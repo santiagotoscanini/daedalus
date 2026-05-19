@@ -1,0 +1,646 @@
+{
+  "uid": "s2-nextcloud",
+  "title": "Home Server — Nextcloud",
+  "tags": [
+    "s2-server",
+    "nextcloud"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1300,
+      "type": "row",
+      "title": "Overview",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1301,
+      "type": "stat",
+      "title": "Scrape",
+      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"nextcloud\"}",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1302,
+      "type": "stat",
+      "title": "Maintenance Mode",
+      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(nextcloud_maintenance)",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "OFF", "color": "green" }, "1": { "text": "ON", "color": "red" } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1303,
+      "type": "stat",
+      "title": "Total Users",
+      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(nextcloud_users)",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1304,
+      "type": "stat",
+      "title": "Total Files",
+      "description": "Real count from oc_filecache via nextcloud-exporter (postgres-exporter). Includes External Storage (/s2/*) and excludes internal NC paths (appdata, cache, trash, versions).",
+      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(nextcloud_files_count)",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1305,
+      "type": "stat",
+      "title": "Total Shares",
+      "gridPos": { "x": 16, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(nextcloud_shares)",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1306,
+      "type": "stat",
+      "title": "Apps Enabled",
+      "gridPos": { "x": 20, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(nextcloud_installed_applications{status=\"enabled\"})",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1310,
+      "type": "row",
+      "title": "Activity",
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1311,
+      "type": "timeseries",
+      "title": "Active Users (by window)",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "nextcloud_active_users",
+          "legendFormat": "{{time}}",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 1312,
+      "type": "timeseries",
+      "title": "Active Sessions (by window)",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "nextcloud_active_sessions",
+          "legendFormat": "{{time}}",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 1315,
+      "type": "row",
+      "title": "Storage",
+      "gridPos": { "x": 0, "y": 14, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1316,
+      "type": "stat",
+      "title": "Total Storage Used",
+      "gridPos": { "x": 0, "y": 15, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(nextcloud_storage_bytes{storage!~\"local::/var/www/html/data/\"})",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10995116277760 },
+              { "color": "red", "value": 14000000000000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1317,
+      "type": "bargauge",
+      "title": "Files per Storage",
+      "gridPos": { "x": 6, "y": 15, "w": 9, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sort_desc(nextcloud_storage_files)",
+          "legendFormat": "{{storage}}",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "continuous-BlYlRd" } },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 1318,
+      "type": "bargauge",
+      "title": "Bytes per Storage",
+      "description": "Sum of bytes per storage mount. Each storage counted exactly once; sums to Total Storage Used. (Earlier 'Bytes per User' was misleading — oc_mounts counts shared storage for every user with access, double-counting.)",
+      "gridPos": { "x": 15, "y": 15, "w": 9, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sort_desc(nextcloud_storage_bytes{storage!~\"local::/var/www/html/data/\"})",
+          "legendFormat": "{{storage}}",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "color": { "mode": "continuous-BlYlRd" } },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 1320,
+      "type": "row",
+      "title": "Files & Shares",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1321,
+      "type": "bargauge",
+      "title": "Files by mimetype",
+      "description": "Top 15 mimetypes by file count, across user home + all External Storage. Source: nextcloud-exporter custom SQL on oc_filecache.",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 10 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(15, nextcloud_files_count)",
+          "legendFormat": "{{mimetype}}",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "continuous-GrYlRd" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 1322,
+      "type": "bargauge",
+      "title": "Shares by type",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 10 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sort_desc(nextcloud_shares)",
+          "legendFormat": "{{type}}",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "continuous-BlPu" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 1330,
+      "type": "row",
+      "title": "Operations",
+      "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1331,
+      "type": "stat",
+      "title": "Running Background Jobs",
+      "gridPos": { "x": 0, "y": 32, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(nextcloud_running_jobs)",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1332,
+      "type": "stat",
+      "title": "Apps Disabled",
+      "gridPos": { "x": 6, "y": 32, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(nextcloud_installed_applications{status=\"disabled\"})",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1333,
+      "type": "stat",
+      "title": "Log Level (lower = more verbose)",
+      "gridPos": { "x": 12, "y": 32, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(nextcloud_log_level)",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": {
+              "0": { "text": "0 (DEBUG)" },
+              "1": { "text": "1 (INFO)" },
+              "2": { "text": "2 (WARN)" },
+              "3": { "text": "3 (ERROR)" },
+              "4": { "text": "4 (FATAL)" }
+            } }
+          ],
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1334,
+      "type": "stat",
+      "title": "Metrics Scrape Duration",
+      "gridPos": { "x": 18, "y": 32, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(nextcloud_exporter_run_seconds)",
+          "legendFormat": "",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1335,
+      "type": "timeseries",
+      "title": "Running Background Jobs Over Time",
+      "gridPos": { "x": 0, "y": 37, "w": 24, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(nextcloud_running_jobs)",
+          "legendFormat": "jobs",
+          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": { "mode": "none" }
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "showLegend": true, "placement": "bottom", "displayMode": "list" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [ "s2-server" ],
+      "title": "Dashboards",
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "id": null
+}
