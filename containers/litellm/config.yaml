@@ -1,0 +1,11 @@
+# LiteLLM proxy config. Currently used only to enable the Prometheus
+# callback — model definitions can still come from the UI/DB (we set
+# STORE_MODEL_IN_DB=True in the container env).
+
+litellm_settings:
+  callbacks:
+    - prometheus
+  success_callback:
+    - prometheus
+  failure_callback:
+    - prometheus
