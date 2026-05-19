@@ -8,6 +8,26 @@
 #   - Only prometheus + grafana publish to the host (Traefik dials them
 #     for their UIs); node-exporter + cadvisor are internal-only.
 #
+# `prometheus.yml` and the dashboards dir are now nix-generated and
+# bind-mounted from /nix/store:
+#
+#   * `prometheusConfig` is built from a base scrape-job list defined
+#     below (translated 1:1 from the previous hand-edited prometheus.yml)
+#     plus any per-stack contributions via `myStack.prometheusScrapes`.
+#     Per-stack stacks therefore add their own scrape jobs without
+#     touching this module.
+#
+#   * `dashboardsDir` combines the static JSON files under
+#     `./grafana-dashboards/` (committed to /etc/nixos/) with any
+#     dashboards a per-stack module emits via
+#     `myStack.grafanaDashboards`. Stacks like the supabase wrapper
+#     emit one dashboard per project from a JSON template.
+#
+# When a stack's scrape list or dashboard set changes, the resulting
+# /nix/store path changes, the container's systemd unit definition
+# changes, and nixos-rebuild switch automatically restarts the
+# affected container. No manual reload step required.
+#
 # To wire local `claude` CLI to Grafana via MCP (replace {TOKEN} with a
 # Grafana service-account token from
 # https://grafana.s2.toscanini.me/org/serviceaccounts):
@@ -18,8 +38,123 @@
 #       -e GRAFANA_SERVICE_ACCOUNT_TOKEN={TOKEN} \
 #       docker.io/grafana/mcp-grafana -t stdio
 
-{ mkRootlessContainer, ... }:
+{ config, lib, pkgs, mkRootlessContainer, ... }:
 
+let
+  # Base scrape jobs — every job that was previously hand-edited in
+  # /home/santiago/selfhost/monitoring/prometheus/app/prometheus.yml,
+  # translated to nix attrset shape. The supabase-db job is NOT here;
+  # it now comes through `myStack.prometheusScrapes` from the supabase
+  # wrapper, one entry per declared project.
+  baseScrapes = [
+    { job_name = "prometheus";
+      static_configs = [ { targets = [ "prometheus:9090" ]; } ]; }
+
+    { job_name = "node_exporter";
+      static_configs = [ { targets = [ "host.containers.internal:9100" ]; } ]; }
+
+    { job_name = "cadvisor";
+      static_configs = [ { targets = [ "cadvisor:8080" ]; } ]; }
+
+    # Intel iGPU (clambin/intel-gpu-exporter wrapping intel_gpu_top -J).
+    # Same bridge as prometheus, scraped by container name. The
+    # dashboard variable filters on a `node` label; upstream gets that
+    # from k8s, we synthesize it here so panels render.
+    { job_name = "intel-gpu";
+      static_configs = [ {
+        targets = [ "intel-gpu-exporter:9100" ];
+        labels = { node = "s2-server"; };
+      } ]; }
+
+    # Cloudflare Tunnel internal metrics (--metrics flag)
+    { job_name = "cloudflared";
+      static_configs = [ { targets = [ "host.containers.internal:2000" ]; } ]; }
+
+    # Traefik native Prometheus metrics on its internal :8080
+    { job_name = "traefik";
+      static_configs = [ { targets = [ "host.containers.internal:9080" ]; } ]; }
+
+    # wg-easy v15 native Prometheus exporter (after toggling
+    # metrics_prometheus=1 in its SQLite DB)
+    { job_name = "wireguard";
+      metrics_path = "/metrics/prometheus";
+      static_configs = [ { targets = [ "host.containers.internal:51821" ]; } ]; }
+
+    # LiteLLM proxy native /metrics (requires bearer token of
+    # LITELLM_MASTER_KEY). Same secrecy posture as before — the token
+    # is now baked into /nix/store-rendered prometheus.yml instead of
+    # the host-side prometheus.yml; both are world-readable on this
+    # single-user box. If broader access ever lands here, switch to
+    # `credentials_file = "/etc/nixos/containers/monitoring/litellm.token"`.
+    { job_name = "litellm";
+      authorization = {
+        type = "Bearer";
+        credentials = "ROTATED-2026-07-15";
+      };
+      static_configs = [ { targets = [ "host.containers.internal:4000" ]; } ]; }
+
+    # gluetun-exporter (thecfu/gluetun-exporter) — sidecar in gluetun's netns
+    { job_name = "gluetun";
+      static_configs = [ { targets = [ "host.containers.internal:8001" ]; } ]; }
+
+    # Nextcloud OpenMetrics endpoint. The `/metrics` path is built into
+    # Nextcloud (no separate exporter). By default it responds only to
+    # localhost; openmetrics_allowed_clients in config.php is set to
+    # allow 10.0.0.0/8 (covers the podman bridge IPs that prometheus
+    # appears as from inside nextcloud-net). Hosted at host port 8082,
+    # behind apache on the nextcloud-app container.
+    { job_name = "nextcloud";
+      honor_timestamps = false;
+      static_configs = [ { targets = [ "host.containers.internal:8082" ]; } ]; }
+
+    # nextcloud-exporter (postgres-exporter against nextcloud-postgres).
+    # Provides accurate file/storage metrics that bypass the
+    # `WHERE path LIKE 'files/%'` filter in NC's built-in /metrics —
+    # see modules/nextcloud-exporter.nix.
+    { job_name = "nextcloud-exporter";
+      static_configs = [ { targets = [ "host.containers.internal:9187" ]; } ]; }
+
+    # Immich — API + microservices metrics (IMMICH_TELEMETRY_INCLUDE=all).
+    # OpenTelemetry-style endpoints. Bridge-isolated containers reached
+    # via host.containers.internal because Prometheus lives on
+    # monitoring-net, Immich on immich-net.
+    { job_name = "immich-api";
+      static_configs = [ { targets = [ "host.containers.internal:18081" ]; } ]; }
+
+    { job_name = "immich-microservices";
+      static_configs = [ { targets = [ "host.containers.internal:18082" ]; } ]; }
+  ];
+
+  # Generate prometheus.yml from the merged scrape list. Prometheus
+  # accepts JSON as a YAML 1.1 superset, so `toJSON` is sufficient —
+  # avoids any quoting/escaping pitfalls of a hand-rolled YAML writer.
+  prometheusConfig = pkgs.writeText "prometheus.yml" (builtins.toJSON {
+    global = {
+      scrape_interval = "15s";
+      evaluation_interval = "15s";
+    };
+    scrape_configs = baseScrapes ++ config.myStack.prometheusScrapes;
+  });
+
+  # /etc/prometheus needs to be a directory (Prometheus also looks
+  # there for rule files). Wrap the single generated yml in a dir so
+  # adding alert_rules.yml later is a one-line extension here.
+  prometheusDir = pkgs.runCommand "prometheus-etc" { } ''
+    mkdir -p $out
+    cp ${prometheusConfig} $out/prometheus.yml
+  '';
+
+  # Combine the static dashboards (committed to /etc/nixos/modules/
+  # grafana-dashboards/) with anything per-stack modules push through
+  # `myStack.grafanaDashboards`. Two sources, one /nix/store dir
+  # bind-mounted into Grafana.
+  dashboardsDir = pkgs.runCommand "grafana-dashboards" { } (''
+    mkdir -p $out
+    cp -r ${./grafana-dashboards}/. $out/
+  '' + lib.concatStringsSep "\n" (lib.mapAttrsToList (name: content:
+    "cp ${pkgs.writeText "${name}.json" content} $out/${name}.json"
+  ) config.myStack.grafanaDashboards));
+in
 {
   myStack.containerNetworks = {
     prometheus    = "monitoring";
@@ -47,10 +182,10 @@
     ];
 
     volumes = [
-      # `prometheus.yml` and any alert rule files are edited on the
-      # host — the prom/prometheus image is distroless (no shell, no
-      # editor inside the container).
-      "/home/santiago/selfhost/monitoring/prometheus/app:/etc/prometheus:ro"
+      # /nix/store-backed config dir. nixos-rebuild restarts the
+      # container whenever the derivation hash changes.
+      "${prometheusDir}:/etc/prometheus:ro"
+      # TSDB stays on disk under selfhost.
       "/home/santiago/selfhost/monitoring/prometheus/data:/prometheus"
     ];
 
@@ -75,7 +210,8 @@
       "/home/santiago/selfhost/monitoring/grafana/app/provisioning/datasources:/etc/grafana/provisioning/datasources:ro"
       "/home/santiago/selfhost/monitoring/grafana/app/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro"
       "/home/santiago/selfhost/monitoring/grafana/app/provisioning/alerting:/etc/grafana/provisioning/alerting:ro"
-      "/home/santiago/selfhost/monitoring/grafana/app/dashboards:/var/lib/grafana/dashboards:ro"
+      # Static + per-stack dashboards live in /nix/store.
+      "${dashboardsDir}:/var/lib/grafana/dashboards:ro"
     ];
 
     environment = {

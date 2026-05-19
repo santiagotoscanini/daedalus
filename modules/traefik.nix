@@ -25,9 +25,30 @@ let
   mkTraefikRouteContent = name: route:
     let
       entry = route.entrypoint or "websecure";
-      tlsLine = if entry == "websecure"
-                then "      tls: { options: tls-opts@file }\n"
-                else "";
+      needsTls = entry == "websecure";
+      hasCert  = route.certMain != null;
+      # tlsLine is substituted into the template at the position
+      # marked `${tlsLine}  services:` — so it must end with a newline
+      # AND its own contents already include any leading whitespace
+      # they need (the template dedent has already taken 6 columns
+      # off, so anything we want at YAML column N starts with N spaces
+      # in the string).
+      tlsLine =
+        if !needsTls then ""
+        else if !hasCert then
+          "      tls: { options: tls-opts@file }\n"
+        else
+          let
+            sansBlock = lib.concatMapStringsSep "\n"
+              (s: "              - \"${s}\"")
+              route.certSans;
+          in
+            "      tls:\n"
+            + "        options: tls-opts@file\n"
+            + "        domains:\n"
+            + "          - main: \"${route.certMain}\"\n"
+            + "            sans:\n"
+            + sansBlock + "\n";
     in ''
       # Auto-generated from myStack.traefikRoutes.${name}.
       # Edit the attrset (in the owning stack's module), not this file

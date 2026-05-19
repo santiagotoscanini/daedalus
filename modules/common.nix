@@ -11,10 +11,24 @@
 #     podman-network-<bridge>-net.service that creates the bridge.
 #   - `options.myStack.traefikRoutes`: simple
 #     `Host(...) -> host.containers.internal:port` routes, consumed by
-#     modules/traefik.nix.
+#     modules/traefik.nix. Optional `certMain`/`certSans` request a
+#     per-route wildcard cert (used by stacks like supabase whose URLs
+#     sit two levels under s2.toscanini.me so the default
+#     *.s2.toscanini.me cert doesn't cover them).
 #   - `options.myStack.traefikStaticRules`: raw YAML rule contents
 #     keyed by filename, for routes that don't fit the simple shape
 #     (dual-entrypoint routers, custom middlewares, api@internal).
+#   - `options.myStack.dnsHosts`: lines appended to pi-hole's
+#     `services.pihole-ftl.settings.dns.hosts`. Per-stack modules
+#     contribute their LAN-resolvable hostnames here so adding a new
+#     stack doesn't require editing modules/pihole.nix by hand.
+#   - `options.myStack.prometheusScrapes`: scrape jobs merged into
+#     monitoring.nix's generated prometheus.yml. One entry per scrape
+#     target, raw attrset shape (passed verbatim to YAML).
+#   - `options.myStack.grafanaDashboards`: dashboard JSON keyed by
+#     filename-without-extension. monitoring.nix combines these with
+#     the static dashboards under modules/grafana-dashboards/ and
+#     bind-mounts the resulting derivation into grafana.
 #
 # Per-stack modules declare their own containers + network entries +
 # kernel-module needs + traefik routes; NixOS's module system merges
@@ -134,6 +148,31 @@ in
               for routes reached through the Cloudflare tunnel.
             '';
           };
+          certMain = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = ''
+              Optional `tls.domains[0].main` for this router. When
+              non-null, the generated YAML asks Traefik to request a
+              dedicated cert covering `certMain` + `certSans`. Used
+              by stacks whose host is two+ levels under s2.toscanini.me
+              (e.g. `studio.foo.supabase.s2.toscanini.me`) where the
+              default `*.s2.toscanini.me` wildcard doesn't apply.
+
+              Only emitted on `websecure` entrypoint routers.
+            '';
+            example = "foo.supabase.s2.toscanini.me";
+          };
+          certSans = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            description = ''
+              SANs accompanying `certMain`. Typically a single wildcard
+              like `*.foo.supabase.s2.toscanini.me`. Ignored when
+              `certMain` is null.
+            '';
+            example = [ "*.foo.supabase.s2.toscanini.me" ];
+          };
         };
       }));
       default = { };
@@ -153,6 +192,44 @@ in
         configs that don't fit the simple `traefikRoutes` shape:
         dual-entrypoint routers (e.g. nextcloud cfweb + websecure),
         named TLS options, the dashboard router using `api@internal`.
+      '';
+    };
+
+    dnsHosts = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        Lines appended to `services.pihole-ftl.settings.dns.hosts`.
+        Format: `"<IP> <hostname>"` (one space, exactly as pi-hole
+        expects). Per-stack modules add their LAN-resolvable hostnames
+        here so pi-hole.nix doesn't need a hand-maintained list.
+      '';
+      example = [ "192.168.0.2 foo.supabase.s2.toscanini.me" ];
+    };
+
+    prometheusScrapes = lib.mkOption {
+      type = lib.types.listOf (lib.types.attrsOf lib.types.unspecified);
+      default = [ ];
+      description = ''
+        Scrape jobs merged into the generated `prometheus.yml`'s
+        `scrape_configs`. Each entry is the raw attrset shape that
+        prometheus YAML expects, e.g.:
+          { job_name = "foo";
+            static_configs = [ { targets = [ "host.containers.internal:1234" ]; } ];
+            metrics_path = "/metrics";  # optional
+            authorization = { type = "Bearer"; credentials = "..."; };  # optional
+          }
+      '';
+    };
+
+    grafanaDashboards = lib.mkOption {
+      type = lib.types.attrsOf lib.types.lines;
+      default = { };
+      description = ''
+        Per-stack dashboard JSON keyed by filename (without `.json`).
+        modules/monitoring.nix combines these with the static
+        dashboards under modules/grafana-dashboards/ and bind-mounts
+        the resulting derivation into the grafana container.
       '';
     };
   };
