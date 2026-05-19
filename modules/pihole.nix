@@ -25,8 +25,14 @@
 # changed from "eth0" (docker NIC) to "enp3s0" (host NIC);
 # webserver.port is driven by services.pihole-web.ports below (plain
 # HTTP on 8080, behind Traefik's TLS).
+#
+# Per-stack DNS entries can now be contributed via
+# `myStack.dnsHosts` (see modules/common.nix). The literal list below
+# is the legacy set — stacks haven't been migrated yet, except
+# supabase whose entries flow in through the new option. Other stacks
+# can drain into their owning modules over time.
 
-{ lib, ... }:
+{ config, lib, ... }:
 
 {
   # Pi-hole's web UI gets routed via Traefik like everything else, but
@@ -49,7 +55,7 @@
         listeningMode = "ALL";
         upstreams = [ "8.8.8.8" "8.8.4.4" ];
         bogusPriv = false;
-        hosts = [
+        hosts = config.myStack.dnsHosts ++ [
           "192.168.0.2 stirling-pdf.s2.toscanini.me"
           "192.168.0.2 immich.s2.toscanini.me"
           "192.168.0.2 traefik.s2.toscanini.me"
@@ -62,8 +68,6 @@
           "192.168.0.2 grafana.s2.toscanini.me"
           "192.168.0.2 litellm.s2.toscanini.me"
           "192.168.0.2 logging.s2.toscanini.me"
-          "192.168.0.2 supabase.s2.toscanini.me"
-          "192.168.0.2 studio.s2.toscanini.me"
           # tv stack
           "192.168.0.2 jellyfin.s2.toscanini.me"
           "192.168.0.2 sonarr.s2.toscanini.me"
