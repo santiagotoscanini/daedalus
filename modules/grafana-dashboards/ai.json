@@ -1,0 +1,599 @@
+{
+  "uid": "s2-ai",
+  "title": "Home Server \u2014 AI (LiteLLM)",
+  "tags": [
+    "s2-server",
+    "ai"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1100,
+      "type": "row",
+      "title": "LiteLLM Overview",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1101,
+      "type": "stat",
+      "title": "Total Users",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(litellm_total_users)",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1102,
+      "type": "stat",
+      "title": "Teams",
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(litellm_teams_count)",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1103,
+      "type": "stat",
+      "title": "In-Flight Requests",
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(litellm_in_flight_requests)",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1104,
+      "type": "stat",
+      "title": "Request Rate",
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(litellm_proxy_total_requests_metric_total[5m]))",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1110,
+      "type": "row",
+      "title": "Requests",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1111,
+      "type": "timeseries",
+      "title": "Request Rate by Model",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (litellm_model_name) (rate(litellm_proxy_total_requests_metric_total[5m]))",
+          "legendFormat": "{{litellm_model_name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 1112,
+      "type": "timeseries",
+      "title": "Failed Request Rate by Model",
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (litellm_model_name) (rate(litellm_proxy_failed_requests_metric_total[5m]))",
+          "legendFormat": "{{litellm_model_name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 1113,
+      "type": "timeseries",
+      "title": "In-Flight Requests Over Time",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(litellm_in_flight_requests)",
+          "legendFormat": "in-flight",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 1120,
+      "type": "row",
+      "title": "Cost Tracking",
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1121,
+      "type": "stat",
+      "title": "Last Batch Cost Run (age)",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - litellm_check_batch_cost_last_run_timestamp",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 600
+              },
+              {
+                "color": "red",
+                "value": 3600
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1122,
+      "type": "stat",
+      "title": "Batches Polled (last run)",
+      "gridPos": {
+        "x": 8,
+        "y": 22,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "litellm_check_batch_cost_jobs_polled",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 1123,
+      "type": "stat",
+      "title": "Last Batch Cost Run",
+      "gridPos": {
+        "x": 16,
+        "y": 22,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "litellm_check_batch_cost_last_run_timestamp",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeFromNow",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    }
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "s2-server"
+      ],
+      "title": "Dashboards",
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "id": null
+}

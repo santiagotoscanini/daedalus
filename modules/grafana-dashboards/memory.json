@@ -1,0 +1,1805 @@
+{
+  "uid": "s2-memory",
+  "title": "Home Server \u2014 Memory",
+  "tags": [
+    "s2-server",
+    "memory"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "version": 1,
+  "panels": [
+    {
+      "id": 300,
+      "type": "row",
+      "title": "Overview",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 301,
+      "type": "stat",
+      "title": "Total RAM",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_MemTotal_bytes",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 302,
+      "type": "stat",
+      "title": "Available",
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_MemAvailable_bytes",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 303,
+      "type": "gauge",
+      "title": "Memory %",
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 95
+              }
+            ]
+          },
+          "decimals": 1,
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 304,
+      "type": "stat",
+      "title": "Memory Pressure",
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_pressure_memory_waiting_seconds_total[5m]) * 100",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 310,
+      "type": "timeseries",
+      "title": "Memory Breakdown",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Buffers_bytes - node_memory_Cached_bytes",
+          "legendFormat": "used (anon)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "node_memory_Buffers_bytes",
+          "legendFormat": "buffers",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "node_memory_Cached_bytes",
+          "legendFormat": "cache",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "D",
+          "expr": "node_memory_MemFree_bytes",
+          "legendFormat": "free",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 320,
+      "type": "row",
+      "title": "Faults & Paging",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 321,
+      "type": "stat",
+      "title": "OOM Kills (total)",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_vmstat_oom_kill OR on() vector(0)",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 322,
+      "type": "stat",
+      "title": "Major Faults / sec",
+      "gridPos": {
+        "x": 6,
+        "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_vmstat_pgmajfault[5m])",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 323,
+      "type": "stat",
+      "title": "Page Ins / sec",
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_vmstat_pgpgin[5m])",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 324,
+      "type": "stat",
+      "title": "Page Outs / sec",
+      "gridPos": {
+        "x": 18,
+        "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_vmstat_pgpgout[5m])",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 330,
+      "type": "timeseries",
+      "title": "Page Faults / sec",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_vmstat_pgmajfault[5m])",
+          "legendFormat": "major",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "rate(node_vmstat_pgfault[5m]) - rate(node_vmstat_pgmajfault[5m])",
+          "legendFormat": "minor",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 331,
+      "type": "timeseries",
+      "title": "Swap In/Out",
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_vmstat_pswpin[5m])",
+          "legendFormat": "in",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "rate(node_vmstat_pswpout[5m])",
+          "legendFormat": "out",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 340,
+      "type": "row",
+      "title": "Swap (zram)",
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 341,
+      "type": "stat",
+      "title": "Swap Total",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_SwapTotal_bytes",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 342,
+      "type": "stat",
+      "title": "Swap Used",
+      "gridPos": {
+        "x": 8,
+        "y": 27,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 343,
+      "type": "gauge",
+      "title": "Swap %",
+      "gridPos": {
+        "x": 16,
+        "y": 27,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "decimals": 1,
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 350,
+      "type": "timeseries",
+      "title": "Swap Usage",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes",
+          "legendFormat": "used",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "node_memory_SwapTotal_bytes",
+          "legendFormat": "total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 360,
+      "type": "row",
+      "title": "ZFS ARC (in-RAM cache)",
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 361,
+      "type": "stat",
+      "title": "ARC Size",
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_arc_size",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 362,
+      "type": "stat",
+      "title": "ARC Target",
+      "gridPos": {
+        "x": 6,
+        "y": 39,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_arc_c",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 363,
+      "type": "stat",
+      "title": "ARC Max",
+      "gridPos": {
+        "x": 12,
+        "y": 39,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_arc_c_max",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 364,
+      "type": "stat",
+      "title": "Compression Ratio",
+      "gridPos": {
+        "x": 18,
+        "y": 39,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_arc_uncompressed_size / node_zfs_arc_compressed_size",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 370,
+      "type": "timeseries",
+      "title": "ARC Size Over Time",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_arc_size",
+          "legendFormat": "size",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "node_zfs_arc_c",
+          "legendFormat": "target",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "node_zfs_arc_c_max",
+          "legendFormat": "max",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 371,
+      "type": "timeseries",
+      "title": "ARC Hit Rate",
+      "gridPos": {
+        "x": 12,
+        "y": 43,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(100 * rate(node_zfs_arc_hits[5m]) / (rate(node_zfs_arc_hits[5m]) + rate(node_zfs_arc_misses[5m]))) and (rate(node_zfs_arc_hits[5m]) + rate(node_zfs_arc_misses[5m])) > 0",
+          "legendFormat": "hit %",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 372,
+      "type": "timeseries",
+      "title": "ARC Anatomy",
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_arc_mru_size",
+          "legendFormat": "MRU",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "node_zfs_arc_mfu_size",
+          "legendFormat": "MFU",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "node_zfs_arc_data_size",
+          "legendFormat": "data",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "D",
+          "expr": "node_zfs_arc_metadata_size",
+          "legendFormat": "metadata",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 373,
+      "type": "timeseries",
+      "title": "dbuf Cache",
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_dbuf_cache_size_bytes",
+          "legendFormat": "size",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "node_zfs_dbuf_cache_target_bytes",
+          "legendFormat": "target",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 380,
+      "type": "row",
+      "title": "ARC Pressure (alert-worthy)",
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 381,
+      "type": "stat",
+      "title": "ARC No-Grow",
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_arc_arc_no_grow",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OK",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "BLOCKED",
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 382,
+      "type": "stat",
+      "title": "Memory Throttle Count",
+      "gridPos": {
+        "x": 8,
+        "y": 60,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_arc_memory_throttle_count",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 383,
+      "type": "stat",
+      "title": "ARC Prune Count",
+      "gridPos": {
+        "x": 16,
+        "y": 60,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_zfs_arc_arc_prune",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 390,
+      "type": "row",
+      "title": "Kernel Memory",
+      "gridPos": {
+        "x": 0,
+        "y": 64,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 391,
+      "type": "timeseries",
+      "title": "Kernel Memory",
+      "gridPos": {
+        "x": 0,
+        "y": 65,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_Slab_bytes",
+          "legendFormat": "slab",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "node_memory_SReclaimable_bytes",
+          "legendFormat": "S reclaimable",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "node_memory_SUnreclaim_bytes",
+          "legendFormat": "S unreclaim",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "D",
+          "expr": "node_memory_KernelStack_bytes",
+          "legendFormat": "kernel stack",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 392,
+      "type": "timeseries",
+      "title": "Dirty / Writeback",
+      "gridPos": {
+        "x": 12,
+        "y": 65,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_Dirty_bytes",
+          "legendFormat": "dirty",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "node_memory_Writeback_bytes",
+          "legendFormat": "writeback",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "list"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "s2-server"
+      ],
+      "title": "Dashboards",
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "id": null
+}
