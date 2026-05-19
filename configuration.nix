@@ -37,6 +37,7 @@
     ./modules/pihole.nix
     ./modules/stirling-pdf.nix
     ./modules/supabase.nix
+    ./modules/supabase-projects.nix
     ./modules/traefik.nix
     ./modules/tv.nix
     ./modules/wealthfolio.nix

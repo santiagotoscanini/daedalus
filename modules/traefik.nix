@@ -45,6 +45,7 @@ let
           in
             "      tls:\n"
             + "        options: tls-opts@file\n"
+            + "        certResolver: dns-cloudflare\n"
             + "        domains:\n"
             + "          - main: \"${route.certMain}\"\n"
             + "            sans:\n"

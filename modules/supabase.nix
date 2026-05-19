@@ -219,6 +219,38 @@ let
       # read-replica.conf. Idempotent: skips if the bind-target is
       # already populated. Replaces what `podman volume create` auto-
       # populating from the image would have done for a named volume.
+      # First-boot bootstrap: generate env file with fresh secrets and
+      # seed static configs from /nix/store-baked
+      # /etc/nixos/modules/supabase-static. Idempotent — every file/dir
+      # is skipped if already present.
+      systemd.services."supabase-${proj.id}-bootstrap" = {
+        description = "Bootstrap supabase ${proj.id}: env file + static configs on first boot";
+        after = [ "local-fs.target" ];
+        before = (map (r: "podman-${cName r}.service") [
+          "db" "db-exporter" "meta" "auth" "rest" "realtime" "imgproxy"
+          "storage" "edge-functions" "analytics" "vector" "pooler" "kong" "studio"
+        ]) ++ [ "supabase-${proj.id}-db-config-seed.service" ];
+        wantedBy = [ "podman-${cName "db"}.service" ];
+        environment = {
+          PROJECT_ID  = proj.id;
+          HOST_ROOT   = hostRoot;
+          STATIC_DIR  = "${./supabase-static}";
+          STUDIO_HOST = studioHost;
+          KONG_HOST   = kongHost;
+          ENV_FILE    = envFile;
+          PATH        = lib.mkForce (lib.makeBinPath [
+            pkgs.bash pkgs.openssl pkgs.coreutils pkgs.gnused
+          ]);
+        };
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          Restart = "on-failure";
+          RestartSec = "5s";
+          ExecStart = "${pkgs.bash}/bin/bash ${./supabase-static}/bootstrap.sh";
+        };
+      };
+
       systemd.services."supabase-${proj.id}-db-config-seed" = {
         description = "Seed supabase ${proj.id} /etc/postgresql-custom bind mount on first boot";
         after = [ "network-online.target" "local-fs.target" ];
