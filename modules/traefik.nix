@@ -198,6 +198,8 @@ in
       "--entrypoints.websecure.http.tls.domains[0].sans=*.s2.toscanini.me"
       "--entrypoints.websecure.http.tls.domains[1].main=toscanini.me"
       "--entrypoints.websecure.http.tls.domains[1].sans=*.toscanini.me"
+      "--entrypoints.websecure.http.tls.domains[2].main=supabase.s2.toscanini.me"
+      "--entrypoints.websecure.http.tls.domains[2].sans=*.supabase.s2.toscanini.me"
       "--certificatesResolvers.dns-cloudflare.acme.storage=/acme.json"
       "--certificatesResolvers.dns-cloudflare.acme.email=nextcloud@account.toscanini.me"
       "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.provider=cloudflare"

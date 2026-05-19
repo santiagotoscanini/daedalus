@@ -113,9 +113,8 @@ let
       bridge     = "supabase-${proj.id}";
       cName      = role: "supabase-${proj.id}-${role}";
       net        = alias: "--network=${bridge}-net:alias=${alias}";
-      studioHost = "studio.${proj.id}.supabase.s2.toscanini.me";
-      kongHost   = "kong.${proj.id}.supabase.s2.toscanini.me";
-      certDomain = "${proj.id}.supabase.s2.toscanini.me";
+      studioHost = "studio-${proj.id}.supabase.s2.toscanini.me";
+      kongHost   = "kong-${proj.id}.supabase.s2.toscanini.me";
     in {
       myStack.containerNetworks = lib.listToAttrs (map
         (role: lib.nameValuePair (cName role) bridge)
@@ -129,14 +128,10 @@ let
       myStack.traefikRoutes."${cName "studio"}" = {
         host     = studioHost;
         port     = proj.ports.studio;
-        certMain = certDomain;
-        certSans = [ "*.${certDomain}" ];
       };
       myStack.traefikRoutes."${cName "kong"}" = {
         host     = kongHost;
         port     = proj.ports.kong;
-        certMain = certDomain;
-        certSans = [ "*.${certDomain}" ];
       };
 
       # LAN psql access through Supavisor. The pi-hole-served DHCP
