@@ -658,7 +658,7 @@ let
 in
 {
   options.myStack.supabaseProjects = lib.mkOption {
-    type = lib.types.attrsOf (lib.types.submodule {
+    type = lib.types.attrsOf (lib.types.submodule ({ ... }: {
       options = {
         id = lib.mkOption {
           type = lib.types.str;
@@ -677,7 +677,7 @@ in
           '';
         };
         ports = lib.mkOption {
-          type = lib.types.submodule {
+          type = lib.types.submodule ({ ... }: {
             options = {
               kong = lib.mkOption {
                 type = lib.types.port;
@@ -700,7 +700,7 @@ in
                 description = "Host port for postgres_exporter scrape (internal 9187).";
               };
             };
-          };
+          });
           description = ''
             Host-side port allocation. Must not collide with any
             other project on this host or with other stacks.
@@ -713,7 +713,7 @@ in
           '';
         };
       };
-    });
+    }));
     default = { };
     description = ''
       Per-project Supabase stacks. Each entry materializes 14
@@ -724,16 +724,39 @@ in
     '';
   };
 
-  config = lib.mkMerge (
-    [
-      {
-        # Vector talks to rootless podman over its user socket.
-        # linger=true for santiago in configuration.nix already keeps
-        # user@1000.service up at boot; this wantedBy makes the user
-        # socket itself auto-start. Shared by every project.
-        systemd.user.sockets.podman.wantedBy = [ "sockets.target" ];
-      }
-    ]
-    ++ map mkProject (lib.attrValues config.myStack.supabaseProjects)
-  );
+  config = let
+    projects  = lib.attrValues config.myStack.supabaseProjects;
+    fragments = map mkProject projects;
+    # Helpers — extract per-option contributions from each fragment
+    # and combine them with the option's natural merge semantics.
+    # The top-level config attrset has STATIC keys (NixOS can compute
+    # freeformType without iterating projects); each value uses
+    # `mkMerge`/`concatLists` to fold the dynamic per-project list.
+    attrsOpt = path: lib.mkMerge   (map (f: lib.attrByPath path { } f) fragments);
+    listOpt  = path: lib.concatLists (map (f: lib.attrByPath path [ ] f) fragments);
+  in {
+    # Vector talks to rootless podman over its user socket.
+    # linger=true for santiago in configuration.nix already keeps
+    # user@1000.service up at boot; this wantedBy makes the user
+    # socket itself auto-start. Shared by every project.
+    systemd.user.sockets.podman.wantedBy = [ "sockets.target" ];
+
+    virtualisation.oci-containers.containers =
+      attrsOpt [ "virtualisation" "oci-containers" "containers" ];
+
+    myStack = {
+      containerNetworks = attrsOpt [ "myStack" "containerNetworks" ];
+      traefikRoutes     = attrsOpt [ "myStack" "traefikRoutes" ];
+      dnsHosts          = listOpt  [ "myStack" "dnsHosts" ];
+      prometheusScrapes = listOpt  [ "myStack" "prometheusScrapes" ];
+      grafanaDashboards = attrsOpt [ "myStack" "grafanaDashboards" ];
+    };
+
+    networking.firewall.allowedTCPPorts =
+      listOpt [ "networking" "firewall" "allowedTCPPorts" ];
+
+    systemd.tmpfiles.rules = listOpt [ "systemd" "tmpfiles" "rules" ];
+
+    systemd.services = attrsOpt [ "systemd" "services" ];
+  };
 }
