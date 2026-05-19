@@ -1,0 +1,29 @@
+# Secrets — never commit these. Leading **/ matches at any depth.
+**/env
+**/*.env
+**/migration-key
+**/*-key
+**/*.key
+**/password
+**/password.*
+**/secret
+**/secret.*
+ddns/
+
+# Allow safe non-secret YAMLs that happen to live under containers/.
+!containers/**/tls-opts.yml
+!containers/**/traefik-dashboard.yml
+!containers/**/nextcloud.yml
+!containers/**/config.yaml
+
+# Backup files we may create during refactors.
+*.bak
+*.bak.*
+
+# Nix build artifacts (in case anyone runs nix-build here).
+result
+result-*
+
+# Editor noise.
+*.swp
+*.swo
