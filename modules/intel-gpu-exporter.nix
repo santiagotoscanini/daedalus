@@ -36,6 +36,17 @@
 
   boot.kernel.sysctl."kernel.perf_event_paranoid" = lib.mkDefault 0;
 
+
+  myStack.prometheusScrapes = [{
+    job_name = "intel-gpu";
+    static_configs = [{
+      targets = [ "intel-gpu-exporter:9100" ];
+      labels = { node = "s2-server"; };
+    }];
+  }];
+
+  myStack.grafanaDashboards.intel-gpu = builtins.readFile ./intel-gpu-dashboard.json;
+
   virtualisation.oci-containers.containers.intel-gpu-exporter = mkRootlessContainer {
     image = "ghcr.io/clambin/intel-gpu-exporter:0.7.0";
 

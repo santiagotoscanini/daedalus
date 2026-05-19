@@ -77,6 +77,33 @@ in
     entrypoint = "cfweb";
   };
 
+
+  myStack.dnsHosts = [ "192.168.0.2 immich.s2.toscanini.me" ];
+
+  myStack.prometheusScrapes = [
+    { job_name = "immich-api";
+      static_configs = [{ targets = [ "host.containers.internal:18081" ]; }]; }
+    { job_name = "immich-microservices";
+      static_configs = [{ targets = [ "host.containers.internal:18082" ]; }]; }
+  ];
+
+  myStack.grafanaDashboards.immich = builtins.readFile ./immich-dashboard.json;
+
+  myStack.homepageServices."Cloud & AI" = [{
+    name = "Immich";
+    href = "https://immich.s2.toscanini.me";
+    description = "Photo + video backup (ML on iGPU via OpenVINO)";
+    icon = "immich.png";
+    siteMonitor = "http://host.containers.internal:2283";
+    widget = {
+      type = "immich";
+      url = "http://host.containers.internal:2283";
+      key = "{{HOMEPAGE_VAR_IMMICH_API_KEY}}";
+      version = 2;
+      fields = [ "users" "photos" "videos" "storage" ];
+    };
+  }];
+
   virtualisation.oci-containers.containers.immich-postgres = mkRootlessContainer {
     image = immichPostgresImage;
 

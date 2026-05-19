@@ -16,6 +16,17 @@
     port = 5678;
   };
 
+
+  myStack.dnsHosts = [ "192.168.0.2 n8n.s2.toscanini.me" ];
+
+  myStack.homepageServices."Productivity" = [{
+    name = "n8n";
+    href = "https://n8n.s2.toscanini.me";
+    description = "Workflow automation";
+    icon = "n8n.png";
+    siteMonitor = "http://host.containers.internal:5678";
+  }];
+
   virtualisation.oci-containers.containers.n8n-postgres = mkRootlessContainer {
     image = "docker.io/library/postgres:15-alpine";
 

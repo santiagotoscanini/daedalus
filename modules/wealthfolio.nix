@@ -18,6 +18,15 @@
     entrypoint = "cfweb";
   };
 
+
+  myStack.homepageServices."Productivity" = [{
+    name = "Wealthfolio";
+    href = "https://wealthfolio.toscanini.me";
+    description = "Personal finance";
+    icon = "mdi-finance-#34d399";
+    siteMonitor = "http://host.containers.internal:8088";
+  }];
+
   virtualisation.oci-containers.containers.wealthfolio = mkRootlessContainer {
     image = "docker.io/afadil/wealthfolio:latest";
 

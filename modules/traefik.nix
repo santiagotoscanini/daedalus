@@ -98,6 +98,26 @@ in
     "traefik-dashboard.yml" = builtins.readFile ../containers/traefik/traefik-dashboard.yml;
   };
 
+
+  myStack.dnsHosts = [ "192.168.0.2 traefik.s2.toscanini.me" ];
+
+  myStack.prometheusScrapes = [{
+    job_name = "traefik";
+    static_configs = [{ targets = [ "host.containers.internal:9080" ]; }];
+  }];
+
+  myStack.homepageServices."Network" = [{
+    name = "Traefik";
+    href = "https://traefik.s2.toscanini.me";
+    description = "Reverse proxy — all *.s2 / *.toscanini routes";
+    icon = "traefik.png";
+    siteMonitor = "https://traefik.s2.toscanini.me";
+    widget = {
+      type = "traefik";
+      url  = "https://traefik.s2.toscanini.me";
+    };
+  }];
+
   virtualisation.oci-containers.containers.traefik = mkRootlessContainer {
     image = "docker.io/library/traefik:v3.6";
 

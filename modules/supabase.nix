@@ -170,6 +170,26 @@ let
           [ proj.id "supabase-${proj.id}-db" ]
           dashboardTemplate;
 
+      # Backend group tiles — one Studio + one Kong link per project.
+      # No upstream homepage widget exists for Supabase, so these are
+      # link tiles with siteMonitor pings against the host ports.
+      myStack.homepageServices."Backend" = [
+        {
+          name = "Supabase Studio (${proj.id})";
+          href = "https://${studioHost}";
+          description = "Postgres + Auth + Realtime + Storage admin UI (${proj.id})";
+          icon = "supabase.png";
+          siteMonitor = "http://host.containers.internal:${toString proj.ports.studio}";
+        }
+        {
+          name = "Supabase API (${proj.id})";
+          href = "https://${kongHost}";
+          description = "Kong gateway — /auth, /rest, /realtime, /storage, /functions (${proj.id})";
+          icon = "mdi-api-#34d399";
+          siteMonitor = "http://host.containers.internal:${toString proj.ports.kong}";
+        }
+      ];
+
       # systemd-tmpfiles creates bind-mount target dirs at activation
       # with the right rootless-podman UID mapping. The
       # supabase/postgres image runs as container UID 105
@@ -750,6 +770,7 @@ in
       dnsHosts          = listOpt  [ "myStack" "dnsHosts" ];
       prometheusScrapes = listOpt  [ "myStack" "prometheusScrapes" ];
       grafanaDashboards = attrsOpt [ "myStack" "grafanaDashboards" ];
+      homepageServices  = attrsOpt [ "myStack" "homepageServices" ];
     };
 
     networking.firewall.allowedTCPPorts =
