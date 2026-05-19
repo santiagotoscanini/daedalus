@@ -33,6 +33,25 @@
 {
   myStack.containerNetworks.cloudflared = null;
 
+
+  myStack.prometheusScrapes = [{
+    job_name = "cloudflared";
+    static_configs = [{ targets = [ "host.containers.internal:2000" ]; }];
+  }];
+
+  myStack.homepageServices."Network" = [{
+    name = "Cloudflare Tunnel";
+    href = "https://dash.cloudflare.com/c08bf36c41d7bc5db11d6b35e0b4e721/tunnels/e2dc540a-c1d5-4d7e-b134-e0a7e21cab24/overview";
+    description = "Outbound CF Tunnel (nextcloud, grocy, wealthfolio, immich public)";
+    icon = "cloudflare.png";
+    widget = {
+      type = "cloudflared";
+      accountid = "{{HOMEPAGE_VAR_CF_ACCOUNT_ID}}";
+      tunnelid  = "{{HOMEPAGE_VAR_CF_TUNNEL_ID}}";
+      key       = "{{HOMEPAGE_VAR_CF_API_TOKEN}}";
+    };
+  }];
+
   virtualisation.oci-containers.containers.cloudflared = mkRootlessContainer {
     image = "docker.io/cloudflare/cloudflared:latest";
     dependsOn = [ "traefik" ];

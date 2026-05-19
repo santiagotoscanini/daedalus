@@ -53,6 +53,134 @@
   # tun is exclusive to gluetun (creates /dev/net/tun for the tunnel).
   boot.kernelModules = [ "wireguard" "iptable_nat" "iptable_filter" "tun" ];
 
+
+  myStack.dnsHosts = [
+    "192.168.0.2 jellyfin.s2.toscanini.me"
+    "192.168.0.2 qbittorrent.s2.toscanini.me"
+    "192.168.0.2 nzbget.s2.toscanini.me"
+    "192.168.0.2 sonarr.s2.toscanini.me"
+    "192.168.0.2 radarr.s2.toscanini.me"
+    "192.168.0.2 bazarr.s2.toscanini.me"
+    "192.168.0.2 prowlarr.s2.toscanini.me"
+  ];
+
+  myStack.prometheusScrapes = [{
+    job_name = "gluetun";
+    static_configs = [{ targets = [ "host.containers.internal:8001" ]; }];
+  }];
+
+  myStack.homepageServices."Media" = [
+    {
+      name = "Jellyfin";
+      href = "https://jellyfin.s2.toscanini.me";
+      description = "Movies, TV, music — household media server";
+      icon = "jellyfin.png";
+      siteMonitor = "http://host.containers.internal:8096";
+      widget = {
+        type = "jellyfin";
+        url = "http://host.containers.internal:8096";
+        key = "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}";
+        enableBlocks = true;
+        enableNowPlaying = true;
+        enableUser = false;
+      };
+    }
+    {
+      name = "qBittorrent";
+      href = "https://qbittorrent.s2.toscanini.me";
+      description = "BitTorrent (via gluetun/ProtonVPN)";
+      icon = "qbittorrent.png";
+      siteMonitor = "http://host.containers.internal:8090";
+      widget = {
+        # Direct host.containers.internal:8090 makes qBittorrent
+        # return 403 to homepage's widget (CSRF / SameSite cookie
+        # interaction). Going through traefik fixes it.
+        type = "qbittorrent";
+        url = "https://qbittorrent.s2.toscanini.me";
+        username = "{{HOMEPAGE_VAR_QBT_USER}}";
+        password = "{{HOMEPAGE_VAR_QBT_PASS}}";
+        enableLeechProgress = true;
+      };
+    }
+    {
+      name = "NZBGet";
+      href = "https://nzbget.s2.toscanini.me";
+      description = "Usenet downloader (via gluetun)";
+      icon = "nzbget.png";
+      siteMonitor = "https://nzbget.s2.toscanini.me";
+      widget = {
+        # `Connection: close` undici-bug workaround — go via traefik.
+        type = "nzbget";
+        url = "https://nzbget.s2.toscanini.me";
+        username = "{{HOMEPAGE_VAR_NZBGET_USER}}";
+        password = "{{HOMEPAGE_VAR_NZBGET_PASS}}";
+      };
+    }
+    {
+      name = "Sonarr";
+      href = "https://sonarr.s2.toscanini.me";
+      description = "TV shows";
+      icon = "sonarr.png";
+      siteMonitor = "http://host.containers.internal:8989";
+      widget = {
+        type = "sonarr";
+        url = "http://host.containers.internal:8989";
+        key = "{{HOMEPAGE_VAR_SONARR_API_KEY}}";
+        enableQueue = true;
+      };
+    }
+    {
+      name = "Radarr";
+      href = "https://radarr.s2.toscanini.me";
+      description = "Movies";
+      icon = "radarr.png";
+      siteMonitor = "http://host.containers.internal:7878";
+      widget = {
+        type = "radarr";
+        url = "http://host.containers.internal:7878";
+        key = "{{HOMEPAGE_VAR_RADARR_API_KEY}}";
+        enableQueue = true;
+      };
+    }
+    {
+      name = "Bazarr";
+      href = "https://bazarr.s2.toscanini.me";
+      description = "Subtitles";
+      icon = "bazarr.png";
+      siteMonitor = "http://host.containers.internal:6767";
+      widget = {
+        type = "bazarr";
+        url = "http://host.containers.internal:6767";
+        key = "{{HOMEPAGE_VAR_BAZARR_API_KEY}}";
+      };
+    }
+    {
+      name = "Prowlarr";
+      href = "https://prowlarr.s2.toscanini.me";
+      description = "Indexer aggregator";
+      icon = "prowlarr.png";
+      siteMonitor = "http://host.containers.internal:9696";
+      widget = {
+        type = "prowlarr";
+        url = "http://host.containers.internal:9696";
+        key = "{{HOMEPAGE_VAR_PROWLARR_API_KEY}}";
+      };
+    }
+  ];
+
+  myStack.homepageServices."Network" = [{
+    name = "Gluetun";
+    href = "https://qbittorrent.s2.toscanini.me";
+    description = "ProtonVPN WireGuard tunnel (host netns for tv stack)";
+    icon = "gluetun.png";
+    siteMonitor = "http://host.containers.internal:8000/v1/publicip/ip";
+    widget = {
+      type = "gluetun";
+      url = "http://host.containers.internal:8000";
+      version = 2;
+    };
+  }];
+
   virtualisation.oci-containers.containers.gluetun = mkRootlessContainer {
     image = "docker.io/qmcgaw/gluetun:latest";
 

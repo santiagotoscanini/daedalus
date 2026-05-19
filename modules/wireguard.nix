@@ -37,6 +37,31 @@
 
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
+
+  myStack.dnsHosts = [ "192.168.0.2 wireguard.s2.toscanini.me" ];
+
+  myStack.prometheusScrapes = [{
+    job_name = "wireguard";
+    metrics_path = "/metrics/prometheus";
+    static_configs = [{ targets = [ "host.containers.internal:51821" ]; }];
+  }];
+
+  myStack.homepageServices."Network" = [{
+    name = "WireGuard";
+    href = "https://wireguard.s2.toscanini.me";
+    description = "VPN admin (wg-easy v15+)";
+    icon = "wireguard.png";
+    siteMonitor = "http://host.containers.internal:51821";
+    widget = {
+      type = "wgeasy";
+      url = "http://host.containers.internal:51821";
+      version = 2;
+      username = "{{HOMEPAGE_VAR_WGEASY_USER}}";
+      password = "{{HOMEPAGE_VAR_WGEASY_PASS}}";
+      threshold = 2;
+    };
+  }];
+
   virtualisation.oci-containers.containers.wireguard = mkRootlessContainer {
     image = "ghcr.io/wg-easy/wg-easy:15";
 

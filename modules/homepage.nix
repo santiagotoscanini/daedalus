@@ -1,30 +1,55 @@
 # homepage — single-pane dashboard for the whole fleet (gethomepage.dev).
 #
-# Standalone, pasta networking. Reads its config from
-# /home/santiago/selfhost/homepage/config (bind-mounted at /app/config).
-# All widget URLs use `host.containers.internal:<host-port>` to reach
-# each service via the host loopback — same pattern Traefik uses for
-# its file-provider rules (see modules/traefik.nix).
+# Standalone, pasta networking. Each stack module contributes its
+# tiles via `myStack.homepageServices`; this module renders them into
+# a generated `services.yaml`, combines it with the static support
+# files under modules/homepage-static/ (bookmarks, widgets, settings,
+# custom.css/js, docker/kubernetes/proxmox stubs), and bind-mounts
+# the resulting /nix/store directory read-only into the container.
+#
+# Read-only config dir + writable logs subdir: homepage writes only
+# to /app/config/logs at runtime, so we bind that as a separate rw
+# host path on top of the read-only config dir.
 #
 # Secrets (per-service API keys, admin passwords) live in
 # /etc/nixos/containers/homepage/env as HOMEPAGE_VAR_* keys. Homepage
-# substitutes `{{HOMEPAGE_VAR_FOO}}` placeholders in any of the
-# config/*.yaml files at read time. Empty values are tolerated —
-# widgets that miss credentials degrade to a tile + status dot.
+# substitutes `{{HOMEPAGE_VAR_FOO}}` placeholders in the rendered
+# YAML at read time, so the per-stack tile definitions reference
+# placeholder strings (not actual secret values).
 #
 # HOMEPAGE_ALLOWED_HOSTS gates the proxy against host-header attacks
 # (defense in depth; Traefik routes by host already). localhost:3000
 # and 127.0.0.1:3000 are always implicitly allowed.
-#
-# Why no docker socket: this box runs rootless podman, and homepage's
-# docker integration expects a unix socket on the host. The rootless
-# podman socket exists at /run/user/1000/podman/podman.sock but
-# enabling it adds enough surface area to not be worth it for the few
-# "container is up" tiles homepage would gain over the explicit
-# siteMonitor URLs we already set per service. The config/docker.yaml
-# is left present-but-empty so adding it later is just an edit.
 
-{ mkRootlessContainer, ... }:
+{ config, lib, pkgs, mkRootlessContainer, ... }:
+
+let
+  # Render `myStack.homepageServices` into homepage's services.yaml
+  # shape: a top-level list of single-key attrsets (group → list of
+  # services), where each service is itself a single-key attrset
+  # (service name → properties). We carry `name` as a regular field
+  # in nix for ergonomic merging and pull it out into the wrapper key
+  # here at generation time. YAML is a JSON superset, so toJSON is
+  # sufficient (avoids hand-rolled YAML escaping).
+  servicesYaml = pkgs.writeText "services.yaml" (builtins.toJSON (
+    lib.mapAttrsToList (groupName: services: {
+      "${groupName}" = map
+        (svc: { "${svc.name}" = removeAttrs svc [ "name" ]; })
+        services;
+    }) config.myStack.homepageServices
+  ));
+
+  # Combine the generated services.yaml with the static config files
+  # in /etc/nixos/modules/homepage-static/. The empty `logs/` subdir
+  # is the bind-mount target for the writable logs volume below — it
+  # must exist in the read-only base for the overlay bind to land.
+  homepageConfig = pkgs.runCommand "homepage-config" { } ''
+    mkdir -p $out
+    cp -r ${./homepage-static}/. $out/
+    cp ${servicesYaml} $out/services.yaml
+    mkdir -p $out/logs
+  '';
+in
 
 {
   myStack.containerNetworks.homepage = null;
@@ -32,6 +57,50 @@
     host = "homepage.s2.toscanini.me";
     port = 3001;
   };
+
+  # Pi-hole DNS entry and homepage's own tile come through the same
+  # `myStack.*` options that every other stack uses — homepage is
+  # not special. (The tile here is the dashboard's link to itself,
+  # which is useful when bookmarked elsewhere.)
+  myStack.dnsHosts = [
+    "192.168.0.2 homepage.s2.toscanini.me"
+  ];
+
+
+  # External / ambient network links — not tied to any container, so
+  # they live in homepage.nix itself rather than a stack module.
+  myStack.homepageServices."Network" = [
+    {
+      name = "Router";
+      href = "http://192.168.0.1/webpages/index.html?t=eb9856ea#networkMap";
+      description = "LAN router admin (192.168.0.1)";
+      icon = "mdi-router-network-#38bdf8";
+      siteMonitor = "http://192.168.0.1/";
+    }
+    {
+      name = "Cloudflare DNS";
+      href = "https://dash.cloudflare.com/c08bf36c41d7bc5db11d6b35e0b4e721/toscanini.me/dns/records";
+      description = "DNS records for toscanini.me";
+      icon = "cloudflare.png";
+    }
+    {
+      name = "Namecheap";
+      href = "https://ap.www.namecheap.com/Domains/DomainControlPanel/toscanini.me/advancedns";
+      description = "Domain registrar — toscanini.me";
+      icon = "namecheap.png";
+    }
+    {
+      name = "ProtonVPN";
+      href = "https://account.protonvpn.com/downloads";
+      description = "Re-export WireGuard config when gluetun peers fail";
+      icon = "proton-vpn.png";
+    }
+  ];
+
+  systemd.tmpfiles.rules = [
+    # Writable logs dir — homepage's winston logger writes here.
+    "d /home/santiago/selfhost/homepage/logs 0755 santiago users -"
+  ];
 
   virtualisation.oci-containers.containers.homepage = mkRootlessContainer {
     # Pin to the current upstream stable release. Bump intentionally —
@@ -44,7 +113,10 @@
     ports = [ "3001:3000" ];
 
     volumes = [
-      "/home/santiago/selfhost/homepage/config:/app/config"
+      # Generated config dir (services.yaml + static files), read-only.
+      "${homepageConfig}:/app/config:ro"
+      # Writable overlay for the runtime log dir.
+      "/home/santiago/selfhost/homepage/logs:/app/config/logs:rw"
     ];
 
     environment = {

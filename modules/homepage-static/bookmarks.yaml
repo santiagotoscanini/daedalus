@@ -1,0 +1,8 @@
+# homepage — bookmarks.
+# Intentionally empty: all external links (Cloudflare, Namecheap,
+# ProtonVPN, etc.) live as service tiles in the Network group of
+# services.yaml so they get the same glassmorphism treatment + the
+# router gets a real status dot. Add bookmark groups here only if
+# you want the dense pill-list style at the bottom of the page.
+
+---

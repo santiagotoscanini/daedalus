@@ -52,6 +52,9 @@
     port = 3100;
   };
 
+
+  myStack.dnsHosts = [ "192.168.0.2 logging.s2.toscanini.me" ];
+
   virtualisation.oci-containers.containers.loki = mkRootlessContainer {
     image = "docker.io/grafana/loki:3.4.1";
 

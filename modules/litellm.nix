@@ -37,6 +37,39 @@
     port = 4000;
   };
 
+
+  myStack.dnsHosts = [ "192.168.0.2 litellm.s2.toscanini.me" ];
+
+  myStack.prometheusScrapes = [{
+    job_name = "litellm";
+    authorization = {
+      type = "Bearer";
+      credentials = "ROTATED-2026-07-15";
+    };
+    static_configs = [{ targets = [ "host.containers.internal:4000" ]; }];
+  }];
+
+
+  myStack.grafanaDashboards.litellm = builtins.readFile ./litellm-dashboard.json;
+  myStack.homepageServices."Cloud & AI" = [
+    {
+      name = "LiteLLM";
+      href = "https://litellm.s2.toscanini.me/ui";
+      description = "OpenAI-compatible LLM gateway (lemonade on gaming-pc)";
+      icon = "mdi-robot-happy-#a78bfa";
+      siteMonitor = "http://host.containers.internal:4000";
+    }
+    {
+      # External — runs on the Windows gaming PC, declared here because
+      # litellm is the only NixOS-side piece of this dual-machine setup.
+      name = "Lemonade";
+      href = "http://gaming-pc.local.toscanini.me:13305/";
+      description = "Local LLM model server on the gaming PC (Vulkan/ROCm)";
+      icon = "mdi-lemon-#facc15";
+      siteMonitor = "http://gaming-pc.local.toscanini.me:13305/";
+    }
+  ];
+
   virtualisation.oci-containers.containers.litellm-db = mkRootlessContainer {
     image = "docker.io/library/postgres:16-alpine";
 

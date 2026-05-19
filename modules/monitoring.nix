@@ -55,74 +55,6 @@ let
 
     { job_name = "cadvisor";
       static_configs = [ { targets = [ "cadvisor:8080" ]; } ]; }
-
-    # Intel iGPU (clambin/intel-gpu-exporter wrapping intel_gpu_top -J).
-    # Same bridge as prometheus, scraped by container name. The
-    # dashboard variable filters on a `node` label; upstream gets that
-    # from k8s, we synthesize it here so panels render.
-    { job_name = "intel-gpu";
-      static_configs = [ {
-        targets = [ "intel-gpu-exporter:9100" ];
-        labels = { node = "s2-server"; };
-      } ]; }
-
-    # Cloudflare Tunnel internal metrics (--metrics flag)
-    { job_name = "cloudflared";
-      static_configs = [ { targets = [ "host.containers.internal:2000" ]; } ]; }
-
-    # Traefik native Prometheus metrics on its internal :8080
-    { job_name = "traefik";
-      static_configs = [ { targets = [ "host.containers.internal:9080" ]; } ]; }
-
-    # wg-easy v15 native Prometheus exporter (after toggling
-    # metrics_prometheus=1 in its SQLite DB)
-    { job_name = "wireguard";
-      metrics_path = "/metrics/prometheus";
-      static_configs = [ { targets = [ "host.containers.internal:51821" ]; } ]; }
-
-    # LiteLLM proxy native /metrics (requires bearer token of
-    # LITELLM_MASTER_KEY). Same secrecy posture as before — the token
-    # is now baked into /nix/store-rendered prometheus.yml instead of
-    # the host-side prometheus.yml; both are world-readable on this
-    # single-user box. If broader access ever lands here, switch to
-    # `credentials_file = "/etc/nixos/containers/monitoring/litellm.token"`.
-    { job_name = "litellm";
-      authorization = {
-        type = "Bearer";
-        credentials = "ROTATED-2026-07-15";
-      };
-      static_configs = [ { targets = [ "host.containers.internal:4000" ]; } ]; }
-
-    # gluetun-exporter (thecfu/gluetun-exporter) — sidecar in gluetun's netns
-    { job_name = "gluetun";
-      static_configs = [ { targets = [ "host.containers.internal:8001" ]; } ]; }
-
-    # Nextcloud OpenMetrics endpoint. The `/metrics` path is built into
-    # Nextcloud (no separate exporter). By default it responds only to
-    # localhost; openmetrics_allowed_clients in config.php is set to
-    # allow 10.0.0.0/8 (covers the podman bridge IPs that prometheus
-    # appears as from inside nextcloud-net). Hosted at host port 8082,
-    # behind apache on the nextcloud-app container.
-    { job_name = "nextcloud";
-      honor_timestamps = false;
-      static_configs = [ { targets = [ "host.containers.internal:8082" ]; } ]; }
-
-    # nextcloud-exporter (postgres-exporter against nextcloud-postgres).
-    # Provides accurate file/storage metrics that bypass the
-    # `WHERE path LIKE 'files/%'` filter in NC's built-in /metrics —
-    # see modules/nextcloud-exporter.nix.
-    { job_name = "nextcloud-exporter";
-      static_configs = [ { targets = [ "host.containers.internal:9187" ]; } ]; }
-
-    # Immich — API + microservices metrics (IMMICH_TELEMETRY_INCLUDE=all).
-    # OpenTelemetry-style endpoints. Bridge-isolated containers reached
-    # via host.containers.internal because Prometheus lives on
-    # monitoring-net, Immich on immich-net.
-    { job_name = "immich-api";
-      static_configs = [ { targets = [ "host.containers.internal:18081" ]; } ]; }
-
-    { job_name = "immich-microservices";
-      static_configs = [ { targets = [ "host.containers.internal:18082" ]; } ]; }
   ];
 
   # Generate prometheus.yml from the merged scrape list. Prometheus
@@ -167,6 +99,40 @@ in
     prometheus = { host = "prometheus.s2.toscanini.me"; port = 9090; };
     grafana    = { host = "grafana.s2.toscanini.me";    port = 3000; };
   };
+
+
+  myStack.dnsHosts = [
+    "192.168.0.2 prometheus.s2.toscanini.me"
+    "192.168.0.2 grafana.s2.toscanini.me"
+  ];
+
+  myStack.homepageServices."Monitoring" = [
+    {
+      name = "Grafana";
+      href = "https://grafana.s2.toscanini.me/bookmarks";
+      description = "Dashboards (prometheus + loki)";
+      icon = "grafana.png";
+      siteMonitor = "http://host.containers.internal:3000";
+      widget = {
+        type = "grafana";
+        version = 2;
+        url = "http://host.containers.internal:3000";
+        username = "{{HOMEPAGE_VAR_GRAFANA_USER}}";
+        password = "{{HOMEPAGE_VAR_GRAFANA_PASS}}";
+      };
+    }
+    {
+      name = "Prometheus";
+      href = "https://prometheus.s2.toscanini.me";
+      description = "TSDB — 30d / 100GB retention";
+      icon = "prometheus.png";
+      siteMonitor = "http://host.containers.internal:9090";
+      widget = {
+        type = "prometheus";
+        url = "http://host.containers.internal:9090";
+      };
+    }
+  ];
 
   virtualisation.oci-containers.containers.prometheus = mkRootlessContainer {
     image = "docker.io/prom/prometheus:v3.9.1";

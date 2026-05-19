@@ -21,6 +21,15 @@
     entrypoint = "cfweb";
   };
 
+
+  myStack.homepageServices."Productivity" = [{
+    name = "Grocy";
+    href = "https://grocy.toscanini.me";
+    description = "Household inventory & chores";
+    icon = "grocy.png";
+    siteMonitor = "http://host.containers.internal:8084";
+  }];
+
   virtualisation.oci-containers.containers.grocy = mkRootlessContainer {
     image = "docker.io/linuxserver/grocy:latest";
 

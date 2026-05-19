@@ -18,6 +18,17 @@
     port = 8081;
   };
 
+
+  myStack.dnsHosts = [ "192.168.0.2 metube.s2.toscanini.me" ];
+
+  myStack.homepageServices."Media" = [{
+    name = "MeTube";
+    href = "https://metube.s2.toscanini.me";
+    description = "YouTube-dl web UI (writes to /s2/tv/media/videos)";
+    icon = "metube.png";
+    siteMonitor = "http://host.containers.internal:8081";
+  }];
+
   virtualisation.oci-containers.containers.metube = mkRootlessContainer {
     image = "ghcr.io/alexta69/metube:2026.04.04";
 

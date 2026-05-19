@@ -1,0 +1,265 @@
+/*
+ * homepage — custom styling.
+ * https://gethomepage.dev/configs/custom-css-js/
+ *
+ * Visual goals:
+ *   1. Atmospheric photographic background (forest at twilight).
+ *   2. Glassmorphism tiles: translucent slate, backdrop blur, hover
+ *      lift, soft glowing shadows.
+ *   3. Dense layout: tight group spacing, compact info bar, no
+ *      wasted vertical real estate.
+ *
+ * All overrides are scoped — if homepage rebrands the markup, the
+ * rules silently stop applying. Nothing here can break the page.
+ *
+ * To swap the background, change the --bg-image var below.
+ */
+
+:root {
+  /* Forest at twilight — swap to any other URL or a /icons/ local
+     path to change the vibe. */
+  --bg-image: url('https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?auto=format&fit=crop&w=2400&q=80');
+
+  /* Tile palette. Bumping --tile-bg up to e.g. 0.6 gives heavier
+     opacity; down to 0.3 makes it ghostier. */
+  --tile-bg: rgba(15, 23, 42, 0.55);
+  --tile-bg-hover: rgba(15, 23, 42, 0.70);
+  --tile-border: rgba(148, 163, 184, 0.12);
+  --tile-border-hover: rgba(148, 163, 184, 0.30);
+  --tile-radius: 12px;
+  --tile-blur: 14px;
+}
+
+/* ── Background ─────────────────────────────────────────────────── */
+
+/*
+ * homepage's bundled Next.js stylesheet has
+ *
+ *     @layer base { html { background-color: rgb(var(--bg-color)) } }
+ *     .dark { --bg-color: var(--color-800) }
+ *
+ * That paints opaque slate over the body. Putting the photo on
+ * <html> with !important wins because it has equal specificity and
+ * loads later in the same cascade.
+ */
+html {
+  background-color: transparent !important;
+  background-image: var(--bg-image) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-attachment: fixed !important;
+  background-repeat: no-repeat !important;
+}
+
+/* Solid fallback behind the photo during slow image fetch. */
+html::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: #020617;
+  z-index: -2;
+}
+
+/* Tint overlay — keeps tile text legible against any photo without
+   washing the photo out. Lighter than before so the forest is
+   actually visible. */
+body {
+  background-color: transparent !important;
+  min-height: 100vh;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 18% 12%, rgba(99, 102, 241, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 82% 22%, rgba(14, 165, 233, 0.10) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(2, 6, 23, 0.35) 0%, rgba(11, 18, 32, 0.30) 60%, rgba(2, 6, 23, 0.45) 100%);
+}
+
+/* Make every wrapper Next.js renders transparent so the photo +
+   overlay remain visible at all depths. */
+#__next, #page_wrapper, #inner_wrapper, main, header,
+.container, [class*="bg-theme-"] {
+  background-color: transparent !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Density: tighten outer spacing ────────────────────────────── */
+
+/* Container that holds the entire dashboard. */
+.container {
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+/* Top info-widgets strip — pulled tight + given a "S2" wordmark on
+   the left. ::before content is injected so we don't depend on
+   homepage exposing a "title" rendering slot. */
+#information-widgets,
+[id*="information-widgets"] {
+  background-color: var(--tile-bg) !important;
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid var(--tile-border);
+  border-radius: var(--tile-radius);
+  margin: 12px 18px 14px !important;
+  padding: 6px 14px 6px 18px !important;
+  border-bottom-width: 1px !important;
+  box-shadow: 0 4px 20px -8px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+/* "S2" wordmark — sits left of the resources strip with a
+   blue-to-pink gradient + soft glow. */
+#information-widgets::before {
+  content: "S2";
+  display: flex;
+  align-items: center;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #93c5fd 0%, #c4b5fd 50%, #f0abfc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 10px rgba(99, 102, 241, 0.4));
+  margin-right: 22px;
+  flex-shrink: 0;
+}
+
+/* ── Density: group spacing ────────────────────────────────────── */
+
+/* Each service group is wrapped in an element with several
+   `mt-*` `mb-*` classes; collapse them. */
+.services-group,
+[id^="service-group-"],
+[class*="services-group"] {
+  margin-top: 6px !important;
+  margin-bottom: 6px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Service group inner padding (homepage uses `p-1 sm:p-4` etc). */
+[class*="services-group"] > div {
+  padding: 2px 18px !important;
+}
+
+/* Make tile gaps tighter (Tailwind default is gap-2/gap-4). */
+[class*="services-group"] [class*="grid"],
+[class*="grid"][class*="gap"] {
+  gap: 8px !important;
+}
+
+/* ── Density: group headings ───────────────────────────────────── */
+
+.services-group > h2,
+.bookmarks-group > h2,
+h2.group-name,
+h2[class*="group"] {
+  font-weight: 700 !important;
+  font-size: 0.95rem !important;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 50%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent !important;
+  padding: 0 0 4px 0 !important;
+  margin: 4px 0 6px 0 !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Glass tiles ────────────────────────────────────────────────── */
+
+.service-card,
+.bookmark-text,
+[id^="service-"] > div,
+[class*="services-block"],
+[class*="bookmark-block"] {
+  background-color: var(--tile-bg) !important;
+  backdrop-filter: blur(var(--tile-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--tile-blur)) saturate(160%);
+  border: 1px solid var(--tile-border);
+  border-radius: var(--tile-radius) !important;
+  transition:
+    transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    background-color 200ms ease;
+}
+
+.service-card:hover,
+[id^="service-"] > div:hover,
+[class*="services-block"]:hover,
+[class*="bookmark-block"]:hover {
+  transform: translateY(-1px);
+  border-color: var(--tile-border-hover);
+  background-color: var(--tile-bg-hover) !important;
+  box-shadow:
+    0 12px 32px -16px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+/* Tighten tile inner padding (homepage default is p-2 sm:p-4). */
+.service-card,
+[id^="service-"] > div {
+  padding: 8px 10px !important;
+}
+
+/* ── Status indicators ─────────────────────────────────────────── */
+
+.status-light,
+[class*="status-"] svg,
+[class*="status-light"] {
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+[class*="status-light-resource-up"],
+[class*="status-up"] { color: rgb(74, 222, 128) !important; }
+
+[class*="status-light-resource-down"],
+[class*="status-down"] { color: rgb(248, 113, 113) !important; }
+
+[class*="status-light-resource-paused"],
+[class*="status-warn"] { color: rgb(251, 191, 36) !important; }
+
+/* ── Service icons ─────────────────────────────────────────────── */
+
+.service-card img,
+[id^="service-"] img {
+  border-radius: 4px;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.45));
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.service-card:hover img,
+[id^="service-"] div:hover img {
+  transform: scale(1.05);
+}
+
+/* ── Scrollbar (webkit) ────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); }
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.45); }
+
+/* ── Typography ────────────────────────────────────────────────── */
+
+body, h1, h2, h3, p, span, div {
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Subtle text-shadow so body text reads against any background. */
+body, p, span {
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}

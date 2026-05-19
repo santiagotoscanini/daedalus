@@ -232,6 +232,43 @@ in
         the resulting derivation into the grafana container.
       '';
     };
+
+    homepageServices = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.listOf
+        (lib.types.attrsOf lib.types.unspecified));
+      default = { };
+      description = ''
+        Per-stack homepage service tiles. Outer attrset is keyed by
+        group name (e.g., "Media", "Network"); each value is a list
+        of service entries. Each entry MUST include a `name` field;
+        remaining fields follow homepage's services.yaml schema
+        (`href`, `icon`, `description`, `widget`, `siteMonitor`, …).
+
+        modules/homepage.nix renders this into services.yaml at build
+        time: the `name` field becomes the service entry's single-key
+        wrapper (`{ Foo: {...} }`) that homepage expects.
+
+        Groups merge across modules (multiple modules can contribute
+        services to the same group). YAML output order is alphabetical
+        — homepage's own `weight` field on a service can override the
+        within-group rendering order if needed.
+      '';
+      example = lib.literalExpression ''
+        {
+          "Media" = [{
+            name = "Jellyfin";
+            href = "https://jellyfin.s2.toscanini.me";
+            icon = "jellyfin.png";
+            siteMonitor = "http://host.containers.internal:8096";
+            widget = {
+              type = "jellyfin";
+              url  = "http://host.containers.internal:8096";
+              key  = "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}";
+            };
+          }];
+        }
+      '';
+    };
   };
 
   config = {

@@ -43,6 +43,23 @@
     port = 8080;
   };
 
+
+  myStack.dnsHosts = [ "192.168.0.2 pihole.s2.toscanini.me" ];
+
+  myStack.homepageServices."Network" = [{
+    name = "Pi-hole";
+    href = "https://pihole.s2.toscanini.me";
+    description = "LAN DNS, DHCP, ad-blocking";
+    icon = "pi-hole.png";
+    siteMonitor = "https://pihole.s2.toscanini.me";
+    widget = {
+      type = "pihole";
+      url = "http://host.containers.internal:8080";
+      version = 6;
+      key = "{{HOMEPAGE_VAR_PIHOLE_KEY}}";
+    };
+  }];
+
   services.pihole-ftl = {
     enable = true;
     openFirewallDNS = true;       # 53 TCP + UDP
@@ -56,26 +73,6 @@
         upstreams = [ "8.8.8.8" "8.8.4.4" ];
         bogusPriv = false;
         hosts = config.myStack.dnsHosts ++ [
-          "192.168.0.2 stirling-pdf.s2.toscanini.me"
-          "192.168.0.2 immich.s2.toscanini.me"
-          "192.168.0.2 traefik.s2.toscanini.me"
-          "192.168.0.2 wireguard.s2.toscanini.me"
-          "192.168.0.2 homepage.s2.toscanini.me"
-          "192.168.0.2 pihole.s2.toscanini.me"
-          "192.168.0.2 metube.s2.toscanini.me"
-          "192.168.0.2 n8n.s2.toscanini.me"
-          "192.168.0.2 prometheus.s2.toscanini.me"
-          "192.168.0.2 grafana.s2.toscanini.me"
-          "192.168.0.2 litellm.s2.toscanini.me"
-          "192.168.0.2 logging.s2.toscanini.me"
-          # tv stack
-          "192.168.0.2 jellyfin.s2.toscanini.me"
-          "192.168.0.2 sonarr.s2.toscanini.me"
-          "192.168.0.2 radarr.s2.toscanini.me"
-          "192.168.0.2 bazarr.s2.toscanini.me"
-          "192.168.0.2 prowlarr.s2.toscanini.me"
-          "192.168.0.2 qbittorrent.s2.toscanini.me"
-          "192.168.0.2 nzbget.s2.toscanini.me"
           "192.168.0.120 gaming-pc.local.toscanini.me"
         ];
         domain = {

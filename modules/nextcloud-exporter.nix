@@ -33,6 +33,12 @@
 {
   myStack.containerNetworks.nextcloud-exporter = "nextcloud";
 
+
+  myStack.prometheusScrapes = [{
+    job_name = "nextcloud-exporter";
+    static_configs = [{ targets = [ "host.containers.internal:9187" ]; }];
+  }];
+
   virtualisation.oci-containers.containers.nextcloud-exporter = mkRootlessContainer {
     image = "quay.io/prometheuscommunity/postgres-exporter:v0.17.1";
     dependsOn = [ "nextcloud-postgres" ];
