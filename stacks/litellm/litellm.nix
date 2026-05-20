@@ -50,7 +50,7 @@
   }];
 
 
-  myStack.grafanaDashboards.litellm = builtins.readFile ./litellm-dashboard.json;
+  myStack.grafanaDashboards.litellm = builtins.readFile ./assets/dashboard.json;
   myStack.homepageServices."Cloud & AI" = [
     {
       name = "LiteLLM";
@@ -83,7 +83,7 @@
     };
 
     # POSTGRES_PASSWORD shared with litellm (DATABASE_URL).
-    environmentFiles = [ "/etc/nixos/containers/litellm/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/litellm/secrets/env" ];
 
     extraOptions = [
       "--network=litellm-net"
@@ -101,7 +101,7 @@
     # /metrics endpoint returns 404. Config file lives next to the env
     # file under /etc/nixos so it's reproducible.
     volumes = [
-      "/etc/nixos/containers/litellm/config.yaml:/app/config.yaml:ro"
+      "/etc/nixos/stacks/litellm/assets/config.yaml:/app/config.yaml:ro"
     ];
 
     cmd = [ "--config" "/app/config.yaml" "--port" "4000" ];
@@ -111,7 +111,7 @@
     };
 
     # DATABASE_URL + UI_USERNAME/UI_PASSWORD + LITELLM_MASTER_KEY.
-    environmentFiles = [ "/etc/nixos/containers/litellm/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/litellm/secrets/env" ];
 
     extraOptions = [
       "--network=litellm-net"

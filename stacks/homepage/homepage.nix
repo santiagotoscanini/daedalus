@@ -3,7 +3,7 @@
 # Standalone, pasta networking. Each stack module contributes its
 # tiles via `myStack.homepageServices`; this module renders them into
 # a generated `services.yaml`, combines it with the static support
-# files under modules/homepage-static/ (bookmarks, widgets, settings,
+# files under stacks/homepage/assets/ (bookmarks, widgets, settings,
 # custom.css/js, docker/kubernetes/proxmox stubs), and bind-mounts
 # the resulting /nix/store directory read-only into the container.
 #
@@ -40,12 +40,12 @@ let
   ));
 
   # Combine the generated services.yaml with the static config files
-  # in /etc/nixos/modules/homepage-static/. The empty `logs/` subdir
+  # in /etc/nixos/stacks/homepage/assets/. The empty `logs/` subdir
   # is the bind-mount target for the writable logs volume below — it
   # must exist in the read-only base for the overlay bind to land.
   homepageConfig = pkgs.runCommand "homepage-config" { } ''
     mkdir -p $out
-    cp -r ${./homepage-static}/. $out/
+    cp -r ${./assets}/. $out/
     cp ${servicesYaml} $out/services.yaml
     mkdir -p $out/logs
   '';
@@ -153,7 +153,7 @@ in
     ];
 
     environmentFiles = [
-      "/etc/nixos/containers/homepage/env"
+      "/etc/nixos/stacks/homepage/secrets/env"
     ];
   };
 }

@@ -87,7 +87,7 @@ in
       static_configs = [{ targets = [ "host.containers.internal:18082" ]; }]; }
   ];
 
-  myStack.grafanaDashboards.immich = builtins.readFile ./immich-dashboard.json;
+  myStack.grafanaDashboards.immich = builtins.readFile ./assets/dashboard.json;
 
   myStack.homepageServices."Cloud & AI" = [{
     name = "Immich";
@@ -122,7 +122,7 @@ in
 
     # POSTGRES_PASSWORD (also DB_PASSWORD for immich-server — same
     # value, two keys, both consumed natively).
-    environmentFiles = [ "/etc/nixos/containers/immich/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/immich/secrets/env" ];
 
     extraOptions = [
       "--network=immich-net:alias=database"
@@ -180,7 +180,7 @@ in
     };
 
     # DB_PASSWORD — same env file as postgres so they stay in sync.
-    environmentFiles = [ "/etc/nixos/containers/immich/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/immich/secrets/env" ];
 
     extraOptions = [
       "--network=immich-net"

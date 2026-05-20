@@ -25,20 +25,20 @@
     ./stacks/cloudflared/cloudflared.nix
     ./stacks/factorio/factorio.nix
     ./stacks/grocy/grocy.nix
-    ./modules/homepage.nix
-    ./modules/immich.nix
-    ./modules/intel-gpu-exporter.nix
-    ./modules/litellm.nix
+    ./stacks/homepage/homepage.nix
+    ./stacks/immich/immich.nix
+    ./stacks/intel-gpu-exporter/intel-gpu-exporter.nix
+    ./stacks/litellm/litellm.nix
     ./stacks/logging/logging.nix
     ./stacks/metube/metube.nix
-    ./modules/monitoring.nix
+    ./stacks/monitoring/monitoring.nix
     ./stacks/n8n/n8n.nix
     ./modules/nextcloud.nix
     ./stacks/pihole/pihole.nix
     ./stacks/stirling-pdf/stirling-pdf.nix
     ./modules/supabase.nix
     ./modules/supabase-projects.nix
-    ./modules/traefik.nix
+    ./stacks/traefik/traefik.nix
     ./modules/tv.nix
     ./stacks/wealthfolio/wealthfolio.nix
     ./stacks/wireguard/wireguard.nix

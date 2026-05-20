@@ -95,8 +95,8 @@ in
   # The `nextcloud.yml` static rule lives in modules/nextcloud.nix,
   # declared alongside the nextcloud-app container.
   myStack.traefikStaticRules = {
-    "tls-opts.yml"          = builtins.readFile ../containers/traefik/tls-opts.yml;
-    "traefik-dashboard.yml" = builtins.readFile ../containers/traefik/traefik-dashboard.yml;
+    "tls-opts.yml"          = builtins.readFile ./assets/tls-opts.yml;
+    "traefik-dashboard.yml" = builtins.readFile ./assets/dashboard-rule.yml;
   };
 
 
@@ -147,7 +147,7 @@ in
     # ACME. Mode 0600, santiago:users (the systemd unit runs as
     # santiago). TODO: migrate to sops-nix.
     environmentFiles = [
-      "/etc/nixos/containers/traefik/env"
+      "/etc/nixos/stacks/traefik/secrets/env"
     ];
 
     cmd = [
