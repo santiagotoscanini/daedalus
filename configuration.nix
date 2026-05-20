@@ -33,13 +33,13 @@
     ./stacks/metube/metube.nix
     ./stacks/monitoring/monitoring.nix
     ./stacks/n8n/n8n.nix
-    ./modules/nextcloud.nix
+    ./stacks/nextcloud/nextcloud.nix
     ./stacks/pihole/pihole.nix
     ./stacks/stirling-pdf/stirling-pdf.nix
     ./modules/supabase.nix
     ./modules/supabase-projects.nix
     ./stacks/traefik/traefik.nix
-    ./modules/tv.nix
+    ./stacks/tv/tv.nix
     ./stacks/wealthfolio/wealthfolio.nix
     ./stacks/wireguard/wireguard.nix
     ./platform/zfs-datasets.nix

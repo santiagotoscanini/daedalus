@@ -56,7 +56,7 @@ in
   # (HTTPS). A single router with both entrypoints would force `tls:`
   # to apply to cfweb too (404 from CF). HSTS middleware is on both.
   myStack.traefikStaticRules."nextcloud.yml" =
-    builtins.readFile ../containers/nextcloud/nextcloud.yml;
+    builtins.readFile ./assets/traefik-rule.yml;
 
   # The `:16` pin is load-bearing: the on-disk cluster in
   # /home/santiago/selfhost/nextcloud/nc_postgres was initdb'd for
@@ -90,7 +90,7 @@ in
     };
 
     # PG_PASS — also used by nextcloud-app to log in as oc_santi.
-    environmentFiles = [ "/etc/nixos/containers/nextcloud/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/nextcloud/secrets/env" ];
 
     extraOptions = [
       # `:alias=postgres` so nextcloud-app's persisted config.php
@@ -113,7 +113,7 @@ in
     # argv (visible in `ps`). For podman we read the password from the
     # env file in the cmd's shell instead, so it isn't in argv at
     # config time.
-    environmentFiles = [ "/etc/nixos/containers/nextcloud/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/nextcloud/secrets/env" ];
 
     cmd = [
       "sh" "-c"
@@ -159,7 +159,7 @@ in
     };
 
     # PG_PASS + REDIS_PASS (REDIS_HOST_PASSWORD aliased below).
-    environmentFiles = [ "/etc/nixos/containers/nextcloud/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/nextcloud/secrets/env" ];
 
     # The official nextcloud image reads REDIS_HOST_PASSWORD; our env
     # file uses REDIS_PASS (matches postgres + makes pre-existing

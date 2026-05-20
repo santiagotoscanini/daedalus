@@ -267,7 +267,7 @@
     };
 
     # NZBGET_USER + NZBGET_PASS (admin credentials).
-    environmentFiles = [ "/etc/nixos/containers/tv/nzbget/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/tv/secrets/nzbget-env" ];
 
     extraOptions = [ "--network=container:gluetun" ];
   };
