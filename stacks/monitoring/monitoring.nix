@@ -91,7 +91,7 @@ let
   dashboardsDir = pkgs.runCommand "grafana-dashboards" { } (
     ''
       mkdir -p $out
-      cp -r ${./grafana-dashboards}/. $out/
+      cp -r ${./assets/dashboards}/. $out/
     ''
     + lib.concatStringsSep "\n" (lib.mapAttrsToList (name: content:
       "cp ${pkgs.writeText "${name}.json" content} $out/${name}.json"
@@ -204,7 +204,7 @@ in
     };
 
     # GF_SECURITY_ADMIN_USER + GF_SECURITY_ADMIN_PASSWORD.
-    environmentFiles = [ "/etc/nixos/containers/monitoring/grafana.env" ];
+    environmentFiles = [ "/etc/nixos/stacks/monitoring/secrets/grafana.env" ];
 
     extraOptions = [
       "--user=0:0"
