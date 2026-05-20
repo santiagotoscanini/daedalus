@@ -76,16 +76,33 @@ let
     cp ${prometheusConfig} $out/prometheus.yml
   '';
 
-  # Combine the static dashboards (committed to /etc/nixos/modules/
-  # grafana-dashboards/) with anything per-stack modules push through
-  # `myStack.grafanaDashboards`. Two sources, one /nix/store dir
-  # bind-mounted into Grafana.
-  dashboardsDir = pkgs.runCommand "grafana-dashboards" { } (''
-    mkdir -p $out
-    cp -r ${./grafana-dashboards}/. $out/
-  '' + lib.concatStringsSep "\n" (lib.mapAttrsToList (name: content:
-    "cp ${pkgs.writeText "${name}.json" content} $out/${name}.json"
-  ) config.myStack.grafanaDashboards));
+  # Combine three sources, all bind-mounted as a single /nix/store dir
+  # into the grafana container:
+  #   1. Static OS-generic dashboards committed under
+  #      /etc/nixos/modules/grafana-dashboards/ (root of /var/lib/
+  #      grafana/dashboards inside the container).
+  #   2. Per-stack dashboards from myStack.grafanaDashboards. Also at
+  #      root.
+  #   3. Per-stack dashboards in folders, from
+  #      myStack.grafanaDashboardsByFolder. Placed under named
+  #      subdirectories; the grafana provisioner uses
+  #      `foldersFromFilesStructure: true` to surface them as
+  #      Grafana sidebar folders.
+  dashboardsDir = pkgs.runCommand "grafana-dashboards" { } (
+    ''
+      mkdir -p $out
+      cp -r ${./grafana-dashboards}/. $out/
+    ''
+    + lib.concatStringsSep "\n" (lib.mapAttrsToList (name: content:
+      "cp ${pkgs.writeText "${name}.json" content} $out/${name}.json"
+    ) config.myStack.grafanaDashboards)
+    + "\n"
+    + lib.concatStringsSep "\n" (lib.mapAttrsToList (folder: dashboards: ''
+      mkdir -p "$out/${folder}"
+    '' + lib.concatStringsSep "\n" (lib.mapAttrsToList (name: content:
+      "cp ${pkgs.writeText "${name}.json" content} \"$out/${folder}/${name}.json\""
+    ) dashboards)) config.myStack.grafanaDashboardsByFolder)
+  );
 in
 {
   myStack.containerNetworks = {

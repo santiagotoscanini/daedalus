@@ -233,6 +233,29 @@ in
       '';
     };
 
+    grafanaDashboardsByFolder = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf lib.types.lines);
+      default = { };
+      description = ''
+        Per-stack dashboards organized into Grafana folders. Outer
+        attrset keyed by folder name (rendered as the folder in the
+        Grafana sidebar via Grafana's `foldersFromFilesStructure`
+        provisioner mode); inner attrset is the same shape as
+        `grafanaDashboards` (filename-without-`.json` → JSON content).
+
+        Use this instead of `grafanaDashboards` when a stack emits
+        multiple dashboards that belong together (e.g. one per
+        supabase project, all under a "Supabase" folder).
+      '';
+      example = lib.literalExpression ''
+        {
+          "Supabase" = {
+            "supabase-anansi" = builtins.readFile ./dashboard.json;
+          };
+        }
+      '';
+    };
+
     homepageServices = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf
         (lib.types.attrsOf lib.types.unspecified));
