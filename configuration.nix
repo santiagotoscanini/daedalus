@@ -19,7 +19,8 @@
     # Include the results of the hardware scan.
     ./hardware-configuration.nix
     # Shared helpers + myStack.* option declarations.
-    ./modules/common.nix
+    ./platform/common.nix
+    ./platform/ddclient/ddclient.nix
     # Per-stack modules.
     ./modules/cloudflared.nix
     ./modules/factorio.nix
@@ -41,7 +42,7 @@
     ./modules/tv.nix
     ./modules/wealthfolio.nix
     ./modules/wireguard.nix
-    ./modules/zfs-datasets.nix
+    ./platform/zfs-datasets.nix
   ];
 
   # ── Boot ────────────────────────────────────────────────────────────────────
@@ -347,27 +348,6 @@
   # Redis (nextcloud-redis) warns that without this BGSAVE may fail under
   # memory pressure. NixOS default is 0 (heuristic). 1 = always allow.
   boot.kernel.sysctl."vm.overcommit_memory" = 1;
-
-  # ── DDNS (Cloudflare → s2.toscanini.me) ─────────────────────────────────────
-
-  # Updates the Cloudflare A record for s2.toscanini.me every 5 minutes if our
-  # public IP changes. The API token lives at /etc/nixos/ddns/password
-  # (mode 0600, root:root — ddclient runs as root). Matches the
-  # /etc/nixos/containers/<stack>/ convention used for per-stack secrets;
-  # the long-term plan is to move all of these into sops-nix.
-  services.ddclient = {
-    enable = true;
-    protocol = "cloudflare";
-    zone = "toscanini.me";
-    username = "cloudflare@account.toscanini.me";
-    passwordFile = "/etc/nixos/ddns/password";
-    ssl = true;
-    usev4 = "webv4, webv4=https://cloudflare.com/cdn-cgi/trace, web-skip='ip='";
-    usev6 = "disabled";
-    extraConfig = "ttl=1\n";
-    domains = [ "s2.toscanini.me" ];
-    interval = "300s";
-  };
 
   # ── Intel iGPU (Jellyfin hardware transcoding) ──────────────────────────────
 
