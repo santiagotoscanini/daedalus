@@ -38,6 +38,6 @@
 
     # WF_LISTEN_ADDR + WF_DB_PATH + WF_SECRET_KEY + WF_AUTH_PASSWORD_HASH
     # + WF_CORS_ALLOW_ORIGINS.
-    environmentFiles = [ "/etc/nixos/containers/wealthfolio/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/wealthfolio/secrets/env" ];
   };
 }

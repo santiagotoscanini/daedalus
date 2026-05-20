@@ -41,7 +41,7 @@
 
     # PG_PASS in this env file is re-exported as POSTGRES_PASSWORD by
     # the entrypoint below (compose used POSTGRES_PASSWORD=${PG_PASS}).
-    environmentFiles = [ "/etc/nixos/containers/n8n/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/n8n/secrets/env" ];
 
     entrypoint = "/bin/sh";
     cmd = [
@@ -81,7 +81,7 @@
     };
 
     # PG_PASS + N8N_USER + N8N_PASS + N8N_ENCRYPTION_KEY.
-    environmentFiles = [ "/etc/nixos/containers/n8n/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/n8n/secrets/env" ];
 
     # The image expects DB_POSTGRESDB_PASSWORD / N8N_BASIC_AUTH_USER /
     # N8N_BASIC_AUTH_PASSWORD; compose mapped from PG_PASS / N8N_USER /

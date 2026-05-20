@@ -22,26 +22,26 @@
     ./platform/common.nix
     ./platform/ddclient/ddclient.nix
     # Per-stack modules.
-    ./modules/cloudflared.nix
-    ./modules/factorio.nix
-    ./modules/grocy.nix
+    ./stacks/cloudflared/cloudflared.nix
+    ./stacks/factorio/factorio.nix
+    ./stacks/grocy/grocy.nix
     ./modules/homepage.nix
     ./modules/immich.nix
     ./modules/intel-gpu-exporter.nix
     ./modules/litellm.nix
-    ./modules/logging.nix
-    ./modules/metube.nix
+    ./stacks/logging/logging.nix
+    ./stacks/metube/metube.nix
     ./modules/monitoring.nix
-    ./modules/n8n.nix
+    ./stacks/n8n/n8n.nix
     ./modules/nextcloud.nix
-    ./modules/pihole.nix
-    ./modules/stirling-pdf.nix
+    ./stacks/pihole/pihole.nix
+    ./stacks/stirling-pdf/stirling-pdf.nix
     ./modules/supabase.nix
     ./modules/supabase-projects.nix
     ./modules/traefik.nix
     ./modules/tv.nix
-    ./modules/wealthfolio.nix
-    ./modules/wireguard.nix
+    ./stacks/wealthfolio/wealthfolio.nix
+    ./stacks/wireguard/wireguard.nix
     ./platform/zfs-datasets.nix
   ];
 
