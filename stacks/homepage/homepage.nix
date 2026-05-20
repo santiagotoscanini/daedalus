@@ -2,20 +2,26 @@
 #
 # Standalone, pasta networking. Each stack module contributes its
 # tiles via `myStack.homepageServices`; this module renders them into
-# a generated `services.yaml`, combines it with the static support
-# files under stacks/homepage/assets/ (bookmarks, widgets, settings,
-# custom.css/js, docker/kubernetes/proxmox stubs), and bind-mounts
-# the resulting /nix/store directory read-only into the container.
+# a generated `services.yaml`. Homepage's `/app/config` is a writable
+# host dir; the files WE care about (services + the 4 static configs)
+# are layered on top as per-file read-only overlays. Anything else
+# Homepage wants — the docker.yaml / kubernetes.yaml / proxmox.yaml
+# skeleton stubs for integrations we don't use — Homepage auto-seeds
+# into the writable host dir on first run. We don't track those.
 #
-# Read-only config dir + writable logs subdir: homepage writes only
-# to /app/config/logs at runtime, so we bind that as a separate rw
-# host path on top of the read-only config dir.
+# Why per-file overlays: a single read-only bind of /app/config
+# breaks Homepage's "auto-copy from skeleton" startup step (it tries
+# to write missing default files and fails with EROFS). Making the
+# base dir writable + overlaying only the files we own is the
+# cleanest middle ground: declarative for our config, runtime
+# auto-seed for the rest, no zero-info stub files in nix.
 #
 # Secrets (per-service API keys, admin passwords) live in
-# /etc/nixos/containers/homepage/env as HOMEPAGE_VAR_* keys. Homepage
-# substitutes `{{HOMEPAGE_VAR_FOO}}` placeholders in the rendered
-# YAML at read time, so the per-stack tile definitions reference
-# placeholder strings (not actual secret values).
+# stacks/homepage/secrets/env as HOMEPAGE_VAR_* keys. Homepage
+# substitutes `{{HOMEPAGE_VAR_FOO}}` placeholders in any of the
+# rendered YAML files at read time, so the per-stack tile
+# definitions reference placeholder strings (not actual secret
+# values).
 #
 # HOMEPAGE_ALLOWED_HOSTS gates the proxy against host-header attacks
 # (defense in depth; Traefik routes by host already). localhost:3000
@@ -38,17 +44,6 @@ let
         services;
     }) config.myStack.homepageServices
   ));
-
-  # Combine the generated services.yaml with the static config files
-  # in /etc/nixos/stacks/homepage/assets/. The empty `logs/` subdir
-  # is the bind-mount target for the writable logs volume below — it
-  # must exist in the read-only base for the overlay bind to land.
-  homepageConfig = pkgs.runCommand "homepage-config" { } ''
-    mkdir -p $out
-    cp -r ${./assets}/. $out/
-    cp ${servicesYaml} $out/services.yaml
-    mkdir -p $out/logs
-  '';
 in
 
 {
@@ -98,8 +93,10 @@ in
   ];
 
   systemd.tmpfiles.rules = [
-    # Writable logs dir — homepage's winston logger writes here.
-    "d /home/santiago/selfhost/homepage/logs 0755 santiago users -"
+    # Writable host dir for /app/config. Homepage auto-seeds the
+    # files we don't override (bookmarks fallback, docker.yaml,
+    # kubernetes.yaml, proxmox.yaml, custom.js) into it on first run.
+    "d /home/santiago/selfhost/homepage/config 0755 santiago users -"
   ];
 
   virtualisation.oci-containers.containers.homepage = mkRootlessContainer {
@@ -113,10 +110,16 @@ in
     ports = [ "3001:3000" ];
 
     volumes = [
-      # Generated config dir (services.yaml + static files), read-only.
-      "${homepageConfig}:/app/config:ro"
-      # Writable overlay for the runtime log dir.
-      "/home/santiago/selfhost/homepage/logs:/app/config/logs:rw"
+      # Writable host base — Homepage owns this dir; auto-seeds any
+      # file it expects but we don't pin. Logs land in logs/.
+      "/home/santiago/selfhost/homepage/config:/app/config:rw"
+
+      # Per-file RO overlays — the bits WE keep declarative.
+      "${servicesYaml}:/app/config/services.yaml:ro"
+      "${./assets/settings.yaml}:/app/config/settings.yaml:ro"
+      "${./assets/widgets.yaml}:/app/config/widgets.yaml:ro"
+      "${./assets/bookmarks.yaml}:/app/config/bookmarks.yaml:ro"
+      "${./assets/custom.css}:/app/config/custom.css:ro"
     ];
 
     environment = {
@@ -126,8 +129,8 @@ in
     };
 
     # HOMEPAGE_VAR_* placeholders referenced from services.yaml — see
-    # /etc/nixos/containers/homepage/env for the full list and where
-    # to find each value.
+    # stacks/homepage/secrets/env for the full list and where to find
+    # each value.
     extraOptions = [
       # Map traefik.s2.toscanini.me to the pasta gateway so the
       # traefik widget can reach the api@internal router (which is
