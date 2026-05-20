@@ -48,18 +48,14 @@ in
 
 {
   myStack.containerNetworks.homepage = null;
-  myStack.traefikRoutes.homepage = {
-    host = "homepage.s2.toscanini.me";
+
+  # Pi-hole DNS entry + traefik websecure route come from the single
+  # webApps entry — homepage is not special. The "Network" tile below
+  # is just the dashboard's link to itself.
+  myStack.webApps.homepage = {
+    hostname = "homepage.toscanini.me";
     port = 3001;
   };
-
-  # Pi-hole DNS entry and homepage's own tile come through the same
-  # `myStack.*` options that every other stack uses — homepage is
-  # not special. (The tile here is the dashboard's link to itself,
-  # which is useful when bookmarked elsewhere.)
-  myStack.dnsHosts = [
-    "192.168.0.2 homepage.s2.toscanini.me"
-  ];
 
 
   # External / ambient network links — not tied to any container, so
@@ -125,18 +121,18 @@ in
     environment = {
       # Reverse-proxy host-header allow-list. Comma-separated, no
       # spaces. Localhost is always implicitly allowed.
-      HOMEPAGE_ALLOWED_HOSTS = "homepage.s2.toscanini.me";
+      HOMEPAGE_ALLOWED_HOSTS = "homepage.toscanini.me";
     };
 
     # HOMEPAGE_VAR_* placeholders referenced from services.yaml — see
     # stacks/homepage/secrets/env for the full list and where to find
     # each value.
     extraOptions = [
-      # Map traefik.s2.toscanini.me to the pasta gateway so the
+      # Map traefik.toscanini.me to the pasta gateway so the
       # traefik widget can reach the api@internal router (which is
       # only served on websecure with the right Host header). The
       # wildcard cert covers this name so TLS validates.
-      "--add-host=traefik.s2.toscanini.me:host-gateway"
+      "--add-host=traefik.toscanini.me:host-gateway"
       # Same trick for Nextcloud — its `NC_overwriteprotocol = "https"`
       # turns every plain-HTTP request from host.containers.internal into
       # a 30x redirect to https://nextcloud.toscanini.me, which homepage's
@@ -148,11 +144,11 @@ in
       # HTTP client that ECONNRESETs on the `Connection: close` response
       # NZBGet emits. Going through traefik gets keep-alive on the
       # client-facing side, sidestepping the bug.
-      "--add-host=nzbget.s2.toscanini.me:host-gateway"
+      "--add-host=nzbget.toscanini.me:host-gateway"
       # Pi-hole `/` ping + qBittorrent widget both hit the same
       # undici quirks. Route through traefik like the others above.
-      "--add-host=pihole.s2.toscanini.me:host-gateway"
-      "--add-host=qbittorrent.s2.toscanini.me:host-gateway"
+      "--add-host=pihole.toscanini.me:host-gateway"
+      "--add-host=qbittorrent.toscanini.me:host-gateway"
     ];
 
     environmentFiles = [

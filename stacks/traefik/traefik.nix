@@ -100,7 +100,7 @@ in
   };
 
 
-  myStack.dnsHosts = [ "192.168.0.2 traefik.s2.toscanini.me" ];
+  myStack.dnsHosts = [ "192.168.0.2 traefik.toscanini.me" ];
 
   myStack.prometheusScrapes = [{
     job_name = "traefik";
@@ -109,13 +109,13 @@ in
 
   myStack.homepageServices."Network" = [{
     name = "Traefik";
-    href = "https://traefik.s2.toscanini.me";
+    href = "https://traefik.toscanini.me";
     description = "Reverse proxy — all *.s2 / *.toscanini routes";
     icon = "traefik.png";
-    siteMonitor = "https://traefik.s2.toscanini.me";
+    siteMonitor = "https://traefik.toscanini.me";
     widget = {
       type = "traefik";
-      url  = "https://traefik.s2.toscanini.me";
+      url  = "https://traefik.toscanini.me";
     };
   }];
 
@@ -195,7 +195,7 @@ in
       # ACME certresolver — Cloudflare DNS challenge.
       "--entrypoints.websecure.http.tls.certresolver=dns-cloudflare"
       "--entrypoints.websecure.http.tls.domains[0].main=s2.toscanini.me"
-      "--entrypoints.websecure.http.tls.domains[0].sans=*.s2.toscanini.me"
+      "--entrypoints.websecure.http.tls.domains[0].sans=*.toscanini.me"
       "--entrypoints.websecure.http.tls.domains[1].main=toscanini.me"
       "--entrypoints.websecure.http.tls.domains[1].sans=*.toscanini.me"
       "--certificatesResolvers.dns-cloudflare.acme.storage=/acme.json"

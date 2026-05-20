@@ -25,9 +25,9 @@
 #     `http://rest:3000`, etc. all work unchanged.
 #
 # What's per-project (derived from `id`):
-#   - URLs: `studio.<id>.supabase.s2.toscanini.me`,
-#           `kong.<id>.supabase.s2.toscanini.me`
-#   - Cert: `*.<id>.supabase.s2.toscanini.me` (Traefik requests one
+#   - URLs: `studio.<id>.supabase.toscanini.me`,
+#           `kong.<id>.supabase.toscanini.me`
+#   - Cert: `*.<id>.supabase.toscanini.me` (Traefik requests one
 #     per project from the existing Cloudflare DNS-01 resolver)
 #   - Container names: `supabase-<id>-<role>`
 #   - Bridge: `supabase-<id>` → `podman-network-supabase-<id>-net.service`
@@ -112,8 +112,8 @@ let
       bridge     = "supabase-${proj.id}";
       cName      = role: "supabase-${proj.id}-${role}";
       net        = alias: "--network=${bridge}-net:alias=${alias}";
-      studioHost = "supabase-studio-${proj.id}.s2.toscanini.me";
-      kongHost   = "supabase-kong-${proj.id}.s2.toscanini.me";
+      studioHost = "supabase-studio-${proj.id}.toscanini.me";
+      kongHost   = "supabase-kong-${proj.id}.toscanini.me";
     in {
       myStack.containerNetworks = lib.listToAttrs (map
         (role: lib.nameValuePair (cName role) bridge)
@@ -121,15 +121,17 @@ let
           "imgproxy" "storage" "edge-functions" "analytics"
           "vector" "pooler" "kong" "studio" ]);
 
-      # Two public-facing routes (studio + kong), each with its own
-      # wildcard cert. Internal API services (auth/rest/realtime/etc.)
-      # are reached only through Kong, so they have no Traefik routes.
-      myStack.traefikRoutes."${cName "studio"}" = {
-        host     = studioHost;
+      # Two public-facing routes (studio + kong) — both single-level
+      # subdomains of toscanini.me, so the entrypoint-level wildcard
+      # cert covers them with no per-route ACME work. Internal API
+      # services (auth/rest/realtime/etc.) are reached only through
+      # Kong, so they have no Traefik routes.
+      myStack.webApps."${cName "studio"}" = {
+        hostname = studioHost;
         port     = proj.ports.studio;
       };
-      myStack.traefikRoutes."${cName "kong"}" = {
-        host     = kongHost;
+      myStack.webApps."${cName "kong"}" = {
+        hostname = kongHost;
         port     = proj.ports.kong;
       };
 
@@ -140,11 +142,6 @@ let
       networking.firewall.allowedTCPPorts = [
         proj.ports.poolerSession
         proj.ports.poolerTx
-      ];
-
-      myStack.dnsHosts = [
-        "192.168.0.2 ${studioHost}"
-        "192.168.0.2 ${kongHost}"
       ];
 
       # postgres-exporter scrape — one job per project, distinguished
@@ -720,7 +717,7 @@ in
             Project identifier — used as: container-name suffix
             (`supabase-<id>-*`), bridge suffix
             (`podman-network-supabase-<id>-net.service`), URL segment
-            (`studio.<id>.supabase.s2.toscanini.me`), host-path
+            (`studio.<id>.supabase.toscanini.me`), host-path
             subdir (`/home/santiago/selfhost/supabase/<id>/`), env
             subdir (`/etc/nixos/stacks/supabase/secrets/<id>/env`), and
             storage tenant (`/s2/supabase-storage/<id>/`).
@@ -796,6 +793,7 @@ in
     myStack = {
       containerNetworks = attrsOpt [ "myStack" "containerNetworks" ];
       traefikRoutes     = attrsOpt [ "myStack" "traefikRoutes" ];
+      webApps           = attrsOpt [ "myStack" "webApps" ];
       dnsHosts          = listOpt  [ "myStack" "dnsHosts" ];
       prometheusScrapes = listOpt  [ "myStack" "prometheusScrapes" ];
       grafanaDashboards = attrsOpt [ "myStack" "grafanaDashboards" ];

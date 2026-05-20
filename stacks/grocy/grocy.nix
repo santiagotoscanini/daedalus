@@ -1,8 +1,6 @@
-# grocy — linuxserver image (PHP-FPM), CF-tunnel only.
-#
-# Routed only on the cfweb entrypoint (no LAN `*.s2` host) — same as
-# the old compose. `grocy.toscanini.me` is in the Cloudflare Zero Trust
-# dashboard's ingress and reaches Traefik via cloudflared.
+# grocy — linuxserver image (PHP-FPM). Split-horizon publish: LAN
+# clients hit traefik:443 directly via pi-hole short-circuit; off-LAN
+# clients reach the same hostname through the Cloudflare tunnel.
 #
 # PUID/PGID quirk: unlike the tv stack (PUID=0 maps to host santiago),
 # grocy's image runs PHP-FPM, which has an internal safety check that
@@ -15,10 +13,10 @@
 
 {
   myStack.containerNetworks.grocy = null;
-  myStack.traefikRoutes.grocy = {
-    host = "grocy.toscanini.me";
+  myStack.webApps.grocy = {
+    hostname = "grocy.toscanini.me";
     port = 8084;
-    entrypoint = "cfweb";
+    exposeRemotely = true;
   };
 
 

@@ -9,8 +9,8 @@
 #   PROJECT_ID    — short id (e.g. "anansi")
 #   HOST_ROOT     — /home/santiago/selfhost/supabase/<id>
 #   STATIC_DIR    — /nix/store/...supabase-static
-#   STUDIO_HOST   — studio.<id>.supabase.s2.toscanini.me
-#   KONG_HOST     — kong.<id>.supabase.s2.toscanini.me
+#   STUDIO_HOST   — studio.<id>.supabase.toscanini.me
+#   KONG_HOST     — kong.<id>.supabase.toscanini.me
 #   ENV_FILE      — /etc/nixos/containers/supabase/<id>/env
 
 set -eu

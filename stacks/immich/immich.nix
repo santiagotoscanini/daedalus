@@ -63,22 +63,15 @@ in
     immich                  = "immich";
   };
 
-  # LAN HTTPS — pi-hole resolves this to 192.168.0.2.
-  myStack.traefikRoutes.immich = {
-    host = "immich.s2.toscanini.me";
+  # Split-horizon publish: LAN clients hit traefik:443 directly
+  # (pi-hole answers 192.168.0.2 for the hostname); off-LAN clients
+  # go through the Cloudflare tunnel onto traefik:8888. Same FQDN,
+  # same wildcard cert (`*.toscanini.me`), one nix entry.
+  myStack.webApps.immich = {
+    hostname = "immich.toscanini.me";
     port = 2283;
+    exposeRemotely = true;
   };
-
-  # Public — reached via the Cloudflare tunnel (CF terminates TLS at
-  # the edge, traffic to traefik is plain HTTP on cfweb).
-  myStack.traefikRoutes.immich-public = {
-    host = "immich.toscanini.me";
-    port = 2283;
-    entrypoint = "cfweb";
-  };
-
-
-  myStack.dnsHosts = [ "192.168.0.2 immich.s2.toscanini.me" ];
 
   myStack.prometheusScrapes = [
     { job_name = "immich-api";
@@ -91,7 +84,7 @@ in
 
   myStack.homepageServices."Cloud & AI" = [{
     name = "Immich";
-    href = "https://immich.s2.toscanini.me";
+    href = "https://immich.toscanini.me";
     description = "Photo + video backup (ML on iGPU via OpenVINO)";
     icon = "immich.png";
     siteMonitor = "http://host.containers.internal:2283";

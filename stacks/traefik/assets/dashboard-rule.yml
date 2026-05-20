@@ -4,7 +4,7 @@ http:
   routers:
     traefik-rtr:
       entryPoints: [ websecure ]
-      rule: "Host(`traefik.s2.toscanini.me`)"
+      rule: "Host(`traefik.toscanini.me`)"
       service: api@internal
       tls:
         options: tls-opts@file

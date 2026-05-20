@@ -8,17 +8,14 @@
 
 {
   myStack.containerNetworks.stirling-pdf = null;
-  myStack.traefikRoutes.stirling-pdf = {
-    host = "stirling-pdf.s2.toscanini.me";
+  myStack.webApps.stirling-pdf = {
+    hostname = "stirling-pdf.toscanini.me";
     port = 8083;
   };
 
-
-  myStack.dnsHosts = [ "192.168.0.2 stirling-pdf.s2.toscanini.me" ];
-
   myStack.homepageServices."Productivity" = [{
     name = "Stirling-PDF";
-    href = "https://stirling-pdf.s2.toscanini.me";
+    href = "https://stirling-pdf.toscanini.me";
     description = "PDF toolbox (split, merge, OCR)";
     icon = "stirling-pdf.png";
     siteMonitor = "http://host.containers.internal:8083";

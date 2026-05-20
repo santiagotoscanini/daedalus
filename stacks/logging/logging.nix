@@ -8,7 +8,7 @@
 #            /home/santiago/selfhost/logging/loki/data, 30-day
 #            retention via compactor (matches prometheus retention).
 #            Exposed on host :3100 and via traefik at
-#            logging.s2.toscanini.me for LAN debugging; grafana uses
+#            logging.toscanini.me for LAN debugging; grafana uses
 #            the bridge URL `http://loki:3100` either way.
 #
 #   - alloy: log collector. Reads the host's systemd journal (the
@@ -47,13 +47,10 @@
   # LAN-only HTTPS UI / API. Loki itself has no UI — grafana is the
   # UI — but having a stable hostname is handy for ad-hoc LogCLI
   # queries or `curl /ready` from a laptop.
-  myStack.traefikRoutes.loki = {
-    host = "logging.s2.toscanini.me";
+  myStack.webApps.loki = {
+    hostname = "logging.toscanini.me";
     port = 3100;
   };
-
-
-  myStack.dnsHosts = [ "192.168.0.2 logging.s2.toscanini.me" ];
 
   virtualisation.oci-containers.containers.loki = mkRootlessContainer {
     image = "docker.io/grafana/loki:3.4.1";

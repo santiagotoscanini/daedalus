@@ -30,11 +30,11 @@
 #
 # To wire local `claude` CLI to Grafana via MCP (replace {TOKEN} with a
 # Grafana service-account token from
-# https://grafana.s2.toscanini.me/org/serviceaccounts):
+# https://grafana.toscanini.me/org/serviceaccounts):
 #
 #   claude mcp add --transport stdio --scope user grafana -- \
 #       podman run --rm -i \
-#       -e GRAFANA_URL=https://grafana.s2.toscanini.me \
+#       -e GRAFANA_URL=https://grafana.toscanini.me \
 #       -e GRAFANA_SERVICE_ACCOUNT_TOKEN={TOKEN} \
 #       docker.io/grafana/mcp-grafana -t stdio
 
@@ -112,21 +112,15 @@ in
     node-exporter = null;        # host net (sees real enp3s0)
   };
 
-  myStack.traefikRoutes = {
-    prometheus = { host = "prometheus.s2.toscanini.me"; port = 9090; };
-    grafana    = { host = "grafana.s2.toscanini.me";    port = 3000; };
+  myStack.webApps = {
+    prometheus = { hostname = "prometheus.toscanini.me"; port = 9090; };
+    grafana    = { hostname = "grafana.toscanini.me";    port = 3000; };
   };
-
-
-  myStack.dnsHosts = [
-    "192.168.0.2 prometheus.s2.toscanini.me"
-    "192.168.0.2 grafana.s2.toscanini.me"
-  ];
 
   myStack.homepageServices."Monitoring" = [
     {
       name = "Grafana";
-      href = "https://grafana.s2.toscanini.me/bookmarks";
+      href = "https://grafana.toscanini.me/bookmarks";
       description = "Dashboards (prometheus + loki)";
       icon = "grafana.png";
       siteMonitor = "http://host.containers.internal:3000";
@@ -140,7 +134,7 @@ in
     }
     {
       name = "Prometheus";
-      href = "https://prometheus.s2.toscanini.me";
+      href = "https://prometheus.toscanini.me";
       description = "TSDB — 30d / 100GB retention";
       icon = "prometheus.png";
       siteMonitor = "http://host.containers.internal:9090";
@@ -199,7 +193,7 @@ in
 
     environment = {
       GF_USERS_ALLOW_SIGN_UP = "false";
-      GF_SERVER_ROOT_URL = "https://grafana.s2.toscanini.me";
+      GF_SERVER_ROOT_URL = "https://grafana.toscanini.me";
       GF_SERVER_SERVE_FROM_SUB_PATH = "false";
     };
 
