@@ -63,14 +63,6 @@ in
   # PostgreSQL 16. Bumping the tag requires a pg_upgrade dance (dump
   # on the old image, restore on the new one), NOT just a tag bump.
 
-  myStack.prometheusScrapes = [{
-    job_name = "nextcloud";
-    honor_timestamps = false;
-    static_configs = [{ targets = [ "host.containers.internal:8082" ]; }];
-  }];
-
-  myStack.grafanaDashboards.nextcloud = builtins.readFile ./nextcloud-dashboard.json;
-
   myStack.homepageServices."Cloud & AI" = [{
     name = "Nextcloud";
     href = "https://nextcloud.toscanini.me";
