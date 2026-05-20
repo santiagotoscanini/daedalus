@@ -5,7 +5,7 @@
 #     reach via s2.toscanini.me:51820 from outside).
 #   - 51821/tcp — admin web UI on the host, NOT in the firewall;
 #     Traefik dials it via host.containers.internal:51821 (route
-#     registered via myStack.traefikRoutes.wireguard).
+#     registered via myStack.webApps.wireguard).
 #
 # `NET_ADMIN` lets wg-easy create the wg0 interface inside the
 # container's netns. `SYS_MODULE` from the old compose is dropped —

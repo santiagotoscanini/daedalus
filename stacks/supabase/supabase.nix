@@ -102,7 +102,7 @@ let
   # system merges across projects automatically — containerNetworks
   # (attrs union), tmpfiles.rules (list concat), firewall ports (list
   # concat), dnsHosts (list concat), prometheusScrapes (list concat),
-  # grafanaDashboards (attrs union), traefikRoutes (attrs union),
+  # grafanaDashboards (attrs union), traefikRoutes/webApps (attrs union),
   # virtualisation.oci-containers.containers (attrs union).
   mkProject = proj:
     let
