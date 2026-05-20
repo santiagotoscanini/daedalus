@@ -4,7 +4,7 @@
 # Supabase stack: 14 containers on a dedicated bridge
 # (`supabase-<id>-net`), data under `/home/santiago/selfhost/supabase/<id>/`,
 # storage under `/s2/supabase-storage/<id>/`, env file at
-# `/etc/nixos/containers/supabase/<id>/env`, two Traefik routes with
+# `/etc/nixos/stacks/supabase/secrets/<id>/env`, two Traefik routes with
 # a per-project wildcard cert, two pi-hole DNS entries, two firewall
 # ports for the LAN pooler, one Prometheus scrape (postgres-exporter
 # sidecar), and one Grafana dashboard derived from the supabase
@@ -32,11 +32,11 @@
 #   - Container names: `supabase-<id>-<role>`
 #   - Bridge: `supabase-<id>` → `podman-network-supabase-<id>-net.service`
 #   - Storage tenant: `/s2/supabase-storage/<id>/`
-#   - Env file: `/etc/nixos/containers/supabase/<id>/env`
+#   - Env file: `/etc/nixos/stacks/supabase/secrets/<id>/env`
 #   - Host paths under: `/home/santiago/selfhost/supabase/<id>/`
 #   - Prometheus job_name: `supabase-<id>-db`
 #   - Grafana dashboard: `supabase-<id>` (templated from
-#     `modules/supabase-dashboard.json.in`)
+#     `stacks/supabase/assets/dashboard.json.in`)
 #
 # Per-project ports must be unique across projects on this host.
 # Suggested allocation for the Nth project (N=0,1,2,…):
@@ -91,12 +91,12 @@ let
   };
 
   rootBase = "/home/santiago/selfhost/supabase";
-  envBase  = "/etc/nixos/containers/supabase";
+  envBase  = "/etc/nixos/stacks/supabase/secrets";
 
   # Dashboard template — one file with `%PROJECT_ID%` / `%DB_JOB%`
   # placeholders; `lib.replaceStrings` materializes a per-project
   # dashboard in `myStack.grafanaDashboards`.
-  dashboardTemplate = builtins.readFile ./supabase-dashboard.json.in;
+  dashboardTemplate = builtins.readFile ./assets/dashboard.json.in;
 
   # Builds the NixOS module fragment for one project. NixOS's module
   # system merges across projects automatically — containerNetworks
@@ -215,7 +215,7 @@ let
       # populating from the image would have done for a named volume.
       # First-boot bootstrap: generate env file with fresh secrets and
       # seed static configs from /nix/store-baked
-      # /etc/nixos/modules/supabase-static. Idempotent — every file/dir
+      # /etc/nixos/stacks/supabase/assets. Idempotent — every file/dir
       # is skipped if already present.
       systemd.services."supabase-${proj.id}-bootstrap" = {
         description = "Bootstrap supabase ${proj.id}: env file + static configs on first boot";
@@ -228,7 +228,7 @@ let
         environment = {
           PROJECT_ID  = proj.id;
           HOST_ROOT   = hostRoot;
-          STATIC_DIR  = "${./supabase-static}";
+          STATIC_DIR  = "${./assets}";
           STUDIO_HOST = studioHost;
           KONG_HOST   = kongHost;
           ENV_FILE    = envFile;
@@ -241,7 +241,7 @@ let
           RemainAfterExit = true;
           Restart = "on-failure";
           RestartSec = "5s";
-          ExecStart = "${pkgs.bash}/bin/bash ${./supabase-static}/bootstrap.sh";
+          ExecStart = "${pkgs.bash}/bin/bash ${./assets}/bootstrap.sh";
         };
       };
 
@@ -722,7 +722,7 @@ in
             (`podman-network-supabase-<id>-net.service`), URL segment
             (`studio.<id>.supabase.s2.toscanini.me`), host-path
             subdir (`/home/santiago/selfhost/supabase/<id>/`), env
-            subdir (`/etc/nixos/containers/supabase/<id>/env`), and
+            subdir (`/etc/nixos/stacks/supabase/secrets/<id>/env`), and
             storage tenant (`/s2/supabase-storage/<id>/`).
 
             Must equal `GLOBAL_S3_BUCKET` in the project's env file

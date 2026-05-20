@@ -36,8 +36,8 @@
     ./stacks/nextcloud/nextcloud.nix
     ./stacks/pihole/pihole.nix
     ./stacks/stirling-pdf/stirling-pdf.nix
-    ./modules/supabase.nix
-    ./modules/supabase-projects.nix
+    ./stacks/supabase/supabase.nix
+    ./stacks/supabase/projects.nix
     ./stacks/traefik/traefik.nix
     ./stacks/tv/tv.nix
     ./stacks/wealthfolio/wealthfolio.nix
