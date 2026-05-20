@@ -91,7 +91,7 @@
 
     # INIT_USERNAME + INIT_PASSWORD (admin web-UI credentials).
     environmentFiles = [
-      "/etc/nixos/containers/wireguard/env"
+      "/etc/nixos/stacks/wireguard/secrets/env"
     ];
 
     extraOptions = [

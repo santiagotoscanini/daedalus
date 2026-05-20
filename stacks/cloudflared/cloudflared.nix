@@ -64,7 +64,7 @@
 
     cmd = [ "tunnel" "--metrics" "0.0.0.0:2000" "--no-autoupdate" "run" ];
 
-    environmentFiles = [ "/etc/nixos/containers/cloudflared/env" ];
+    environmentFiles = [ "/etc/nixos/stacks/cloudflared/secrets/env" ];
 
     extraOptions = [
       "--add-host=traefik:host-gateway"
