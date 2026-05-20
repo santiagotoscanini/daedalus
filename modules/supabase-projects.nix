@@ -22,7 +22,6 @@
 #   studio        = 3003 + N
 #   poolerSession = 5432 + N
 #   poolerTx      = 6543 + N
-#   dbExporter    = 9188 + N
 
 { ... }:
 
@@ -34,7 +33,6 @@
       studio        = 3003;
       poolerSession = 5432;
       poolerTx      = 6543;
-      dbExporter    = 9188;
     };
   };
 }
