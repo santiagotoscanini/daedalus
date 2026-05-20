@@ -11,17 +11,14 @@
     n8n          = "n8n";
   };
 
-  myStack.traefikRoutes.n8n = {
-    host = "n8n.s2.toscanini.me";
+  myStack.webApps.n8n = {
+    hostname = "n8n.toscanini.me";
     port = 5678;
   };
 
-
-  myStack.dnsHosts = [ "192.168.0.2 n8n.s2.toscanini.me" ];
-
   myStack.homepageServices."Productivity" = [{
     name = "n8n";
-    href = "https://n8n.s2.toscanini.me";
+    href = "https://n8n.toscanini.me";
     description = "Workflow automation";
     icon = "n8n.png";
     siteMonitor = "http://host.containers.internal:5678";
@@ -72,11 +69,11 @@
       DB_POSTGRESDB_DATABASE = "n8n";
       DB_POSTGRESDB_USER = "n8n";
       N8N_BASIC_AUTH_ACTIVE = "true";
-      N8N_HOST = "n8n.s2.toscanini.me";
+      N8N_HOST = "n8n.toscanini.me";
       N8N_PORT = "5678";
       N8N_PROTOCOL = "https";
       NODE_ENV = "production";
-      WEBHOOK_URL = "https://n8n.s2.toscanini.me";
+      WEBHOOK_URL = "https://n8n.toscanini.me";
       GENERIC_TIMEZONE = config.time.timeZone;
     };
 

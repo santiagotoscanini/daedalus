@@ -38,20 +38,17 @@
   # Pi-hole's web UI gets routed via Traefik like everything else, but
   # the upstream isn't a container — file-provider rule dials the
   # native pihole-web on host.containers.internal:8080.
-  myStack.traefikRoutes.pihole = {
-    host = "pihole.s2.toscanini.me";
+  myStack.webApps.pihole = {
+    hostname = "pihole.toscanini.me";
     port = 8080;
   };
 
-
-  myStack.dnsHosts = [ "192.168.0.2 pihole.s2.toscanini.me" ];
-
   myStack.homepageServices."Network" = [{
     name = "Pi-hole";
-    href = "https://pihole.s2.toscanini.me";
+    href = "https://pihole.toscanini.me";
     description = "LAN DNS, DHCP, ad-blocking";
     icon = "pi-hole.png";
-    siteMonitor = "https://pihole.s2.toscanini.me";
+    siteMonitor = "https://pihole.toscanini.me";
     widget = {
       type = "pihole";
       url = "http://host.containers.internal:8080";
@@ -146,7 +143,7 @@
   services.pihole-web = {
     enable = true;
     ports = [ 8080 ];   # HTTP only — Traefik does TLS termination on 443
-    hostName = "pihole.s2.toscanini.me";
+    hostName = "pihole.toscanini.me";
   };
 
   # Force /etc/pihole/pihole.toml to be a symlink into /nix/store

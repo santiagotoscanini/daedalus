@@ -14,7 +14,7 @@
 #     modules/traefik.nix. Optional `certMain`/`certSans` request a
 #     per-route wildcard cert (used by stacks like supabase whose URLs
 #     sit two levels under s2.toscanini.me so the default
-#     *.s2.toscanini.me cert doesn't cover them).
+#     *.toscanini.me cert doesn't cover them).
 #   - `options.myStack.traefikStaticRules`: raw YAML rule contents
 #     keyed by filename, for routes that don't fit the simple shape
 #     (dual-entrypoint routers, custom middlewares, api@internal).
@@ -156,22 +156,22 @@ in
               non-null, the generated YAML asks Traefik to request a
               dedicated cert covering `certMain` + `certSans`. Used
               by stacks whose host is two+ levels under s2.toscanini.me
-              (e.g. `studio.foo.supabase.s2.toscanini.me`) where the
-              default `*.s2.toscanini.me` wildcard doesn't apply.
+              (e.g. `studio.foo.supabase.toscanini.me`) where the
+              default `*.toscanini.me` wildcard doesn't apply.
 
               Only emitted on `websecure` entrypoint routers.
             '';
-            example = "foo.supabase.s2.toscanini.me";
+            example = "foo.supabase.toscanini.me";
           };
           certSans = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [ ];
             description = ''
               SANs accompanying `certMain`. Typically a single wildcard
-              like `*.foo.supabase.s2.toscanini.me`. Ignored when
+              like `*.foo.supabase.toscanini.me`. Ignored when
               `certMain` is null.
             '';
-            example = [ "*.foo.supabase.s2.toscanini.me" ];
+            example = [ "*.foo.supabase.toscanini.me" ];
           };
         };
       }));
@@ -195,6 +195,52 @@ in
       '';
     };
 
+    cloudflareRoutes = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule ({ ... }: {
+        options = {
+          hostname = lib.mkOption {
+            type = lib.types.str;
+            description = ''
+              Public hostname exposed via the Cloudflare tunnel
+              (e.g. `nextcloud.toscanini.me`). Must already have a
+              DNS CNAME pointing at `<tunnel-id>.cfargotunnel.com`
+              in Cloudflare DNS — those were auto-created when the
+              old dashboard routes were added and survive their
+              deletion.
+            '';
+          };
+          service = lib.mkOption {
+            type = lib.types.str;
+            default = "http://traefik:8888";
+            description = ''
+              Origin URL cloudflared dials when this hostname is
+              hit. Default `http://traefik:8888` reaches the host's
+              traefik on the cfweb (plain HTTP) entrypoint via
+              pasta's gateway alias — see the `--add-host` extraOption
+              in stacks/cloudflared/cloudflared.nix.
+            '';
+          };
+        };
+      }));
+      default = { };
+      description = ''
+        Public hostnames published through the Cloudflare tunnel.
+        Per-stack modules contribute entries here; stacks/cloudflared
+        renders them into the locally-managed tunnel's config.yml
+        ingress block (plus the mandatory `http_status:404` catch-all)
+        and bind-mounts the result into the cloudflared container.
+
+        Pairs with `myStack.traefikRoutes.<name>.entrypoint = "cfweb"`
+        on the same hostname so traefik will accept the inbound
+        request once cloudflared forwards it.
+      '';
+      example = lib.literalExpression ''
+        {
+          nextcloud = { hostname = "nextcloud.toscanini.me"; };
+        }
+      '';
+    };
+
     dnsHosts = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -204,7 +250,7 @@ in
         expects). Per-stack modules add their LAN-resolvable hostnames
         here so pi-hole.nix doesn't need a hand-maintained list.
       '';
-      example = [ "192.168.0.2 foo.supabase.s2.toscanini.me" ];
+      example = [ "192.168.0.2 foo.supabase.toscanini.me" ];
     };
 
     prometheusScrapes = lib.mkOption {
@@ -256,6 +302,76 @@ in
       '';
     };
 
+    webApps = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule ({ ... }: {
+        options = {
+          hostname = lib.mkOption {
+            type = lib.types.str;
+            description = ''
+              Canonical FQDN clients hit (e.g. "immich.toscanini.me").
+              Same hostname is used by:
+                - LAN HTTPS: pi-hole answers `192.168.0.2 <hostname>`,
+                  traefik websecure router serves the wildcard cert.
+                - CF tunnel (if `exposeRemotely`): public CNAME via
+                  `cloudflareRoutes` → cfweb traefik router → same
+                  upstream.
+              Must fall under one of the wildcards traefik already
+              has ACME-issued (`*.toscanini.me`, `*.toscanini.me`)
+              for HTTPS to work without extra cert config.
+            '';
+          };
+          port = lib.mkOption {
+            type = lib.types.port;
+            description = ''
+              Upstream port on `host.containers.internal` that
+              traefik dials. Same port for LAN and CF — CF terminates
+              TLS at the edge, so the cfweb router is plain HTTP to
+              the identical upstream.
+            '';
+          };
+          exposeRemotely = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              When true: also publish the hostname through the
+              locally-managed Cloudflare tunnel. Emits a `cfweb`
+              traefik router + a `cloudflareRoutes` entry, which
+              the `cloudflared-route-sync` oneshot turns into a
+              proxied CNAME. LAN exposure is unconditional —
+              there is no `exposeLocally` knob.
+            '';
+          };
+        };
+      }));
+      default = { };
+      description = ''
+        High-level "publish this web app" abstraction. Each entry
+        materializes into the right combination of `traefikRoutes`,
+        `dnsHosts`, and `cloudflareRoutes` for the common case.
+
+        Use this for plain `Host(...) -> port` apps. Custom routers
+        — HSTS middleware, dual-entrypoint HSTS-share (nextcloud),
+        per-route wildcard certs outside `*.toscanini.me`/`*.s2.*`
+        (supabase) — still configure `traefikRoutes` /
+        `traefikStaticRules` / `cloudflareRoutes` directly.
+      '';
+      example = lib.literalExpression ''
+        {
+          # Split-horizon (LAN HTTPS + CF tunnel on the same name).
+          immich = {
+            hostname = "immich.toscanini.me";
+            port = 2283;
+            exposeRemotely = true;
+          };
+          # LAN-only (e.g., admin UIs).
+          grafana = {
+            hostname = "grafana.toscanini.me";
+            port = 3000;
+          };
+        }
+      '';
+    };
+
     homepageServices = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf
         (lib.types.attrsOf lib.types.unspecified));
@@ -280,7 +396,7 @@ in
         {
           "Media" = [{
             name = "Jellyfin";
-            href = "https://jellyfin.s2.toscanini.me";
+            href = "https://jellyfin.toscanini.me";
             icon = "jellyfin.png";
             siteMonitor = "http://host.containers.internal:8096";
             widget = {
@@ -326,5 +442,35 @@ in
         (net:
           lib.nameValuePair "podman-network-${net}-net" (mkBridgeUnit net))
         distinctBridges));
+
+    # Materialize `myStack.webApps` into the lower-level options the
+    # rest of the box already consumes (traefik route rendering,
+    # pi-hole dns.hosts, cloudflared-route-sync). NixOS's module
+    # system merges these contributions with any direct definitions
+    # of the same options, so a stack can use webApps for the
+    # ordinary case and the lower-level options for edge cases at
+    # the same time.
+    myStack.traefikRoutes =
+      (lib.mapAttrs
+        (_: w: { host = w.hostname; port = w.port; })
+        cfg.webApps)
+      //
+      (lib.mapAttrs'
+        (n: w: lib.nameValuePair "${n}-cf" {
+          host = w.hostname;
+          port = w.port;
+          entrypoint = "cfweb";
+        })
+        (lib.filterAttrs (_: w: w.exposeRemotely) cfg.webApps));
+
+    myStack.dnsHosts =
+      lib.mapAttrsToList
+        (_: w: "192.168.0.2 ${w.hostname}")
+        cfg.webApps;
+
+    myStack.cloudflareRoutes =
+      lib.mapAttrs
+        (_: w: { hostname = w.hostname; })
+        (lib.filterAttrs (_: w: w.exposeRemotely) cfg.webApps);
   };
 }

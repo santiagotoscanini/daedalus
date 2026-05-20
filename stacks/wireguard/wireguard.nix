@@ -24,8 +24,8 @@
 
 {
   myStack.containerNetworks.wireguard = null;
-  myStack.traefikRoutes.wireguard = {
-    host = "wireguard.s2.toscanini.me";
+  myStack.webApps.wireguard = {
+    hostname = "wireguard.toscanini.me";
     port = 51821;
   };
 
@@ -37,9 +37,6 @@
 
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
-
-  myStack.dnsHosts = [ "192.168.0.2 wireguard.s2.toscanini.me" ];
-
   myStack.prometheusScrapes = [{
     job_name = "wireguard";
     metrics_path = "/metrics/prometheus";
@@ -48,7 +45,7 @@
 
   myStack.homepageServices."Network" = [{
     name = "WireGuard";
-    href = "https://wireguard.s2.toscanini.me";
+    href = "https://wireguard.toscanini.me";
     description = "VPN admin (wg-easy v15+)";
     icon = "wireguard.png";
     siteMonitor = "http://host.containers.internal:51821";
@@ -83,7 +80,7 @@
       INIT_ENABLED = "true";
       INIT_HOST = "s2.toscanini.me";
       INIT_PORT = "51820";
-      # Use the local pi-hole so wg-easy's *.s2.toscanini.me lookups
+      # Use the local pi-hole so wg-easy's *.toscanini.me lookups
       # resolve to LAN IPs.
       INIT_DNS = "192.168.0.2";
       DISABLE_IPV6 = "true";

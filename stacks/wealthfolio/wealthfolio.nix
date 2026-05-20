@@ -1,6 +1,5 @@
-# wealthfolio — personal finance tracker.
-#
-# Single-container, CF-tunnel only (no LAN host).
+# wealthfolio — personal finance tracker. Single container, split-
+# horizon publish.
 #
 # To rotate the admin password, regenerate the argon2 hash:
 #   echo -n "<new-pass>" | argon2 "<salt>" -id -m 12 -t 3 -p 1 -e
@@ -12,10 +11,10 @@
 
 {
   myStack.containerNetworks.wealthfolio = null;
-  myStack.traefikRoutes.wealthfolio = {
-    host = "wealthfolio.toscanini.me";
+  myStack.webApps.wealthfolio = {
+    hostname = "wealthfolio.toscanini.me";
     port = 8088;
-    entrypoint = "cfweb";
+    exposeRemotely = true;
   };
 
 

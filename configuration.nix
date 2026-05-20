@@ -92,7 +92,7 @@
 
     # Use the local pi-hole (native NixOS service, not docker) as
     # resolver. The server itself benefits from ad-blocking, local DNS
-    # rewrites (e.g. jellyfin.s2.toscanini.me → 192.168.0.2), and shows
+    # rewrites (e.g. jellyfin.toscanini.me → 192.168.0.2), and shows
     # up in pi-hole's own query log.
     #
     # NOTE: openresolv (NixOS's resolvconf) sees a loopback nameserver

@@ -38,31 +38,20 @@
     jellyfin         = null;
   };
 
-  myStack.traefikRoutes = {
-    jellyfin    = { host = "jellyfin.s2.toscanini.me";    port = 8096; };
-    sonarr      = { host = "sonarr.s2.toscanini.me";      port = 8989; };
-    radarr      = { host = "radarr.s2.toscanini.me";      port = 7878; };
-    bazarr      = { host = "bazarr.s2.toscanini.me";      port = 6767; };
-    prowlarr    = { host = "prowlarr.s2.toscanini.me";    port = 9696; };
-    qbittorrent = { host = "qbittorrent.s2.toscanini.me"; port = 8090; };
-    nzbget      = { host = "nzbget.s2.toscanini.me";      port = 6789; };
+  myStack.webApps = {
+    jellyfin    = { hostname = "jellyfin.toscanini.me";    port = 8096; };
+    sonarr      = { hostname = "sonarr.toscanini.me";      port = 8989; };
+    radarr      = { hostname = "radarr.toscanini.me";      port = 7878; };
+    bazarr      = { hostname = "bazarr.toscanini.me";      port = 6767; };
+    prowlarr    = { hostname = "prowlarr.toscanini.me";    port = 9696; };
+    qbittorrent = { hostname = "qbittorrent.toscanini.me"; port = 8090; };
+    nzbget      = { hostname = "nzbget.toscanini.me";      port = 6789; };
   };
 
   # Kernel modules gluetun needs at runtime. modules/wireguard.nix
   # also declares the wireguard/iptables ones; NixOS merges the lists.
   # tun is exclusive to gluetun (creates /dev/net/tun for the tunnel).
   boot.kernelModules = [ "wireguard" "iptable_nat" "iptable_filter" "tun" ];
-
-
-  myStack.dnsHosts = [
-    "192.168.0.2 jellyfin.s2.toscanini.me"
-    "192.168.0.2 qbittorrent.s2.toscanini.me"
-    "192.168.0.2 nzbget.s2.toscanini.me"
-    "192.168.0.2 sonarr.s2.toscanini.me"
-    "192.168.0.2 radarr.s2.toscanini.me"
-    "192.168.0.2 bazarr.s2.toscanini.me"
-    "192.168.0.2 prowlarr.s2.toscanini.me"
-  ];
 
   myStack.prometheusScrapes = [{
     job_name = "gluetun";
@@ -72,7 +61,7 @@
   myStack.homepageServices."Media" = [
     {
       name = "Jellyfin";
-      href = "https://jellyfin.s2.toscanini.me";
+      href = "https://jellyfin.toscanini.me";
       description = "Movies, TV, music — household media server";
       icon = "jellyfin.png";
       siteMonitor = "http://host.containers.internal:8096";
@@ -87,7 +76,7 @@
     }
     {
       name = "qBittorrent";
-      href = "https://qbittorrent.s2.toscanini.me";
+      href = "https://qbittorrent.toscanini.me";
       description = "BitTorrent (via gluetun/ProtonVPN)";
       icon = "qbittorrent.png";
       siteMonitor = "http://host.containers.internal:8090";
@@ -96,7 +85,7 @@
         # return 403 to homepage's widget (CSRF / SameSite cookie
         # interaction). Going through traefik fixes it.
         type = "qbittorrent";
-        url = "https://qbittorrent.s2.toscanini.me";
+        url = "https://qbittorrent.toscanini.me";
         username = "{{HOMEPAGE_VAR_QBT_USER}}";
         password = "{{HOMEPAGE_VAR_QBT_PASS}}";
         enableLeechProgress = true;
@@ -104,21 +93,21 @@
     }
     {
       name = "NZBGet";
-      href = "https://nzbget.s2.toscanini.me";
+      href = "https://nzbget.toscanini.me";
       description = "Usenet downloader (via gluetun)";
       icon = "nzbget.png";
-      siteMonitor = "https://nzbget.s2.toscanini.me";
+      siteMonitor = "https://nzbget.toscanini.me";
       widget = {
         # `Connection: close` undici-bug workaround — go via traefik.
         type = "nzbget";
-        url = "https://nzbget.s2.toscanini.me";
+        url = "https://nzbget.toscanini.me";
         username = "{{HOMEPAGE_VAR_NZBGET_USER}}";
         password = "{{HOMEPAGE_VAR_NZBGET_PASS}}";
       };
     }
     {
       name = "Sonarr";
-      href = "https://sonarr.s2.toscanini.me";
+      href = "https://sonarr.toscanini.me";
       description = "TV shows";
       icon = "sonarr.png";
       siteMonitor = "http://host.containers.internal:8989";
@@ -131,7 +120,7 @@
     }
     {
       name = "Radarr";
-      href = "https://radarr.s2.toscanini.me";
+      href = "https://radarr.toscanini.me";
       description = "Movies";
       icon = "radarr.png";
       siteMonitor = "http://host.containers.internal:7878";
@@ -144,7 +133,7 @@
     }
     {
       name = "Bazarr";
-      href = "https://bazarr.s2.toscanini.me";
+      href = "https://bazarr.toscanini.me";
       description = "Subtitles";
       icon = "bazarr.png";
       siteMonitor = "http://host.containers.internal:6767";
@@ -156,7 +145,7 @@
     }
     {
       name = "Prowlarr";
-      href = "https://prowlarr.s2.toscanini.me";
+      href = "https://prowlarr.toscanini.me";
       description = "Indexer aggregator";
       icon = "prowlarr.png";
       siteMonitor = "http://host.containers.internal:9696";
@@ -170,7 +159,7 @@
 
   myStack.homepageServices."Network" = [{
     name = "Gluetun";
-    href = "https://qbittorrent.s2.toscanini.me";
+    href = "https://qbittorrent.toscanini.me";
     description = "ProtonVPN WireGuard tunnel (host netns for tv stack)";
     icon = "gluetun.png";
     siteMonitor = "http://host.containers.internal:8000/v1/publicip/ip";
@@ -397,7 +386,7 @@
 
     ports = [
       # Web UI — main port for clients. Traefik routes
-      # jellyfin.s2.toscanini.me here.
+      # jellyfin.toscanini.me here.
       "8096:8096"
     ];
 

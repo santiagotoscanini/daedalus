@@ -16,7 +16,7 @@ iconStyle: gradient
 fullWidth: true
 
 # Allow wider grids. Default cap is 4; Network needs 5.
-maxGroupColumns: 6
+maxGroupColumns: 1
 maxBookmarkGroupColumns: 6
 
 # Nothing to collapse — every group is meant to be visible.

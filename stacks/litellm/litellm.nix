@@ -32,13 +32,10 @@
     litellm    = "litellm";
   };
 
-  myStack.traefikRoutes.litellm = {
-    host = "litellm.s2.toscanini.me";
+  myStack.webApps.litellm = {
+    hostname = "litellm.toscanini.me";
     port = 4000;
   };
-
-
-  myStack.dnsHosts = [ "192.168.0.2 litellm.s2.toscanini.me" ];
 
   myStack.prometheusScrapes = [{
     job_name = "litellm";
@@ -54,7 +51,7 @@
   myStack.homepageServices."Cloud & AI" = [
     {
       name = "LiteLLM";
-      href = "https://litellm.s2.toscanini.me/ui";
+      href = "https://litellm.toscanini.me/ui";
       description = "OpenAI-compatible LLM gateway (lemonade on gaming-pc)";
       icon = "mdi-robot-happy-#a78bfa";
       siteMonitor = "http://host.containers.internal:4000";

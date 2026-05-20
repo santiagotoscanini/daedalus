@@ -51,12 +51,18 @@ in
     nextcloud-app      = "nextcloud";
   };
 
-  # Complex route — dual-entrypoint (cfweb + websecure) so the same URL
-  # works behind the Cloudflare tunnel (plain HTTP) and on the LAN
-  # (HTTPS). A single router with both entrypoints would force `tls:`
-  # to apply to cfweb too (404 from CF). HSTS middleware is on both.
-  myStack.traefikStaticRules."nextcloud.yml" =
-    builtins.readFile ./assets/traefik-rule.yml;
+  # Split-horizon publish — LAN clients reach traefik:443 directly
+  # via pi-hole short-circuit; off-LAN clients go through the
+  # Cloudflare tunnel onto traefik:8888. Same hostname, one wildcard
+  # cert (`*.toscanini.me`). HSTS is handled by Nextcloud itself
+  # (its `.htaccess`/`config.php` set Strict-Transport-Security on
+  # HTTPS responses) — the old per-router HSTS middleware lived in
+  # `assets/traefik-rule.yml` and was retired with this migration.
+  myStack.webApps.nextcloud = {
+    hostname = "nextcloud.toscanini.me";
+    port = 8082;
+    exposeRemotely = true;
+  };
 
   # The `:16` pin is load-bearing: the on-disk cluster in
   # /home/santiago/selfhost/nextcloud/nc_postgres was initdb'd for
