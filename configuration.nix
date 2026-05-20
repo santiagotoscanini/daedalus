@@ -33,7 +33,6 @@
     ./modules/monitoring.nix
     ./modules/n8n.nix
     ./modules/nextcloud.nix
-    ./modules/nextcloud-exporter.nix
     ./modules/pihole.nix
     ./modules/stirling-pdf.nix
     ./modules/supabase.nix
