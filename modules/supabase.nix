@@ -44,7 +44,6 @@
 #   studio        = 3003 + N
 #   poolerSession = 5432 + N
 #   poolerTx      = 6543 + N
-#   dbExporter    = 9188 + N
 #
 # Why no custom entrypoints anywhere: docker-compose substitutes
 # `${VAR}` into env var values at deploy time, so by the time the
@@ -153,7 +152,7 @@ let
       myStack.prometheusScrapes = [ {
         job_name = "supabase-${proj.id}-db";
         static_configs = [ {
-          targets = [ "host.containers.internal:${toString proj.ports.dbExporter}" ];
+          targets = [ "${cName "db-exporter"}:9187" ];
           labels  = { project = proj.id; };
         } ];
       } ];
@@ -275,6 +274,16 @@ let
             echo "Done."
           '';
         };
+      };
+
+      # The auto-emitted podman unit override (modules/common.nix) only
+      # adds an `after` dep on the PRIMARY bridge unit (supabase-<id>-net).
+      # Since this container also attaches to monitoring-net (so
+      # Prometheus can scrape by container name), declare that dep too,
+      # else the unit can race ahead of the monitoring bridge.
+      systemd.services."podman-${cName "db-exporter"}" = {
+        after = [ "podman-network-monitoring-net.service" ];
+        wants = [ "podman-network-monitoring-net.service" ];
       };
 
       virtualisation.oci-containers.containers = {
@@ -638,16 +647,14 @@ let
         # ── db-exporter (postgres_exporter for Prometheus) ──────────
         # Scrapes pg_stat_* / pg_locks / etc. from supabase-db and
         # exposes them as Prometheus metrics on :9187 (internal).
-        # Host port comes from `proj.ports.dbExporter`. Connects as
+        # Scraped by Prometheus over monitoring-net (multi-bridge attach
+        # below). Connects as
         # supabase_admin (superuser) so it can read every stats view
         # including pg_stat_statements.
         "${cName "db-exporter"}" = mkRootlessContainer {
           image = images.db-exporter;
           dependsOn = [ (cName "db") ];
 
-          ports = [
-            "${toString proj.ports.dbExporter}:9187"
-          ];
 
           environmentFiles = [ envFile ];
 
@@ -660,7 +667,7 @@ let
             ''
           ];
 
-          extraOptions = [ (net "db-exporter") ];
+          extraOptions = [ (net "db-exporter") "--network=monitoring-net" ];
         };
 
         # ── studio (Next.js dashboard) ──────────────────────────────
@@ -742,10 +749,6 @@ in
                 type = lib.types.port;
                 description = "Host port for Supavisor transaction mode (internal 6543).";
               };
-              dbExporter = lib.mkOption {
-                type = lib.types.port;
-                description = "Host port for postgres_exporter scrape (internal 9187).";
-              };
             };
           });
           description = ''
@@ -756,7 +759,6 @@ in
               studio        = 3003 + N
               poolerSession = 5432 + N
               poolerTx      = 6543 + N
-              dbExporter    = 9188 + N
           '';
         };
       };
