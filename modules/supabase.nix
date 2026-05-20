@@ -159,7 +159,7 @@ let
       } ];
 
       # Per-project dashboard, templated from the .json.in file.
-      myStack.grafanaDashboards."supabase-${proj.id}" =
+      myStack.grafanaDashboardsByFolder."Supabase"."supabase-${proj.id}" =
         lib.replaceStrings
           [ "%PROJECT_ID%" "%DB_JOB%" ]
           [ proj.id "supabase-${proj.id}-db" ]
@@ -797,6 +797,7 @@ in
       dnsHosts          = listOpt  [ "myStack" "dnsHosts" ];
       prometheusScrapes = listOpt  [ "myStack" "prometheusScrapes" ];
       grafanaDashboards = attrsOpt [ "myStack" "grafanaDashboards" ];
+      grafanaDashboardsByFolder = attrsOpt [ "myStack" "grafanaDashboardsByFolder" ];
       homepageServices  = attrsOpt [ "myStack" "homepageServices" ];
     };
 
