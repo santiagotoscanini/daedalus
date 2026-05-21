@@ -136,6 +136,20 @@
         # fully reproducible from this nix file; UI changes only land
         # in /var/lib/pihole (gravity.db, etc.) which is intentional.
         readOnly = true;
+
+        # Scope the toscanini.me zone to local-only resolution.
+        # Without this, dnsmasq short-circuits A queries from the
+        # hosts file but still forwards AAAA upstream — and proxied
+        # Cloudflare CNAMEs reply with the public anycast IPv6, which
+        # iOS Happy Eyeballs prefers over the LAN A. With local=,
+        # dnsmasq answers exclusively from local sources (dns.hosts
+        # above): A → 192.168.0.2, AAAA → NODATA (no local AAAA
+        # configured), and never forwards. Side effect: any
+        # toscanini.me name NOT in dns.hosts (e.g. the public DDNS
+        # hostname s2.toscanini.me) returns NXDOMAIN from LAN — fine
+        # since LAN clients use the per-service hostnames and most
+        # consumer routers don't hairpin-NAT the public IP anyway.
+        dnsmasq_lines = [ "local=/toscanini.me/" ];
       };
     };
   };
