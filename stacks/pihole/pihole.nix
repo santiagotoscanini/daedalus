@@ -34,6 +34,20 @@
 
 { config, lib, ... }:
 
+let
+  # Every name we want answered from the LAN instead of public DNS.
+  # Format matches dnsmasq's hosts file ("IP host"); the entries from
+  # myStack.dnsHosts cover stacks declared via webApps, the literal
+  # list catches non-stack hosts.
+  hostEntries = config.myStack.dnsHosts ++ [
+    "192.168.0.120 gaming-pc.local.toscanini.me"
+  ];
+
+  # Just the hostname half of each entry. Used below to emit a
+  # `local=/<host>/` line per name (see misc.dnsmasq_lines).
+  localOnlyHostnames =
+    map (e: lib.elemAt (lib.splitString " " e) 1) hostEntries;
+in
 {
   # Pi-hole's web UI gets routed via Traefik like everything else, but
   # the upstream isn't a container — file-provider rule dials the
@@ -69,9 +83,7 @@
         listeningMode = "ALL";
         upstreams = [ "8.8.8.8" "8.8.4.4" ];
         bogusPriv = false;
-        hosts = config.myStack.dnsHosts ++ [
-          "192.168.0.120 gaming-pc.local.toscanini.me"
-        ];
+        hosts = hostEntries;
         domain = {
           name = "lan";
           local = true;
@@ -137,19 +149,20 @@
         # in /var/lib/pihole (gravity.db, etc.) which is intentional.
         readOnly = true;
 
-        # Scope the toscanini.me zone to local-only resolution.
-        # Without this, dnsmasq short-circuits A queries from the
-        # hosts file but still forwards AAAA upstream — and proxied
-        # Cloudflare CNAMEs reply with the public anycast IPv6, which
-        # iOS Happy Eyeballs prefers over the LAN A. With local=,
-        # dnsmasq answers exclusively from local sources (dns.hosts
-        # above): A → 192.168.0.2, AAAA → NODATA (no local AAAA
-        # configured), and never forwards. Side effect: any
-        # toscanini.me name NOT in dns.hosts (e.g. the public DDNS
-        # hostname s2.toscanini.me) returns NXDOMAIN from LAN — fine
-        # since LAN clients use the per-service hostnames and most
-        # consumer routers don't hairpin-NAT the public IP anyway.
-        dnsmasq_lines = [ "local=/toscanini.me/" ];
+        # Per-name `local=` (not zone-wide). For each LAN-resolved
+        # name in dns.hosts, dnsmasq answers exclusively from local
+        # sources: A → 192.168.0.2, AAAA → NODATA. This kills the iOS
+        # Happy-Eyeballs trap where an upstream-forwarded AAAA
+        # returns CF anycast IPv6 for the 4 tunnel-proxied
+        # hostnames and outraces the LAN A.
+        #
+        # Names NOT in dns.hosts fall through to dns.upstreams as
+        # normal — so apex `toscanini.me` (Vercel), `blog`, `travel`,
+        # `santree` (GitHub Pages), `images` (CloudFront), and
+        # `account` (SimpleLogin MX/TXT) all resolve to their real
+        # public records. Previous design used `local=/toscanini.me/`
+        # zone-wide, which NXDOMAIN'd all those.
+        dnsmasq_lines = map (h: "local=/${h}/") localOnlyHostnames;
       };
     };
   };
