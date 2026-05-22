@@ -40,6 +40,7 @@
     ./stacks/supabase/projects.nix
     ./stacks/traefik/traefik.nix
     ./stacks/tv/tv.nix
+    ./stacks/verdaccio/verdaccio.nix
     ./stacks/wealthfolio/wealthfolio.nix
     ./stacks/wireguard/wireguard.nix
     ./platform/zfs.nix
