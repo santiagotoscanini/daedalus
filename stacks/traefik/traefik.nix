@@ -23,6 +23,43 @@
 let
   cfg = config.myStack;
 
+  # Activates the postgres TCP entrypoint, container port-publish,
+  # firewall rule, and shared bridge attach only when at least one
+  # stack declares a TCP route. See myStack.tcpRoutes in
+  # platform/common.nix and stacks/apps/apps.nix for emitters.
+  pgwireEnabled = cfg.tcpRoutes != { };
+
+  # TCP YAML route — TLS terminates at traefik using the shared
+  # *.toscanini.me wildcard cert (issued at entrypoint level for
+  # websecure; the certResolver is shared across entrypoints). The
+  # backend connection is plaintext postgres on the per-app bridge.
+  mkTraefikTCPRouteContent = name: route: ''
+    # Auto-generated from myStack.tcpRoutes.${name}.
+    # TCP router for SNI-based routing on the postgres entrypoint.
+    # `pg-tls@file` advertises the `postgresql` ALPN protocol so
+    # direct-TLS clients (libpq 17+ / pgjdbc 42.7+) succeed instead of
+    # getting `tlsv1 alert no application protocol`. The TLS options
+    # are defined in stacks/traefik/assets/tls-opts.yml.
+    tcp:
+      routers:
+        ${name}-tcp-rtr:
+          entryPoints: [ postgres ]
+          rule: "HostSNI(`${route.hostname}`)"
+          service: ${name}-tcp-svc
+          tls:
+            certResolver: dns-cloudflare
+            options: pg-tls@file
+            domains:
+              - main: "toscanini.me"
+                sans:
+                  - "*.toscanini.me"
+      services:
+        ${name}-tcp-svc:
+          loadBalancer:
+            servers:
+              - address: "${route.serviceUrl}"
+  '';
+
   mkTraefikRouteContent = name: route:
     let
       entry = route.entrypoint or "websecure";
@@ -79,6 +116,10 @@ let
     (lib.mapAttrsToList (filename: contents:
       "cp ${pkgs.writeText filename contents} $out/${filename}"
     ) cfg.traefikStaticRules)
+    ++
+    (lib.mapAttrsToList (name: route:
+      "cp ${pkgs.writeText "${name}-tcp.yml" (mkTraefikTCPRouteContent name route)} $out/${name}-tcp.yml"
+    ) cfg.tcpRoutes)
   ));
 in
 {
@@ -94,6 +135,13 @@ in
 
   # Opens TCP 80/443 — LAN HTTPS ingress.
   networking.firewall.allowedTCPPorts = [ 80 443 ];
+
+  # Opens TCP 5432 ONLY on the LAN interface, only when a TCP route is
+  # declared (postgres SNI routing). Belt-and-suspenders: the box only
+  # has enp3s0, but restricting per-interface keeps any future second
+  # interface (wireguard, etc.) off-limits by default.
+  networking.firewall.interfaces.enp3s0.allowedTCPPorts =
+    lib.optional pgwireEnabled 5432;
 
   myStack.dnsHosts = [ "192.168.0.2 traefik.toscanini.me" ];
 
@@ -125,7 +173,11 @@ in
       # cfweb — plain HTTP for the Cloudflare tunnel; CF terminates TLS
       # at the edge so a 443 hop would mean double-TLS.
       "8888:8888"
-    ];
+    ] ++ (lib.optional pgwireEnabled
+      # postgres TCP entrypoint — SNI-routed per-app pg-<name>.toscanini.me.
+      # TLS terminates here using *.toscanini.me. Backend is plaintext
+      # postgres on db-exporter-net (where every pg-<name> lives too).
+      "5432:5432");
     # Dashboard/metrics on :8080 reached via traefik-net only (no host port).
 
     volumes = [
@@ -157,6 +209,9 @@ in
       "--entrypoints.websecure.address=:443"
       "--entrypoints.traefik.address=:8080"
       "--entrypoints.cfweb.address=:8888"
+    ] ++ (lib.optional pgwireEnabled
+      "--entrypoints.postgres.address=:5432"
+    ) ++ [
 
       "--entrypoints.websecure.http.tls=true"
       "--entrypoints.websecure.http.tls.options=tls-opts@file"
@@ -190,6 +245,12 @@ in
     extraOptions = [
       "--security-opt=no-new-privileges:true"
       "--network=traefik-net"
-    ];
+    ] ++ (lib.optional pgwireEnabled
+      # db-exporter-net is the shared bridge where every pg-<name>
+      # container also lives (see stacks/app-db/exporter.nix). Traefik
+      # uses it to reach pg-<name>:5432 after SNI-routing a postgres
+      # TCP connection. Bridge only exists when ≥1 app uses postgres.
+      "--network=db-exporter-net"
+    );
   };
 }

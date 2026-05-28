@@ -28,6 +28,8 @@
     ./stacks/stirling-pdf/stirling-pdf.nix
     ./stacks/apps/apps.nix
     ./stacks/apps/declarations.nix
+    ./stacks/app-db/app-db.nix
+    ./stacks/app-db/exporter.nix
     ./stacks/traefik/traefik.nix
     ./stacks/tv/tv.nix
     ./stacks/verdaccio/verdaccio.nix

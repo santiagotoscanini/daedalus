@@ -390,6 +390,48 @@ in
       '';
     };
 
+    tcpRoutes = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule ({ ... }: {
+        options = {
+          hostname = lib.mkOption {
+            type = lib.types.str;
+            description = ''
+              FQDN matched by the TCP router's `HostSNI(...)` rule.
+              Must fall under one of the wildcards traefik has
+              ACME-issued (`*.toscanini.me`) — the same wildcard cert
+              is used for TLS termination on the TCP entrypoint.
+            '';
+            example = "pg-anansi.toscanini.me";
+          };
+          serviceUrl = lib.mkOption {
+            type = lib.types.str;
+            description = ''
+              Backend `host:port` traefik forwards to over plaintext
+              after terminating TLS. Shape: `<container>:<port>` —
+              the container must share a bridge with traefik (see
+              stacks/traefik/traefik.nix for which bridge).
+            '';
+            example = "pg-anansi:5432";
+          };
+        };
+      }));
+      default = { };
+      description = ''
+        TCP routes with TLS termination at traefik + SNI-based routing,
+        for non-HTTP protocols that need hostname-based multiplexing on
+        a single host port (e.g. postgres on the `postgres` entrypoint
+        :5432).
+
+        Each entry materializes a Traefik `tcp.routers` + `tcp.services`
+        block in a rule YAML. Pi-hole DNS for `<hostname>` is auto-
+        emitted to 192.168.0.2 by common.nix.
+
+        Clients connect with TLS direct-negotiation (postgres JDBC
+        42.7+ / libpq 17+ via `sslmode=require sslnegotiation=direct`)
+        so the SNI is visible in the initial ClientHello.
+      '';
+    };
+
     homepageServices = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf
         (lib.types.attrsOf lib.types.unspecified));
@@ -486,9 +528,13 @@ in
     }) cfg.webApps;
 
     myStack.dnsHosts =
-      lib.mapAttrsToList
+      (lib.mapAttrsToList
         (_: w: "192.168.0.2 ${w.hostname}")
-        cfg.webApps;
+        cfg.webApps)
+      ++
+      (lib.mapAttrsToList
+        (_: r: "192.168.0.2 ${r.hostname}")
+        cfg.tcpRoutes);
 
     myStack.cloudflareRoutes =
       lib.mapAttrs
