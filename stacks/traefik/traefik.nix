@@ -23,25 +23,11 @@
 let
   cfg = config.myStack;
 
-  # Activates the postgres TCP entrypoint, container port-publish,
-  # firewall rule, and shared bridge attach only when at least one
-  # stack declares a TCP route. See myStack.tcpRoutes in
-  # platform/common.nix and stacks/apps/apps.nix for emitters.
-  pgwireEnabled = cfg.tcpRoutes != { };
-
-  # TCP YAML route — TLS terminates at traefik using the shared
-  # *.toscanini.me wildcard cert (issued at entrypoint level for
-  # websecure; the certResolver is shared across entrypoints). The
-  # backend connection is plaintext postgres on the per-app bridge.
-  #
-  # Template skeleton lives at assets/tcp-route-template.yml (pure
-  # YAML, lints/highlights). Substitutions are flat — name + hostname
-  # + serviceUrl — so a plain replaceStrings is enough.
-  mkTraefikTCPRouteContent = name: route:
-    lib.replaceStrings
-      [ "%NAME%"  "%HOSTNAME%"     "%SERVICEURL%"   ]
-      [ name       route.hostname   route.serviceUrl ]
-      (builtins.readFile ./assets/tcp-route-template.yml);
+  # Activates the postgres :5432 entrypoint + LAN firewall port when
+  # the app-db cluster has at least one app database. The actual TCP
+  # route YAML is contributed by stacks/app-db via traefikStaticRules
+  # (one fixed `postgres.toscanini.me` route — no per-app fan-out).
+  pgwireEnabled = config.myStack.appDatabases != { };
 
   mkTraefikRouteContent = name: route:
     let
@@ -99,10 +85,6 @@ let
     (lib.mapAttrsToList (filename: contents:
       "cp ${pkgs.writeText filename contents} $out/${filename}"
     ) cfg.traefikStaticRules)
-    ++
-    (lib.mapAttrsToList (name: route:
-      "cp ${pkgs.writeText "${name}-tcp.yml" (mkTraefikTCPRouteContent name route)} $out/${name}-tcp.yml"
-    ) cfg.tcpRoutes)
   ));
 in
 {

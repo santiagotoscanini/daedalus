@@ -179,17 +179,20 @@ in
     # LAN access for direct-TLS postgres clients (DBeaver, psql, JDBC).
     # One shared hostname for the whole cluster; the client picks the
     # database (and matching role) via the `dbname=` / `user=` fields
-    # in its connection string. common.nix auto-emits the pi-hole hosts
-    # entry from this route's hostname.
+    # in its connection string.
     #
     # Per-app hostnames (`pg-<name>.toscanini.me`) would be decorative —
     # all routes would terminate at the same `pg:5432` backend and the
     # host doesn't influence which database the client lands in. One
     # shared route avoids fan-out in traefik rules + pi-hole entries.
-    myStack.tcpRoutes."postgres" = {
-      hostname   = "postgres.toscanini.me";
-      serviceUrl = "pg:5432";
-    };
+    #
+    # The TCP route is a single fixed YAML — contributed via the
+    # existing `traefikStaticRules` escape hatch (same mechanism
+    # nextcloud's dual-router uses). traefik.nix gates the :5432
+    # entrypoint + firewall on `myStack.appDatabases != { }`.
+    myStack.traefikStaticRules."postgres-tcp.yml" =
+      builtins.readFile ./assets/traefik-tcp.yml;
+    myStack.dnsHosts = [ "192.168.0.2 postgres.toscanini.me" ];
 
     systemd.tmpfiles.rules = [
       "d ${hostRoot}                  0755 santiago users  -"
