@@ -399,7 +399,6 @@ in
       appDatabases              = attrsOpt [ "myStack" "appDatabases" ];
       containerNetworks         = attrsOpt [ "myStack" "containerNetworks" ];
       webApps                   = attrsOpt [ "myStack" "webApps" ];
-      tcpRoutes                 = attrsOpt [ "myStack" "tcpRoutes" ];
       prometheusScrapes         = listOpt  [ "myStack" "prometheusScrapes" ];
       grafanaDashboardsByFolder = attrsOpt [ "myStack" "grafanaDashboardsByFolder" ];
       homepageServices          = attrsOpt [ "myStack" "homepageServices" ];

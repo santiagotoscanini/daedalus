@@ -1,7 +1,7 @@
-# Auto-generated TCP router for SNI-based routing on the postgres
-# entrypoint. Consumed by stacks/traefik/traefik.nix per
-# myStack.tcpRoutes.<name>.
+# TCP/SNI route for the shared `pg` cluster — exposes
+# postgres.toscanini.me:5432 on the LAN for DBeaver/psql clients.
 #
+# Consumed by stacks/app-db/app-db.nix via myStack.traefikStaticRules.
 # `pg-tls@file` advertises the `postgresql` ALPN protocol so
 # direct-TLS clients (libpq 17+ / pgjdbc 42.7+) succeed instead of
 # getting `tlsv1 alert no application protocol`. The TLS options
@@ -9,10 +9,10 @@
 
 tcp:
   routers:
-    %NAME%-tcp-rtr:
+    postgres-tcp-rtr:
       entryPoints: [ postgres ]
-      rule: "HostSNI(`%HOSTNAME%`)"
-      service: %NAME%-tcp-svc
+      rule: "HostSNI(`postgres.toscanini.me`)"
+      service: postgres-tcp-svc
       tls:
         certResolver: dns-cloudflare
         options: pg-tls@file
@@ -21,7 +21,7 @@ tcp:
             sans:
               - "*.toscanini.me"
   services:
-    %NAME%-tcp-svc:
+    postgres-tcp-svc:
       loadBalancer:
         servers:
-          - address: "%SERVICEURL%"
+          - address: "pg:5432"
