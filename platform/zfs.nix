@@ -23,7 +23,6 @@
 #                             selfhost's DB churn × 1-month would balloon).
 #   s2-pool/{santi,sofi,
 #            shared,immich}   skip frequent (files don't change every 15min).
-#   s2-pool/supabase-storage  hourly+daily only (big-file writes).
 #   s2-pool/tv                no snapshots (re-downloadable).
 
 { config, lib, pkgs, utils, ... }:
@@ -118,14 +117,6 @@ let
       };
     };
 
-    "s2-pool/supabase-storage" = {
-      mount = "/s2/supabase-storage";
-      properties = snapshotOn // {
-        mountpoint                       = "legacy";
-        "com.sun:auto-snapshot:frequent" = "false";
-        "com.sun:auto-snapshot:weekly"   = "false";
-      };
-    };
 
     "s2-pool/tv" = {
       mount = "/s2/tv";

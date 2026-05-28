@@ -26,8 +26,6 @@
     ./stacks/nextcloud/nextcloud.nix
     ./stacks/pihole/pihole.nix
     ./stacks/stirling-pdf/stirling-pdf.nix
-    ./stacks/supabase/supabase.nix
-    ./stacks/supabase/projects.nix
     ./stacks/apps/apps.nix
     ./stacks/apps/declarations.nix
     ./stacks/traefik/traefik.nix
