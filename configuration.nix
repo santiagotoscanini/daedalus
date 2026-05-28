@@ -10,6 +10,7 @@
   imports = [
     ./hardware-configuration.nix
     ./platform/common.nix
+    ./platform/git.nix
     ./platform/ddclient/ddclient.nix
     ./platform/zfs.nix
     ./stacks/cloudflared/cloudflared.nix
@@ -165,28 +166,6 @@
     bantime-increment = {
       enable = true;
       maxtime = "168h";
-    };
-  };
-
-  # ── Git ────────────────────────────────────────────────────────────────────
-
-  # System-wide /etc/gitconfig — delta as pager + diff filter, zdiff3 for
-  # easier conflict resolution. Per-user ~/.gitconfig still takes
-  # precedence (santiago's has safe.directory = /etc/nixos).
-  programs.git = {
-    enable = true;
-    config = {
-      core.pager = "delta";
-      user.name = "Santiago Toscanini";
-      user.email = "github@account.toscanini.me";
-      interactive.diffFilter = "delta --color-only";
-      delta = {
-        navigate = true;
-        light = false;
-        line-numbers = true;
-      };
-      merge.conflictstyle = "zdiff3";
-      diff.colorMoved = "default";
     };
   };
 
