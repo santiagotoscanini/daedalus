@@ -60,80 +60,21 @@ let
   #   2. SWEEP — DELETE any CNAME with our managedComment whose name
   #      isn't in the declared set (so removing an entry + rebuild
   #      removes the CNAME).
+  # Script body lives at assets/route-sync.sh (pure Bash, shellcheckable
+  # standalone). This wrapper sets the parameters it expects as env
+  # vars, then concatenates the body so writeShellApplication runs it
+  # all in one shell with shellcheck across the whole.
   routeSyncScript = pkgs.writeShellApplication {
     name = "cloudflared-route-sync";
     runtimeInputs = [ pkgs.curl pkgs.jq ];
     text = ''
-      set -euo pipefail
-
       ZONE_ID='${zoneId}'
       TUNNEL_ID='${tunnelId}'
       MANAGED_COMMENT=${lib.escapeShellArg managedComment}
-      TARGET="''${TUNNEL_ID}.cfargotunnel.com"
+      HOSTS=${lib.escapeShellArg (lib.concatMapStringsSep "\n"
+        (r: r.hostname) (lib.attrValues cfg.cloudflareRoutes))}
 
-      if [[ -z "''${CF_DNS_API_TOKEN:-}" ]]; then
-        echo "ERROR: CF_DNS_API_TOKEN not set in EnvironmentFile" >&2
-        exit 1
-      fi
-
-      api() {
-        local method="$1" path="$2"
-        shift 2
-        curl -sS -X "$method" \
-          -H "Authorization: Bearer $CF_DNS_API_TOKEN" \
-          -H "Content-Type: application/json" \
-          "$@" \
-          "https://api.cloudflare.com/client/v4''${path}"
-      }
-
-      HOSTS=( ${lib.concatMapStringsSep " "
-        (r: lib.escapeShellArg r.hostname)
-        (lib.attrValues cfg.cloudflareRoutes)} )
-
-      # 1. Upsert declared hostnames
-      for HOST in "''${HOSTS[@]}"; do
-        EXISTING=$(api GET "/zones/$ZONE_ID/dns_records?type=CNAME&name=$HOST")
-        COUNT=$(echo "$EXISTING" | jq '.result | length')
-
-        if [ "$COUNT" -eq 0 ]; then
-          echo "[create] $HOST -> $TARGET"
-          api POST "/zones/$ZONE_ID/dns_records" \
-            -d "$(jq -n --arg n "$HOST" --arg c "$TARGET" --arg m "$MANAGED_COMMENT" \
-              '{type:"CNAME",name:$n,content:$c,proxied:true,ttl:1,comment:$m}')" \
-            | jq -e '.success' >/dev/null
-        else
-          RID=$(echo "$EXISTING" | jq -r '.result[0].id')
-          CONTENT=$(echo "$EXISTING" | jq -r '.result[0].content')
-          PROXIED=$(echo "$EXISTING" | jq -r '.result[0].proxied')
-          COMMENT=$(echo "$EXISTING" | jq -r '.result[0].comment // ""')
-
-          if [ "$CONTENT" = "$TARGET" ] && [ "$PROXIED" = "true" ] \
-             && [ "$COMMENT" = "$MANAGED_COMMENT" ]; then
-            echo "[ok]     $HOST -> $TARGET"
-          else
-            echo "[patch]  $HOST  $CONTENT (proxied=$PROXIED, comment=\"$COMMENT\") -> $TARGET (proxied=true, marked)"
-            api PATCH "/zones/$ZONE_ID/dns_records/$RID" \
-              -d "$(jq -n --arg c "$TARGET" --arg m "$MANAGED_COMMENT" \
-                '{content:$c,proxied:true,comment:$m}')" \
-              | jq -e '.success' >/dev/null
-          fi
-        fi
-      done
-
-      # 2. Sweep orphan managed records (default page size 100 is fine
-      # for a personal zone; add pagination if it ever exceeds that).
-      ALL=$(api GET "/zones/$ZONE_ID/dns_records?type=CNAME&per_page=100")
-      DECLARED=$(printf '%s\n' "''${HOSTS[@]}")
-
-      while IFS=$'\t' read -r RID NAME; do
-        [ -z "''${RID:-}" ] && continue
-        if ! grep -qxF "$NAME" <<<"$DECLARED"; then
-          echo "[delete] $NAME (orphan; was managed, no longer in cloudflareRoutes)"
-          api DELETE "/zones/$ZONE_ID/dns_records/$RID" \
-            | jq -e '.success' >/dev/null
-        fi
-      done < <(echo "$ALL" | jq -r --arg m "$MANAGED_COMMENT" \
-        '.result | map(select(.comment == $m)) | .[] | .id + "\t" + .name')
+      ${builtins.readFile ./assets/route-sync.sh}
     '';
   };
 in
