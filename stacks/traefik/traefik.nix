@@ -33,32 +33,15 @@ let
   # *.toscanini.me wildcard cert (issued at entrypoint level for
   # websecure; the certResolver is shared across entrypoints). The
   # backend connection is plaintext postgres on the per-app bridge.
-  mkTraefikTCPRouteContent = name: route: ''
-    # Auto-generated from myStack.tcpRoutes.${name}.
-    # TCP router for SNI-based routing on the postgres entrypoint.
-    # `pg-tls@file` advertises the `postgresql` ALPN protocol so
-    # direct-TLS clients (libpq 17+ / pgjdbc 42.7+) succeed instead of
-    # getting `tlsv1 alert no application protocol`. The TLS options
-    # are defined in stacks/traefik/assets/tls-opts.yml.
-    tcp:
-      routers:
-        ${name}-tcp-rtr:
-          entryPoints: [ postgres ]
-          rule: "HostSNI(`${route.hostname}`)"
-          service: ${name}-tcp-svc
-          tls:
-            certResolver: dns-cloudflare
-            options: pg-tls@file
-            domains:
-              - main: "toscanini.me"
-                sans:
-                  - "*.toscanini.me"
-      services:
-        ${name}-tcp-svc:
-          loadBalancer:
-            servers:
-              - address: "${route.serviceUrl}"
-  '';
+  #
+  # Template skeleton lives at assets/tcp-route-template.yml (pure
+  # YAML, lints/highlights). Substitutions are flat — name + hostname
+  # + serviceUrl — so a plain replaceStrings is enough.
+  mkTraefikTCPRouteContent = name: route:
+    lib.replaceStrings
+      [ "%NAME%"  "%HOSTNAME%"     "%SERVICEURL%"   ]
+      [ name       route.hostname   route.serviceUrl ]
+      (builtins.readFile ./assets/tcp-route-template.yml);
 
   mkTraefikRouteContent = name: route:
     let

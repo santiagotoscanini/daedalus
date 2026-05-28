@@ -1,0 +1,27 @@
+# Auto-generated TCP router for SNI-based routing on the postgres
+# entrypoint. Consumed by stacks/traefik/traefik.nix per
+# myStack.tcpRoutes.<name>.
+#
+# `pg-tls@file` advertises the `postgresql` ALPN protocol so
+# direct-TLS clients (libpq 17+ / pgjdbc 42.7+) succeed instead of
+# getting `tlsv1 alert no application protocol`. The TLS options
+# are defined in stacks/traefik/assets/tls-opts.yml.
+
+tcp:
+  routers:
+    %NAME%-tcp-rtr:
+      entryPoints: [ postgres ]
+      rule: "HostSNI(`%HOSTNAME%`)"
+      service: %NAME%-tcp-svc
+      tls:
+        certResolver: dns-cloudflare
+        options: pg-tls@file
+        domains:
+          - main: "toscanini.me"
+            sans:
+              - "*.toscanini.me"
+  services:
+    %NAME%-tcp-svc:
+      loadBalancer:
+        servers:
+          - address: "%SERVICEURL%"
