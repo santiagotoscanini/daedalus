@@ -73,68 +73,20 @@ let
 
   pgImage      = "docker.io/library/postgres:18.4-alpine";
 
-  podmanExec   = "${pkgs.podman}/bin/podman exec";
-
-  # Idempotent per-app SQL run via `podman exec -i pg psql`. The
-  # per-app password is passed to psql as the `qpwd` variable so the
-  # SQL can quote it with `:'qpwd'` (psql escapes for SQL string).
-  # APP_PWD is a regular bash variable name (avoiding $PWD which is
-  # the shell's CWD built-in).
+  # The bash body lives at assets/bootstrap.sh (shellcheckable
+  # standalone). This wrapper exports the four parameters it reads
+  # (APP_NAME, ENV_BASE, CLUSTER_ENV, APP_ENV_FILE) and concatenates
+  # the body so it all runs in a single shell with `set -eu` from
+  # the systemd script preamble.
   perAppBootstrapScript = name: ''
     set -eu
 
-    # ${envBase}/${name} is pre-created by tmpfiles.rules (0700
-    # santiago:users), so this script runs as santiago and can write
-    # into it without needing root.
+    export APP_NAME=${lib.escapeShellArg name}
+    export ENV_BASE=${lib.escapeShellArg envBase}
+    export CLUSTER_ENV=${lib.escapeShellArg clusterEnv}
+    export APP_ENV_FILE=${lib.escapeShellArg (appEnvFile name)}
 
-    # Wait for postgres to be ready (up to 60s).
-    for i in $(seq 1 60); do
-      if ${podmanExec} pg pg_isready -U postgres -d postgres >/dev/null 2>&1; then
-        break
-      fi
-      sleep 1
-    done
-
-    # Read or generate the per-app password.
-    if [ -e "${appEnvFile name}" ]; then
-      APP_PWD=$(grep '^POSTGRES_PASSWORD=' "${appEnvFile name}" | head -1 | cut -d= -f2-)
-    else
-      APP_PWD=$(openssl rand -hex 32)
-    fi
-
-    # Read the cluster superuser password.
-    SUPER_PWD=$(grep '^POSTGRES_PASSWORD=' "${clusterEnv}" | head -1 | cut -d= -f2-)
-
-    # Idempotent role + db materialization. -i pipes stdin to psql.
-    # -v qpwd=... binds the psql variable, substituted as :'qpwd' (SQL-
-    # escaped string literal) below.
-    #
-    # Note: psql client-side substitution (:'qpwd') does NOT work inside
-    # a DO $$ ... $$ block — the block body is sent verbatim to the
-    # server. So we use the same `\gexec` trick for the role check that
-    # we already use for the database: compute the SQL client-side, then
-    # execute the resulting row.
-    ${podmanExec} -i -e PGPASSWORD="$SUPER_PWD" pg \
-      psql -X -v ON_ERROR_STOP=1 -v qpwd="$APP_PWD" -U postgres -d postgres <<'SQL'
-    SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', '${name}', :'qpwd')
-    WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${name}')
-    \gexec
-    ALTER ROLE ${name} PASSWORD :'qpwd';
-    SELECT format('CREATE DATABASE %I OWNER %I', '${name}', '${name}')
-    WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${name}')
-    \gexec
-    REVOKE ALL ON DATABASE ${name} FROM PUBLIC;
-    GRANT  ALL ON DATABASE ${name} TO ${name};
-    SQL
-
-    # Write env file last so a partial bootstrap doesn't leave a stale
-    # env file pointing at a non-existent role.
-    install -m 0600 -o santiago -g users /dev/stdin "${appEnvFile name}" <<EOF
-    POSTGRES_USER=${name}
-    POSTGRES_DB=${name}
-    POSTGRES_PASSWORD=$APP_PWD
-    DATABASE_URL=postgresql://${name}:$APP_PWD@pg:5432/${name}
-    EOF
+    ${builtins.readFile ./assets/bootstrap.sh}
   '';
 in
 {
