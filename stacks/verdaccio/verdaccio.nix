@@ -1,5 +1,9 @@
 # verdaccio — private npm proxy registry. LAN-only.
 #
+# Config lives at assets/config.yaml — bind-mounted read-only into
+# the container. Edit the YAML directly; the .nix module owns
+# wiring/UID/networking only.
+#
 # UID strategy (defense-in-depth — verdaccio deserializes arbitrary
 # uploaded tarballs):
 #   - `--user=10001:0` matches the image's `chown 10001:root` on the
@@ -18,64 +22,6 @@
 
 { config, lib, pkgs, mkRootlessContainer, ... }:
 
-let
-  # Trimmed default docker.yaml — diff against
-  # https://github.com/verdaccio/verdaccio/blob/master/packages/config/src/conf/docker.yaml
-  # when bumping the image tag to catch upstream drift.
-  configYaml = pkgs.writeText "verdaccio-config.yaml" ''
-    # Auto-generated from /etc/nixos/stacks/verdaccio/verdaccio.nix.
-    # Edit the nix module, not this file (it lives in /nix/store).
-
-    storage: /verdaccio/storage/data
-    plugins: /verdaccio/plugins
-
-    web:
-      title: s2 Verdaccio
-      darkMode: true
-      gravatar: false
-
-    auth:
-      htpasswd:
-        file: /verdaccio/storage/htpasswd
-        # LAN-only registry → "anyone on the LAN" is the trust boundary.
-        # Drop to `-1` after bootstrap to lock further sign-up.
-        max_users: 1000
-
-    uplinks:
-      npmjs:
-        url: https://registry.npmjs.org/
-
-    packages:
-      '@*/*':
-        access: $all
-        publish: $authenticated
-        unpublish: $authenticated
-        proxy: npmjs
-
-      '**':
-        access: $all
-        publish: $authenticated
-        unpublish: $authenticated
-        proxy: npmjs
-
-    server:
-      keepAliveTimeout: 60
-      # Trust LAN proxies so `req.ip` resolves to the original client.
-      trustProxy: 'loopback,linklocal,uniquelocal'
-
-    middlewares:
-      audit:
-        enabled: true
-
-    log:
-      type: stdout
-      format: pretty
-      level: http
-
-    i18n:
-      web: en-US
-  '';
-in
 {
   myStack.containerNetworks.verdaccio = "traefik";
 
@@ -107,7 +53,7 @@ in
 
     volumes = [
       "/home/santiago/selfhost/verdaccio/storage:/verdaccio/storage"
-      "${configYaml}:/verdaccio/conf/config.yaml:ro"
+      "${./assets/config.yaml}:/verdaccio/conf/config.yaml:ro"
     ];
 
     environment = {
