@@ -1,38 +1,28 @@
-# Supabase project declarations.
+# Supabase project declarations — vestigial after the apps wrapper.
 #
-# Each entry in `myStack.supabaseProjects.<id>` materializes the full
-# Supabase stack for that project (14 containers, bridge, Traefik
-# routes with a per-project wildcard cert, pi-hole DNS, firewall
-# ports, Prometheus scrape, Grafana dashboard, homepage tiles). See
-# modules/supabase.nix for the wrapper.
+# Apps now flow in through `myStack.apps.<name>` (see
+# stacks/apps/declarations.nix). The apps wrapper sets
+# `myStack.supabaseProjects.<name>` for each entry, which the supabase
+# wrapper picks up and materializes the same way it always did.
 #
-# Adding a project:
-#   1. Append an entry below.
-#   2. `sudo nixos-rebuild switch`.
-# The bootstrap oneshot (supabase-<id>-bootstrap.service) auto-
-# generates the env file at /etc/nixos/containers/supabase/<id>/env
-# with fresh secrets, and seeds static configs (kong.yml, pooler.exs,
-# vector.yml, db-init/*.sql, functions/main/index.ts) from
-# /etc/nixos/modules/supabase-static/ into
-# /home/santiago/selfhost/supabase/<id>/. Both are idempotent —
-# re-running the rebuild after changes is safe.
+# This file is the place to declare a Supabase project that is NOT
+# backed by a `myStack.apps.*` entry (e.g. a backend used only from
+# the LAN by external tooling, no companion container). Such cases
+# should be rare — prefer the apps wrapper.
 #
-# Suggested port allocation (per the Nth project, N=0,1,2,…):
-#   kong          = 8400 + N
-#   studio        = 3003 + N
-#   poolerSession = 5432 + N
-#   poolerTx      = 6543 + N
+# Slot allocation: see stacks/apps/declarations.nix for the canonical
+# list. Picking the same slot used there will fail the build (pooler
+# port collision).
 
 { ... }:
 
 {
-  myStack.supabaseProjects.anansi = {
-    id = "anansi";
-    ports = {
-      kong          = 8400;
-      studio        = 3003;
-      poolerSession = 5432;
-      poolerTx      = 6543;
-    };
-  };
+  # Intentionally empty. Add a standalone Supabase project here only
+  # when the apps wrapper doesn't fit.
+  #
+  # Example:
+  # myStack.supabaseProjects.standalone = {
+  #   id   = "standalone";
+  #   slot = 99;
+  # };
 }

@@ -1,60 +1,36 @@
 # Pi-hole 6 — native NixOS service (NOT a container).
 #
-# Pi-hole 6 packaged via services.pihole-ftl + services.pihole-web
-# (added late 2025 / early 2026 by upstream PR #361571). This replaces
-# the docker pi-hole that used to run on the system docker daemon.
+# Config lives in /etc/pihole/pihole.toml, which we force to a /nix/store
+# symlink (see environment.etc override at bottom). That makes the TOML
+# truly immutable: even with misc.readOnly = true, pi-hole's teleporter-
+# import code path bypasses readOnly and would corrupt the file (hit
+# empirically). A /nix/store symlink can't be written to at all.
 #
-# All pi-hole *config* is declared here and rendered into
-# /etc/pihole/pihole.toml as a read-only symlink into /nix/store (see
-# the environment.etc override at the bottom). That makes the TOML
-# truly immutable: even with misc.readOnly = true, the pi-hole API
-# has a separate file-write code path (used by the teleporter import)
-# that bypasses the readOnly flag and would corrupt the file — we hit
-# this empirically. A symlink into /nix/store cannot be written to at
-# all, so the UI can never break the config.
+# Pi-hole *data* (gravity.db blocklists/custom domains, pihole-FTL.db
+# query history, macvendor.db, tls.pem) lives in /var/lib/pihole and
+# is fully mutable — UI changes go there, not into pihole.toml.
 #
-# Pi-hole *data* (gravity.db with blocklists/custom domains,
-# pihole-FTL.db with query history, macvendor.db, tls.pem) lives in
-# /var/lib/pihole and remains fully mutable — the UI can still manage
-# blocklists, add/remove allow/deny domains, etc. (those changes are
-# recorded in gravity.db, not in pihole.toml). The pihole user
-# (UID 995) owns that directory.
-#
-# The settings below were translated 1:1 from the docker pi-hole's
-# teleporter export. Two bare-metal adjustments: dns.interface
-# changed from "eth0" (docker NIC) to "enp3s0" (host NIC);
-# webserver.port is driven by services.pihole-web.ports below (plain
-# HTTP on 8080, behind Traefik's TLS).
-#
-# Per-stack DNS entries can now be contributed via
-# `myStack.dnsHosts` (see modules/common.nix). The literal list below
-# is the legacy set — stacks haven't been migrated yet, except
-# supabase whose entries flow in through the new option. Other stacks
-# can drain into their owning modules over time.
+# Per-stack DNS entries flow in via `myStack.dnsHosts`. The literal
+# list below catches non-stack hosts.
 
 { config, lib, ... }:
 
 let
-  # Every name we want answered from the LAN instead of public DNS.
-  # Format matches dnsmasq's hosts file ("IP host"); the entries from
-  # myStack.dnsHosts cover stacks declared via webApps, the literal
-  # list catches non-stack hosts.
   hostEntries = config.myStack.dnsHosts ++ [
     "192.168.0.120 gaming-pc.local.toscanini.me"
   ];
 
-  # Just the hostname half of each entry. Used below to emit a
-  # `local=/<host>/` line per name (see misc.dnsmasq_lines).
+  # Hostname half of each entry — used for the per-name `local=` lines below.
   localOnlyHostnames =
     map (e: lib.elemAt (lib.splitString " " e) 1) hostEntries;
 in
 {
-  # Pi-hole's web UI gets routed via Traefik like everything else, but
-  # the upstream isn't a container — file-provider rule dials the
-  # native pihole-web on host.containers.internal:8080.
+  # Native NixOS service, not a container — traefik dials it through
+  # pasta's host gateway alias instead of via traefik-net.
   myStack.webApps.pihole = {
     hostname = "pihole.toscanini.me";
     port = 8080;
+    serviceUrl = "http://host.containers.internal:8080";
   };
 
   myStack.homepageServices."Network" = [{
@@ -75,7 +51,7 @@ in
     enable = true;
     openFirewallDNS = true;       # 53 TCP + UDP
     openFirewallDHCP = true;      # 67 UDP
-    openFirewallWebserver = true; # 8080 TCP (from services.pihole-web.ports)
+    openFirewallWebserver = true; # 8080 TCP
 
     settings = {
       dns = {
@@ -97,8 +73,12 @@ in
         start = "192.168.0.100";
         end = "192.168.0.250";
         leaseTime = "8h";
-        # Static DHCP reservations: "MAC,IP,hostname"
+        # Static reservations: "MAC,IP,hostname". s2-server is included for
+        # LAN-DNS only — dnsmasq populates a `s2-server.lan → .2` A record
+        # from this entry. No DHCP transaction (it IS the DHCP server;
+        # static IP from configuration.nix).
         hosts = [
+          "XX:XX:XX:XX:XX:00,192.168.0.2,s2-server"
           "XX:XX:XX:XX:XX:01,192.168.0.120,Gaming-PC"
           "XX:XX:XX:XX:XX:02,192.168.0.100,MBP-Santiago"
           "XX:XX:XX:XX:XX:03,192.168.0.101,MBP-B"
@@ -111,24 +91,15 @@ in
       };
 
       webserver = {
-        # Preserve the admin password hash from the previous (docker)
-        # pi-hole. The hash sits in /nix/store world-readable — for a
-        # single-user home server this is acceptable; if it ever leaks
-        # off-box, rotate via the UI (UI changes go into gravity-side
-        # state, not pihole.toml, so they survive). The "real" file-
-        # extraction migration would need an activation-script
-        # workaround (the pihole-ftl module has no `pwhashFile`); see
-        # the secrets discussion in CLAUDE.md.
+        # Admin password hash. World-readable via /nix/store — acceptable
+        # for a single-user home server; rotate via UI if leaked (UI
+        # password changes go into gravity-side state, which survives).
         api.pwhash = "$BALLOON-SHA256$v=1$s=1024,t=32$c/EYhJu7DAKW0woakpKHsg==$1fjHBU91iHJ9Nx5mRCW8x7RiWbhmEDZPK5wx+qPXrS0=";
-        # App password for the homepage widget. Hash of HOMEPAGE_VAR_PIHOLE_KEY
-        # in /etc/nixos/containers/homepage/env (computed via nettle's
-        # balloon_sha256 — same library pi-hole-FTL uses, so the digest
-        # matches byte-for-byte). Generated declaratively because the
-        # rendered pihole.toml is a read-only symlink into /nix/store, so
-        # app passwords created via the UI never persist.
+        # App password for the homepage widget. balloon_sha256 of
+        # HOMEPAGE_VAR_PIHOLE_KEY from homepage/secrets/env. Declared here
+        # because UI-created app passwords don't persist (toml is RO).
         api.app_pwhash = "$BALLOON-SHA256$v=1$s=1024,t=32$OeHTN/2zWCM7vQvqf4INHQ==$RT/Nw6suYL0rO4cDBGzB/KQPefmvRsWYg9szqpqKtws=";
-        # Relaxed CSP from the teleporter (the upstream default is too
-        # strict for Chart.js and inline scripts on this dashboard).
+        # Relaxed CSP (upstream default is too strict for Chart.js inline scripts).
         headers = [
           "X-DNS-Prefetch-Control: off"
           "Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
@@ -140,28 +111,20 @@ in
       };
 
       misc = {
-        # readOnly = true blocks the API config-write path so the UI
-        # can't mutate the rendered TOML at runtime. The teleporter
-        # file-write path is separately neutralized by making
-        # /etc/pihole/pihole.toml a symlink into /nix/store (see
-        # environment.etc override below). Net effect: pihole.toml is
-        # fully reproducible from this nix file; UI changes only land
-        # in /var/lib/pihole (gravity.db, etc.) which is intentional.
+        # Blocks the API config-write path. Paired with the /nix/store
+        # symlink override below, pihole.toml is fully reproducible from
+        # this file; UI changes only land in /var/lib/pihole.
         readOnly = true;
 
-        # Per-name `local=` (not zone-wide). For each LAN-resolved
-        # name in dns.hosts, dnsmasq answers exclusively from local
-        # sources: A → 192.168.0.2, AAAA → NODATA. This kills the iOS
-        # Happy-Eyeballs trap where an upstream-forwarded AAAA
-        # returns CF anycast IPv6 for the 4 tunnel-proxied
-        # hostnames and outraces the LAN A.
-        #
-        # Names NOT in dns.hosts fall through to dns.upstreams as
-        # normal — so apex `toscanini.me` (Vercel), `blog`, `travel`,
-        # `santree` (GitHub Pages), `images` (CloudFront), and
-        # `account` (SimpleLogin MX/TXT) all resolve to their real
-        # public records. Previous design used `local=/toscanini.me/`
-        # zone-wide, which NXDOMAIN'd all those.
+        # Per-name `local=` (not zone-wide). For each LAN-resolved name,
+        # dnsmasq answers exclusively from local sources: A → 192.168.0.2,
+        # AAAA → NODATA. Kills the iOS Happy-Eyeballs trap where an
+        # upstream-forwarded AAAA returns CF anycast IPv6 for tunnel-
+        # proxied hostnames and outraces the LAN A. Names NOT in
+        # dns.hosts fall through to upstreams normally (so apex
+        # `toscanini.me`, blog, travel, etc. resolve to their real
+        # public records — previous zone-wide `local=/toscanini.me/`
+        # NXDOMAIN'd all of them).
         dnsmasq_lines = map (h: "local=/${h}/") localOnlyHostnames;
       };
     };
@@ -169,18 +132,15 @@ in
 
   services.pihole-web = {
     enable = true;
-    ports = [ 8080 ];   # HTTP only — Traefik does TLS termination on 443
+    ports = [ 8080 ];   # HTTP only — traefik terminates TLS on 443
     hostName = "pihole.toscanini.me";
   };
 
-  # Force /etc/pihole/pihole.toml to be a symlink into /nix/store
-  # instead of a regular-file copy. The pihole-ftl module sets
-  # mode = "400", which tells NixOS to copy the file into /etc;
-  # NixOS's activation script then refuses to overwrite that copy on
-  # subsequent rebuilds — so a teleporter-corrupted toml survives
-  # across nixos-rebuild switch (we hit this empirically). As a
-  # symlink, the file can never be written to (/nix/store is
-  # read-only) and every rebuild re-points it at the latest rendered
-  # toml — exactly the immutable-config behavior we want.
+  # Force a /nix/store symlink (not a copy). The pihole-ftl module sets
+  # mode="400", which makes NixOS copy the file into /etc and then refuse
+  # to overwrite it on rebuilds — so a teleporter-corrupted toml survives
+  # across nixos-rebuild switch (hit empirically). As a symlink, the file
+  # can never be written to and every rebuild re-points it at the latest
+  # rendered toml.
   environment.etc."pihole/pihole.toml".mode = lib.mkForce "symlink";
 }

@@ -1,33 +1,21 @@
 # intel-gpu-exporter — Prometheus exporter for the Alder Lake iGPU.
 #
-# Wraps `intel_gpu_top` (i915 PMU sampling) and exposes `gpumon_*`
-# metrics on :9100 inside the monitoring-net bridge. Prometheus scrapes
-# it as `intel-gpu-exporter:9100` — same pattern as cadvisor.
+# Wraps `intel_gpu_top` (i915 PMU sampling) → `gpumon_*` metrics on
+# :9100 inside monitoring-net. Lets us answer "is the iGPU being used
+# by Immich/Jellyfin transcoding?" persistently + alertably (otherwise
+# only `sudo intel_gpu_top` interactively).
 #
-# Why it exists: Immich and Jellyfin both rely on QSV transcoding via
-# /dev/dri/renderD128. Without a metric, "is the iGPU actually being
-# used?" is something you can only answer by running
-# `sudo intel_gpu_top` interactively. This makes it persistent and
-# alertable.
-#
-# Three host-level requirements, declared HERE (not in configuration.nix)
+# Three host-level requirements declared HERE (not configuration.nix)
 # so removing this module cleanly removes the host changes too:
-#
-#   - `kernel.perf_event_paranoid = 0`. Necessary but not sufficient
-#     for intel_gpu_top PMU access. Negligible risk on a single-user
-#     box. Using `lib.mkDefault` so any future configuration.nix
-#     setting wins.
-#
-#   - /dev/dri bind-mounted. The exporter passes `drm:/dev/dri/card0`
-#     to intel_gpu_top; the full dir is mounted to cover renderD128.
-#
-#   - `--privileged`. The i915 PMU privilege check happens against
-#     the host's init user namespace; rootless containers can't pass
-#     it via `--cap-add` because their caps are namespace-scoped.
-#     In rootless mode, `--privileged` does NOT grant host root —
-#     the container still runs as santiago (UID 1000); it just
-#     unmasks /proc/sys/dev paths and grants the full bounding set
-#     within santiago's user namespace. Same trick cadvisor uses.
+#   - kernel.perf_event_paranoid=0: required for intel_gpu_top PMU
+#     access. mkDefault so a future configuration.nix setting wins.
+#   - /dev/dri bind: full dir so renderD128 + card0 are both available.
+#   - --privileged: the i915 PMU privilege check happens in the host's
+#     init userns, so rootless can't pass it via --cap-add. In rootless
+#     mode --privileged does NOT grant host root — the container still
+#     runs as santiago (1000), it just unmasks /proc/sys/dev paths +
+#     grants the full bounding set within santiago's userns. Same
+#     trick cadvisor uses.
 
 { lib, mkRootlessContainer, ... }:
 
@@ -35,7 +23,6 @@
   myStack.containerNetworks.intel-gpu-exporter = "monitoring";
 
   boot.kernel.sysctl."kernel.perf_event_paranoid" = lib.mkDefault 0;
-
 
   myStack.prometheusScrapes = [{
     job_name = "intel-gpu";

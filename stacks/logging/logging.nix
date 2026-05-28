@@ -1,40 +1,30 @@
 # logging — centralized log aggregation: loki + alloy.
 #
-# Two rootless containers on the existing `monitoring-net` bridge
-# (so grafana queries loki by name as `loki:3100`, same way it
-# queries `prometheus:9090`).
+# Two containers on monitoring-net (grafana queries loki by name on
+# the same bridge it queries prometheus).
 #
-#   - loki:  log database. Filesystem store under
-#            /home/santiago/selfhost/logging/loki/data, 30-day
-#            retention via compactor (matches prometheus retention).
-#            Exposed on host :3100 and via traefik at
-#            logging.toscanini.me for LAN debugging; grafana uses
-#            the bridge URL `http://loki:3100` either way.
+#   - loki:  log DB. Filesystem store under
+#            /home/santiago/selfhost/logging/loki/data, 30-day retention
+#            (matches prometheus). Bridge-routed via traefik for LAN
+#            debugging; grafana uses `http://loki:3100` directly.
 #
-#   - alloy: log collector. Reads the host's systemd journal (the
-#            ONE source — every rootless-podman system unit's
-#            stdout/stderr is logged there by podman's default
-#            --log-driver=journald, plus host services like pi-hole,
-#            ddclient, smartd, fail2ban). Forwards to loki with
-#            labels {unit, container, host, level}. No file scraping
-#            today; add another `loki.source.file` to config.alloy
-#            if a specific service stops writing to journald.
+#   - alloy: log collector. Reads the host's systemd journal — the ONE
+#            source (every rootless-podman unit's stdout/stderr lands
+#            there via --log-driver=journald, plus pi-hole/ddclient/
+#            smartd/fail2ban). Forwards to loki with labels
+#            {unit, container, host, level}. Add `loki.source.file`
+#            to config.alloy if a specific service stops journald.
 #
-# Why journald-only as the source: every container + every host
-# service on this box already writes to journald. Adding per-file
-# scrapers is duplication that grows cardinality without value.
+# Why alloy in a container (not as a native NixOS service): keeps the
+# "everything in containers + declared in nix" pattern uniform across
+# the fleet; the journal-permission gymnastics below are the only cost.
 #
-# Permission setup for journal reads:
-#   - Host `santiago` is added to the `systemd-journal` group (see
-#     users.users.santiago.extraGroups below). NixOS gives that
-#     group `rx` ACL on /var/log/journal by default.
-#   - Alloy container runs with `--user=0:0` (host santiago in
-#     rootless) + `--group-add=keep-groups` to inherit santiago's
-#     systemd-journal membership inside the container's userns.
-#
-# Why not run alloy on the host as a NixOS service: keeps the
-# "everything in containers + declared in nix" pattern; the
-# permission gymnastics above are the only cost.
+# Journal read permissions:
+#   - santiago is in the `systemd-journal` group (extraGroups below);
+#     NixOS grants that group `rx` ACL on /var/log/journal.
+#   - Alloy container: `--user=0:0` (host santiago) +
+#     `--group-add=keep-groups` to inherit santiago's supplementary
+#     groups (notably systemd-journal) inside its userns.
 
 { mkRootlessContainer, ... }:
 
@@ -44,18 +34,16 @@
     alloy = "monitoring";
   };
 
-  # LAN-only HTTPS UI / API. Loki itself has no UI — grafana is the
-  # UI — but having a stable hostname is handy for ad-hoc LogCLI
-  # queries or `curl /ready` from a laptop.
+  # LAN-only stable hostname for ad-hoc LogCLI queries / `curl /ready`.
+  # Loki has no UI of its own (grafana is the UI), but the route is handy.
   myStack.webApps.loki = {
     hostname = "logging.toscanini.me";
+    serviceName = "loki";
     port = 3100;
   };
 
   virtualisation.oci-containers.containers.loki = mkRootlessContainer {
     image = "docker.io/grafana/loki:3.4.1";
-
-    ports = [ "3100:3100" ];
 
     cmd = [ "-config.file=/etc/loki/loki.yaml" ];
 
@@ -65,10 +53,9 @@
     ];
 
     extraOptions = [
-      # `--user=0:0` → host santiago (1000) under rootless. The data
-      # dir is owned santiago:users, matches.
-      "--user=0:0"
+      "--user=0:0"             # → host santiago, owns the data dir
       "--network=monitoring-net"
+      "--network=traefik-net"  # traefik upstream
     ];
   };
 
@@ -85,9 +72,7 @@
 
     volumes = [
       "/home/santiago/selfhost/logging/alloy/app:/etc/alloy:ro"
-      # Persistent journal lives at /var/log/journal; volatile (early-
-      # boot, before /var is mounted) at /run/log/journal. Mount both
-      # so logs from very early boot are picked up too.
+      # Persistent + volatile (early-boot) journal paths.
       "/var/log/journal:/var/log/journal:ro"
       "/run/log/journal:/run/log/journal:ro"
       "/etc/machine-id:/etc/machine-id:ro"
@@ -96,17 +81,11 @@
 
     extraOptions = [
       "--user=0:0"
-      # Inherit santiago's supplementary groups (notably
-      # `systemd-journal`) into the container's user-ns, so the
-      # in-container UID 0 (= host santiago) can read journal files
-      # whose group is `systemd-journal`.
-      "--group-add=keep-groups"
+      "--group-add=keep-groups"  # inherit systemd-journal in userns
       "--network=monitoring-net"
     ];
   };
 
-  # Required for `--group-add=keep-groups` above to grant journal
-  # read access. NixOS sets a tmpfiles ACL granting r-x on
-  # /var/log/journal to the `systemd-journal` group.
+  # Required for `--group-add=keep-groups` to grant journal access.
   users.users.santiago.extraGroups = [ "systemd-journal" ];
 }
