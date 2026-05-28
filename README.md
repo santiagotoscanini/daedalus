@@ -41,7 +41,7 @@ sudo nixos-rebuild switch
 
 ## Conventions referenced by the modules
 
-- `myStack.containerNetworks`, `traefikRoutes`, `dnsHosts`, `prometheusScrapes`, `grafanaDashboards`, `grafanaDashboardsByFolder`, `homepageServices` — declared in `platform/common.nix`. Each stack module contributes; the consumer modules (traefik, pihole, monitoring, homepage, supabase) merge.
+- `myStack.containerNetworks`, `traefikRoutes`, `dnsHosts`, `prometheusScrapes`, `grafanaDashboards`, `grafanaDashboardsByFolder`, `homepageServices` — declared in `platform/common.nix`. Each stack module contributes; the consumer modules (traefik, pihole, monitoring, homepage) merge.
 
 ## Operator notes
 
