@@ -1,26 +1,20 @@
 # tv stack — media acquisition + library, VPN-anchored.
 #
 # Architecture:
-#   - gluetun is the VPN anchor: holds a ProtonVPN WireGuard tunnel
-#     and owns the netns that downloaders + *arrs share.
+#   - gluetun holds a ProtonVPN WireGuard tunnel and owns the netns.
 #   - The downloaders (qbittorrent, nzbget), the indexer (prowlarr),
-#     the *arrs (radarr, sonarr, bazarr), the cf-bypass solver
-#     (flaresolverr) and gluetun-exporter all run with
-#     `--net=container:gluetun` so their egress goes through the VPN.
-#   - Jellyfin runs OUTSIDE the VPN (pasta networking) so LAN streaming
-#     to TVs/phones doesn't loop through ProtonVPN.
-#
-# Why all the published ports are declared on gluetun, not the
-# dependents: containers that share a netns can't publish their own
-# ports — only the netns owner can. So every UI port (qbittorrent
-# 8090, sonarr 8989, etc.) is published in gluetun's block below.
+#     the *arrs (radarr, sonarr, bazarr), flaresolverr, and
+#     gluetun-exporter all run with `--net=container:gluetun` so their
+#     egress goes through the VPN. Only the netns owner (gluetun) can
+#     publish ports — every UI port lives on gluetun's container block.
+#   - Jellyfin is OUTSIDE the VPN (joins traefik-net) so LAN streaming
+#     doesn't loop through ProtonVPN exit nodes.
 #
 # WireGuard config: /home/santiago/selfhost/tv/gluetun/wireguard/wg0.conf
 # (ProtonVPN custom-WireGuard export, 1-year expiry — re-export from
-# https://account.protonvpn.com/downloads when peers start failing).
-# NB: ProtonVPN only shows the WireGuard private key ONCE at export
-# time — if you lose wg0.conf or migrate to a new machine, you have
-# to create a fresh export, not recover the key.
+# https://account.protonvpn.com/downloads when peers fail). ProtonVPN
+# only shows the private key ONCE at export — if you lose this file,
+# you must create a fresh export, not recover.
 
 { config, mkRootlessContainer, ... }:
 
@@ -35,22 +29,52 @@
     sonarr           = null;
     bazarr           = null;
     gluetun-exporter = null;   # shares gluetun's netns
-    jellyfin         = null;
+    jellyfin         = "traefik";
   };
 
+  # Jellyfin is bridge-routed. The 6 gluetun-netns UIs use explicit
+  # serviceUrl pointing at gluetun's host-published ports — putting
+  # gluetun on traefik-net would mix VPN-exit and bridge traffic.
   myStack.webApps = {
-    jellyfin    = { hostname = "jellyfin.toscanini.me";    port = 8096; };
-    sonarr      = { hostname = "sonarr.toscanini.me";      port = 8989; };
-    radarr      = { hostname = "radarr.toscanini.me";      port = 7878; };
-    bazarr      = { hostname = "bazarr.toscanini.me";      port = 6767; };
-    prowlarr    = { hostname = "prowlarr.toscanini.me";    port = 9696; };
-    qbittorrent = { hostname = "qbittorrent.toscanini.me"; port = 8090; };
-    nzbget      = { hostname = "nzbget.toscanini.me";      port = 6789; };
+    jellyfin = {
+      hostname    = "jellyfin.toscanini.me";
+      serviceName = "jellyfin";
+      port        = 8096;
+    };
+    sonarr = {
+      hostname   = "sonarr.toscanini.me";
+      port       = 8989;
+      serviceUrl = "http://host.containers.internal:8989";
+    };
+    radarr = {
+      hostname   = "radarr.toscanini.me";
+      port       = 7878;
+      serviceUrl = "http://host.containers.internal:7878";
+    };
+    bazarr = {
+      hostname   = "bazarr.toscanini.me";
+      port       = 6767;
+      serviceUrl = "http://host.containers.internal:6767";
+    };
+    prowlarr = {
+      hostname   = "prowlarr.toscanini.me";
+      port       = 9696;
+      serviceUrl = "http://host.containers.internal:9696";
+    };
+    qbittorrent = {
+      hostname   = "qbittorrent.toscanini.me";
+      port       = 8090;
+      serviceUrl = "http://host.containers.internal:8090";
+    };
+    nzbget = {
+      hostname   = "nzbget.toscanini.me";
+      port       = 6789;
+      serviceUrl = "http://host.containers.internal:6789";
+    };
   };
 
-  # Kernel modules gluetun needs at runtime. modules/wireguard.nix
-  # also declares the wireguard/iptables ones; NixOS merges the lists.
-  # tun is exclusive to gluetun (creates /dev/net/tun for the tunnel).
+  # wireguard.nix also declares wireguard/iptables modules; NixOS
+  # merges the lists. `tun` is exclusive to gluetun (/dev/net/tun).
   boot.kernelModules = [ "wireguard" "iptable_nat" "iptable_filter" "tun" ];
 
   myStack.prometheusScrapes = [{
@@ -64,10 +88,10 @@
       href = "https://jellyfin.toscanini.me";
       description = "Movies, TV, music — household media server";
       icon = "jellyfin.png";
-      siteMonitor = "http://host.containers.internal:8096";
+      siteMonitor = "http://jellyfin:8096";
       widget = {
         type = "jellyfin";
-        url = "http://host.containers.internal:8096";
+        url = "http://jellyfin:8096";
         key = "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}";
         enableBlocks = true;
         enableNowPlaying = true;
@@ -81,9 +105,8 @@
       icon = "qbittorrent.png";
       siteMonitor = "http://host.containers.internal:8090";
       widget = {
-        # Direct host.containers.internal:8090 makes qBittorrent
-        # return 403 to homepage's widget (CSRF / SameSite cookie
-        # interaction). Going through traefik fixes it.
+        # Direct host.containers.internal:8090 returns 403 to homepage's
+        # widget (CSRF / SameSite cookie). Go through traefik.
         type = "qbittorrent";
         url = "https://qbittorrent.toscanini.me";
         username = "{{HOMEPAGE_VAR_QBT_USER}}";
@@ -98,7 +121,7 @@
       icon = "nzbget.png";
       siteMonitor = "https://nzbget.toscanini.me";
       widget = {
-        # `Connection: close` undici-bug workaround — go via traefik.
+        # undici Connection: close bug — go through traefik.
         type = "nzbget";
         url = "https://nzbget.toscanini.me";
         username = "{{HOMEPAGE_VAR_NZBGET_USER}}";
@@ -173,10 +196,15 @@
   virtualisation.oci-containers.containers.gluetun = mkRootlessContainer {
     image = "docker.io/qmcgaw/gluetun:latest";
 
+    # Ports for all containers sharing gluetun's netns. None of these
+    # are opened in the host firewall — traefik dials them via
+    # host.containers.internal.
+    #
+    # Not published: 8191 (flaresolverr — internal to prowlarr only);
+    # 6881 (qbittorrent BT — actual P2P comes through the tunnel, not
+    # the host port); 8388/8888 (gluetun's built-in shadowsocks/http
+    # proxy, unused).
     ports = [
-      # Ports for the containers that share gluetun's netns. None of
-      # these are opened in the host firewall — Traefik dials them via
-      # host.containers.internal:<port> for the UIs that get a route.
       "8090:8090"       # qbittorrent web UI
       "6789:6789"       # nzbget web UI
       "9696:9696"       # prowlarr web UI
@@ -184,14 +212,7 @@
       "8989:8989"       # sonarr web UI
       "6767:6767"       # bazarr web UI
       "8001:8001"       # gluetun-exporter (shares this netns)
-      "8000:8000"       # gluetun HTTP control server (homepage gluetun widget)
-      # Notes on ports we DON'T publish:
-      #   - 8191 (flaresolverr) — used only by prowlarr via 127.0.0.1
-      #     inside the shared netns, no host access needed.
-      #   - 6881 (qbittorrent BT) — the actual P2P traffic comes in
-      #     through the VPN tunnel, not the host port.
-      #   - 8388/8888 (gluetun's built-in shadowsocks/http proxy) —
-      #     unused in this setup.
+      "8000:8000"       # gluetun HTTP control server
     ];
 
     volumes = [
@@ -203,11 +224,9 @@
       VPN_TYPE = "wireguard";
       VPN_PORT_FORWARDING = "on";
       VPN_PORT_FORWARDING_PROVIDER = "protonvpn";
-      # Whenever ProtonVPN hands out a new forwarded port, push it to
-      # qBittorrent's API so qBT listens on the matching port.
-      # Requires "Bypass authentication for clients on localhost" in
-      # qBT (set on first run). {{PORTS}} is gluetun's runtime
-      # template.
+      # When ProtonVPN hands out a new forwarded port, push it to
+      # qBittorrent so qBT listens there. Requires "Bypass auth for
+      # localhost clients" in qBT. {{PORTS}} is gluetun's template.
       VPN_PORT_FORWARDING_UP_COMMAND = "/bin/sh -c 'wget -O- --retry-connrefused --post-data \"json={\\\"listen_port\\\":{{PORTS}}}\" http://127.0.0.1:8090/api/v2/app/setPreferences 2>&1'";
     };
 
@@ -217,10 +236,9 @@
     ];
   };
 
-  # All of the netns-sharing dependents use the same shape:
-  # PUID=0/PGID=0 (linuxserver s6-overlay maps container root to host
-  # santiago in our rootless setup; UID=0 means "don't drop privs"),
-  # `--network=container:gluetun`, and a /config + data-dir bind mount.
+  # Netns-sharing pattern: PUID=0/PGID=0 (linuxserver s6 maps container
+  # root to host santiago in our rootless setup; UID=0 means "don't drop
+  # privs"), `--network=container:gluetun`, /config + data binds.
 
   virtualisation.oci-containers.containers.qbittorrent = mkRootlessContainer {
     image = "docker.io/linuxserver/qbittorrent:latest";
@@ -261,8 +279,7 @@
     extraOptions = [ "--network=container:gluetun" ];
   };
 
-  # Internal API used by prowlarr to bypass Cloudflare protection. Not
-  # routed through Traefik — only prowlarr calls it on 127.0.0.1:8191.
+  # Internal CF-bypass API; only prowlarr calls it on 127.0.0.1:8191.
   virtualisation.oci-containers.containers.flaresolverr = mkRootlessContainer {
     image = "docker.io/flaresolverr/flaresolverr:latest";
     dependsOn = [ "gluetun" ];
@@ -292,10 +309,9 @@
     extraOptions = [ "--network=container:gluetun" ];
   };
 
-  # Bind-mounts /s2/tv (not just /s2/tv/media) because radarr's "import
-  # from download client" workflow uses hardlinks across /downloads,
-  # /torrents and /media — all must be on the same filesystem under
-  # one bind mount.
+  # /s2/tv (not /s2/tv/media) because radarr's "import from download
+  # client" hardlinks across /downloads, /torrents, /media — all need
+  # to be on the same filesystem under one bind mount.
   virtualisation.oci-containers.containers.radarr = mkRootlessContainer {
     image = "docker.io/linuxserver/radarr:latest";
     dependsOn = [ "gluetun" ];
@@ -330,8 +346,7 @@
     extraOptions = [ "--network=container:gluetun" ];
   };
 
-  # bazarr only needs /data/media (it reads what radarr/sonarr
-  # produce), so a narrower bind mount than the *arrs.
+  # bazarr only reads what the *arrs produce, so a narrower bind.
   virtualisation.oci-containers.containers.bazarr = mkRootlessContainer {
     image = "docker.io/linuxserver/bazarr:latest";
     dependsOn = [ "gluetun" ];
@@ -349,10 +364,9 @@
     extraOptions = [ "--network=container:gluetun" ];
   };
 
-  # Reads gluetun's HTTP control server (localhost:8000 inside the
-  # shared netns) and exports VPN state as Prometheus metrics on :8001.
-  # Published port comes from gluetun's container block above (which
-  # owns the netns).
+  # Reads gluetun's control server (localhost:8000 inside the shared
+  # netns), exports as Prometheus metrics on :8001. The published port
+  # lives on gluetun's block (netns owner).
   virtualisation.oci-containers.containers.gluetun-exporter = mkRootlessContainer {
     image = "ghcr.io/thecfu/gluetun-exporter:latest";
     dependsOn = [ "gluetun" ];
@@ -366,29 +380,15 @@
     extraOptions = [ "--network=container:gluetun" ];
   };
 
-  # Jellyfin is pulled OUT of gluetun's VPN namespace. The old compose
-  # had `network_mode: service:gluetun` which meant LAN streaming
-  # looped through the ProtonVPN exit node — slow and burning paid VPN
-  # bandwidth. Standalone pasta means clients on the LAN reach
-  # jellyfin directly via the host.
+  # Jellyfin runs outside gluetun (was looping LAN streaming through
+  # ProtonVPN — slow, paid bandwidth). renderD128 = Intel Alder Lake
+  # iGPU render node; mode 0666 on host so no `--group-add=render`
+  # needed for rootless. i915 is force-loaded in configuration.nix.
   #
-  # Hardware transcoding: /dev/dri/renderD128 is the Intel Alder Lake
-  # iGPU's render node, world-rw (mode 0666) on this host, so passing
-  # it via --device is enough — no `--group-add=render` needed for
-  # rootless. The i915 driver is force-loaded for this iGPU (see
-  # boot.kernelParams in configuration.nix).
-  #
-  # The compose's `group_add: [303]` (render GID) is dropped: rootless
-  # podman would map host GID 303 through santiago's subgid table, and
-  # the mode 0666 on the device makes it irrelevant anyway.
+  # If LAN client auto-discovery is ever needed back, SSDP 1900 + 7359
+  # have to land on host networking — multicast doesn't cross bridges.
   virtualisation.oci-containers.containers.jellyfin = mkRootlessContainer {
     image = "docker.io/linuxserver/jellyfin:latest";
-
-    ports = [
-      # Web UI — main port for clients. Traefik routes
-      # jellyfin.toscanini.me here.
-      "8096:8096"
-    ];
 
     volumes = [
       "/home/santiago/selfhost/tv/jellyfin:/config"
@@ -402,6 +402,7 @@
 
     extraOptions = [
       "--device=/dev/dri/renderD128"
+      "--network=traefik-net"
     ];
   };
 }

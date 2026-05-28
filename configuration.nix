@@ -1,27 +1,17 @@
 # s2-server — top-level NixOS configuration.
-#
-# Only host/system-level settings live here: boot, ZFS, networking,
-# users, SSH, podman runtime, DDNS, GPU userspace, journald, GC, the
-# weekly autoUpgrade, etc. Every stack (28 containers + pi-hole) lives
-# in modules/<stack>.nix, imported below.
-#
-# Shared helpers (mkRootlessContainer) and the myStack.* option
-# declarations that connect modules to common.nix are in
-# modules/common.nix. Each per-stack module declares its own
-# myStack.containerNetworks entries, traefik routes, kernel modules,
-# and firewall ports next to the relevant container — NixOS merges
-# all of those across modules.
+# Host/system-level settings only (boot, networking, users, SSH, podman
+# runtime, GC). Per-stack modules under stacks/<name>/ each contribute
+# their own myStack.* entries, kernel modules, and firewall ports —
+# NixOS merges across modules.
 
 { pkgs, ... }:
 
 {
   imports = [
-    # Include the results of the hardware scan.
     ./hardware-configuration.nix
-    # Shared helpers + myStack.* option declarations.
     ./platform/common.nix
     ./platform/ddclient/ddclient.nix
-    # Per-stack modules.
+    ./platform/zfs.nix
     ./stacks/cloudflared/cloudflared.nix
     ./stacks/factorio/factorio.nix
     ./stacks/grocy/grocy.nix
@@ -38,160 +28,99 @@
     ./stacks/stirling-pdf/stirling-pdf.nix
     ./stacks/supabase/supabase.nix
     ./stacks/supabase/projects.nix
+    ./stacks/apps/apps.nix
+    ./stacks/apps/declarations.nix
     ./stacks/traefik/traefik.nix
     ./stacks/tv/tv.nix
     ./stacks/verdaccio/verdaccio.nix
     ./stacks/wealthfolio/wealthfolio.nix
     ./stacks/wireguard/wireguard.nix
-    ./platform/zfs.nix
   ];
 
   # ── Boot ────────────────────────────────────────────────────────────────────
 
-  # systemd-boot (not GRUB) — simpler, UEFI-native, supports NixOS generations
-  # directly in the boot menu.
-  # configurationLimit caps how many old generations stay in the menu so /boot
-  # doesn't fill up over time (each gen carries its own kernel + initrd).
+  # configurationLimit caps boot-menu generations so /boot doesn't fill.
   boot.loader.systemd-boot = {
     enable = true;
     configurationLimit = 10;
   };
   boot.loader.efi.canTouchEfiVariables = true;
 
-
-  # Force the i915 driver to attach to the Alder Lake iGPU (UHD 770, PCI ID 4680).
-  # Needed for Jellyfin QSV/VAAPI hardware-accelerated transcoding. Drop this if
-  # you ever stop using hardware transcoding.
+  # Force i915 on Alder Lake iGPU (UHD 770, PCI ID 4680) for Jellyfin's
+  # QSV/VAAPI hardware-accelerated transcoding. Drop this if hardware
+  # transcoding ever stops being used.
   boot.kernelParams = [ "i915.force_probe=4680" ];
-
-  # ── Filesystems (OS mounts come from hardware-configuration.nix) ────────────
-
-
 
   # ── Disk health monitoring ──────────────────────────────────────────────────
 
-  # smartd polls every drive's S.M.A.R.T. counters and emails on failures.
-  # `autodetect` picks up every disk without per-drive config.
+  # smartd polls every drive's SMART counters and logs failures to
+  # journald. `autodetect` picks up every disk without per-drive config.
   services.smartd = {
     enable = true;
     autodetect = true;
-
-    # Short test every Saturday at 2am.
-    # Long test on the 1st of every month at 3am.
+    # Short test Sat 02:00, long test 1st-of-month 03:00.
     defaults.autodetected = "-a -s (S/../../6/02|L/../01/./03)";
   };
 
   # ── Networking ──────────────────────────────────────────────────────────────
 
   networking = {
-    # ZFS records the host ID of the machine that imported a pool last, then
-    # refuses to import on a host with a different ID. Must be stable across
-    # reboots; do NOT regenerate.
+    # ZFS records the host ID of the machine that imported a pool last,
+    # then refuses to import on a host with a different ID. Must be
+    # stable across reboots; do NOT regenerate.
     hostId = "493bc992";
 
     hostName = "s2-server";
 
-    # Use the local pi-hole (native NixOS service, not docker) as
-    # resolver. The server itself benefits from ad-blocking, local DNS
-    # rewrites (e.g. jellyfin.toscanini.me → 192.168.0.2), and shows
-    # up in pi-hole's own query log.
-    #
-    # NOTE: openresolv (NixOS's resolvconf) sees a loopback nameserver
-    # and writes ONLY that one to /etc/resolv.conf — the additional
-    # 1.1.1.1 / 8.8.8.8 entries listed here would be ignored. That's
-    # actually fine: pi-hole itself forwards to 8.8.8.8 / 8.8.4.4 for
-    # anything it can't answer locally (see
-    # services.pihole-ftl.settings.dns.upstreams below), so public DNS
-    # is reached *through* pi-hole, not as a sibling fallback.
-    #
-    # The only failure mode is "pi-hole is down". In that case the
-    # server has no DNS until pi-hole is restarted. Mitigation: SSH by
-    # IP, `systemctl restart pihole-ftl`. For a homelab, acceptable.
+    # Resolve via local pi-hole. openresolv writes only the loopback ns
+    # to /etc/resolv.conf (additional public DNS entries here would be
+    # ignored); pi-hole forwards upstream itself. Failure mode: pi-hole
+    # down → no DNS on the box. SSH by IP, `systemctl restart pihole-ftl`.
     nameservers = [ "127.0.0.1" ];
 
     defaultGateway = "192.168.0.1";
 
-    # Disable DHCP entirely. Pi-hole (the LAN's only DHCP server) runs on
-    # this same host (native NixOS service), so during early boot there's
-    # no DHCP server to answer. Without these lines, dhcpcd runs in
-    # parallel on enp3s0, hangs waiting for a lease, and can delay
-    # network-online.target enough to break service start-up. We use a
-    # static IP — DHCP is just noise.
+    # No DHCP — pi-hole IS the LAN's DHCP server, on this same host, so
+    # there's no server to lease from at early boot. Static IP below.
+    # (s2's MAC is listed in pi-hole's dhcp.hosts for LAN-DNS only —
+    # dnsmasq populates the `s2-server.lan` A record from it.)
     useDHCP = false;
     interfaces.enp3s0.useDHCP = false;
 
-    # Static IP — the LAN expects this server at .2 (DDNS, Traefik, clients).
     interfaces.enp3s0.ipv4.addresses = [{
       address = "192.168.0.2";
       prefixLength = 24;
     }];
 
-    firewall = {
-      enable = true;
-      # Port 22 is opened by services.openssh.openFirewall below.
-      # Per-stack ports come from the modules that need them:
-      #   - 27015 / 34197 → modules/factorio.nix
-      #   - 51820        → modules/wireguard.nix
-      #   - 53/67/8080   → services.pihole-ftl / services.pihole-web
-      #                    openFirewall* options in modules/pihole.nix
-      # NixOS merges the lists across modules.
-      allowedTCPPorts = [
-        80   # HTTP — Traefik
-        443  # HTTPS — Traefik
-      ];
-    };
+    # Every surviving host port is opened by its owning stack module.
+    # See CLAUDE.md's "Must-keep host ports" table.
+    firewall.enable = true;
   };
 
   time.timeZone = "America/Argentina/Buenos_Aires";
 
   # ── Users ───────────────────────────────────────────────────────────────────
 
-  # Passwordless sudo for wheel members. The security model is "if you're in
-  # this shell, you're already trusted": SSH is key-only (no password auth,
-  # see services.openssh below), root login is disabled, and santiago is the
-  # only allowed SSH user. Anyone past that gate already has the private key
-  # for `santi@s2`, so a sudo password adds friction without much security.
+  # SSH is key-only and locked to santiago — sudo password adds no security.
   security.sudo.wheelNeedsPassword = false;
 
-  # Authoritative user declarations. With mutableUsers = false:
-  #   - The set of users/groups is whatever this file says — anything created
-  #     out-of-band (e.g. `useradd` over SSH) gets removed on next activation.
-  #   - `password` / `hashedPassword` / their absence is enforced every
-  #     activation, not just on first user creation.
-  # Since santiago declares neither, the account is permanently locked for
-  # password login — SSH key auth is the only way in.
+  # Authoritative declarations: out-of-band useradd/passwd are reverted on
+  # next activation. santiago has no password → account is locked for
+  # password login (SSH key only).
   users.mutableUsers = false;
 
-  # Single non-root admin user. `wheel` grants sudo. No password set: with
-  # `users.mutableUsers = false` and no `password`/`hashedPassword`, the
-  # account is locked for password login. The only way in is via the SSH
-  # key below.
   users.users.santiago = {
     uid = 1000;
     isNormalUser = true;
     extraGroups = [ "wheel" ];
-    # Enable lingering so `user@1000.service` (and with it
-    # `/run/user/1000`) starts at boot, before any podman unit fires.
-    #
-    # Every container declared below is a *system* unit running as
-    # User=santiago in rootless mode and needs XDG_RUNTIME_DIR to point
-    # at an existing directory. Without linger, /run/user/1000 is only
-    # materialized when a real login session for santiago appears
-    # (SSH, console). On a cold boot with no one logged in, the
-    # podman-network-*-net oneshot units fire first and crash with
-    # `lstat /run/user/1000: no such file or directory`. They have no
-    # Restart policy, so they stay failed; every container that
-    # `requires=` them then gets `Dependency failed` and stays dead
-    # until manually started. Same cascade hit gluetun at boot, taking
-    # the whole tv stack down via `dependsOn`. Linger=true fixes the
-    # whole chain.
-    #
-    # (The option must still be set explicitly rather than left at its
-    # default: the oci-containers module reads it as a plain bool and
-    # chokes on the underlying `nullOr bool` default of `null`.)
+    # linger=true so /run/user/1000 exists at boot before any rootless
+    # podman unit fires. Without it, podman-network-*-net oneshots fail
+    # with `lstat /run/user/1000: no such file or directory` and every
+    # dependent container stays dead until manual start. Must be set
+    # explicitly — the option's null default chokes the oci-containers
+    # bool reader.
     linger = true;
     openssh.authorizedKeys.keys = [
-      # MacBook login key
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDMB4iShrbJ9RsgVh6roT0iJlOge4wHqYmZuRz+uftDX santi@s2"
     ];
     packages = with pkgs; [
@@ -200,23 +129,9 @@
     ];
   };
 
-  # Pull claude-code from nixpkgs-unstable instead of the channel pin.
-  #
-  # Why an overlay rather than switching the whole system to unstable?
-  # Surgical — the rest of the system stays on the reproducible stable pin;
-  # only this one attribute moves. Anthropic ships frequent CLI updates that
-  # don't land in stable nixpkgs until the next six-month release, so without
-  # this overlay claude-code would be frozen at the version that was current
-  # when the stable branch was cut.
-  #
-  # Trade-off: each rebuild may pull a newer version (nixos-unstable is a
-  # moving branch). For strict reproducibility, replace the URL with a
-  # specific commit SHA and add `sha256`. For a personal box where fresh CLI
-  # versions are wanted, leaving it on nixos-unstable is the right call.
-  #
-  # allowUnfree=true on the inner nixpkgs is required because the unstable
-  # evaluation is independent — it does NOT inherit the top-level
-  # `nixpkgs.config.allowUnfreePredicate` from this configuration.
+  # Pull claude-code from nixos-unstable so the CLI stays current (stable
+  # nixpkgs lags ~6 months). Trade-off: rebuilds may pull a newer version
+  # — pin via commit SHA + sha256 if strict reproducibility matters.
   nixpkgs.overlays = [
     (final: prev: {
       claude-code = (import (builtins.fetchTarball {
@@ -230,13 +145,7 @@
 
   # ── SSH ─────────────────────────────────────────────────────────────────────
 
-  # Key-only SSH. Defaults we rely on (don't re-set them here):
-  #   - `ports = [ 22 ]`
-  #   - `openFirewall = true`
-  #   - `UsePAM = true`  (default in this NixOS version)
-  # The openssh module wires `users.users.*.openssh.authorizedKeys.keys` to
-  # `/etc/ssh/authorized_keys.d/<user>` and appends that path to the
-  # rendered `AuthorizedKeysFile` automatically — no override needed.
+  # Key-only SSH. Defaults preserved: port 22, openFirewall=true.
   services.openssh = {
     enable = true;
     settings = {
@@ -247,10 +156,7 @@
     };
   };
 
-  # Ban IPs that fail SSH auth too many times. Cheap insurance against bots
-  # hammering 22 from the public internet (if you ever expose it). `ignoreIP`
-  # whitelists localhost and the LAN — protects against fat-fingering an SSH
-  # attempt from your laptop and accidentally banning yourself.
+  # ignoreIP keeps the laptop from banning itself after a fat-fingered SSH.
   services.fail2ban = {
     enable = true;
     ignoreIP = [ "127.0.0.1/8" "192.168.0.0/24" ];
@@ -258,50 +164,54 @@
     bantime = "1h";
     bantime-increment = {
       enable = true;
-      maxtime = "168h";  # 1 week ceiling
+      maxtime = "168h";
     };
   };
 
-  # ── Podman + nix-declared rootless containers ───────────────────────────────
-  #
-  # All container workloads on this box run as rootless podman, declared
-  # via virtualisation.oci-containers.containers.<name>. Each container
-  # sets `podman.user = "santiago"`, which generates a *system* systemd
-  # unit with `User=santiago` — the podman process runs as santiago in
-  # rootless mode, using santiago's subuid range (100000:65536) for the
-  # container's UID namespace. Same isolation model as rootless docker
-  # used to provide, but the *deployment* is declarative in this file.
-  #
-  # Docker (system + rootless) was removed once the last stack migrated
-  # off compose — see the git history of this file if you need the
-  # previous block. The `rpool/docker` dataset (was at /var/lib/docker)
-  # has been destroyed; the mount entry was already removed from
-  # hardware-configuration.nix earlier.
-  #
-  # dockerCompat = true installs a `docker` shim that forwards to podman
-  # (preserves muscle memory of `docker ps`, `docker logs`, etc.). We do
-  # NOT enable dockerSocket — nothing on this box expects a docker
-  # socket. If something ever does, flip dockerSocket on.
+  # ── Git ────────────────────────────────────────────────────────────────────
+
+  # System-wide /etc/gitconfig — delta as pager + diff filter, zdiff3 for
+  # easier conflict resolution. Per-user ~/.gitconfig still takes
+  # precedence (santiago's has safe.directory = /etc/nixos).
+  programs.git = {
+    enable = true;
+    config = {
+      core.pager = "delta";
+      user.name = "Santiago Toscanini";
+      user.email = "github@account.toscanini.me";
+      interactive.diffFilter = "delta --color-only";
+      delta = {
+        navigate = true;
+        light = false;
+        line-numbers = true;
+      };
+      merge.conflictstyle = "zdiff3";
+      diff.colorMoved = "default";
+    };
+  };
+
+  # ── Podman ──────────────────────────────────────────────────────────────────
+
+  # All containers via virtualisation.oci-containers run rootless as santiago
+  # (subuid 100000:65536). dockerCompat installs a `docker` shim → podman.
   virtualisation.podman = {
     enable = true;
     dockerCompat = true;
   };
   virtualisation.oci-containers.backend = "podman";
 
-  # Lower the privileged-port floor so rootless podman (pasta runs
-  # without CAP_NET_BIND_SERVICE) can bind 80 and 443 for Traefik.
-  # Trade-off: any unprivileged process on the box can now bind to ports
-  # ≥ 80. Single-user home server, so acceptable.
+  # Let rootless pasta bind 80/443 for traefik (no CAP_NET_BIND_SERVICE).
+  # Trade-off: any unprivileged process can now bind ≥80. Single-user box.
   boot.kernel.sysctl."net.ipv4.ip_unprivileged_port_start" = 80;
 
-  # Redis (nextcloud-redis) warns that without this BGSAVE may fail under
-  # memory pressure. NixOS default is 0 (heuristic). 1 = always allow.
+  # nextcloud-redis BGSAVE under memory pressure (1 = always allow).
   boot.kernel.sysctl."vm.overcommit_memory" = 1;
 
-  # ── Intel iGPU (Jellyfin hardware transcoding) ──────────────────────────────
+  # ── Intel iGPU userspace (Jellyfin transcoding) ─────────────────────────────
 
-  # Enable the OpenGL/Vulkan/VAAPI userspace stack and ship intel-media-driver
-  # so Jellyfin's QSV transcoding has the runtime libraries it needs.
+  # OpenGL/Vulkan/VAAPI userspace stack + intel-media-driver — runtime
+  # libs Jellyfin's QSV transcoding needs (paired with the i915
+  # force_probe kernel param above).
   hardware.graphics = {
     enable = true;
     extraPackages = with pkgs; [ intel-media-driver ];
@@ -312,24 +222,22 @@
   environment.systemPackages = with pkgs; [
     vim
     git
+    delta
+    gh
     htop
     ddclient          # CLI for poking at DDNS state when debugging
     intel-gpu-tools   # `intel_gpu_top` for watching transcoding load
-    fdupes            # find duplicate files (housekeeping)
+    fdupes            # find duplicate files
   ];
 
   # ── Memory / swap ───────────────────────────────────────────────────────────
 
-  # Compressed in-RAM swap. With 64 GiB RAM, we'll rarely use it — but if
-  # something does spike, zram avoids the disk-swap thrash that's especially
-  # painful on ZFS (every swap write is a CoW write).
+  # Compressed RAM-swap — avoids ZFS CoW-thrash if spikes ever hit 64 GiB.
   zramSwap.enable = true;
 
   # ── Logging ─────────────────────────────────────────────────────────────────
 
-  # Cap the systemd journal so a chatty service can't fill /.
-  # SystemMaxUse = hard cap on total journal size.
-  # MaxRetentionSec = drop messages older than this regardless of size.
+  # Cap journal size + retention so a chatty service can't fill /.
   services.journald.extraConfig = ''
     SystemMaxUse=2G
     MaxRetentionSec=1month
@@ -337,20 +245,17 @@
 
   # ── Nix store hygiene ───────────────────────────────────────────────────────
 
-  # Hardlink identical files inside /nix/store on every store insert.
-  # Saves space without snapshot-style overhead.
+  # Hardlink identical files inside /nix/store on every insert.
   nix.settings.auto-optimise-store = true;
 
-  # Weekly garbage collection of old generations and unreferenced store paths.
-  # Without this, `/nix` grows monotonically and `/boot` fills with old kernels.
+  # Without this, /nix grows monotonically and /boot fills with old kernels.
   nix.gc = {
     automatic = true;
     dates = "weekly";
     options = "--delete-older-than 30d";
   };
 
-  # Weekly re-run of nix-store --optimise, in case auto-optimise-store missed
-  # any opportunities (e.g. store paths inserted before the setting was enabled).
+  # Weekly catch-up for store paths inserted before auto-optimise was on.
   nix.optimise = {
     automatic = true;
     dates = [ "weekly" ];
@@ -358,9 +263,7 @@
 
   # ── Auto-upgrade ────────────────────────────────────────────────────────────
 
-  # Weekly: pull the channel, build the new system, stage it as the next boot.
-  # `allowReboot = false` so the NAS never reboots itself — you reboot manually
-  # when convenient and the new system comes up.
+  # Stage next-boot weekly; never auto-reboot (you reboot manually).
   system.autoUpgrade = {
     enable = true;
     dates = "weekly";
@@ -368,8 +271,7 @@
     allowReboot = false;
   };
 
-  # Pinned at the version of NixOS used for the initial install. Do NOT bump on
-  # channel updates — it tells NixOS which compatibility defaults to keep.
+  # Pinned at initial-install version. Do NOT bump — controls compat defaults.
   # https://nixos.org/manual/nixos/stable/options#opt-system.stateVersion
   system.stateVersion = "25.11";
 }

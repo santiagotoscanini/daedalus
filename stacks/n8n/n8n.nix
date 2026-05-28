@@ -1,4 +1,6 @@
-# n8n — workflow automation + postgres on n8n-net.
+# n8n — workflow automation + postgres on n8n-net. The n8n container
+# also joins traefik-net so traefik dials it as `http://n8n:5678` —
+# no host port published.
 #
 # docker.io path NOT `docker.n8n.io` — the latter is blocked by
 # pi-hole (resolves to us, returns traefik's default cert).
@@ -13,6 +15,7 @@
 
   myStack.webApps.n8n = {
     hostname = "n8n.toscanini.me";
+    serviceName = "n8n";
     port = 5678;
   };
 
@@ -21,7 +24,7 @@
     href = "https://n8n.toscanini.me";
     description = "Workflow automation";
     icon = "n8n.png";
-    siteMonitor = "http://host.containers.internal:5678";
+    siteMonitor = "http://n8n:5678";
   }];
 
   virtualisation.oci-containers.containers.n8n-postgres = mkRootlessContainer {
@@ -54,8 +57,6 @@
   virtualisation.oci-containers.containers.n8n = mkRootlessContainer {
     image = "docker.io/n8nio/n8n:latest";
     dependsOn = [ "n8n-postgres" ];
-
-    ports = [ "5678:5678" ];
 
     volumes = [
       "/home/santiago/selfhost/n8n/data:/home/node/.n8n"
@@ -97,6 +98,9 @@
 
     extraOptions = [
       "--network=n8n-net"
+      # Also join traefik-net so the file-provider rule can dial
+      # `http://n8n:5678` by container DNS — no host port needed.
+      "--network=traefik-net"
     ];
   };
 }

@@ -1,42 +1,22 @@
 # homepage — single-pane dashboard for the whole fleet (gethomepage.dev).
 #
-# Standalone, pasta networking. Each stack module contributes its
-# tiles via `myStack.homepageServices`; this module renders them into
-# a generated `services.yaml`. Homepage's `/app/config` is a writable
-# host dir; the files WE care about (services + the 4 static configs)
-# are layered on top as per-file read-only overlays. Anything else
-# Homepage wants — the docker.yaml / kubernetes.yaml / proxmox.yaml
-# skeleton stubs for integrations we don't use — Homepage auto-seeds
-# into the writable host dir on first run. We don't track those.
-#
-# Why per-file overlays: a single read-only bind of /app/config
-# breaks Homepage's "auto-copy from skeleton" startup step (it tries
-# to write missing default files and fails with EROFS). Making the
-# base dir writable + overlaying only the files we own is the
-# cleanest middle ground: declarative for our config, runtime
-# auto-seed for the rest, no zero-info stub files in nix.
+# Each stack contributes tiles via `myStack.homepageServices`; this
+# module renders them into `/app/config/services.yaml`. `/app/config`
+# is a writable host dir overlaid with per-file RO mounts for the
+# configs we own. Single RO bind would break homepage's startup
+# auto-seed (it writes missing defaults and trips EROFS).
 #
 # Secrets (per-service API keys, admin passwords) live in
-# stacks/homepage/secrets/env as HOMEPAGE_VAR_* keys. Homepage
-# substitutes `{{HOMEPAGE_VAR_FOO}}` placeholders in any of the
-# rendered YAML files at read time, so the per-stack tile
-# definitions reference placeholder strings (not actual secret
-# values).
-#
-# HOMEPAGE_ALLOWED_HOSTS gates the proxy against host-header attacks
-# (defense in depth; Traefik routes by host already). localhost:3000
-# and 127.0.0.1:3000 are always implicitly allowed.
+# `secrets/env` as HOMEPAGE_VAR_* keys — homepage substitutes
+# `{{HOMEPAGE_VAR_FOO}}` placeholders in any rendered YAML at read time.
 
 { config, lib, pkgs, mkRootlessContainer, ... }:
 
 let
-  # Render `myStack.homepageServices` into homepage's services.yaml
-  # shape: a top-level list of single-key attrsets (group → list of
-  # services), where each service is itself a single-key attrset
-  # (service name → properties). We carry `name` as a regular field
-  # in nix for ergonomic merging and pull it out into the wrapper key
-  # here at generation time. YAML is a JSON superset, so toJSON is
-  # sufficient (avoids hand-rolled YAML escaping).
+  # Render myStack.homepageServices into homepage's services.yaml shape:
+  # a list of single-key attrsets (group → [service]), each service a
+  # single-key attrset (name → properties). YAML is JSON-superset, so
+  # toJSON suffices.
   servicesYaml = pkgs.writeText "services.yaml" (builtins.toJSON (
     lib.mapAttrsToList (groupName: services: {
       "${groupName}" = map
@@ -47,19 +27,16 @@ let
 in
 
 {
-  myStack.containerNetworks.homepage = null;
+  myStack.containerNetworks.homepage = "traefik";
 
-  # Pi-hole DNS entry + traefik websecure route come from the single
-  # webApps entry — homepage is not special. The "Network" tile below
-  # is just the dashboard's link to itself.
   myStack.webApps.homepage = {
     hostname = "homepage.toscanini.me";
-    port = 3001;
+    serviceName = "homepage";
+    port = 3000;
   };
 
-
   # External / ambient network links — not tied to any container, so
-  # they live in homepage.nix itself rather than a stack module.
+  # they live here rather than in a stack module.
   myStack.homepageServices."Network" = [
     {
       name = "Router";
@@ -88,28 +65,20 @@ in
     }
   ];
 
+  # Homepage auto-seeds the unpinned defaults (bookmarks fallback,
+  # docker.yaml, kubernetes.yaml, etc.) into this dir on first run.
   systemd.tmpfiles.rules = [
-    # Writable host dir for /app/config. Homepage auto-seeds the
-    # files we don't override (bookmarks fallback, docker.yaml,
-    # kubernetes.yaml, proxmox.yaml, custom.js) into it on first run.
     "d /home/santiago/selfhost/homepage/config 0755 santiago users -"
   ];
 
   virtualisation.oci-containers.containers.homepage = mkRootlessContainer {
-    # Pin to the current upstream stable release. Bump intentionally —
-    # the YAML schema has occasionally added required fields (e.g. the
-    # pihole v6 / immich v2 / wgeasy v2 widget `version:` keys).
+    # Bump intentionally — the YAML schema has occasionally added
+    # required fields (e.g. widget `version:` keys for pihole v6 /
+    # immich v2 / wgeasy v2).
     image = "ghcr.io/gethomepage/homepage:v1.13.1";
 
-    # 3001 host -> 3000 container (homepage is Next.js, internal :3000;
-    # host :3000 is grafana).
-    ports = [ "3001:3000" ];
-
     volumes = [
-      # Writable host base — Homepage owns this dir; auto-seeds any
-      # file it expects but we don't pin. Logs land in logs/.
       "/home/santiago/selfhost/homepage/config:/app/config:rw"
-
       # Per-file RO overlays — the bits WE keep declarative.
       "${servicesYaml}:/app/config/services.yaml:ro"
       "${./assets/settings.yaml}:/app/config/settings.yaml:ro"
@@ -119,36 +88,31 @@ in
     ];
 
     environment = {
-      # Reverse-proxy host-header allow-list. Comma-separated, no
-      # spaces. Localhost is always implicitly allowed.
+      # Host-header allow-list (defense in depth; traefik already routes
+      # by host). Comma-separated, no spaces. localhost always allowed.
       HOMEPAGE_ALLOWED_HOSTS = "homepage.toscanini.me";
     };
 
-    # HOMEPAGE_VAR_* placeholders referenced from services.yaml — see
-    # stacks/homepage/secrets/env for the full list and where to find
-    # each value.
     extraOptions = [
-      # Map traefik.toscanini.me to the pasta gateway so the
-      # traefik widget can reach the api@internal router (which is
-      # only served on websecure with the right Host header). The
-      # wildcard cert covers this name so TLS validates.
+      # --add-host workarounds for widgets that can't reach a service
+      # by raw bridge name:
+      #  - traefik: api@internal only serves on websecure with the right
+      #    Host header, so we route through the public FQDN.
+      #  - nextcloud: NC_overwriteprotocol="https" 30x-redirects every
+      #    plain-HTTP request, and homepage's proxy can't follow http→https.
+      #  - nzbget / pihole / qbittorrent: homepage's undici client trips
+      #    on their `Connection: close` responses → ECONNRESET. Going
+      #    through traefik gets keep-alive and sidesteps the bug.
       "--add-host=traefik.toscanini.me:host-gateway"
-      # Same trick for Nextcloud — its `NC_overwriteprotocol = "https"`
-      # turns every plain-HTTP request from host.containers.internal into
-      # a 30x redirect to https://nextcloud.toscanini.me, which homepage's
-      # proxy cannot follow (http -> https redirects are forbidden). Map
-      # the FQDN to the pasta gateway so the widget can hit it directly
-      # over HTTPS (wildcard cert covers *.toscanini.me).
       "--add-host=nextcloud.toscanini.me:host-gateway"
-      # Same trick for NZBGet — homepage's widget uses an undici-based
-      # HTTP client that ECONNRESETs on the `Connection: close` response
-      # NZBGet emits. Going through traefik gets keep-alive on the
-      # client-facing side, sidestepping the bug.
       "--add-host=nzbget.toscanini.me:host-gateway"
-      # Pi-hole `/` ping + qBittorrent widget both hit the same
-      # undici quirks. Route through traefik like the others above.
       "--add-host=pihole.toscanini.me:host-gateway"
       "--add-host=qbittorrent.toscanini.me:host-gateway"
+      # traefik-net is the primary bridge so siteMonitor / widget URLs
+      # targeting migrated stacks resolve via aardvark-dns
+      # (e.g. http://grafana:3000). Non-migrated stacks need
+      # host.containers.internal or --add-host above.
+      "--network=traefik-net"
     ];
 
     environmentFiles = [

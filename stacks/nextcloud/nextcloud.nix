@@ -1,19 +1,13 @@
-# nextcloud — 3 containers on a shared bridge + custom-built image +
-# host-side cron timer + the dual-router Traefik rule.
+# nextcloud — 3 containers on nextcloud-net + custom-built image +
+# host-side cron timer.
 #
-# Why a custom podman network: nextcloud-app dials postgres and redis
-# by name (POSTGRES_HOST=postgres, REDIS_HOST=redis in the persisted
-# config.php). Pasta doesn't do inter-container DNS; all three on the
-# same user-defined bridge do (via netavark/aardvark-dns).
-# host.containers.internal still resolves on bridge networks, so
-# Traefik's egress patterns continue to work.
+# nextcloud-net carries inter-container DNS (postgres/redis). The app
+# container also joins traefik-net so traefik dials it as
+# `http://nextcloud-app:80` without host-publishing. The websecure +
+# cfweb dual-router shape is materialized by `exposeRemotely = true`.
 #
-# Only nextcloud-app publishes to the host (`8082:80`); postgres + redis
-# are reachable only from inside the bridge. Traefik dials the app via
-# host.containers.internal:8082.
-#
-# Post-Nextcloud-version-upgrade manual steps (NOT auto-run — they're
-# slow on large instances and would block startup):
+# Post-Nextcloud-version-upgrade manual steps (NOT auto-run — slow on
+# large instances, would block startup):
 #   sudo -u santiago env HOME=/home/santiago XDG_RUNTIME_DIR=/run/user/1000 \
 #     podman exec -u www-data nextcloud-app php occ db:add-missing-indices
 #   sudo -u santiago env HOME=/home/santiago XDG_RUNTIME_DIR=/run/user/1000 \
@@ -23,18 +17,15 @@
 { config, lib, pkgs, mkRootlessContainer, ... }:
 
 let
-  # Bump to track upstream Nextcloud — both the FROM line in the
-  # Containerfile and the local image tag follow it. After bumping,
-  # `nixos-rebuild switch` triggers a rebuild of the image and a
-  # restart of the app container. Then run the post-upgrade `occ`
-  # commands above by hand.
+  # Bump to track upstream. After bumping, `nixos-rebuild switch`
+  # rebuilds the image and restarts the app; then run the post-upgrade
+  # `occ` commands above by hand.
   nextcloudVersion = "33";
 
-  # The official nextcloud:N image doesn't ship ffmpeg, but Nextcloud's
-  # preview generator and the `recognize` ML app both want it. Build
-  # `localhost/nextcloud-ffmpeg:<ver>` once via the
-  # nextcloud-image-build oneshot below. podman caches the FROM image
-  # and the RUN layer, so subsequent rebuilds are ~instant.
+  # Official nextcloud:N doesn't ship ffmpeg, but the preview generator
+  # and `recognize` ML app both want it. Build localhost/nextcloud-ffmpeg
+  # once via the systemd oneshot below; podman layer-caches subsequent
+  # builds (~instant).
   nextcloudImageBuildDir = pkgs.writeTextDir "Containerfile" ''
     FROM docker.io/library/nextcloud:${nextcloudVersion}
     RUN apt-get update \
@@ -51,23 +42,15 @@ in
     nextcloud-app      = "nextcloud";
   };
 
-  # Split-horizon publish — LAN clients reach traefik:443 directly
-  # via pi-hole short-circuit; off-LAN clients go through the
-  # Cloudflare tunnel onto traefik:8888. Same hostname, one wildcard
-  # cert (`*.toscanini.me`). HSTS is handled by Nextcloud itself
-  # (its `.htaccess`/`config.php` set Strict-Transport-Security on
-  # HTTPS responses) — the old per-router HSTS middleware lived in
-  # `assets/traefik-rule.yml` and was retired with this migration.
+  # Split-horizon publish — same hostname for LAN (websecure) + off-LAN
+  # (cfweb via CF tunnel), wildcard cert covers both. HSTS is set by
+  # Nextcloud itself in its .htaccess/config.php.
   myStack.webApps.nextcloud = {
     hostname = "nextcloud.toscanini.me";
-    port = 8082;
+    serviceName = "nextcloud-app";
+    port = 80;
     exposeRemotely = true;
   };
-
-  # The `:16` pin is load-bearing: the on-disk cluster in
-  # /home/santiago/selfhost/nextcloud/nc_postgres was initdb'd for
-  # PostgreSQL 16. Bumping the tag requires a pg_upgrade dance (dump
-  # on the old image, restore on the new one), NOT just a tag bump.
 
   myStack.homepageServices."Cloud & AI" = [{
     name = "Nextcloud";
@@ -83,6 +66,8 @@ in
     };
   }];
 
+  # `:16` is load-bearing: the on-disk cluster was initdb'd for PG 16.
+  # Bumping requires a pg_upgrade dance, NOT just a tag bump.
   virtualisation.oci-containers.containers.nextcloud-postgres = mkRootlessContainer {
     image = "docker.io/library/postgres:16-alpine";
 
@@ -99,10 +84,8 @@ in
     environmentFiles = [ "/etc/nixos/stacks/nextcloud/secrets/env" ];
 
     extraOptions = [
-      # `:alias=postgres` so nextcloud-app's persisted config.php
-      # (written when the compose service was named just `postgres`)
-      # still resolves the right container. Container name is
-      # `nextcloud-postgres`; alias makes it reachable as both.
+      # `:alias=postgres` — persisted config.php (from compose era when
+      # the service was named just `postgres`) resolves both names.
       "--network=nextcloud-net:alias=postgres"
     ];
   };
@@ -114,11 +97,8 @@ in
       "/home/santiago/selfhost/nextcloud/nc_redis:/data"
     ];
 
-    # The compose used `command: redis-server --requirepass ${REDIS_PASS}`,
-    # which expanded REDIS_PASS at compose time and put it directly in
-    # argv (visible in `ps`). For podman we read the password from the
-    # env file in the cmd's shell instead, so it isn't in argv at
-    # config time.
+    # Read REDIS_PASS in the cmd's shell so it's not in argv at config
+    # time (vs. the old compose which interpolated into argv directly).
     environmentFiles = [ "/etc/nixos/stacks/nextcloud/secrets/env" ];
 
     cmd = [
@@ -127,18 +107,14 @@ in
     ];
 
     extraOptions = [
-      # Same alias trick as postgres — config.php has `redis.host = redis`.
-      "--network=nextcloud-net:alias=redis"
+      "--network=nextcloud-net:alias=redis"   # config.php has redis.host = redis
     ];
   };
 
   virtualisation.oci-containers.containers.nextcloud-app = mkRootlessContainer {
-    # Local image built by systemd.services.nextcloud-image-build
-    # below. Tag tracks nextcloudVersion.
+    # Built by nextcloud-image-build below.
     image = "localhost/nextcloud-ffmpeg:${nextcloudVersion}";
     dependsOn = [ "nextcloud-postgres" "nextcloud-redis" ];
-
-    ports = [ "8082:80" ];
 
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_config:/var/www/html"
@@ -167,10 +143,8 @@ in
     # PG_PASS + REDIS_PASS (REDIS_HOST_PASSWORD aliased below).
     environmentFiles = [ "/etc/nixos/stacks/nextcloud/secrets/env" ];
 
-    # The official nextcloud image reads REDIS_HOST_PASSWORD; our env
-    # file uses REDIS_PASS (matches postgres + makes pre-existing
-    # secret naming consistent). Alias it here. ffmpeg is baked into
-    # the image (built by nextcloud-image-build), so no apt-get step.
+    # Image reads REDIS_HOST_PASSWORD; our env file uses REDIS_PASS for
+    # naming consistency. Alias here.
     entrypoint = "/bin/sh";
     cmd = [
       "-c"
@@ -179,15 +153,13 @@ in
 
     extraOptions = [
       "--network=nextcloud-net"
-      # tmpfs for /tmp speeds up Nextcloud's `recognize` app (ML-based
-      # content recognition) per its README. The compose did this via
-      # a `type: tmpfs` volume entry; podman needs the dedicated flag.
+      "--network=traefik-net"   # traefik dials http://nextcloud-app:80
+      # tmpfs for /tmp speeds up the `recognize` ML app per its README.
       "--tmpfs=/tmp:exec"
     ];
   };
 
-  # Build localhost/nextcloud-ffmpeg:<ver> from upstream + ffmpeg.
-  # Runs before podman-nextcloud-app starts.
+  # Build localhost/nextcloud-ffmpeg:<ver>. Runs before nextcloud-app.
   systemd.services.nextcloud-image-build = {
     description = "Build localhost/nextcloud-ffmpeg:${nextcloudVersion}";
     after = [ "network-online.target" ];
@@ -212,21 +184,16 @@ in
     };
   };
 
-  # Extend the auto-generated podman-nextcloud-app override with a dep
-  # on nextcloud-image-build. NixOS module merging combines this with
-  # the override from modules/common.nix (Type=oneshot + the bridge
-  # dep). `after` and `wants` are list-typed and concatenate.
+  # NixOS module merging concatenates after/wants with common.nix's
+  # auto-generated override.
   systemd.services.podman-nextcloud-app = {
     after = [ "nextcloud-image-build.service" ];
     wants = [ "nextcloud-image-build.service" ];
   };
 
-  # Nextcloud expects cron.php to run every 5 min for background jobs
-  # (file scans, notifications, indexing). The official image doesn't
-  # ship cron, so we podman-exec into the container from a host-side
-  # systemd timer. The unit runs as santiago against santiago's
-  # rootless podman; the container is named `nextcloud-app`
-  # (oci-containers names the container from the attribute name).
+  # Nextcloud expects cron.php every 5 min for background jobs
+  # (file scans, notifications, indexing). Official image doesn't ship
+  # cron — podman-exec from a host-side systemd timer instead.
   systemd.services.nextcloud-cron = {
     description = "Run Nextcloud cron.php inside the nextcloud-app container";
     after = [ "podman-nextcloud-app.service" ];
@@ -245,7 +212,7 @@ in
     partOf = [ "nextcloud-cron.service" ];
     timerConfig = {
       OnCalendar = "*:0/5";
-      Persistent = true;  # run on next boot if missed (e.g. server was off)
+      Persistent = true;  # catch up if the server was off
     };
   };
 }

@@ -1,57 +1,42 @@
-# immich — photo backup + ML, 4 containers on immich-net.
+# immich — photo backup + ML. 4 containers on immich-net (server + ML +
+# postgres + redis). Custom bridge because the server dials postgres and
+# redis by DNS name (DB_HOSTNAME=database, REDIS_HOSTNAME=redis); pasta
+# doesn't do inter-container DNS, a user-defined bridge does (via
+# netavark/aardvark-dns). The server container also joins traefik-net so
+# traefik dials its three HTTP ports (2283 UI, 8081 api metrics, 8082
+# microservices metrics) by container DNS — no host ports published.
 #
-# Faithful translation of Immich's official docker-compose
-# (https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml)
-# to nix oci-containers. Same four services (server, machine-learning,
-# postgres, redis), same images, same wiring; expressed in the same
-# rootless-podman pattern the rest of the fleet uses.
+# Faithful translation of the upstream docker-compose to rootless
+# oci-containers. Notable deviations:
+#   - ML uses the -openvino tag for Alder Lake iGPU acceleration
+#     (~5-10x faster than CPU on CLIP + face detection + OCR).
+#   - Server + ML both get /dev/dri (QSV transcoding + OpenVINO).
+#   - --userns=keep-id:uid=1000 maps container `node` (UID 1000) to
+#     host santiago (compose runs rootful, so this is rootless-only).
+#   - --network=immich-net:alias=database / :alias=redis preserves the
+#     standard hostnames the server expects.
+#   - IMMICH_TRUSTED_PROXIES set because traefik is in front.
 #
-# Why a custom podman network: the server dials postgres and redis by
-# DNS name (defaults DB_HOSTNAME=database, REDIS_HOSTNAME=redis).
-# Pasta doesn't do inter-container DNS; all four on the same user-
-# defined bridge do, via netavark/aardvark-dns.
-# host.containers.internal still resolves on bridge networks so
-# Traefik's egress patterns keep working.
-#
-# Deviations from the upstream compose, with reasons:
-#   - ML image uses the -openvino tag — we have an Alder Lake iGPU and
-#     OpenVINO is ~5-10x faster than CPU for CLIP + face detection + OCR.
-#   - Server and ML containers both get /dev/dri (QSV transcoding for
-#     the server, OpenVINO for ML). The compose puts these in
-#     hwaccel.*.yml overlay files that you opt into.
-#   - --userns=keep-id:uid=1000,gid=1000 maps container UID 1000 (the
-#     Immich `node` user) to host santiago. Required because we run
-#     rootless; the compose runs rootful.
-#   - --network=immich-net:alias=database / :alias=redis so the
-#     standard hostnames the server expects keep resolving despite our
-#     descriptive container names.
-#   - IMMICH_TRUSTED_PROXIES=192.168.0.2/24 because Traefik is in front.
-#     The compose assumes direct port-2283 exposure.
-#
-# Postgres image is non-negotiable:
-# ghcr.io/immich-app/postgres:14-vectorchord... — Immich uses the
-# `vectorchord` extension for vector similarity (face recognition,
-# smart search). Vanilla docker.io/library/postgres won't work — the
-# extension is custom-built into this image.
+# Postgres image is non-negotiable: ghcr.io/immich-app/postgres:14-vectorchord*
+# — Immich uses the `vectorchord` extension for vector similarity
+# (face recognition, smart search), built into this custom image.
 #
 # Storage layout:
-#   /s2/immich/                          # UPLOAD_LOCATION
-#     upload/                                  # fresh uploads
-#     library/<storageLabel>/                  # managed, template-organized
-#     thumbs/, encoded-video/                  # regenerable
-#     profile/, backups/                       # avatars + auto pg_dumps
-#   /home/santiago/selfhost/immich/postgres/   # DB on NVMe
-#   /home/santiago/selfhost/immich/model-cache # CLIP / face / OCR models
+#   /s2/immich/                  UPLOAD_LOCATION
+#     upload/                    fresh uploads
+#     library/<storageLabel>/    managed, template-organized
+#     thumbs/, encoded-video/    regenerable
+#     profile/, backups/         avatars + auto pg_dumps
+#   /home/santiago/selfhost/immich/{postgres,model-cache}/   on NVMe
 
 { config, lib, pkgs, mkRootlessContainer, ... }:
 
 let
-  # Pin both server + ML to the same tag. Bump intentionally — iOS app
+  # Pin server + ML to the same tag. Bump intentionally — iOS app
   # version mismatches stall background sync silently.
   immichVersion = "v2.7.5";
 
-  # Immich-built postgres image with vectorchord baked in. Tag is tied
-  # to the immich major; check before bumping immichVersion.
+  # Tied to the immich major; check before bumping immichVersion.
   immichPostgresImage =
     "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0";
 in
@@ -63,21 +48,32 @@ in
     immich                  = "immich";
   };
 
-  # Split-horizon publish: LAN clients hit traefik:443 directly
-  # (pi-hole answers 192.168.0.2 for the hostname); off-LAN clients
-  # go through the Cloudflare tunnel onto traefik:8888. Same FQDN,
-  # same wildcard cert (`*.toscanini.me`), one nix entry.
+  # Three webApps entries — one per in-container HTTP port. UI is
+  # exposed remotely; the two telemetry endpoints stay LAN-only.
+  # Distinct hostnames because traefik routes by Host header.
   myStack.webApps.immich = {
     hostname = "immich.toscanini.me";
+    serviceName = "immich";
     port = 2283;
     exposeRemotely = true;
   };
+  myStack.webApps.immich-metrics-api = {
+    hostname = "immich-metrics-api.toscanini.me";
+    serviceName = "immich";
+    port = 8081;           # IMMICH_TELEMETRY_INCLUDE=all → /metrics
+  };
+  myStack.webApps.immich-metrics-microservices = {
+    hostname = "immich-metrics-microservices.toscanini.me";
+    serviceName = "immich";
+    port = 8082;
+  };
 
+  # Bridge scrape — prometheus is on traefik-net too (see monitoring.nix).
   myStack.prometheusScrapes = [
     { job_name = "immich-api";
-      static_configs = [{ targets = [ "host.containers.internal:18081" ]; }]; }
+      static_configs = [{ targets = [ "immich:8081" ]; }]; }
     { job_name = "immich-microservices";
-      static_configs = [{ targets = [ "host.containers.internal:18082" ]; }]; }
+      static_configs = [{ targets = [ "immich:8082" ]; }]; }
   ];
 
   myStack.grafanaDashboards.immich = builtins.readFile ./assets/dashboard.json;
@@ -87,10 +83,10 @@ in
     href = "https://immich.toscanini.me";
     description = "Photo + video backup (ML on iGPU via OpenVINO)";
     icon = "immich.png";
-    siteMonitor = "http://host.containers.internal:2283";
+    siteMonitor = "http://immich:2283";
     widget = {
       type = "immich";
-      url = "http://host.containers.internal:2283";
+      url = "http://immich:2283";
       key = "{{HOMEPAGE_VAR_IMMICH_API_KEY}}";
       version = 2;
       fields = [ "users" "photos" "videos" "storage" ];
@@ -107,14 +103,12 @@ in
     environment = {
       POSTGRES_DB = "immich";
       POSTGRES_USER = "immich";
-      # Applied only on first initdb. Cheap insurance against silent
-      # page-level bit-rot; can't be added later without offline
-      # pg_checksums.
+      # Applied only on first initdb — can't be added later without
+      # offline pg_checksums. Cheap insurance against bit-rot.
       POSTGRES_INITDB_ARGS = "--data-checksums";
     };
 
-    # POSTGRES_PASSWORD (also DB_PASSWORD for immich-server — same
-    # value, two keys, both consumed natively).
+    # POSTGRES_PASSWORD + DB_PASSWORD (same value, both keys consumed natively).
     environmentFiles = [ "/etc/nixos/stacks/immich/secrets/env" ];
 
     extraOptions = [
@@ -131,8 +125,6 @@ in
     ];
   };
 
-  # OpenVINO image variant — uses the Alder Lake iGPU via /dev/dri.
-  # CPU fallback works but is ~5-10x slower on CLIP + face detection.
   virtualisation.oci-containers.containers.immich-machine-learning = mkRootlessContainer {
     image = "ghcr.io/immich-app/immich-machine-learning:${immichVersion}-openvino";
 
@@ -150,25 +142,21 @@ in
     image = "ghcr.io/immich-app/immich-server:${immichVersion}";
     dependsOn = [ "immich-postgres" "immich-redis" "immich-machine-learning" ];
 
-    ports = [ "2283:2283" "18081:8081" "18082:8082" ];
-
     volumes = [
       "/s2/immich:/data"
       "/etc/localtime:/etc/localtime:ro"
     ];
 
     environment = {
-      # Match the bridge aliases above. Setting explicitly so future
-      # ops grep finds them.
+      # Match the bridge aliases above.
       DB_HOSTNAME = "database";
       DB_USERNAME = "immich";
       DB_DATABASE_NAME = "immich";
       REDIS_HOSTNAME = "redis";
 
-      # Trust Traefik so X-Forwarded-For is honored (correct client
-      # IPs in audit logs and rate limiting).
+      # Honor X-Forwarded-For from traefik (correct IPs in audit logs).
       IMMICH_TRUSTED_PROXIES = "192.168.0.2/24";
-      # Enables OpenTelemetry-style /metrics on :8081 (api) + :8082 (microservices).
+      # /metrics on :8081 (api) + :8082 (microservices).
       IMMICH_TELEMETRY_INCLUDE = "all";
     };
 
@@ -177,11 +165,9 @@ in
 
     extraOptions = [
       "--network=immich-net"
-      # iGPU for QSV transcoding — see Settings → Video Transcoding.
-      "--device=/dev/dri:/dev/dri"
-      # Container UID 1000 (node) → host UID 1000 (santiago), so
-      # /s2/immich is owned by santiago on the host.
-      "--userns=keep-id:uid=1000,gid=1000"
+      "--network=traefik-net"     # traefik + prometheus reach by container DNS
+      "--device=/dev/dri:/dev/dri" # iGPU for QSV transcoding
+      "--userns=keep-id:uid=1000,gid=1000"  # node (UID 1000) → santiago
     ];
   };
 }

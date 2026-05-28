@@ -2,15 +2,17 @@
 #
 # Image runs as container root by default (no USER set), which maps to
 # host santiago in our rootless setup — owning the data dirs cleanly.
-# No secrets, no inter-container DNS, no VPN; standalone pasta.
+# No secrets, no inter-container DNS, no VPN. Joins traefik-net so
+# traefik dials `http://stirling-pdf:8080` directly — no host port.
 
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.stirling-pdf = null;
+  myStack.containerNetworks.stirling-pdf = "traefik";
   myStack.webApps.stirling-pdf = {
     hostname = "stirling-pdf.toscanini.me";
-    port = 8083;
+    serviceName = "stirling-pdf";
+    port = 8080;           # in-container port
   };
 
   myStack.homepageServices."Productivity" = [{
@@ -18,13 +20,11 @@
     href = "https://stirling-pdf.toscanini.me";
     description = "PDF toolbox (split, merge, OCR)";
     icon = "stirling-pdf.png";
-    siteMonitor = "http://host.containers.internal:8083";
+    siteMonitor = "http://stirling-pdf:8080";
   }];
 
   virtualisation.oci-containers.containers.stirling-pdf = mkRootlessContainer {
     image = "docker.io/frooodle/s-pdf:latest";
-
-    ports = [ "8083:8080" ];
 
     volumes = [
       # `training-data` holds tesseract `.traineddata` packs for OCR in
@@ -40,5 +40,9 @@
       DOCKER_ENABLE_SECURITY = "false";
       INSTALL_BOOK_AND_ADVANCED_HTML_OPS = "false";
     };
+
+    extraOptions = [
+      "--network=traefik-net"
+    ];
   };
 }

@@ -1,63 +1,39 @@
-# Single source of truth for everything ZFS on this host: boot config,
-# pool maintenance, snapshot timers, dataset properties, and mounts.
+# Single source of truth for ZFS on this host: boot config, pool
+# maintenance, snapshot timers, dataset properties, mounts.
 #
-# Datasets are declared once in `datasets` below. Each entry may set:
-#
-#   properties = { ... };  Re-applied on every nixos-rebuild via
-#                          zfs-converge.service. Each property is
-#                          diffed against the current value and `zfs
-#                          set` runs only if they differ. Silent
-#                          no-op when on-disk state matches.
-#                          Missing datasets are skipped (logged).
-#
+# Each entry in `datasets` may set:
+#   properties = { ... };  Re-applied every rebuild by zfs-converge.service
+#                          (diff-then-`zfs set`, no-op when matching).
+#                          Missing datasets are skipped + logged.
 #   mount      = "/path";  Emits a fileSystems."<path>" entry. rpool/*
-#                          mounts live in hardware-configuration.nix
-#                          and are deliberately not declared here.
+#                          mounts live in hardware-configuration.nix.
 #
-# Dataset CREATION is intentionally not automated. Pools are created
-# once at install time and their children are created once with
-# `zfs create -o mountpoint=legacy <pool>/<name>`. If you ever need
-# to rebuild them, the list below tells you exactly which datasets to
-# create. Adding `create = true` plumbing would mostly run for nothing
-# on the boots that matter.
+# Dataset CREATION is NOT automated. Pools are created once at install
+# and children via `zfs create -o mountpoint=legacy <pool>/<name>`.
+# The list below documents which children exist if you ever need to recreate.
 #
-# ── Snapshot policy ─────────────────────────────────────────────────
+# Snapshot policy: services.zfs.autoSnapshot fires every 15min/hour/day/week
+# and prunes to the count below. Per-dataset opt-in via
+# `com.sun:auto-snapshot=true`; per-tier override via
+# `com.sun:auto-snapshot:<tier>`. Window math: count × cadence = retention.
+# Older data is an off-site-backup problem, not local snapshots.
 #
-# The `services.zfs.autoSnapshot` timers fire on a fixed cadence
-# (every 15 min / hour / day / week) and prune the corresponding tier
-# to the count below. Tier counts are GLOBAL; per-dataset opt-in is
-# via the `com.sun:auto-snapshot` property, with per-tier override via
-# `com.sun:auto-snapshot:<tier>`.
-#
-# Window math (count × cadence): a tier's count IS its retention
-# window. frequent=4 → 1 hour back. hourly=24 → 1 day. daily=7 →
-# 1 week. weekly=4 → 1 month. Anything older is gone — that's an
-# off-site backup problem, not a local-snapshot one.
-#
-# Per-dataset choices below:
-# - rpool/{home,selfhost}: skip weekly. Frequent + hourly + daily are
-#   plenty for fat-finger recovery on active data; selfhost's high DB
-#   churn × 1-month weekly window would balloon snapshot size.
-# - s2-pool/{santi,sofi,shared,immich}: skip frequent (files don't
-#   change every 15 min). Hourly + daily + weekly give 1 month of
-#   coarse recovery for personal files / photos — cheap because the
-#   data is read-mostly.
-# - s2-pool/supabase-storage: hourly + daily only. Drop frequent
-#   (writes are big files, no value at 15-min grain) and weekly
-#   (will grow with usage; revisit when it does).
-# - s2-pool/tv: no snapshots. Re-downloadable; not worth the space.
+# Per-dataset tier choices:
+#   rpool/{home,selfhost}     skip weekly (frequent+hourly+daily is plenty;
+#                             selfhost's DB churn × 1-month would balloon).
+#   s2-pool/{santi,sofi,
+#            shared,immich}   skip frequent (files don't change every 15min).
+#   s2-pool/supabase-storage  hourly+daily only (big-file writes).
+#   s2-pool/tv                no snapshots (re-downloadable).
 
 { config, lib, pkgs, utils, ... }:
 
 let
-  # Common opt-in for any dataset we want snapshotted. Per-tier opt-outs
-  # are layered on top in each entry below.
+  # Opt-in for any dataset we want snapshotted. Per-tier opt-outs layered on top.
   snapshotOn = { "com.sun:auto-snapshot" = "true"; };
 
   datasets = {
-    # ── rpool (SSD) — properties only ─────────────────────────────────
-    # Pool root + OS datasets created at install; mounts in
-    # hardware-configuration.nix.
+    # rpool (SSD) — properties only. Mounts in hardware-configuration.nix.
 
     "rpool" = {
       properties = {
@@ -93,15 +69,14 @@ let
     "rpool/selfhost" = {
       properties = snapshotOn // {
         mountpoint                       = "legacy";
-        # 16K matches typical postgres page size. Every container's DB
-        # and bind mount lives here; 128K would amplify writes ~8x for
-        # small-row updates.
+        # Matches typical postgres page size; 128K would amplify writes
+        # ~8x for small-row DB updates.
         recordsize                       = "16K";
         "com.sun:auto-snapshot:weekly"   = "false";
       };
     };
 
-    # ── s2-pool (HDD) — properties + mount ────────────────────────────
+    # s2-pool (HDD) — properties + mount.
 
     "s2-pool" = {
       properties = {
@@ -152,7 +127,6 @@ let
       };
     };
 
-    # tv is intentionally NOT snapshotted (re-downloadable).
     "s2-pool/tv" = {
       mount = "/s2/tv";
       properties.mountpoint = "legacy";
@@ -168,9 +142,8 @@ let
     set -eu
     ZFS=${pkgs.zfs}/bin/zfs
 
-    # Converge a single property. Reads the current value, only writes
-    # when different. Skips datasets that don't exist (e.g. recovery
-    # boot before s2-pool import).
+    # Reads current value, writes only on diff. Skips missing datasets
+    # (e.g. recovery boot before s2-pool import).
     set_if_different() {
       local ds="$1" key="$2" want="$3" have
       have=$($ZFS get -H -o value "$key" "$ds" 2>/dev/null) || {
@@ -196,18 +169,17 @@ let
   '';
 in
 {
-  # ── Boot-time ZFS support ──────────────────────────────────────────
   boot.supportedFilesystems = [ "zfs" ];
 
   boot.zfs = {
-    # Stable by-id device paths so the pool survives kernel drive renames.
+    # Stable by-id paths survive kernel drive renames.
     devNodes = "/dev/disk/by-id";
     # Off after the first force-import re-stamped rpool with this host's
     # hostid; split-brain guard now active.
     forceImportRoot = false;
   };
 
-  # ── Mounts (rpool/* stay in hardware-configuration.nix) ────────────
+  # rpool/* mounts stay in hardware-configuration.nix.
   fileSystems = lib.mapAttrs'
     (ds: v: lib.nameValuePair v.mount {
       device = ds;
@@ -215,32 +187,22 @@ in
     })
     toMount;
 
-  # ── Maintenance + snapshot timers ──────────────────────────────────
   services.zfs = {
-    # Monthly scrub — verifies every block's checksum, catches bit-rot.
-    autoScrub.enable = true;
+    autoScrub.enable = true;   # monthly — catches bit-rot
+    trim.enable = true;        # SSD; no-op on HDDs in s2-pool
 
-    # SSD/NVMe TRIM. Pool-level; no-op on rotational drives in s2-pool.
-    trim.enable = true;
-
-    # Snapshot tiers fire on every dataset with
-    # `com.sun:auto-snapshot=true` (and not opted out of the specific
-    # tier). Counts apply globally; opt-in is per-dataset above.
     autoSnapshot = {
       enable   = true;
       flags    = "-k -p --utc";
-      frequent = 4;   # 4 × 15 min = last hour
+      frequent = 4;   # last hour
       hourly   = 24;  # last day
       daily    = 7;   # last week
       weekly   = 4;   # last month
-      monthly  = 0;   # monthly+ belongs in off-site backups, not local
+      monthly  = 0;   # off-site backup territory
     };
   };
 
-  # ── Property convergence ───────────────────────────────────────────
-  # Runs on every nixos-rebuild + every boot. Quiet no-op when on-disk
-  # properties already match `datasets`; logs `set:` lines on every
-  # actual change.
+  # Quiet no-op when properties match; logs `set:` on actual changes.
   systemd.services.zfs-converge = {
     description = "Converge ZFS dataset properties";
     after = [

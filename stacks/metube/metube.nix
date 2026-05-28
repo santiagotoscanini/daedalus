@@ -1,8 +1,9 @@
 # metube — youtube-dl web UI, sibling of the tv stack.
 #
-# Standalone (no VPN), pasta networking. Writes downloads to
-# /s2/tv/media/videos which is already part of the jellyfin library —
-# anything pulled here surfaces in Jellyfin's Videos folder.
+# Standalone (no VPN), traefik-net for HTTP routing — traefik reaches
+# via `http://metube:8081`, no host port published. Writes downloads
+# to /s2/tv/media/videos which is already part of the jellyfin
+# library — anything pulled here surfaces in Jellyfin's Videos folder.
 #
 # UID/GID env vars on this image are `UID`/`GID` (not the linuxserver
 # `PUID`/`PGID`). Same rationale as the tv stack: container UID 0 maps
@@ -12,9 +13,10 @@
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.metube = null;
+  myStack.containerNetworks.metube = "traefik";
   myStack.webApps.metube = {
     hostname = "metube.toscanini.me";
+    serviceName = "metube";
     port = 8081;
   };
 
@@ -23,13 +25,11 @@
     href = "https://metube.toscanini.me";
     description = "YouTube-dl web UI (writes to /s2/tv/media/videos)";
     icon = "metube.png";
-    siteMonitor = "http://host.containers.internal:8081";
+    siteMonitor = "http://metube:8081";
   }];
 
   virtualisation.oci-containers.containers.metube = mkRootlessContainer {
     image = "ghcr.io/alexta69/metube:2026.04.04";
-
-    ports = [ "8081:8081" ];
 
     volumes = [
       "/s2/tv/media/videos:/downloads"
@@ -39,5 +39,9 @@
       UID = "0";
       GID = "0";
     };
+
+    extraOptions = [
+      "--network=traefik-net"
+    ];
   };
 }
