@@ -31,7 +31,7 @@
     name = "Factorio Admin";
     href = "https://factorio-admin.toscanini.me";
     description = "Factorio server manager";
-    icon = "factorio.png";
+    icon = "/icons/factorio.png";
     siteMonitor = "https://factorio-admin.toscanini.me";
   }];
 
