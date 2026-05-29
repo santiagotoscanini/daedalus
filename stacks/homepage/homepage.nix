@@ -42,7 +42,7 @@ in
       name = "Router";
       href = "http://192.168.0.1/webpages/index.html?t=eb9856ea#networkMap";
       description = "LAN router admin (192.168.0.1)";
-      icon = "mdi-router-network-#38bdf8";
+      icon = "/icons/tp-link.png";
       siteMonitor = "http://192.168.0.1/";
     }
     {
@@ -85,6 +85,7 @@ in
       "${./assets/widgets.yaml}:/app/config/widgets.yaml:ro"
       "${./assets/bookmarks.yaml}:/app/config/bookmarks.yaml:ro"
       "${./assets/custom.css}:/app/config/custom.css:ro"
+      "${./assets/icons}:/app/public/icons:ro"
     ];
 
     environment = {

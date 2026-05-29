@@ -101,7 +101,7 @@ let
         name        = "Logs";
         href        = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${name}/logs?from=now-15m&to=now&var-ds=loki-default&var-filters=service_name%7C%3D%7C${name}";
         description = "App + DB logs (Loki / Grafana Drilldown)";
-        icon        = "mdi-script-text-outline-#60a5fa";
+        icon        = "/icons/loki.png";
       };
 
       repoTile = {
@@ -118,7 +118,7 @@ let
         name        = "DB";
         href        = "https://grafana.toscanini.me/d/pg-overview/postgres?orgId=1&var-app=${name}&refresh=30s";
         description = "Postgres metrics — ${name} DB";
-        icon        = "mdi-database-outline-#10b981";
+        icon        = "/icons/postgres.png";
       };
     in {
       # Delegate per-app Postgres entirely to stacks/app-db/. The

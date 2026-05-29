@@ -24,7 +24,7 @@
     name = "Wealthfolio";
     href = "https://wealthfolio.toscanini.me";
     description = "Personal finance";
-    icon = "mdi-finance-#34d399";
+    icon = "/icons/wealthfolio.png";
     siteMonitor = "http://wealthfolio:8088";
   }];
 

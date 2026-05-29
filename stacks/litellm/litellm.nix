@@ -48,7 +48,7 @@
       name = "LiteLLM";
       href = "https://litellm.toscanini.me/ui";
       description = "OpenAI-compatible LLM gateway (lemonade on gaming-pc)";
-      icon = "mdi-robot-happy-#a78bfa";
+      icon = "/icons/litellm.png";
       siteMonitor = "http://litellm:4000";
     }
     {
@@ -57,7 +57,7 @@
       name = "Lemonade";
       href = "http://gaming-pc.local.toscanini.me:13305/";
       description = "Local LLM model server on the gaming PC (Vulkan/ROCm)";
-      icon = "mdi-lemon-#facc15";
+      icon = "/icons/lemonade.png";
       siteMonitor = "http://gaming-pc.local.toscanini.me:13305/";
     }
   ];
