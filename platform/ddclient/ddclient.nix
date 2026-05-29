@@ -23,4 +23,12 @@
     domains = [ "s2.toscanini.me" ];
     interval = "300s";
   };
+
+  # First-boot race: ddclient hits cloudflare.com before pi-hole is
+  # actually serving DNS. Gate on pihole-ready so the first run resolves
+  # without burning ~5s of DNS retries.
+  systemd.services.ddclient = {
+    after = [ "pihole-ready.service" ];
+    wants = [ "pihole-ready.service" ];
+  };
 }

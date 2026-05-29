@@ -136,8 +136,8 @@ in
   # safe if cloudflared is already up.
   systemd.services.cloudflared-route-sync = {
     description = "Reconcile CF DNS CNAMEs for myStack.cloudflareRoutes";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
+    after = [ "network-online.target" "pihole-ready.service" ];
+    wants = [ "network-online.target" "pihole-ready.service" ];
     wantedBy = [ "multi-user.target" ];
     before = [ "podman-cloudflared.service" ];
     serviceConfig = {
@@ -146,7 +146,7 @@ in
       EnvironmentFile = "/etc/nixos/stacks/cloudflared/secrets/env";
       ExecStart = "${routeSyncScript}/bin/cloudflared-route-sync";
       Restart = "on-failure";
-      RestartSec = "10s";
+      RestartSec = "2s";
     };
   };
 }

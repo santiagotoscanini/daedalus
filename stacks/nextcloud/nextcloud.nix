@@ -162,8 +162,9 @@ in
   # Build localhost/nextcloud-ffmpeg:<ver>. Runs before nextcloud-app.
   systemd.services.nextcloud-image-build = {
     description = "Build localhost/nextcloud-ffmpeg:${nextcloudVersion}";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
+    # linger-users gates /run/user/1000 → rootless podman → newuidmap.
+    after = [ "network-online.target" "linger-users.service" ];
+    wants = [ "network-online.target" "linger-users.service" ];
     before = [ "podman-nextcloud-app.service" ];
     serviceConfig = {
       Type = "oneshot";
@@ -172,7 +173,7 @@ in
       Group = "users";
       Environment = "XDG_RUNTIME_DIR=/run/user/1000";
       Restart = "on-failure";
-      RestartSec = "10s";
+      RestartSec = "1s";
       ExecStart = pkgs.writeShellScript "build-nextcloud-image" ''
         set -eu
         cd ${nextcloudImageBuildDir}
