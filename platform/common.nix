@@ -40,6 +40,10 @@ let
         RemainAfterExit = true;
         Restart = lib.mkForce "on-failure";
         RestartSec = "5s";
+      };
+      # StartLimit* and RequiresMountsFor are [Unit] keys; systemd drops
+      # them silently from [Service], turning the guards above into no-ops.
+      unitConfig = {
         # systemd default (5 in 10s) trips first-boot races where
         # auth/storage/pooler wait on db. 20 over 10 min lets slow paths converge.
         StartLimitBurst = 20;
@@ -54,10 +58,12 @@ let
 
   # Idempotent — `--ignore` returns 0 if the network already exists,
   # so this can re-run on every rebuild without churn.
+  # Waits on linger-users.service so /run/user/1000 is populated before
+  # rootless podman runs (otherwise newuidmap lookup fails on first boot).
   mkBridgeUnit = net: {
     description = "Create the ${net}-net podman bridge";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
+    after = [ "network-online.target" "linger-users.service" ];
+    wants = [ "network-online.target" "linger-users.service" ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
@@ -65,7 +71,9 @@ let
       User = "santiago";
       Environment = "XDG_RUNTIME_DIR=/run/user/1000";
       Restart = "on-failure";
-      RestartSec = "5s";
+      # First-boot rootless-podman bootstrap fails (newuidmap)
+      # for reasons that aren't yet understood; 1s recovery is cheap.
+      RestartSec = "1s";
       ExecStart =
         "${pkgs.podman}/bin/podman network create --ignore ${net}-net";
     };

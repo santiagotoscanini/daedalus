@@ -13,7 +13,7 @@
 # Per-stack DNS entries flow in via `myStack.dnsHosts`. The literal
 # list below catches non-stack hosts.
 
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   hostEntries = config.myStack.dnsHosts ++ [
@@ -143,4 +143,30 @@ in
   # can never be written to and every rebuild re-points it at the latest
   # rendered toml.
   environment.etc."pihole/pihole.toml".mode = lib.mkForce "symlink";
+
+  # pihole-ftl is Type=simple — it declares "active" the instant the FTL
+  # process starts, well before it's loaded gravity.db and bound :53. So
+  # `After=pihole-ftl.service` only orders, it doesn't wait for readiness.
+  # This oneshot polls upstream DNS until it actually resolves, providing
+  # a readiness gate for anything that does DNS at boot — depend on
+  # pihole-ready.service instead of pihole-ftl.service.
+  systemd.services.pihole-ready = {
+    description = "Gate: pi-hole is actually answering DNS queries";
+    after = [ "pihole-ftl.service" "network-online.target" ];
+    wants = [ "pihole-ftl.service" "network-online.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = pkgs.writeShellScript "wait-pihole-dns" ''
+        for i in $(seq 1 60); do
+          ${pkgs.curl}/bin/curl -s --max-time 1 -o /dev/null --head \
+            https://api.cloudflare.com/ && exit 0
+          sleep 0.25
+        done
+        # Don't block boot forever if upstream DNS is unreachable.
+        exit 0
+      '';
+    };
+  };
 }
