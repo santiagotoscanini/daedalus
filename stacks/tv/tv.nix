@@ -259,6 +259,15 @@
     extraOptions = [ "--network=container:gluetun" ];
   };
 
+  # qBittorrent's lockfile occasionally survives ungraceful shutdown
+  # (e.g., when gluetun's netns disappears before qBT cleans up).
+  # A stale lockfile makes new instances exit quietly with "termination
+  # initiated" — symptom is a tight restart loop where port 8090 never
+  # binds. Safe to wipe: systemd guarantees one instance at a time.
+  systemd.services.podman-qbittorrent.preStart = ''
+    rm -f /home/santiago/selfhost/tv/qbittorrent/qBittorrent/lockfile
+  '';
+
   virtualisation.oci-containers.containers.nzbget = mkRootlessContainer {
     image = "docker.io/linuxserver/nzbget:latest";
     dependsOn = [ "gluetun" ];
