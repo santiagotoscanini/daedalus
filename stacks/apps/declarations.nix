@@ -25,6 +25,7 @@
 {
   myStack.apps.anansi = {
     postgres.enable = true;
+    stage          = "live";
 
     homepage = {
       description = "Anansi — task-tracking experiment";
