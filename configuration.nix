@@ -23,6 +23,7 @@
     ./stacks/logging/logging.nix
     ./stacks/metube/metube.nix
     ./stacks/monitoring/monitoring.nix
+    ./stacks/myspeed/myspeed.nix
     ./stacks/n8n/n8n.nix
     ./stacks/nextcloud/nextcloud.nix
     ./stacks/pihole/pihole.nix
@@ -136,7 +137,7 @@
   nixpkgs.overlays = [
     (final: prev: {
       claude-code = (import (builtins.fetchTarball {
-        url = "https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz";
+        url = "https://github.com/NixOS/nixpkgs/archive/master.tar.gz";
       }) {
         system = prev.stdenv.hostPlatform.system;
         config.allowUnfree = true;

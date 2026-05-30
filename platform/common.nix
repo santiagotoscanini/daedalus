@@ -426,6 +426,31 @@ in
         }
       '';
     };
+
+    homepageLayout = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf lib.types.unspecified);
+      default = { };
+      description = ''
+        Per-group homepage layout, keyed by group name. Each value is
+        a homepage `layout.<group>` block (`style`, `columns`,
+        `icon`, `useEqualHeights`, etc.).
+
+        Each stack that introduces a new homepage group is responsible
+        for contributing its layout here, so the per-app generator in
+        stacks/apps/ can add new groups without anyone editing
+        settings.yaml.
+      '';
+      example = lib.literalExpression ''
+        {
+          Anansi = {
+            style = "row";
+            columns = 4;
+            icon = "mdi-spider-#f59e0b";
+            useEqualHeights = true;
+          };
+        }
+      '';
+    };
   };
 
   config = {

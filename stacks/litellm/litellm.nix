@@ -50,6 +50,22 @@
       description = "OpenAI-compatible LLM gateway (lemonade on gaming-pc)";
       icon = "/icons/litellm.png";
       siteMonitor = "http://litellm:4000";
+      widget = {
+        type = "customapi";
+        # /global/spend → {"spend": <num>, "max_budget": <num>}.
+        # Both render as $0/$0 until you wire a billed provider; the
+        # tile is also an "alive" signal — a 401/non-200 will show
+        # the API error in the widget.
+        url = "http://litellm:4000/global/spend";
+        refreshInterval = 60000;
+        headers = {
+          Authorization = "Bearer {{HOMEPAGE_VAR_LITELLM_KEY}}";
+        };
+        mappings = [
+          { field = "spend"; label = "Spend"; format = "number"; prefix = "$"; }
+          { field = "max_budget"; label = "Budget"; format = "number"; prefix = "$"; }
+        ];
+      };
     }
     {
       # External Windows-PC service — declared here because litellm is

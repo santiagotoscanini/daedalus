@@ -21,6 +21,18 @@
     description = "PDF toolbox (split, merge, OCR)";
     icon = "stirling-pdf.png";
     siteMonitor = "http://stirling-pdf:8080";
+    widget = {
+      type = "customapi";
+      # /api/v1/info/status → {"version":"2.10.1","status":"UP"}
+      # Tiny but accurate: tells us the running image version and
+      # that the Spring Boot app's liveness probe is green.
+      url = "http://stirling-pdf:8080/api/v1/info/status";
+      refreshInterval = 300000;
+      mappings = [
+        { field = "status";  label = "Status";  format = "text"; }
+        { field = "version"; label = "Version"; format = "text"; }
+      ];
+    };
   }];
 
   virtualisation.oci-containers.containers.stirling-pdf = mkRootlessContainer {

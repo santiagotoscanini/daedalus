@@ -38,6 +38,17 @@
     description = "Private npm registry (LAN-only)";
     icon = "verdaccio.png";
     siteMonitor = "https://verdaccio.toscanini.me/-/ping";
+    widget = {
+      type = "customapi";
+      # /-/v1/search?text=* → {"total": <n>, "objects": [...], "time": "..."}
+      # `total` is the count of locally-published packages (uplinks
+      # are not included), which is the stat that matters here.
+      url = "http://verdaccio:4873/-/v1/search?text=*";
+      refreshInterval = 300000;
+      mappings = [
+        { field = "total"; label = "Packages"; format = "number"; }
+      ];
+    };
   }];
 
   myStack.grafanaDashboards.verdaccio = builtins.readFile ./assets/dashboard.json;
