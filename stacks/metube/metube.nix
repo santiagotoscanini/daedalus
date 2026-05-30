@@ -10,7 +10,7 @@
 # to host santiago in our rootless setup, so UID=0 GID=0 = run as the
 # user that owns the videos dir.
 
-{ mkRootlessContainer, ... }:
+{ lib, mkRootlessContainer, ... }:
 
 {
   myStack.containerNetworks.metube = "traefik";
@@ -20,12 +20,23 @@
     port = 8081;
   };
 
-  myStack.homepageServices."Media" = [{
+  myStack.homepageServices."Media" = lib.mkOrder 500 [{
     name = "MeTube";
     href = "https://metube.toscanini.me";
     description = "YouTube-dl web UI (writes to /s2/tv/media/videos)";
     icon = "metube.png";
     siteMonitor = "http://metube:8081";
+    widget = {
+      type = "customapi";
+      # /history → {"done":[...], "queue":[...], "pending":[...]}
+      url = "http://metube:8081/history";
+      refreshInterval = 30000;
+      mappings = [
+        { field = "queue"; label = "Queued"; format = "size"; }
+        { field = "pending"; label = "Pending"; format = "size"; }
+        { field = "done"; label = "Done"; format = "size"; }
+      ];
+    };
   }];
 
   virtualisation.oci-containers.containers.metube = mkRootlessContainer {

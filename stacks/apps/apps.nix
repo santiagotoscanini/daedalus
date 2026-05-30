@@ -102,6 +102,19 @@ let
         href        = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${name}/logs?from=now-15m&to=now&var-ds=loki-default&var-filters=service_name%7C%3D%7C${name}";
         description = "App + DB logs (Loki / Grafana Drilldown)";
         icon        = "/icons/loki.png";
+        widget      = {
+          type = "customapi";
+          # sum(count_over_time({service_name="<app>"}[1h])) → vector
+          # with [ts, "<count>"] at data.result[0].value. Empty result
+          # (no log lines in the last hour) renders blank.
+          url = "http://loki:3100/loki/api/v1/query?query=sum%28count_over_time%28%7Bservice_name%3D%22${name}%22%7D%5B1h%5D%29%29%20or%20vector%280%29";
+          refreshInterval = 60000;
+          mappings = [{
+            field = "data.result.0.value.1";
+            label = "Logs (1h)";
+            format = "number";
+          }];
+        };
       };
 
       repoTile = {
@@ -119,6 +132,19 @@ let
         href        = "https://grafana.toscanini.me/d/pg-overview/postgres?orgId=1&var-app=${name}&refresh=30s";
         description = "Postgres metrics — ${name} DB";
         icon        = "/icons/postgres.png";
+        widget      = {
+          type = "customapi";
+          # Prometheus pg_database_size_bytes scraped from app-db's
+          # postgres-exporter. Empty result (DB not yet created /
+          # exporter not scraping) renders blank, which is fine.
+          url = "http://prometheus:9090/api/v1/query?query=pg_database_size_bytes%7Bdatname%3D%22${name}%22%7D";
+          refreshInterval = 60000;
+          mappings = [{
+            field = "data.result.0.value.1";
+            label = "Size";
+            format = "bytes";
+          }];
+        };
       };
     in {
       # Delegate per-app Postgres entirely to stacks/app-db/. The
@@ -168,6 +194,16 @@ let
       myStack.homepageServices."${tileGroup}" =
         [ homepageTile repoTile logsTile ]
         ++ (lib.optional postgresEnabled dbTile);
+
+      # Per-group layout for the dynamically-named app group, so the
+      # 3 or 4 tiles render in a row instead of stacking vertically.
+      myStack.homepageLayout."${tileGroup}" = {
+        style           = "row";
+        columns         = if postgresEnabled then 4 else 3;
+        icon            = app.homepage.icon;
+        useEqualHeights = true;
+        tab             = "Apps";
+      };
 
       # Baseline secrets bootstrap. Generates AUTH_SECRET on first boot
       # and writes the per-app env file. Idempotent: re-running is safe;
@@ -402,6 +438,7 @@ in
       prometheusScrapes         = listOpt  [ "myStack" "prometheusScrapes" ];
       grafanaDashboardsByFolder = attrsOpt [ "myStack" "grafanaDashboardsByFolder" ];
       homepageServices          = attrsOpt [ "myStack" "homepageServices" ];
+      homepageLayout            = attrsOpt [ "myStack" "homepageLayout" ];
     };
 
     virtualisation.oci-containers.containers =

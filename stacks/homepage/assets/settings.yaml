@@ -27,43 +27,6 @@ hideVersion: true
 disableUpdateCheck: true
 disableIndexing: true
 
-# Per-group layout. Group names MUST match top-level entries in
-# services.yaml exactly (including punctuation/quotes). `useEqualHeights`
-# makes tiles in the same row line up at the height of the tallest
-# tile — eliminates the ragged-bottom look when one widget is taller.
-layout:
-  Media:
-    style: row
-    columns: 4
-    icon: mdi-play-circle-#94a3b8
-    useEqualHeights: true
-  Cloud & AI:
-    style: row
-    columns: 4
-    icon: mdi-cloud-#94a3b8
-    useEqualHeights: true
-  Productivity:
-    style: row
-    columns: 4
-    icon: mdi-briefcase-#94a3b8
-    useEqualHeights: true
-  Backend:
-    style: row
-    columns: 4
-    icon: mdi-database-cog-#94a3b8
-    useEqualHeights: true
-  Network:
-    style: row
-    columns: 5
-    icon: mdi-lan-#94a3b8
-    useEqualHeights: true
-  Monitoring:
-    style: row
-    columns: 4
-    icon: mdi-chart-areaspline-#94a3b8
-    useEqualHeights: true
-
-# Cmd/Ctrl+K launches the omnibar.
 quicklaunch:
   searchDescriptions: true
   hideInternetSearch: false

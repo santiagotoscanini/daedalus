@@ -16,7 +16,7 @@
 # only shows the private key ONCE at export — if you lose this file,
 # you must create a fresh export, not recover.
 
-{ config, mkRootlessContainer, ... }:
+{ config, lib, mkRootlessContainer, ... }:
 
 {
   myStack.containerNetworks = {
@@ -82,7 +82,8 @@
     static_configs = [{ targets = [ "host.containers.internal:8001" ]; }];
   }];
 
-  myStack.homepageServices."Media" = [
+  myStack.homepageServices."Media" = lib.mkMerge [
+    (lib.mkOrder 400 [
     {
       name = "Jellyfin";
       href = "https://jellyfin.toscanini.me";
@@ -128,6 +129,8 @@
         password = "{{HOMEPAGE_VAR_NZBGET_PASS}}";
       };
     }
+    ])
+    (lib.mkOrder 600 [
     {
       name = "Sonarr";
       href = "https://sonarr.toscanini.me";
@@ -178,6 +181,7 @@
         key = "{{HOMEPAGE_VAR_PROWLARR_API_KEY}}";
       };
     }
+    ])
   ];
 
   myStack.homepageServices."Network" = [{

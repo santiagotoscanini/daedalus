@@ -24,6 +24,31 @@ let
         services;
     }) config.myStack.homepageServices
   ));
+
+  # Tabs render in the order tab names FIRST appear in `layout:`. Since
+  # nix `toJSON` of an attrset sorts keys alphabetically, we instead
+  # serialize layout as a YAML LIST (still a homepage-supported shape)
+  # with groups sorted by (tab position in `tabOrder`, group name).
+  # That way the first tab visible to the user is `tabOrder[0]`
+  # regardless of which group introduces it.
+  tabOrder = [ "Home" "Apps" "Infra" ];
+  tabIdx = tab:
+    let i = lib.lists.findFirstIndex (t: t == tab) null tabOrder;
+    in if i == null then 999 else i;
+  sortedGroupNames = lib.sort
+    (a: b:
+      let
+        tA = tabIdx (config.myStack.homepageLayout.${a}.tab or "");
+        tB = tabIdx (config.myStack.homepageLayout.${b}.tab or "");
+      in if tA != tB then tA < tB else a < b)
+    (lib.attrNames config.myStack.homepageLayout);
+  layoutList = map
+    (n: { "${n}" = config.myStack.homepageLayout.${n}; })
+    sortedGroupNames;
+  settingsYaml = pkgs.writeText "settings.yaml" (
+    builtins.readFile ./assets/settings.yaml
+    + "\nlayout: " + builtins.toJSON layoutList + "\n"
+  );
 in
 
 {
@@ -33,6 +58,19 @@ in
     hostname = "homepage.toscanini.me";
     serviceName = "homepage";
     port = 3000;
+  };
+
+  # Per-group layout — keyed on the same group names contributed via
+  # `myStack.homepageServices` (e.g. "Media", "Cloud & AI"). Each stack
+  # that introduces a NEW group is responsible for adding its own
+  # layout entry — apps.nix does this dynamically per-app.
+  myStack.homepageLayout = {
+    Media         = { style = "row"; columns = 4; icon = "mdi-play-circle-#94a3b8"; useEqualHeights = true; tab = "Home"; };
+    "Cloud & AI"  = { style = "row"; columns = 4; icon = "mdi-cloud-#94a3b8";       useEqualHeights = true; tab = "Home"; };
+    Productivity  = { style = "row"; columns = 4; icon = "mdi-briefcase-#94a3b8";   useEqualHeights = true; tab = "Home"; };
+    Backend       = { style = "row"; columns = 4; icon = "mdi-database-cog-#94a3b8"; useEqualHeights = true; tab = "Apps"; };
+    Network       = { style = "row"; columns = 5; icon = "mdi-lan-#94a3b8";         useEqualHeights = true; tab = "Infra"; };
+    Monitoring    = { style = "row"; columns = 4; icon = "mdi-chart-areaspline-#94a3b8"; useEqualHeights = true; tab = "Infra"; };
   };
 
   # External / ambient network links — not tied to any container, so
@@ -81,7 +119,7 @@ in
       "/home/santiago/selfhost/homepage/config:/app/config:rw"
       # Per-file RO overlays — the bits WE keep declarative.
       "${servicesYaml}:/app/config/services.yaml:ro"
-      "${./assets/settings.yaml}:/app/config/settings.yaml:ro"
+      "${settingsYaml}:/app/config/settings.yaml:ro"
       "${./assets/widgets.yaml}:/app/config/widgets.yaml:ro"
       "${./assets/bookmarks.yaml}:/app/config/bookmarks.yaml:ro"
       "${./assets/custom.css}:/app/config/custom.css:ro"
