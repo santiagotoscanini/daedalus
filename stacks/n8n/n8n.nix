@@ -53,6 +53,7 @@
           { value = "AaEwerVyMkmEEYJH";      to = "Crypto monitor"; }
           { value = "PE_s7WPIw-c6U3D7JuoQ7"; to = "Supabase wakeup command"; }
           { value = "71zc3JjYq5cKBfU3Sv5MI"; to = "Instagram followers"; }
+          { value = "G2cUo1VdVDf7vi3t";      to = "RSS Feeds"; }
           { any = true;                       to = "Unknown workflow"; }
         ];
       };

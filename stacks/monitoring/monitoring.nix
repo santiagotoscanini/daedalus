@@ -129,7 +129,7 @@ in
   ];
 
   virtualisation.oci-containers.containers.prometheus = mkRootlessContainer {
-    image = "docker.io/prom/prometheus:v3.9.1";
+    image = "docker.io/prom/prometheus:v3.13.1";
 
     # Host port kept for external scrapers / remote_write / federation
     # (raw API access — bridge-routing via traefik would lose that).
@@ -158,7 +158,7 @@ in
   };
 
   virtualisation.oci-containers.containers.grafana = mkRootlessContainer {
-    image = "docker.io/grafana/grafana:12.3.1";
+    image = "docker.io/grafana/grafana:12.4.5";
     dependsOn = [ "prometheus" ];
 
     volumes = [
