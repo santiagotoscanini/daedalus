@@ -20,7 +20,7 @@ let
   # Bump to track upstream. After bumping, `nixos-rebuild switch`
   # rebuilds the image and restarts the app; then run the post-upgrade
   # `occ` commands above by hand.
-  nextcloudVersion = "33";
+  nextcloudVersion = "34";
 
   # Official nextcloud:N doesn't ship ffmpeg, but the preview generator
   # and `recognize` ML app both want it. Build localhost/nextcloud-ffmpeg
