@@ -40,7 +40,7 @@
   }];
 
   virtualisation.oci-containers.containers.metube = mkRootlessContainer {
-    image = "ghcr.io/alexta69/metube:2026.04.04";
+    image = "ghcr.io/alexta69/metube:2026.07.12";
 
     volumes = [
       "/s2/tv/media/videos:/downloads"

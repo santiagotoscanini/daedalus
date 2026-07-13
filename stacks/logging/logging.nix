@@ -43,7 +43,7 @@
   };
 
   virtualisation.oci-containers.containers.loki = mkRootlessContainer {
-    image = "docker.io/grafana/loki:3.4.1";
+    image = "docker.io/grafana/loki:3.7.3";
 
     cmd = [ "-config.file=/etc/loki/loki.yaml" ];
 
@@ -60,7 +60,7 @@
   };
 
   virtualisation.oci-containers.containers.alloy = mkRootlessContainer {
-    image = "docker.io/grafana/alloy:v1.5.1";
+    image = "docker.io/grafana/alloy:v1.17.1";
     dependsOn = [ "loki" ];
 
     cmd = [

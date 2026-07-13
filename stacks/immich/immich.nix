@@ -34,7 +34,7 @@
 let
   # Pin server + ML to the same tag. Bump intentionally — iOS app
   # version mismatches stall background sync silently.
-  immichVersion = "v2.7.5";
+  immichVersion = "v3.0.2";
 
   # Tied to the immich major; check before bumping immichVersion.
   immichPostgresImage =

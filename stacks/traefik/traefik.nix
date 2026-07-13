@@ -130,7 +130,7 @@ in
   }];
 
   virtualisation.oci-containers.containers.traefik = mkRootlessContainer {
-    image = "docker.io/library/traefik:v3.6";
+    image = "docker.io/library/traefik:v3.7";
 
     ports = [
       "80:80"
