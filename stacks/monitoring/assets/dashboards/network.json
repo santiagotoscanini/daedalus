@@ -1,6 +1,6 @@
 {
   "uid": "s2-network",
-  "title": "Home Server \u2014 Network",
+  "title": "Home Server — Network",
   "tags": [
     "s2-server",
     "network"
@@ -1168,7 +1168,7 @@
     {
       "id": 600,
       "type": "row",
-      "title": "Cloudflare Tunnel \u2014 Overview",
+      "title": "Cloudflare Tunnel — Overview",
       "gridPos": {
         "x": 0,
         "y": 46,
@@ -1650,7 +1650,7 @@
     {
       "id": 620,
       "type": "row",
-      "title": "Cloudflare Tunnel \u2014 QUIC Quality",
+      "title": "Cloudflare Tunnel — QUIC Quality",
       "gridPos": {
         "x": 0,
         "y": 66,
@@ -3121,7 +3121,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "gluetun_vpn_status",
+          "expr": "gluetun_vpn_status{job=\"gluetun\"}",
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
@@ -3200,7 +3200,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(gluetun_forwarded_ports_total)",
+          "expr": "sum(gluetun_forwarded_ports_total{job=\"gluetun\"})",
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
@@ -3249,7 +3249,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "gluetun_vpn_infos",
+          "expr": "gluetun_vpn_infos{job=\"gluetun\"}",
           "format": "table",
           "instant": true,
           "datasource": {
@@ -3274,66 +3274,246 @@
             {
               "type": "value",
               "options": {
-                "Argentina":           { "text": "🇦🇷 Argentina",           "index": 0 },
-                "Australia":           { "text": "🇦🇺 Australia",           "index": 1 },
-                "Austria":             { "text": "🇦🇹 Austria",             "index": 2 },
-                "Belgium":             { "text": "🇧🇪 Belgium",             "index": 3 },
-                "Brazil":              { "text": "🇧🇷 Brazil",              "index": 4 },
-                "Bulgaria":            { "text": "🇧🇬 Bulgaria",            "index": 5 },
-                "Canada":              { "text": "🇨🇦 Canada",              "index": 6 },
-                "Chile":               { "text": "🇨🇱 Chile",               "index": 7 },
-                "Colombia":            { "text": "🇨🇴 Colombia",            "index": 8 },
-                "Costa Rica":          { "text": "🇨🇷 Costa Rica",          "index": 9 },
-                "Croatia":             { "text": "🇭🇷 Croatia",             "index": 10 },
-                "Cyprus":              { "text": "🇨🇾 Cyprus",              "index": 11 },
-                "Czech Republic":      { "text": "🇨🇿 Czech Republic",      "index": 12 },
-                "Czechia":             { "text": "🇨🇿 Czechia",             "index": 13 },
-                "Denmark":             { "text": "🇩🇰 Denmark",             "index": 14 },
-                "Egypt":               { "text": "🇪🇬 Egypt",               "index": 15 },
-                "Estonia":             { "text": "🇪🇪 Estonia",             "index": 16 },
-                "Finland":             { "text": "🇫🇮 Finland",             "index": 17 },
-                "France":              { "text": "🇫🇷 France",              "index": 18 },
-                "Germany":             { "text": "🇩🇪 Germany",             "index": 19 },
-                "Greece":              { "text": "🇬🇷 Greece",              "index": 20 },
-                "Hong Kong":           { "text": "🇭🇰 Hong Kong",           "index": 21 },
-                "Hungary":             { "text": "🇭🇺 Hungary",             "index": 22 },
-                "Iceland":             { "text": "🇮🇸 Iceland",             "index": 23 },
-                "India":               { "text": "🇮🇳 India",               "index": 24 },
-                "Indonesia":           { "text": "🇮🇩 Indonesia",           "index": 25 },
-                "Ireland":             { "text": "🇮🇪 Ireland",             "index": 26 },
-                "Israel":              { "text": "🇮🇱 Israel",              "index": 27 },
-                "Italy":               { "text": "🇮🇹 Italy",               "index": 28 },
-                "Japan":               { "text": "🇯🇵 Japan",               "index": 29 },
-                "Latvia":              { "text": "🇱🇻 Latvia",              "index": 30 },
-                "Lithuania":           { "text": "🇱🇹 Lithuania",           "index": 31 },
-                "Luxembourg":          { "text": "🇱🇺 Luxembourg",          "index": 32 },
-                "Malaysia":            { "text": "🇲🇾 Malaysia",            "index": 33 },
-                "Mexico":              { "text": "🇲🇽 Mexico",              "index": 34 },
-                "Netherlands":         { "text": "🇳🇱 Netherlands",         "index": 35 },
-                "New Zealand":         { "text": "🇳🇿 New Zealand",         "index": 36 },
-                "Norway":              { "text": "🇳🇴 Norway",              "index": 37 },
-                "Peru":                { "text": "🇵🇪 Peru",                "index": 38 },
-                "Philippines":         { "text": "🇵🇭 Philippines",         "index": 39 },
-                "Poland":              { "text": "🇵🇱 Poland",              "index": 40 },
-                "Portugal":            { "text": "🇵🇹 Portugal",            "index": 41 },
-                "Romania":             { "text": "🇷🇴 Romania",             "index": 42 },
-                "Serbia":              { "text": "🇷🇸 Serbia",              "index": 43 },
-                "Singapore":           { "text": "🇸🇬 Singapore",           "index": 44 },
-                "Slovakia":            { "text": "🇸🇰 Slovakia",            "index": 45 },
-                "Slovenia":            { "text": "🇸🇮 Slovenia",            "index": 46 },
-                "South Africa":        { "text": "🇿🇦 South Africa",        "index": 47 },
-                "South Korea":         { "text": "🇰🇷 South Korea",         "index": 48 },
-                "Spain":               { "text": "🇪🇸 Spain",               "index": 49 },
-                "Sweden":              { "text": "🇸🇪 Sweden",              "index": 50 },
-                "Switzerland":         { "text": "🇨🇭 Switzerland",         "index": 51 },
-                "Taiwan":              { "text": "🇹🇼 Taiwan",              "index": 52 },
-                "Thailand":            { "text": "🇹🇭 Thailand",            "index": 53 },
-                "Turkey":              { "text": "🇹🇷 Turkey",              "index": 54 },
-                "Ukraine":             { "text": "🇺🇦 Ukraine",             "index": 55 },
-                "United Arab Emirates":{ "text": "🇦🇪 United Arab Emirates","index": 56 },
-                "United Kingdom":      { "text": "🇬🇧 United Kingdom",      "index": 57 },
-                "United States":       { "text": "🇺🇸 United States",       "index": 58 },
-                "Vietnam":             { "text": "🇻🇳 Vietnam",             "index": 59 }
+                "Argentina": {
+                  "text": "🇦🇷 Argentina",
+                  "index": 0
+                },
+                "Australia": {
+                  "text": "🇦🇺 Australia",
+                  "index": 1
+                },
+                "Austria": {
+                  "text": "🇦🇹 Austria",
+                  "index": 2
+                },
+                "Belgium": {
+                  "text": "🇧🇪 Belgium",
+                  "index": 3
+                },
+                "Brazil": {
+                  "text": "🇧🇷 Brazil",
+                  "index": 4
+                },
+                "Bulgaria": {
+                  "text": "🇧🇬 Bulgaria",
+                  "index": 5
+                },
+                "Canada": {
+                  "text": "🇨🇦 Canada",
+                  "index": 6
+                },
+                "Chile": {
+                  "text": "🇨🇱 Chile",
+                  "index": 7
+                },
+                "Colombia": {
+                  "text": "🇨🇴 Colombia",
+                  "index": 8
+                },
+                "Costa Rica": {
+                  "text": "🇨🇷 Costa Rica",
+                  "index": 9
+                },
+                "Croatia": {
+                  "text": "🇭🇷 Croatia",
+                  "index": 10
+                },
+                "Cyprus": {
+                  "text": "🇨🇾 Cyprus",
+                  "index": 11
+                },
+                "Czech Republic": {
+                  "text": "🇨🇿 Czech Republic",
+                  "index": 12
+                },
+                "Czechia": {
+                  "text": "🇨🇿 Czechia",
+                  "index": 13
+                },
+                "Denmark": {
+                  "text": "🇩🇰 Denmark",
+                  "index": 14
+                },
+                "Egypt": {
+                  "text": "🇪🇬 Egypt",
+                  "index": 15
+                },
+                "Estonia": {
+                  "text": "🇪🇪 Estonia",
+                  "index": 16
+                },
+                "Finland": {
+                  "text": "🇫🇮 Finland",
+                  "index": 17
+                },
+                "France": {
+                  "text": "🇫🇷 France",
+                  "index": 18
+                },
+                "Germany": {
+                  "text": "🇩🇪 Germany",
+                  "index": 19
+                },
+                "Greece": {
+                  "text": "🇬🇷 Greece",
+                  "index": 20
+                },
+                "Hong Kong": {
+                  "text": "🇭🇰 Hong Kong",
+                  "index": 21
+                },
+                "Hungary": {
+                  "text": "🇭🇺 Hungary",
+                  "index": 22
+                },
+                "Iceland": {
+                  "text": "🇮🇸 Iceland",
+                  "index": 23
+                },
+                "India": {
+                  "text": "🇮🇳 India",
+                  "index": 24
+                },
+                "Indonesia": {
+                  "text": "🇮🇩 Indonesia",
+                  "index": 25
+                },
+                "Ireland": {
+                  "text": "🇮🇪 Ireland",
+                  "index": 26
+                },
+                "Israel": {
+                  "text": "🇮🇱 Israel",
+                  "index": 27
+                },
+                "Italy": {
+                  "text": "🇮🇹 Italy",
+                  "index": 28
+                },
+                "Japan": {
+                  "text": "🇯🇵 Japan",
+                  "index": 29
+                },
+                "Latvia": {
+                  "text": "🇱🇻 Latvia",
+                  "index": 30
+                },
+                "Lithuania": {
+                  "text": "🇱🇹 Lithuania",
+                  "index": 31
+                },
+                "Luxembourg": {
+                  "text": "🇱🇺 Luxembourg",
+                  "index": 32
+                },
+                "Malaysia": {
+                  "text": "🇲🇾 Malaysia",
+                  "index": 33
+                },
+                "Mexico": {
+                  "text": "🇲🇽 Mexico",
+                  "index": 34
+                },
+                "Netherlands": {
+                  "text": "🇳🇱 Netherlands",
+                  "index": 35
+                },
+                "New Zealand": {
+                  "text": "🇳🇿 New Zealand",
+                  "index": 36
+                },
+                "Norway": {
+                  "text": "🇳🇴 Norway",
+                  "index": 37
+                },
+                "Peru": {
+                  "text": "🇵🇪 Peru",
+                  "index": 38
+                },
+                "Philippines": {
+                  "text": "🇵🇭 Philippines",
+                  "index": 39
+                },
+                "Poland": {
+                  "text": "🇵🇱 Poland",
+                  "index": 40
+                },
+                "Portugal": {
+                  "text": "🇵🇹 Portugal",
+                  "index": 41
+                },
+                "Romania": {
+                  "text": "🇷🇴 Romania",
+                  "index": 42
+                },
+                "Serbia": {
+                  "text": "🇷🇸 Serbia",
+                  "index": 43
+                },
+                "Singapore": {
+                  "text": "🇸🇬 Singapore",
+                  "index": 44
+                },
+                "Slovakia": {
+                  "text": "🇸🇰 Slovakia",
+                  "index": 45
+                },
+                "Slovenia": {
+                  "text": "🇸🇮 Slovenia",
+                  "index": 46
+                },
+                "South Africa": {
+                  "text": "🇿🇦 South Africa",
+                  "index": 47
+                },
+                "South Korea": {
+                  "text": "🇰🇷 South Korea",
+                  "index": 48
+                },
+                "Spain": {
+                  "text": "🇪🇸 Spain",
+                  "index": 49
+                },
+                "Sweden": {
+                  "text": "🇸🇪 Sweden",
+                  "index": 50
+                },
+                "Switzerland": {
+                  "text": "🇨🇭 Switzerland",
+                  "index": 51
+                },
+                "Taiwan": {
+                  "text": "🇹🇼 Taiwan",
+                  "index": 52
+                },
+                "Thailand": {
+                  "text": "🇹🇭 Thailand",
+                  "index": 53
+                },
+                "Turkey": {
+                  "text": "🇹🇷 Turkey",
+                  "index": 54
+                },
+                "Ukraine": {
+                  "text": "🇺🇦 Ukraine",
+                  "index": 55
+                },
+                "United Arab Emirates": {
+                  "text": "🇦🇪 United Arab Emirates",
+                  "index": 56
+                },
+                "United Kingdom": {
+                  "text": "🇬🇧 United Kingdom",
+                  "index": 57
+                },
+                "United States": {
+                  "text": "🇺🇸 United States",
+                  "index": 58
+                },
+                "Vietnam": {
+                  "text": "🇻🇳 Vietnam",
+                  "index": 59
+                }
               }
             }
           ]
@@ -3372,7 +3552,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "gluetun_vpn_infos",
+          "expr": "gluetun_vpn_infos{job=\"gluetun\"}",
           "format": "table",
           "instant": true,
           "datasource": {
@@ -3429,7 +3609,565 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "gluetun_vpn_infos",
+          "expr": "gluetun_vpn_infos{job=\"gluetun\"}",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "dark-purple"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^ip$/",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 906,
+      "type": "row",
+      "title": "Gluetun (ipcrawl VPN)",
+      "gridPos": {
+        "x": 0,
+        "y": 153,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 907,
+      "type": "stat",
+      "title": "VPN Status",
+      "gridPos": {
+        "x": 0,
+        "y": 154,
+        "w": 12,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "gluetun_vpn_status{job=\"gluetun-ipcrawl\"}",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DISCONNECTED",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "CONNECTED",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 908,
+      "type": "stat",
+      "title": "Forwarded Ports",
+      "gridPos": {
+        "x": 12,
+        "y": 154,
+        "w": 12,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(gluetun_forwarded_ports_total{job=\"gluetun-ipcrawl\"})",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 909,
+      "type": "stat",
+      "title": "Country",
+      "gridPos": {
+        "x": 0,
+        "y": 159,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "gluetun_vpn_infos{job=\"gluetun-ipcrawl\"}",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "dark-blue"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "Argentina": {
+                  "text": "🇦🇷 Argentina",
+                  "index": 0
+                },
+                "Australia": {
+                  "text": "🇦🇺 Australia",
+                  "index": 1
+                },
+                "Austria": {
+                  "text": "🇦🇹 Austria",
+                  "index": 2
+                },
+                "Belgium": {
+                  "text": "🇧🇪 Belgium",
+                  "index": 3
+                },
+                "Brazil": {
+                  "text": "🇧🇷 Brazil",
+                  "index": 4
+                },
+                "Bulgaria": {
+                  "text": "🇧🇬 Bulgaria",
+                  "index": 5
+                },
+                "Canada": {
+                  "text": "🇨🇦 Canada",
+                  "index": 6
+                },
+                "Chile": {
+                  "text": "🇨🇱 Chile",
+                  "index": 7
+                },
+                "Colombia": {
+                  "text": "🇨🇴 Colombia",
+                  "index": 8
+                },
+                "Costa Rica": {
+                  "text": "🇨🇷 Costa Rica",
+                  "index": 9
+                },
+                "Croatia": {
+                  "text": "🇭🇷 Croatia",
+                  "index": 10
+                },
+                "Cyprus": {
+                  "text": "🇨🇾 Cyprus",
+                  "index": 11
+                },
+                "Czech Republic": {
+                  "text": "🇨🇿 Czech Republic",
+                  "index": 12
+                },
+                "Czechia": {
+                  "text": "🇨🇿 Czechia",
+                  "index": 13
+                },
+                "Denmark": {
+                  "text": "🇩🇰 Denmark",
+                  "index": 14
+                },
+                "Egypt": {
+                  "text": "🇪🇬 Egypt",
+                  "index": 15
+                },
+                "Estonia": {
+                  "text": "🇪🇪 Estonia",
+                  "index": 16
+                },
+                "Finland": {
+                  "text": "🇫🇮 Finland",
+                  "index": 17
+                },
+                "France": {
+                  "text": "🇫🇷 France",
+                  "index": 18
+                },
+                "Germany": {
+                  "text": "🇩🇪 Germany",
+                  "index": 19
+                },
+                "Greece": {
+                  "text": "🇬🇷 Greece",
+                  "index": 20
+                },
+                "Hong Kong": {
+                  "text": "🇭🇰 Hong Kong",
+                  "index": 21
+                },
+                "Hungary": {
+                  "text": "🇭🇺 Hungary",
+                  "index": 22
+                },
+                "Iceland": {
+                  "text": "🇮🇸 Iceland",
+                  "index": 23
+                },
+                "India": {
+                  "text": "🇮🇳 India",
+                  "index": 24
+                },
+                "Indonesia": {
+                  "text": "🇮🇩 Indonesia",
+                  "index": 25
+                },
+                "Ireland": {
+                  "text": "🇮🇪 Ireland",
+                  "index": 26
+                },
+                "Israel": {
+                  "text": "🇮🇱 Israel",
+                  "index": 27
+                },
+                "Italy": {
+                  "text": "🇮🇹 Italy",
+                  "index": 28
+                },
+                "Japan": {
+                  "text": "🇯🇵 Japan",
+                  "index": 29
+                },
+                "Latvia": {
+                  "text": "🇱🇻 Latvia",
+                  "index": 30
+                },
+                "Lithuania": {
+                  "text": "🇱🇹 Lithuania",
+                  "index": 31
+                },
+                "Luxembourg": {
+                  "text": "🇱🇺 Luxembourg",
+                  "index": 32
+                },
+                "Malaysia": {
+                  "text": "🇲🇾 Malaysia",
+                  "index": 33
+                },
+                "Mexico": {
+                  "text": "🇲🇽 Mexico",
+                  "index": 34
+                },
+                "Netherlands": {
+                  "text": "🇳🇱 Netherlands",
+                  "index": 35
+                },
+                "New Zealand": {
+                  "text": "🇳🇿 New Zealand",
+                  "index": 36
+                },
+                "Norway": {
+                  "text": "🇳🇴 Norway",
+                  "index": 37
+                },
+                "Peru": {
+                  "text": "🇵🇪 Peru",
+                  "index": 38
+                },
+                "Philippines": {
+                  "text": "🇵🇭 Philippines",
+                  "index": 39
+                },
+                "Poland": {
+                  "text": "🇵🇱 Poland",
+                  "index": 40
+                },
+                "Portugal": {
+                  "text": "🇵🇹 Portugal",
+                  "index": 41
+                },
+                "Romania": {
+                  "text": "🇷🇴 Romania",
+                  "index": 42
+                },
+                "Serbia": {
+                  "text": "🇷🇸 Serbia",
+                  "index": 43
+                },
+                "Singapore": {
+                  "text": "🇸🇬 Singapore",
+                  "index": 44
+                },
+                "Slovakia": {
+                  "text": "🇸🇰 Slovakia",
+                  "index": 45
+                },
+                "Slovenia": {
+                  "text": "🇸🇮 Slovenia",
+                  "index": 46
+                },
+                "South Africa": {
+                  "text": "🇿🇦 South Africa",
+                  "index": 47
+                },
+                "South Korea": {
+                  "text": "🇰🇷 South Korea",
+                  "index": 48
+                },
+                "Spain": {
+                  "text": "🇪🇸 Spain",
+                  "index": 49
+                },
+                "Sweden": {
+                  "text": "🇸🇪 Sweden",
+                  "index": 50
+                },
+                "Switzerland": {
+                  "text": "🇨🇭 Switzerland",
+                  "index": 51
+                },
+                "Taiwan": {
+                  "text": "🇹🇼 Taiwan",
+                  "index": 52
+                },
+                "Thailand": {
+                  "text": "🇹🇭 Thailand",
+                  "index": 53
+                },
+                "Turkey": {
+                  "text": "🇹🇷 Turkey",
+                  "index": 54
+                },
+                "Ukraine": {
+                  "text": "🇺🇦 Ukraine",
+                  "index": 55
+                },
+                "United Arab Emirates": {
+                  "text": "🇦🇪 United Arab Emirates",
+                  "index": 56
+                },
+                "United Kingdom": {
+                  "text": "🇬🇧 United Kingdom",
+                  "index": 57
+                },
+                "United States": {
+                  "text": "🇺🇸 United States",
+                  "index": 58
+                },
+                "Vietnam": {
+                  "text": "🇻🇳 Vietnam",
+                  "index": 59
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^country$/",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 910,
+      "type": "stat",
+      "title": "City",
+      "gridPos": {
+        "x": 8,
+        "y": 159,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "gluetun_vpn_infos{job=\"gluetun-ipcrawl\"}",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^city$/",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 911,
+      "type": "stat",
+      "title": "Public IP",
+      "gridPos": {
+        "x": 16,
+        "y": 159,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "gluetun_vpn_infos{job=\"gluetun-ipcrawl\"}",
           "format": "table",
           "instant": true,
           "datasource": {

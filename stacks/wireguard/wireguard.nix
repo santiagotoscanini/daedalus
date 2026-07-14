@@ -71,8 +71,18 @@
       INIT_ENABLED = "true";
       INIT_HOST = "s2.toscanini.me";
       INIT_PORT = "51820";
-      # Local pi-hole so wg-easy's *.toscanini.me resolves to LAN IPs.
-      INIT_DNS = "192.168.0.2";
+      # Client DNS must be the wg0 address (10.8.0.1), NOT a host IP:
+      # - 192.168.0.2 is unreachable from the container netns (pasta
+      #   copies the host IP into the namespace; port 53 has no netns
+      #   listener, so queries die with "connection refused").
+      # - 169.254.1.2 (pasta host alias) IS reachable from the netns,
+      #   but clients never send it through the tunnel: 169.254/16 is
+      #   link-local and stays pinned to the physical interface on
+      #   macOS/iOS, beating the tunnel /1 routes.
+      # A PostUp DNAT hook (stored in wg-easy.db, NOT re-created on a
+      # fresh init — re-add via admin UI > Hooks if bootstrapping!)
+      # forwards 10.8.0.1:53 -> 169.254.1.2:53 -> host pi-hole.
+      INIT_DNS = "10.8.0.1";
       DISABLE_IPV6 = "true";
     };
 

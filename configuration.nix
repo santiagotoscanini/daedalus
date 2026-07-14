@@ -30,6 +30,7 @@
     ./stacks/stirling-pdf/stirling-pdf.nix
     ./stacks/apps/apps.nix
     ./stacks/apps/declarations.nix
+    ./stacks/ipcrawl-vpn/ipcrawl-vpn.nix
     ./stacks/app-db/app-db.nix
     ./stacks/app-db/exporter.nix
     ./stacks/traefik/traefik.nix
