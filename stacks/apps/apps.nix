@@ -39,9 +39,19 @@
 #
 # Optional features (opt-in; `false` by default):
 #   - postgres.enable → injects DATABASE_URL (+ POSTGRES_*)
-#   - litellm        → injects LITELLM_BASE_URL
+#   - storage.enable  → bind-mounts a persistent data dir at /app/data
+#   - litellm         → injects LITELLM_BASE_URL
 #   - …future features follow the same pattern (off by default,
 #     env injection conditional on opt-in).
+#
+# Convention enforced #2: an app that needs a disk writes it to
+# /app/data. Same reasoning as the port — we build the images, so we
+# pick the path. `storage.enable = true` bind-mounts
+# /home/santiago/selfhost/apps/<name>/data there (overridable via
+# storage.hostPath) and tmpfiles-owns it `santiago:users`, which is
+# what container UID 0 maps to under rootless podman. This is what
+# SQLite / file-backed apps need; Postgres apps use postgres.enable
+# instead, and an app can use both.
 #
 # Environment plumbing — fully declarative:
 #
@@ -64,6 +74,9 @@ let
   appSecretsBase = "/etc/nixos/stacks/apps/secrets";
   appDbEnvBase   = "/etc/nixos/stacks/app-db/secrets";
 
+  # Host tree backing `storage.enable`. One dir per app underneath.
+  appsDataRoot   = "/home/santiago/selfhost/apps";
+
   # Capitalize first letter; used for the per-app homepage group.
   capitalize = s:
     (lib.toUpper (lib.substring 0 1 s))
@@ -81,12 +94,31 @@ let
       postgresEnabled  = app.postgres.enable;
       appDbEnvFile     = "${appDbEnvBase}/${name}/env";
 
+      storageEnabled   = app.storage.enable;
+      storageHostPath  = app.storage.hostPath;
+
+      # VPN egress: borrow a gluetun container's netns for ALL traffic
+      # instead of joining traefik-net (see stacks/ipcrawl-vpn/). Guarded:
+      # incompatible with postgres (a netns-borrowing container can't also
+      # join the app-db bridge), and hostPort is mandatory when set.
+      egressEnabled =
+        let e = app.egress.container != null; in
+        lib.throwIf (e && postgresEnabled)
+          "myStack.apps.${name}: `egress` cannot combine with `postgres.enable` — a container sharing gluetun's netns can't also join the app-db-net bridge."
+          (lib.throwIf (e && app.egress.hostPort == null)
+            "myStack.apps.${name}: `egress.container` is set but `egress.hostPort` is null — set the host port the netns owner publishes for this app."
+            e);
+
       tileGroup = capitalize name;
 
       homepageTile = {
         name        = name;
         href        = publicUrl;
-        siteMonitor = "http://${cName}:3000";
+        # traefik-net DNS by default; in egress mode the app isn't on any
+        # bridge, so monitor the host port gluetun publishes instead.
+        siteMonitor = if egressEnabled
+                      then "http://host.containers.internal:${toString app.egress.hostPort}"
+                      else "http://${cName}:3000";
         icon        = app.homepage.icon;
       } // (lib.optionalAttrs (app.homepage.description != "") {
         description = app.homepage.description;
@@ -155,17 +187,25 @@ let
         "${name}" = { };
       };
 
-      # Container joins traefik-net (primary) so traefik can dial it
-      # via container DNS, no host port published.
-      myStack.containerNetworks."${cName}" = "traefik";
+      # Register in containerNetworks either way — that's what earns the
+      # mandatory Type=oneshot systemd override (rootless podman + Type=notify
+      # is broken on this box). "traefik" joins the bridge for DNS routing;
+      # `null` means pasta/netns with NO bridge (egress mode borrows gluetun's
+      # netns via extraOptions, and traefik reaches it via the published host
+      # port — see webApps below). Same shape as the TV stack's `sonarr = null`.
+      myStack.containerNetworks."${cName}" = if egressEnabled then null else "traefik";
 
-      # Web exposure — hardcoded internal port 3000.
+      # Web exposure — hardcoded internal port 3000. Bridge-routed by default
+      # (serviceName on traefik-net). In egress mode the app can't ride
+      # traefik-net, so traefik dials the host port gluetun publishes via
+      # host.containers.internal — the same escape hatch the TV stack uses.
       myStack.webApps."${name}" = {
         hostname       = hostname;
-        serviceName    = cName;
         port           = 3000;
         exposeRemotely = (app.stage == "live");
-      };
+      } // (if egressEnabled
+            then { serviceUrl = "http://host.containers.internal:${toString app.egress.hostPort}"; }
+            else { serviceName = cName; });
 
       # Prometheus scrapes the app's own /metrics endpoint (when
       # prometheus.enable). Postgres metrics come from the single
@@ -205,6 +245,29 @@ let
         tab             = "Apps";
       };
 
+      # Persistent data dir. 0755 santiago:users — container UID 0 maps
+      # to host santiago (1000) under rootless podman, so the app can
+      # write it as root-in-container. Recreated + re-owned on every
+      # rebuild by systemd-tmpfiles, which is also why the mode is
+      # stated here rather than left to whatever the app's umask did.
+      #
+      # The parent is declared explicitly, and that is load-bearing: for
+      # a leaf whose parent doesn't exist, systemd-tmpfiles creates the
+      # intermediate dirs as ROOT, then refuses its own santiago→root
+      # ownership transition ("Detected unsafe path transition") and
+      # silently never creates the leaf — leaving the container to die on
+      # `statfs ...: no such file or directory`. Only walk the parents we
+      # actually own: a hostPath outside the apps tree (e.g. /s2/<name>)
+      # sits directly under an existing mountpoint, and emitting a rule
+      # for *that* parent would chown the mountpoint itself.
+      systemd.tmpfiles.rules = lib.optionals storageEnabled (
+        (lib.optionals (lib.hasPrefix "${appsDataRoot}/" storageHostPath) [
+          "d ${appsDataRoot}       0755 santiago users -"
+          "d ${appsDataRoot}/${name} 0755 santiago users -"
+        ])
+        ++ [ "d ${storageHostPath} 0755 santiago users -" ]
+      );
+
       # Baseline secrets bootstrap. Generates AUTH_SECRET on first boot
       # and writes the per-app env file. Idempotent: re-running is safe;
       # the env file is created only if missing. Delete the file +
@@ -241,12 +304,14 @@ let
       systemd.services."podman-${cName}" = {
         after =
           [ "app-${name}-secrets-bootstrap.service" ]
+          ++ (lib.optional egressEnabled "podman-${app.egress.container}.service")
           ++ (lib.optionals postgresEnabled [
             "app-db-${name}-bootstrap.service"
             "podman-pg.service"
           ]);
         wants =
           [ "app-${name}-secrets-bootstrap.service" ]
+          ++ (lib.optional egressEnabled "podman-${app.egress.container}.service")
           ++ (lib.optionals postgresEnabled [
             "app-db-${name}-bootstrap.service"
             "podman-pg.service"
@@ -258,6 +323,13 @@ let
       virtualisation.oci-containers.containers."${cName}" =
         mkRootlessContainer ({
           image = app.image;
+
+          # A /s2/* hostPath additionally picks up RequiresMountsFor for
+          # free — common.nix extracts it from `volumes`, closing the
+          # cold-boot race where the container starts before the ZFS
+          # dataset mounts and writes into the empty underlay.
+          volumes = lib.optional storageEnabled
+            "${storageHostPath}:/app/data";
 
           environmentFiles =
             [ appSecretsFile ]
@@ -284,10 +356,16 @@ let
           // app.env;
 
           extraOptions =
-            [ "--network=traefik-net" "--authfile=/etc/nixos/stacks/apps/secrets/ghcr-auth.json" ]
+            [ (if egressEnabled
+               then "--network=container:${app.egress.container}"
+               else "--network=traefik-net")
+              "--authfile=/etc/nixos/stacks/apps/secrets/ghcr-auth.json" ]
             ++ (lib.optional postgresEnabled "--network=app-db-net");
         }
-        // (lib.optionalAttrs (app.cmd != null) { cmd = app.cmd; }));
+        // (lib.optionalAttrs (app.cmd != null) { cmd = app.cmd; })
+        # In egress mode podman needs the netns owner up first; dependsOn
+        # adds Requires=+After= on its unit (same as the TV arrs on gluetun).
+        // (lib.optionalAttrs egressEnabled { dependsOn = [ app.egress.container ]; }));
     };
 in
 {
@@ -327,6 +405,37 @@ in
           '';
         };
 
+        # VPN egress via a gluetun (or other netns-owning) container. See
+        # stacks/ipcrawl-vpn/. When set, the app borrows that container's
+        # network namespace for ALL traffic instead of joining traefik-net:
+        # outbound exits the VPN (fail-closed), and traefik reaches the UI via
+        # the host port the netns owner publishes
+        # (`host.containers.internal:<egress.hostPort>`). Mutually exclusive
+        # with `postgres.enable`; leave `prometheus.enable = false` too (a
+        # netns'd app isn't scrapable from monitoring-net).
+        egress = {
+          container = lib.mkOption {
+            type        = lib.types.nullOr lib.types.str;
+            default     = null;
+            description = ''
+              Name of a netns-owning container (e.g. a gluetun instance)
+              whose network namespace this app joins via
+              `--network=container:<name>`. null = normal traefik-net.
+            '';
+            example = "gluetun-ipcrawl";
+          };
+          hostPort = lib.mkOption {
+            type        = lib.types.nullOr lib.types.port;
+            default     = null;
+            description = ''
+              Host port the netns owner publishes for this app's :3000,
+              which traefik dials via host.containers.internal. Required
+              when `egress.container` is set.
+            '';
+            example = 3100;
+          };
+        };
+
         # Plain Postgres-per-app, materialized by stacks/app-db/.
         postgres = {
           enable = lib.mkOption {
@@ -346,6 +455,36 @@ in
           # For app-scoped throttling, use postgres role-level
           # settings: ALTER ROLE <name> CONNECTION LIMIT N;
           # ALTER ROLE <name> SET statement_timeout = '30s'; etc.
+        };
+
+        # Persistent disk for file-backed apps (SQLite, caches, uploads).
+        storage = {
+          enable = lib.mkOption {
+            type        = lib.types.bool;
+            default     = false;
+            description = ''
+              When true, bind-mount `storage.hostPath` at `/app/data`
+              inside the container and create it (0755 santiago:users)
+              via tmpfiles. Off by default — stateless apps get no disk.
+
+              /app/data is a convention, not an option, exactly like the
+              port-3000 rule: we build the images, so we pick the path.
+            '';
+          };
+          hostPath = lib.mkOption {
+            type        = lib.types.str;
+            default     = "${appsDataRoot}/${name}/data";
+            description = ''
+              Host dir backing /app/data. The default sits on
+              `rpool/selfhost` (16K recordsize, frequent+hourly+daily
+              snapshots), which is right for a small SQLite file but
+              expensive for a large, churning blob cache — snapshot
+              deltas balloon. Point high-churn apps at `/s2/<name>`
+              instead (needs a one-time
+              `zfs create -o mountpoint=legacy s2-pool/<name>` plus an
+              entry in platform/zfs.nix).
+            '';
+          };
         };
 
         litellm = lib.mkOption {
@@ -444,6 +583,7 @@ in
     virtualisation.oci-containers.containers =
       attrsOpt [ "virtualisation" "oci-containers" "containers" ];
 
-    systemd.services = attrsOpt [ "systemd" "services" ];
+    systemd.services      = attrsOpt [ "systemd" "services" ];
+    systemd.tmpfiles.rules = listOpt [ "systemd" "tmpfiles" "rules" ];
   };
 }
