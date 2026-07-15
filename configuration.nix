@@ -4,7 +4,7 @@
 # their own myStack.* entries, kernel modules, and firewall ports —
 # NixOS merges across modules.
 
-{ pkgs, ... }:
+{ pkgs, nixpkgs-unstable, ... }:
 
 {
   imports = [
@@ -132,14 +132,12 @@
     ];
   };
 
-  # Pull claude-code from nixos-unstable so the CLI stays current (stable
-  # nixpkgs lags ~6 months). Trade-off: rebuilds may pull a newer version
-  # — pin via commit SHA + sha256 if strict reproducibility matters.
+  # claude-code from the pinned nixos-unstable flake input (stable
+  # nixpkgs lags ~6 months). Locked in flake.lock; updated via
+  # `nix flake update` — replaces the old unpinned fetchTarball-of-master.
   nixpkgs.overlays = [
     (final: prev: {
-      claude-code = (import (builtins.fetchTarball {
-        url = "https://github.com/NixOS/nixpkgs/archive/master.tar.gz";
-      }) {
+      claude-code = (import nixpkgs-unstable {
         system = prev.stdenv.hostPlatform.system;
         config.allowUnfree = true;
       }).claude-code;
@@ -226,6 +224,10 @@
 
   # ── Nix store hygiene ───────────────────────────────────────────────────────
 
+  # Flakes: the repo IS the system definition (see flake.nix). nix-command
+  # is the CLI half of the feature pair.
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+
   # Hardlink identical files inside /nix/store on every insert.
   nix.settings.auto-optimise-store = true;
 
@@ -246,7 +248,7 @@
 
   # Stage next-boot weekly; never auto-reboot (you reboot manually).
   system.autoUpgrade = {
-    enable = true;
+    enable = false;  # channel-based; flake-native replacement pending
     dates = "weekly";
     operation = "boot";
     allowReboot = false;
