@@ -10,6 +10,7 @@
   imports = [
     ./hardware-configuration.nix
     ./platform/common.nix
+    ./platform/sops.nix
     ./platform/git.nix
     ./platform/ddclient/ddclient.nix
     ./platform/zfs.nix

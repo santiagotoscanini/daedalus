@@ -1,0 +1,17 @@
+# Who can decrypt what. Two recipients on every secret:
+#   host     — derived from /etc/ssh/ssh_host_ed25519_key (ssh-to-age);
+#              the box decrypts at activation with no extra key material.
+#   santiago — personal age key (password manager + ~/.config/sops/age/
+#              keys.txt); the disaster-recovery path: clone repo anywhere
+#              + this key = all secrets.
+# One catch-all rule: everything sops touches in this repo gets both
+# recipients. Encrypted files end in `.sops` by convention and live at
+# the stack root (NOT inside secrets/ — that dir stays gitignored for
+# machine-generated state).
+# Edit with: sops <file>   (decrypts to $EDITOR, re-encrypts on save)
+keys:
+  - &host age13xjamkkjcc2wdan3c8tscslqulgwz9uvxxs532paldqqfn4vxfqq65p0wa
+  - &santiago age1av4gwap6v2pf53acau25l4c8ksmhfu770x4glq7n6uunvq9szvvs3gcpkk
+creation_rules:
+  - key_groups:
+      - age: [ *host, *santiago ]
