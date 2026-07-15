@@ -8,8 +8,8 @@
 #     with a catch-all `http_status:404` appended (required by cloudflared).
 #   - `cloudflared-route-sync.service` reconciles Cloudflare DNS CNAMEs
 #     against `cloudflareRoutes` on every nixos-rebuild, using
-#     CF_DNS_API_TOKEN from secrets/env. Idempotent.
-#   - `secrets/credentials.json` carries `{AccountTag, TunnelID,
+#     CF_DNS_API_TOKEN from env.sops (sops). Idempotent.
+#   - `credentials.json.sops` (sops) carries `{AccountTag, TunnelID,
 #     TunnelSecret}` — CF exposes the secret ONLY at tunnel creation
 #     (POST response), so this is the one-time output that must be
 #     backed up out-of-tree to recover the tunnel identity.
