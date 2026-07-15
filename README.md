@@ -1,48 +1,96 @@
-# s2-server — `/etc/nixos`
+# s2-server
 
-Backbone of the home server. Every running service is declared here.
+NixOS home server. **This repo is the complete system definition**:
+`flake.lock` pins every input, secrets are sops-encrypted in-tree, and
+any checkout + a decryption key rebuilds the exact running system.
 
-## Layout
+Deeper operational docs (module system, gotchas, per-stack quirks) live
+in each module's header comment and in `CLAUDE.md` (operator notes).
 
+## Daily driver commands
+
+```bash
+sudo nixos-rebuild test      # try the config without committing to it
+sudo nixos-rebuild switch    # commit as the next boot generation
 ```
-/etc/nixos/
-├── configuration.nix      # entry point — host config + imports
-├── hardware-configuration.nix
-├── platform/              # OS-level infrastructure (non-stack)
-│   ├── common.nix         # myStack.* options + mkRootlessContainer helper
-│   ├── zfs-datasets.nix   # declarative s2-pool children
-│   └── ddclient/          # dynamic DNS
-│       ├── ddclient.nix
-│       └── secrets/password
-└── stacks/                # one folder per stack
-    └── <stack>/
-        ├── <stack>.nix    # the module
-        ├── assets/        # tracked: non-secret config (yaml/json/templates)
-        └── secrets/       # gitignored: env files, keys, passwords (mode 0600)
+
+Both auto-detect `flake.nix` — no flags needed. The flake only sees
+**git-tracked files**: `sudo git add <newfile>` before rebuilding, or
+the eval fails with "file not found".
+
+## Upgrades
+
+```bash
+cd /etc/nixos
+sudo nix flake update        # advance all inputs within their branches
+sudo nixos-rebuild test      # verify
+sudo nixos-rebuild switch
+sudo git add flake.lock && sudo git commit -m "flake.lock: update"
 ```
+
+`flake-autoupgrade.timer` does this weekly (staged for next boot, never
+auto-reboots, commits the lock to git). Push to origin stays manual:
+`git push`. Roll back an upgrade with `git revert` on the lock commit +
+rebuild, or pick an older generation from the boot menu.
+
+Container images are pinned per-stack; updating one is
+`podman pull` + `systemctl restart podman-<name>` (moving tags) or a
+tag edit + rebuild (pinned tags).
+
+## Secrets
+
+Two classes — know which one you're touching:
+
+| Class | Where | Edit / rotate |
+|---|---|---|
+| Operator secrets (API tokens, admin creds, VPN keys) | `*.sops` files, encrypted, **tracked in git** | `sops <file>` opens $EDITOR, re-encrypts on save; rebuild to apply |
+| Machine-generated (app-db passwords, per-app AUTH_SECRET) | `stacks/{apps,app-db}/secrets/` — plaintext, **gitignored** | delete the file + rebuild; the bootstrap oneshot re-rolls it |
+
+sops recipients are in `.sops.yaml`: the host (key derived from its SSH
+host key at activation — nothing to manage) and santiago's personal age
+key (`~/.config/sops/age/keys.txt`, **copy in the password manager**).
+Decrypted material lands in `/run/secrets/` (tmpfs) at activation.
+
+Conventions: encrypted files end in `.sops` at the stack root; dotenv
+for env files, binary for everything else. `sops <file>` needs an
+identity: as santiago it Just Works (keys.txt); as root prefix with
+`SOPS_AGE_KEY_FILE=/home/santiago/.config/sops/age/keys.txt`.
+
+Special case: the LiteLLM master key lives in TWO files
+(`stacks/litellm/env.sops` + `prom-token.sops` — prometheus scrape
+auth). Rotate both together.
 
 ## Adding a stack
 
 ```bash
-sudo mkdir -p /etc/nixos/stacks/myservice/{assets,secrets}
-sudo $EDITOR /etc/nixos/stacks/myservice/myservice.nix
-# Drop secrets (if any) into secrets/env, mode 0600 santiago:users
-# Drop non-secret config files into assets/
-sudo $EDITOR /etc/nixos/configuration.nix   # add one import line
-sudo nixos-rebuild switch
+sudo mkdir -p /etc/nixos/stacks/<name>/assets
+sudoedit /etc/nixos/stacks/<name>/<name>.nix     # see any stack as template
+# secrets, if any:
+#   printf 'KEY=value\n' | sops -e --input-type dotenv --output-type dotenv \
+#     /dev/stdin | sudo tee /etc/nixos/stacks/<name>/env.sops
+#   then in the module:  sops.secrets."<name>-env" = { sopsFile = ./env.sops;
+#     format = "dotenv"; key = ""; owner = "santiago"; };
+#   and:  environmentFiles = [ config.sops.secrets."<name>-env".path ];
+sudo sed -i 's|./stacks/<prev>|&\n    ./stacks/<name>/<name>.nix|' configuration.nix  # or edit imports by hand
+sudo git add -A && sudo nixos-rebuild test && sudo nixos-rebuild switch
+sudo git commit -am "<name>: add stack"
 ```
 
-## Rules
+## Disaster recovery
 
-1. **Every stack is a folder** — no loose `.nix` files, even for single-container stacks.
-2. **`assets/` is tracked; `secrets/` is gitignored** — `.gitignore` matches `**/secrets/` at any depth.
-3. **No stack-name prefix inside the folder** — `stacks/immich/assets/dashboard.json`, not `stacks/immich/assets/immich-dashboard.json`. Parent folder already encodes the stack.
-4. **Paired ancillaries** (an exporter coupled to a primary, etc.) live next to the primary `.nix` file in the same folder.
+1. Fresh NixOS install (any version with flakes) on new hardware.
+2. `git clone git@github.com:santiagotoscanini/nixos-s2.git /etc/nixos`
+3. Restore the decryption identity — either the old host SSH key to
+   `/etc/ssh/ssh_host_ed25519_key`, or santiago's age key (password
+   manager) to `~/.config/sops/age/keys.txt` + re-encrypt for the new
+   host key: `sops updatekeys` after adding it to `.sops.yaml`.
+4. `sudo nixos-rebuild switch --flake /etc/nixos#s2-server`
+5. Data: `zpool import` both pools; machine-generated secrets and app
+   data restore from ZFS snapshots / `/s2/shared/` backups. The
+   bootstrap oneshots re-roll anything missing (new DB passwords —
+   apps reconnect via the regenerated env files).
 
-## Conventions referenced by the modules
-
-- `myStack.containerNetworks`, `traefikRoutes`, `dnsHosts`, `prometheusScrapes`, `grafanaDashboards`, `grafanaDashboardsByFolder`, `homepageServices` — declared in `platform/common.nix`. Each stack module contributes; the consumer modules (traefik, pihole, monitoring, homepage) merge.
-
-## Operator notes
-
-For deeper operator guidance — UID mapping, ZFS layout, bootstrap quirks per stack, recovery paths — see `CLAUDE.md` at the repo root (one level up; tracked separately).
+What is NOT in this repo: ZFS pool contents (`/s2/*`, app data under
+`/home/santiago/selfhost/`), pi-hole's gravity.db, grafana.db,
+`acme.json` (re-issues automatically; LE rate-limits apply), the
+machine-generated `secrets/` dirs, and santiago's GitHub SSH key.
