@@ -80,6 +80,15 @@ let
   );
 in
 {
+  # grafana admin credentials: sops-encrypted env.sops, decrypted to
+  # /run/secrets/grafana-env at activation. Edit with `sops env.sops`.
+  sops.secrets."grafana-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks = {
     prometheus    = "monitoring";
     grafana       = "monitoring";
@@ -176,7 +185,7 @@ in
     };
 
     # GF_SECURITY_ADMIN_USER + GF_SECURITY_ADMIN_PASSWORD.
-    environmentFiles = [ "/etc/nixos/stacks/monitoring/secrets/grafana.env" ];
+    environmentFiles = [ config.sops.secrets."grafana-env".path ];
 
     extraOptions = [
       "--user=0:0"

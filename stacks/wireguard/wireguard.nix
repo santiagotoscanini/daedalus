@@ -16,9 +16,18 @@
 # on the host (boot.kernelModules below); container just needs
 # /lib/modules read-only to find it.
 
-{ mkRootlessContainer, ... }:
+{ config, mkRootlessContainer, ... }:
 
 {
+  # wg-easy INIT_USERNAME + INIT_PASSWORD: sops-encrypted env.sops, decrypted to
+  # /run/secrets/wireguard-env at activation. Edit with `sops env.sops`.
+  sops.secrets."wireguard-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks.wireguard = "traefik";
   myStack.webApps.wireguard = {
     hostname = "wireguard.toscanini.me";
@@ -88,7 +97,7 @@
 
     # INIT_USERNAME + INIT_PASSWORD (admin web-UI credentials).
     environmentFiles = [
-      "/etc/nixos/stacks/wireguard/secrets/env"
+      config.sops.secrets."wireguard-env".path
     ];
 
     extraOptions = [

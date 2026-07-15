@@ -52,6 +52,15 @@ let
 in
 
 {
+  # HOMEPAGE_VAR_* widget keys: sops-encrypted env.sops, decrypted to
+  # /run/secrets/homepage-env at activation. Edit with `sops env.sops`.
+  sops.secrets."homepage-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks.homepage = "traefik";
 
   myStack.webApps.homepage = {
@@ -155,7 +164,7 @@ in
     ];
 
     environmentFiles = [
-      "/etc/nixos/stacks/homepage/secrets/env"
+      config.sops.secrets."homepage-env".path
     ];
   };
 }

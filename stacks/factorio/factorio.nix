@@ -16,9 +16,18 @@
 # container start (yes, every start — harmless but slow). Keep it
 # matched to the clients' game version or they will refuse to join.
 
-{ mkRootlessContainer, ... }:
+{ config, mkRootlessContainer, ... }:
 
 {
+  # ofsm admin credentials: sops-encrypted env.sops, decrypted to
+  # /run/secrets/factorio-env at activation. Edit with `sops env.sops`.
+  sops.secrets."factorio-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks.factorio = "traefik";
 
   myStack.webApps.factorio-admin = {
@@ -57,7 +66,7 @@
       FACTORIO_VERSION = "2.0.77";
     };
 
-    environmentFiles = [ "/etc/nixos/stacks/factorio/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."factorio-env".path ];
 
     ports = [
       "34197:34197/udp"

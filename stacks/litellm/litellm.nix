@@ -17,9 +17,18 @@
 # Note: `docker.litellm.ai` (old compose used this) is sinkholed by
 # pi-hole — use `ghcr.io/berriai/litellm:main-stable` instead.
 
-{ mkRootlessContainer, ... }:
+{ config, mkRootlessContainer, ... }:
 
 {
+  # DATABASE_URL + UI creds + LITELLM_MASTER_KEY: sops-encrypted env.sops, decrypted to
+  # /run/secrets/litellm-env at activation. Edit with `sops env.sops`.
+  sops.secrets."litellm-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks = {
     litellm-db = "litellm";
     litellm    = "litellm";
@@ -91,7 +100,7 @@
     };
 
     # POSTGRES_PASSWORD shared with litellm (DATABASE_URL).
-    environmentFiles = [ "/etc/nixos/stacks/litellm/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."litellm-env".path ];
 
     extraOptions = [
       "--network=litellm-net"
@@ -115,7 +124,7 @@
     };
 
     # DATABASE_URL + UI_USERNAME/UI_PASSWORD + LITELLM_MASTER_KEY.
-    environmentFiles = [ "/etc/nixos/stacks/litellm/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."litellm-env".path ];
 
     extraOptions = [
       "--network=litellm-net"
