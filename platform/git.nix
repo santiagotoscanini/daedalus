@@ -50,6 +50,9 @@
       };
       merge.conflictstyle = "zdiff3";
       diff.colorMoved = "default";
+      # Root-run units (flake-autoupgrade) operate on this root-owned repo;
+      # without this git refuses with "dubious ownership".
+      safe.directory = "/etc/nixos";
     };
   };
 

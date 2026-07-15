@@ -261,10 +261,13 @@
   systemd.services.flake-autoupgrade = {
     description = "Update flake.lock, commit, stage next-boot generation";
     serviceConfig.Type = "oneshot";
-    path = [ pkgs.nix pkgs.git ];
+    # System nix (not pkgs.nix): the running nix honors /etc/gitconfig
+    # safe.directory for the santiago-owned repo; a mismatched pkgs.nix
+    # trips the libgit2 ownership check and the unit fails.
+    path = [ pkgs.git ];
     script = ''
       cd /etc/nixos
-      nix flake update --commit-lock-file
+      /run/current-system/sw/bin/nix flake update --commit-lock-file
       /run/current-system/sw/bin/nixos-rebuild boot --flake /etc/nixos
     '';
   };
