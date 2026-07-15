@@ -19,6 +19,16 @@
 { config, lib, mkRootlessContainer, ... }:
 
 {
+  # ProtonVPN WireGuard config for gluetun — sops-encrypted and IN THE
+  # REBUILD TRAIL (ProtonVPN shows the private key once at export; losing
+  # this file used to mean re-exporting). Bind-mounted over the wg0.conf
+  # path inside the /gluetun dir mount.
+  sops.secrets."tv-wg0" = {
+    sopsFile = ./wg0.conf.sops;
+    format   = "binary";
+    owner    = "santiago";
+  };
+
   # NZBGET_USER + NZBGET_PASS: sops-encrypted env.sops, decrypted to
   # /run/secrets/nzbget-env at activation. Edit with `sops env.sops`.
   sops.secrets."nzbget-env" = {
@@ -230,6 +240,7 @@
 
     volumes = [
       "/home/santiago/selfhost/tv/gluetun:/gluetun"
+      "${config.sops.secrets."tv-wg0".path}:/gluetun/wireguard/wg0.conf:ro"
     ];
 
     environment = {

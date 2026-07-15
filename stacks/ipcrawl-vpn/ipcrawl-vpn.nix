@@ -26,9 +26,17 @@
 # account.protonvpn.com/downloads if lost. No VPN_PORT_FORWARDING — ipcrawl is
 # outbound-only and needs no inbound forwarded port.
 
-{ mkRootlessContainer, ... }:
+{ config, mkRootlessContainer, ... }:
 
 {
+  # ProtonVPN WireGuard config — sops-encrypted, in the rebuild trail
+  # (separate ProtonVPN export from the TV stack's; same rationale).
+  sops.secrets."ipcrawl-wg0" = {
+    sopsFile = ./wg0.conf.sops;
+    format   = "binary";
+    owner    = "santiago";
+  };
+
   # Register in containerNetworks with `null` (pasta, no bridge) so common.nix
   # gives it the mandatory Type=oneshot systemd override — without this the
   # container defaults to Type=notify, which is broken for rootless podman on
@@ -91,6 +99,7 @@
 
     volumes = [
       "/home/santiago/selfhost/ipcrawl-vpn/gluetun:/gluetun"
+      "${config.sops.secrets."ipcrawl-wg0".path}:/gluetun/wireguard/wg0.conf:ro"
       # Control-server auth policy (tracked asset, read-only from /nix/store —
       # so it's reproducible, unlike the TV stack's loose file). Without it,
       # gluetun's control API answers "Unauthorized" and the homepage widget

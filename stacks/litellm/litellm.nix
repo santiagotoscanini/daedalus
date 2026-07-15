@@ -20,12 +20,23 @@
 { config, mkRootlessContainer, ... }:
 
 {
-  # DATABASE_URL + UI creds + LITELLM_MASTER_KEY: sops-encrypted env.sops, decrypted to
-  # /run/secrets/litellm-env at activation. Edit with `sops env.sops`.
+  # DATABASE_URL + UI creds + LITELLM_MASTER_KEY: sops-encrypted env.sops,
+  # decrypted to /run/secrets/litellm-env. Edit with `sops env.sops`.
   sops.secrets."litellm-env" = {
     sopsFile = ./env.sops;
     format   = "dotenv";
     key      = "";
+    owner    = "santiago";
+  };
+
+  # Bare master-key token for prometheus scrape authorization
+  # (credentials_file) — monitoring.nix bind-mounts it into the
+  # prometheus container. DUPLICATED from env.sops LITELLM_MASTER_KEY
+  # (sops-nix cannot extract single dotenv keys): on rotation, update
+  # BOTH files — sops env.sops + re-encrypt prom-token.sops.
+  sops.secrets."litellm-master-key" = {
+    sopsFile = ./prom-token.sops;
+    format   = "binary";
     owner    = "santiago";
   };
 
@@ -45,7 +56,7 @@
     job_name = "litellm";
     authorization = {
       type = "Bearer";
-      credentials = "ROTATED-2026-07-15";
+      credentials_file = "/run/secrets/litellm-master-key";
     };
     static_configs = [{ targets = [ "litellm:4000" ]; }];
   }];
