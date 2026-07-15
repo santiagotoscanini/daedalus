@@ -19,6 +19,15 @@
 { config, lib, mkRootlessContainer, ... }:
 
 {
+  # NZBGET_USER + NZBGET_PASS: sops-encrypted env.sops, decrypted to
+  # /run/secrets/nzbget-env at activation. Edit with `sops env.sops`.
+  sops.secrets."nzbget-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks = {
     gluetun          = null;
     qbittorrent      = null;
@@ -278,7 +287,7 @@
     };
 
     # NZBGET_USER + NZBGET_PASS (admin credentials).
-    environmentFiles = [ "/etc/nixos/stacks/tv/secrets/nzbget-env" ];
+    environmentFiles = [ config.sops.secrets."nzbget-env".path ];
 
     extraOptions = [ "--network=container:gluetun" ];
   };

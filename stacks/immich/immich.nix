@@ -41,6 +41,15 @@ let
     "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0";
 in
 {
+  # POSTGRES_PASSWORD + DB_PASSWORD (shared by db and server): sops-encrypted env.sops, decrypted to
+  # /run/secrets/immich-env at activation. Edit with `sops env.sops`.
+  sops.secrets."immich-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks = {
     immich-postgres         = "immich";
     immich-redis            = "immich";
@@ -109,7 +118,7 @@ in
     };
 
     # POSTGRES_PASSWORD + DB_PASSWORD (same value, both keys consumed natively).
-    environmentFiles = [ "/etc/nixos/stacks/immich/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."immich-env".path ];
 
     extraOptions = [
       "--network=immich-net:alias=database"
@@ -161,7 +170,7 @@ in
     };
 
     # DB_PASSWORD — same env file as postgres so they stay in sync.
-    environmentFiles = [ "/etc/nixos/stacks/immich/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."immich-env".path ];
 
     extraOptions = [
       "--network=immich-net"

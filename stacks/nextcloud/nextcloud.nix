@@ -36,6 +36,15 @@ let
   '';
 in
 {
+  # PG_PASS + REDIS_PASS (shared by postgres, redis, app): sops-encrypted env.sops, decrypted to
+  # /run/secrets/nextcloud-env at activation. Edit with `sops env.sops`.
+  sops.secrets."nextcloud-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks = {
     nextcloud-postgres = "nextcloud";
     nextcloud-redis    = "nextcloud";
@@ -81,7 +90,7 @@ in
     };
 
     # PG_PASS — also used by nextcloud-app to log in as oc_santi.
-    environmentFiles = [ "/etc/nixos/stacks/nextcloud/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."nextcloud-env".path ];
 
     extraOptions = [
       # `:alias=postgres` — persisted config.php (from compose era when
@@ -99,7 +108,7 @@ in
 
     # Read REDIS_PASS in the cmd's shell so it's not in argv at config
     # time (vs. the old compose which interpolated into argv directly).
-    environmentFiles = [ "/etc/nixos/stacks/nextcloud/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."nextcloud-env".path ];
 
     cmd = [
       "sh" "-c"
@@ -141,7 +150,7 @@ in
     };
 
     # PG_PASS + REDIS_PASS (REDIS_HOST_PASSWORD aliased below).
-    environmentFiles = [ "/etc/nixos/stacks/nextcloud/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."nextcloud-env".path ];
 
     # Image reads REDIS_HOST_PASSWORD; our env file uses REDIS_PASS for
     # naming consistency. Alias here.
