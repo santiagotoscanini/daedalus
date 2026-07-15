@@ -572,7 +572,7 @@ in
             use the LLM gateway never see the variable.
 
             Does NOT inject the master key. Apps that need it add
-            `/etc/nixos/stacks/litellm/secrets/env` to `environmentFiles`.
+            `the litellm sops secret (config.sops.secrets."litellm-env".path)` to `environmentFiles`.
           '';
         };
 
@@ -674,7 +674,7 @@ in
           description = ''
             Additional env files passed via --env-file. Common uses:
             per-app secrets, third-party API keys, the litellm master
-            key (/etc/nixos/stacks/litellm/secrets/env).
+            key (the litellm sops secret (config.sops.secrets."litellm-env".path)).
             Conventions: `0600 santiago:users`, under `**/secrets/`
             anywhere so the path is gitignored.
           '';

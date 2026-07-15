@@ -8,6 +8,15 @@
 { config, mkRootlessContainer, ... }:
 
 {
+  # PG_PASS + N8N_* creds + encryption key: sops-encrypted env.sops, decrypted to
+  # /run/secrets/n8n-env at activation. Edit with `sops env.sops`.
+  sops.secrets."n8n-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks = {
     n8n-postgres = "n8n";
     n8n          = "n8n";
@@ -74,7 +83,7 @@
 
     # PG_PASS in this env file is re-exported as POSTGRES_PASSWORD by
     # the entrypoint below (compose used POSTGRES_PASSWORD=${PG_PASS}).
-    environmentFiles = [ "/etc/nixos/stacks/n8n/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."n8n-env".path ];
 
     entrypoint = "/bin/sh";
     cmd = [
@@ -112,7 +121,7 @@
     };
 
     # PG_PASS + N8N_USER + N8N_PASS + N8N_ENCRYPTION_KEY.
-    environmentFiles = [ "/etc/nixos/stacks/n8n/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."n8n-env".path ];
 
     # The image expects DB_POSTGRESDB_PASSWORD / N8N_BASIC_AUTH_USER /
     # N8N_BASIC_AUTH_PASSWORD; compose mapped from PG_PASS / N8N_USER /
