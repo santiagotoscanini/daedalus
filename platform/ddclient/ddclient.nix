@@ -2,10 +2,8 @@
 #
 # Updates the Cloudflare A record for s2.toscanini.me every 5 minutes
 # if our home public IP changes. The API token lives at
-# secrets/password (mode 0600 root:root — ddclient runs as root).
+# password.sops (sops-encrypted; ddclient runs as root).
 #
-# Long-term plan: migrate this secret (and every other on-disk env /
-# password under stacks/*/secrets) to sops-nix.
 
 { config, ... }:
 

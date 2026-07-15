@@ -7,7 +7,7 @@
 # auto-seed (it writes missing defaults and trips EROFS).
 #
 # Secrets (per-service API keys, admin passwords) live in
-# `secrets/env` as HOMEPAGE_VAR_* keys — homepage substitutes
+# `env.sops` (sops) as HOMEPAGE_VAR_* keys — homepage substitutes
 # `{{HOMEPAGE_VAR_FOO}}` placeholders in any rendered YAML at read time.
 
 { config, lib, pkgs, mkRootlessContainer, ... }:
