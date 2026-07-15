@@ -11,14 +11,20 @@
 # Optional opt-ins:
 #   - postgres.enable = true   → per-app postgres via stacks/app-db/
 #   - stage = "live"           → public CNAME via Cloudflare tunnel
+#   - deploy.enable = false    → freeze the app on its current image
 #
 # Workflow:
 #   1. Push the code to github.com/santiagotoscanini/<name>; CI publishes
 #      `ghcr.io/santiagotoscanini/<name>:latest`.
 #   2. Add an entry below; `sudo nixos-rebuild switch`.
-#   3. To bump :latest in place:
-#      `sudo -u santiago podman pull --authfile /etc/nixos/stacks/apps/secrets/ghcr-auth.json ghcr.io/santiagotoscanini/<name>:latest`
-#      then `sudo systemctl restart podman-app-<name>.service`.
+#
+# That's the whole loop. From then on, every push to main goes live on its
+# own: `app-<name>-deploy.timer` polls ghcr.io every 2 minutes, and when the
+# digest moves it pulls, restarts the container, and health-checks it through
+# traefik. No manual pull, no rebuild. Watch a deploy with
+# `journalctl -fu app-<name>-deploy.service`; a deploy that comes back
+# unhealthy leaves the unit failed (and the new image running — there is no
+# auto-rollback). See stacks/apps/apps.nix + assets/deploy.sh.
 
 { ... }:
 

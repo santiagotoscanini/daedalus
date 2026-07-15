@@ -12,6 +12,10 @@
 #   - Grafana dashboard if supplied (in the "Apps" folder).
 #   - Homepage tiles under a per-app section named after the app (e.g.
 #     `Anansi`): the app, Repo, Logs.
+#   - An auto-deploy timer + oneshot (`deploy.enable`, ON by default) that
+#     polls ghcr.io and redeploys the container when the image digest moves.
+#     This is the "push to main and it's live" half of the platform; see
+#     assets/deploy.sh for why an explicit pull is unavoidable.
 #
 # Convention enforced: every app container LISTENS ON PORT 3000.
 # No per-app port override. The image is built by us; the rule is ours.
@@ -77,6 +81,22 @@ let
   # Host tree backing `storage.enable`. One dir per app underneath.
   appsDataRoot   = "/home/santiago/selfhost/apps";
 
+  # Classic PAT (read:packages) in podman auth.json form. Used both by the
+  # container's implicit pull and by the deploy oneshot's explicit one. GHCR
+  # private packages accept ONLY a classic PAT — fine-grained PATs and GitHub
+  # App installation tokens are still rejected. When it expires, deploys fail
+  # loudly rather than silently going stale.
+  ghcrAuthFile   = "${appSecretsBase}/ghcr-auth.json";
+
+  # Last deploy result per app, `<digest> ok|failed`. systemd owns the dir
+  # (StateDirectory below); the file is what keeps a failed deploy loud across
+  # subsequent no-op ticks.
+  deployStateDir = "/var/lib/app-deploy";
+
+  # The box's static IP. The deploy health-check dials traefik directly rather
+  # than trusting DNS, so a pi-hole hiccup can't read as a dead app.
+  lanIp          = "192.168.0.2";
+
   # Capitalize first letter; used for the per-app homepage group.
   capitalize = s:
     (lib.toUpper (lib.substring 0 1 s))
@@ -110,6 +130,32 @@ let
             e);
 
       tileGroup = capitalize name;
+
+      # Pull-and-redeploy. House style (cf. cloudflared-route-sync): nix
+      # injects the parameters, the bash body lives in a standalone
+      # shellcheckable assets/*.sh. setpriv/env/podman are absolute because
+      # the privilege-dropped child doesn't inherit this PATH — see the
+      # header of deploy.sh.
+      deployScript = pkgs.writeShellApplication {
+        name = "app-${name}-deploy";
+        runtimeInputs = [ pkgs.curl pkgs.systemd pkgs.coreutils ];
+        text = ''
+          APP=${lib.escapeShellArg name}
+          IMAGE=${lib.escapeShellArg app.image}
+          UNIT=${lib.escapeShellArg "podman-${cName}.service"}
+          APP_HOST=${lib.escapeShellArg hostname}
+          HEALTH_PATH=${lib.escapeShellArg app.deploy.healthPath}
+          HEALTH_TIMEOUT=${toString app.deploy.healthTimeout}
+          AUTHFILE=${lib.escapeShellArg ghcrAuthFile}
+          LAN_IP=${lib.escapeShellArg lanIp}
+          STATE=${lib.escapeShellArg "${deployStateDir}/${name}"}
+          SETPRIV=${pkgs.util-linux}/bin/setpriv
+          ENV_BIN=${pkgs.coreutils}/bin/env
+          PODMAN=${pkgs.podman}/bin/podman
+
+          ${builtins.readFile ./assets/deploy.sh}
+        '';
+      };
 
       homepageTile = {
         name        = name;
@@ -297,6 +343,36 @@ let
         '';
       };
 
+      # Auto-deploy. Pulls the image; restarts the container only if the
+      # digest actually moved; then health-checks it through traefik. Runs as
+      # root (it must restart a system unit) and drops to santiago for podman.
+      #
+      # No RemainAfterExit — unlike every bootstrap oneshot here, this one has
+      # to run again on every tick.
+      systemd.services."app-${name}-deploy" = {
+        enable      = app.deploy.enable;
+        description = "Redeploy app-${name} when a new image lands on ghcr.io";
+        # linger-users gates /run/user/1000 → rootless podman → newuidmap.
+        after = [ "network-online.target" "linger-users.service" "podman-${cName}.service" ];
+        wants = [ "network-online.target" "linger-users.service" ];
+        serviceConfig = {
+          Type           = "oneshot";
+          StateDirectory = "app-deploy";
+          ExecStart      = "${deployScript}/bin/app-${name}-deploy";
+        };
+      };
+
+      systemd.timers."app-${name}-deploy" = {
+        enable      = app.deploy.enable;
+        description = "Poll ghcr.io for a new app-${name} image";
+        wantedBy    = [ "timers.target" ];
+        timerConfig = {
+          OnCalendar         = app.deploy.interval;
+          Persistent         = true;  # catch up if the box was off
+          RandomizedDelaySec = 45;    # don't have every app hit ghcr on the same second
+        };
+      };
+
       # Container ordering. Always wait on secrets bootstrap; when
       # postgres is on, also wait on the shared pg + the per-app
       # role/database bootstrap. With shared cluster, multiple apps
@@ -359,7 +435,7 @@ let
             [ (if egressEnabled
                then "--network=container:${app.egress.container}"
                else "--network=traefik-net")
-              "--authfile=/etc/nixos/stacks/apps/secrets/ghcr-auth.json" ]
+              "--authfile=${ghcrAuthFile}" ]
             ++ (lib.optional postgresEnabled "--network=app-db-net");
         }
         // (lib.optionalAttrs (app.cmd != null) { cmd = app.cmd; })
@@ -500,6 +576,52 @@ in
           '';
         };
 
+        # Auto-deploy — the "push to main and it's live" half of the platform.
+        # See this module's header and assets/deploy.sh.
+        deploy = {
+          enable = lib.mkOption {
+            type        = lib.types.bool;
+            default     = true;
+            description = ''
+              Poll ghcr.io and redeploy the container when the image digest
+              moves. ON by default: every app here rides a moving `:latest`
+              published by CI on push-to-main, so "new image → run it" is the
+              expected behaviour, not an opt-in.
+
+              Turn OFF to freeze an app on whatever it's running — pair with a
+              digest- or sha-pinned `image` to hold a known-good build.
+            '';
+          };
+          interval = lib.mkOption {
+            type        = lib.types.str;
+            default     = "*:0/2";
+            description = ''
+              systemd OnCalendar for the poll. The default (every 2 min) is
+              the worst-case latency between CI publishing and the app going
+              live — well under the CI build itself, so it isn't the
+              bottleneck. A pull of an unchanged tag is one manifest request.
+            '';
+          };
+          healthPath = lib.mkOption {
+            type        = lib.types.str;
+            default     = "/";
+            description = ''
+              Path fetched through traefik after the restart to decide whether
+              the new image is alive. Any status < 500 counts — an Auth.js app
+              302-ing to a login page is a working app.
+            '';
+          };
+          healthTimeout = lib.mkOption {
+            type        = lib.types.int;
+            default     = 90;
+            description = ''
+              Seconds to wait for the app to answer after the restart. On
+              timeout the new image keeps running and the unit fails loudly
+              (deploy-and-report — there is no auto-rollback).
+            '';
+          };
+        };
+
         prometheus = {
           enable = lib.mkOption {
             type        = lib.types.bool;
@@ -584,6 +706,7 @@ in
       attrsOpt [ "virtualisation" "oci-containers" "containers" ];
 
     systemd.services      = attrsOpt [ "systemd" "services" ];
+    systemd.timers        = attrsOpt [ "systemd" "timers" ];
     systemd.tmpfiles.rules = listOpt [ "systemd" "tmpfiles" "rules" ];
   };
 }
