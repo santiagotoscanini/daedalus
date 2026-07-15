@@ -4,7 +4,7 @@
 # their own myStack.* entries, kernel modules, and firewall ports —
 # NixOS merges across modules.
 
-{ pkgs, nixpkgs-unstable, ... }:
+{ pkgs, nixpkgs, nixpkgs-unstable, ... }:
 
 {
   imports = [
@@ -247,12 +247,34 @@
 
   # ── Auto-upgrade ────────────────────────────────────────────────────────────
 
-  # Stage next-boot weekly; never auto-reboot (you reboot manually).
-  system.autoUpgrade = {
-    enable = false;  # channel-based; flake-native replacement pending
-    dates = "weekly";
-    operation = "boot";
-    allowReboot = false;
+  # Pin the system registry + NIX_PATH to the flake input, so ad-hoc
+  # tooling (nix-shell -p, nix shell nixpkgs#foo, nix run) resolves to
+  # the SAME nixpkgs the system was built from — no channel needed.
+  nix.registry.nixpkgs.flake = nixpkgs;
+  nix.nixPath = [ "nixpkgs=flake:nixpkgs" ];
+
+  # Weekly flake-native upgrade (replaces channel-based system.autoUpgrade):
+  # advance flake.lock within the pinned branches, commit the lock, stage
+  # the new generation for next boot. Never auto-reboots (you reboot
+  # manually) and never touches the running system. Every upgrade is a
+  # git commit — inspectable, revertible. Push to origin stays manual.
+  systemd.services.flake-autoupgrade = {
+    description = "Update flake.lock, commit, stage next-boot generation";
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.nix pkgs.git ];
+    script = ''
+      cd /etc/nixos
+      nix flake update --commit-lock-file
+      /run/current-system/sw/bin/nixos-rebuild boot --flake /etc/nixos
+    '';
+  };
+  systemd.timers.flake-autoupgrade = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "weekly";
+      Persistent = true;           # catch up if the box was off
+      RandomizedDelaySec = "45min";
+    };
   };
 
   # Pinned at initial-install version. Do NOT bump — controls compat defaults.
