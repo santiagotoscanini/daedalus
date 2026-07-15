@@ -88,6 +88,15 @@ let
   ));
 in
 {
+  # CF_API_TOKEN + CF_DNS_API_TOKEN (ACME DNS-01): sops-encrypted env.sops,
+  # decrypted to /run/secrets/traefik-env at activation. Edit with `sops env.sops`.
+  sops.secrets."traefik-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks.traefik = "traefik";
 
   # Static rules that don't fit the Host->port shape. Each stack reads
@@ -151,10 +160,8 @@ in
       "/home/santiago/selfhost/traefik/logs:/var/log/traefik"
     ];
 
-    # CF_API_TOKEN — Cloudflare DNS-01 ACME challenge. Mode 0600,
-    # santiago:users. TODO: migrate to sops-nix.
     environmentFiles = [
-      "/etc/nixos/stacks/traefik/secrets/env"
+      config.sops.secrets."traefik-env".path
     ];
 
     cmd = [
