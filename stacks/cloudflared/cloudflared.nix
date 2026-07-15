@@ -80,6 +80,22 @@ let
 in
 
 {
+  # Tunnel credentials (AccountTag/TunnelID/TunnelSecret — CF shows the
+  # secret only at tunnel creation) + CF_DNS_API_TOKEN for route-sync.
+  # Both sops-encrypted and tracked: the tunnel identity is now in the
+  # rebuild trail, no out-of-tree backup needed.
+  sops.secrets."cloudflared-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+  sops.secrets."cloudflared-credentials" = {
+    sopsFile = ./credentials.json.sops;
+    format   = "binary";
+    owner    = "santiago";
+  };
+
   myStack.containerNetworks.cloudflared = "traefik";
 
   myStack.prometheusScrapes = [{
@@ -106,7 +122,7 @@ in
 
     volumes = [
       "${configYml}:/etc/cloudflared/config.yml:ro"
-      "/etc/nixos/stacks/cloudflared/secrets/credentials.json:/etc/cloudflared/credentials.json:ro"
+      "${config.sops.secrets."cloudflared-credentials".path}:/etc/cloudflared/credentials.json:ro"
     ];
 
     # `--config` flips cloudflared from "fetch ingress from CF" to
@@ -143,7 +159,7 @@ in
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      EnvironmentFile = "/etc/nixos/stacks/cloudflared/secrets/env";
+      EnvironmentFile = config.sops.secrets."cloudflared-env".path;
       ExecStart = "${routeSyncScript}/bin/cloudflared-route-sync";
       Restart = "on-failure";
       RestartSec = "2s";

@@ -154,6 +154,8 @@ in
 
     volumes = [
       "${prometheusDir}:/etc/prometheus:ro"
+      # litellm scrape auth — bare-token secret declared in stacks/litellm/
+      "/run/secrets/litellm-master-key:/run/secrets/litellm-master-key:ro"
       "/home/santiago/selfhost/monitoring/prometheus/data:/prometheus"
     ];
 

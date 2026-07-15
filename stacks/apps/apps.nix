@@ -86,7 +86,7 @@ let
   # private packages accept ONLY a classic PAT — fine-grained PATs and GitHub
   # App installation tokens are still rejected. When it expires, deploys fail
   # loudly rather than silently going stale.
-  ghcrAuthFile   = "${appSecretsBase}/ghcr-auth.json";
+  ghcrAuthFile   = config.sops.secrets."ghcr-auth".path;
 
   # Last deploy result per app, `<digest> ok|failed`. systemd owns the dir
   # (StateDirectory below); the file is what keeps a failed deploy loud across
@@ -692,6 +692,14 @@ in
     attrsOpt = path: lib.mkMerge   (map (f: lib.attrByPath path { } f) fragments);
     listOpt  = path: lib.concatLists (map (f: lib.attrByPath path [ ] f) fragments);
   in {
+    # GHCR classic PAT (read:packages) in podman auth.json form —
+    # sops-encrypted, used by container pulls + the deploy oneshots.
+    sops.secrets."ghcr-auth" = {
+      sopsFile = ./ghcr-auth.json.sops;
+      format   = "binary";
+      owner    = "santiago";
+    };
+
     myStack = {
       appDatabases              = attrsOpt [ "myStack" "appDatabases" ];
       containerNetworks         = attrsOpt [ "myStack" "containerNetworks" ];

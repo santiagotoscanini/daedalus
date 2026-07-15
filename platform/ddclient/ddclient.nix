@@ -7,15 +7,22 @@
 # Long-term plan: migrate this secret (and every other on-disk env /
 # password under stacks/*/secrets) to sops-nix.
 
-{ ... }:
+{ config, ... }:
 
 {
+  # Cloudflare API token, sops-encrypted (password.sops). ddclient runs
+  # as root; default root-owned /run/secrets path is correct.
+  sops.secrets."ddclient-password" = {
+    sopsFile = ./password.sops;
+    format   = "binary";
+  };
+
   services.ddclient = {
     enable = true;
     protocol = "cloudflare";
     zone = "toscanini.me";
     username = "cloudflare@account.toscanini.me";
-    passwordFile = "/etc/nixos/platform/ddclient/secrets/password";
+    passwordFile = config.sops.secrets."ddclient-password".path;
     ssl = true;
     usev4 = "webv4, webv4=https://cloudflare.com/cdn-cgi/trace, web-skip='ip='";
     usev6 = "disabled";
