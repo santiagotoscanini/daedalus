@@ -8,7 +8,7 @@
 # the old compose, which doubled `$` for its own interpolation). Then
 # `systemctl restart podman-wealthfolio`.
 
-{ mkRootlessContainer, ... }:
+{ config, mkRootlessContainer, ... }:
 
 {
   myStack.containerNetworks.wealthfolio = "traefik";
@@ -28,6 +28,15 @@
     siteMonitor = "http://wealthfolio:8088";
   }];
 
+  # WF_* secrets: sops-encrypted env.sops -> /run/secrets/wealthfolio-env
+  # (tmpfs, 0400 santiago). Edit with `sops env.sops`.
+  sops.secrets."wealthfolio-env" = {
+    sopsFile = ./env.sops;
+    format   = "dotenv";
+    key      = "";
+    owner    = "santiago";
+  };
+
   virtualisation.oci-containers.containers.wealthfolio = mkRootlessContainer {
     image = "docker.io/afadil/wealthfolio:latest";
 
@@ -37,7 +46,7 @@
 
     # WF_LISTEN_ADDR + WF_DB_PATH + WF_SECRET_KEY + WF_AUTH_PASSWORD_HASH
     # + WF_CORS_ALLOW_ORIGINS.
-    environmentFiles = [ "/etc/nixos/stacks/wealthfolio/secrets/env" ];
+    environmentFiles = [ config.sops.secrets."wealthfolio-env".path ];
 
     extraOptions = [
       "--network=traefik-net"
