@@ -14,11 +14,7 @@
   description = "s2-server — NixOS home server";
 
   inputs = {
-    # Pinned to the exact rev the channel pointed at during migration so
-    # the first flake build was byte-comparable. Move to the branch ref
-    # ("github:NixOS/nixpkgs/nixos-25.11") — done by the auto-upgrade
-    # rework; `nix flake update` then advances within 25.11.
-    nixpkgs.url = "github:NixOS/nixpkgs/b6018f87da91d19d0ab4cf979885689b469cdd41";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
 
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -33,7 +29,7 @@
       system = "x86_64-linux";
       # Hand the unstable input to modules that cherry-pick from it
       # (configuration.nix's claude-code overlay).
-      specialArgs = { inherit nixpkgs-unstable; };
+      specialArgs = { inherit nixpkgs nixpkgs-unstable; };
       modules = [
         ./configuration.nix
         sops-nix.nixosModules.sops
