@@ -41,13 +41,17 @@ let
   # config at eval time (attrNames below), never hand-maintained, so a
   # newly-added stack is covered automatically.
   #
-  # The dir lives on tmpfs (/run), not under ~/selfhost: rewriting a .prom
-  # file every minute would otherwise churn the 16K-recordsize,
-  # snapshotted + replicated selfhost dataset. The metrics are ephemeral —
-  # regenerated within a minute of boot.
+  # The dir lives at /var/lib/node-exporter/textfile — deliberately NOT
+  # under ~/selfhost (rewriting a .prom every minute would churn the
+  # 16K-recordsize, snapshotted + replicated selfhost dataset) and NOT on
+  # /run (nixos activation's `systemd-tmpfiles` wipes /run dirs on every
+  # rebuild, racing the node-exporter bind-mount → podman 125). /var/lib is
+  # on rpool/root, which is opted out of snapshots (platform/zfs.nix), so it
+  # dodges the churn concern while being persistent — the bind source is
+  # always present.
   containerNames = lib.attrNames config.virtualisation.oci-containers.containers;
 
-  textfileDir = "/run/node-exporter/textfile";
+  textfileDir = "/var/lib/node-exporter/textfile";
 
   livenessScript = pkgs.writeShellScript "container-up-export" ''
     set -eu
@@ -126,25 +130,14 @@ in
     owner    = "santiago";
   };
 
-  # Textfile-collector dir on tmpfs (/run). Owned by santiago so the
-  # rootless liveness sweep can write it and node-exporter (UID 0 → host
-  # santiago) can read it. tmpfiles recreates it early each boot, before
-  # the podman units start, so node-exporter's read-only bind never races
-  # a missing source dir.
+  # Persistent textfile-collector dir. Owned by santiago so the rootless
+  # liveness sweep writes it and node-exporter (UID 0 → host santiago) reads
+  # it. On /var/lib (persistent), so unlike a /run path it survives every
+  # rebuild — the node-exporter bind source is always present, no 125 race.
   systemd.tmpfiles.rules = [
-    "d /run/node-exporter 0755 santiago users -"
+    "d /var/lib/node-exporter 0755 santiago users -"
     "d ${textfileDir} 0755 santiago users -"
   ];
-
-  # node-exporter bind-mounts the textfile dir (source must pre-exist or
-  # podman errors 125). It runs as santiago and can't create dirs under the
-  # root-owned /run, so order it (and the writer) after tmpfiles-setup, which
-  # materializes the dir. Belt to the rebuild-time suspenders (nixos
-  # activation runs `systemd-tmpfiles --create` before restarting units).
-  systemd.services.podman-node-exporter = {
-    after = [ "systemd-tmpfiles-setup.service" ];
-    wants = [ "systemd-tmpfiles-setup.service" ];
-  };
 
   # 1-min liveness sweep. Runs as santiago so it can talk to the rootless
   # podman socket; writes the .prom file node-exporter serves.
