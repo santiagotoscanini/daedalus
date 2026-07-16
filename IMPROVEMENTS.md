@@ -69,7 +69,7 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
 - [ ] **13. Quarterly restore drill** — one file back from a ZFS
       snapshot; one sops secret decrypted with the password-manager
       age key. Calendar it.
-- [ ] **14. Lint/format tooling** — treefmt (nixfmt) + statix +
+- [x] **14. Lint/format tooling** — treefmt (nixfmt) + statix +
       deadnix as pre-commit.
 
 ## Final step
