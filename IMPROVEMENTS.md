@@ -66,7 +66,7 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
 - [x] **12. Drift cleanup** — inspect then destroy orphaned
       `s2-pool/supabase-storage` dataset (explicit OK required);
       remove stale `stacks/immich/migration-key.sops`.
-- [ ] **13. Quarterly restore drill** — one file back from a ZFS
+- [x] **13. Quarterly restore drill** — one file back from a ZFS
       snapshot; one sops secret decrypted with the password-manager
       age key. Calendar it.
 - [x] **14. Lint/format tooling** — treefmt (nixfmt) + statix +
