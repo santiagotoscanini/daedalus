@@ -1,0 +1,5 @@
+# statix lint config. `repeated_keys` (W20) is disabled: this repo
+# deliberately uses flat `myStack.<option> = ...;` assignments per stack
+# module (readable, greppable) rather than one merged `myStack = { ... }`
+# block, and statix would otherwise flag every multi-option stack.
+disabled = ["repeated_keys"]
