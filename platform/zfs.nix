@@ -125,6 +125,14 @@ let
       };
     };
 
+    "s2-pool/books" = {
+      mount = "/s2/books";
+      properties = snapshotOn // {
+        mountpoint = "legacy";
+        "com.sun:auto-snapshot:frequent" = "false";
+      };
+    };
+
     "s2-pool/tv" = {
       mount = "/s2/tv";
       properties.mountpoint = "legacy";
