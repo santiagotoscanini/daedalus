@@ -151,6 +151,7 @@ let
           pkgs.curl
           pkgs.systemd
           pkgs.coreutils
+          pkgs.msmtp # send_alert in deploy.sh (transition emails)
         ];
         text = ''
           APP=${lib.escapeShellArg name}
@@ -165,6 +166,11 @@ let
           SETPRIV=${pkgs.util-linux}/bin/setpriv
           ENV_BIN=${pkgs.coreutils}/bin/env
           PODMAN=${pkgs.podman}/bin/podman
+          # Deploy-failure alert relay (platform/mail msmtp -> Gmail). These
+          # mirror platform/mail/mail.nix {sender, alertTo}; kept literal to
+          # avoid a shared option for two addresses.
+          NOTIFY_FROM=${lib.escapeShellArg "s2.toscanini.me@gmail.com"}
+          NOTIFY_TO=${lib.escapeShellArg "santiago@toscanini.me"}
 
           ${builtins.readFile ./assets/deploy.sh}
         '';

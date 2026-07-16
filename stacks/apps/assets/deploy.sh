@@ -27,6 +27,20 @@ podman_() {
     "$PODMAN" "$@"
 }
 
+# Email on a deploy state TRANSITION (ok->failed or failed->ok), never on the
+# per-tick re-fail below. Runs in the root context (before any setpriv drop)
+# so msmtp can read /run/secrets/mail-relay-password. Best-effort: a mail
+# failure must never fail the deploy.
+send_alert() {  # $1 = subject; body on stdin
+  {
+    echo "From: $NOTIFY_FROM"
+    echo "To: $NOTIFY_TO"
+    echo "Subject: $1"
+    echo
+    cat
+  } | msmtp --account=default -t 2>/dev/null || true
+}
+
 # One inspect for both fields — see the setpriv note above; each podman call
 # costs a process spawn. Missing image (first boot, or untagged) yields an
 # empty id and the sentinel digest `none`, which reads as "everything is new".
@@ -73,6 +87,15 @@ while [ "$SECONDS" -lt "$deadline" ]; do
   if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
     echo "$after ok" > "$STATE"
     echo "deployed $after — healthy (HTTP $code)"
+    # Recovered? Alert once on failed -> ok (not on every healthy deploy).
+    case "$last" in
+      *" failed")
+        send_alert "[s2-server] RECOVERED: app-$APP deploy" <<EOF
+app-$APP is healthy again (HTTP $code) on image $after.
+Previous deploy state was: $last
+EOF
+        ;;
+    esac
 
     # Drop only the image this deploy superseded, so a moving :latest doesn't
     # slowly fill rpool/selfhost with <none> layers.
@@ -88,4 +111,13 @@ done
 # refuse to go quiet about it.
 echo "$after failed" > "$STATE"
 echo "DEPLOY FAILED: app-$APP did not answer within ${HEALTH_TIMEOUT}s (last HTTP $code)"
+# Alert here, on the ok->failed transition only. The per-tick re-fail path
+# above (after == before, last == "$after failed") deliberately stays silent
+# so a broken app doesn't email every 2 minutes.
+send_alert "[s2-server] DEPLOY FAILED: app-$APP" <<EOF
+app-$APP failed to deploy image $after.
+It did not return HTTP < 500 within ${HEALTH_TIMEOUT}s (last HTTP $code).
+The new image is still running (deploy-and-report; no auto-rollback).
+Investigate: journalctl -u app-$APP-deploy ; state file: $STATE
+EOF
 exit 1
