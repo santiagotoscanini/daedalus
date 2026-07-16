@@ -122,6 +122,34 @@ let
       mount = "/s2/tv";
       properties.mountpoint = "legacy";
     };
+
+    # Local replication targets (platform/backup.nix). Not mounted
+    # (replica, never mounts over the live tree) and NOT snapshotted on
+    # the receive side (auto-snapshot=false; its history is whatever the
+    # source sent). Parent created once by hand:
+    #   zfs create -o mountpoint=none -o com.sun:auto-snapshot=false s2-pool/backup
+    # Children are born on the first `zfs receive` — skipped+logged by
+    # zfs-converge until then.
+    "s2-pool/backup" = {
+      properties = {
+        mountpoint              = "none";
+        "com.sun:auto-snapshot" = "false";
+      };
+    };
+
+    "s2-pool/backup/selfhost" = {
+      properties = {
+        mountpoint              = "none";
+        "com.sun:auto-snapshot" = "false";
+      };
+    };
+
+    "s2-pool/backup/home" = {
+      properties = {
+        mountpoint              = "none";
+        "com.sun:auto-snapshot" = "false";
+      };
+    };
   };
 
   toMount = lib.filterAttrs (_: v: v ? mount) datasets;
