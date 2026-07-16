@@ -146,12 +146,18 @@
   # nixpkgs lags ~6 months). Locked in flake.lock; updated via
   # `nix flake update` — replaces the old unpinned fetchTarball-of-master.
   nixpkgs.overlays = [
-    (final: prev: {
-      inherit ((import nixpkgs-unstable {
+    (
+      final: prev:
+      let
+        unstable = import nixpkgs-unstable {
           inherit (prev.stdenv.hostPlatform) system;
           config.allowUnfree = true;
-        })) claude-code;
-    })
+        };
+      in
+      {
+        inherit (unstable) claude-code;
+      }
+    )
   ];
 
   # ── SSH ─────────────────────────────────────────────────────────────────────
