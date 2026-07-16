@@ -42,8 +42,8 @@
   # monitoring.nix bind-mounts into prometheus. Same activation-render idiom
   # as app-db's pg-exporter-config.
   #
-  # This removes the old prom-token.sops duplicate: the key now has ONE
-  # encrypted source of truth (env.sops). ONE copy still needs manual sync on
+  # The key has ONE encrypted source of truth (env.sops). ONE copy
+  # still needs manual sync on
   # rotation — stacks/homepage/env.sops HOMEPAGE_VAR_LITELLM_KEY (the homepage
   # tile substitutes its own var and can't read this rendered file).
   systemd.services."litellm-prom-token" = {

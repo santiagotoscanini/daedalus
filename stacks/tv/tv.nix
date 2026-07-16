@@ -25,8 +25,8 @@
 
 {
   # ProtonVPN WireGuard config for gluetun — sops-encrypted and IN THE
-  # REBUILD TRAIL (ProtonVPN shows the private key once at export; losing
-  # this file used to mean re-exporting). Bind-mounted over the wg0.conf
+  # REBUILD TRAIL (ProtonVPN shows the private key only once, at
+  # export time). Bind-mounted over the wg0.conf
   # path inside the /gluetun dir mount.
   sops.secrets."tv-wg0" = {
     sopsFile = ./wg0.conf.sops;

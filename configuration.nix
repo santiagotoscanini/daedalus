@@ -145,7 +145,7 @@
 
   # claude-code from the pinned nixos-unstable flake input (stable
   # nixpkgs lags ~6 months). Locked in flake.lock; updated via
-  # `nix flake update` — replaces the old unpinned fetchTarball-of-master.
+  # `nix flake update`.
   nixpkgs.overlays = [
     (
       final: prev:

@@ -47,8 +47,7 @@
   ];
 
   # Only the game port faces the world; UI is LAN-only via Traefik.
-  # (Old module also opened 27015/tcp for RCON; ofsm handles RCON
-  # internally so that host port is no longer needed.)
+  # (No RCON host port — ofsm drives RCON internally.)
   networking.firewall.allowedUDPPorts = [ 34197 ];
 
   systemd.tmpfiles.rules = [
@@ -56,8 +55,8 @@
     "d /home/santiago/selfhost/factorio/fsm-data     0755 santiago users -"
     "d /home/santiago/selfhost/factorio/mod_packs    0755 santiago users -"
     "d /home/santiago/selfhost/factorio/data         0755 santiago users -"
-    # Re-chown existing saves/mods/config from the old image UID
-    # (100844) to ofsm's container-root UID (santiago/1000).
+    # Z: converge data ownership to ofsm's container-root UID
+    # (santiago/1000), whatever UID older files were created under.
     "Z /home/santiago/selfhost/factorio/data         - santiago users -"
   ];
 

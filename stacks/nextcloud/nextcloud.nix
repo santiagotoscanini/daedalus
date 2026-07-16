@@ -119,8 +119,8 @@ in
       "/home/santiago/selfhost/nextcloud/nc_redis:/data"
     ];
 
-    # Read REDIS_PASS in the cmd's shell so it's not in argv at config
-    # time (vs. the old compose which interpolated into argv directly).
+    # Read REDIS_PASS in the cmd's shell so the secret isn't baked
+    # into the unit's argv.
     environmentFiles = [ config.sops.secrets."nextcloud-env".path ];
 
     cmd = [
@@ -145,7 +145,7 @@ in
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_config:/var/www/html"
       # Only the external-storage paths occ actually serves — NOT all of /s2.
-      # A Nextcloud compromise (public, RCE-prone) can no longer reach
+      # A Nextcloud compromise (public, RCE-prone) cannot reach
       # /s2/immich, /s2/tv, or /s2/backup. Verified via `occ files_external:list`.
       "/s2/santi:/s2/santi"
       "/s2/shared:/s2/shared"

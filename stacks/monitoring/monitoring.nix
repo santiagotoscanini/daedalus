@@ -350,8 +350,7 @@ in
   # No /var/lib/docker or /var/run mounts — the latter would overlay the
   # container's /run and hide /run/.containerenv that podman's crun
   # needs. cadvisor still reports cgroup-level container stats via the
-  # /sys mount; per-container CPU/RAM works (less rich than the
-  # docker-aware view that used to exist).
+  # /sys mount; per-container CPU/RAM works.
   virtualisation.oci-containers.containers.cadvisor = mkRootlessContainer {
     image = "gcr.io/cadvisor/cadvisor:v0.55.1@sha256:3de2bd5203120b866d74a9b283b2ffb8ec382fbf9dc321814700c6ea6f44ec57";
 

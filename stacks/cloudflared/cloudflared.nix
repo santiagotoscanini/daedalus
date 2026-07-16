@@ -95,8 +95,8 @@ in
 {
   # Tunnel credentials (AccountTag/TunnelID/TunnelSecret — CF shows the
   # secret only at tunnel creation) + CF_DNS_API_TOKEN for route-sync.
-  # Both sops-encrypted and tracked: the tunnel identity is now in the
-  # rebuild trail, no out-of-tree backup needed.
+  # Both sops-encrypted and tracked: the tunnel identity is in the
+  # rebuild trail, so no out-of-tree backup is needed.
   sops.secrets."cloudflared-env" = {
     sopsFile = ./env.sops;
     format = "dotenv";

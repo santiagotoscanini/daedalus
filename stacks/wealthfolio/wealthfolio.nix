@@ -4,8 +4,8 @@
 #
 # To rotate the admin password, regenerate the argon2 hash:
 #   echo -n "<new-pass>" | argon2 "<salt>" -id -m 12 -t 3 -p 1 -e
-# The output is WF_AUTH_PASSWORD_HASH (single `$`, no escaping — unlike
-# the old compose, which doubled `$` for its own interpolation). Then
+# The output is WF_AUTH_PASSWORD_HASH, verbatim (single `$`, no
+# escaping). Then
 # `systemctl restart podman-wealthfolio`.
 
 { config, mkRootlessContainer, ... }:

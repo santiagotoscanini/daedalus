@@ -1,7 +1,7 @@
 # Local ZFS replication — the box's only backup today.
 #
 # Replicates the two irreplaceable rpool (NVMe SSD) datasets onto the
-# s2-pool (2×16 TB HDD mirror) so a single NVMe failure no longer loses
+# s2-pool (2×16 TB HDD mirror) so a single NVMe failure doesn't lose
 # every container DB + the home dir:
 #
 #   rpool/selfhost  ->  s2-pool/backup/selfhost   (all stack state/DBs)
