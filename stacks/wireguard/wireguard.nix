@@ -44,6 +44,13 @@
 
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
+  # wg-easy writes wg-easy.db (server private key + client configs/PSKs)
+  # world-readable (0644). Tighten to 0600 on each activation — a private
+  # key has no business being world-readable, even on a single-user box.
+  systemd.tmpfiles.rules = [
+    "z /home/santiago/selfhost/wireguard/wg-easy.db 0600 santiago users - -"
+  ];
+
   myStack.prometheusScrapes = [
     {
       job_name = "wireguard";

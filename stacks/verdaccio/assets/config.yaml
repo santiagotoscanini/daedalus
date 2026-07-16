@@ -14,9 +14,10 @@ web:
 auth:
   htpasswd:
     file: /verdaccio/storage/htpasswd
-    # LAN-only registry → "anyone on the LAN" is the trust boundary.
-    # Drop to `-1` after bootstrap to lock further sign-up.
-    max_users: 1000
+    # LAN-only registry, locked to existing accounts. -1 disables further
+    # sign-up so a compromised LAN device can't self-register and then
+    # publish/overwrite packages (publish requires $authenticated).
+    max_users: -1
 
 uplinks:
   npmjs:
