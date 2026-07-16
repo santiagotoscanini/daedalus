@@ -282,6 +282,8 @@ in
 
     volumes = [
       "/home/santiago/selfhost/monitoring/grafana/data:/var/lib/grafana"
+      # Gmail app password for GF_SMTP_PASSWORD__FILE (shared mail secret).
+      "${config.sops.secrets."mail-relay-password".path}:/run/secrets/mail-relay-password:ro"
       "${./assets/provisioning/datasources}:/etc/grafana/provisioning/datasources:ro"
       "${./assets/provisioning/dashboards}:/etc/grafana/provisioning/dashboards:ro"
       "${./assets/provisioning/alerting}:/etc/grafana/provisioning/alerting:ro"
@@ -292,6 +294,17 @@ in
       GF_USERS_ALLOW_SIGN_UP = "false";
       GF_SERVER_ROOT_URL = "https://grafana.toscanini.me";
       GF_SERVER_SERVE_FROM_SUB_PATH = "false";
+
+      # SMTP alert delivery via the same Gmail relay msmtp uses. Password
+      # read from the bind-mounted mail secret through Grafana's __FILE
+      # convention (grafana runs --user=0:0 → santiago, which owns it).
+      GF_SMTP_ENABLED = "true";
+      GF_SMTP_HOST = "smtp.gmail.com:587";
+      GF_SMTP_USER = "s2.toscanini.me@gmail.com";
+      GF_SMTP_PASSWORD__FILE = "/run/secrets/mail-relay-password";
+      GF_SMTP_FROM_ADDRESS = "s2.toscanini.me@gmail.com";
+      GF_SMTP_FROM_NAME = "s2-server Grafana";
+      GF_SMTP_STARTTLS_POLICY = "MandatoryStartTLS";
     };
 
     # GF_SECURITY_ADMIN_USER + GF_SECURITY_ADMIN_PASSWORD.

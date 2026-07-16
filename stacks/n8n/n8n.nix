@@ -5,7 +5,12 @@
 # docker.io path NOT `docker.n8n.io` — the latter is blocked by
 # pi-hole (resolves to us, returns traefik's default cert).
 
-{ config, mkRootlessContainer, ... }:
+{
+  config,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 {
   # PG_PASS + N8N_* creds + encryption key: sops-encrypted env.sops, decrypted to
@@ -86,6 +91,38 @@
     }
   ];
 
+  # n8n runs as a mapped uid that can't read the santiago-owned mail secret
+  # directly, so render N8N_SMTP_PASS into an --env-file podman injects as
+  # santiago (same activation-render idiom as litellm-prom-token). Single
+  # source of truth stays the shared platform/mail secret.
+  systemd.services."n8n-smtp-env" = {
+    description = "Render N8N_SMTP_PASS from the shared mail relay secret";
+    before = [ "podman-n8n.service" ];
+    wantedBy = [ "podman-n8n.service" ];
+    after = [ "local-fs.target" ];
+    path = [ pkgs.coreutils ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      Restart = "on-failure";
+      RestartSec = "5s";
+    };
+    script = ''
+      set -eu
+      install -d -m 0755 -o santiago -g users /run/n8n-smtp
+      umask 077
+      install -m 0400 -o santiago -g users /dev/stdin /run/n8n-smtp/env <<EOF
+      N8N_SMTP_PASS=$(cat ${config.sops.secrets."mail-relay-password".path})
+      EOF
+    '';
+  };
+
+  # Wait for the rendered env file (merges with common.nix's generated override).
+  systemd.services.podman-n8n = {
+    after = [ "n8n-smtp-env.service" ];
+    wants = [ "n8n-smtp-env.service" ];
+  };
+
   virtualisation.oci-containers.containers.n8n-postgres = mkRootlessContainer {
     image = "docker.io/library/postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f";
 
@@ -135,10 +172,26 @@
       NODE_ENV = "production";
       WEBHOOK_URL = "https://n8n.toscanini.me";
       GENERIC_TIMEZONE = config.time.timeZone;
+
+      # Instance SMTP (user-management emails) via the same Gmail relay.
+      # N8N_SMTP_PASS is injected from the rendered env file (below): n8n
+      # runs as a mapped uid that can't read the santiago-owned mail secret,
+      # so podman injects it as an --env-file instead.
+      N8N_EMAIL_MODE = "smtp";
+      N8N_SMTP_HOST = "smtp.gmail.com";
+      N8N_SMTP_PORT = "587";
+      N8N_SMTP_USER = "s2.toscanini.me@gmail.com";
+      N8N_SMTP_SENDER = "s2.toscanini.me@gmail.com";
+      N8N_SMTP_SSL = "false";
+      N8N_SMTP_STARTTLS = "true";
     };
 
-    # PG_PASS + N8N_USER + N8N_PASS + N8N_ENCRYPTION_KEY.
-    environmentFiles = [ config.sops.secrets."n8n-env".path ];
+    # PG_PASS + N8N_USER + N8N_PASS + N8N_ENCRYPTION_KEY, plus the rendered
+    # N8N_SMTP_PASS (from the shared mail secret via n8n-smtp-env.service).
+    environmentFiles = [
+      config.sops.secrets."n8n-env".path
+      "/run/n8n-smtp/env"
+    ];
 
     # The image expects DB_POSTGRESDB_PASSWORD / N8N_BASIC_AUTH_USER /
     # N8N_BASIC_AUTH_PASSWORD; compose mapped from PG_PASS / N8N_USER /

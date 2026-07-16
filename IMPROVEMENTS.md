@@ -20,12 +20,12 @@ upstream · reboot happens LAST, as the closing validation.
 Prereq (operator): 2-Step Verification on the Gmail account, then 6
 app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
 
-- [ ] **2. System mail** — msmtp as sendmail (new `platform/mail/`),
+- [x] **2. System mail** — msmtp as sendmail (new `platform/mail/`),
       smartd mail notifications, ZFS ZED email on pool events,
       `OnFailure` email hooks (autoupgrade, backup units), weekly
       heartbeat email so a dead/locked relay is itself detectable.
       *Why: disk + pool failures are currently journal-only/silent.*
-- [ ] **3. Grafana alert delivery** — `GF_SMTP_*` env (secret in
+- [x] **3. Grafana alert delivery** — `GF_SMTP_*` env (secret in
       `stacks/monitoring/env.sops`), replace the `noop` contact point
       in grafana alerting provisioning, send test alert.
       *Why: 21 existing rules currently page nobody.*
@@ -37,7 +37,7 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
 - [x] **5. Outside-in uptime probing** — gatus (or blackbox_exporter)
       probing the public/LAN HTTPS endpoints + cert expiry, alerting
       through the same email path.
-- [ ] **6. n8n SMTP env** — `N8N_EMAIL_MODE=smtp` + `N8N_SMTP_*`
+- [x] **6. n8n SMTP env** — `N8N_EMAIL_MODE=smtp` + `N8N_SMTP_*`
       (secret in `stacks/n8n/env.sops`).
 - [ ] **7. Per-app SMTP in UIs** (operator, each has a test button):
       - [ ] Nextcloud — Admin settings → Basic settings → Email server
