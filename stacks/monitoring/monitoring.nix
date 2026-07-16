@@ -363,7 +363,11 @@ in
     ];
 
     extraOptions = [
-      "--privileged"
+      # De-privileged (was `--privileged`): cadvisor reads host cgroup /
+      # machine stats via the ro /sys + /rootfs mounts, which don't need
+      # full privilege. /dev/kmsg (OOM-event parsing) is best-effort — with
+      # kernel.dmesg_restrict=1 it needs CAP_SYSLOG, deliberately NOT
+      # granted; the container_* metrics don't depend on it.
       "--device=/dev/kmsg"
       "--network=monitoring-net"
     ];
