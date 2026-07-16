@@ -63,7 +63,7 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
 
 - [x] **11. flake-autoupgrade: add `git push`** — and verify the timer's
       first-ever scheduled run fires Mon 2026-07-20.
-- [ ] **12. Drift cleanup** — inspect then destroy orphaned
+- [x] **12. Drift cleanup** — inspect then destroy orphaned
       `s2-pool/supabase-storage` dataset (explicit OK required);
       remove stale `stacks/immich/migration-key.sops`.
 - [ ] **13. Quarterly restore drill** — one file back from a ZFS
