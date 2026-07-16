@@ -456,13 +456,27 @@ in
   config = {
     # Decorator exposed to per-stack modules:
     #   virtualisation.oci-containers.containers.foo = mkRootlessContainer { ... };
+    #
+    # Injects `--security-opt=no-new-privileges:true` fleet-wide: once set,
+    # no process in the container can gain privileges via a setuid/setgid
+    # binary or file capabilities on execve. It does NOT strip already-granted
+    # capabilities (--cap-add NET_ADMIN etc. still work), so the VPN/wireguard
+    # stacks keep functioning. Opt out per-container with
+    # `noNewPrivileges = false` (the key is stripped before reaching
+    # oci-containers) for the rare image that legitimately needs to escalate.
     _module.args.mkRootlessContainer = args:
+      let
+        nnp = args.noNewPrivileges or true;
+        cleanArgs = removeAttrs args [ "noNewPrivileges" ];
+        secOpts = lib.optional nnp "--security-opt=no-new-privileges:true";
+      in
       {
         autoStart = true;
         podman.user = "santiago";
-      } // args // {
+      } // cleanArgs // {
         environment = { TZ = config.time.timeZone; }
-          // (args.environment or { });
+          // (cleanArgs.environment or { });
+        extraOptions = secOpts ++ (cleanArgs.extraOptions or [ ]);
       };
 
     # systemd overrides + bridge units generated from the registry.

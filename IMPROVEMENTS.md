@@ -55,7 +55,7 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
       *Why: DR must re-pull what ran, not whatever `:latest` is that day.*
 - [x] **9. Traefik logging fix** — DEBUG→INFO, log to stdout
       (journald→Loki), enable access log.
-- [ ] **10. `no-new-privileges` fleet-wide** — add to
+- [x] **10. `no-new-privileges` fleet-wide** — add to
       `mkRootlessContainer`; opt-outs where needed (gluetun, cadvisor,
       intel-gpu-exporter).
 

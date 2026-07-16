@@ -225,7 +225,7 @@ in
     ];
 
     extraOptions = [
-      "--security-opt=no-new-privileges:true"
+      # no-new-privileges is now injected fleet-wide by mkRootlessContainer.
       "--network=traefik-net"
     ] ++ (lib.optional pgwireEnabled
       # db-exporter-net is the shared bridge where every pg-<name>
