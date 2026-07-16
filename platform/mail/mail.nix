@@ -13,9 +13,6 @@
 #   - smartd            → a failing / pre-failing disk (was journal-only)
 #   - ZFS ZED           → pool DEGRADED / FAULTED / scrub-with-errors
 #   - systemd OnFailure → flake-autoupgrade + the two syncoid backups
-#   - weekly heartbeat  → a Sunday "relay alive" mail; its ABSENCE is the
-#                         signal that the alert path itself broke (a dead
-#                         relay looks identical to "all healthy" otherwise)
 #
 # Grafana + n8n send their OWN mail (configured in their stack modules
 # against the same Gmail account + password secret), not via this sendmail.
@@ -53,26 +50,6 @@ let
       echo
       echo "--- recent journal ---"
       ${pkgs.systemd}/bin/journalctl -u "$unit" --no-pager -n 40 2>&1 || true
-    } | ${msmtpSend}
-  '';
-
-  heartbeat = pkgs.writeShellScript "mail-heartbeat" ''
-    set -eu
-    {
-      echo "From: ${sender}"
-      echo "To: ${alertTo}"
-      echo "Subject: [s2-server] weekly heartbeat — OK"
-      echo
-      echo "s2-server alert relay is alive as of $(${pkgs.coreutils}/bin/date)."
-      echo "If these stop arriving, the email/alert path is broken."
-      echo
-      echo "uptime:$(${pkgs.procps}/bin/uptime)"
-      echo
-      echo "--- zpool status ---"
-      ${pkgs.zfs}/bin/zpool status -x 2>&1 || true
-      echo
-      echo "--- failed units ---"
-      ${pkgs.systemd}/bin/systemctl --failed --no-pager --plain 2>&1 | head -n 20 || true
     } | ${msmtpSend}
   '';
 in
@@ -132,20 +109,4 @@ in
   systemd.services.flake-autoupgrade.onFailure = [ "notify-email@%N.service" ];
   systemd.services.syncoid-rpool-home.onFailure = [ "notify-email@%N.service" ];
   systemd.services.syncoid-rpool-selfhost.onFailure = [ "notify-email@%N.service" ];
-
-  # Weekly "still alive" heartbeat.
-  systemd.services.mail-heartbeat = {
-    description = "Weekly alert-relay heartbeat email";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = heartbeat;
-    };
-  };
-  systemd.timers.mail-heartbeat = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "Sun 09:00";
-      Persistent = true;
-    };
-  };
 }
