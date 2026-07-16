@@ -33,6 +33,11 @@
       description = "Media requests & discovery";
       icon = "jellyseerr.png";
       siteMonitor = "http://jellyseerr:5055";
+      widget = {
+        type = "seerr";
+        url = "http://jellyseerr:5055";
+        key = "{{HOMEPAGE_VAR_JELLYSEERR_API_KEY}}";
+      };
     }
   ];
 
