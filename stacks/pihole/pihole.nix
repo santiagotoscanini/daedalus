@@ -57,7 +57,12 @@ in
     enable = true;
     openFirewallDNS = true; # 53 TCP + UDP
     openFirewallDHCP = true; # 67 UDP
-    openFirewallWebserver = true; # 8080 TCP
+    # 8080 (admin web UI) is NOT opened to the LAN. traefik + the homepage
+    # widget reach pihole-FTL's UI via host.containers.internal, which is
+    # 192.168.0.2 -> 192.168.0.2 (host-to-self, routed over `lo` and accepted
+    # by the firewall's `-i lo` rule). LAN devices (192.168.0.x on enp3s0)
+    # hitting :8080 are dropped -> admin is HTTPS-only via pihole.toscanini.me.
+    openFirewallWebserver = false; # 8080 TCP: LAN-blocked (see above)
 
     settings = {
       dns = {
