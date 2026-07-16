@@ -34,7 +34,7 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
       point container alert rules at it.
       *Why: cadvisor can't see rootless containers — a dead container
       triggers nothing and its systemd unit stays green.*
-- [ ] **5. Outside-in uptime probing** — gatus (or blackbox_exporter)
+- [x] **5. Outside-in uptime probing** — gatus (or blackbox_exporter)
       probing the public/LAN HTTPS endpoints + cert expiry, alerting
       through the same email path.
 - [ ] **6. n8n SMTP env** — `N8N_EMAIL_MODE=smtp` + `N8N_SMTP_*`
