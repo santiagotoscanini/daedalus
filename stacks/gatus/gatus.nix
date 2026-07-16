@@ -99,6 +99,10 @@ in
       description = "Outside-in uptime + cert expiry";
       icon = "gatus.png";
       siteMonitor = "http://gatus:8080";
+      widget = {
+        type = "gatus";
+        url = "http://gatus:8080";
+      };
     }
   ];
 
