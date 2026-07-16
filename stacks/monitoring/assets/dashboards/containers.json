@@ -1,0 +1,159 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "liveNow": false,
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": ["containers", "home-server"],
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Containers",
+  "uid": "container-liveness",
+  "version": 1,
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Running",
+      "description": "container_up == 1 summed. Derived from every declared oci-container by the container-up-exporter timer (node-exporter textfile).",
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }, "expr": "sum(container_up)", "instant": true, "legendFormat": "running" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Down",
+      "description": "Declared containers currently not running (container_up == 0). Green at 0, red once any container is down.",
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }, "expr": "sum(1 - container_up)", "instant": true, "legendFormat": "down" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Declared total",
+      "description": "Number of oci-containers declared in the nix config (the exporter emits one series per declared container).",
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }, "expr": "count(container_up)", "instant": true, "legendFormat": "total" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Currently down",
+      "description": "Rows appear only while a container is down. Empty table = whole fleet up.",
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "options": { "showHeader": true, "cellHeight": "sm" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "filterable": true },
+          "color": { "mode": "fixed", "fixedColor": "red" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Value" }, "properties": [ { "id": "custom.hidden", "value": true } ] }
+        ]
+      },
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "job": true, "instance": true, "group": true, "type": true }, "renameByName": { "name": "container" } } }
+      ],
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }, "expr": "container_up == 0", "instant": true, "format": "table" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "state-timeline",
+      "title": "Liveness timeline (green = up, red = down)",
+      "description": "Per-container up/down over the dashboard window. Gaps of red are outages the Container Disappeared alert fires on. Ordered by name.",
+      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": { "h": 18, "w": 24, "x": 0, "y": 4 },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "left",
+        "rowHeight": 0.9,
+        "legend": { "displayMode": "hidden", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 90, "lineWidth": 0 },
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "down", "color": "red", "index": 0 } } },
+            { "type": "value", "options": { "1": { "text": "up", "color": "green", "index": 1 } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }, "expr": "container_up", "legendFormat": "{{name}}" }
+      ]
+    }
+  ]
+}
