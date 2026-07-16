@@ -32,8 +32,13 @@
   # Bare master-key token for prometheus scrape authorization
   # (credentials_file) — monitoring.nix bind-mounts it into the
   # prometheus container. DUPLICATED from env.sops LITELLM_MASTER_KEY
-  # (sops-nix cannot extract single dotenv keys): on rotation, update
-  # BOTH files — sops env.sops + re-encrypt prom-token.sops.
+  # (sops-nix cannot extract single dotenv keys). The key lives in THREE
+  # places — rotate ALL of them together or the stragglers 401:
+  #   1. stacks/litellm/env.sops        LITELLM_MASTER_KEY        (the app)
+  #   2. stacks/litellm/prom-token.sops (bare token)             (prom scrape)
+  #   3. stacks/homepage/env.sops       HOMEPAGE_VAR_LITELLM_KEY (homepage tile)
+  # (#3 was missed in the 2026-07-15 rotation → homepage spammed litellm
+  #  with 401s until re-synced; that's why it's called out here.)
   sops.secrets."litellm-master-key" = {
     sopsFile = ./prom-token.sops;
     format = "binary";
