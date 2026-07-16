@@ -56,7 +56,7 @@
     environment = {
       SITE_ROOT = "https://hc.toscanini.me";
       SITE_NAME = "s2-server";
-      ALLOWED_HOSTS = "hc.toscanini.me";
+      ALLOWED_HOSTS = "hc.toscanini.me,healthchecks";
       SECURE_PROXY_SSL_HEADER = "HTTP_X_FORWARDED_PROTO,https";
       DEBUG = "False";
       REGISTRATION_OPEN = "False";
