@@ -166,9 +166,9 @@ in
       "8888:8888"
     ]
     ++ (lib.optional pgwireEnabled
-      # postgres TCP entrypoint — SNI-routed per-app pg-<name>.toscanini.me.
-      # TLS terminates here using *.toscanini.me. Backend is plaintext
-      # postgres on db-exporter-net (where every pg-<name> lives too).
+      # postgres TCP entrypoint — SNI route for postgres.toscanini.me.
+      # TLS terminates here with the *.toscanini.me wildcard; the
+      # backend is plaintext postgres (`pg`) dialed over pg-wire-net.
       "5432:5432"
     );
     # Dashboard/metrics on :8080 reached via traefik-net only (no host port).
@@ -244,15 +244,13 @@ in
     ];
 
     extraOptions = [
-      # no-new-privileges is now injected fleet-wide by mkRootlessContainer.
       "--network=traefik-net"
     ]
     ++ (lib.optional pgwireEnabled
-      # db-exporter-net is the shared bridge where every pg-<name>
-      # container also lives (see stacks/app-db/exporter.nix). Traefik
-      # uses it to reach pg-<name>:5432 after SNI-routing a postgres
-      # TCP connection. Bridge only exists when ≥1 app uses postgres.
-      "--network=db-exporter-net"
+      # pg-wire-net: private bridge to the app-db cluster; traefik and
+      # pg are its only members (declared in stacks/app-db). Carries
+      # the SNI-routed postgres TCP wire to `pg:5432`.
+      "--network=pg-wire-net"
     );
   };
 }
