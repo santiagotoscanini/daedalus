@@ -217,7 +217,7 @@
   }];
 
   virtualisation.oci-containers.containers.gluetun = mkRootlessContainer {
-    image = "docker.io/qmcgaw/gluetun:latest";
+    image = "docker.io/qmcgaw/gluetun:latest@sha256:b0ee2135e6ba52ad3f102aae9663707cd1c9531485117067a380d3b2b6dd991d";
 
     # Ports for all containers sharing gluetun's netns. None of these
     # are opened in the host firewall — traefik dials them via
@@ -265,7 +265,7 @@
   # privs"), `--network=container:gluetun`, /config + data binds.
 
   virtualisation.oci-containers.containers.qbittorrent = mkRootlessContainer {
-    image = "docker.io/linuxserver/qbittorrent:latest";
+    image = "docker.io/linuxserver/qbittorrent:5.2.3_v2.0.13-ls468@sha256:352371a7242e8b4aa10958ca02076d1023758070519b89a10251475fb9f1a35a";
     dependsOn = [ "gluetun" ];
 
     volumes = [
@@ -284,7 +284,7 @@
   };
 
   virtualisation.oci-containers.containers.nzbget = mkRootlessContainer {
-    image = "docker.io/linuxserver/nzbget:latest";
+    image = "docker.io/linuxserver/nzbget:v26.2-ls253@sha256:20439658454cbe39f8be90b7d8e5027340c7f7ce99e3cac151992acd15785303";
     dependsOn = [ "gluetun" ];
 
     volumes = [
@@ -305,7 +305,7 @@
 
   # Internal CF-bypass API; only prowlarr calls it on 127.0.0.1:8191.
   virtualisation.oci-containers.containers.flaresolverr = mkRootlessContainer {
-    image = "docker.io/flaresolverr/flaresolverr:latest";
+    image = "docker.io/flaresolverr/flaresolverr:v3.5.0@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47";
     dependsOn = [ "gluetun" ];
 
     environment = {
@@ -318,7 +318,7 @@
   };
 
   virtualisation.oci-containers.containers.prowlarr = mkRootlessContainer {
-    image = "docker.io/linuxserver/prowlarr:latest";
+    image = "docker.io/linuxserver/prowlarr:2.4.0.5397-ls153@sha256:536036aeb2c740d1a660ccf143b58a8bd6222f09010258fdfc10a538af7bec78";
     dependsOn = [ "gluetun" ];
 
     volumes = [
@@ -337,7 +337,7 @@
   # client" hardlinks across /downloads, /torrents, /media — all need
   # to be on the same filesystem under one bind mount.
   virtualisation.oci-containers.containers.radarr = mkRootlessContainer {
-    image = "docker.io/linuxserver/radarr:latest";
+    image = "docker.io/linuxserver/radarr:6.3.0.10514-ls311@sha256:2b2c1c05eb3f648d2c80dfab9486147dd7bb0ad4d77fa972fc1c5de8f1da3738";
     dependsOn = [ "gluetun" ];
 
     volumes = [
@@ -354,7 +354,7 @@
   };
 
   virtualisation.oci-containers.containers.sonarr = mkRootlessContainer {
-    image = "docker.io/linuxserver/sonarr:latest";
+    image = "docker.io/linuxserver/sonarr:4.0.19.2979-ls319@sha256:4b025354d338999e03bf6dbdadcdde94815d39d4a5aba5de3cdc86a56d7d6c51";
     dependsOn = [ "gluetun" ];
 
     volumes = [
@@ -372,7 +372,7 @@
 
   # bazarr only reads what the *arrs produce, so a narrower bind.
   virtualisation.oci-containers.containers.bazarr = mkRootlessContainer {
-    image = "docker.io/linuxserver/bazarr:latest";
+    image = "docker.io/linuxserver/bazarr:v1.6.0-ls354@sha256:5d916d07404296ec35ee726e13e0e558f05952724cf494a7f009d913fb2b12f3";
     dependsOn = [ "gluetun" ];
 
     volumes = [
@@ -392,7 +392,7 @@
   # netns), exports as Prometheus metrics on :8001. The published port
   # lives on gluetun's block (netns owner).
   virtualisation.oci-containers.containers.gluetun-exporter = mkRootlessContainer {
-    image = "ghcr.io/thecfu/gluetun-exporter:latest";
+    image = "ghcr.io/thecfu/gluetun-exporter:latest@sha256:bafeabb2a9638bf6b0800c2d3d47d49c6236d879bd01eec8caea45dfca2b50c5";
     dependsOn = [ "gluetun" ];
 
     environment = {
@@ -412,7 +412,7 @@
   # If LAN client auto-discovery is ever needed back, SSDP 1900 + 7359
   # have to land on host networking — multicast doesn't cross bridges.
   virtualisation.oci-containers.containers.jellyfin = mkRootlessContainer {
-    image = "docker.io/linuxserver/jellyfin:latest";
+    image = "docker.io/linuxserver/jellyfin:10.11.11ubu2404-ls40@sha256:a569ae0bfbd67ca404ae51f54cead7a2522d270179f57b3d12cf80ebff5d683b";
 
     volumes = [
       "/home/santiago/selfhost/tv/jellyfin:/config"

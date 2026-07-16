@@ -38,7 +38,7 @@
   };
 
   virtualisation.oci-containers.containers.wealthfolio = mkRootlessContainer {
-    image = "docker.io/afadil/wealthfolio:latest";
+    image = "docker.io/afadil/wealthfolio:3.6.1@sha256:2819715df7057a46a29f30cd3c3e713df3bbe424b3a1bf7f2c92dc1dea1f84a6";
 
     volumes = [
       "/home/santiago/selfhost/wealthfolio/data:/data"

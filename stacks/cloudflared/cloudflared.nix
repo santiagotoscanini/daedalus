@@ -117,7 +117,7 @@ in
   }];
 
   virtualisation.oci-containers.containers.cloudflared = mkRootlessContainer {
-    image = "docker.io/cloudflare/cloudflared:latest";
+    image = "docker.io/cloudflare/cloudflared:2026.7.1@sha256:188bb03589a32affed3cf4d0590565ffe67b78866e6b5582574afab2b705bafe";
     dependsOn = [ "traefik" ];
 
     volumes = [

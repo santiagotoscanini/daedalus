@@ -78,7 +78,7 @@ in
   # `:16` is load-bearing: the on-disk cluster was initdb'd for PG 16.
   # Bumping requires a pg_upgrade dance, NOT just a tag bump.
   virtualisation.oci-containers.containers.nextcloud-postgres = mkRootlessContainer {
-    image = "docker.io/library/postgres:16-alpine";
+    image = "docker.io/library/postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777";
 
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_postgres:/var/lib/postgresql/data"
@@ -100,7 +100,7 @@ in
   };
 
   virtualisation.oci-containers.containers.nextcloud-redis = mkRootlessContainer {
-    image = "docker.io/library/redis:alpine";
+    image = "docker.io/library/redis:alpine@sha256:9d317178eceac8454a2284a9e6df2466b93c745529947f0cd42a0fa9609d7005";
 
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_redis:/data"

@@ -48,7 +48,7 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
 
 ## P2 — Security & reproducibility
 
-- [ ] **8. Pin the ~20 `:latest`/moving images** to the versions
+- [x] **8. Pin the ~20 `:latest`/moving images** to the versions
       actually running (`podman inspect` per container → version tag
       in each stack module). Apps platform keeps its intentional
       `:latest` CD loop.

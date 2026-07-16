@@ -267,7 +267,7 @@ in
   # and reports actual NIC traffic. Inside a bridge it would only see
   # a synthetic `eth0` with meaningless 0 traffic.
   virtualisation.oci-containers.containers.node-exporter = mkRootlessContainer {
-    image = "docker.io/prom/node-exporter:latest";
+    image = "docker.io/prom/node-exporter:v1.12.0@sha256:9b0ade5e607f9dbedb0a8e11151b6011ae5bd79304c261804cfdd2cadf200a80";
 
     cmd = [
       "--path.procfs=/host/proc"
@@ -297,7 +297,7 @@ in
   # /sys mount; per-container CPU/RAM works (less rich than the
   # docker-aware view that used to exist).
   virtualisation.oci-containers.containers.cadvisor = mkRootlessContainer {
-    image = "gcr.io/cadvisor/cadvisor:latest";
+    image = "gcr.io/cadvisor/cadvisor:v0.55.1@sha256:3de2bd5203120b866d74a9b283b2ffb8ec382fbf9dc321814700c6ea6f44ec57";
 
     volumes = [
       "/:/rootfs:ro"

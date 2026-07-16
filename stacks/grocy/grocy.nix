@@ -48,7 +48,7 @@
   }];
 
   virtualisation.oci-containers.containers.grocy = mkRootlessContainer {
-    image = "docker.io/linuxserver/grocy:latest";
+    image = "docker.io/linuxserver/grocy:v4.6.0-ls332@sha256:20aaee6b741178035a0c538c87917a8d72113ce2686368183a28f38e823f785c";
 
     volumes = [
       "/home/santiago/selfhost/grocy/config:/config"

@@ -84,7 +84,7 @@
   ];
 
   virtualisation.oci-containers.containers.gluetun-ipcrawl = mkRootlessContainer {
-    image = "docker.io/qmcgaw/gluetun:latest";
+    image = "docker.io/qmcgaw/gluetun:latest@sha256:b0ee2135e6ba52ad3f102aae9663707cd1c9531485117067a380d3b2b6dd991d";
 
     # host 3100 → ipcrawl UI (:3000 in-netns); traefik dials it via
     # host.containers.internal:3100. host 8002 → gluetun's control API
@@ -124,7 +124,7 @@
   # on :8001 (host-published as 8003 by gluetun-ipcrawl). Same image + shape as
   # the TV stack's gluetun-exporter.
   virtualisation.oci-containers.containers.gluetun-exporter-ipcrawl = mkRootlessContainer {
-    image     = "ghcr.io/thecfu/gluetun-exporter:latest";
+    image     = "ghcr.io/thecfu/gluetun-exporter:latest@sha256:bafeabb2a9638bf6b0800c2d3d47d49c6236d879bd01eec8caea45dfca2b50c5";
     dependsOn = [ "gluetun-ipcrawl" ];
 
     environment = {

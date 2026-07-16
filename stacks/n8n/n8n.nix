@@ -70,7 +70,7 @@
   }];
 
   virtualisation.oci-containers.containers.n8n-postgres = mkRootlessContainer {
-    image = "docker.io/library/postgres:15-alpine";
+    image = "docker.io/library/postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f";
 
     volumes = [
       "/home/santiago/selfhost/n8n/db:/var/lib/postgresql/data"
@@ -97,7 +97,7 @@
   };
 
   virtualisation.oci-containers.containers.n8n = mkRootlessContainer {
-    image = "docker.io/n8nio/n8n:latest";
+    image = "docker.io/n8nio/n8n:2.29.10@sha256:9cb60554716a0ab11a966e79ed65171e1bbf00b6d262ba12aa119bba22eb6000";
     dependsOn = [ "n8n-postgres" ];
 
     volumes = [

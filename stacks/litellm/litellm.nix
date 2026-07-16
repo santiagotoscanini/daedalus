@@ -15,7 +15,7 @@
 #     `--llamacpp-args "--device ROCM1"` if the iGPU interferes.
 #
 # Note: `docker.litellm.ai` (old compose used this) is sinkholed by
-# pi-hole — use `ghcr.io/berriai/litellm:main-stable` instead.
+# pi-hole — use `ghcr.io/berriai/litellm:main-stable@sha256:9ef6f45bc0104940571765e610c52a1d761b5ec85efcd193795281086ee61277` instead.
 
 { config, mkRootlessContainer, ... }:
 
@@ -99,7 +99,7 @@
   ];
 
   virtualisation.oci-containers.containers.litellm-db = mkRootlessContainer {
-    image = "docker.io/library/postgres:16-alpine";
+    image = "docker.io/library/postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777";
 
     volumes = [
       "/home/santiago/selfhost/litellm/db:/var/lib/postgresql/data"
@@ -119,7 +119,7 @@
   };
 
   virtualisation.oci-containers.containers.litellm = mkRootlessContainer {
-    image = "ghcr.io/berriai/litellm:main-stable";
+    image = "ghcr.io/berriai/litellm:main-stable@sha256:9ef6f45bc0104940571765e610c52a1d761b5ec85efcd193795281086ee61277";
     dependsOn = [ "litellm-db" ];
 
     # config.yaml enables the prometheus callback (without

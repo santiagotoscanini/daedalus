@@ -127,7 +127,7 @@ in
   };
 
   virtualisation.oci-containers.containers.immich-redis = mkRootlessContainer {
-    image = "docker.io/valkey/valkey:9";
+    image = "docker.io/valkey/valkey:9@sha256:4963247afc4cd33c7d3b2d2816b9f7f8eeebab148d29056c2ca4d7cbc966f2d9";
 
     extraOptions = [
       "--network=immich-net:alias=redis"

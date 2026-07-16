@@ -36,7 +36,7 @@
   }];
 
   virtualisation.oci-containers.containers.stirling-pdf = mkRootlessContainer {
-    image = "docker.io/frooodle/s-pdf:latest";
+    image = "docker.io/frooodle/s-pdf:2.14.2@sha256:7ed4d9681d18e4fbc3aa6a63647c4b5c2bcc4b75841df7c05d7e3d2320f5c9a1";
 
     volumes = [
       # `training-data` holds tesseract `.traineddata` packs for OCR in
