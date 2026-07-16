@@ -31,6 +31,43 @@
 { config, lib, pkgs, mkRootlessContainer, ... }:
 
 let
+  # ── Container liveness metric (IMPROVEMENTS #4) ─────────────────────────
+  # cadvisor can't see rootless-podman container cgroups (they live under
+  # user@1000.service, invisible to cadvisor), so its per-container series
+  # are empty and a dead container fires no alert while its systemd unit
+  # stays `active (exited)`. This closes the gap: a 1-min timer writes
+  # `container_up{name=...} 0|1` for EVERY declared oci-container into
+  # node-exporter's textfile-collector dir. The set is derived from the
+  # config at eval time (attrNames below), never hand-maintained, so a
+  # newly-added stack is covered automatically.
+  #
+  # The dir lives on tmpfs (/run), not under ~/selfhost: rewriting a .prom
+  # file every minute would otherwise churn the 16K-recordsize,
+  # snapshotted + replicated selfhost dataset. The metrics are ephemeral —
+  # regenerated within a minute of boot.
+  containerNames = lib.attrNames config.virtualisation.oci-containers.containers;
+
+  textfileDir = "/run/node-exporter/textfile";
+
+  livenessScript = pkgs.writeShellScript "container-up-export" ''
+    set -eu
+    export PATH=${lib.makeBinPath [ pkgs.podman pkgs.coreutils pkgs.gnugrep ]}
+    tmp="${textfileDir}/container_up.prom.$$"
+    # One podman call; each declared name is 1 iff it appears in `ps`.
+    running=$(podman ps --format '{{.Names}}' || true)
+    {
+      echo "# HELP container_up Declared oci-container running (1) or stopped/missing (0)."
+      echo "# TYPE container_up gauge"
+      for name in ${lib.concatStringsSep " " containerNames}; do
+        if printf '%s\n' "$running" | grep -qxF "$name"; then up=1; else up=0; fi
+        echo "container_up{name=\"$name\"} $up"
+      done
+    } > "$tmp"
+    # Atomic swap — node-exporter reads whole files; a half-written file
+    # would export a truncated series.
+    mv -f "$tmp" "${textfileDir}/container_up.prom"
+  '';
+
   baseScrapes = [
     { job_name = "prometheus";
       static_configs = [ { targets = [ "prometheus:9090" ]; } ]; }
@@ -87,6 +124,36 @@ in
     format   = "dotenv";
     key      = "";
     owner    = "santiago";
+  };
+
+  # Textfile-collector dir on tmpfs (/run). Owned by santiago so the
+  # rootless liveness sweep can write it and node-exporter (UID 0 → host
+  # santiago) can read it. tmpfiles recreates it early each boot, before
+  # the podman units start, so node-exporter's read-only bind never races
+  # a missing source dir.
+  systemd.tmpfiles.rules = [
+    "d /run/node-exporter 0755 santiago users -"
+    "d ${textfileDir} 0755 santiago users -"
+  ];
+
+  # 1-min liveness sweep. Runs as santiago so it can talk to the rootless
+  # podman socket; writes the .prom file node-exporter serves.
+  systemd.services.container-up-exporter = {
+    description = "Export container_up{name} liveness to node-exporter textfile";
+    after = [ "podman.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "santiago";
+      Environment = [ "HOME=/home/santiago" "XDG_RUNTIME_DIR=/run/user/1000" ];
+      ExecStart = livenessScript;
+    };
+  };
+  systemd.timers.container-up-exporter = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "1min";
+      OnUnitActiveSec = "1min";
+    };
   };
 
   myStack.containerNetworks = {
@@ -207,6 +274,8 @@ in
       "--path.sysfs=/host/sys"
       "--path.rootfs=/rootfs"
       "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)"
+      # Read container_up{} (+ any future .prom) from the textfile dir.
+      "--collector.textfile.directory=/var/lib/node-exporter/textfile"
     ];
 
     volumes = [
@@ -214,6 +283,7 @@ in
       "/proc:/host/proc:ro"
       "/sys:/host/sys:ro"
       "/:/rootfs:ro"
+      "${textfileDir}:/var/lib/node-exporter/textfile:ro"
     ];
 
     extraOptions = [
