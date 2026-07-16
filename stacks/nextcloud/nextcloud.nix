@@ -144,7 +144,12 @@ in
 
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_config:/var/www/html"
-      "/s2:/s2"
+      # Only the external-storage paths occ actually serves — NOT all of /s2.
+      # A Nextcloud compromise (public, RCE-prone) can no longer reach
+      # /s2/immich, /s2/tv, or /s2/backup. Verified via `occ files_external:list`.
+      "/s2/santi:/s2/santi"
+      "/s2/shared:/s2/shared"
+      "/s2/sofi:/s2/sofi"
     ];
 
     environment = {

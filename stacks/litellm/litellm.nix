@@ -92,7 +92,7 @@
       job_name = "litellm";
       authorization = {
         type = "Bearer";
-        credentials_file = "/run/secrets/litellm-master-key";
+        credentials_file = "/run/secrets/litellm-prom-token/token";
       };
       static_configs = [ { targets = [ "litellm:4000" ]; } ];
     }
