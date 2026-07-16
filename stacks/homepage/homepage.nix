@@ -208,6 +208,9 @@ in
       # (e.g. http://grafana:3000). Non-migrated stacks need
       # host.containers.internal or --add-host above.
       "--network=traefik-net"
+      # monitoring-net: homepage's per-app log widget queries loki:3100
+      # directly (loki left traefik-net), so homepage must share its bridge.
+      "--network=monitoring-net"
     ];
 
     environmentFiles = [

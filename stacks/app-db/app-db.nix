@@ -164,6 +164,40 @@ in
     # the two assignments don't conflict.
     systemd.services = lib.mkMerge [
       {
+        # db-exporter-net was an orphan bridge: created by an earlier
+        # config and persisted in podman's store, but no longer declared,
+        # so a fresh podman store would break both traefik's pg wire and
+        # pg's attachment below. Declare it explicitly (mirrors the
+        # generator in platform/common.nix mkBridgeUnit).
+        "podman-network-db-exporter-net" = {
+          description = "Create the db-exporter-net podman bridge";
+          after = [
+            "network-online.target"
+            "linger-users.service"
+          ];
+          wants = [
+            "network-online.target"
+            "linger-users.service"
+          ];
+          wantedBy = [ "multi-user.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            User = "santiago";
+            Environment = "XDG_RUNTIME_DIR=/run/user/1000";
+            Restart = "on-failure";
+            RestartSec = "1s";
+            ExecStart = "${pkgs.podman}/bin/podman network create --ignore db-exporter-net";
+          };
+        };
+        # pg's secondary bridge is now db-exporter-net; ensure it exists
+        # before pg starts (the fleet-wide override only orders pg after
+        # its PRIMARY bridge, app-db-net).
+        "podman-pg" = {
+          after = [ "podman-network-db-exporter-net.service" ];
+          wants = [ "podman-network-db-exporter-net.service" ];
+        };
+
         "pg-cluster-bootstrap" = {
           description = "Bootstrap pg cluster: generate superuser POSTGRES_PASSWORD on first boot";
           before = [ "podman-pg.service" ];
@@ -253,11 +287,13 @@ in
         # Primary bridge: app containers dial `pg` here for the
         # in-cluster DATABASE_URL (postgresql://...@pg:5432/<db>).
         "--network=app-db-net"
-        # Secondary bridge: traefik (on traefik-net) dials `pg:5432`
-        # for the TCP/SNI route that exposes the cluster on the LAN
-        # as `pg-<name>.toscanini.me:5432`. Without this, traefik's
-        # backend lookup fails: `dial tcp: lookup pg ... no such host`.
-        "--network=traefik-net"
+        # Secondary bridge: traefik dials `pg:5432` here for the TCP/SNI
+        # route that exposes the cluster on the LAN as
+        # `pg-<name>.toscanini.me:5432`. Uses db-exporter-net (NOT
+        # traefik-net) so the shared cluster isn't network-reachable by
+        # every other web app on traefik-net; traefik is the only other
+        # member. Bridge declared by podman-network-db-exporter-net below.
+        "--network=db-exporter-net"
         "--cpus=2"
         "--memory=2g"
         "--pids-limit=500"

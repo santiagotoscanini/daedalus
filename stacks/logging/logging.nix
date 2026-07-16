@@ -34,13 +34,11 @@
     alloy = "monitoring";
   };
 
-  # LAN-only stable hostname for ad-hoc LogCLI queries / `curl /ready`.
-  # Loki has no UI of its own (grafana is the UI), but the route is handy.
-  myStack.webApps.loki = {
-    hostname = "logging.toscanini.me";
-    serviceName = "loki";
-    port = 3100;
-  };
+  # Loki has NO traefik route by design: reachable only over
+  # monitoring-net (grafana is the UI; alloy pushes to it; homepage's
+  # per-app log widget joins monitoring-net to reach it). Dropping the
+  # former `logging.toscanini.me` webApp closes Loki's unauthenticated
+  # exposure (it was queryable by any LAN device + any traefik-net peer).
 
   virtualisation.oci-containers.containers.loki = mkRootlessContainer {
     image = "docker.io/grafana/loki:3.7.3";
@@ -55,7 +53,6 @@
     extraOptions = [
       "--user=0:0" # → host santiago, owns the data dir
       "--network=monitoring-net"
-      "--network=traefik-net" # traefik upstream
     ];
   };
 
