@@ -157,7 +157,9 @@ in
     volumes = [
       "${traefikRulesDir}:/rules:ro"
       "/home/santiago/selfhost/traefik/acme.json:/acme.json"
-      "/home/santiago/selfhost/traefik/logs:/var/log/traefik"
+      # No /var/log/traefik mount: both app + access logs go to stdout
+      # (journald -> Loki). File logging is intentionally off so nothing
+      # grows unbounded under ~/selfhost/traefik/logs.
     ];
 
     environmentFiles = [
@@ -191,8 +193,16 @@ in
       "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       "--entrypoints.web.http.redirections.entrypoint.permanent=true"
 
+      # App log -> container stdout -> journald -> alloy -> Loki. INFO, not
+      # DEBUG: at DEBUG traefik emits a "Service selected by WRR" line for
+      # every single request, swamping journald/Loki with noise.
       "--log=true"
-      "--log.level=DEBUG"
+      "--log.level=INFO"
+
+      # Access log -> stdout too (no filePath => stdout, never a file), JSON
+      # so LogQL can filter/aggregate by status, router, duration, host.
+      "--accesslog=true"
+      "--accesslog.format=json"
 
       # File provider — shallow watch, top-level *.yml only.
       "--providers.file.directory=/rules"

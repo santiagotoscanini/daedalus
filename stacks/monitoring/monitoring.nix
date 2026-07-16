@@ -136,11 +136,22 @@ in
     "d ${textfileDir} 0755 santiago users -"
   ];
 
+  # node-exporter bind-mounts the textfile dir (source must pre-exist or
+  # podman errors 125). It runs as santiago and can't create dirs under the
+  # root-owned /run, so order it (and the writer) after tmpfiles-setup, which
+  # materializes the dir. Belt to the rebuild-time suspenders (nixos
+  # activation runs `systemd-tmpfiles --create` before restarting units).
+  systemd.services.podman-node-exporter = {
+    after = [ "systemd-tmpfiles-setup.service" ];
+    wants = [ "systemd-tmpfiles-setup.service" ];
+  };
+
   # 1-min liveness sweep. Runs as santiago so it can talk to the rootless
   # podman socket; writes the .prom file node-exporter serves.
   systemd.services.container-up-exporter = {
     description = "Export container_up{name} liveness to node-exporter textfile";
-    after = [ "podman.service" ];
+    after = [ "podman.service" "systemd-tmpfiles-setup.service" ];
+    wants = [ "systemd-tmpfiles-setup.service" ];
     serviceConfig = {
       Type = "oneshot";
       User = "santiago";
