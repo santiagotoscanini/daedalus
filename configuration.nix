@@ -21,6 +21,7 @@
     ./platform/zfs.nix
     ./platform/backup.nix
     ./platform/mail/mail.nix
+    ./platform/hc-ping.nix
     ./stacks/calibre-web/calibre-web.nix
     ./stacks/cloudflared/cloudflared.nix
     ./stacks/factorio/factorio.nix

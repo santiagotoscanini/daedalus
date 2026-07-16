@@ -35,6 +35,11 @@
       description = "Cron / job dead-man's-switch";
       icon = "healthchecks.png";
       siteMonitor = "http://healthchecks:8000";
+      widget = {
+        type = "healthchecks";
+        url = "http://healthchecks:8000";
+        key = "{{HOMEPAGE_VAR_HEALTHCHECKS_API_KEY}}";
+      };
     }
   ];
 
@@ -54,7 +59,7 @@
       ALLOWED_HOSTS = "hc.toscanini.me";
       SECURE_PROXY_SSL_HEADER = "HTTP_X_FORWARDED_PROTO,https";
       DEBUG = "False";
-      REGISTRATION_OPEN = "True";
+      REGISTRATION_OPEN = "False";
       DB = "sqlite";
       DB_NAME = "/data/hc.sqlite";
       EMAIL_HOST = "smtp.gmail.com";
