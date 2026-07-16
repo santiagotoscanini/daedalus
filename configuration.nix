@@ -259,9 +259,9 @@
   # advance flake.lock within the pinned branches, commit the lock, stage
   # the new generation for next boot. Never auto-reboots (you reboot
   # manually) and never touches the running system. Every upgrade is a
-  # git commit — inspectable, revertible. Push to origin stays manual.
+  # git commit — inspectable, revertible. Push runs as santiago (offline-tolerant).
   systemd.services.flake-autoupgrade = {
-    description = "Update flake.lock, commit, stage next-boot generation";
+    description = "Update flake.lock, commit, stage next-boot generation, push";
     serviceConfig.Type = "oneshot";
     # System nix (not pkgs.nix): the running nix honors /etc/gitconfig
     # safe.directory for the santiago-owned repo; a mismatched pkgs.nix
@@ -271,6 +271,22 @@
       cd /etc/nixos
       /run/current-system/sw/bin/nix flake update --commit-lock-file
       /run/current-system/sw/bin/nixos-rebuild boot --flake /etc/nixos
+
+      # Push the lock-bump commit to origin. Only santiago has the GitHub
+      # SSH key (root has none — see platform/git.nix), so drop to santiago
+      # with setpriv (no PAM session, matching stacks/apps). The commit
+      # above ran as root and wrote root-owned objects into .git; chown it
+      # back to santiago first so santiago can push now AND hand-commit
+      # later without hitting "insufficient permission" on root-owned
+      # objects. Offline must not fail the upgrade: the lock is already
+      # committed locally, so a failed push is swallowed and the next run
+      # carries it forward.
+      ${pkgs.coreutils}/bin/chown -R santiago:users /etc/nixos/.git
+      ${pkgs.util-linux}/bin/setpriv --reuid santiago --regid users --init-groups \
+        ${pkgs.coreutils}/bin/env HOME=/home/santiago \
+          GIT_SSH_COMMAND="${pkgs.openssh}/bin/ssh -i /home/santiago/.ssh/id_ed25519_github -o BatchMode=yes -o IdentitiesOnly=yes" \
+        ${pkgs.git}/bin/git push origin main \
+        || echo "flake-autoupgrade: git push failed (offline?); lock committed locally, retrying next run"
     '';
   };
   systemd.timers.flake-autoupgrade = {

@@ -61,7 +61,7 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
 
 ## P3 — Hygiene
 
-- [ ] **11. flake-autoupgrade: add `git push`** — and verify the timer's
+- [x] **11. flake-autoupgrade: add `git push`** — and verify the timer's
       first-ever scheduled run fires Mon 2026-07-20.
 - [ ] **12. Drift cleanup** — inspect then destroy orphaned
       `s2-pool/supabase-storage` dataset (explicit OK required);
