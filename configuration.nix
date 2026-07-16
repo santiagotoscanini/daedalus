@@ -4,7 +4,12 @@
 # their own myStack.* entries, kernel modules, and firewall ports —
 # NixOS merges across modules.
 
-{ pkgs, nixpkgs, nixpkgs-unstable, ... }:
+{
+  pkgs,
+  nixpkgs,
+  nixpkgs-unstable,
+  ...
+}:
 
 {
   imports = [
@@ -93,10 +98,12 @@
     useDHCP = false;
     interfaces.enp3s0.useDHCP = false;
 
-    interfaces.enp3s0.ipv4.addresses = [{
-      address = "192.168.0.2";
-      prefixLength = 24;
-    }];
+    interfaces.enp3s0.ipv4.addresses = [
+      {
+        address = "192.168.0.2";
+        prefixLength = 24;
+      }
+    ];
 
     # Every surviving host port is opened by its owning stack module.
     # See CLAUDE.md's "Must-keep host ports" table.
@@ -140,10 +147,10 @@
   # `nix flake update` — replaces the old unpinned fetchTarball-of-master.
   nixpkgs.overlays = [
     (final: prev: {
-      claude-code = (import nixpkgs-unstable {
-        system = prev.stdenv.hostPlatform.system;
-        config.allowUnfree = true;
-      }).claude-code;
+      inherit ((import nixpkgs-unstable {
+          inherit (prev.stdenv.hostPlatform) system;
+          config.allowUnfree = true;
+        })) claude-code;
     })
   ];
 
@@ -163,7 +170,10 @@
   # ignoreIP keeps the laptop from banning itself after a fat-fingered SSH.
   services.fail2ban = {
     enable = true;
-    ignoreIP = [ "127.0.0.1/8" "192.168.0.0/24" ];
+    ignoreIP = [
+      "127.0.0.1/8"
+      "192.168.0.0/24"
+    ];
     maxretry = 5;
     bantime = "1h";
     bantime-increment = {
@@ -207,9 +217,9 @@
     delta
     gh
     htop
-    ddclient          # CLI for poking at DDNS state when debugging
-    intel-gpu-tools   # `intel_gpu_top` for watching transcoding load
-    fdupes            # find duplicate files
+    ddclient # CLI for poking at DDNS state when debugging
+    intel-gpu-tools # `intel_gpu_top` for watching transcoding load
+    fdupes # find duplicate files
   ];
 
   # ── Memory / swap ───────────────────────────────────────────────────────────
@@ -229,7 +239,10 @@
 
   # Flakes: the repo IS the system definition (see flake.nix). nix-command
   # is the CLI half of the feature pair.
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
 
   # Hardlink identical files inside /nix/store on every insert.
   nix.settings.auto-optimise-store = true;
@@ -293,7 +306,7 @@
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "weekly";
-      Persistent = true;           # catch up if the box was off
+      Persistent = true; # catch up if the box was off
       RandomizedDelaySec = "45min";
     };
   };

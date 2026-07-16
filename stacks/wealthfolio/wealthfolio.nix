@@ -19,22 +19,23 @@
     exposeRemotely = true;
   };
 
-
-  myStack.homepageServices."Productivity" = [{
-    name = "Wealthfolio";
-    href = "https://wealthfolio.toscanini.me";
-    description = "Personal finance";
-    icon = "/icons/wealthfolio.png";
-    siteMonitor = "http://wealthfolio:8088";
-  }];
+  myStack.homepageServices."Productivity" = [
+    {
+      name = "Wealthfolio";
+      href = "https://wealthfolio.toscanini.me";
+      description = "Personal finance";
+      icon = "/icons/wealthfolio.png";
+      siteMonitor = "http://wealthfolio:8088";
+    }
+  ];
 
   # WF_* secrets: sops-encrypted env.sops -> /run/secrets/wealthfolio-env
   # (tmpfs, 0400 santiago). Edit with `sops env.sops`.
   sops.secrets."wealthfolio-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   virtualisation.oci-containers.containers.wealthfolio = mkRootlessContainer {

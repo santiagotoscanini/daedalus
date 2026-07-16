@@ -12,7 +12,7 @@
   # as root; default root-owned /run/secrets path is correct.
   sops.secrets."ddclient-password" = {
     sopsFile = ./password.sops;
-    format   = "binary";
+    format = "binary";
   };
 
   services.ddclient = {

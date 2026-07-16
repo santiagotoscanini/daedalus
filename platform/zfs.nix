@@ -25,11 +25,19 @@
 #            shared,immich}   skip frequent (files don't change every 15min).
 #   s2-pool/tv                no snapshots (re-downloadable).
 
-{ config, lib, pkgs, utils, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  utils,
+  ...
+}:
 
 let
   # Opt-in for any dataset we want snapshotted. Per-tier opt-outs layered on top.
-  snapshotOn = { "com.sun:auto-snapshot" = "true"; };
+  snapshotOn = {
+    "com.sun:auto-snapshot" = "true";
+  };
 
   datasets = {
     # rpool (SSD) — properties only. Mounts in hardware-configuration.nix.
@@ -37,41 +45,41 @@ let
     "rpool" = {
       properties = {
         compression = "lz4";
-        atime       = "off";
-        xattr       = "on";
-        acltype     = "posix";
-        mountpoint  = "none";
+        atime = "off";
+        xattr = "on";
+        acltype = "posix";
+        mountpoint = "none";
       };
     };
 
     "rpool/root" = {
       properties = {
-        mountpoint              = "legacy";
+        mountpoint = "legacy";
         "com.sun:auto-snapshot" = "false";
       };
     };
 
     "rpool/nix" = {
       properties = {
-        mountpoint              = "legacy";
+        mountpoint = "legacy";
         "com.sun:auto-snapshot" = "false";
       };
     };
 
     "rpool/home" = {
       properties = snapshotOn // {
-        mountpoint                       = "legacy";
-        "com.sun:auto-snapshot:weekly"   = "false";
+        mountpoint = "legacy";
+        "com.sun:auto-snapshot:weekly" = "false";
       };
     };
 
     "rpool/selfhost" = {
       properties = snapshotOn // {
-        mountpoint                       = "legacy";
+        mountpoint = "legacy";
         # Matches typical postgres page size; 128K would amplify writes
         # ~8x for small-row DB updates.
-        recordsize                       = "16K";
-        "com.sun:auto-snapshot:weekly"   = "false";
+        recordsize = "16K";
+        "com.sun:auto-snapshot:weekly" = "false";
       };
     };
 
@@ -80,7 +88,7 @@ let
     "s2-pool" = {
       properties = {
         compression = "lz4";
-        mountpoint  = "legacy";
+        mountpoint = "legacy";
       };
       mount = "/s2";
     };
@@ -88,7 +96,7 @@ let
     "s2-pool/santi" = {
       mount = "/s2/santi";
       properties = snapshotOn // {
-        mountpoint                       = "legacy";
+        mountpoint = "legacy";
         "com.sun:auto-snapshot:frequent" = "false";
       };
     };
@@ -96,7 +104,7 @@ let
     "s2-pool/sofi" = {
       mount = "/s2/sofi";
       properties = snapshotOn // {
-        mountpoint                       = "legacy";
+        mountpoint = "legacy";
         "com.sun:auto-snapshot:frequent" = "false";
       };
     };
@@ -104,7 +112,7 @@ let
     "s2-pool/shared" = {
       mount = "/s2/shared";
       properties = snapshotOn // {
-        mountpoint                       = "legacy";
+        mountpoint = "legacy";
         "com.sun:auto-snapshot:frequent" = "false";
       };
     };
@@ -112,11 +120,10 @@ let
     "s2-pool/immich" = {
       mount = "/s2/immich";
       properties = snapshotOn // {
-        mountpoint                       = "legacy";
+        mountpoint = "legacy";
         "com.sun:auto-snapshot:frequent" = "false";
       };
     };
-
 
     "s2-pool/tv" = {
       mount = "/s2/tv";
@@ -132,21 +139,21 @@ let
     # zfs-converge until then.
     "s2-pool/backup" = {
       properties = {
-        mountpoint              = "none";
+        mountpoint = "none";
         "com.sun:auto-snapshot" = "false";
       };
     };
 
     "s2-pool/backup/selfhost" = {
       properties = {
-        mountpoint              = "none";
+        mountpoint = "none";
         "com.sun:auto-snapshot" = "false";
       };
     };
 
     "s2-pool/backup/home" = {
       properties = {
-        mountpoint              = "none";
+        mountpoint = "none";
         "com.sun:auto-snapshot" = "false";
       };
     };
@@ -154,8 +161,7 @@ let
 
   toMount = lib.filterAttrs (_: v: v ? mount) datasets;
 
-  mountUnits = lib.mapAttrsToList
-    (_: v: "${utils.escapeSystemdPath v.mount}.mount") toMount;
+  mountUnits = lib.mapAttrsToList (_: v: "${utils.escapeSystemdPath v.mount}.mount") toMount;
 
   convergeScript = pkgs.writeShellScript "zfs-converge" ''
     set -eu
@@ -175,16 +181,19 @@ let
       fi
     }
 
-    ${lib.concatStringsSep "\n"
-      (lib.mapAttrsToList
-        (ds: v: lib.optionalString (v ? properties)
-          (lib.concatMapStringsSep "\n"
-            (k:
-              "    set_if_different ${lib.escapeShellArg ds} "
-              + "${lib.escapeShellArg k} "
-              + "${lib.escapeShellArg v.properties.${k}}")
-            (lib.attrNames v.properties)))
-        datasets)}
+    ${lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (
+        ds: v:
+        lib.optionalString (v ? properties) (
+          lib.concatMapStringsSep "\n" (
+            k:
+            "    set_if_different ${lib.escapeShellArg ds} "
+            + "${lib.escapeShellArg k} "
+            + "${lib.escapeShellArg v.properties.${k}}"
+          ) (lib.attrNames v.properties)
+        )
+      ) datasets
+    )}
   '';
 in
 {
@@ -199,25 +208,26 @@ in
   };
 
   # rpool/* mounts stay in hardware-configuration.nix.
-  fileSystems = lib.mapAttrs'
-    (ds: v: lib.nameValuePair v.mount {
+  fileSystems = lib.mapAttrs' (
+    ds: v:
+    lib.nameValuePair v.mount {
       device = ds;
       fsType = "zfs";
-    })
-    toMount;
+    }
+  ) toMount;
 
   services.zfs = {
-    autoScrub.enable = true;   # monthly — catches bit-rot
-    trim.enable = true;        # SSD; no-op on HDDs in s2-pool
+    autoScrub.enable = true; # monthly — catches bit-rot
+    trim.enable = true; # SSD; no-op on HDDs in s2-pool
 
     autoSnapshot = {
-      enable   = true;
-      flags    = "-k -p --utc";
-      frequent = 4;   # last hour
-      hourly   = 24;  # last day
-      daily    = 7;   # last week
-      weekly   = 4;   # last month
-      monthly  = 0;   # off-site backup territory
+      enable = true;
+      flags = "-k -p --utc";
+      frequent = 4; # last hour
+      hourly = 24; # last day
+      daily = 7; # last week
+      weekly = 4; # last month
+      monthly = 0; # off-site backup territory
     };
   };
 
@@ -232,13 +242,13 @@ in
       "zfs-import-rpool.service"
       "zfs-import-s2-pool.service"
     ];
-    before     = mountUnits;
+    before = mountUnits;
     requiredBy = mountUnits;
     unitConfig.DefaultDependencies = false;
     serviceConfig = {
-      Type            = "oneshot";
+      Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart       = convergeScript;
+      ExecStart = convergeScript;
     };
   };
 }

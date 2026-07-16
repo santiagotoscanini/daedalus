@@ -30,7 +30,7 @@
 
 {
   myStack.containerNetworks = {
-    loki  = "monitoring";
+    loki = "monitoring";
     alloy = "monitoring";
   };
 
@@ -53,9 +53,9 @@
     ];
 
     extraOptions = [
-      "--user=0:0"             # → host santiago, owns the data dir
+      "--user=0:0" # → host santiago, owns the data dir
       "--network=monitoring-net"
-      "--network=traefik-net"  # traefik upstream
+      "--network=traefik-net" # traefik upstream
     ];
   };
 
@@ -81,7 +81,7 @@
 
     extraOptions = [
       "--user=0:0"
-      "--group-add=keep-groups"  # inherit systemd-journal in userns
+      "--group-add=keep-groups" # inherit systemd-journal in userns
       "--network=monitoring-net"
     ];
   };

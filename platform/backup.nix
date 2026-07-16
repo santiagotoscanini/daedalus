@@ -43,7 +43,7 @@
 # receive/rollback on target) is handled automatically by the NixOS
 # syncoid module for the unprivileged `syncoid` user — no manual grants.
 
-{ ... }:
+_:
 
 {
   services.syncoid = {
@@ -59,7 +59,10 @@
     #   A progress bar is worthless in a systemd service with no TTY, and
     #   suppressing it also keeps the per-snapshot INFO spam out of
     #   journald/Loki — only errors remain. mbuffer (buffering) stays.
-    commonArgs = [ "--no-sync-snap" "--quiet" ];
+    commonArgs = [
+      "--no-sync-snap"
+      "--quiet"
+    ];
 
     commands = {
       "rpool/selfhost".target = "s2-pool/backup/selfhost";

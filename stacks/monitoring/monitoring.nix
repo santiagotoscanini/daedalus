@@ -28,7 +28,13 @@
 #     -e GRAFANA_SERVICE_ACCOUNT_TOKEN={TOKEN} \
 #     docker.io/grafana/mcp-grafana -t stdio
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   # ── Container liveness metric (IMPROVEMENTS #4) ─────────────────────────
@@ -55,7 +61,13 @@ let
 
   livenessScript = pkgs.writeShellScript "container-up-export" ''
     set -eu
-    export PATH=${lib.makeBinPath [ pkgs.podman pkgs.coreutils pkgs.gnugrep ]}
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.podman
+        pkgs.coreutils
+        pkgs.gnugrep
+      ]
+    }
     tmp="${textfileDir}/container_up.prom.$$"
     # One podman call; each declared name is 1 iff it appears in `ps`.
     running=$(podman ps --format '{{.Names}}' || true)
@@ -73,24 +85,32 @@ let
   '';
 
   baseScrapes = [
-    { job_name = "prometheus";
-      static_configs = [ { targets = [ "prometheus:9090" ]; } ]; }
+    {
+      job_name = "prometheus";
+      static_configs = [ { targets = [ "prometheus:9090" ]; } ];
+    }
 
-    { job_name = "node_exporter";
-      static_configs = [ { targets = [ "host.containers.internal:9100" ]; } ]; }
+    {
+      job_name = "node_exporter";
+      static_configs = [ { targets = [ "host.containers.internal:9100" ]; } ];
+    }
 
-    { job_name = "cadvisor";
-      static_configs = [ { targets = [ "cadvisor:8080" ]; } ]; }
+    {
+      job_name = "cadvisor";
+      static_configs = [ { targets = [ "cadvisor:8080" ]; } ];
+    }
   ];
 
   # JSON is a YAML 1.1 superset — toJSON sidesteps quoting/escape pitfalls.
-  prometheusConfig = pkgs.writeText "prometheus.yml" (builtins.toJSON {
-    global = {
-      scrape_interval = "15s";
-      evaluation_interval = "15s";
-    };
-    scrape_configs = baseScrapes ++ config.myStack.prometheusScrapes;
-  });
+  prometheusConfig = pkgs.writeText "prometheus.yml" (
+    builtins.toJSON {
+      global = {
+        scrape_interval = "15s";
+        evaluation_interval = "15s";
+      };
+      scrape_configs = baseScrapes ++ config.myStack.prometheusScrapes;
+    }
+  );
 
   # /etc/prometheus must be a dir (rule files land there too). Single
   # generated yml wrapped in a dir so alert_rules.yml can be added later
@@ -109,15 +129,25 @@ let
       mkdir -p $out
       cp -r ${./assets/dashboards}/. $out/
     ''
-    + lib.concatStringsSep "\n" (lib.mapAttrsToList (name: content:
-      "cp ${pkgs.writeText "${name}.json" content} $out/${name}.json"
-    ) config.myStack.grafanaDashboards)
+    + lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (
+        name: content: "cp ${pkgs.writeText "${name}.json" content} $out/${name}.json"
+      ) config.myStack.grafanaDashboards
+    )
     + "\n"
-    + lib.concatStringsSep "\n" (lib.mapAttrsToList (folder: dashboards: ''
-      mkdir -p "$out/${folder}"
-    '' + lib.concatStringsSep "\n" (lib.mapAttrsToList (name: content:
-      "cp ${pkgs.writeText "${name}.json" content} \"$out/${folder}/${name}.json\""
-    ) dashboards)) config.myStack.grafanaDashboardsByFolder)
+    + lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (
+        folder: dashboards:
+        ''
+          mkdir -p "$out/${folder}"
+        ''
+        + lib.concatStringsSep "\n" (
+          lib.mapAttrsToList (
+            name: content: "cp ${pkgs.writeText "${name}.json" content} \"$out/${folder}/${name}.json\""
+          ) dashboards
+        )
+      ) config.myStack.grafanaDashboardsByFolder
+    )
   );
 in
 {
@@ -125,9 +155,9 @@ in
   # /run/secrets/grafana-env at activation. Edit with `sops env.sops`.
   sops.secrets."grafana-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   # Persistent textfile-collector dir. Owned by santiago so the rootless
@@ -143,12 +173,18 @@ in
   # podman socket; writes the .prom file node-exporter serves.
   systemd.services.container-up-exporter = {
     description = "Export container_up{name} liveness to node-exporter textfile";
-    after = [ "podman.service" "systemd-tmpfiles-setup.service" ];
+    after = [
+      "podman.service"
+      "systemd-tmpfiles-setup.service"
+    ];
     wants = [ "systemd-tmpfiles-setup.service" ];
     serviceConfig = {
       Type = "oneshot";
       User = "santiago";
-      Environment = [ "HOME=/home/santiago" "XDG_RUNTIME_DIR=/run/user/1000" ];
+      Environment = [
+        "HOME=/home/santiago"
+        "XDG_RUNTIME_DIR=/run/user/1000"
+      ];
       ExecStart = livenessScript;
     };
   };
@@ -161,10 +197,10 @@ in
   };
 
   myStack.containerNetworks = {
-    prometheus    = "monitoring";
-    grafana       = "monitoring";
-    cadvisor      = "monitoring";
-    node-exporter = null;        # host net — see comment on container below
+    prometheus = "monitoring";
+    grafana = "monitoring";
+    cadvisor = "monitoring";
+    node-exporter = null; # host net — see comment on container below
   };
 
   myStack.webApps = {
@@ -235,7 +271,7 @@ in
       # nothing. Override to UID 0 → host santiago, who owns the data dir.
       "--user=0:0"
       "--network=monitoring-net"
-      "--network=traefik-net"  # scrape migrated stacks + traefik dials by DNS
+      "--network=traefik-net" # scrape migrated stacks + traefik dials by DNS
     ];
   };
 

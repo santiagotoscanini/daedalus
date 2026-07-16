@@ -26,16 +26,16 @@
 # unhealthy leaves the unit failed (and the new image running — there is no
 # auto-rollback). See stacks/apps/apps.nix + assets/deploy.sh.
 
-{ ... }:
+_:
 
 {
   myStack.apps.anansi = {
     postgres.enable = true;
-    stage          = "live";
+    stage = "live";
 
     homepage = {
       description = "Anansi — task-tracking experiment";
-      icon        = "mdi-spider-#f59e0b";
+      icon = "mdi-spider-#f59e0b";
     };
   };
 
@@ -62,7 +62,7 @@
     # netns; traefik reaches the UI via the host port gluetun publishes.
     egress = {
       container = "gluetun-ipcrawl";
-      hostPort  = 3100;
+      hostPort = 3100;
     };
 
     # LAN-only. This is a catalogue of other people's exposed webcams;
@@ -114,7 +114,7 @@
 
     homepage = {
       description = "ipcrawl — exposed-webcam catalogue (Shodan)";
-      icon        = "mdi-cctv-#38bdf8";
+      icon = "mdi-cctv-#38bdf8";
     };
   };
 }

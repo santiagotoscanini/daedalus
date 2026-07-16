@@ -38,34 +38,40 @@
 # don't wipe the uptime history. LAN-only (status.toscanini.me); no
 # exposeRemotely.
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   # One probe per published web app, derived from the merged webApps set.
-  endpoints = lib.mapAttrsToList
-    (name: w: {
-      inherit name;
-      group = "web-apps";
-      url = "https://${w.hostname}";
-      interval = "60s";
-      conditions = [
-        "[STATUS] < 500"
-        "[CERTIFICATE_EXPIRATION] > 168h"
-      ];
-    })
-    config.myStack.webApps;
+  endpoints = lib.mapAttrsToList (name: w: {
+    inherit name;
+    group = "web-apps";
+    url = "https://${w.hostname}";
+    interval = "60s";
+    conditions = [
+      "[STATUS] < 500"
+      "[CERTIFICATE_EXPIRATION] > 168h"
+    ];
+  }) config.myStack.webApps;
 
   # gatus reads YAML; JSON is a valid subset, so toJSON avoids quoting pain.
-  gatusConfig = pkgs.writeText "gatus.yaml" (builtins.toJSON {
-    web.port = 8080;
-    storage = {
-      type = "sqlite";
-      path = "/data/data.db";
-    };
-    metrics = true;
-    ui.title = "s2-server · status";
-    inherit endpoints;
-  });
+  gatusConfig = pkgs.writeText "gatus.yaml" (
+    builtins.toJSON {
+      web.port = 8080;
+      storage = {
+        type = "sqlite";
+        path = "/data/data.db";
+      };
+      metrics = true;
+      ui.title = "s2-server · status";
+      inherit endpoints;
+    }
+  );
 in
 {
   myStack.containerNetworks.gatus = "traefik";
@@ -79,18 +85,22 @@ in
 
   # Prometheus reaches gatus by container DNS on traefik-net. gatus exports
   # results_* series (per-endpoint success, response time, cert expiry).
-  myStack.prometheusScrapes = [{
-    job_name = "gatus";
-    static_configs = [{ targets = [ "gatus:8080" ]; }];
-  }];
+  myStack.prometheusScrapes = [
+    {
+      job_name = "gatus";
+      static_configs = [ { targets = [ "gatus:8080" ]; } ];
+    }
+  ];
 
-  myStack.homepageServices."Monitoring" = [{
-    name = "Gatus";
-    href = "https://status.toscanini.me";
-    description = "Outside-in uptime + cert expiry";
-    icon = "gatus.png";
-    siteMonitor = "http://gatus:8080";
-  }];
+  myStack.homepageServices."Monitoring" = [
+    {
+      name = "Gatus";
+      href = "https://status.toscanini.me";
+      description = "Outside-in uptime + cert expiry";
+      icon = "gatus.png";
+      siteMonitor = "http://gatus:8080";
+    }
+  ];
 
   virtualisation.oci-containers.containers.gatus = mkRootlessContainer {
     image = "docker.io/twinproduction/gatus:v5.36.0";

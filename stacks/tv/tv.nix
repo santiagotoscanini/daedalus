@@ -16,7 +16,12 @@
 # only shows the private key ONCE at export — if you lose this file,
 # you must create a fresh export, not recover.
 
-{ config, lib, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  mkRootlessContainer,
+  ...
+}:
 
 {
   # ProtonVPN WireGuard config for gluetun — sops-encrypted and IN THE
@@ -25,30 +30,30 @@
   # path inside the /gluetun dir mount.
   sops.secrets."tv-wg0" = {
     sopsFile = ./wg0.conf.sops;
-    format   = "binary";
-    owner    = "santiago";
+    format = "binary";
+    owner = "santiago";
   };
 
   # NZBGET_USER + NZBGET_PASS: sops-encrypted env.sops, decrypted to
   # /run/secrets/nzbget-env at activation. Edit with `sops env.sops`.
   sops.secrets."nzbget-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   myStack.containerNetworks = {
-    gluetun          = null;
-    qbittorrent      = null;
-    nzbget           = null;
-    flaresolverr     = null;
-    prowlarr         = null;
-    radarr           = null;
-    sonarr           = null;
-    bazarr           = null;
-    gluetun-exporter = null;   # shares gluetun's netns
-    jellyfin         = "traefik";
+    gluetun = null;
+    qbittorrent = null;
+    nzbget = null;
+    flaresolverr = null;
+    prowlarr = null;
+    radarr = null;
+    sonarr = null;
+    bazarr = null;
+    gluetun-exporter = null; # shares gluetun's netns
+    jellyfin = "traefik";
   };
 
   # Jellyfin is bridge-routed. The 6 gluetun-netns UIs use explicit
@@ -56,165 +61,174 @@
   # gluetun on traefik-net would mix VPN-exit and bridge traffic.
   myStack.webApps = {
     jellyfin = {
-      hostname    = "jellyfin.toscanini.me";
+      hostname = "jellyfin.toscanini.me";
       serviceName = "jellyfin";
-      port        = 8096;
+      port = 8096;
     };
     sonarr = {
-      hostname   = "sonarr.toscanini.me";
-      port       = 8989;
+      hostname = "sonarr.toscanini.me";
+      port = 8989;
       serviceUrl = "http://host.containers.internal:8989";
     };
     radarr = {
-      hostname   = "radarr.toscanini.me";
-      port       = 7878;
+      hostname = "radarr.toscanini.me";
+      port = 7878;
       serviceUrl = "http://host.containers.internal:7878";
     };
     bazarr = {
-      hostname   = "bazarr.toscanini.me";
-      port       = 6767;
+      hostname = "bazarr.toscanini.me";
+      port = 6767;
       serviceUrl = "http://host.containers.internal:6767";
     };
     prowlarr = {
-      hostname   = "prowlarr.toscanini.me";
-      port       = 9696;
+      hostname = "prowlarr.toscanini.me";
+      port = 9696;
       serviceUrl = "http://host.containers.internal:9696";
     };
     qbittorrent = {
-      hostname   = "qbittorrent.toscanini.me";
-      port       = 8090;
+      hostname = "qbittorrent.toscanini.me";
+      port = 8090;
       serviceUrl = "http://host.containers.internal:8090";
     };
     nzbget = {
-      hostname   = "nzbget.toscanini.me";
-      port       = 6789;
+      hostname = "nzbget.toscanini.me";
+      port = 6789;
       serviceUrl = "http://host.containers.internal:6789";
     };
   };
 
   # wireguard.nix also declares wireguard/iptables modules; NixOS
   # merges the lists. `tun` is exclusive to gluetun (/dev/net/tun).
-  boot.kernelModules = [ "wireguard" "iptable_nat" "iptable_filter" "tun" ];
+  boot.kernelModules = [
+    "wireguard"
+    "iptable_nat"
+    "iptable_filter"
+    "tun"
+  ];
 
-  myStack.prometheusScrapes = [{
-    job_name = "gluetun";
-    static_configs = [{ targets = [ "host.containers.internal:8001" ]; }];
-  }];
+  myStack.prometheusScrapes = [
+    {
+      job_name = "gluetun";
+      static_configs = [ { targets = [ "host.containers.internal:8001" ]; } ];
+    }
+  ];
 
   myStack.homepageServices."Media" = lib.mkMerge [
     (lib.mkOrder 400 [
-    {
-      name = "Jellyfin";
-      href = "https://jellyfin.toscanini.me";
-      description = "Movies, TV, music — household media server";
-      icon = "jellyfin.png";
-      siteMonitor = "http://jellyfin:8096";
-      widget = {
-        type = "jellyfin";
-        url = "http://jellyfin:8096";
-        key = "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}";
-        enableBlocks = true;
-        enableNowPlaying = true;
-        enableUser = false;
-      };
-    }
-    {
-      name = "qBittorrent";
-      href = "https://qbittorrent.toscanini.me";
-      description = "BitTorrent (via gluetun/ProtonVPN)";
-      icon = "qbittorrent.png";
-      siteMonitor = "http://host.containers.internal:8090";
-      widget = {
-        # Direct host.containers.internal:8090 returns 403 to homepage's
-        # widget (CSRF / SameSite cookie). Go through traefik.
-        type = "qbittorrent";
-        url = "https://qbittorrent.toscanini.me";
-        username = "{{HOMEPAGE_VAR_QBT_USER}}";
-        password = "{{HOMEPAGE_VAR_QBT_PASS}}";
-        enableLeechProgress = true;
-      };
-    }
-    {
-      name = "NZBGet";
-      href = "https://nzbget.toscanini.me";
-      description = "Usenet downloader (via gluetun)";
-      icon = "nzbget.png";
-      siteMonitor = "https://nzbget.toscanini.me";
-      widget = {
-        # undici Connection: close bug — go through traefik.
-        type = "nzbget";
-        url = "https://nzbget.toscanini.me";
-        username = "{{HOMEPAGE_VAR_NZBGET_USER}}";
-        password = "{{HOMEPAGE_VAR_NZBGET_PASS}}";
-      };
-    }
+      {
+        name = "Jellyfin";
+        href = "https://jellyfin.toscanini.me";
+        description = "Movies, TV, music — household media server";
+        icon = "jellyfin.png";
+        siteMonitor = "http://jellyfin:8096";
+        widget = {
+          type = "jellyfin";
+          url = "http://jellyfin:8096";
+          key = "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}";
+          enableBlocks = true;
+          enableNowPlaying = true;
+          enableUser = false;
+        };
+      }
+      {
+        name = "qBittorrent";
+        href = "https://qbittorrent.toscanini.me";
+        description = "BitTorrent (via gluetun/ProtonVPN)";
+        icon = "qbittorrent.png";
+        siteMonitor = "http://host.containers.internal:8090";
+        widget = {
+          # Direct host.containers.internal:8090 returns 403 to homepage's
+          # widget (CSRF / SameSite cookie). Go through traefik.
+          type = "qbittorrent";
+          url = "https://qbittorrent.toscanini.me";
+          username = "{{HOMEPAGE_VAR_QBT_USER}}";
+          password = "{{HOMEPAGE_VAR_QBT_PASS}}";
+          enableLeechProgress = true;
+        };
+      }
+      {
+        name = "NZBGet";
+        href = "https://nzbget.toscanini.me";
+        description = "Usenet downloader (via gluetun)";
+        icon = "nzbget.png";
+        siteMonitor = "https://nzbget.toscanini.me";
+        widget = {
+          # undici Connection: close bug — go through traefik.
+          type = "nzbget";
+          url = "https://nzbget.toscanini.me";
+          username = "{{HOMEPAGE_VAR_NZBGET_USER}}";
+          password = "{{HOMEPAGE_VAR_NZBGET_PASS}}";
+        };
+      }
     ])
     (lib.mkOrder 600 [
-    {
-      name = "Sonarr";
-      href = "https://sonarr.toscanini.me";
-      description = "TV shows";
-      icon = "sonarr.png";
-      siteMonitor = "http://host.containers.internal:8989";
-      widget = {
-        type = "sonarr";
-        url = "http://host.containers.internal:8989";
-        key = "{{HOMEPAGE_VAR_SONARR_API_KEY}}";
-        enableQueue = true;
-      };
-    }
-    {
-      name = "Radarr";
-      href = "https://radarr.toscanini.me";
-      description = "Movies";
-      icon = "radarr.png";
-      siteMonitor = "http://host.containers.internal:7878";
-      widget = {
-        type = "radarr";
-        url = "http://host.containers.internal:7878";
-        key = "{{HOMEPAGE_VAR_RADARR_API_KEY}}";
-        enableQueue = true;
-      };
-    }
-    {
-      name = "Bazarr";
-      href = "https://bazarr.toscanini.me";
-      description = "Subtitles";
-      icon = "bazarr.png";
-      siteMonitor = "http://host.containers.internal:6767";
-      widget = {
-        type = "bazarr";
-        url = "http://host.containers.internal:6767";
-        key = "{{HOMEPAGE_VAR_BAZARR_API_KEY}}";
-      };
-    }
-    {
-      name = "Prowlarr";
-      href = "https://prowlarr.toscanini.me";
-      description = "Indexer aggregator";
-      icon = "prowlarr.png";
-      siteMonitor = "http://host.containers.internal:9696";
-      widget = {
-        type = "prowlarr";
-        url = "http://host.containers.internal:9696";
-        key = "{{HOMEPAGE_VAR_PROWLARR_API_KEY}}";
-      };
-    }
+      {
+        name = "Sonarr";
+        href = "https://sonarr.toscanini.me";
+        description = "TV shows";
+        icon = "sonarr.png";
+        siteMonitor = "http://host.containers.internal:8989";
+        widget = {
+          type = "sonarr";
+          url = "http://host.containers.internal:8989";
+          key = "{{HOMEPAGE_VAR_SONARR_API_KEY}}";
+          enableQueue = true;
+        };
+      }
+      {
+        name = "Radarr";
+        href = "https://radarr.toscanini.me";
+        description = "Movies";
+        icon = "radarr.png";
+        siteMonitor = "http://host.containers.internal:7878";
+        widget = {
+          type = "radarr";
+          url = "http://host.containers.internal:7878";
+          key = "{{HOMEPAGE_VAR_RADARR_API_KEY}}";
+          enableQueue = true;
+        };
+      }
+      {
+        name = "Bazarr";
+        href = "https://bazarr.toscanini.me";
+        description = "Subtitles";
+        icon = "bazarr.png";
+        siteMonitor = "http://host.containers.internal:6767";
+        widget = {
+          type = "bazarr";
+          url = "http://host.containers.internal:6767";
+          key = "{{HOMEPAGE_VAR_BAZARR_API_KEY}}";
+        };
+      }
+      {
+        name = "Prowlarr";
+        href = "https://prowlarr.toscanini.me";
+        description = "Indexer aggregator";
+        icon = "prowlarr.png";
+        siteMonitor = "http://host.containers.internal:9696";
+        widget = {
+          type = "prowlarr";
+          url = "http://host.containers.internal:9696";
+          key = "{{HOMEPAGE_VAR_PROWLARR_API_KEY}}";
+        };
+      }
     ])
   ];
 
-  myStack.homepageServices."Network" = [{
-    name = "Gluetun";
-    href = "https://qbittorrent.toscanini.me";
-    description = "ProtonVPN WireGuard tunnel (host netns for tv stack)";
-    icon = "gluetun.png";
-    siteMonitor = "http://host.containers.internal:8000/v1/publicip/ip";
-    widget = {
-      type = "gluetun";
-      url = "http://host.containers.internal:8000";
-      version = 2;
-    };
-  }];
+  myStack.homepageServices."Network" = [
+    {
+      name = "Gluetun";
+      href = "https://qbittorrent.toscanini.me";
+      description = "ProtonVPN WireGuard tunnel (host netns for tv stack)";
+      icon = "gluetun.png";
+      siteMonitor = "http://host.containers.internal:8000/v1/publicip/ip";
+      widget = {
+        type = "gluetun";
+        url = "http://host.containers.internal:8000";
+        version = 2;
+      };
+    }
+  ];
 
   virtualisation.oci-containers.containers.gluetun = mkRootlessContainer {
     image = "docker.io/qmcgaw/gluetun:latest@sha256:b0ee2135e6ba52ad3f102aae9663707cd1c9531485117067a380d3b2b6dd991d";
@@ -228,14 +242,14 @@
     # the host port); 8388/8888 (gluetun's built-in shadowsocks/http
     # proxy, unused).
     ports = [
-      "8090:8090"       # qbittorrent web UI
-      "6789:6789"       # nzbget web UI
-      "9696:9696"       # prowlarr web UI
-      "7878:7878"       # radarr web UI
-      "8989:8989"       # sonarr web UI
-      "6767:6767"       # bazarr web UI
-      "8001:8001"       # gluetun-exporter (shares this netns)
-      "8000:8000"       # gluetun HTTP control server
+      "8090:8090" # qbittorrent web UI
+      "6789:6789" # nzbget web UI
+      "9696:9696" # prowlarr web UI
+      "7878:7878" # radarr web UI
+      "8989:8989" # sonarr web UI
+      "6767:6767" # bazarr web UI
+      "8001:8001" # gluetun-exporter (shares this netns)
+      "8000:8000" # gluetun HTTP control server
     ];
 
     volumes = [

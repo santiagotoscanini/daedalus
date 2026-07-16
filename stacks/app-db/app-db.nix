@@ -51,27 +51,33 @@
 # one-time check that its driver is pooler-aware (Drizzle/Prisma/
 # postgres-js all support it via a flag).
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   cfg = config.myStack.appDatabases;
 
-  activeApps   = lib.attrNames cfg;
-  enabled      = activeApps != [ ];
+  activeApps = lib.attrNames cfg;
+  enabled = activeApps != [ ];
 
   # App names land as postgres role + database identifiers, the LAN
   # hostname `pg-<name>.toscanini.me`, the env file path, etc. Force a
   # narrow shape so we don't have to defend any of those downstream.
-  nameRegex    = "[a-z][a-z0-9_]*";
+  nameRegex = "[a-z][a-z0-9_]*";
 
-  envBase      = "/etc/nixos/stacks/app-db/secrets";
-  clusterEnv   = "${envBase}/cluster/env";
-  appEnvFile   = name: "${envBase}/${name}/env";
+  envBase = "/etc/nixos/stacks/app-db/secrets";
+  clusterEnv = "${envBase}/cluster/env";
+  appEnvFile = name: "${envBase}/${name}/env";
 
-  hostRoot     = "/home/santiago/selfhost/app-db";
-  dataDir      = "${hostRoot}/postgres";
+  hostRoot = "/home/santiago/selfhost/app-db";
+  dataDir = "${hostRoot}/postgres";
 
-  pgImage      = "docker.io/library/postgres:18.4-alpine";
+  pgImage = "docker.io/library/postgres:18.4-alpine";
 
   # The bash body lives at assets/bootstrap.sh (shellcheckable
   # standalone). This wrapper exports the four parameters it reads
@@ -118,7 +124,7 @@ in
     # Catch garbage names at build time, not at first podman exec.
     assertions = map (n: {
       assertion = builtins.match nameRegex n != null;
-      message   = ''
+      message = ''
         myStack.appDatabases."${n}": invalid app name.
         Must match ${nameRegex} — used as the postgres role,
         database, and env-file directory.
@@ -142,15 +148,15 @@ in
     # existing `traefikStaticRules` escape hatch (same mechanism
     # nextcloud's dual-router uses). traefik.nix gates the :5432
     # entrypoint + firewall on `myStack.appDatabases != { }`.
-    myStack.traefikStaticRules."postgres-tcp.yml" =
-      builtins.readFile ./assets/traefik-tcp.yml;
+    myStack.traefikStaticRules."postgres-tcp.yml" = builtins.readFile ./assets/traefik-tcp.yml;
     myStack.dnsHosts = [ "192.168.0.2 postgres.toscanini.me" ];
 
     systemd.tmpfiles.rules = [
       "d ${hostRoot}                  0755 santiago users  -"
       "d ${dataDir}                   0700 100069   100069 -"
       "d ${envBase}/cluster           0700 santiago users  -"
-    ] ++ (map (n: "d ${envBase}/${n}  0700 santiago users  -") activeApps);
+    ]
+    ++ (map (n: "d ${envBase}/${n}  0700 santiago users  -") activeApps);
 
     # Cluster bootstrap (one-shot: generate superuser POSTGRES_PASSWORD)
     # + per-app bootstrap services (idempotent SQL: materialize role +
@@ -160,15 +166,18 @@ in
       {
         "pg-cluster-bootstrap" = {
           description = "Bootstrap pg cluster: generate superuser POSTGRES_PASSWORD on first boot";
-          before      = [ "podman-pg.service" ];
-          wantedBy    = [ "podman-pg.service" ];
-          after       = [ "local-fs.target" ];
-          path        = [ pkgs.openssl pkgs.coreutils ];
+          before = [ "podman-pg.service" ];
+          wantedBy = [ "podman-pg.service" ];
+          after = [ "local-fs.target" ];
+          path = [
+            pkgs.openssl
+            pkgs.coreutils
+          ];
           serviceConfig = {
-            Type            = "oneshot";
+            Type = "oneshot";
             RemainAfterExit = true;
-            Restart         = "on-failure";
-            RestartSec      = "5s";
+            Restart = "on-failure";
+            RestartSec = "5s";
           };
           script = ''
             set -eu
@@ -185,60 +194,74 @@ in
 
       # Per-app bootstrap services: SQL-driven role+db materialization.
       # Run as santiago so we can `podman exec` into rootless pg.
-      (lib.listToAttrs (map (name:
-        lib.nameValuePair "app-db-${name}-bootstrap" {
-          description = "Materialize role + database `${name}` on shared pg cluster";
-          before      = [ "podman-app-${name}.service" ];
-          wantedBy    = [ "podman-app-${name}.service" ];
-          after       = [ "podman-pg.service" ];
-          wants       = [ "podman-pg.service" ];
-          path        = [ pkgs.openssl pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.podman ];
-          serviceConfig = {
-            Type            = "oneshot";
-            RemainAfterExit = true;
-            User            = "santiago";
-            Environment     = "XDG_RUNTIME_DIR=/run/user/1000";
-            Restart         = "on-failure";
-            RestartSec      = "5s";
-          };
-          script = perAppBootstrapScript name;
-        }
-      ) activeApps))
+      (lib.listToAttrs (
+        map (
+          name:
+          lib.nameValuePair "app-db-${name}-bootstrap" {
+            description = "Materialize role + database `${name}` on shared pg cluster";
+            before = [ "podman-app-${name}.service" ];
+            wantedBy = [ "podman-app-${name}.service" ];
+            after = [ "podman-pg.service" ];
+            wants = [ "podman-pg.service" ];
+            path = [
+              pkgs.openssl
+              pkgs.coreutils
+              pkgs.gnugrep
+              pkgs.gnused
+              pkgs.podman
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              User = "santiago";
+              Environment = "XDG_RUNTIME_DIR=/run/user/1000";
+              Restart = "on-failure";
+              RestartSec = "5s";
+            };
+            script = perAppBootstrapScript name;
+          }
+        ) activeApps
+      ))
     ];
 
-    virtualisation.oci-containers.containers."pg" =
-      mkRootlessContainer {
-        image            = pgImage;
-        environmentFiles = [ clusterEnv ];
-        environment = {
-          # Postgres 18 default PGDATA is /var/lib/postgresql/<major>/docker
-          # for pg_upgrade ergonomics; we mount at the legacy path and pin
-          # PGDATA so initdb doesn't bail with "unused mount/volume".
-          PGDATA = "/var/lib/postgresql/data";
-        };
-        volumes = [ "${dataDir}:/var/lib/postgresql/data" ];
-        cmd = [
-          "postgres"
-          "-c" "shared_buffers=256MB"
-          "-c" "max_connections=200"
-          "-c" "work_mem=8MB"
-          "-c" "maintenance_work_mem=64MB"
-          "-c" "effective_cache_size=1GB"
-          "-c" "log_min_messages=warning"
-        ];
-        extraOptions = [
-          # Primary bridge: app containers dial `pg` here for the
-          # in-cluster DATABASE_URL (postgresql://...@pg:5432/<db>).
-          "--network=app-db-net"
-          # Secondary bridge: traefik (on traefik-net) dials `pg:5432`
-          # for the TCP/SNI route that exposes the cluster on the LAN
-          # as `pg-<name>.toscanini.me:5432`. Without this, traefik's
-          # backend lookup fails: `dial tcp: lookup pg ... no such host`.
-          "--network=traefik-net"
-          "--cpus=2"
-          "--memory=2g"
-          "--pids-limit=500"
-        ];
+    virtualisation.oci-containers.containers."pg" = mkRootlessContainer {
+      image = pgImage;
+      environmentFiles = [ clusterEnv ];
+      environment = {
+        # Postgres 18 default PGDATA is /var/lib/postgresql/<major>/docker
+        # for pg_upgrade ergonomics; we mount at the legacy path and pin
+        # PGDATA so initdb doesn't bail with "unused mount/volume".
+        PGDATA = "/var/lib/postgresql/data";
       };
+      volumes = [ "${dataDir}:/var/lib/postgresql/data" ];
+      cmd = [
+        "postgres"
+        "-c"
+        "shared_buffers=256MB"
+        "-c"
+        "max_connections=200"
+        "-c"
+        "work_mem=8MB"
+        "-c"
+        "maintenance_work_mem=64MB"
+        "-c"
+        "effective_cache_size=1GB"
+        "-c"
+        "log_min_messages=warning"
+      ];
+      extraOptions = [
+        # Primary bridge: app containers dial `pg` here for the
+        # in-cluster DATABASE_URL (postgresql://...@pg:5432/<db>).
+        "--network=app-db-net"
+        # Secondary bridge: traefik (on traefik-net) dials `pg:5432`
+        # for the TCP/SNI route that exposes the cluster on the LAN
+        # as `pg-<name>.toscanini.me:5432`. Without this, traefik's
+        # backend lookup fails: `dial tcp: lookup pg ... no such host`.
+        "--network=traefik-net"
+        "--cpus=2"
+        "--memory=2g"
+        "--pids-limit=500"
+      ];
+    };
   };
 }

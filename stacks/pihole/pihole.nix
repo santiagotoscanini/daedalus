@@ -13,7 +13,12 @@
 # Per-stack DNS entries flow in via `myStack.dnsHosts`. The literal
 # list below catches non-stack hosts.
 
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   hostEntries = config.myStack.dnsHosts ++ [
@@ -21,8 +26,7 @@ let
   ];
 
   # Hostname half of each entry — used for the per-name `local=` lines below.
-  localOnlyHostnames =
-    map (e: lib.elemAt (lib.splitString " " e) 1) hostEntries;
+  localOnlyHostnames = map (e: lib.elemAt (lib.splitString " " e) 1) hostEntries;
 in
 {
   # Native NixOS service, not a container — traefik dials it through
@@ -33,31 +37,36 @@ in
     serviceUrl = "http://host.containers.internal:8080";
   };
 
-  myStack.homepageServices."Network" = [{
-    name = "Pi-hole";
-    href = "https://pihole.toscanini.me";
-    description = "LAN DNS, DHCP, ad-blocking";
-    icon = "pi-hole.png";
-    siteMonitor = "https://pihole.toscanini.me";
-    widget = {
-      type = "pihole";
-      url = "http://host.containers.internal:8080";
-      version = 6;
-      key = "{{HOMEPAGE_VAR_PIHOLE_KEY}}";
-    };
-  }];
+  myStack.homepageServices."Network" = [
+    {
+      name = "Pi-hole";
+      href = "https://pihole.toscanini.me";
+      description = "LAN DNS, DHCP, ad-blocking";
+      icon = "pi-hole.png";
+      siteMonitor = "https://pihole.toscanini.me";
+      widget = {
+        type = "pihole";
+        url = "http://host.containers.internal:8080";
+        version = 6;
+        key = "{{HOMEPAGE_VAR_PIHOLE_KEY}}";
+      };
+    }
+  ];
 
   services.pihole-ftl = {
     enable = true;
-    openFirewallDNS = true;       # 53 TCP + UDP
-    openFirewallDHCP = true;      # 67 UDP
+    openFirewallDNS = true; # 53 TCP + UDP
+    openFirewallDHCP = true; # 67 UDP
     openFirewallWebserver = true; # 8080 TCP
 
     settings = {
       dns = {
         interface = "enp3s0";
         listeningMode = "ALL";
-        upstreams = [ "8.8.8.8" "8.8.4.4" ];
+        upstreams = [
+          "8.8.8.8"
+          "8.8.4.4"
+        ];
         bogusPriv = false;
         hosts = hostEntries;
         domain = {
@@ -132,7 +141,7 @@ in
 
   services.pihole-web = {
     enable = true;
-    ports = [ 8080 ];   # HTTP only — traefik terminates TLS on 443
+    ports = [ 8080 ]; # HTTP only — traefik terminates TLS on 443
     hostName = "pihole.toscanini.me";
   };
 
@@ -152,8 +161,14 @@ in
   # pihole-ready.service instead of pihole-ftl.service.
   systemd.services.pihole-ready = {
     description = "Gate: pi-hole is actually answering DNS queries";
-    after = [ "pihole-ftl.service" "network-online.target" ];
-    wants = [ "pihole-ftl.service" "network-online.target" ];
+    after = [
+      "pihole-ftl.service"
+      "network-online.target"
+    ];
+    wants = [
+      "pihole-ftl.service"
+      "network-online.target"
+    ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";

@@ -10,20 +10,26 @@
 # `env.sops` (sops) as HOMEPAGE_VAR_* keys — homepage substitutes
 # `{{HOMEPAGE_VAR_FOO}}` placeholders in any rendered YAML at read time.
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   # Render myStack.homepageServices into homepage's services.yaml shape:
   # a list of single-key attrsets (group → [service]), each service a
   # single-key attrset (name → properties). YAML is JSON-superset, so
   # toJSON suffices.
-  servicesYaml = pkgs.writeText "services.yaml" (builtins.toJSON (
-    lib.mapAttrsToList (groupName: services: {
-      "${groupName}" = map
-        (svc: { "${svc.name}" = removeAttrs svc [ "name" ]; })
-        services;
-    }) config.myStack.homepageServices
-  ));
+  servicesYaml = pkgs.writeText "services.yaml" (
+    builtins.toJSON (
+      lib.mapAttrsToList (groupName: services: {
+        "${groupName}" = map (svc: { "${svc.name}" = removeAttrs svc [ "name" ]; }) services;
+      }) config.myStack.homepageServices
+    )
+  );
 
   # Tabs render in the order tab names FIRST appear in `layout:`. Since
   # nix `toJSON` of an attrset sorts keys alphabetically, we instead
@@ -31,23 +37,28 @@ let
   # with groups sorted by (tab position in `tabOrder`, group name).
   # That way the first tab visible to the user is `tabOrder[0]`
   # regardless of which group introduces it.
-  tabOrder = [ "Home" "Apps" "Infra" ];
-  tabIdx = tab:
-    let i = lib.lists.findFirstIndex (t: t == tab) null tabOrder;
-    in if i == null then 999 else i;
-  sortedGroupNames = lib.sort
-    (a: b:
-      let
-        tA = tabIdx (config.myStack.homepageLayout.${a}.tab or "");
-        tB = tabIdx (config.myStack.homepageLayout.${b}.tab or "");
-      in if tA != tB then tA < tB else a < b)
-    (lib.attrNames config.myStack.homepageLayout);
-  layoutList = map
-    (n: { "${n}" = config.myStack.homepageLayout.${n}; })
-    sortedGroupNames;
+  tabOrder = [
+    "Home"
+    "Apps"
+    "Infra"
+  ];
+  tabIdx =
+    tab:
+    let
+      i = lib.lists.findFirstIndex (t: t == tab) null tabOrder;
+    in
+    if i == null then 999 else i;
+  sortedGroupNames = lib.sort (
+    a: b:
+    let
+      tA = tabIdx (config.myStack.homepageLayout.${a}.tab or "");
+      tB = tabIdx (config.myStack.homepageLayout.${b}.tab or "");
+    in
+    if tA != tB then tA < tB else a < b
+  ) (lib.attrNames config.myStack.homepageLayout);
+  layoutList = map (n: { "${n}" = config.myStack.homepageLayout.${n}; }) sortedGroupNames;
   settingsYaml = pkgs.writeText "settings.yaml" (
-    builtins.readFile ./assets/settings.yaml
-    + "\nlayout: " + builtins.toJSON layoutList + "\n"
+    builtins.readFile ./assets/settings.yaml + "\nlayout: " + builtins.toJSON layoutList + "\n"
   );
 in
 
@@ -56,9 +67,9 @@ in
   # /run/secrets/homepage-env at activation. Edit with `sops env.sops`.
   sops.secrets."homepage-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   myStack.containerNetworks.homepage = "traefik";
@@ -74,12 +85,48 @@ in
   # that introduces a NEW group is responsible for adding its own
   # layout entry — apps.nix does this dynamically per-app.
   myStack.homepageLayout = {
-    Media         = { style = "row"; columns = 4; icon = "mdi-play-circle-#94a3b8"; useEqualHeights = true; tab = "Home"; };
-    "Cloud & AI"  = { style = "row"; columns = 4; icon = "mdi-cloud-#94a3b8";       useEqualHeights = true; tab = "Home"; };
-    Productivity  = { style = "row"; columns = 4; icon = "mdi-briefcase-#94a3b8";   useEqualHeights = true; tab = "Home"; };
-    Backend       = { style = "row"; columns = 4; icon = "mdi-database-cog-#94a3b8"; useEqualHeights = true; tab = "Apps"; };
-    Network       = { style = "row"; columns = 5; icon = "mdi-lan-#94a3b8";         useEqualHeights = true; tab = "Infra"; };
-    Monitoring    = { style = "row"; columns = 4; icon = "mdi-chart-areaspline-#94a3b8"; useEqualHeights = true; tab = "Infra"; };
+    Media = {
+      style = "row";
+      columns = 4;
+      icon = "mdi-play-circle-#94a3b8";
+      useEqualHeights = true;
+      tab = "Home";
+    };
+    "Cloud & AI" = {
+      style = "row";
+      columns = 4;
+      icon = "mdi-cloud-#94a3b8";
+      useEqualHeights = true;
+      tab = "Home";
+    };
+    Productivity = {
+      style = "row";
+      columns = 4;
+      icon = "mdi-briefcase-#94a3b8";
+      useEqualHeights = true;
+      tab = "Home";
+    };
+    Backend = {
+      style = "row";
+      columns = 4;
+      icon = "mdi-database-cog-#94a3b8";
+      useEqualHeights = true;
+      tab = "Apps";
+    };
+    Network = {
+      style = "row";
+      columns = 5;
+      icon = "mdi-lan-#94a3b8";
+      useEqualHeights = true;
+      tab = "Infra";
+    };
+    Monitoring = {
+      style = "row";
+      columns = 4;
+      icon = "mdi-chart-areaspline-#94a3b8";
+      useEqualHeights = true;
+      tab = "Infra";
+    };
   };
 
   # External / ambient network links — not tied to any container, so

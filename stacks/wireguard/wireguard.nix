@@ -23,9 +23,9 @@
   # /run/secrets/wireguard-env at activation. Edit with `sops env.sops`.
   sops.secrets."wireguard-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   myStack.containerNetworks.wireguard = "traefik";
@@ -36,31 +36,39 @@
   };
 
   # tv stack's gluetun adds the same modules; NixOS merges the lists.
-  boot.kernelModules = [ "wireguard" "iptable_nat" "iptable_filter" ];
+  boot.kernelModules = [
+    "wireguard"
+    "iptable_nat"
+    "iptable_filter"
+  ];
 
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
-  myStack.prometheusScrapes = [{
-    job_name = "wireguard";
-    metrics_path = "/metrics/prometheus";
-    static_configs = [{ targets = [ "wireguard:51821" ]; }];
-  }];
+  myStack.prometheusScrapes = [
+    {
+      job_name = "wireguard";
+      metrics_path = "/metrics/prometheus";
+      static_configs = [ { targets = [ "wireguard:51821" ]; } ];
+    }
+  ];
 
-  myStack.homepageServices."Network" = [{
-    name = "WireGuard";
-    href = "https://wireguard.toscanini.me";
-    description = "VPN admin (wg-easy v15+)";
-    icon = "wireguard.png";
-    siteMonitor = "http://wireguard:51821";
-    widget = {
-      type = "wgeasy";
-      url = "http://wireguard:51821";
-      version = 2;
-      username = "{{HOMEPAGE_VAR_WGEASY_USER}}";
-      password = "{{HOMEPAGE_VAR_WGEASY_PASS}}";
-      threshold = 2;
-    };
-  }];
+  myStack.homepageServices."Network" = [
+    {
+      name = "WireGuard";
+      href = "https://wireguard.toscanini.me";
+      description = "VPN admin (wg-easy v15+)";
+      icon = "wireguard.png";
+      siteMonitor = "http://wireguard:51821";
+      widget = {
+        type = "wgeasy";
+        url = "http://wireguard:51821";
+        version = 2;
+        username = "{{HOMEPAGE_VAR_WGEASY_USER}}";
+        password = "{{HOMEPAGE_VAR_WGEASY_PASS}}";
+        threshold = 2;
+      };
+    }
+  ];
 
   virtualisation.oci-containers.containers.wireguard = mkRootlessContainer {
     image = "ghcr.io/wg-easy/wg-easy:15.3.0@sha256:93bbd593e07bab98d02807a28770ac87ab6c48818e319e68c1f66561feb99876";

@@ -16,22 +16,25 @@
 # Gated behind `lib.mkIf enabled` — a no-op until at least one app has
 # `myStack.appDatabases.<name>.enable = true`.
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   enabled = config.myStack.appDatabases != { };
 
   clusterEnv = "/etc/nixos/stacks/app-db/secrets/cluster/env";
-  cfgDir     = "/run/pg-exporter-config";
+  cfgDir = "/run/pg-exporter-config";
   # postgres_exporter v0.18.1 only reads DATA_SOURCE_NAME from env,
   # not from a file env (no DATA_SOURCE_NAME_FILE support). So we
   # render the DSN as a KEY=VAL file and feed it via podman's
   # --env-file (oci-containers `environmentFiles`).
-  envFile    = "${cfgDir}/env";
+  envFile = "${cfgDir}/env";
 
-  # In-container UID 65534 (nobody, the user the postgres-exporter
-  # image runs as) → host UID 99999 + 65534 = 165533.
-  exporterHostUid = 165533;
 in
 {
   config = lib.mkIf enabled {
@@ -47,16 +50,23 @@ in
     # time. Atomic mv so the exporter never reads a half-written file.
     systemd.services."pg-exporter-config" = {
       description = "Render pg-exporter DSN from the cluster superuser env";
-      before      = [ "podman-pg-exporter.service" ];
-      wantedBy    = [ "podman-pg-exporter.service" ];
-      after       = [ "local-fs.target" "pg-cluster-bootstrap.service" ];
-      wants       = [ "pg-cluster-bootstrap.service" ];
-      path        = [ pkgs.coreutils pkgs.gnugrep pkgs.gnused ];
+      before = [ "podman-pg-exporter.service" ];
+      wantedBy = [ "podman-pg-exporter.service" ];
+      after = [
+        "local-fs.target"
+        "pg-cluster-bootstrap.service"
+      ];
+      wants = [ "pg-cluster-bootstrap.service" ];
+      path = [
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.gnused
+      ];
       serviceConfig = {
-        Type            = "oneshot";
+        Type = "oneshot";
         RemainAfterExit = true;
-        Restart         = "on-failure";
-        RestartSec      = "5s";
+        Restart = "on-failure";
+        RestartSec = "5s";
       };
       script = ''
         set -eu
@@ -75,39 +85,41 @@ in
       '';
     };
 
-    virtualisation.oci-containers.containers."pg-exporter" =
-      mkRootlessContainer {
-        image = "quay.io/prometheuscommunity/postgres-exporter:v0.20.1";
-        # DATA_SOURCE_NAME is read directly from podman's --env-file.
-        # The DSN file stays out of `podman inspect` output (env file
-        # contents aren't reflected in Config.Env when injected via
-        # --env-file).
-        environmentFiles = [ envFile ];
-        cmd = [
-          "--web.listen-address=:9187"
-          "--no-auto-discover-databases"
-          "--log.level=warn"
-        ];
-        extraOptions = [
-          "--network=app-db-net"
-          "--network=monitoring-net"
-          "--cpus=0.25"
-          "--memory=64m"
-          "--pids-limit=100"
-        ];
-      };
+    virtualisation.oci-containers.containers."pg-exporter" = mkRootlessContainer {
+      image = "quay.io/prometheuscommunity/postgres-exporter:v0.20.1";
+      # DATA_SOURCE_NAME is read directly from podman's --env-file.
+      # The DSN file stays out of `podman inspect` output (env file
+      # contents aren't reflected in Config.Env when injected via
+      # --env-file).
+      environmentFiles = [ envFile ];
+      cmd = [
+        "--web.listen-address=:9187"
+        "--no-auto-discover-databases"
+        "--log.level=warn"
+      ];
+      extraOptions = [
+        "--network=app-db-net"
+        "--network=monitoring-net"
+        "--cpus=0.25"
+        "--memory=64m"
+        "--pids-limit=100"
+      ];
+    };
 
     # Prometheus scrape: one job for the shared cluster. Per-database
     # metrics are broken out by the `datname` label automatically.
-    myStack.prometheusScrapes = [{
-      job_name = "pg";
-      static_configs = [{
-        targets = [ "pg-exporter:9187" ];
-      }];
-    }];
+    myStack.prometheusScrapes = [
+      {
+        job_name = "pg";
+        static_configs = [
+          {
+            targets = [ "pg-exporter:9187" ];
+          }
+        ];
+      }
+    ];
 
     # Per-app cluster dashboard.
-    myStack.grafanaDashboards."pg-overview" =
-      builtins.readFile ./assets/postgres.json;
+    myStack.grafanaDashboards."pg-overview" = builtins.readFile ./assets/postgres.json;
   };
 }

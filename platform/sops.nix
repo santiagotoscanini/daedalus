@@ -8,7 +8,7 @@
 # Rootless-podman note: secrets read by containers need
 # `owner = "santiago"` — podman runs as santiago and reads env files /
 # bind-mount sources with her uid before the userns remap.
-{ ... }:
+_:
 
 {
   # The host's decryption identity, derived from its SSH host key at

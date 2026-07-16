@@ -24,13 +24,19 @@
 
   boot.kernel.sysctl."kernel.perf_event_paranoid" = lib.mkDefault 0;
 
-  myStack.prometheusScrapes = [{
-    job_name = "intel-gpu";
-    static_configs = [{
-      targets = [ "intel-gpu-exporter:9100" ];
-      labels = { node = "s2-server"; };
-    }];
-  }];
+  myStack.prometheusScrapes = [
+    {
+      job_name = "intel-gpu";
+      static_configs = [
+        {
+          targets = [ "intel-gpu-exporter:9100" ];
+          labels = {
+            node = "s2-server";
+          };
+        }
+      ];
+    }
+  ];
 
   myStack.grafanaDashboards.intel-gpu = builtins.readFile ./assets/dashboard.json;
 

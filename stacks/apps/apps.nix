@@ -70,23 +70,29 @@
 #     <user-supplied static env>                       # via .env
 #   };
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   cfg = config.myStack.apps;
 
   appSecretsBase = "/etc/nixos/stacks/apps/secrets";
-  appDbEnvBase   = "/etc/nixos/stacks/app-db/secrets";
+  appDbEnvBase = "/etc/nixos/stacks/app-db/secrets";
 
   # Host tree backing `storage.enable`. One dir per app underneath.
-  appsDataRoot   = "/home/santiago/selfhost/apps";
+  appsDataRoot = "/home/santiago/selfhost/apps";
 
   # Classic PAT (read:packages) in podman auth.json form. Used both by the
   # container's implicit pull and by the deploy oneshot's explicit one. GHCR
   # private packages accept ONLY a classic PAT — fine-grained PATs and GitHub
   # App installation tokens are still rejected. When it expires, deploys fail
   # loudly rather than silently going stale.
-  ghcrAuthFile   = config.sops.secrets."ghcr-auth".path;
+  ghcrAuthFile = config.sops.secrets."ghcr-auth".path;
 
   # Last deploy result per app, `<digest> ok|failed`. systemd owns the dir
   # (StateDirectory below); the file is what keeps a failed deploy loud across
@@ -95,39 +101,42 @@ let
 
   # The box's static IP. The deploy health-check dials traefik directly rather
   # than trusting DNS, so a pi-hole hiccup can't read as a dead app.
-  lanIp          = "192.168.0.2";
+  lanIp = "192.168.0.2";
 
   # Capitalize first letter; used for the per-app homepage group.
-  capitalize = s:
-    (lib.toUpper (lib.substring 0 1 s))
-    + (lib.substring 1 (lib.stringLength s) s);
+  capitalize = s: (lib.toUpper (lib.substring 0 1 s)) + (lib.substring 1 (lib.stringLength s) s);
 
-  mkApp = name: app:
+  mkApp =
+    name: app:
     let
-      cName            = "app-${name}";
-      hostname         = "${name}.toscanini.me";
-      publicUrl        = "https://${hostname}";
+      cName = "app-${name}";
+      hostname = "${name}.toscanini.me";
+      publicUrl = "https://${hostname}";
 
       # Baseline (always-on) per-app secrets file.
-      appSecretsFile   = "${appSecretsBase}/${name}/env";
+      appSecretsFile = "${appSecretsBase}/${name}/env";
 
-      postgresEnabled  = app.postgres.enable;
-      appDbEnvFile     = "${appDbEnvBase}/${name}/env";
+      postgresEnabled = app.postgres.enable;
+      appDbEnvFile = "${appDbEnvBase}/${name}/env";
 
-      storageEnabled   = app.storage.enable;
-      storageHostPath  = app.storage.hostPath;
+      storageEnabled = app.storage.enable;
+      storageHostPath = app.storage.hostPath;
 
       # VPN egress: borrow a gluetun container's netns for ALL traffic
       # instead of joining traefik-net (see stacks/ipcrawl-vpn/). Guarded:
       # incompatible with postgres (a netns-borrowing container can't also
       # join the app-db bridge), and hostPort is mandatory when set.
       egressEnabled =
-        let e = app.egress.container != null; in
+        let
+          e = app.egress.container != null;
+        in
         lib.throwIf (e && postgresEnabled)
           "myStack.apps.${name}: `egress` cannot combine with `postgres.enable` — a container sharing gluetun's netns can't also join the app-db-net bridge."
-          (lib.throwIf (e && app.egress.hostPort == null)
-            "myStack.apps.${name}: `egress.container` is set but `egress.hostPort` is null — set the host port the netns owner publishes for this app."
-            e);
+          (
+            lib.throwIf (e && app.egress.hostPort == null)
+              "myStack.apps.${name}: `egress.container` is set but `egress.hostPort` is null — set the host port the netns owner publishes for this app."
+              e
+          );
 
       tileGroup = capitalize name;
 
@@ -138,7 +147,11 @@ let
       # header of deploy.sh.
       deployScript = pkgs.writeShellApplication {
         name = "app-${name}-deploy";
-        runtimeInputs = [ pkgs.curl pkgs.systemd pkgs.coreutils ];
+        runtimeInputs = [
+          pkgs.curl
+          pkgs.systemd
+          pkgs.coreutils
+        ];
         text = ''
           APP=${lib.escapeShellArg name}
           IMAGE=${lib.escapeShellArg app.image}
@@ -158,16 +171,19 @@ let
       };
 
       homepageTile = {
-        name        = name;
-        href        = publicUrl;
+        inherit name;
+        href = publicUrl;
         # traefik-net DNS by default; in egress mode the app isn't on any
         # bridge, so monitor the host port gluetun publishes instead.
-        siteMonitor = if egressEnabled
-                      then "http://host.containers.internal:${toString app.egress.hostPort}"
-                      else "http://${cName}:3000";
-        icon        = app.homepage.icon;
-      } // (lib.optionalAttrs (app.homepage.description != "") {
-        description = app.homepage.description;
+        siteMonitor =
+          if egressEnabled then
+            "http://host.containers.internal:${toString app.egress.hostPort}"
+          else
+            "http://${cName}:3000";
+        inherit (app.homepage) icon;
+      }
+      // (lib.optionalAttrs (app.homepage.description != "") {
+        inherit (app.homepage) description;
       });
 
       # service_name=<name> is set by alloy for both app-<name> AND
@@ -176,55 +192,60 @@ let
       # The user can filter to just one via the `component` label
       # (`app` for the Next.js container, `pg` for postgres).
       logsTile = {
-        name        = "Logs";
-        href        = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${name}/logs?from=now-15m&to=now&var-ds=loki-default&var-filters=service_name%7C%3D%7C${name}";
+        name = "Logs";
+        href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${name}/logs?from=now-15m&to=now&var-ds=loki-default&var-filters=service_name%7C%3D%7C${name}";
         description = "App + DB logs (Loki / Grafana Drilldown)";
-        icon        = "/icons/loki.png";
-        widget      = {
+        icon = "/icons/loki.png";
+        widget = {
           type = "customapi";
           # sum(count_over_time({service_name="<app>"}[1h])) → vector
           # with [ts, "<count>"] at data.result[0].value. Empty result
           # (no log lines in the last hour) renders blank.
           url = "http://loki:3100/loki/api/v1/query?query=sum%28count_over_time%28%7Bservice_name%3D%22${name}%22%7D%5B1h%5D%29%29%20or%20vector%280%29";
           refreshInterval = 60000;
-          mappings = [{
-            field = "data.result.0.value.1";
-            label = "Logs (1h)";
-            format = "number";
-          }];
+          mappings = [
+            {
+              field = "data.result.0.value.1";
+              label = "Logs (1h)";
+              format = "number";
+            }
+          ];
         };
       };
 
       repoTile = {
-        name        = "Repo";
-        href        = "https://github.com/santiagotoscanini/${name}";
+        name = "Repo";
+        href = "https://github.com/santiagotoscanini/${name}";
         description = "Source code (github.com/santiagotoscanini/${name})";
-        icon        = "mdi-github-#94a3b8";
+        icon = "mdi-github-#94a3b8";
       };
 
       # Per-app DB metrics dashboard (only when postgres is enabled).
       # Same shape as logsTile — direct link with `var-app=<name>` so
       # the dashboard template variable lands pre-filtered.
       dbTile = {
-        name        = "DB";
-        href        = "https://grafana.toscanini.me/d/pg-overview/postgres?orgId=1&var-app=${name}&refresh=30s";
+        name = "DB";
+        href = "https://grafana.toscanini.me/d/pg-overview/postgres?orgId=1&var-app=${name}&refresh=30s";
         description = "Postgres metrics — ${name} DB";
-        icon        = "/icons/postgres.png";
-        widget      = {
+        icon = "/icons/postgres.png";
+        widget = {
           type = "customapi";
           # Prometheus pg_database_size_bytes scraped from app-db's
           # postgres-exporter. Empty result (DB not yet created /
           # exporter not scraping) renders blank, which is fine.
           url = "http://prometheus:9090/api/v1/query?query=pg_database_size_bytes%7Bdatname%3D%22${name}%22%7D";
           refreshInterval = 60000;
-          mappings = [{
-            field = "data.result.0.value.1";
-            label = "Size";
-            format = "bytes";
-          }];
+          mappings = [
+            {
+              field = "data.result.0.value.1";
+              label = "Size";
+              format = "bytes";
+            }
+          ];
         };
       };
-    in {
+    in
+    {
       # Delegate per-app Postgres entirely to stacks/app-db/. The
       # presence of the key triggers role + database creation, the
       # per-app env file, AND the LAN TCP/SNI route + pi-hole entry
@@ -246,49 +267,56 @@ let
       # traefik-net, so traefik dials the host port gluetun publishes via
       # host.containers.internal — the same escape hatch the TV stack uses.
       myStack.webApps."${name}" = {
-        hostname       = hostname;
-        port           = 3000;
-        exposeRemotely = (app.stage == "live");
-      } // (if egressEnabled
-            then { serviceUrl = "http://host.containers.internal:${toString app.egress.hostPort}"; }
-            else { serviceName = cName; });
+        inherit hostname;
+        port = 3000;
+        exposeRemotely = app.stage == "live";
+      }
+      // (
+        if egressEnabled then
+          { serviceUrl = "http://host.containers.internal:${toString app.egress.hostPort}"; }
+        else
+          { serviceName = cName; }
+      );
 
       # Prometheus scrapes the app's own /metrics endpoint (when
       # prometheus.enable). Postgres metrics come from the single
       # shared `pg-exporter` declared in stacks/app-db/exporter.nix —
       # the dashboard breaks them out per-app via the `datname` label.
       # No per-app scrape entry here.
-      myStack.prometheusScrapes =
-        lib.optional app.prometheus.enable {
-          job_name = cName;
-          static_configs = [{
+      myStack.prometheusScrapes = lib.optional app.prometheus.enable {
+        job_name = cName;
+        static_configs = [
+          {
             targets = [ "${cName}:3000" ];
-            labels  = { app = name; };
-          }];
-          metrics_path = app.prometheus.path;
-        };
+            labels = {
+              app = name;
+            };
+          }
+        ];
+        metrics_path = app.prometheus.path;
+      };
 
       # Grafana dashboard in the "Apps" folder (when supplied).
-      myStack.grafanaDashboardsByFolder =
-        lib.optionalAttrs (app.dashboard != null) {
-          "Apps"."${cName}" =
-            lib.replaceStrings [ "%APP_NAME%" ] [ name ]
-              (builtins.readFile app.dashboard);
-        };
+      myStack.grafanaDashboardsByFolder = lib.optionalAttrs (app.dashboard != null) {
+        "Apps"."${cName}" = lib.replaceStrings [ "%APP_NAME%" ] [ name ] (builtins.readFile app.dashboard);
+      };
 
       # Homepage tile lands in the per-app section.
-      myStack.homepageServices."${tileGroup}" =
-        [ homepageTile repoTile logsTile ]
-        ++ (lib.optional postgresEnabled dbTile);
+      myStack.homepageServices."${tileGroup}" = [
+        homepageTile
+        repoTile
+        logsTile
+      ]
+      ++ (lib.optional postgresEnabled dbTile);
 
       # Per-group layout for the dynamically-named app group, so the
       # 3 or 4 tiles render in a row instead of stacking vertically.
       myStack.homepageLayout."${tileGroup}" = {
-        style           = "row";
-        columns         = if postgresEnabled then 4 else 3;
-        icon            = app.homepage.icon;
+        style = "row";
+        columns = if postgresEnabled then 4 else 3;
+        inherit (app.homepage) icon;
         useEqualHeights = true;
-        tab             = "Apps";
+        tab = "Apps";
       };
 
       # Persistent data dir. 0755 santiago:users — container UID 0 maps
@@ -321,15 +349,18 @@ let
       # the old AUTH_SECRET).
       systemd.services."app-${name}-secrets-bootstrap" = {
         description = "Bootstrap app-${name}: generate AUTH_SECRET on first boot";
-        before      = [ "podman-${cName}.service" ];
-        wantedBy    = [ "podman-${cName}.service" ];
-        after       = [ "local-fs.target" ];
-        path        = [ pkgs.openssl pkgs.coreutils ];
+        before = [ "podman-${cName}.service" ];
+        wantedBy = [ "podman-${cName}.service" ];
+        after = [ "local-fs.target" ];
+        path = [
+          pkgs.openssl
+          pkgs.coreutils
+        ];
         serviceConfig = {
-          Type            = "oneshot";
+          Type = "oneshot";
           RemainAfterExit = true;
-          Restart         = "on-failure";
-          RestartSec      = "5s";
+          Restart = "on-failure";
+          RestartSec = "5s";
         };
         script = ''
           set -eu
@@ -350,26 +381,33 @@ let
       # No RemainAfterExit — unlike every bootstrap oneshot here, this one has
       # to run again on every tick.
       systemd.services."app-${name}-deploy" = {
-        enable      = app.deploy.enable;
+        inherit (app.deploy) enable;
         description = "Redeploy app-${name} when a new image lands on ghcr.io";
         # linger-users gates /run/user/1000 → rootless podman → newuidmap.
-        after = [ "network-online.target" "linger-users.service" "podman-${cName}.service" ];
-        wants = [ "network-online.target" "linger-users.service" ];
+        after = [
+          "network-online.target"
+          "linger-users.service"
+          "podman-${cName}.service"
+        ];
+        wants = [
+          "network-online.target"
+          "linger-users.service"
+        ];
         serviceConfig = {
-          Type           = "oneshot";
+          Type = "oneshot";
           StateDirectory = "app-deploy";
-          ExecStart      = "${deployScript}/bin/app-${name}-deploy";
+          ExecStart = "${deployScript}/bin/app-${name}-deploy";
         };
       };
 
       systemd.timers."app-${name}-deploy" = {
-        enable      = app.deploy.enable;
+        inherit (app.deploy) enable;
         description = "Poll ghcr.io for a new app-${name} image";
-        wantedBy    = [ "timers.target" ];
+        wantedBy = [ "timers.target" ];
         timerConfig = {
-          OnCalendar         = app.deploy.interval;
-          Persistent         = true;  # catch up if the box was off
-          RandomizedDelaySec = 45;    # don't have every app hit ghcr on the same second
+          OnCalendar = app.deploy.interval;
+          Persistent = true; # catch up if the box was off
+          RandomizedDelaySec = 45; # don't have every app hit ghcr on the same second
         };
       };
 
@@ -378,45 +416,47 @@ let
       # role/database bootstrap. With shared cluster, multiple apps
       # share `podman-pg.service` as a single ordering anchor.
       systemd.services."podman-${cName}" = {
-        after =
-          [ "app-${name}-secrets-bootstrap.service" ]
-          ++ (lib.optional egressEnabled "podman-${app.egress.container}.service")
-          ++ (lib.optionals postgresEnabled [
-            "app-db-${name}-bootstrap.service"
-            "podman-pg.service"
-          ]);
-        wants =
-          [ "app-${name}-secrets-bootstrap.service" ]
-          ++ (lib.optional egressEnabled "podman-${app.egress.container}.service")
-          ++ (lib.optionals postgresEnabled [
-            "app-db-${name}-bootstrap.service"
-            "podman-pg.service"
-          ]);
+        after = [
+          "app-${name}-secrets-bootstrap.service"
+        ]
+        ++ (lib.optional egressEnabled "podman-${app.egress.container}.service")
+        ++ (lib.optionals postgresEnabled [
+          "app-db-${name}-bootstrap.service"
+          "podman-pg.service"
+        ]);
+        wants = [
+          "app-${name}-secrets-bootstrap.service"
+        ]
+        ++ (lib.optional egressEnabled "podman-${app.egress.container}.service")
+        ++ (lib.optionals postgresEnabled [
+          "app-db-${name}-bootstrap.service"
+          "podman-pg.service"
+        ]);
       };
 
       # The container itself — pure declarative, identical pattern to
       # every other stack on the box.
-      virtualisation.oci-containers.containers."${cName}" =
-        mkRootlessContainer ({
-          image = app.image;
+      virtualisation.oci-containers.containers."${cName}" = mkRootlessContainer (
+        {
+          inherit (app) image;
 
           # A /s2/* hostPath additionally picks up RequiresMountsFor for
           # free — common.nix extracts it from `volumes`, closing the
           # cold-boot race where the container starts before the ZFS
           # dataset mounts and writes into the empty underlay.
-          volumes = lib.optional storageEnabled
-            "${storageHostPath}:/app/data";
+          volumes = lib.optional storageEnabled "${storageHostPath}:/app/data";
 
-          environmentFiles =
-            [ appSecretsFile ]
-            ++ (lib.optional postgresEnabled appDbEnvFile)
-            ++ app.environmentFiles;
+          environmentFiles = [
+            appSecretsFile
+          ]
+          ++ (lib.optional postgresEnabled appDbEnvFile)
+          ++ app.environmentFiles;
 
           environment = {
-            APP_NAME       = name;
-            APP_HOSTNAME   = hostname;
+            APP_NAME = name;
+            APP_HOSTNAME = hostname;
             APP_PUBLIC_URL = publicUrl;
-            PORT           = "3000";
+            PORT = "3000";
             # Auth.js v5 / NextAuth sits behind traefik, so the request
             # Host is the public hostname (anansi.toscanini.me), not the
             # in-container `app-<name>:3000` the framework auto-derives.
@@ -424,297 +464,340 @@ let
             # with `UntrustedHost`. Set at the platform level since every
             # reverse-proxied app on this PaaS hits the same wall.
             AUTH_TRUST_HOST = "true";
-            AUTH_URL        = publicUrl;
+            AUTH_URL = publicUrl;
           }
           // (lib.optionalAttrs app.litellm {
             LITELLM_BASE_URL = "http://litellm:4000";
           })
           // app.env;
 
-          extraOptions =
-            [ (if egressEnabled
-               then "--network=container:${app.egress.container}"
-               else "--network=traefik-net")
-              "--authfile=${ghcrAuthFile}" ]
-            ++ (lib.optional postgresEnabled "--network=app-db-net");
+          extraOptions = [
+            (if egressEnabled then "--network=container:${app.egress.container}" else "--network=traefik-net")
+            "--authfile=${ghcrAuthFile}"
+          ]
+          ++ (lib.optional postgresEnabled "--network=app-db-net");
         }
-        // (lib.optionalAttrs (app.cmd != null) { cmd = app.cmd; })
+        // (lib.optionalAttrs (app.cmd != null) { inherit (app) cmd; })
         # In egress mode podman needs the netns owner up first; dependsOn
         # adds Requires=+After= on its unit (same as the TV arrs on gluetun).
-        // (lib.optionalAttrs egressEnabled { dependsOn = [ app.egress.container ]; }));
+        // (lib.optionalAttrs egressEnabled { dependsOn = [ app.egress.container ]; })
+      );
     };
 in
 {
   options.myStack.apps = lib.mkOption {
-    type = lib.types.attrsOf (lib.types.submodule ({ name, ... }: {
-      options = {
-        image = lib.mkOption {
-          type        = lib.types.str;
-          default     = "ghcr.io/santiagotoscanini/${name}:latest";
-          description = ''
-            OCI image. Default: `ghcr.io/santiagotoscanini/<name>:latest`.
-            Convention is to host each app at
-            `github.com/santiagotoscanini/<name>` and publish images to
-            the matching ghcr namespace. Override for placeholders,
-            forks, or pinned digests.
-          '';
-          example = "ghcr.io/santiagotoscanini/anansi:abc123";
-        };
+    type = lib.types.attrsOf (
+      lib.types.submodule (
+        { name, ... }: {
+          options = {
+            image = lib.mkOption {
+              type = lib.types.str;
+              default = "ghcr.io/santiagotoscanini/${name}:latest";
+              description = ''
+                OCI image. Default: `ghcr.io/santiagotoscanini/<name>:latest`.
+                Convention is to host each app at
+                `github.com/santiagotoscanini/<name>` and publish images to
+                the matching ghcr namespace. Override for placeholders,
+                forks, or pinned digests.
+              '';
+              example = "ghcr.io/santiagotoscanini/anansi:abc123";
+            };
 
-        cmd = lib.mkOption {
-          type        = lib.types.nullOr (lib.types.listOf lib.types.str);
-          default     = null;
-          description = ''
-            Optional cmd override (escape hatch — apps should normally
-            bake their start command into the image CMD).
-          '';
-        };
+            cmd = lib.mkOption {
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
+              description = ''
+                Optional cmd override (escape hatch — apps should normally
+                bake their start command into the image CMD).
+              '';
+            };
 
-        stage = lib.mkOption {
-          type        = lib.types.enum [ "lab" "live" ];
-          default     = "lab";
-          description = ''
-            "lab" = LAN-only (<name>.toscanini.me via pi-hole + traefik).
-            "live" = adds Cloudflare-tunnel exposure (public CNAME via
-            cloudflared-route-sync). The *.toscanini.me wildcard cert
-            covers both — no per-app cert work.
-          '';
-        };
+            stage = lib.mkOption {
+              type = lib.types.enum [
+                "lab"
+                "live"
+              ];
+              default = "lab";
+              description = ''
+                "lab" = LAN-only (<name>.toscanini.me via pi-hole + traefik).
+                "live" = adds Cloudflare-tunnel exposure (public CNAME via
+                cloudflared-route-sync). The *.toscanini.me wildcard cert
+                covers both — no per-app cert work.
+              '';
+            };
 
-        # VPN egress via a gluetun (or other netns-owning) container. See
-        # stacks/ipcrawl-vpn/. When set, the app borrows that container's
-        # network namespace for ALL traffic instead of joining traefik-net:
-        # outbound exits the VPN (fail-closed), and traefik reaches the UI via
-        # the host port the netns owner publishes
-        # (`host.containers.internal:<egress.hostPort>`). Mutually exclusive
-        # with `postgres.enable`; leave `prometheus.enable = false` too (a
-        # netns'd app isn't scrapable from monitoring-net).
-        egress = {
-          container = lib.mkOption {
-            type        = lib.types.nullOr lib.types.str;
-            default     = null;
-            description = ''
-              Name of a netns-owning container (e.g. a gluetun instance)
-              whose network namespace this app joins via
-              `--network=container:<name>`. null = normal traefik-net.
-            '';
-            example = "gluetun-ipcrawl";
+            # VPN egress via a gluetun (or other netns-owning) container. See
+            # stacks/ipcrawl-vpn/. When set, the app borrows that container's
+            # network namespace for ALL traffic instead of joining traefik-net:
+            # outbound exits the VPN (fail-closed), and traefik reaches the UI via
+            # the host port the netns owner publishes
+            # (`host.containers.internal:<egress.hostPort>`). Mutually exclusive
+            # with `postgres.enable`; leave `prometheus.enable = false` too (a
+            # netns'd app isn't scrapable from monitoring-net).
+            egress = {
+              container = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Name of a netns-owning container (e.g. a gluetun instance)
+                  whose network namespace this app joins via
+                  `--network=container:<name>`. null = normal traefik-net.
+                '';
+                example = "gluetun-ipcrawl";
+              };
+              hostPort = lib.mkOption {
+                type = lib.types.nullOr lib.types.port;
+                default = null;
+                description = ''
+                  Host port the netns owner publishes for this app's :3000,
+                  which traefik dials via host.containers.internal. Required
+                  when `egress.container` is set.
+                '';
+                example = 3100;
+              };
+            };
+
+            # Plain Postgres-per-app, materialized by stacks/app-db/.
+            postgres = {
+              enable = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  When true, materialize a per-app Postgres container
+                  (`pg-<name>`) via stacks/app-db/. The app container joins
+                  the private `<name>-db-net` bridge and receives
+                  DATABASE_URL (postgresql://app:<pwd>@pg-<name>:5432/app)
+                  via env file.
+                  See stacks/app-db/README.md.
+                '';
+              };
+              # Per-app resource tunables are gone — the cluster is
+              # shared, so cpus/memory are set once in stacks/app-db/app-db.nix.
+              # For app-scoped throttling, use postgres role-level
+              # settings: ALTER ROLE <name> CONNECTION LIMIT N;
+              # ALTER ROLE <name> SET statement_timeout = '30s'; etc.
+            };
+
+            # Persistent disk for file-backed apps (SQLite, caches, uploads).
+            storage = {
+              enable = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  When true, bind-mount `storage.hostPath` at `/app/data`
+                  inside the container and create it (0755 santiago:users)
+                  via tmpfiles. Off by default — stateless apps get no disk.
+
+                  /app/data is a convention, not an option, exactly like the
+                  port-3000 rule: we build the images, so we pick the path.
+                '';
+              };
+              hostPath = lib.mkOption {
+                type = lib.types.str;
+                default = "${appsDataRoot}/${name}/data";
+                description = ''
+                  Host dir backing /app/data. The default sits on
+                  `rpool/selfhost` (16K recordsize, frequent+hourly+daily
+                  snapshots), which is right for a small SQLite file but
+                  expensive for a large, churning blob cache — snapshot
+                  deltas balloon. Point high-churn apps at `/s2/<name>`
+                  instead (needs a one-time
+                  `zfs create -o mountpoint=legacy s2-pool/<name>` plus an
+                  entry in platform/zfs.nix).
+                '';
+              };
+            };
+
+            litellm = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Opt-in: when true, sets `LITELLM_BASE_URL = http://litellm:4000`
+                in the app's environment. Off by default — apps that don't
+                use the LLM gateway never see the variable.
+
+                Does NOT inject the master key. Apps that need it add
+                `the litellm sops secret (config.sops.secrets."litellm-env".path)` to `environmentFiles`.
+              '';
+            };
+
+            # Auto-deploy — the "push to main and it's live" half of the platform.
+            # See this module's header and assets/deploy.sh.
+            deploy = {
+              enable = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = ''
+                  Poll ghcr.io and redeploy the container when the image digest
+                  moves. ON by default: every app here rides a moving `:latest`
+                  published by CI on push-to-main, so "new image → run it" is the
+                  expected behaviour, not an opt-in.
+
+                  Turn OFF to freeze an app on whatever it's running — pair with a
+                  digest- or sha-pinned `image` to hold a known-good build.
+                '';
+              };
+              interval = lib.mkOption {
+                type = lib.types.str;
+                default = "*:0/2";
+                description = ''
+                  systemd OnCalendar for the poll. The default (every 2 min) is
+                  the worst-case latency between CI publishing and the app going
+                  live — well under the CI build itself, so it isn't the
+                  bottleneck. A pull of an unchanged tag is one manifest request.
+                '';
+              };
+              healthPath = lib.mkOption {
+                type = lib.types.str;
+                default = "/";
+                description = ''
+                  Path fetched through traefik after the restart to decide whether
+                  the new image is alive. Any status < 500 counts — an Auth.js app
+                  302-ing to a login page is a working app.
+                '';
+              };
+              healthTimeout = lib.mkOption {
+                type = lib.types.int;
+                default = 90;
+                description = ''
+                  Seconds to wait for the app to answer after the restart. On
+                  timeout the new image keeps running and the unit fails loudly
+                  (deploy-and-report — there is no auto-rollback).
+                '';
+              };
+            };
+
+            prometheus = {
+              enable = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Add a prometheus scrape for `<cName>:3000<path>`.";
+              };
+              path = lib.mkOption {
+                type = lib.types.str;
+                default = "/metrics";
+                description = "metrics_path of the prometheus scrape.";
+              };
+            };
+
+            dashboard = lib.mkOption {
+              type = lib.types.nullOr lib.types.path;
+              default = null;
+              description = ''
+                Optional Grafana dashboard JSON. `%APP_NAME%` placeholders
+                are substituted with the app's name. Lands under the "Apps"
+                folder.
+              '';
+            };
+
+            homepage = {
+              description = lib.mkOption {
+                type = lib.types.str;
+                default = "";
+                description = "Tile subtitle on the homepage dashboard.";
+              };
+              icon = lib.mkOption {
+                type = lib.types.str;
+                default = "mdi-cube-outline-#94a3b8";
+                description = "Tile icon (homepage icon syntax).";
+              };
+            };
+
+            env = lib.mkOption {
+              type = lib.types.attrsOf lib.types.str;
+              default = { };
+              description = ''
+                Static env vars merged into the container's `environment`.
+                NOT for secrets — visible in /nix/store. For secrets, add
+                an env file to `environmentFiles`.
+              '';
+            };
+
+            environmentFiles = lib.mkOption {
+              type = lib.types.listOf lib.types.path;
+              default = [ ];
+              description = ''
+                Additional env files passed via --env-file. Common uses:
+                per-app secrets, third-party API keys, the litellm master
+                key (the litellm sops secret (config.sops.secrets."litellm-env".path)).
+                Conventions: `0600 santiago:users`, under `**/secrets/`
+                anywhere so the path is gitignored.
+              '';
+            };
           };
-          hostPort = lib.mkOption {
-            type        = lib.types.nullOr lib.types.port;
-            default     = null;
-            description = ''
-              Host port the netns owner publishes for this app's :3000,
-              which traefik dials via host.containers.internal. Required
-              when `egress.container` is set.
-            '';
-            example = 3100;
-          };
-        };
-
-        # Plain Postgres-per-app, materialized by stacks/app-db/.
-        postgres = {
-          enable = lib.mkOption {
-            type        = lib.types.bool;
-            default     = false;
-            description = ''
-              When true, materialize a per-app Postgres container
-              (`pg-<name>`) via stacks/app-db/. The app container joins
-              the private `<name>-db-net` bridge and receives
-              DATABASE_URL (postgresql://app:<pwd>@pg-<name>:5432/app)
-              via env file.
-              See stacks/app-db/README.md.
-            '';
-          };
-          # Per-app resource tunables are gone — the cluster is
-          # shared, so cpus/memory are set once in stacks/app-db/app-db.nix.
-          # For app-scoped throttling, use postgres role-level
-          # settings: ALTER ROLE <name> CONNECTION LIMIT N;
-          # ALTER ROLE <name> SET statement_timeout = '30s'; etc.
-        };
-
-        # Persistent disk for file-backed apps (SQLite, caches, uploads).
-        storage = {
-          enable = lib.mkOption {
-            type        = lib.types.bool;
-            default     = false;
-            description = ''
-              When true, bind-mount `storage.hostPath` at `/app/data`
-              inside the container and create it (0755 santiago:users)
-              via tmpfiles. Off by default — stateless apps get no disk.
-
-              /app/data is a convention, not an option, exactly like the
-              port-3000 rule: we build the images, so we pick the path.
-            '';
-          };
-          hostPath = lib.mkOption {
-            type        = lib.types.str;
-            default     = "${appsDataRoot}/${name}/data";
-            description = ''
-              Host dir backing /app/data. The default sits on
-              `rpool/selfhost` (16K recordsize, frequent+hourly+daily
-              snapshots), which is right for a small SQLite file but
-              expensive for a large, churning blob cache — snapshot
-              deltas balloon. Point high-churn apps at `/s2/<name>`
-              instead (needs a one-time
-              `zfs create -o mountpoint=legacy s2-pool/<name>` plus an
-              entry in platform/zfs.nix).
-            '';
-          };
-        };
-
-        litellm = lib.mkOption {
-          type        = lib.types.bool;
-          default     = false;
-          description = ''
-            Opt-in: when true, sets `LITELLM_BASE_URL = http://litellm:4000`
-            in the app's environment. Off by default — apps that don't
-            use the LLM gateway never see the variable.
-
-            Does NOT inject the master key. Apps that need it add
-            `the litellm sops secret (config.sops.secrets."litellm-env".path)` to `environmentFiles`.
-          '';
-        };
-
-        # Auto-deploy — the "push to main and it's live" half of the platform.
-        # See this module's header and assets/deploy.sh.
-        deploy = {
-          enable = lib.mkOption {
-            type        = lib.types.bool;
-            default     = true;
-            description = ''
-              Poll ghcr.io and redeploy the container when the image digest
-              moves. ON by default: every app here rides a moving `:latest`
-              published by CI on push-to-main, so "new image → run it" is the
-              expected behaviour, not an opt-in.
-
-              Turn OFF to freeze an app on whatever it's running — pair with a
-              digest- or sha-pinned `image` to hold a known-good build.
-            '';
-          };
-          interval = lib.mkOption {
-            type        = lib.types.str;
-            default     = "*:0/2";
-            description = ''
-              systemd OnCalendar for the poll. The default (every 2 min) is
-              the worst-case latency between CI publishing and the app going
-              live — well under the CI build itself, so it isn't the
-              bottleneck. A pull of an unchanged tag is one manifest request.
-            '';
-          };
-          healthPath = lib.mkOption {
-            type        = lib.types.str;
-            default     = "/";
-            description = ''
-              Path fetched through traefik after the restart to decide whether
-              the new image is alive. Any status < 500 counts — an Auth.js app
-              302-ing to a login page is a working app.
-            '';
-          };
-          healthTimeout = lib.mkOption {
-            type        = lib.types.int;
-            default     = 90;
-            description = ''
-              Seconds to wait for the app to answer after the restart. On
-              timeout the new image keeps running and the unit fails loudly
-              (deploy-and-report — there is no auto-rollback).
-            '';
-          };
-        };
-
-        prometheus = {
-          enable = lib.mkOption {
-            type        = lib.types.bool;
-            default     = true;
-            description = "Add a prometheus scrape for `<cName>:3000<path>`.";
-          };
-          path = lib.mkOption {
-            type        = lib.types.str;
-            default     = "/metrics";
-            description = "metrics_path of the prometheus scrape.";
-          };
-        };
-
-        dashboard = lib.mkOption {
-          type        = lib.types.nullOr lib.types.path;
-          default     = null;
-          description = ''
-            Optional Grafana dashboard JSON. `%APP_NAME%` placeholders
-            are substituted with the app's name. Lands under the "Apps"
-            folder.
-          '';
-        };
-
-        homepage = {
-          description = lib.mkOption {
-            type        = lib.types.str;
-            default     = "";
-            description = "Tile subtitle on the homepage dashboard.";
-          };
-          icon = lib.mkOption {
-            type        = lib.types.str;
-            default     = "mdi-cube-outline-#94a3b8";
-            description = "Tile icon (homepage icon syntax).";
-          };
-        };
-
-        env = lib.mkOption {
-          type        = lib.types.attrsOf lib.types.str;
-          default     = { };
-          description = ''
-            Static env vars merged into the container's `environment`.
-            NOT for secrets — visible in /nix/store. For secrets, add
-            an env file to `environmentFiles`.
-          '';
-        };
-
-        environmentFiles = lib.mkOption {
-          type        = lib.types.listOf lib.types.path;
-          default     = [ ];
-          description = ''
-            Additional env files passed via --env-file. Common uses:
-            per-app secrets, third-party API keys, the litellm master
-            key (the litellm sops secret (config.sops.secrets."litellm-env".path)).
-            Conventions: `0600 santiago:users`, under `**/secrets/`
-            anywhere so the path is gitignored.
-          '';
-        };
-      };
-    }));
+        }
+      )
+    );
     default = { };
     description = ''
       Vibe-coded app wrapper — see this module's header.
     '';
   };
 
-  config = let
-    fragments = lib.mapAttrsToList mkApp cfg;
-    attrsOpt = path: lib.mkMerge   (map (f: lib.attrByPath path { } f) fragments);
-    listOpt  = path: lib.concatLists (map (f: lib.attrByPath path [ ] f) fragments);
-  in {
-    # GHCR classic PAT (read:packages) in podman auth.json form —
-    # sops-encrypted, used by container pulls + the deploy oneshots.
-    sops.secrets."ghcr-auth" = {
-      sopsFile = ./ghcr-auth.json.sops;
-      format   = "binary";
-      owner    = "santiago";
+  config =
+    let
+      fragments = lib.mapAttrsToList mkApp cfg;
+      attrsOpt = path: lib.mkMerge (map (f: lib.attrByPath path { } f) fragments);
+      listOpt = path: lib.concatLists (map (f: lib.attrByPath path [ ] f) fragments);
+    in
+    {
+      # GHCR classic PAT (read:packages) in podman auth.json form —
+      # sops-encrypted, used by container pulls + the deploy oneshots.
+      sops.secrets."ghcr-auth" = {
+        sopsFile = ./ghcr-auth.json.sops;
+        format = "binary";
+        owner = "santiago";
+      };
+
+      myStack = {
+        appDatabases = attrsOpt [
+          "myStack"
+          "appDatabases"
+        ];
+        containerNetworks = attrsOpt [
+          "myStack"
+          "containerNetworks"
+        ];
+        webApps = attrsOpt [
+          "myStack"
+          "webApps"
+        ];
+        prometheusScrapes = listOpt [
+          "myStack"
+          "prometheusScrapes"
+        ];
+        grafanaDashboardsByFolder = attrsOpt [
+          "myStack"
+          "grafanaDashboardsByFolder"
+        ];
+        homepageServices = attrsOpt [
+          "myStack"
+          "homepageServices"
+        ];
+        homepageLayout = attrsOpt [
+          "myStack"
+          "homepageLayout"
+        ];
+      };
+
+      virtualisation.oci-containers.containers = attrsOpt [
+        "virtualisation"
+        "oci-containers"
+        "containers"
+      ];
+
+      systemd.services = attrsOpt [
+        "systemd"
+        "services"
+      ];
+      systemd.timers = attrsOpt [
+        "systemd"
+        "timers"
+      ];
+      systemd.tmpfiles.rules = listOpt [
+        "systemd"
+        "tmpfiles"
+        "rules"
+      ];
     };
-
-    myStack = {
-      appDatabases              = attrsOpt [ "myStack" "appDatabases" ];
-      containerNetworks         = attrsOpt [ "myStack" "containerNetworks" ];
-      webApps                   = attrsOpt [ "myStack" "webApps" ];
-      prometheusScrapes         = listOpt  [ "myStack" "prometheusScrapes" ];
-      grafanaDashboardsByFolder = attrsOpt [ "myStack" "grafanaDashboardsByFolder" ];
-      homepageServices          = attrsOpt [ "myStack" "homepageServices" ];
-      homepageLayout            = attrsOpt [ "myStack" "homepageLayout" ];
-    };
-
-    virtualisation.oci-containers.containers =
-      attrsOpt [ "virtualisation" "oci-containers" "containers" ];
-
-    systemd.services      = attrsOpt [ "systemd" "services" ];
-    systemd.timers        = attrsOpt [ "systemd" "timers" ];
-    systemd.tmpfiles.rules = listOpt [ "systemd" "tmpfiles" "rules" ];
-  };
 }

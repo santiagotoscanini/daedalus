@@ -18,7 +18,13 @@
 # for cloudflared, bound but not firewall-opened — internal only).
 # The dashboard on :8080 is reached over traefik-net, not host-published.
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   cfg = config.myStack;
@@ -29,33 +35,35 @@ let
   # (one fixed `postgres.toscanini.me` route — no per-app fan-out).
   pgwireEnabled = config.myStack.appDatabases != { };
 
-  mkTraefikRouteContent = name: route:
+  mkTraefikRouteContent =
+    name: route:
     let
       entry = route.entrypoint or "websecure";
       needsTls = entry == "websecure";
-      hasCert  = route.certMain != null;
+      hasCert = route.certMain != null;
       upstreamUrl = route.serviceUrl;
       # tlsLine is substituted at the position marked `${tlsLine}  services:`
       # — must end with a newline AND include its own leading whitespace
       # (the template dedent strips 6 columns; we re-add).
       tlsLine =
-        if !needsTls then ""
+        if !needsTls then
+          ""
         else if !hasCert then
           "      tls: { options: tls-opts@file }\n"
         else
           let
-            sansBlock = lib.concatMapStringsSep "\n"
-              (s: "              - \"${s}\"")
-              route.certSans;
+            sansBlock = lib.concatMapStringsSep "\n" (s: "              - \"${s}\"") route.certSans;
           in
-            "      tls:\n"
-            + "        options: tls-opts@file\n"
-            + "        certResolver: dns-cloudflare\n"
-            + "        domains:\n"
-            + "          - main: \"${route.certMain}\"\n"
-            + "            sans:\n"
-            + sansBlock + "\n";
-    in ''
+          "      tls:\n"
+          + "        options: tls-opts@file\n"
+          + "        certResolver: dns-cloudflare\n"
+          + "        domains:\n"
+          + "          - main: \"${route.certMain}\"\n"
+          + "            sans:\n"
+          + sansBlock
+          + "\n";
+    in
+    ''
       # Auto-generated from myStack.traefikRoutes.${name}.
       # Edit the attrset (in the owning stack's module), not this file
       # (it lives in /nix/store, read-only).
@@ -75,26 +83,29 @@ let
   # Use runCommand+cp (not symlinkJoin) so $out contains real files.
   # /rules bind mount doesn't include /nix/store; symlinks would dangle
   # and the inotify watcher errors out.
-  traefikRulesDir = pkgs.runCommand "traefik-rules" { } (''
-    mkdir -p $out
-  '' + lib.concatStringsSep "\n" (
-    (lib.mapAttrsToList (name: route:
-      "cp ${pkgs.writeText "${name}.yml" (mkTraefikRouteContent name route)} $out/${name}.yml"
-    ) cfg.traefikRoutes)
-    ++
-    (lib.mapAttrsToList (filename: contents:
-      "cp ${pkgs.writeText filename contents} $out/${filename}"
-    ) cfg.traefikStaticRules)
-  ));
+  traefikRulesDir = pkgs.runCommand "traefik-rules" { } (
+    ''
+      mkdir -p $out
+    ''
+    + lib.concatStringsSep "\n" (
+      (lib.mapAttrsToList (
+        name: route:
+        "cp ${pkgs.writeText "${name}.yml" (mkTraefikRouteContent name route)} $out/${name}.yml"
+      ) cfg.traefikRoutes)
+      ++ (lib.mapAttrsToList (
+        filename: contents: "cp ${pkgs.writeText filename contents} $out/${filename}"
+      ) cfg.traefikStaticRules)
+    )
+  );
 in
 {
   # CF_API_TOKEN + CF_DNS_API_TOKEN (ACME DNS-01): sops-encrypted env.sops,
   # decrypted to /run/secrets/traefik-env at activation. Edit with `sops env.sops`.
   sops.secrets."traefik-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   myStack.containerNetworks.traefik = "traefik";
@@ -103,40 +114,46 @@ in
   # its own asset and contributes here (e.g. nextcloud's dual-router
   # rule lives in stacks/nextcloud/).
   myStack.traefikStaticRules = {
-    "tls-opts.yml"          = builtins.readFile ./assets/tls-opts.yml;
+    "tls-opts.yml" = builtins.readFile ./assets/tls-opts.yml;
     "traefik-dashboard.yml" = builtins.readFile ./assets/dashboard-rule.yml;
   };
 
   # Opens TCP 80/443 — LAN HTTPS ingress.
-  networking.firewall.allowedTCPPorts = [ 80 443 ];
+  networking.firewall.allowedTCPPorts = [
+    80
+    443
+  ];
 
   # Opens TCP 5432 ONLY on the LAN interface, only when a TCP route is
   # declared (postgres SNI routing). Belt-and-suspenders: the box only
   # has enp3s0, but restricting per-interface keeps any future second
   # interface (wireguard, etc.) off-limits by default.
-  networking.firewall.interfaces.enp3s0.allowedTCPPorts =
-    lib.optional pgwireEnabled 5432;
+  networking.firewall.interfaces.enp3s0.allowedTCPPorts = lib.optional pgwireEnabled 5432;
 
   myStack.dnsHosts = [ "192.168.0.2 traefik.toscanini.me" ];
 
-  myStack.prometheusScrapes = [{
-    job_name = "traefik";
-    # Prometheus joins traefik-net (see monitoring.nix) and reaches the
-    # api@internal/metrics endpoint by container DNS.
-    static_configs = [{ targets = [ "traefik:8080" ]; }];
-  }];
+  myStack.prometheusScrapes = [
+    {
+      job_name = "traefik";
+      # Prometheus joins traefik-net (see monitoring.nix) and reaches the
+      # api@internal/metrics endpoint by container DNS.
+      static_configs = [ { targets = [ "traefik:8080" ]; } ];
+    }
+  ];
 
-  myStack.homepageServices."Network" = [{
-    name = "Traefik";
-    href = "https://traefik.toscanini.me";
-    description = "Reverse proxy — all *.s2 / *.toscanini routes";
-    icon = "traefik.png";
-    siteMonitor = "https://traefik.toscanini.me";
-    widget = {
-      type = "traefik";
-      url  = "https://traefik.toscanini.me";
-    };
-  }];
+  myStack.homepageServices."Network" = [
+    {
+      name = "Traefik";
+      href = "https://traefik.toscanini.me";
+      description = "Reverse proxy — all *.s2 / *.toscanini routes";
+      icon = "traefik.png";
+      siteMonitor = "https://traefik.toscanini.me";
+      widget = {
+        type = "traefik";
+        url = "https://traefik.toscanini.me";
+      };
+    }
+  ];
 
   virtualisation.oci-containers.containers.traefik = mkRootlessContainer {
     image = "docker.io/library/traefik:v3.7.7@sha256:1cb3845d7a05e1473c9086351426597e911db49db382b6e4769f9b0744962ac8";
@@ -147,11 +164,13 @@ in
       # cfweb — plain HTTP for the Cloudflare tunnel; CF terminates TLS
       # at the edge so a 443 hop would mean double-TLS.
       "8888:8888"
-    ] ++ (lib.optional pgwireEnabled
+    ]
+    ++ (lib.optional pgwireEnabled
       # postgres TCP entrypoint — SNI-routed per-app pg-<name>.toscanini.me.
       # TLS terminates here using *.toscanini.me. Backend is plaintext
       # postgres on db-exporter-net (where every pg-<name> lives too).
-      "5432:5432");
+      "5432:5432"
+    );
     # Dashboard/metrics on :8080 reached via traefik-net only (no host port).
 
     volumes = [
@@ -183,9 +202,9 @@ in
       "--entrypoints.websecure.address=:443"
       "--entrypoints.traefik.address=:8080"
       "--entrypoints.cfweb.address=:8888"
-    ] ++ (lib.optional pgwireEnabled
-      "--entrypoints.postgres.address=:5432"
-    ) ++ [
+    ]
+    ++ (lib.optional pgwireEnabled "--entrypoints.postgres.address=:5432")
+    ++ [
 
       "--entrypoints.websecure.http.tls=true"
       "--entrypoints.websecure.http.tls.options=tls-opts@file"
@@ -227,7 +246,8 @@ in
     extraOptions = [
       # no-new-privileges is now injected fleet-wide by mkRootlessContainer.
       "--network=traefik-net"
-    ] ++ (lib.optional pgwireEnabled
+    ]
+    ++ (lib.optional pgwireEnabled
       # db-exporter-net is the shared bridge where every pg-<name>
       # container also lives (see stacks/app-db/exporter.nix). Traefik
       # uses it to reach pg-<name>:5432 after SNI-routing a postgres

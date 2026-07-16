@@ -11,7 +11,12 @@
 #     traefikStaticRules, cloudflareRoutes, dnsHosts, prometheusScrapes,
 #     grafanaDashboards{,ByFolder}, webApps, homepageServices).
 
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.myStack;
@@ -25,14 +30,14 @@ let
   # starts before ZFS imports s2-pool, silently bind-mounting the
   # unmounted underlay (empty dir), then the dataset mounts on top
   # and the container writes into an orphan inode. Silent data loss.
-  mkContainerOverride = name: net:
+  mkContainerOverride =
+    name: net:
     let
       container = config.virtualisation.oci-containers.containers.${name} or { };
       volumes = container.volumes or [ ];
       # Volume strings: "host:container[:opts]" → first segment is host path.
       hostPaths = map (v: lib.head (lib.splitString ":" v)) volumes;
-      s2Paths = lib.unique
-        (lib.filter (lib.hasPrefix "/s2") hostPaths);
+      s2Paths = lib.unique (lib.filter (lib.hasPrefix "/s2") hostPaths);
     in
     {
       serviceConfig = {
@@ -48,10 +53,12 @@ let
         # auth/storage/pooler wait on db. 20 over 10 min lets slow paths converge.
         StartLimitBurst = 20;
         StartLimitIntervalSec = 600;
-      } // lib.optionalAttrs (s2Paths != [ ]) {
+      }
+      // lib.optionalAttrs (s2Paths != [ ]) {
         RequiresMountsFor = s2Paths;
       };
-    } // (lib.optionalAttrs (net != null) {
+    }
+    // (lib.optionalAttrs (net != null) {
       after = [ "podman-network-${net}-net.service" ];
       wants = [ "podman-network-${net}-net.service" ];
     });
@@ -62,8 +69,14 @@ let
   # rootless podman runs (otherwise newuidmap lookup fails on first boot).
   mkBridgeUnit = net: {
     description = "Create the ${net}-net podman bridge";
-    after = [ "network-online.target" "linger-users.service" ];
-    wants = [ "network-online.target" "linger-users.service" ];
+    after = [
+      "network-online.target"
+      "linger-users.service"
+    ];
+    wants = [
+      "network-online.target"
+      "linger-users.service"
+    ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
@@ -74,13 +87,11 @@ let
       # First-boot rootless-podman bootstrap fails (newuidmap)
       # for reasons that aren't yet understood; 1s recovery is cheap.
       RestartSec = "1s";
-      ExecStart =
-        "${pkgs.podman}/bin/podman network create --ignore ${net}-net";
+      ExecStart = "${pkgs.podman}/bin/podman network create --ignore ${net}-net";
     };
   };
 
-  distinctBridges = lib.unique (lib.filter (n: n != null)
-    (lib.attrValues cfg.containerNetworks));
+  distinctBridges = lib.unique (lib.filter (n: n != null) (lib.attrValues cfg.containerNetworks));
 in
 {
   options.myStack = {
@@ -106,76 +117,81 @@ in
     };
 
     traefikRoutes = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule ({ ... }: {
-        options = {
-          host = lib.mkOption {
-            type = lib.types.str;
-            description = "FQDN matched by the `Host(...)` rule.";
-          };
-          port = lib.mkOption {
-            type = lib.types.port;
-            description = ''
-              Upstream port traefik dials. Used to build the default
-              `host.containers.internal:port` URL when `serviceUrl` is
-              null; when `serviceUrl` is set, this is informational only.
-            '';
-          };
-          serviceUrl = lib.mkOption {
-            type = lib.types.str;
-            description = ''
-              Full upstream URL traefik dials. Required — there is no
-              implicit `host.containers.internal` fallback; every
-              route declares its upstream explicitly.
+      type = lib.types.attrsOf (
+        lib.types.submodule (_: {
+          options = {
+            host = lib.mkOption {
+              type = lib.types.str;
+              description = "FQDN matched by the `Host(...)` rule.";
+            };
+            port = lib.mkOption {
+              type = lib.types.port;
+              description = ''
+                Upstream port traefik dials. Used to build the default
+                `host.containers.internal:port` URL when `serviceUrl` is
+                null; when `serviceUrl` is set, this is informational only.
+              '';
+            };
+            serviceUrl = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                Full upstream URL traefik dials. Required — there is no
+                implicit `host.containers.internal` fallback; every
+                route declares its upstream explicitly.
 
-              Typical shape: `http://<container-name>:<in-container-port>`
-              for stacks attached to `traefik-net`. Use `https://`
-              for the rare image that listens TLS internally; use
-              `http://host.containers.internal:<host-port>` for the
-              must-keep stacks that cannot ride `traefik-net`
-              (gluetun-shared netns containers; pi-hole, which is a
-              native NixOS service, not a container).
+                Typical shape: `http://<container-name>:<in-container-port>`
+                for stacks attached to `traefik-net`. Use `https://`
+                for the rare image that listens TLS internally; use
+                `http://host.containers.internal:<host-port>` for the
+                must-keep stacks that cannot ride `traefik-net`
+                (gluetun-shared netns containers; pi-hole, which is a
+                native NixOS service, not a container).
 
-              webApps materializes this automatically from either
-              `serviceName` (preferred) or `serviceUrl`.
-            '';
-            example = "http://grocy:80";
-          };
-          entrypoint = lib.mkOption {
-            type = lib.types.enum [ "websecure" "cfweb" ];
-            default = "websecure";
-            description = ''
-              Traefik entrypoint. `websecure` (default) is HTTPS with
-              TLS via tls-opts@file; `cfweb` is plain HTTP on :8888
-              for routes reached through the Cloudflare tunnel.
-            '';
-          };
-          certMain = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-            description = ''
-              Optional `tls.domains[0].main` for this router. When
-              non-null, the generated YAML asks Traefik to request a
-              dedicated cert covering `certMain` + `certSans`. Used
-              by stacks whose host is two+ levels under s2.toscanini.me
-              (e.g. `studio.foo.supabase.toscanini.me`) where the
-              default `*.toscanini.me` wildcard doesn't apply.
+                webApps materializes this automatically from either
+                `serviceName` (preferred) or `serviceUrl`.
+              '';
+              example = "http://grocy:80";
+            };
+            entrypoint = lib.mkOption {
+              type = lib.types.enum [
+                "websecure"
+                "cfweb"
+              ];
+              default = "websecure";
+              description = ''
+                Traefik entrypoint. `websecure` (default) is HTTPS with
+                TLS via tls-opts@file; `cfweb` is plain HTTP on :8888
+                for routes reached through the Cloudflare tunnel.
+              '';
+            };
+            certMain = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Optional `tls.domains[0].main` for this router. When
+                non-null, the generated YAML asks Traefik to request a
+                dedicated cert covering `certMain` + `certSans`. Used
+                by stacks whose host is two+ levels under s2.toscanini.me
+                (e.g. `studio.foo.supabase.toscanini.me`) where the
+                default `*.toscanini.me` wildcard doesn't apply.
 
-              Only emitted on `websecure` entrypoint routers.
-            '';
-            example = "foo.supabase.toscanini.me";
+                Only emitted on `websecure` entrypoint routers.
+              '';
+              example = "foo.supabase.toscanini.me";
+            };
+            certSans = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                SANs accompanying `certMain`. Typically a single wildcard
+                like `*.foo.supabase.toscanini.me`. Ignored when
+                `certMain` is null.
+              '';
+              example = [ "*.foo.supabase.toscanini.me" ];
+            };
           };
-          certSans = lib.mkOption {
-            type = lib.types.listOf lib.types.str;
-            default = [ ];
-            description = ''
-              SANs accompanying `certMain`. Typically a single wildcard
-              like `*.foo.supabase.toscanini.me`. Ignored when
-              `certMain` is null.
-            '';
-            example = [ "*.foo.supabase.toscanini.me" ];
-          };
-        };
-      }));
+        })
+      );
       default = { };
       description = ''
         `Host(...) -> serviceUrl` routes, rendered by modules/traefik.nix
@@ -196,28 +212,30 @@ in
     };
 
     cloudflareRoutes = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule ({ ... }: {
-        options = {
-          hostname = lib.mkOption {
-            type = lib.types.str;
-            description = ''
-              Public hostname exposed via the Cloudflare tunnel
-              (e.g. `nextcloud.toscanini.me`). The
-              cloudflared-route-sync oneshot creates/updates the
-              proxied CNAME → `<tunnel-id>.cfargotunnel.com`.
-            '';
+      type = lib.types.attrsOf (
+        lib.types.submodule (_: {
+          options = {
+            hostname = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                Public hostname exposed via the Cloudflare tunnel
+                (e.g. `nextcloud.toscanini.me`). The
+                cloudflared-route-sync oneshot creates/updates the
+                proxied CNAME → `<tunnel-id>.cfargotunnel.com`.
+              '';
+            };
+            service = lib.mkOption {
+              type = lib.types.str;
+              default = "http://traefik:8888";
+              description = ''
+                Origin URL cloudflared dials when this hostname is hit.
+                Default `http://traefik:8888` reaches the cfweb (plain
+                HTTP) entrypoint via the bridge.
+              '';
+            };
           };
-          service = lib.mkOption {
-            type = lib.types.str;
-            default = "http://traefik:8888";
-            description = ''
-              Origin URL cloudflared dials when this hostname is hit.
-              Default `http://traefik:8888` reaches the cfweb (plain
-              HTTP) entrypoint via the bridge.
-            '';
-          };
-        };
-      }));
+        })
+      );
       default = { };
       description = ''
         Public hostnames published through the Cloudflare tunnel.
@@ -294,80 +312,82 @@ in
     };
 
     webApps = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule ({ ... }: {
-        options = {
-          hostname = lib.mkOption {
-            type = lib.types.str;
-            description = ''
-              Canonical FQDN clients hit (e.g. "immich.toscanini.me").
-              Same hostname for LAN HTTPS (pi-hole answers
-              192.168.0.2; traefik websecure with the wildcard cert)
-              and, if `exposeRemotely`, the CF tunnel (CNAME →
-              cfweb traefik router → same upstream).
+      type = lib.types.attrsOf (
+        lib.types.submodule (_: {
+          options = {
+            hostname = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                Canonical FQDN clients hit (e.g. "immich.toscanini.me").
+                Same hostname for LAN HTTPS (pi-hole answers
+                192.168.0.2; traefik websecure with the wildcard cert)
+                and, if `exposeRemotely`, the CF tunnel (CNAME →
+                cfweb traefik router → same upstream).
 
-              Must fall under one of the wildcards traefik already
-              has ACME-issued (`*.toscanini.me`) for HTTPS without
-              extra cert config.
-            '';
-          };
-          port = lib.mkOption {
-            type = lib.types.port;
-            description = ''
-              Upstream port traefik dials. With `serviceName` (preferred):
-              in-container port → bridge DNS as
-              `http://''${serviceName}:''${port}`. With `serviceUrl`:
-              informational only (the URL already carries the port).
-            '';
-          };
-          serviceName = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-            description = ''
-              Preferred upstream shape. When set, traefik dials via
-              container DNS on traefik-net — materializes
-              `traefikRoutes.<name>.serviceUrl =
-              "http://''${serviceName}:''${port}"`.
+                Must fall under one of the wildcards traefik already
+                has ACME-issued (`*.toscanini.me`) for HTTPS without
+                extra cert config.
+              '';
+            };
+            port = lib.mkOption {
+              type = lib.types.port;
+              description = ''
+                Upstream port traefik dials. With `serviceName` (preferred):
+                in-container port → bridge DNS as
+                `http://''${serviceName}:''${port}`. With `serviceUrl`:
+                informational only (the URL already carries the port).
+              '';
+            };
+            serviceName = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Preferred upstream shape. When set, traefik dials via
+                container DNS on traefik-net — materializes
+                `traefikRoutes.<name>.serviceUrl =
+                "http://''${serviceName}:''${port}"`.
 
-              Requires the upstream container on `traefik-net`
-              (`myStack.containerNetworks.<x> = "traefik"` and
-              `"--network=traefik-net"` in extraOptions; multi-bridge
-              stacks add it as a secondary bridge).
+                Requires the upstream container on `traefik-net`
+                (`myStack.containerNetworks.<x> = "traefik"` and
+                `"--network=traefik-net"` in extraOptions; multi-bridge
+                stacks add it as a secondary bridge).
 
-              For stacks that can't ride `traefik-net` (gluetun-shared
-              netns, native NixOS services), leave null and set
-              `serviceUrl` instead. Exactly one of the two must be set.
-            '';
-            example = "grocy";
-          };
-          serviceUrl = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-            description = ''
-              Escape-hatch upstream URL — for cases `serviceName` can't fit:
+                For stacks that can't ride `traefik-net` (gluetun-shared
+                netns, native NixOS services), leave null and set
+                `serviceUrl` instead. Exactly one of the two must be set.
+              '';
+              example = "grocy";
+            };
+            serviceUrl = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Escape-hatch upstream URL — for cases `serviceName` can't fit:
 
-              - gluetun-shared netns (TV stack): only gluetun publishes
-                ports; UIs reached via `host.containers.internal:<port>`.
-              - Native NixOS services (pi-hole): no container/bridge.
-              - TLS-internal upstreams: `https://name:port`.
+                - gluetun-shared netns (TV stack): only gluetun publishes
+                  ports; UIs reached via `host.containers.internal:<port>`.
+                - Native NixOS services (pi-hole): no container/bridge.
+                - TLS-internal upstreams: `https://name:port`.
 
-              Exactly one of `serviceName` / `serviceUrl` must be
-              set — enforced by an assertion.
-            '';
-            example = "http://host.containers.internal:8989";
+                Exactly one of `serviceName` / `serviceUrl` must be
+                set — enforced by an assertion.
+              '';
+              example = "http://host.containers.internal:8989";
+            };
+            exposeRemotely = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                When true: publish the hostname through the CF tunnel
+                too. Emits a `cfweb` traefik router + a
+                `cloudflareRoutes` entry → cloudflared-route-sync turns
+                it into a proxied CNAME. LAN exposure is unconditional;
+                no `exposeLocally` knob.
+              '';
+            };
           };
-          exposeRemotely = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = ''
-              When true: publish the hostname through the CF tunnel
-              too. Emits a `cfweb` traefik router + a
-              `cloudflareRoutes` entry → cloudflared-route-sync turns
-              it into a proxied CNAME. LAN exposure is unconditional;
-              no `exposeLocally` knob.
-            '';
-          };
-        };
-      }));
+        })
+      );
       default = { };
       description = ''
         High-level "publish this web app" abstraction. Materializes
@@ -399,8 +419,7 @@ in
     };
 
     homepageServices = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.listOf
-        (lib.types.attrsOf lib.types.unspecified));
+      type = lib.types.attrsOf (lib.types.listOf (lib.types.attrsOf lib.types.unspecified));
       default = { };
       description = ''
         Per-stack homepage tiles. Outer keyed by group name ("Media",
@@ -464,7 +483,8 @@ in
     # stacks keep functioning. Opt out per-container with
     # `noNewPrivileges = false` (the key is stripped before reaching
     # oci-containers) for the rare image that legitimately needs to escalate.
-    _module.args.mkRootlessContainer = args:
+    _module.args.mkRootlessContainer =
+      args:
       let
         nnp = args.noNewPrivileges or true;
         cleanArgs = removeAttrs args [ "noNewPrivileges" ];
@@ -473,24 +493,25 @@ in
       {
         autoStart = true;
         podman.user = "santiago";
-      } // cleanArgs // {
-        environment = { TZ = config.time.timeZone; }
-          // (cleanArgs.environment or { });
+      }
+      // cleanArgs
+      // {
+        environment = {
+          TZ = config.time.timeZone;
+        }
+        // (cleanArgs.environment or { });
         extraOptions = secOpts ++ (cleanArgs.extraOptions or [ ]);
       };
 
     # systemd overrides + bridge units generated from the registry.
     # Per-stack `systemd.services.<X>` additions merge with these.
     systemd.services =
-      (lib.mapAttrs'
-        (name: net:
-          lib.nameValuePair "podman-${name}" (mkContainerOverride name net))
-        cfg.containerNetworks)
-      //
-      (lib.listToAttrs (map
-        (net:
-          lib.nameValuePair "podman-network-${net}-net" (mkBridgeUnit net))
-        distinctBridges));
+      (lib.mapAttrs' (
+        name: net: lib.nameValuePair "podman-${name}" (mkContainerOverride name net)
+      ) cfg.containerNetworks)
+      // (lib.listToAttrs (
+        map (net: lib.nameValuePair "podman-network-${net}-net" (mkBridgeUnit net)) distinctBridges
+      ));
 
     # Materialize webApps into the lower-level options the rest of
     # the box consumes (traefik route rendering, pi-hole dns.hosts,
@@ -501,29 +522,29 @@ in
       let
         # Resolve from whichever of the two webApps inputs is set
         # (assertion below enforces exactly-one).
-        resolveUrl = w:
-          if w.serviceName != null
-          then "http://${w.serviceName}:${toString w.port}"
-          else w.serviceUrl;
+        resolveUrl =
+          w: if w.serviceName != null then "http://${w.serviceName}:${toString w.port}" else w.serviceUrl;
         baseRoute = w: {
           host = w.hostname;
-          port = w.port;
+          inherit (w) port;
           serviceUrl = resolveUrl w;
         };
       in
       (lib.mapAttrs (_: baseRoute) cfg.webApps)
-      //
-      (lib.mapAttrs'
-        (n: w: lib.nameValuePair "${n}-cf" (baseRoute w // {
-          entrypoint = "cfweb";
-        }))
-        (lib.filterAttrs (_: w: w.exposeRemotely) cfg.webApps));
+      // (lib.mapAttrs' (
+        n: w:
+        lib.nameValuePair "${n}-cf" (
+          baseRoute w
+          // {
+            entrypoint = "cfweb";
+          }
+        )
+      ) (lib.filterAttrs (_: w: w.exposeRemotely) cfg.webApps));
 
     # Every route declares its upstream shape explicitly — no implicit
     # `host.containers.internal` fallback.
     assertions = lib.mapAttrsToList (n: w: {
-      assertion =
-        (w.serviceName != null) != (w.serviceUrl != null);
+      assertion = (w.serviceName != null) != (w.serviceUrl != null);
       message = ''
         myStack.webApps.${n}: exactly one of `serviceName`
         (bridge-routed via traefik-net) or `serviceUrl` (explicit
@@ -532,14 +553,10 @@ in
       '';
     }) cfg.webApps;
 
-    myStack.dnsHosts =
-      lib.mapAttrsToList
-        (_: w: "192.168.0.2 ${w.hostname}")
-        cfg.webApps;
+    myStack.dnsHosts = lib.mapAttrsToList (_: w: "192.168.0.2 ${w.hostname}") cfg.webApps;
 
-    myStack.cloudflareRoutes =
-      lib.mapAttrs
-        (_: w: { hostname = w.hostname; })
-        (lib.filterAttrs (_: w: w.exposeRemotely) cfg.webApps);
+    myStack.cloudflareRoutes = lib.mapAttrs (_: w: { inherit (w) hostname; }) (
+      lib.filterAttrs (_: w: w.exposeRemotely) cfg.webApps
+    );
   };
 }

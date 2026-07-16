@@ -12,14 +12,14 @@
   # /run/secrets/n8n-env at activation. Edit with `sops env.sops`.
   sops.secrets."n8n-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   myStack.containerNetworks = {
     n8n-postgres = "n8n";
-    n8n          = "n8n";
+    n8n = "n8n";
   };
 
   myStack.webApps.n8n = {
@@ -28,46 +28,63 @@
     port = 5678;
   };
 
-  myStack.homepageServices."Productivity" = [{
-    name = "n8n";
-    href = "https://n8n.toscanini.me";
-    description = "Workflow automation";
-    icon = "n8n.png";
-    siteMonitor = "http://n8n:5678";
-    widget = {
-      type = "customapi";
-      # /api/v1/executions?limit=10 → {data: [{id, workflowId, status, startedAt, ...}], nextCursor}
-      # Dynamic-list rendering: left column is the raw status
-      # (success / error / running), right column is a human name
-      # for the workflow. n8n's API does not return the workflow
-      # name on the execution row, and customapi cannot join two
-      # endpoints — so we hardcode a workflowId → name remap.
-      # `name`/`label` are reversed from the natural reading order
-      # because formatValue (and therefore `remap`) only runs on the
-      # label field, not the name. Add new workflows here as they
-      # appear; the `any` rule is a catch-all so unknown hashes
-      # never leak into the UI.
-      url = "http://n8n:5678/api/v1/executions?limit=10";
-      refreshInterval = 60000;
-      headers = {
-        "X-N8N-API-KEY" = "{{HOMEPAGE_VAR_N8N_API_KEY}}";
+  myStack.homepageServices."Productivity" = [
+    {
+      name = "n8n";
+      href = "https://n8n.toscanini.me";
+      description = "Workflow automation";
+      icon = "n8n.png";
+      siteMonitor = "http://n8n:5678";
+      widget = {
+        type = "customapi";
+        # /api/v1/executions?limit=10 → {data: [{id, workflowId, status, startedAt, ...}], nextCursor}
+        # Dynamic-list rendering: left column is the raw status
+        # (success / error / running), right column is a human name
+        # for the workflow. n8n's API does not return the workflow
+        # name on the execution row, and customapi cannot join two
+        # endpoints — so we hardcode a workflowId → name remap.
+        # `name`/`label` are reversed from the natural reading order
+        # because formatValue (and therefore `remap`) only runs on the
+        # label field, not the name. Add new workflows here as they
+        # appear; the `any` rule is a catch-all so unknown hashes
+        # never leak into the UI.
+        url = "http://n8n:5678/api/v1/executions?limit=10";
+        refreshInterval = 60000;
+        headers = {
+          "X-N8N-API-KEY" = "{{HOMEPAGE_VAR_N8N_API_KEY}}";
+        };
+        display = "dynamic-list";
+        mappings = {
+          items = "data";
+          limit = 5;
+          name = "status";
+          label = "workflowId";
+          remap = [
+            {
+              value = "AaEwerVyMkmEEYJH";
+              to = "Crypto monitor";
+            }
+            {
+              value = "PE_s7WPIw-c6U3D7JuoQ7";
+              to = "Supabase wakeup command";
+            }
+            {
+              value = "71zc3JjYq5cKBfU3Sv5MI";
+              to = "Instagram followers";
+            }
+            {
+              value = "G2cUo1VdVDf7vi3t";
+              to = "RSS Feeds";
+            }
+            {
+              any = true;
+              to = "Unknown workflow";
+            }
+          ];
+        };
       };
-      display = "dynamic-list";
-      mappings = {
-        items = "data";
-        limit = 5;
-        name = "status";
-        label = "workflowId";
-        remap = [
-          { value = "AaEwerVyMkmEEYJH";      to = "Crypto monitor"; }
-          { value = "PE_s7WPIw-c6U3D7JuoQ7"; to = "Supabase wakeup command"; }
-          { value = "71zc3JjYq5cKBfU3Sv5MI"; to = "Instagram followers"; }
-          { value = "G2cUo1VdVDf7vi3t";      to = "RSS Feeds"; }
-          { any = true;                       to = "Unknown workflow"; }
-        ];
-      };
-    };
-  }];
+    }
+  ];
 
   virtualisation.oci-containers.containers.n8n-postgres = mkRootlessContainer {
     image = "docker.io/library/postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f";

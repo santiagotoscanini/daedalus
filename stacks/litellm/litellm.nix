@@ -24,9 +24,9 @@
   # decrypted to /run/secrets/litellm-env. Edit with `sops env.sops`.
   sops.secrets."litellm-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   # Bare master-key token for prometheus scrape authorization
@@ -36,13 +36,13 @@
   # BOTH files — sops env.sops + re-encrypt prom-token.sops.
   sops.secrets."litellm-master-key" = {
     sopsFile = ./prom-token.sops;
-    format   = "binary";
-    owner    = "santiago";
+    format = "binary";
+    owner = "santiago";
   };
 
   myStack.containerNetworks = {
     litellm-db = "litellm";
-    litellm    = "litellm";
+    litellm = "litellm";
   };
 
   myStack.webApps.litellm = {
@@ -52,14 +52,16 @@
   };
 
   # Prometheus on traefik-net scrapes by container DNS.
-  myStack.prometheusScrapes = [{
-    job_name = "litellm";
-    authorization = {
-      type = "Bearer";
-      credentials_file = "/run/secrets/litellm-master-key";
-    };
-    static_configs = [{ targets = [ "litellm:4000" ]; }];
-  }];
+  myStack.prometheusScrapes = [
+    {
+      job_name = "litellm";
+      authorization = {
+        type = "Bearer";
+        credentials_file = "/run/secrets/litellm-master-key";
+      };
+      static_configs = [ { targets = [ "litellm:4000" ]; } ];
+    }
+  ];
 
   myStack.grafanaDashboards.litellm = builtins.readFile ./assets/dashboard.json;
 
@@ -82,8 +84,18 @@
           Authorization = "Bearer {{HOMEPAGE_VAR_LITELLM_KEY}}";
         };
         mappings = [
-          { field = "spend"; label = "Spend"; format = "number"; prefix = "$"; }
-          { field = "max_budget"; label = "Budget"; format = "number"; prefix = "$"; }
+          {
+            field = "spend";
+            label = "Spend";
+            format = "number";
+            prefix = "$";
+          }
+          {
+            field = "max_budget";
+            label = "Budget";
+            format = "number";
+            prefix = "$";
+          }
         ];
       };
     }
@@ -128,7 +140,12 @@
       "/etc/nixos/stacks/litellm/assets/config.yaml:/app/config.yaml:ro"
     ];
 
-    cmd = [ "--config" "/app/config.yaml" "--port" "4000" ];
+    cmd = [
+      "--config"
+      "/app/config.yaml"
+      "--port"
+      "4000"
+    ];
 
     environment = {
       STORE_MODEL_IN_DB = "True";

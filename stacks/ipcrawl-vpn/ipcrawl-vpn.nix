@@ -33,8 +33,8 @@
   # (separate ProtonVPN export from the TV stack's; same rationale).
   sops.secrets."ipcrawl-wg0" = {
     sopsFile = ./wg0.conf.sops;
-    format   = "binary";
-    owner    = "santiago";
+    format = "binary";
+    owner = "santiago";
   };
 
   # Register in containerNetworks with `null` (pasta, no bridge) so common.nix
@@ -42,37 +42,46 @@
   # container defaults to Type=notify, which is broken for rootless podman on
   # this box (podman run -d exits before READY). Same as the TV stack's
   # `gluetun = null`. The exporter shares gluetun's netns and needs the same.
-  myStack.containerNetworks.gluetun-ipcrawl          = null;
+  myStack.containerNetworks.gluetun-ipcrawl = null;
   myStack.containerNetworks.gluetun-exporter-ipcrawl = null;
 
   # Prometheus scrapes the exporter by its own job so the Grafana panels can
   # tell this instance apart from the TV gluetun (job="gluetun"). Reached via
   # the host port gluetun-ipcrawl publishes for the exporter (8003 → :8001).
-  myStack.prometheusScrapes = [{
-    job_name = "gluetun-ipcrawl";
-    static_configs = [{ targets = [ "host.containers.internal:8003" ]; }];
-  }];
+  myStack.prometheusScrapes = [
+    {
+      job_name = "gluetun-ipcrawl";
+      static_configs = [ { targets = [ "host.containers.internal:8003" ]; } ];
+    }
+  ];
 
   # Homepage tile in the "Network" group, next to the TV gluetun. The native
   # gluetun widget reads the control API (public IP + region + country) — same
   # shape as stacks/tv/tv.nix, pointed at this instance's host :8002.
-  myStack.homepageServices."Network" = [{
-    name        = "Gluetun (ipcrawl)";
-    href        = "https://ipcrawl.toscanini.me";
-    description = "ProtonVPN WireGuard tunnel (netns egress for ipcrawl)";
-    icon        = "gluetun.png";
-    siteMonitor = "http://host.containers.internal:8002/v1/publicip/ip";
-    widget = {
-      type    = "gluetun";
-      url     = "http://host.containers.internal:8002";
-      version = 2;
-    };
-  }];
+  myStack.homepageServices."Network" = [
+    {
+      name = "Gluetun (ipcrawl)";
+      href = "https://ipcrawl.toscanini.me";
+      description = "ProtonVPN WireGuard tunnel (netns egress for ipcrawl)";
+      icon = "gluetun.png";
+      siteMonitor = "http://host.containers.internal:8002/v1/publicip/ip";
+      widget = {
+        type = "gluetun";
+        url = "http://host.containers.internal:8002";
+        version = 2;
+      };
+    }
+  ];
 
   # Host-loaded kernel modules gluetun needs (rootless can't load them). The
   # TV stack already declares these; NixOS merges the lists, so this is
   # belt-and-suspenders that keeps the stack self-contained if TV ever goes.
-  boot.kernelModules = [ "wireguard" "iptable_nat" "iptable_filter" "tun" ];
+  boot.kernelModules = [
+    "wireguard"
+    "iptable_nat"
+    "iptable_filter"
+    "tun"
+  ];
 
   systemd.tmpfiles.rules = [
     "d /home/santiago/selfhost/ipcrawl-vpn                   0755 santiago users -"
@@ -94,7 +103,7 @@
     ports = [
       "3100:3000"
       "8002:8000"
-      "8003:8001"   # gluetun-exporter (sibling in this netns) → Prometheus
+      "8003:8001" # gluetun-exporter (sibling in this netns) → Prometheus
     ];
 
     volumes = [
@@ -109,7 +118,7 @@
 
     environment = {
       VPN_SERVICE_PROVIDER = "custom";
-      VPN_TYPE             = "wireguard";
+      VPN_TYPE = "wireguard";
     };
 
     extraOptions = [
@@ -124,12 +133,12 @@
   # on :8001 (host-published as 8003 by gluetun-ipcrawl). Same image + shape as
   # the TV stack's gluetun-exporter.
   virtualisation.oci-containers.containers.gluetun-exporter-ipcrawl = mkRootlessContainer {
-    image     = "ghcr.io/thecfu/gluetun-exporter:latest@sha256:bafeabb2a9638bf6b0800c2d3d47d49c6236d879bd01eec8caea45dfca2b50c5";
+    image = "ghcr.io/thecfu/gluetun-exporter:latest@sha256:bafeabb2a9638bf6b0800c2d3d47d49c6236d879bd01eec8caea45dfca2b50c5";
     dependsOn = [ "gluetun-ipcrawl" ];
 
     environment = {
-      GLUETUN_URL       = "http://localhost:8000";
-      EXPORTER_PORT     = "8001";
+      GLUETUN_URL = "http://localhost:8000";
+      EXPORTER_PORT = "8001";
       EXPORTER_INTERVAL = "30";
     };
 

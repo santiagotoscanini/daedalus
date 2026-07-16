@@ -14,7 +14,13 @@
 #     podman exec -u www-data nextcloud-app php occ maintenance:repair \
 #       --include-expensive
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   # Bump to track upstream. After bumping, `nixos-rebuild switch`
@@ -40,15 +46,15 @@ in
   # /run/secrets/nextcloud-env at activation. Edit with `sops env.sops`.
   sops.secrets."nextcloud-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   myStack.containerNetworks = {
     nextcloud-postgres = "nextcloud";
-    nextcloud-redis    = "nextcloud";
-    nextcloud-app      = "nextcloud";
+    nextcloud-redis = "nextcloud";
+    nextcloud-app = "nextcloud";
   };
 
   # Split-horizon publish — same hostname for LAN (websecure) + off-LAN
@@ -61,19 +67,26 @@ in
     exposeRemotely = true;
   };
 
-  myStack.homepageServices."Cloud & AI" = [{
-    name = "Nextcloud";
-    href = "https://nextcloud.toscanini.me";
-    description = "Files, calendar, contacts — primary household sync";
-    icon = "nextcloud.png";
-    siteMonitor = "https://nextcloud.toscanini.me";
-    widget = {
-      type = "nextcloud";
-      url = "https://nextcloud.toscanini.me";
-      key = "{{HOMEPAGE_VAR_NEXTCLOUD_KEY}}";
-      fields = [ "freespace" "activeusers" "numfiles" "numshares" ];
-    };
-  }];
+  myStack.homepageServices."Cloud & AI" = [
+    {
+      name = "Nextcloud";
+      href = "https://nextcloud.toscanini.me";
+      description = "Files, calendar, contacts — primary household sync";
+      icon = "nextcloud.png";
+      siteMonitor = "https://nextcloud.toscanini.me";
+      widget = {
+        type = "nextcloud";
+        url = "https://nextcloud.toscanini.me";
+        key = "{{HOMEPAGE_VAR_NEXTCLOUD_KEY}}";
+        fields = [
+          "freespace"
+          "activeusers"
+          "numfiles"
+          "numshares"
+        ];
+      };
+    }
+  ];
 
   # `:16` is load-bearing: the on-disk cluster was initdb'd for PG 16.
   # Bumping requires a pg_upgrade dance, NOT just a tag bump.
@@ -111,19 +124,23 @@ in
     environmentFiles = [ config.sops.secrets."nextcloud-env".path ];
 
     cmd = [
-      "sh" "-c"
+      "sh"
+      "-c"
       "exec redis-server --requirepass \"$REDIS_PASS\""
     ];
 
     extraOptions = [
-      "--network=nextcloud-net:alias=redis"   # config.php has redis.host = redis
+      "--network=nextcloud-net:alias=redis" # config.php has redis.host = redis
     ];
   };
 
   virtualisation.oci-containers.containers.nextcloud-app = mkRootlessContainer {
     # Built by nextcloud-image-build below.
     image = "localhost/nextcloud-ffmpeg:${nextcloudVersion}";
-    dependsOn = [ "nextcloud-postgres" "nextcloud-redis" ];
+    dependsOn = [
+      "nextcloud-postgres"
+      "nextcloud-redis"
+    ];
 
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_config:/var/www/html"
@@ -162,7 +179,7 @@ in
 
     extraOptions = [
       "--network=nextcloud-net"
-      "--network=traefik-net"   # traefik dials http://nextcloud-app:80
+      "--network=traefik-net" # traefik dials http://nextcloud-app:80
       # tmpfs for /tmp speeds up the `recognize` ML app per its README.
       "--tmpfs=/tmp:exec"
     ];
@@ -172,8 +189,14 @@ in
   systemd.services.nextcloud-image-build = {
     description = "Build localhost/nextcloud-ffmpeg:${nextcloudVersion}";
     # linger-users gates /run/user/1000 → rootless podman → newuidmap.
-    after = [ "network-online.target" "linger-users.service" ];
-    wants = [ "network-online.target" "linger-users.service" ];
+    after = [
+      "network-online.target"
+      "linger-users.service"
+    ];
+    wants = [
+      "network-online.target"
+      "linger-users.service"
+    ];
     before = [ "podman-nextcloud-app.service" ];
     serviceConfig = {
       Type = "oneshot";
@@ -222,7 +245,7 @@ in
     partOf = [ "nextcloud-cron.service" ];
     timerConfig = {
       OnCalendar = "*:0/5";
-      Persistent = true;  # catch up if the server was off
+      Persistent = true; # catch up if the server was off
     };
   };
 }

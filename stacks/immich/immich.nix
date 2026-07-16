@@ -29,7 +29,13 @@
 #     profile/, backups/         avatars + auto pg_dumps
 #   /home/santiago/selfhost/immich/{postgres,model-cache}/   on NVMe
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   # Pin server + ML to the same tag. Bump intentionally — iOS app
@@ -37,24 +43,23 @@ let
   immichVersion = "v3.0.2";
 
   # Tied to the immich major; check before bumping immichVersion.
-  immichPostgresImage =
-    "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0";
+  immichPostgresImage = "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0";
 in
 {
   # POSTGRES_PASSWORD + DB_PASSWORD (shared by db and server): sops-encrypted env.sops, decrypted to
   # /run/secrets/immich-env at activation. Edit with `sops env.sops`.
   sops.secrets."immich-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   myStack.containerNetworks = {
-    immich-postgres         = "immich";
-    immich-redis            = "immich";
+    immich-postgres = "immich";
+    immich-redis = "immich";
     immich-machine-learning = "immich";
-    immich                  = "immich";
+    immich = "immich";
   };
 
   # Three webApps entries — one per in-container HTTP port. UI is
@@ -69,7 +74,7 @@ in
   myStack.webApps.immich-metrics-api = {
     hostname = "immich-metrics-api.toscanini.me";
     serviceName = "immich";
-    port = 8081;           # IMMICH_TELEMETRY_INCLUDE=all → /metrics
+    port = 8081; # IMMICH_TELEMETRY_INCLUDE=all → /metrics
   };
   myStack.webApps.immich-metrics-microservices = {
     hostname = "immich-metrics-microservices.toscanini.me";
@@ -79,28 +84,39 @@ in
 
   # Bridge scrape — prometheus is on traefik-net too (see monitoring.nix).
   myStack.prometheusScrapes = [
-    { job_name = "immich-api";
-      static_configs = [{ targets = [ "immich:8081" ]; }]; }
-    { job_name = "immich-microservices";
-      static_configs = [{ targets = [ "immich:8082" ]; }]; }
+    {
+      job_name = "immich-api";
+      static_configs = [ { targets = [ "immich:8081" ]; } ];
+    }
+    {
+      job_name = "immich-microservices";
+      static_configs = [ { targets = [ "immich:8082" ]; } ];
+    }
   ];
 
   myStack.grafanaDashboards.immich = builtins.readFile ./assets/dashboard.json;
 
-  myStack.homepageServices."Cloud & AI" = [{
-    name = "Immich";
-    href = "https://immich.toscanini.me";
-    description = "Photo + video backup (ML on iGPU via OpenVINO)";
-    icon = "immich.png";
-    siteMonitor = "http://immich:2283";
-    widget = {
-      type = "immich";
-      url = "http://immich:2283";
-      key = "{{HOMEPAGE_VAR_IMMICH_API_KEY}}";
-      version = 2;
-      fields = [ "users" "photos" "videos" "storage" ];
-    };
-  }];
+  myStack.homepageServices."Cloud & AI" = [
+    {
+      name = "Immich";
+      href = "https://immich.toscanini.me";
+      description = "Photo + video backup (ML on iGPU via OpenVINO)";
+      icon = "immich.png";
+      siteMonitor = "http://immich:2283";
+      widget = {
+        type = "immich";
+        url = "http://immich:2283";
+        key = "{{HOMEPAGE_VAR_IMMICH_API_KEY}}";
+        version = 2;
+        fields = [
+          "users"
+          "photos"
+          "videos"
+          "storage"
+        ];
+      };
+    }
+  ];
 
   virtualisation.oci-containers.containers.immich-postgres = mkRootlessContainer {
     image = immichPostgresImage;
@@ -149,7 +165,11 @@ in
 
   virtualisation.oci-containers.containers.immich = mkRootlessContainer {
     image = "ghcr.io/immich-app/immich-server:${immichVersion}";
-    dependsOn = [ "immich-postgres" "immich-redis" "immich-machine-learning" ];
+    dependsOn = [
+      "immich-postgres"
+      "immich-redis"
+      "immich-machine-learning"
+    ];
 
     volumes = [
       "/s2/immich:/data"
@@ -174,9 +194,9 @@ in
 
     extraOptions = [
       "--network=immich-net"
-      "--network=traefik-net"     # traefik + prometheus reach by container DNS
+      "--network=traefik-net" # traefik + prometheus reach by container DNS
       "--device=/dev/dri:/dev/dri" # iGPU for QSV transcoding
-      "--userns=keep-id:uid=1000,gid=1000"  # node (UID 1000) → santiago
+      "--userns=keep-id:uid=1000,gid=1000" # node (UID 1000) → santiago
     ];
   };
 }

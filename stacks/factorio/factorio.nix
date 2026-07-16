@@ -23,26 +23,28 @@
   # /run/secrets/factorio-env at activation. Edit with `sops env.sops`.
   sops.secrets."factorio-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
 
   myStack.containerNetworks.factorio = "traefik";
 
   myStack.webApps.factorio-admin = {
-    hostname    = "factorio-admin.toscanini.me";
+    hostname = "factorio-admin.toscanini.me";
     serviceName = "factorio";
-    port        = 80;
+    port = 80;
   };
 
-  myStack.homepageServices."Productivity" = [{
-    name = "Factorio Admin";
-    href = "https://factorio-admin.toscanini.me";
-    description = "Factorio server manager";
-    icon = "/icons/factorio.png";
-    siteMonitor = "https://factorio-admin.toscanini.me";
-  }];
+  myStack.homepageServices."Productivity" = [
+    {
+      name = "Factorio Admin";
+      href = "https://factorio-admin.toscanini.me";
+      description = "Factorio server manager";
+      icon = "/icons/factorio.png";
+      siteMonitor = "https://factorio-admin.toscanini.me";
+    }
+  ];
 
   # Only the game port faces the world; UI is LAN-only via Traefik.
   # (Old module also opened 27015/tcp for RCON; ofsm handles RCON

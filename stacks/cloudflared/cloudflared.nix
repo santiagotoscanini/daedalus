@@ -24,14 +24,20 @@
 # websecure would double-TLS with cert validation against the home cert
 # from inside cloudflared. cfweb is plain HTTP, no redirect to https.
 
-{ config, lib, pkgs, mkRootlessContainer, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 let
   cfg = config.myStack;
 
   # Tunnel + account identifiers. Bound here so a tunnel rotation is
   # a single-line change (also referenced from the homepage tile).
-  tunnelId  = "f67bc172-3096-4b17-961e-3cb3d1b5b523";
+  tunnelId = "f67bc172-3096-4b17-961e-3cb3d1b5b523";
   accountId = "c08bf36c41d7bc5db11d6b35e0b4e721";
 
   yamlFormat = pkgs.formats.yaml { };
@@ -40,9 +46,10 @@ let
     tunnel = tunnelId;
     credentials-file = "/etc/cloudflared/credentials.json";
     ingress =
-      (map
-        (r: { hostname = r.hostname; service = r.service; })
-        (lib.attrValues cfg.cloudflareRoutes))
+      (map (r: {
+        inherit (r) hostname;
+        inherit (r) service;
+      }) (lib.attrValues cfg.cloudflareRoutes))
       ++ [ { service = "http_status:404"; } ];
   };
 
@@ -66,13 +73,19 @@ let
   # all in one shell with shellcheck across the whole.
   routeSyncScript = pkgs.writeShellApplication {
     name = "cloudflared-route-sync";
-    runtimeInputs = [ pkgs.curl pkgs.jq ];
+    runtimeInputs = [
+      pkgs.curl
+      pkgs.jq
+    ];
     text = ''
       ZONE_ID='${zoneId}'
       TUNNEL_ID='${tunnelId}'
       MANAGED_COMMENT=${lib.escapeShellArg managedComment}
-      HOSTS=${lib.escapeShellArg (lib.concatMapStringsSep "\n"
-        (r: r.hostname) (lib.attrValues cfg.cloudflareRoutes))}
+      HOSTS=${
+        lib.escapeShellArg (
+          lib.concatMapStringsSep "\n" (r: r.hostname) (lib.attrValues cfg.cloudflareRoutes)
+        )
+      }
 
       ${builtins.readFile ./assets/route-sync.sh}
     '';
@@ -86,35 +99,39 @@ in
   # rebuild trail, no out-of-tree backup needed.
   sops.secrets."cloudflared-env" = {
     sopsFile = ./env.sops;
-    format   = "dotenv";
-    key      = "";
-    owner    = "santiago";
+    format = "dotenv";
+    key = "";
+    owner = "santiago";
   };
   sops.secrets."cloudflared-credentials" = {
     sopsFile = ./credentials.json.sops;
-    format   = "binary";
-    owner    = "santiago";
+    format = "binary";
+    owner = "santiago";
   };
 
   myStack.containerNetworks.cloudflared = "traefik";
 
-  myStack.prometheusScrapes = [{
-    job_name = "cloudflared";
-    static_configs = [{ targets = [ "cloudflared:2000" ]; }];
-  }];
+  myStack.prometheusScrapes = [
+    {
+      job_name = "cloudflared";
+      static_configs = [ { targets = [ "cloudflared:2000" ]; } ];
+    }
+  ];
 
-  myStack.homepageServices."Network" = [{
-    name = "Cloudflare Tunnel";
-    href = "https://dash.cloudflare.com/${accountId}/tunnels/${tunnelId}/overview";
-    description = "Outbound CF Tunnel (locally-managed ingress)";
-    icon = "cloudflare.png";
-    widget = {
-      type = "cloudflared";
-      accountid = "{{HOMEPAGE_VAR_CF_ACCOUNT_ID}}";
-      tunnelid  = "{{HOMEPAGE_VAR_CF_TUNNEL_ID}}";
-      key       = "{{HOMEPAGE_VAR_CF_API_TOKEN}}";
-    };
-  }];
+  myStack.homepageServices."Network" = [
+    {
+      name = "Cloudflare Tunnel";
+      href = "https://dash.cloudflare.com/${accountId}/tunnels/${tunnelId}/overview";
+      description = "Outbound CF Tunnel (locally-managed ingress)";
+      icon = "cloudflare.png";
+      widget = {
+        type = "cloudflared";
+        accountid = "{{HOMEPAGE_VAR_CF_ACCOUNT_ID}}";
+        tunnelid = "{{HOMEPAGE_VAR_CF_TUNNEL_ID}}";
+        key = "{{HOMEPAGE_VAR_CF_API_TOKEN}}";
+      };
+    }
+  ];
 
   virtualisation.oci-containers.containers.cloudflared = mkRootlessContainer {
     image = "docker.io/cloudflare/cloudflared:2026.7.1@sha256:188bb03589a32affed3cf4d0590565ffe67b78866e6b5582574afab2b705bafe";
@@ -130,8 +147,10 @@ in
     # (reached over traefik-net, no host port).
     cmd = [
       "tunnel"
-      "--config" "/etc/cloudflared/config.yml"
-      "--metrics" "0.0.0.0:2000"
+      "--config"
+      "/etc/cloudflared/config.yml"
+      "--metrics"
+      "0.0.0.0:2000"
       "--no-autoupdate"
       "run"
     ];
@@ -152,8 +171,14 @@ in
   # safe if cloudflared is already up.
   systemd.services.cloudflared-route-sync = {
     description = "Reconcile CF DNS CNAMEs for myStack.cloudflareRoutes";
-    after = [ "network-online.target" "pihole-ready.service" ];
-    wants = [ "network-online.target" "pihole-ready.service" ];
+    after = [
+      "network-online.target"
+      "pihole-ready.service"
+    ];
+    wants = [
+      "network-online.target"
+      "pihole-ready.service"
+    ];
     wantedBy = [ "multi-user.target" ];
     before = [ "podman-cloudflared.service" ];
     serviceConfig = {

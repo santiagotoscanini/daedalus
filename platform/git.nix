@@ -33,7 +33,7 @@
 # When sops-nix lands, the private key moves into a sops-encrypted
 # tree and gets materialized at /run/secrets/github-ssh-key.
 
-{ ... }:
+_:
 
 {
   programs.git = {
