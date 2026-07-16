@@ -26,6 +26,7 @@
     ./stacks/factorio/factorio.nix
     ./stacks/grocy/grocy.nix
     ./stacks/gatus/gatus.nix
+    ./stacks/healthchecks/healthchecks.nix
     ./stacks/homepage/homepage.nix
     ./stacks/immich/immich.nix
     ./stacks/intel-gpu-exporter/intel-gpu-exporter.nix
