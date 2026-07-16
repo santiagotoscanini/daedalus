@@ -29,7 +29,7 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
       `stacks/monitoring/env.sops`), replace the `noop` contact point
       in grafana alerting provisioning, send test alert.
       *Why: 21 existing rules currently page nobody.*
-- [ ] **4. Container liveness metric** — timer script exporting
+- [x] **4. Container liveness metric** — timer script exporting
       `container_up{name=…}` via node-exporter textfile collector;
       point container alert rules at it.
       *Why: cadvisor can't see rootless containers — a dead container
