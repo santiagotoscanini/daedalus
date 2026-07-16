@@ -40,10 +40,10 @@ app passwords: `system`, `grafana`, `nextcloud`, `immich`, `n8n`, `tv`.
 - [x] **6. n8n SMTP env** — `N8N_EMAIL_MODE=smtp` + `N8N_SMTP_*`
       (secret in `stacks/n8n/env.sops`).
 - [ ] **7. Per-app SMTP in UIs** (operator, each has a test button):
-      - [ ] Nextcloud — Admin settings → Basic settings → Email server
-      - [ ] Immich — Administration → Settings → Notifications
-      - [ ] radarr — Settings → Connect → Email (health events only)
-      - [ ] sonarr — Settings → Connect → Email (health events only)
+      - [x] Nextcloud — Admin settings → Basic settings → Email server
+      - [x] Immich — Administration → Settings → Notifications
+      - [x] radarr — Settings → Connect → Email (health events only)
+      - [x] sonarr — Settings → Connect → Email (health events only)
       - [ ] n8n — workflow SMTP credential (Credentials → SMTP)
 
 ## P2 — Security & reproducibility
