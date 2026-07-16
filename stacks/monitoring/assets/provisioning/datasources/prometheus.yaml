@@ -1,0 +1,16 @@
+# Provisioned Prometheus datasource. UID is preserved across reboots so
+# the dashboard panels and alert rules (which reference this UID) keep
+# resolving. `editable: false` makes the UI read-only for this entry.
+
+apiVersion: 1
+
+datasources:
+  - name: prometheus
+    uid: dfakbms70z4zke
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      pdcInjected: false

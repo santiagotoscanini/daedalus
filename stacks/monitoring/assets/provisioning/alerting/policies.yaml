@@ -1,0 +1,12 @@
+# Root notification policy routes everything to the noop contact point.
+# Alerts still evaluate and show state in the Grafana UI; they just
+# don't go anywhere externally.
+
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: noop
+    group_by:
+      - grafana_folder
+      - alertname

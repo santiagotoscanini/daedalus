@@ -62,24 +62,16 @@ in
     immich = "immich";
   };
 
-  # Three webApps entries — one per in-container HTTP port. UI is
-  # exposed remotely; the two telemetry endpoints stay LAN-only.
-  # Distinct hostnames because traefik routes by Host header.
+  # One webApp: the UI (exposed remotely). The two telemetry ports (8081
+  # api, 8082 microservices) are NOT published as web routes — prometheus
+  # scrapes them directly by container DNS on traefik-net (see
+  # prometheusScrapes below), so routing them through traefik + pi-hole +
+  # gatus would be redundant surface for endpoints nobody browses by hand.
   myStack.webApps.immich = {
     hostname = "immich.toscanini.me";
     serviceName = "immich";
     port = 2283;
     exposeRemotely = true;
-  };
-  myStack.webApps.immich-metrics-api = {
-    hostname = "immich-metrics-api.toscanini.me";
-    serviceName = "immich";
-    port = 8081; # IMMICH_TELEMETRY_INCLUDE=all → /metrics
-  };
-  myStack.webApps.immich-metrics-microservices = {
-    hostname = "immich-metrics-microservices.toscanini.me";
-    serviceName = "immich";
-    port = 8082;
   };
 
   # Bridge scrape — prometheus is on traefik-net too (see monitoring.nix).

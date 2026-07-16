@@ -1,0 +1,18 @@
+# Dashboard provider: loads JSON files from /var/lib/grafana/dashboards
+# at startup and every 30s thereafter.
+#   disableDeletion: true   → UI can't remove provisioned dashboards
+#   allowUiUpdates: false   → UI changes are temporary; files are SoT
+
+apiVersion: 1
+
+providers:
+  - name: home-server
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true

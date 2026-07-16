@@ -124,14 +124,6 @@ in
               type = lib.types.str;
               description = "FQDN matched by the `Host(...)` rule.";
             };
-            port = lib.mkOption {
-              type = lib.types.port;
-              description = ''
-                Upstream port traefik dials. Used to build the default
-                `host.containers.internal:port` URL when `serviceUrl` is
-                null; when `serviceUrl` is set, this is informational only.
-              '';
-            };
             serviceUrl = lib.mkOption {
               type = lib.types.str;
               description = ''
@@ -526,7 +518,6 @@ in
           w: if w.serviceName != null then "http://${w.serviceName}:${toString w.port}" else w.serviceUrl;
         baseRoute = w: {
           host = w.hostname;
-          inherit (w) port;
           serviceUrl = resolveUrl w;
         };
       in

@@ -261,8 +261,9 @@ in
 
     volumes = [
       "${prometheusDir}:/etc/prometheus:ro"
-      # litellm scrape auth — bare-token secret declared in stacks/litellm/
-      "/run/secrets/litellm-master-key:/run/secrets/litellm-master-key:ro"
+      # litellm scrape auth — bare token rendered from env.sops at boot by
+      # litellm-prom-token.service (stacks/litellm/); no separate sops file.
+      "/run/litellm-prom-token/token:/run/secrets/litellm-master-key:ro"
       "/home/santiago/selfhost/monitoring/prometheus/data:/prometheus"
     ];
 
@@ -281,9 +282,9 @@ in
 
     volumes = [
       "/home/santiago/selfhost/monitoring/grafana/data:/var/lib/grafana"
-      "/home/santiago/selfhost/monitoring/grafana/app/provisioning/datasources:/etc/grafana/provisioning/datasources:ro"
-      "/home/santiago/selfhost/monitoring/grafana/app/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro"
-      "/home/santiago/selfhost/monitoring/grafana/app/provisioning/alerting:/etc/grafana/provisioning/alerting:ro"
+      "${./assets/provisioning/datasources}:/etc/grafana/provisioning/datasources:ro"
+      "${./assets/provisioning/dashboards}:/etc/grafana/provisioning/dashboards:ro"
+      "${./assets/provisioning/alerting}:/etc/grafana/provisioning/alerting:ro"
       "${dashboardsDir}:/var/lib/grafana/dashboards:ro"
     ];
 

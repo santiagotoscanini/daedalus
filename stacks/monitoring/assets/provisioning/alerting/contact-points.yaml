@@ -1,0 +1,17 @@
+# No-op contact point. Email type with a bogus address; since SMTP is
+# not configured on this host, delivery fails silently (a single SMTP
+# error logged per fired alert, no retries). Replaces the previous
+# webhook → n8n integration which generated infinite retries because
+# Grafana-in-pasta couldn't reach the public hostname.
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: noop
+    receivers:
+      - uid: noop-cp-1
+        type: email
+        settings:
+          addresses: noreply@localhost
+        disableResolveMessage: true

@@ -17,7 +17,12 @@
 # Note: `docker.litellm.ai` (old compose used this) is sinkholed by
 # pi-hole — use `ghcr.io/berriai/litellm:main-stable@sha256:9ef6f45bc0104940571765e610c52a1d761b5ec85efcd193795281086ee61277` instead.
 
-{ config, mkRootlessContainer, ... }:
+{
+  config,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 {
   # DATABASE_URL + UI creds + LITELLM_MASTER_KEY: sops-encrypted env.sops,
@@ -29,20 +34,45 @@
     owner = "santiago";
   };
 
-  # Bare master-key token for prometheus scrape authorization
-  # (credentials_file) — monitoring.nix bind-mounts it into the
-  # prometheus container. DUPLICATED from env.sops LITELLM_MASTER_KEY
-  # (sops-nix cannot extract single dotenv keys). The key lives in THREE
-  # places — rotate ALL of them together or the stragglers 401:
-  #   1. stacks/litellm/env.sops        LITELLM_MASTER_KEY        (the app)
-  #   2. stacks/litellm/prom-token.sops (bare token)             (prom scrape)
-  #   3. stacks/homepage/env.sops       HOMEPAGE_VAR_LITELLM_KEY (homepage tile)
-  # (#3 was missed in the 2026-07-15 rotation → homepage spammed litellm
-  #  with 401s until re-synced; that's why it's called out here.)
-  sops.secrets."litellm-master-key" = {
-    sopsFile = ./prom-token.sops;
-    format = "binary";
-    owner = "santiago";
+  # Prometheus scrapes litellm's /metrics with a Bearer token that IS the
+  # LITELLM_MASTER_KEY. `credentials_file` wants a file holding ONLY the
+  # token, but env.sops is a full dotenv — so litellm-prom-token.service
+  # extracts just the token from the already-decrypted /run/secrets/litellm-env
+  # at boot and writes it to /run/litellm-prom-token/token, which
+  # monitoring.nix bind-mounts into prometheus. Same activation-render idiom
+  # as app-db's pg-exporter-config.
+  #
+  # This removes the old prom-token.sops duplicate: the key now has ONE
+  # encrypted source of truth (env.sops). ONE copy still needs manual sync on
+  # rotation — stacks/homepage/env.sops HOMEPAGE_VAR_LITELLM_KEY (the homepage
+  # tile substitutes its own var and can't read this rendered file).
+  systemd.services."litellm-prom-token" = {
+    description = "Render litellm master key as a bare bearer token for the prometheus scrape";
+    # Gate prometheus: podman bind-mounts the token file at container start.
+    before = [ "podman-prometheus.service" ];
+    wantedBy = [ "podman-prometheus.service" ];
+    # /run/secrets/litellm-env is materialized during activation, ahead of
+    # every multi-user unit — no explicit sops ordering needed beyond local-fs.
+    after = [ "local-fs.target" ];
+    path = [
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      Restart = "on-failure";
+      RestartSec = "5s";
+    };
+    script = ''
+      set -eu
+      install -d -m 0755 -o santiago -g users /run/litellm-prom-token
+      umask 077
+      TOKEN=$(grep '^LITELLM_MASTER_KEY=' /run/secrets/litellm-env | head -1 | cut -d= -f2-)
+      install -m 0400 -o santiago -g users /dev/stdin /run/litellm-prom-token/token <<TOK
+      $TOKEN
+      TOK
+    '';
   };
 
   myStack.containerNetworks = {

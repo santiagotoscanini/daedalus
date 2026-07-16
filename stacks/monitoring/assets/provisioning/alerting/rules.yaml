@@ -1,0 +1,886 @@
+# All alert rules for the home server. Exported via Grafana's
+# /api/v1/provisioning/alert-rules/export endpoint. Grouped by
+# severity tier; folder is matched by title ("Home Server Alerts").
+
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: Container Alerts
+    folder: Home Server Alerts
+    interval: 1m
+    rules:
+      # PAUSED: relies on cadvisor per-container memory series
+      # (container_memory_working_set_bytes{name!=""}), which is empty
+      # under rootless podman — cadvisor can't see the container cgroups.
+      # No rootless-visible per-container RAM metric exists to alert on;
+      # only liveness (container_up) is available. Left here, paused, so
+      # it's re-armable if per-container cgroup visibility is ever solved.
+      - uid: efal2elu6y5tse
+        title: Container High Memory Usage
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (container_memory_working_set_bytes{name!="", container_label_com_docker_compose_project!=""} / container_spec_memory_limit_bytes{name!=""} * 100) and container_spec_memory_limit_bytes{name!=""} > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 80
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: Container {{ $labels.name }} is using {{ $values.A | humanizePercentage }} of its memory limit.
+          summary: Container memory usage is high (> 80%)
+        labels:
+          severity: warning
+        isPaused: true
+      # PAUSED: relies on cadvisor per-container CPU throttle series
+      # (container_cpu_cfs_throttled_periods_total{id=~"/system.slice/docker-.*"}),
+      # empty under rootless podman (no docker system.slice cgroups, and
+      # cadvisor can't see the rootless ones). No metric to alert on; see
+      # the note on Container High Memory Usage above. Left paused.
+      - uid: efal2epnyckcga
+        title: Container CPU Throttled
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (increase(container_cpu_cfs_throttled_periods_total{id=~"/system.slice/docker-.*"}[5m]) / increase(container_cpu_cfs_periods_total{id=~"/system.slice/docker-.*"}[5m])) * 100
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 25
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: Container {{ $labels.name }} is being throttled {{ $values.A | humanizePercentage }} of the time.
+          summary: Container is being CPU throttled (> 25%)
+        labels:
+          severity: warning
+        isPaused: true
+      # Liveness via the container_up{} textfile metric (monitoring.nix's
+      # container-up-exporter timer), NOT cadvisor's container_last_seen —
+      # cadvisor can't see rootless-podman cgroups so that series is empty.
+      # container_up{name="X"} is 1 when the declared container is running,
+      # 0 when stopped/missing; fire on 0.
+      - uid: bfal2ethfrdhcc
+        title: Container Disappeared
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              # Aggregate by name so each frame is uniquely labelled — raw
+              # container_up carries instance/job labels that the threshold
+              # reducer collapses to {}, colliding across all 45 series
+              # ("frame cannot uniquely be identified by its labels").
+              expr: min by (name) (container_up)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          description: Container {{ $labels.name }} is down (container_up = 0).
+          summary: A declared container has stopped unexpectedly
+        labels:
+          severity: warning
+        isPaused: false
+  - orgId: 1
+    name: Critical Alerts
+    folder: Home Server Alerts
+    interval: 1m
+    rules:
+      - uid: ffal28xmfal1cf
+        title: Host Out of Disk Space
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"} / node_filesystem_size_bytes{fstype!~"tmpfs|nfs|ramfs"}) * 100
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Filesystem on {{ $labels.instance }} at {{ $labels.mountpoint }} has only {{ $values.A | humanizePercentage }} free space.
+          summary: Host filesystem is almost full (< 10% left)
+        labels:
+          severity: critical
+        isPaused: false
+      - uid: afal291gvnz0ge
+        title: Host Out of Memory
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Memory on {{ $labels.instance }} has only {{ $values.A | humanizePercentage }} available.
+          summary: Host memory is critically low (< 10% available)
+        labels:
+          severity: critical
+        isPaused: false
+      - uid: bfal295czyxa8b
+        title: Host OOM Kill Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: increase(node_vmstat_oom_kill[5m])
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          description: An OOM (Out of Memory) kill event was detected on {{ $labels.instance }}. A process was killed due to memory exhaustion.
+          summary: OOM kill detected on host
+        labels:
+          severity: critical
+        isPaused: false
+      - uid: bfal299afpy4gb
+        title: Host CPU Overtemperature
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: max(node_hwmon_temp_celsius{chip=~".*coretemp.*"}) or vector(0)
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 85
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 2m
+        annotations:
+          description: CPU temperature on {{ $labels.instance }} has reached {{ $values.A }}°C which exceeds safe limits.
+          summary: Host CPU temperature is critically high
+        labels:
+          severity: critical
+        isPaused: false
+      - uid: afal29d6u0hs0d
+        title: Host Systemd Service Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: node_systemd_unit_state{state="failed"}
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          description: Service {{ $labels.name }} on {{ $labels.instance }} is in failed state.
+          summary: Systemd service has failed
+        labels:
+          severity: critical
+        isPaused: false
+  - orgId: 1
+    name: Predictive Alerts
+    folder: Home Server Alerts
+    interval: 1m
+    rules:
+      - uid: afal2fwv7mmtce
+        title: Disk Will Fill In 24 Hours
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          description: Based on current usage trends, filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} will be full within 24 hours.
+          summary: Filesystem predicted to fill within 24 hours
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: dfal2g0pbij28e
+        title: Inodes Will Fill In 24 Hours
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: predict_linear(node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          description: Based on current usage trends, filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} will run out of inodes within 24 hours.
+          summary: Filesystem inodes predicted to fill within 24 hours
+        labels:
+          severity: warning
+        isPaused: false
+  - orgId: 1
+    name: Warning Alerts
+    folder: Home Server Alerts
+    interval: 1m
+    rules:
+      - uid: ffal2b36ys1dsf
+        title: Host High CPU Load
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 80
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: CPU load on {{ $labels.instance }} is {{ $values.A | humanizePercentage }}.
+          summary: Host CPU load is high (> 80%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: afal2b6y5s740a
+        title: Host High CPU IOWait
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: avg by(instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: CPU iowait on {{ $labels.instance }} is {{ $values.A | humanizePercentage }}. This indicates disk I/O bottleneck.
+          summary: Host CPU iowait is high (> 10%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: dfal2bapfa96oc
+        title: Host Swap Filling Up
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) * 100 and node_memory_SwapTotal_bytes > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 80
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Swap usage on {{ $labels.instance }} is {{ $values.A | humanizePercentage }}.
+          summary: Host swap usage is high (> 80%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: efal2befic1dsc
+        title: Host Memory Under Pressure
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: rate(node_vmstat_pgmajfault[5m])
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1000
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: High rate of major page faults ({{ $values.A }}/s) on {{ $labels.instance }} indicates memory pressure.
+          summary: Host is experiencing memory pressure
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: efal2bi8zquiob
+        title: Host Out of Inodes
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"} / node_filesystem_files{fstype!~"tmpfs|nfs|ramfs"}) * 100
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has only {{ $values.A | humanizePercentage }} inodes free.
+          summary: Host filesystem is running out of inodes (< 10% free)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: dfal2cuy5hb7ke
+        title: Host Disk Read Latency High
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (rate(node_disk_read_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_reads_completed_total[5m])) and rate(node_disk_reads_completed_total[5m]) > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.1
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Disk read latency on {{ $labels.instance }} device {{ $labels.device }} is {{ $values.A }}s.
+          summary: Host disk read latency is high (> 100ms)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: ffal2cyt5tvy8d
+        title: Host Disk Write Latency High
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (rate(node_disk_write_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_writes_completed_total[5m])) and rate(node_disk_writes_completed_total[5m]) > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.1
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Disk write latency on {{ $labels.instance }} device {{ $labels.device }} is {{ $values.A }}s.
+          summary: Host disk write latency is high (> 100ms)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: efal2d2n2835se
+        title: Host Network Receive Errors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (rate(node_network_receive_errs_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) / rate(node_network_receive_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m])) * 100 and rate(node_network_receive_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Network interface {{ $labels.device }} on {{ $labels.instance }} has {{ $values.A | humanizePercentage }} receive errors.
+          summary: Host network receive errors detected (> 1%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: ffal2d6fs60hsf
+        title: Host Network Transmit Errors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (rate(node_network_transmit_errs_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) / rate(node_network_transmit_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m])) * 100 and rate(node_network_transmit_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Network interface {{ $labels.device }} on {{ $labels.instance }} has {{ $values.A | humanizePercentage }} transmit errors.
+          summary: Host network transmit errors detected (> 1%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: bfal2da9w1wqod
+        title: Host Clock Skew Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: abs(node_timex_offset_seconds)
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.05
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Clock on {{ $labels.instance }} is {{ $values.A }}s out of sync. This can cause issues with TLS certificates and distributed systems.
+          summary: Host clock is out of sync (> 50ms drift)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: "tsdb-near-cap-1"
+        title: Prometheus TSDB Approaching Cap
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes * 100
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 80
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          description: Prometheus TSDB is at {{ \$values.A | humanizePercentage }} of its retention size cap. Either cardinality is growing or someone bumped retention. The size cap will start dropping old data at 100%.
+          summary: Prometheus TSDB > 80% of size cap
+        labels:
+          severity: warning
+        isPaused: false

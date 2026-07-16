@@ -48,7 +48,7 @@
     cmd = [ "-config.file=/etc/loki/loki.yaml" ];
 
     volumes = [
-      "/home/santiago/selfhost/logging/loki/app/loki.yaml:/etc/loki/loki.yaml:ro"
+      "${./assets/loki.yaml}:/etc/loki/loki.yaml:ro"
       "/home/santiago/selfhost/logging/loki/data:/loki"
     ];
 
@@ -71,7 +71,7 @@
     ];
 
     volumes = [
-      "/home/santiago/selfhost/logging/alloy/app:/etc/alloy:ro"
+      "${./assets/alloy}:/etc/alloy:ro"
       # Persistent + volatile (early-boot) journal paths.
       "/var/log/journal:/var/log/journal:ro"
       "/run/log/journal:/run/log/journal:ro"
