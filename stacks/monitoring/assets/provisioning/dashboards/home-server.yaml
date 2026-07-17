@@ -6,7 +6,7 @@
 apiVersion: 1
 
 providers:
-  - name: home-server
+  - name: s2-nix
     orgId: 1
     folder: ''
     type: file
