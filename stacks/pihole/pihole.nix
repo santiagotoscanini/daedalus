@@ -47,7 +47,6 @@ in
         type = "pihole";
         url = "http://host.containers.internal:8080";
         version = 6;
-        key = "{{HOMEPAGE_VAR_PIHOLE_KEY}}";
       };
     };
   };
@@ -104,14 +103,13 @@ in
       };
 
       webserver = {
-        # Admin password hash. World-readable via /nix/store — acceptable
-        # for a single-user home server; rotate via UI if leaked (UI
-        # password changes go into gravity-side state, which survives).
-        api.pwhash = "$BALLOON-SHA256$v=1$s=1024,t=32$c/EYhJu7DAKW0woakpKHsg==$1fjHBU91iHJ9Nx5mRCW8x7RiWbhmEDZPK5wx+qPXrS0=";
-        # App password for the homepage widget. balloon_sha256 of
-        # HOMEPAGE_VAR_PIHOLE_KEY from homepage/secrets/env. Declared here
-        # because UI-created app passwords don't persist (toml is RO).
-        api.app_pwhash = "$BALLOON-SHA256$v=1$s=1024,t=32$OeHTN/2zWCM7vQvqf4INHQ==$RT/Nw6suYL0rO4cDBGzB/KQPefmvRsWYg9szqpqKtws=";
+        # No admin password — the web UI sits behind traefik's Pocket ID
+        # gate (AUTH.md) and :8080 stays LAN-closed, so FTL's own login
+        # is redundant. BOTH hashes empty: any configured password
+        # (app passwords included) re-enables the login wall. The
+        # homepage widget needs no key against an auth-less API.
+        api.pwhash = "";
+        api.app_pwhash = "";
         # Relaxed CSP (upstream default is too strict for Chart.js inline scripts).
         headers = [
           "X-DNS-Prefetch-Control: off"
