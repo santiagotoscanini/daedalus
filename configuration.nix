@@ -48,6 +48,7 @@
     ./stacks/app-db/exporter.nix
     ./stacks/traefik/traefik.nix
     ./stacks/tv/tv.nix
+    ./stacks/recyclarr/recyclarr.nix
     ./stacks/verdaccio/verdaccio.nix
     ./stacks/wealthfolio/wealthfolio.nix
     ./stacks/wireguard/wireguard.nix
