@@ -29,8 +29,8 @@ let
 
   clusterEnv = "/etc/nixos/stacks/app-db/secrets/cluster/env";
   cfgDir = "/run/pg-exporter-config";
-  # postgres_exporter v0.18.1 only reads DATA_SOURCE_NAME from env,
-  # not from a file env (no DATA_SOURCE_NAME_FILE support). So we
+  # postgres_exporter only reads DATA_SOURCE_NAME from env — no
+  # DATA_SOURCE_NAME_FILE support (still true as of v0.20). So we
   # render the DSN as a KEY=VAL file and feed it via podman's
   # --env-file (oci-containers `environmentFiles`).
   envFile = "${cfgDir}/env";

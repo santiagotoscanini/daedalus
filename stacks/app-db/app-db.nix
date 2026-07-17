@@ -65,9 +65,9 @@ let
   activeApps = lib.attrNames cfg;
   enabled = activeApps != [ ];
 
-  # App names land as postgres role + database identifiers, the LAN
-  # hostname `pg-<name>.toscanini.me`, the env file path, etc. Force a
-  # narrow shape so we don't have to defend any of those downstream.
+  # App names land as postgres role + database identifiers and the
+  # env file path. Force a narrow shape so we don't have to defend
+  # any of those downstream.
   nameRegex = "[a-z][a-z0-9_]*";
 
   envBase = "/etc/nixos/stacks/app-db/secrets";
@@ -106,8 +106,9 @@ in
     description = ''
       Per-app Postgres databases on the single shared `pg` cluster.
       Each entry materializes a database + login role owned by that
-      role (no PUBLIC connect), the per-app env file with DATABASE_URL,
-      and a LAN TCP/SNI route `pg-<name>.toscanini.me:5432`.
+      role (no PUBLIC connect) and the per-app env file with
+      DATABASE_URL. LAN access is the shared
+      `postgres.toscanini.me:5432` TCP/SNI route.
 
       The attribute key is used directly as the postgres role,
       database, and hostname segment — see [[nameRegex]] for the
@@ -118,10 +119,9 @@ in
   };
 
   config = lib.mkIf enabled {
-    # Validate app names at eval time. The name lands unquoted in SQL
-    # (via psql's `%I` for the role/db, but a hyphen would still trip
-    # the LAN hostname `pg-<n>.toscanini.me` and the env file path).
-    # Catch garbage names at build time, not at first podman exec.
+    # Validate app names at eval time. The name lands in SQL (via
+    # psql's `%I` for the role/db) and in the env file path — catch
+    # garbage names at build time, not at first podman exec.
     assertions = map (n: {
       assertion = builtins.match nameRegex n != null;
       message = ''

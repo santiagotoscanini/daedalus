@@ -2,8 +2,9 @@
 #
 # Each entry in `myStack.apps` materializes:
 #   - A container `app-<name>` on `traefik-net`, listening on the
-#     hardcoded internal port 3000. Optionally joins `<name>-db-net`
-#     when `postgres.enable = true`, sharing that bridge with `pg-<name>`.
+#     hardcoded internal port 3000. Also joins the shared `app-db-net`
+#     bridge when `postgres.enable = true` (dials the shared `pg`
+#     cluster there — see stacks/app-db/).
 #   - A webApp at `<name>.toscanini.me`. `stage = "live"` flips
 #     exposeRemotely so cloudflared-route-sync upserts the public CNAME.
 #   - (Optional) prometheus scrape on the app's own /metrics and, when
@@ -30,10 +31,10 @@
 # Image default: `ghcr.io/santiagotoscanini/<name>:latest`. Override
 # for forks or pinned digests.
 #
-# Database: `postgres.enable = true` materializes a plain Postgres
-# container via stacks/app-db/. App reads `DATABASE_URL` from the
-# bootstrap-generated env file
-# (postgresql://app:<pwd>@pg-<name>:5432/app).
+# Database: `postgres.enable = true` materializes a role + database
+# on the shared `pg` cluster via stacks/app-db/. App reads
+# `DATABASE_URL` from the bootstrap-generated env file
+# (postgresql://<name>:<pwd>@pg:5432/<name>).
 #
 # Baseline secrets (always-on per app):
 #   - AUTH_SECRET — random hex32, generated at first boot by
@@ -251,9 +252,9 @@ let
     in
     {
       # Delegate per-app Postgres entirely to stacks/app-db/. The
-      # presence of the key triggers role + database creation, the
-      # per-app env file, AND the LAN TCP/SNI route + pi-hole entry
-      # (`pg-<name>.toscanini.me:5432`). Nothing else here.
+      # presence of the key triggers role + database creation and the
+      # per-app env file. LAN access is the single shared
+      # `postgres.toscanini.me:5432` TCP/SNI route (stacks/app-db).
       myStack.appDatabases = lib.optionalAttrs postgresEnabled {
         "${name}" = { };
       };
@@ -567,12 +568,12 @@ in
                 type = lib.types.bool;
                 default = false;
                 description = ''
-                  When true, materialize a per-app Postgres container
-                  (`pg-<name>`) via stacks/app-db/. The app container joins
-                  the private `<name>-db-net` bridge and receives
-                  DATABASE_URL (postgresql://app:<pwd>@pg-<name>:5432/app)
-                  via env file.
-                  See stacks/app-db/README.md.
+                  When true, materialize a role + database `<name>` on
+                  the shared `pg` cluster via stacks/app-db/. The app
+                  container joins the shared `app-db-net` bridge and
+                  receives DATABASE_URL
+                  (postgresql://<name>:<pwd>@pg:5432/<name>) via env
+                  file. See stacks/app-db/README.md.
                 '';
               };
               # Per-app resource tunables are gone — the cluster is
@@ -621,7 +622,9 @@ in
                 use the LLM gateway never see the variable.
 
                 Does NOT inject the master key. Apps that need it add
-                `the litellm sops secret (config.sops.secrets."litellm-env".path)` to `environmentFiles`.
+                the litellm sops secret
+                (config.sops.secrets."litellm-env".path) to their
+                `environmentFiles`.
               '';
             };
 
@@ -722,10 +725,10 @@ in
               default = [ ];
               description = ''
                 Additional env files passed via --env-file. Common uses:
-                per-app secrets, third-party API keys, the litellm master
-                key (the litellm sops secret (config.sops.secrets."litellm-env".path)).
-                Conventions: `0600 santiago:users`, under `**/secrets/`
-                anywhere so the path is gitignored.
+                per-app secrets, third-party API keys, the litellm
+                master key (config.sops.secrets."litellm-env".path).
+                Conventions: `0600 santiago:users`; hand-managed files
+                live under `**/secrets/` so the path is gitignored.
               '';
             };
           };
@@ -738,6 +741,13 @@ in
     '';
   };
 
+  # Per-path assembly, NOT `config = lib.mkMerge fragments`: the
+  # fragment list depends on `config.myStack.apps`, so a definition
+  # spanning the whole `myStack` attrset would force the list while
+  # resolving `myStack.apps` itself — infinite recursion. Keeping every
+  # contributed path explicit (one level below myStack/systemd/...)
+  # lets `myStack.apps` resolve without forcing the fragments. A new
+  # output path in mkApp must be registered here too.
   config =
     let
       fragments = lib.mapAttrsToList mkApp cfg;
