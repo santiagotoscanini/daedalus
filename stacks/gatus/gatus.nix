@@ -96,7 +96,7 @@ in
   };
 
   virtualisation.oci-containers.containers.gatus = mkRootlessContainer {
-    image = "docker.io/twinproduction/gatus:v5.36.0";
+    image = "docker.io/twinproduction/gatus:v5.36.0@sha256:c5f210d095fa78e6efaa20ffeb14803f2ba4f10615e16a6d12087697149617f0";
 
     environment = {
       GATUS_CONFIG_PATH = "/config/config.yaml";

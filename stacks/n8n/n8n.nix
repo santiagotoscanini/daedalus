@@ -14,7 +14,9 @@
 }:
 
 {
-  # PG_PASS + N8N_* creds + encryption key: sops-encrypted env.sops, decrypted to
+  # DB password (as both POSTGRES_PASSWORD and DB_POSTGRESDB_PASSWORD —
+  # one value, the two names the two images expect) + N8N_BASIC_AUTH_* +
+  # encryption key: sops-encrypted env.sops, decrypted to
   # /run/secrets/n8n-env at activation. Edit with `sops env.sops`.
   sops.secrets."n8n-env" = mkDotenvSecret ./env.sops;
 
@@ -112,15 +114,8 @@
       POSTGRES_USER = "n8n";
     };
 
-    # PG_PASS in this env file is re-exported as POSTGRES_PASSWORD by
-    # the entrypoint below (compose used POSTGRES_PASSWORD=${PG_PASS}).
+    # POSTGRES_PASSWORD (native key name — no entrypoint aliasing).
     environmentFiles = [ config.sops.secrets."n8n-env".path ];
-
-    entrypoint = "/bin/sh";
-    cmd = [
-      "-c"
-      "export POSTGRES_PASSWORD=\"$PG_PASS\" && exec docker-entrypoint.sh postgres"
-    ];
 
     extraOptions = [
       "--network=n8n-net"
@@ -163,26 +158,12 @@
       N8N_SMTP_STARTTLS = "true";
     };
 
-    # PG_PASS + N8N_USER + N8N_PASS + N8N_ENCRYPTION_KEY, plus the rendered
-    # N8N_SMTP_PASS (from the shared mail secret via n8n-smtp-env.service).
+    # DB_POSTGRESDB_PASSWORD + N8N_BASIC_AUTH_* + N8N_ENCRYPTION_KEY
+    # (native key names), plus the rendered N8N_SMTP_PASS (from the
+    # shared mail secret via n8n-smtp-env.service).
     environmentFiles = [
       config.sops.secrets."n8n-env".path
       "/run/n8n-smtp/env"
-    ];
-
-    # The image expects DB_POSTGRESDB_PASSWORD / N8N_BASIC_AUTH_USER /
-    # N8N_BASIC_AUTH_PASSWORD; compose mapped from PG_PASS / N8N_USER /
-    # N8N_PASS. Re-export in the entrypoint so we don't duplicate the
-    # secrets in the env file.
-    entrypoint = "/bin/sh";
-    cmd = [
-      "-c"
-      ''
-        export DB_POSTGRESDB_PASSWORD="$PG_PASS" \
-               N8N_BASIC_AUTH_USER="$N8N_USER" \
-               N8N_BASIC_AUTH_PASSWORD="$N8N_PASS" && \
-        exec /docker-entrypoint.sh
-      ''
     ];
 
     extraOptions = [

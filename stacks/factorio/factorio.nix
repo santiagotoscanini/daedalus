@@ -7,10 +7,8 @@
 # connect.
 #
 # UID note: ofsm's image has no USER directive, so it runs as
-# container-root → host santiago (UID 1000:100) under rootless. The
-# previous bare factoriotools image used UID 845 → host 100844, so
-# the existing on-disk saves/mods/config need to be re-chowned to
-# 1000:100 — the `Z` tmpfiles rule below does that on every rebuild.
+# container-root → host santiago (UID 1000:100) under rootless, which
+# owns the data dirs.
 #
 # FACTORIO_VERSION pins the headless binary ofsm downloads on every
 # container start (yes, every start — harmless but slow). Keep it
@@ -55,13 +53,10 @@
     "d /home/santiago/selfhost/factorio/fsm-data     0755 santiago users -"
     "d /home/santiago/selfhost/factorio/mod_packs    0755 santiago users -"
     "d /home/santiago/selfhost/factorio/data         0755 santiago users -"
-    # Z: converge data ownership to ofsm's container-root UID
-    # (santiago/1000), whatever UID older files were created under.
-    "Z /home/santiago/selfhost/factorio/data         - santiago users -"
   ];
 
   virtualisation.oci-containers.containers.factorio = mkRootlessContainer {
-    image = "docker.io/ofsm/ofsm:0.10.1";
+    image = "docker.io/ofsm/ofsm:0.10.1@sha256:2b031bc1ec51e437a90b24266ce87f82362b4d16670e3804688610b4ac03b608";
 
     environment = {
       FACTORIO_VERSION = "2.0.77";

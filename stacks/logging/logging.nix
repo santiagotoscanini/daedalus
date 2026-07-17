@@ -53,7 +53,7 @@
   # exposure (it was queryable by any LAN device + any traefik-net peer).
 
   virtualisation.oci-containers.containers.loki = mkRootlessContainer {
-    image = "docker.io/grafana/loki:3.7.3";
+    image = "docker.io/grafana/loki:3.7.3@sha256:70b9f699fc9bb868b62f1cfd4f787dfa50242f1fd92e6089787d5d7daea75fe8";
 
     cmd = [ "-config.file=/etc/loki/loki.yaml" ];
 
@@ -69,7 +69,7 @@
   };
 
   virtualisation.oci-containers.containers.alloy = mkRootlessContainer {
-    image = "docker.io/grafana/alloy:v1.17.1";
+    image = "docker.io/grafana/alloy:v1.17.1@sha256:4f6ddc56ffdcf8a6316748fc5162972e20cb301523cac1bb4a31957df733ae9b";
     dependsOn = [ "loki" ];
 
     cmd = [

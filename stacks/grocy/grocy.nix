@@ -8,10 +8,16 @@
 # 911 → host UID 100910 in the subuid range (100000 + 910); the data
 # dir is chowned 100910:100910 to match.
 
-{ config, mkRootlessContainer, ... }:
+{ hostUid, mkRootlessContainer, ... }:
 
 {
   myStack.containerNetworks.grocy = "traefik";
+
+  # linuxserver abc (uid 911) maps to host 100910; the config dir must
+  # exist with that ownership or a fresh install fails on first write.
+  systemd.tmpfiles.rules = [
+    "d /home/santiago/selfhost/grocy/config 0755 ${toString (hostUid 911)} ${toString (hostUid 911)} -"
+  ];
   myStack.webApps.grocy = {
     serviceName = "grocy";
     port = 80;

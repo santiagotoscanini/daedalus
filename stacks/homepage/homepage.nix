@@ -164,7 +164,7 @@ in
     # Bump intentionally — the YAML schema has occasionally added
     # required fields (e.g. widget `version:` keys for pihole v6 /
     # immich v2 / wgeasy v2).
-    image = "ghcr.io/gethomepage/homepage:v1.13.2";
+    image = "ghcr.io/gethomepage/homepage:v1.13.2@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28";
 
     volumes = [
       "/home/santiago/selfhost/homepage/config:/app/config:rw"

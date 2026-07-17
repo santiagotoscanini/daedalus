@@ -880,7 +880,7 @@ groups:
         execErrState: OK
         for: 30m
         annotations:
-          description: Prometheus TSDB is at {{ \$values.A | humanizePercentage }} of its retention size cap. Either cardinality is growing or someone bumped retention. The size cap will start dropping old data at 100%.
+          description: Prometheus TSDB is at {{ $values.A | humanizePercentage }} of its retention size cap. Either cardinality is growing or someone bumped retention. The size cap will start dropping old data at 100%.
           summary: Prometheus TSDB > 80% of size cap
         labels:
           severity: warning

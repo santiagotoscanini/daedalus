@@ -159,8 +159,9 @@ in
   # pihole-ftl is Type=simple — it declares "active" the instant the FTL
   # process starts, well before it's loaded gravity.db and bound :53. So
   # `After=pihole-ftl.service` only orders, it doesn't wait for readiness.
-  # This oneshot polls upstream DNS until it actually resolves, providing
-  # a readiness gate for anything that does DNS at boot — depend on
+  # This oneshot polls FTL itself — a dns.hosts name it answers from
+  # local config, no upstream involved — until it responds, providing a
+  # readiness gate for anything that does DNS at boot: depend on
   # pihole-ready.service instead of pihole-ftl.service.
   systemd.services.pihole-ready = {
     description = "Gate: pi-hole is actually answering DNS queries";
@@ -178,11 +179,11 @@ in
       RemainAfterExit = true;
       ExecStart = pkgs.writeShellScript "wait-pihole-dns" ''
         for i in $(seq 1 60); do
-          ${pkgs.curl}/bin/curl -s --max-time 1 -o /dev/null --head \
-            https://api.cloudflare.com/ && exit 0
+          ${pkgs.dnsutils}/bin/dig +time=1 +tries=1 @127.0.0.1 \
+            pihole.toscanini.me >/dev/null 2>&1 && exit 0
           sleep 0.25
         done
-        # Don't block boot forever if upstream DNS is unreachable.
+        # Don't block boot forever if FTL never answers.
         exit 0
       '';
     };

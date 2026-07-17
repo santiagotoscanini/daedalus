@@ -41,7 +41,7 @@
   };
 
   virtualisation.oci-containers.containers.myspeed = mkRootlessContainer {
-    image = "docker.io/germannewsmaker/myspeed:1.0.9";
+    image = "docker.io/germannewsmaker/myspeed:1.0.9@sha256:3a3e774b3f78d930a5a962d625b99bcb3d71730bfeb4a6b93e04fd38cfe7d9a9";
 
     volumes = [
       "/home/santiago/selfhost/myspeed/data:/myspeed/data"

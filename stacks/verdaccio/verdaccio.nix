@@ -67,7 +67,7 @@
   ];
 
   virtualisation.oci-containers.containers.verdaccio = mkRootlessContainer {
-    image = "docker.io/verdaccio/verdaccio:6.7.4";
+    image = "docker.io/verdaccio/verdaccio:6.7.4@sha256:e3ac7e335e69504cd0b09616aa52066399868282313c34762d2a77b8169a3575";
 
     volumes = [
       "/home/santiago/selfhost/verdaccio/storage:/verdaccio/storage"

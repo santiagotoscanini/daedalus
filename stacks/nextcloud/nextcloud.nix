@@ -28,15 +28,17 @@ let
   # rebuilds the image and restarts the app; then run the post-upgrade
   # `occ` commands above by hand.
   nextcloudVersion = "34";
+  # Digest of docker.io/library/nextcloud:''${nextcloudVersion} — makes
+  # the custom build reproducible. Bump together with nextcloudVersion.
+  nextcloudBaseDigest = "sha256:6444fc5450302534e850b4d23c05b5f06c7b0d25bd5ece716452061454699c58";
 
   # Official nextcloud:N doesn't ship ffmpeg, but the preview generator
   # and `recognize` ML app both want it. Build localhost/nextcloud-ffmpeg
   # once via the systemd oneshot below; podman layer-caches subsequent
   # builds (~instant).
   nextcloudImageBuildDir = pkgs.writeTextDir "Containerfile" ''
-    FROM docker.io/library/nextcloud:${nextcloudVersion}
+    FROM docker.io/library/nextcloud:${nextcloudVersion}@${nextcloudBaseDigest}
     RUN apt-get update \
-     && apt-get upgrade -y \
      && apt-get install -y --no-install-recommends ffmpeg \
      && apt-get clean \
      && rm -rf /var/lib/apt/lists/*
@@ -164,6 +166,8 @@ in
       "NC_overwriteprotocol" = "https";
       "NC_default_phone_region" = "UY";
       "NC_loglevel" = "0";
+      # >= 24 disables the window gate: background jobs may run at any
+      # hour (100 is also upstream's "not configured" default).
       "NC_maintenance_window_start" = "100";
     };
 

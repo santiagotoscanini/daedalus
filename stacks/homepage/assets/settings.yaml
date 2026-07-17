@@ -15,7 +15,8 @@ statusStyle: dot
 iconStyle: gradient
 fullWidth: true
 
-# Allow wider grids. Default cap is 4; Network needs 5.
+# One group per row (full width); tile columns within a group come
+# from layout.<group>.columns instead.
 maxGroupColumns: 1
 maxBookmarkGroupColumns: 6
 

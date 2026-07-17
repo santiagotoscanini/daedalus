@@ -40,11 +40,12 @@
 
 let
   # Pin server + ML to the same tag. Bump intentionally — iOS app
-  # version mismatches stall background sync silently.
+  # version mismatches stall background sync silently. The per-image
+  # @sha256 digests below must be bumped together with the tag.
   immichVersion = "v3.0.2";
 
   # Tied to the immich major; check before bumping immichVersion.
-  immichPostgresImage = "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0";
+  immichPostgresImage = "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23";
 in
 {
   # POSTGRES_PASSWORD + DB_PASSWORD (shared by db and server): sops-encrypted env.sops, decrypted to
@@ -133,7 +134,7 @@ in
   };
 
   virtualisation.oci-containers.containers.immich-machine-learning = mkRootlessContainer {
-    image = "ghcr.io/immich-app/immich-machine-learning:${immichVersion}-openvino";
+    image = "ghcr.io/immich-app/immich-machine-learning:${immichVersion}-openvino@sha256:6b3c1f779df2e0f93be57bb2ad15681a43b7731cb325e8e66be7d984eca1949d";
 
     volumes = [
       "/home/santiago/selfhost/immich/model-cache:/cache"
@@ -146,7 +147,7 @@ in
   };
 
   virtualisation.oci-containers.containers.immich = mkRootlessContainer {
-    image = "ghcr.io/immich-app/immich-server:${immichVersion}";
+    image = "ghcr.io/immich-app/immich-server:${immichVersion}@sha256:14390f3dc9512dc3273b12ccee6363d9be16c388699abc3f3fe0498bb9829937";
     dependsOn = [
       "immich-postgres"
       "immich-redis"

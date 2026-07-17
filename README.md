@@ -56,9 +56,11 @@ for env files, binary for everything else. `sops <file>` needs an
 identity: as santiago it Just Works (keys.txt); as root prefix with
 `SOPS_AGE_KEY_FILE=/home/santiago/.config/sops/age/keys.txt`.
 
-Special case: the LiteLLM master key lives in TWO files
-(`stacks/litellm/env.sops` + `prom-token.sops` — prometheus scrape
-auth). Rotate both together.
+Special case: the LiteLLM master key also feeds the prometheus
+scrape's bearer token, activation-rendered from `env.sops` by
+`litellm-prom-token.service` — and a copy lives in
+`stacks/homepage/env.sops` (`HOMEPAGE_VAR_LITELLM_KEY`). Rotate both
+files together.
 
 ## Adding a stack
 
@@ -68,10 +70,10 @@ sudoedit /etc/nixos/stacks/<name>/<name>.nix     # see any stack as template
 # secrets, if any:
 #   printf 'KEY=value\n' | sops -e --input-type dotenv --output-type dotenv \
 #     /dev/stdin | sudo tee /etc/nixos/stacks/<name>/env.sops
-#   then in the module:  sops.secrets."<name>-env" = { sopsFile = ./env.sops;
-#     format = "dotenv"; key = ""; owner = "santiago"; };
+#   then in the module:  sops.secrets."<name>-env" = mkDotenvSecret ./env.sops;
 #   and:  environmentFiles = [ config.sops.secrets."<name>-env".path ];
-sudo sed -i 's|./stacks/<prev>|&\n    ./stacks/<name>/<name>.nix|' configuration.nix  # or edit imports by hand
+# no import line needed — configuration.nix auto-imports every *.nix
+# under stacks/ (the flake only sees git-tracked files, so `git add` first)
 sudo git add -A && sudo nixos-rebuild test && sudo nixos-rebuild switch
 sudo git commit -am "<name>: add stack"
 ```
