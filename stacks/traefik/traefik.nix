@@ -131,23 +131,41 @@ in
   myStack.traefikStaticRules."oidc-middlewares.yml" =
     let
       envPrefix = n: "POCKET_OIDC_" + lib.toUpper (lib.replaceStrings [ "-" ] [ "_" ] n);
-      mkOidcMw = n: {
-        plugin.oidc = {
-          Secret = "\${POCKET_OIDC_COOKIE_SECRET}";
-          Provider = {
-            Url = "https://id.${cfg.baseDomain}";
-            ClientId = "\${${envPrefix n}_CLIENT_ID}";
-            ClientSecret = "\${${envPrefix n}_CLIENT_SECRET}";
-            UsePkce = true;
+      mkOidcMw =
+        n:
+        let
+          w = cfg.webApps.${n} or null;
+        in
+        {
+          plugin.oidc = {
+            Secret = "\${POCKET_OIDC_COOKIE_SECRET}";
+            Provider = {
+              Url = "https://id.${cfg.baseDomain}";
+              ClientId = "\${${envPrefix n}_CLIENT_ID}";
+              ClientSecret = "\${${envPrefix n}_CLIENT_SECRET}";
+              UsePkce = true;
+            };
+            Scopes = [
+              "openid"
+              "profile"
+              "email"
+              "groups"
+            ];
+          }
+          // lib.optionalAttrs (w != null && w.authBypassRule != null) {
+            BypassAuthenticationRule = w.authBypassRule;
+          }
+          // lib.optionalAttrs (w != null && w.authHeaders != { }) {
+            Headers = lib.mapAttrsToList (hn: hv: {
+              Name = hn;
+              # The file provider Go-templates every rules file before
+              # parsing — wrap in a backtick literal so traefik's pass
+              # emits the PLUGIN's {{ }} template verbatim (backticks,
+              # unlike quotes, survive toJSON unescaped).
+              Value = "{{`" + hv + "`}}";
+            }) w.authHeaders;
           };
-          Scopes = [
-            "openid"
-            "profile"
-            "email"
-            "groups"
-          ];
         };
-      };
     in
     builtins.toJSON {
       http.middlewares =
@@ -158,7 +176,16 @@ in
           # The dashboard is a hand-declared route (api@internal), not
           # a webApp — its middleware is declared here alongside.
           oidc-traefik-dashboard = mkOidcMw "traefik-dashboard";
-        };
+        }
+        // lib.mapAttrs' (
+          # Companion strippers: drop client-supplied copies of each
+          # identity header BEFORE the oidc middleware runs, so bypassed
+          # (API/ping) requests can't spoof the trusted header.
+          n: w:
+          lib.nameValuePair "oidc-${n}-strip" {
+            headers.customRequestHeaders = lib.mapAttrs (_: _: "") w.authHeaders;
+          }
+        ) (lib.filterAttrs (_: w: w.auth == "oidc" && w.authHeaders != { }) cfg.webApps);
     };
 
   # Dashboard / API — LAN-only via pi-hole dns.hosts; `api@internal`

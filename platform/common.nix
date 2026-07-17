@@ -493,6 +493,28 @@ in
                   their own auth.
                 '';
               };
+              authBypassRule = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Traefik rule-syntax expression; matching requests skip
+                  the oidc middleware entirely. For machine endpoints
+                  that carry their own auth (API keys, ping UUIDs), e.g.
+                  "PathPrefix(`/api`) || HeaderRegexp(`X-Api-Key`, `.+`)".
+                '';
+              };
+              authHeaders = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+                description = ''
+                  Identity headers the oidc middleware forwards upstream
+                  (name -> Go-template over claims), e.g.
+                  "X-Forwarded-Email" = "{{ .claims.email }}". Each named
+                  header is also STRIPPED from incoming requests by a
+                  companion middleware so clients can't spoof it on
+                  bypassed paths — apps trust these blindly.
+                '';
+              };
               homepage = lib.mkOption {
                 type = lib.types.nullOr (
                   lib.types.submodule (_: {
@@ -793,7 +815,9 @@ in
         baseRoute = n: w: {
           host = w.hostname;
           serviceUrl = resolveUrl w;
-          middlewares = lib.optional (w.auth == "oidc") "oidc-${n}@file";
+          middlewares =
+            lib.optional (w.auth == "oidc" && w.authHeaders != { }) "oidc-${n}-strip@file"
+            ++ lib.optional (w.auth == "oidc") "oidc-${n}@file";
         };
       in
       (lib.mapAttrs baseRoute cfg.webApps)

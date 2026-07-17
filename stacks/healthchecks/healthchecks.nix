@@ -31,13 +31,28 @@
     hostname = "hc.toscanini.me";
     serviceName = "healthchecks";
     port = 8000;
+    # Pocket ID gate + trusted header (AUTH.md tier 2): the middleware
+    # asserts the login and hands Django the email via
+    # X-Forwarded-Email; REMOTE_USER_HEADER below auto-logs-in that
+    # account (santiago@toscanini.me already exists — same address
+    # Pocket ID asserts) and disables Django's own login.
+    auth = "oidc";
+    # Machine paths keep their own auth: pings are authorized by their
+    # UUID, /api by X-Api-Key, badges by badge key. The companion strip
+    # middleware removes spoofed X-Forwarded-Email on these.
+    authBypassRule = "PathPrefix(`/ping`) || PathPrefix(`/api`) || PathPrefix(`/badge`)";
+    authHeaders."X-Forwarded-Email" = "{{ .claims.email }}";
     homepage = {
       group = "Monitoring";
       description = "Cron / job dead-man's-switch";
       icon = "healthchecks.png";
+      # Via traefik, not uwsgi-direct: homepage's undici client trips
+      # intermittently on uwsgi keep-alive (the old flapping red dot).
+      # /api/v1/status/ rides the auth bypass, so it stays probeable.
+      siteMonitor = "https://hc.toscanini.me/api/v1/status/";
       widget = {
         type = "healthchecks";
-        url = "http://healthchecks:8000";
+        url = "https://hc.toscanini.me";
         key = "{{HOMEPAGE_VAR_HEALTHCHECKS_API_KEY}}";
       };
     };
@@ -53,6 +68,9 @@
       SITE_NAME = "s2-server";
       ALLOWED_HOSTS = "hc.toscanini.me,healthchecks";
       SECURE_PROXY_SSL_HEADER = "HTTP_X_FORWARDED_PROTO,https";
+      # Trust the middleware-set X-Forwarded-Email as the login (Django
+      # META name). Replaces email/password login entirely.
+      REMOTE_USER_HEADER = "HTTP_X_FORWARDED_EMAIL";
       DEBUG = "False";
       REGISTRATION_OPEN = "False";
       DB = "sqlite";
