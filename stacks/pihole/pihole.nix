@@ -32,17 +32,15 @@ in
   # Native NixOS service, not a container — traefik dials it through
   # pasta's host gateway alias instead of via traefik-net.
   myStack.webApps.pihole = {
-    hostname = "pihole.toscanini.me";
     port = 8080;
     serviceUrl = "http://host.containers.internal:8080";
-  };
-
-  myStack.homepageServices."Network" = [
-    {
+    homepage = {
+      group = "Network";
       name = "Pi-hole";
-      href = "https://pihole.toscanini.me";
       description = "LAN DNS, DHCP, ad-blocking";
       icon = "pi-hole.png";
+      # Probe through traefik: homepage reaches pihole via the
+      # --add-host workaround (undici trips on FTL's Connection: close).
       siteMonitor = "https://pihole.toscanini.me";
       widget = {
         type = "pihole";
@@ -50,8 +48,8 @@ in
         version = 6;
         key = "{{HOMEPAGE_VAR_PIHOLE_KEY}}";
       };
-    }
-  ];
+    };
+  };
 
   services.pihole-ftl = {
     enable = true;

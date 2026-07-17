@@ -17,24 +17,19 @@
 # If a password is set later in the UI, add `password` to the homepage
 # widget below.
 
-{ lib, mkRootlessContainer, ... }:
+{ mkRootlessContainer, ... }:
 
 {
   myStack.containerNetworks.myspeed = "traefik";
 
   myStack.webApps.myspeed = {
-    hostname = "myspeed.toscanini.me";
     serviceName = "myspeed";
     port = 5216; # in-container port
-  };
-
-  myStack.homepageServices."Network" = lib.mkOrder 600 [
-    {
+    homepage = {
+      group = "Network";
       name = "MySpeed";
-      href = "https://myspeed.toscanini.me";
       description = "Internet speed tracker (scheduled speedtests)";
       icon = "myspeed.png";
-      siteMonitor = "http://myspeed:5216";
       widget = {
         # Native homepage integration — surfaces the latest test's ping,
         # download and upload straight from MySpeed's API.
@@ -42,8 +37,8 @@
         url = "http://myspeed:5216";
         # password = "{{HOMEPAGE_VAR_MYSPEED_PASSWORD}}"; # only if UI auth set
       };
-    }
-  ];
+    };
+  };
 
   virtualisation.oci-containers.containers.myspeed = mkRootlessContainer {
     image = "docker.io/germannewsmaker/myspeed:1.0.9";

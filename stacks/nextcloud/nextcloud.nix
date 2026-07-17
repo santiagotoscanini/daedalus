@@ -57,18 +57,15 @@ in
   # (cfweb via CF tunnel), wildcard cert covers both. HSTS is set by
   # Nextcloud itself in its .htaccess/config.php.
   myStack.webApps.nextcloud = {
-    hostname = "nextcloud.toscanini.me";
     serviceName = "nextcloud-app";
     port = 80;
     exposeRemotely = true;
-  };
-
-  myStack.homepageServices."Cloud & AI" = [
-    {
-      name = "Nextcloud";
-      href = "https://nextcloud.toscanini.me";
+    homepage = {
+      group = "Cloud & AI";
       description = "Files, calendar, contacts — primary household sync";
       icon = "nextcloud.png";
+      # Probe + widget through traefik: NC_overwriteprotocol 30x-redirects
+      # plain HTTP, which homepage's proxy can't follow (--add-host'ed).
       siteMonitor = "https://nextcloud.toscanini.me";
       widget = {
         type = "nextcloud";
@@ -81,8 +78,8 @@ in
           "numshares"
         ];
       };
-    }
-  ];
+    };
+  };
 
   # `:16` is load-bearing: the on-disk cluster was initdb'd for PG 16.
   # Bumping requires a pg_upgrade dance, NOT just a tag bump.

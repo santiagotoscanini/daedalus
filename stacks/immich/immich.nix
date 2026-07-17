@@ -64,10 +64,26 @@ in
   # prometheusScrapes below), so routing them through traefik + pi-hole +
   # gatus would be redundant surface for endpoints nobody browses by hand.
   myStack.webApps.immich = {
-    hostname = "immich.toscanini.me";
     serviceName = "immich";
     port = 2283;
     exposeRemotely = true;
+    homepage = {
+      group = "Cloud & AI";
+      description = "Photo + video backup (ML on iGPU via OpenVINO)";
+      icon = "immich.png";
+      widget = {
+        type = "immich";
+        url = "http://immich:2283";
+        key = "{{HOMEPAGE_VAR_IMMICH_API_KEY}}";
+        version = 2;
+        fields = [
+          "users"
+          "photos"
+          "videos"
+          "storage"
+        ];
+      };
+    };
   };
 
   # Bridge scrape — prometheus is on traefik-net too (see monitoring.nix).
@@ -83,28 +99,6 @@ in
   ];
 
   myStack.grafanaDashboardsByFolder."Services".immich = builtins.readFile ./assets/dashboard.json;
-
-  myStack.homepageServices."Cloud & AI" = [
-    {
-      name = "Immich";
-      href = "https://immich.toscanini.me";
-      description = "Photo + video backup (ML on iGPU via OpenVINO)";
-      icon = "immich.png";
-      siteMonitor = "http://immich:2283";
-      widget = {
-        type = "immich";
-        url = "http://immich:2283";
-        key = "{{HOMEPAGE_VAR_IMMICH_API_KEY}}";
-        version = 2;
-        fields = [
-          "users"
-          "photos"
-          "videos"
-          "storage"
-        ];
-      };
-    }
-  ];
 
   virtualisation.oci-containers.containers.immich-postgres = mkRootlessContainer {
     image = immichPostgresImage;

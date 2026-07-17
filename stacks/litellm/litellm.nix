@@ -58,32 +58,14 @@
   };
 
   myStack.webApps.litellm = {
-    hostname = "litellm.toscanini.me";
     serviceName = "litellm";
     port = 4000;
-  };
-
-  # Prometheus on traefik-net scrapes by container DNS.
-  myStack.prometheusScrapes = [
-    {
-      job_name = "litellm";
-      authorization = {
-        type = "Bearer";
-        credentials_file = "/run/secrets/litellm-prom-token/token";
-      };
-      static_configs = [ { targets = [ "litellm:4000" ]; } ];
-    }
-  ];
-
-  myStack.grafanaDashboardsByFolder."Services".litellm = builtins.readFile ./assets/dashboard.json;
-
-  myStack.homepageServices."Cloud & AI" = [
-    {
+    homepage = {
+      group = "Cloud & AI";
       name = "LiteLLM";
       href = "https://litellm.toscanini.me/ui";
       description = "OpenAI-compatible LLM gateway (lemonade on gaming-pc)";
       icon = "/icons/litellm.png";
-      siteMonitor = "http://litellm:4000";
       widget = {
         type = "customapi";
         # /global/spend → {"spend": <num>, "max_budget": <num>}.
@@ -110,7 +92,24 @@
           }
         ];
       };
+    };
+  };
+
+  # Prometheus on traefik-net scrapes by container DNS.
+  myStack.prometheusScrapes = [
+    {
+      job_name = "litellm";
+      authorization = {
+        type = "Bearer";
+        credentials_file = "/run/secrets/litellm-prom-token/token";
+      };
+      static_configs = [ { targets = [ "litellm:4000" ]; } ];
     }
+  ];
+
+  myStack.grafanaDashboardsByFolder."Services".litellm = builtins.readFile ./assets/dashboard.json;
+
+  myStack.homepageServices."Cloud & AI" = [
     {
       # External Windows-PC service — declared here because litellm is
       # the only nix-side piece of this dual-machine setup.

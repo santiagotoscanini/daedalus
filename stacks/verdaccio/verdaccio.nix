@@ -32,16 +32,11 @@
   myStack.containerNetworks.verdaccio = "traefik";
 
   myStack.webApps.verdaccio = {
-    hostname = "verdaccio.toscanini.me";
     serviceName = "verdaccio";
     port = 4873;
     # LAN only — off-LAN clients reach it via WireGuard.
-  };
-
-  myStack.homepageServices."Productivity" = [
-    {
-      name = "Verdaccio";
-      href = "https://verdaccio.toscanini.me";
+    homepage = {
+      group = "Productivity";
       description = "Private npm registry (LAN-only)";
       icon = "verdaccio.png";
       siteMonitor = "https://verdaccio.toscanini.me/-/ping";
@@ -60,8 +55,8 @@
           }
         ];
       };
-    }
-  ];
+    };
+  };
 
   myStack.grafanaDashboardsByFolder."Services".verdaccio = builtins.readFile ./assets/dashboard.json;
 

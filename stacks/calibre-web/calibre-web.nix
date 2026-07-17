@@ -23,23 +23,19 @@
     hostname = "calibre.toscanini.me";
     serviceName = "calibre-web";
     port = 8083;
-  };
-
-  myStack.homepageServices."Productivity" = [
-    {
+    homepage = {
+      group = "Productivity";
       name = "Calibre-Web";
-      href = "https://calibre.toscanini.me";
       description = "Ebook library";
       icon = "calibre-web.png";
-      siteMonitor = "http://calibre-web:8083";
       widget = {
         type = "calibreweb";
         url = "http://calibre-web:8083";
         username = "{{HOMEPAGE_VAR_CALIBREWEB_USER}}";
         password = "{{HOMEPAGE_VAR_CALIBREWEB_PASS}}";
       };
-    }
-  ];
+    };
+  };
 
   virtualisation.oci-containers.containers.calibre-web = mkRootlessContainer {
     image = "lscr.io/linuxserver/calibre-web:0.6.26-ls391@sha256:18678f5a40ca01c0681fec60fe9ea4ebb25a9e4ad6fc2e30aa485c09066ab254";

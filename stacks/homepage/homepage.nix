@@ -71,7 +71,6 @@ in
   myStack.containerNetworks.homepage = "traefik";
 
   myStack.webApps.homepage = {
-    hostname = "homepage.toscanini.me";
     serviceName = "homepage";
     port = 3000;
   };

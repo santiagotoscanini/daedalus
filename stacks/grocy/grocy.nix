@@ -13,16 +13,11 @@
 {
   myStack.containerNetworks.grocy = "traefik";
   myStack.webApps.grocy = {
-    hostname = "grocy.toscanini.me";
     serviceName = "grocy";
     port = 80;
     exposeRemotely = true;
-  };
-
-  myStack.homepageServices."Productivity" = [
-    {
-      name = "Grocy";
-      href = "https://grocy.toscanini.me";
+    homepage = {
+      group = "Productivity";
       description = "Household inventory & chores";
       icon = "grocy.png";
       siteMonitor = "https://grocy.toscanini.me";
@@ -62,8 +57,8 @@
           }
         ];
       };
-    }
-  ];
+    };
+  };
 
   virtualisation.oci-containers.containers.grocy = mkRootlessContainer {
     image = "docker.io/linuxserver/grocy:v4.6.0-ls332@sha256:20aaee6b741178035a0c538c87917a8d72113ce2686368183a28f38e823f785c";

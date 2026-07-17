@@ -18,21 +18,15 @@
 {
   myStack.containerNetworks.wealthfolio = "traefik";
   myStack.webApps.wealthfolio = {
-    hostname = "wealthfolio.toscanini.me";
     serviceName = "wealthfolio";
     port = 8088;
     exposeRemotely = true;
-  };
-
-  myStack.homepageServices."Productivity" = [
-    {
-      name = "Wealthfolio";
-      href = "https://wealthfolio.toscanini.me";
+    homepage = {
+      group = "Productivity";
       description = "Personal finance";
       icon = "/icons/wealthfolio.png";
-      siteMonitor = "http://wealthfolio:8088";
-    }
-  ];
+    };
+  };
 
   # WF_* secrets: sops-encrypted env.sops -> /run/secrets/wealthfolio-env
   # (tmpfs, 0400 santiago). Edit with `sops env.sops`.

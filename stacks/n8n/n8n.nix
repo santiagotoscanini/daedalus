@@ -24,18 +24,13 @@
   };
 
   myStack.webApps.n8n = {
-    hostname = "n8n.toscanini.me";
     serviceName = "n8n";
     port = 5678;
-  };
-
-  myStack.homepageServices."Productivity" = [
-    {
+    homepage = {
+      group = "Productivity";
       name = "n8n";
-      href = "https://n8n.toscanini.me";
       description = "Workflow automation";
       icon = "n8n.png";
-      siteMonitor = "http://n8n:5678";
       widget = {
         type = "customapi";
         # /api/v1/executions?limit=10 → {data: [{id, workflowId, status, startedAt, ...}], nextCursor}
@@ -84,8 +79,8 @@
           ];
         };
       };
-    }
-  ];
+    };
+  };
 
   # n8n runs as a mapped uid that can't read the santiago-owned mail secret
   # directly, so render N8N_SMTP_PASS into an --env-file podman injects as

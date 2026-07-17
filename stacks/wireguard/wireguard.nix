@@ -30,9 +30,26 @@
 
   myStack.containerNetworks.wireguard = "traefik";
   myStack.webApps.wireguard = {
-    hostname = "wireguard.toscanini.me";
     serviceName = "wireguard";
     port = 51821;
+    metrics = {
+      enable = true;
+      path = "/metrics/prometheus";
+    };
+    homepage = {
+      group = "Network";
+      name = "WireGuard";
+      description = "VPN admin (wg-easy v15+)";
+      icon = "wireguard.png";
+      widget = {
+        type = "wgeasy";
+        url = "http://wireguard:51821";
+        version = 2;
+        username = "{{HOMEPAGE_VAR_WGEASY_USER}}";
+        password = "{{HOMEPAGE_VAR_WGEASY_PASS}}";
+        threshold = 2;
+      };
+    };
   };
 
   # tv stack's gluetun adds the same modules; NixOS merges the lists.
@@ -49,32 +66,6 @@
   # key has no business being world-readable, even on a single-user box.
   systemd.tmpfiles.rules = [
     "z /home/santiago/selfhost/wireguard/wg-easy.db 0600 santiago users - -"
-  ];
-
-  myStack.prometheusScrapes = [
-    {
-      job_name = "wireguard";
-      metrics_path = "/metrics/prometheus";
-      static_configs = [ { targets = [ "wireguard:51821" ]; } ];
-    }
-  ];
-
-  myStack.homepageServices."Network" = [
-    {
-      name = "WireGuard";
-      href = "https://wireguard.toscanini.me";
-      description = "VPN admin (wg-easy v15+)";
-      icon = "wireguard.png";
-      siteMonitor = "http://wireguard:51821";
-      widget = {
-        type = "wgeasy";
-        url = "http://wireguard:51821";
-        version = 2;
-        username = "{{HOMEPAGE_VAR_WGEASY_USER}}";
-        password = "{{HOMEPAGE_VAR_WGEASY_PASS}}";
-        threshold = 2;
-      };
-    }
   ];
 
   virtualisation.oci-containers.containers.wireguard = mkRootlessContainer {

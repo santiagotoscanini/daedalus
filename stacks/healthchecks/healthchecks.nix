@@ -31,22 +31,17 @@
     hostname = "hc.toscanini.me";
     serviceName = "healthchecks";
     port = 8000;
-  };
-
-  myStack.homepageServices."Monitoring" = [
-    {
-      name = "Healthchecks";
-      href = "https://hc.toscanini.me";
+    homepage = {
+      group = "Monitoring";
       description = "Cron / job dead-man's-switch";
       icon = "healthchecks.png";
-      siteMonitor = "http://healthchecks:8000";
       widget = {
         type = "healthchecks";
         url = "http://healthchecks:8000";
         key = "{{HOMEPAGE_VAR_HEALTHCHECKS_API_KEY}}";
       };
-    }
-  ];
+    };
+  };
 
   sops.secrets."healthchecks-env" = mkDotenvSecret ./env.sops;
 

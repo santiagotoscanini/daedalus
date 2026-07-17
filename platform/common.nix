@@ -92,6 +92,13 @@ let
   };
 
   distinctBridges = lib.unique (lib.filter (n: n != null) (lib.attrValues cfg.containerNetworks));
+
+  # Resolve a webApp's upstream URL from whichever of the two inputs is
+  # set (the exactly-one assertion below enforces the shape).
+  resolveUrl =
+    w: if w.serviceName != null then "http://${w.serviceName}:${toString w.port}" else w.serviceUrl;
+
+  capitalize = s: (lib.toUpper (lib.substring 0 1 s)) + (lib.substring 1 (lib.stringLength s) s);
 in
 {
   options.myStack = {
@@ -346,80 +353,171 @@ in
 
     webApps = lib.mkOption {
       type = lib.types.attrsOf (
-        lib.types.submodule (_: {
-          options = {
-            hostname = lib.mkOption {
-              type = lib.types.str;
-              description = ''
-                Canonical FQDN clients hit (e.g. "immich.toscanini.me").
-                Same hostname for LAN HTTPS (pi-hole answers
-                192.168.0.2; traefik websecure with the wildcard cert)
-                and, if `exposeRemotely`, the CF tunnel (CNAME →
-                cfweb traefik router → same upstream).
+        lib.types.submodule (
+          { name, ... }:
+          {
+            options = {
+              hostname = lib.mkOption {
+                type = lib.types.str;
+                default = "${name}.${cfg.baseDomain}";
+                defaultText = lib.literalExpression ''"''${name}.''${myStack.baseDomain}"'';
+                description = ''
+                  Canonical FQDN clients hit (e.g. "immich.toscanini.me").
+                  Same hostname for LAN HTTPS (pi-hole answers
+                  192.168.0.2; traefik websecure with the wildcard cert)
+                  and, if `exposeRemotely`, the CF tunnel (CNAME →
+                  cfweb traefik router → same upstream).
 
-                Must fall under one of the wildcards traefik already
-                has ACME-issued (`*.toscanini.me`) for HTTPS without
-                extra cert config.
-              '';
-            };
-            port = lib.mkOption {
-              type = lib.types.port;
-              description = ''
-                Upstream port traefik dials. With `serviceName` (preferred):
-                in-container port → bridge DNS as
-                `http://''${serviceName}:''${port}`. With `serviceUrl`:
-                informational only (the URL already carries the port).
-              '';
-            };
-            serviceName = lib.mkOption {
-              type = lib.types.nullOr lib.types.str;
-              default = null;
-              description = ''
-                Preferred upstream shape. When set, traefik dials via
-                container DNS on traefik-net — materializes
-                `traefikRoutes.<name>.serviceUrl =
-                "http://''${serviceName}:''${port}"`.
+                  Must fall under one of the wildcards traefik already
+                  has ACME-issued (`*.toscanini.me`) for HTTPS without
+                  extra cert config.
+                '';
+              };
+              port = lib.mkOption {
+                type = lib.types.port;
+                description = ''
+                  Upstream port traefik dials. With `serviceName` (preferred):
+                  in-container port → bridge DNS as
+                  `http://''${serviceName}:''${port}`. With `serviceUrl`:
+                  informational only (the URL already carries the port).
+                '';
+              };
+              serviceName = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Preferred upstream shape. When set, traefik dials via
+                  container DNS on traefik-net — materializes
+                  `traefikRoutes.<name>.serviceUrl =
+                  "http://''${serviceName}:''${port}"`.
 
-                Requires the upstream container on `traefik-net`
-                (`myStack.containerNetworks.<x> = "traefik"` and
-                `"--network=traefik-net"` in extraOptions; multi-bridge
-                stacks add it as a secondary bridge).
+                  Requires the upstream container on `traefik-net`
+                  (`myStack.containerNetworks.<x> = "traefik"` and
+                  `"--network=traefik-net"` in extraOptions; multi-bridge
+                  stacks add it as a secondary bridge).
 
-                For stacks that can't ride `traefik-net` (gluetun-shared
-                netns, native NixOS services), leave null and set
-                `serviceUrl` instead. Exactly one of the two must be set.
-              '';
-              example = "grocy";
-            };
-            serviceUrl = lib.mkOption {
-              type = lib.types.nullOr lib.types.str;
-              default = null;
-              description = ''
-                Escape-hatch upstream URL — for cases `serviceName` can't fit:
+                  For stacks that can't ride `traefik-net` (gluetun-shared
+                  netns, native NixOS services), leave null and set
+                  `serviceUrl` instead. Exactly one of the two must be set.
+                '';
+                example = "grocy";
+              };
+              serviceUrl = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Escape-hatch upstream URL — for cases `serviceName` can't fit:
 
-                - gluetun-shared netns (TV stack): only gluetun publishes
-                  ports; UIs reached via `host.containers.internal:<port>`.
-                - Native NixOS services (pi-hole): no container/bridge.
-                - TLS-internal upstreams: `https://name:port`.
+                  - gluetun-shared netns (TV stack): only gluetun publishes
+                    ports; UIs reached via `host.containers.internal:<port>`.
+                  - Native NixOS services (pi-hole): no container/bridge.
+                  - TLS-internal upstreams: `https://name:port`.
 
-                Exactly one of `serviceName` / `serviceUrl` must be
-                set — enforced by an assertion.
-              '';
-              example = "http://host.containers.internal:8989";
+                  Exactly one of `serviceName` / `serviceUrl` must be
+                  set — enforced by an assertion.
+                '';
+                example = "http://host.containers.internal:8989";
+              };
+              exposeRemotely = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  When true: publish the hostname through the CF tunnel
+                  too. Emits a `cfweb` traefik router + a
+                  `cloudflareRoutes` entry → cloudflared-route-sync turns
+                  it into a proxied CNAME. LAN exposure is unconditional;
+                  no `exposeLocally` knob.
+                '';
+              };
+
+              homepage = lib.mkOption {
+                type = lib.types.nullOr (
+                  lib.types.submodule (_: {
+                    options = {
+                      group = lib.mkOption {
+                        type = lib.types.str;
+                        description = "Homepage group the tile lands in.";
+                        example = "Media";
+                      };
+                      name = lib.mkOption {
+                        type = lib.types.nullOr lib.types.str;
+                        default = null;
+                        description = "Tile display name. Default: capitalized attr key.";
+                      };
+                      icon = lib.mkOption {
+                        type = lib.types.str;
+                        description = "Tile icon (homepage icon syntax).";
+                      };
+                      description = lib.mkOption {
+                        type = lib.types.nullOr lib.types.str;
+                        default = null;
+                        description = "Tile subtitle.";
+                      };
+                      href = lib.mkOption {
+                        type = lib.types.nullOr lib.types.str;
+                        default = null;
+                        description = "Link override. Default: https://<hostname>.";
+                      };
+                      siteMonitor = lib.mkOption {
+                        type = lib.types.nullOr lib.types.str;
+                        default = null;
+                        description = ''
+                          Liveness-probe URL override. Default: the same
+                          upstream URL traefik dials. Override for apps
+                          homepage must reach through traefik instead
+                          (redirect-happy or --add-host-listed upstreams).
+                        '';
+                      };
+                      widget = lib.mkOption {
+                        type = lib.types.nullOr (lib.types.attrsOf lib.types.unspecified);
+                        default = null;
+                        description = "Optional homepage widget block, passed through verbatim.";
+                      };
+                      extra = lib.mkOption {
+                        type = lib.types.attrsOf lib.types.unspecified;
+                        default = { };
+                        description = "Extra tile fields merged in verbatim (weight, ping, ...).";
+                      };
+                    };
+                  })
+                );
+                default = null;
+                description = ''
+                  Auto-generate this app's homepage tile: href and
+                  siteMonitor derive from the hostname/upstream so they're
+                  declared once. null = no tile. Tiles not tied to a
+                  webApp (external links, no-UI stacks) still use
+                  `myStack.homepageServices` directly.
+                '';
+              };
+
+              metrics = {
+                enable = lib.mkOption {
+                  type = lib.types.bool;
+                  default = false;
+                  description = ''
+                    Emit a prometheus scrape for this app:
+                    `<serviceName>:<metrics.port><metrics.path>`, job
+                    named after the attr key. Requires `serviceName`
+                    (prometheus scrapes over traefik-net by container
+                    DNS). Scrapes that need auth or non-webApp targets
+                    use `myStack.prometheusScrapes` directly.
+                  '';
+                };
+                port = lib.mkOption {
+                  type = lib.types.nullOr lib.types.port;
+                  default = null;
+                  description = "Scrape port. Default: the webApp `port`.";
+                };
+                path = lib.mkOption {
+                  type = lib.types.str;
+                  default = "/metrics";
+                  description = "Scrape metrics_path.";
+                };
+              };
             };
-            exposeRemotely = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = ''
-                When true: publish the hostname through the CF tunnel
-                too. Emits a `cfweb` traefik router + a
-                `cloudflareRoutes` entry → cloudflared-route-sync turns
-                it into a proxied CNAME. LAN exposure is unconditional;
-                no `exposeLocally` knob.
-              '';
-            };
-          };
-        })
+          }
+        )
       );
       default = { };
       description = ''
@@ -619,10 +717,6 @@ in
     # for edge cases at the same time.
     myStack.traefikRoutes =
       let
-        # Resolve from whichever of the two webApps inputs is set
-        # (assertion below enforces exactly-one).
-        resolveUrl =
-          w: if w.serviceName != null then "http://${w.serviceName}:${toString w.port}" else w.serviceUrl;
         baseRoute = w: {
           host = w.hostname;
           serviceUrl = resolveUrl w;
@@ -641,15 +735,62 @@ in
 
     # Every route declares its upstream shape explicitly — no implicit
     # `host.containers.internal` fallback.
-    assertions = lib.mapAttrsToList (n: w: {
-      assertion = (w.serviceName != null) != (w.serviceUrl != null);
-      message = ''
-        myStack.webApps.${n}: exactly one of `serviceName`
-        (bridge-routed via traefik-net) or `serviceUrl` (explicit
-        upstream URL, e.g. for gluetun-shared or native services)
-        must be set.
-      '';
-    }) cfg.webApps;
+    assertions =
+      (lib.mapAttrsToList (n: w: {
+        assertion = (w.serviceName != null) != (w.serviceUrl != null);
+        message = ''
+          myStack.webApps.${n}: exactly one of `serviceName`
+          (bridge-routed via traefik-net) or `serviceUrl` (explicit
+          upstream URL, e.g. for gluetun-shared or native services)
+          must be set.
+        '';
+      }) cfg.webApps)
+      ++ (lib.mapAttrsToList (n: w: {
+        assertion = w.metrics.enable -> (w.serviceName != null);
+        message = ''
+          myStack.webApps.${n}: `metrics.enable` needs `serviceName` —
+          prometheus scrapes by container DNS on traefik-net. For
+          serviceUrl-shaped apps declare `myStack.prometheusScrapes`
+          directly.
+        '';
+      }) cfg.webApps);
+
+    # Default homepage tile per webApp (see the `homepage` option).
+    myStack.homepageServices =
+      let
+        mkTile =
+          n: w:
+          {
+            name = if w.homepage.name != null then w.homepage.name else capitalize n;
+            href = if w.homepage.href != null then w.homepage.href else "https://${w.hostname}";
+            siteMonitor = if w.homepage.siteMonitor != null then w.homepage.siteMonitor else resolveUrl w;
+            inherit (w.homepage) icon;
+          }
+          // lib.optionalAttrs (w.homepage.description != null) { inherit (w.homepage) description; }
+          // lib.optionalAttrs (w.homepage.widget != null) { inherit (w.homepage) widget; }
+          // w.homepage.extra;
+        entries = lib.mapAttrsToList (n: w: {
+          inherit (w.homepage) group;
+          tile = mkTile n w;
+        }) (lib.filterAttrs (_: w: w.homepage != null) cfg.webApps);
+      in
+      lib.mapAttrs (_: es: map (e: e.tile) es) (builtins.groupBy (e: e.group) entries);
+
+    # Auth-less scrapes per webApp (see the `metrics` option).
+    myStack.prometheusScrapes = lib.mapAttrsToList (
+      n: w:
+      {
+        job_name = n;
+        static_configs = [
+          {
+            targets = [
+              "${w.serviceName}:${toString (if w.metrics.port != null then w.metrics.port else w.port)}"
+            ];
+          }
+        ];
+      }
+      // lib.optionalAttrs (w.metrics.path != "/metrics") { metrics_path = w.metrics.path; }
+    ) (lib.filterAttrs (_: w: w.metrics.enable) cfg.webApps);
 
     myStack.dnsHosts = lib.mapAttrsToList (_: w: "${cfg.lanIp} ${w.hostname}") cfg.webApps;
 

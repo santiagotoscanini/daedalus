@@ -81,30 +81,19 @@ in
     serviceName = "gatus";
     port = 8080;
     # LAN-only: uptime dashboard is operator-facing.
-  };
-
-  # Prometheus reaches gatus by container DNS on traefik-net. gatus exports
-  # results_* series (per-endpoint success, response time, cert expiry).
-  myStack.prometheusScrapes = [
-    {
-      job_name = "gatus";
-      static_configs = [ { targets = [ "gatus:8080" ]; } ];
-    }
-  ];
-
-  myStack.homepageServices."Monitoring" = [
-    {
-      name = "Gatus";
-      href = "https://status.toscanini.me";
+    # gatus exports results_* series (per-endpoint success, response
+    # time, cert expiry).
+    metrics.enable = true;
+    homepage = {
+      group = "Monitoring";
       description = "Outside-in uptime + cert expiry";
       icon = "gatus.png";
-      siteMonitor = "http://gatus:8080";
       widget = {
         type = "gatus";
         url = "http://gatus:8080";
       };
-    }
-  ];
+    };
+  };
 
   virtualisation.oci-containers.containers.gatus = mkRootlessContainer {
     image = "docker.io/twinproduction/gatus:v5.36.0";

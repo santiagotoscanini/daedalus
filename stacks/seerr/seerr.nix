@@ -19,25 +19,19 @@
   myStack.containerNetworks.seerr = "traefik";
 
   myStack.webApps.seerr = {
-    hostname = "seerr.toscanini.me";
     serviceName = "seerr";
     port = 5055;
-  };
-
-  myStack.homepageServices."Media" = [
-    {
-      name = "Seerr";
-      href = "https://seerr.toscanini.me";
+    homepage = {
+      group = "Media";
       description = "Media requests & discovery";
       icon = "seerr.png";
-      siteMonitor = "http://seerr:5055";
       widget = {
         type = "seerr";
         url = "http://seerr:5055";
         key = "{{HOMEPAGE_VAR_SEERR_API_KEY}}";
       };
-    }
-  ];
+    };
+  };
 
   virtualisation.oci-containers.containers.seerr = mkRootlessContainer {
     image = "ghcr.io/seerr-team/seerr:v3.3.0@sha256:2892b14e960d946fb91573792505dcba011075638f27104360fd21aa157fa2bc";

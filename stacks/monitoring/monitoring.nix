@@ -204,44 +204,36 @@ in
 
   myStack.webApps = {
     prometheus = {
-      hostname = "prometheus.toscanini.me";
       serviceName = "prometheus";
       port = 9090;
+      homepage = {
+        group = "Monitoring";
+        description = "TSDB — 30d / 100GB retention";
+        icon = "prometheus.png";
+        widget = {
+          type = "prometheus";
+          url = "http://prometheus:9090";
+        };
+      };
     };
     grafana = {
-      hostname = "grafana.toscanini.me";
       serviceName = "grafana";
       port = 3000;
+      homepage = {
+        group = "Monitoring";
+        href = "https://grafana.toscanini.me/bookmarks";
+        description = "Dashboards (prometheus + loki)";
+        icon = "grafana.png";
+        widget = {
+          type = "grafana";
+          version = 2;
+          url = "http://grafana:3000";
+          username = "{{HOMEPAGE_VAR_GRAFANA_USER}}";
+          password = "{{HOMEPAGE_VAR_GRAFANA_PASS}}";
+        };
+      };
     };
   };
-
-  myStack.homepageServices."Monitoring" = [
-    {
-      name = "Grafana";
-      href = "https://grafana.toscanini.me/bookmarks";
-      description = "Dashboards (prometheus + loki)";
-      icon = "grafana.png";
-      siteMonitor = "http://grafana:3000";
-      widget = {
-        type = "grafana";
-        version = 2;
-        url = "http://grafana:3000";
-        username = "{{HOMEPAGE_VAR_GRAFANA_USER}}";
-        password = "{{HOMEPAGE_VAR_GRAFANA_PASS}}";
-      };
-    }
-    {
-      name = "Prometheus";
-      href = "https://prometheus.toscanini.me";
-      description = "TSDB — 30d / 100GB retention";
-      icon = "prometheus.png";
-      siteMonitor = "http://prometheus:9090";
-      widget = {
-        type = "prometheus";
-        url = "http://prometheus:9090";
-      };
-    }
-  ];
 
   virtualisation.oci-containers.containers.prometheus = mkRootlessContainer {
     image = "docker.io/prom/prometheus:v3.13.1";

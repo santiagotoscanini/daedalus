@@ -10,18 +10,13 @@
 {
   myStack.containerNetworks.stirling-pdf = "traefik";
   myStack.webApps.stirling-pdf = {
-    hostname = "stirling-pdf.toscanini.me";
     serviceName = "stirling-pdf";
     port = 8080; # in-container port
-  };
-
-  myStack.homepageServices."Productivity" = [
-    {
+    homepage = {
+      group = "Productivity";
       name = "Stirling-PDF";
-      href = "https://stirling-pdf.toscanini.me";
       description = "PDF toolbox (split, merge, OCR)";
       icon = "stirling-pdf.png";
-      siteMonitor = "http://stirling-pdf:8080";
       widget = {
         type = "customapi";
         # /api/v1/info/status → {"version":"2.10.1","status":"UP"}
@@ -42,8 +37,8 @@
           }
         ];
       };
-    }
-  ];
+    };
+  };
 
   virtualisation.oci-containers.containers.stirling-pdf = mkRootlessContainer {
     image = "docker.io/frooodle/s-pdf:2.14.2@sha256:7ed4d9681d18e4fbc3aa6a63647c4b5c2bcc4b75841df7c05d7e3d2320f5c9a1";
