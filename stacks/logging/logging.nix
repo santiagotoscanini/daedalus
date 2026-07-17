@@ -34,6 +34,18 @@
     alloy = "monitoring";
   };
 
+  # Box-wide log browser (Grafana Drilldown -> Loki). The per-app
+  # Logs tiles (apps.nix) deep-link filtered views of the same data.
+  myStack.homepageServices."Monitoring" = [
+    {
+      name = "Logs";
+      href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore?from=now-1h&to=now&var-ds=loki-default";
+      description = "All services — journald -> Loki (Grafana Drilldown)";
+      icon = "loki.png";
+      siteMonitor = "http://loki:3100/ready";
+    }
+  ];
+
   # Loki has NO traefik route by design: reachable only over
   # monitoring-net (grafana is the UI; alloy pushes to it; homepage's
   # per-app log widget joins monitoring-net to reach it). Dropping the
