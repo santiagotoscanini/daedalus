@@ -32,6 +32,12 @@
       description = "Ebook library";
       icon = "calibre-web.png";
       siteMonitor = "http://calibre-web:8083";
+      widget = {
+        type = "calibreweb";
+        url = "http://calibre-web:8083";
+        username = "{{HOMEPAGE_VAR_CALIBREWEB_USER}}";
+        password = "{{HOMEPAGE_VAR_CALIBREWEB_PASS}}";
+      };
     }
   ];
 
