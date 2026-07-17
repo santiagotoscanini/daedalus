@@ -24,11 +24,12 @@
 # redirect here for login from off-LAN. APP_URL pins absolute URLs to
 # https regardless of the plain-HTTP cfweb entrypoint.
 #
-# Image sets no USER → container root → host santiago (1000:100),
-# which owns the data dir. Listens on 1411 (v2 unified port).
+# The entrypoint drops to in-container UID 1000 → host 100999
+# (hostUid 1000), which owns /app/data. Listens on 1411 (v2 port).
 
 {
   config,
+  hostUid,
   mkRootlessContainer,
   mkDotenvSecret,
   ...
@@ -56,7 +57,7 @@
 
   systemd.tmpfiles.rules = [
     "d /home/santiago/selfhost/pocket-id 0755 santiago users -"
-    "d /home/santiago/selfhost/pocket-id/data 0700 santiago users -"
+    "d /home/santiago/selfhost/pocket-id/data 0700 ${toString (hostUid 1000)} ${toString (hostUid 1000)} -"
   ];
 
   virtualisation.oci-containers.containers.pocket-id = mkRootlessContainer {

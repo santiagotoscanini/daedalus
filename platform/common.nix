@@ -226,6 +226,16 @@ in
               '';
               example = "api@internal";
             };
+            middlewares = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                Middleware refs attached to the generated router,
+                e.g. [ "oidc-auth@file" ]. webApps materializes this
+                from its `auth` option; set directly only on
+                hand-declared routes.
+              '';
+            };
             entrypoint = lib.mkOption {
               type = lib.types.enum [
                 "websecure"
@@ -464,6 +474,20 @@ in
                 '';
               };
 
+              auth = lib.mkOption {
+                type = lib.types.enum [
+                  "none"
+                  "oidc"
+                ];
+                default = "none";
+                description = ''
+                  "oidc" gates the generated router(s) — websecure AND
+                  the cfweb twin when `exposeRemotely` — behind the
+                  `oidc-auth@file` forward-auth middleware (Pocket ID,
+                  see AUTH.md). "none" for apps that authenticate
+                  against Pocket ID natively or keep their own auth.
+                '';
+              };
               homepage = lib.mkOption {
                 type = lib.types.nullOr (
                   lib.types.submodule (_: {
@@ -764,6 +788,7 @@ in
         baseRoute = w: {
           host = w.hostname;
           serviceUrl = resolveUrl w;
+          middlewares = lib.optional (w.auth == "oidc") "oidc-auth@file";
         };
       in
       (lib.mapAttrs (_: baseRoute) cfg.webApps)

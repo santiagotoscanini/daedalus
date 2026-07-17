@@ -38,6 +38,16 @@ let
 
   yamlFormat = pkgs.formats.yaml { };
 
+  # OIDC forward-auth plugin (AUTH.md) — vendored into the nix store so
+  # traefik startup never fetches from the network (localPlugins loads
+  # it in-process via Yaegi from /plugins-local/src/<module>).
+  oidcPlugin = pkgs.fetchFromGitHub {
+    owner = "sevensolutions";
+    repo = "traefik-oidc-auth";
+    rev = "v0.20.1";
+    hash = "sha256-IhAEWiLcR5L4pqa2gE5f1DdtAYeTPWBva3zT1vS3u5U=";
+  };
+
   # One structured YAML file per route — no hand-rolled indentation.
   # Edit the attrset (in the owning stack's module), not the rendered
   # file (it lives in /nix/store, read-only).
@@ -55,6 +65,9 @@ let
           entryPoints = [ entry ];
           rule = "Host(`${route.host}`)";
           service = if internal then route.service else "${name}-svc";
+        }
+        // lib.optionalAttrs (route.middlewares != [ ]) {
+          inherit (route) middlewares;
         }
         // lib.optionalAttrs needsTls {
           tls = {
@@ -104,6 +117,11 @@ in
   # its own asset and contributes here (e.g. app-db's TCP/SNI route
   # lives in stacks/app-db/).
   myStack.traefikStaticRules."tls-opts.yml" = builtins.readFile ./assets/tls-opts.yml;
+
+  # Pocket ID forward-auth middleware (AUTH.md). POCKET_OIDC_* values
+  # come from env.sops via the plugin's own ''${VAR} resolution — the
+  # rendered YAML in /nix/store carries no secrets.
+  myStack.traefikStaticRules."oidc-middleware.yml" = builtins.readFile ./assets/oidc-middleware.yml;
 
   # Dashboard / API — LAN-only via pi-hole dns.hosts; `api@internal`
   # serves /api/* and /dashboard/*.
@@ -174,6 +192,7 @@ in
 
     volumes = [
       "${traefikRulesDir}:/rules:ro"
+      "${oidcPlugin}:/plugins-local/src/github.com/sevensolutions/traefik-oidc-auth:ro"
       "/home/santiago/selfhost/traefik/acme.json:/acme.json"
       # No /var/log/traefik mount: both app + access logs go to stdout
       # (journald -> Loki). File logging is intentionally off so nothing
@@ -201,6 +220,15 @@ in
       "--entrypoints.websecure.address=:443"
       "--entrypoints.traefik.address=:8080"
       "--entrypoints.cfweb.address=:8888"
+
+      # cloudflared dials cfweb from traefik-net; trust its
+      # X-Forwarded-* (proto=https from the CF edge) or OIDC
+      # middlewares build http:// redirect URIs and loop. /16 not /24:
+      # podman renumbers bridge subnets if networks are recreated.
+      "--entrypoints.cfweb.forwardedHeaders.trustedIPs=10.89.0.0/16"
+
+      # In-process OIDC forward-auth plugin (vendored — see oidcPlugin).
+      "--experimental.localPlugins.oidc.moduleName=github.com/sevensolutions/traefik-oidc-auth"
     ]
     ++ (lib.optional pgwireEnabled "--entrypoints.postgres.address=:5432")
     ++ [

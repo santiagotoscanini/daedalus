@@ -73,6 +73,9 @@ in
   myStack.webApps.homepage = {
     serviceName = "homepage";
     port = 3000;
+    # No auth of its own (upstream: none planned) — Pocket ID gate is
+    # the only login. Pilot service for the oidc-auth middleware.
+    auth = "oidc";
   };
 
   # Per-group layout — keyed on the same group names contributed via

@@ -13,7 +13,7 @@ behind forward-auth > bare forward-auth. No double logins: services
 whose local login can't be disabled and have OIDC coming upstream WAIT
 for the official implementation instead.
 
-Status: PLANNED — nothing below is implemented yet. Audit date 2026-07-17.
+Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.toscanini.me, LAN+tunnel); oidc-auth@file middleware (vendored traefik-oidc-auth v0.20.1, localPlugins); `myStack.webApps.<name>.auth = "oidc"` knob gates websecure+cfweb routers; pilot service: homepage. Remaining: per-service rollout below. Audit date 2026-07-17.
 
 ## Tier 1 — native OIDC (app is a Pocket ID client)
 
