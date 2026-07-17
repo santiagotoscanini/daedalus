@@ -1,0 +1,97 @@
+# Janitorr — media-retention reporter/cleaner for the tv stack.
+# DRY-RUN PHASE: application.dry-run=true AND the media bind is :ro in
+# janitorr.nix — nothing is deleted or written; candidates are logged to
+# /logs/janitorr.log. Going live later means: dry-run=false, media bind
+# rw, and solving the leaving-soon symlink namespace (jellyfin sees
+# /s2/tv/media as /data, janitorr sees /s2/tv as /data — symlink targets
+# created by janitorr would need /data/media/... to resolve inside
+# jellyfin, e.g. via an extra ro bind /s2/tv/media:/data/media there).
+# ${...} placeholders resolve from env (sops env.sops) at startup.
+
+logging:
+  level:
+    com.github.schaka: INFO
+  file:
+    name: /logs/janitorr.log
+
+file-system:
+  access: true
+  validate-seeding: false
+  leaving-soon-dir: "/data/media/leaving-soon"
+  media-server-leaving-soon-dir: "/data/leaving-soon"
+  from-scratch: false
+  free-space-check-dir: "/data"
+
+application:
+  dry-run: true
+  run-once: false
+  whole-tv-show: false
+  whole-show-seeding-check: false
+  leaving-soon: 14d
+  exclusion-tags:
+    - "janitorr_keep"
+  media-deletion:
+    enabled: true
+    # key = free-disk %, value = max age: a tier applies only when free
+    # space drops BELOW the key. At ~94% free today NO tier applies —
+    # janitorr deletes nothing until the pool falls under 20% free.
+    movie-expiration:
+      5: 30d
+      10: 90d
+      15: 180d
+      20: 365d
+    season-expiration:
+      5: 30d
+      10: 90d
+      15: 180d
+      20: 365d
+  tag-based-deletion:
+    enabled: false
+    minimum-free-disk-percent: 100
+    schedules: []
+  episode-deletion:
+    enabled: false
+    tag: janitorr_daily
+    max-episodes: 10
+    max-age: 30d
+
+clients:
+  sonarr:
+    enabled: true
+    url: "http://host.containers.internal:8989"
+    api-key: "${SONARR_API_KEY}"
+    delete-empty-shows: true
+    import-exclusions: false
+  radarr:
+    enabled: true
+    url: "http://host.containers.internal:7878"
+    api-key: "${RADARR_API_KEY}"
+    only-delete-files: false
+    import-exclusions: false
+  bazarr:
+    enabled: false
+    url: "http://host.containers.internal:6767"
+    api-key: ""
+  jellyfin:
+    enabled: true
+    url: "http://jellyfin:8096"
+    api-key: "${JELLYFIN_API_KEY}"
+    username: ""
+    password: ""
+    delete: true
+    # a Jellyfin favorite also protects an item from deletion
+    exclude-favorited: true
+    leaving-soon-tv: "Shows (Leaving Soon)"
+    leaving-soon-movies: "Movies (Leaving Soon)"
+    leaving-soon-type: MOVIES_AND_TV
+  emby:
+    enabled: false
+  jellyseerr:
+    enabled: true
+    url: "http://seerr:5055"
+    api-key: "${SEERR_API_KEY}"
+    match-server: false
+  jellystat:
+    enabled: false
+  streamystats:
+    enabled: false
