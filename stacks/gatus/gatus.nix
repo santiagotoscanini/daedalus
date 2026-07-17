@@ -1,4 +1,4 @@
-# gatus — outside-in uptime + TLS-expiry probing (IMPROVEMENTS #5).
+# gatus — outside-in uptime + TLS-expiry probing.
 #
 # Everything else on this box watches from the INSIDE (node-exporter,
 # container_up, cadvisor). gatus is the one component that probes the
@@ -28,11 +28,11 @@
 # subnet, which pi-hole's LOCAL listening mode drops → every probe times out.)
 #
 # ── Alerting deliberately left unconfigured ─────────────────────────────
-# gatus can alert (email/slack/etc.) but that's wired to the Gmail relay,
-# which is blocked pending the operator's app-password step (IMPROVEMENTS
-# #2/#3). For now gatus records history + exposes /metrics; the prometheus
-# scrape below means the existing Grafana rules can alert on it once the
-# email contact point lands. Add `alerting:` + per-endpoint `alerts:` then.
+# gatus can alert on its own (email/slack/etc.), but Grafana owns
+# alerting on this box — the prometheus scrape below feeds gatus
+# results into the same rules + email contact point as everything
+# else: one alert path instead of two. Add `alerting:` + per-endpoint
+# `alerts:` only if gatus must page independently of Grafana.
 #
 # State (history DB) persists at ~/selfhost/gatus/data (sqlite) so restarts
 # don't wipe the uptime history. LAN-only (status.toscanini.me); no

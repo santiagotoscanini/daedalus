@@ -37,7 +37,7 @@
 }:
 
 let
-  # ── Container liveness metric (IMPROVEMENTS #4) ─────────────────────────
+  # ── Container liveness metric ─────────────────────────
   # cadvisor can't see rootless-podman container cgroups (they live under
   # user@1000.service, invisible to cadvisor), so its per-container series
   # are empty and a dead container fires no alert while its systemd unit

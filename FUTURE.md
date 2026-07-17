@@ -1,7 +1,6 @@
 # FUTURE.md — deferred improvements
 
-Items consciously deferred from the 2026-07-15 gap-to-SOTA audit
-(current work: `IMPROVEMENTS.md`). Revisit when the trigger fires.
+Items consciously deferred from the 2026-07-15 gap-to-SOTA audit.
 
 ## 1. Forward-auth SSO for admin UIs (Pocket-ID + traefik-forward-auth)
 
@@ -20,7 +19,7 @@ devices join the network.
 
 ## 2. Off-site ZFS sync to an external service
 
-Local replication (rpool → s2-pool mirror, see IMPROVEMENTS.md) covers
+Local replication (rpool → s2-pool mirror, see platform/backup.nix) covers
 disk failure but NOT fire, theft, or ransomware — all copies live in
 one house. Deferred for cost reasons (2026-07-15).
 
