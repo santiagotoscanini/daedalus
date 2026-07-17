@@ -82,10 +82,14 @@ Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.tosca
   restrictions possible). Rollout recipe per service:
   1. `POST /api/oidc/clients` (header `X-API-KEY` = STATIC_API_KEY from
      `stacks/pocket-id/env.sops`) with `name` = display name,
+     `description`, `launchURL` = `https://<hostname>` (My Apps page),
      `callbackURLs` = `logoutCallbackURLs` =
      `https://<hostname>/oidc/callback`, `pkceEnabled: true`,
      `skipConsent: true` (own infra); then
-     `POST /api/oidc/clients/<id>/secret`.
+     `POST /api/oidc/clients/<id>/secret` and
+     `POST /api/oidc/clients/<id>/logo` (multipart `file`, PNG from
+     cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/<app>.png —
+     same art the homepage tiles use).
   2. Append `POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET}` (name uppercased,
      dashes to underscores) to `stacks/traefik/env.sops`.
   3. Set `auth = "oidc"` on the webApp entry; rebuild. env.sops-only
