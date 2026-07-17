@@ -9,3 +9,15 @@ litellm_settings:
     - prometheus
   failure_callback:
     - prometheus
+
+# Local STT: subgen (tv stack, gluetun netns) exposes OpenAI-compatible
+# /v1/audio endpoints on gluetun's published :9000. Registered here so
+# any OpenAI-SDK consumer gets transcription through the gateway
+# (keys/budgets/metrics). Bazarr does NOT go through this — it speaks
+# subgen's /asr directly on netns localhost.
+model_list:
+  - model_name: whisper-1
+    litellm_params:
+      model: openai/whisper-1
+      api_base: http://host.containers.internal:9000/v1
+      api_key: "local-no-auth"

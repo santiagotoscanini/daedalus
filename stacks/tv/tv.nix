@@ -53,7 +53,7 @@
     sonarr = null;
     bazarr = null;
     gluetun-exporter = null; # shares gluetun's netns
-    whisper = null; # shares gluetun's netns
+    subgen = null; # shares gluetun's netns
     jellyfin = "traefik";
   };
 
@@ -251,6 +251,7 @@
       "6767:6767" # bazarr web UI
       "8001:8001" # gluetun-exporter (shares this netns)
       "8000:8000" # gluetun HTTP control server
+      "9000:9000" # subgen (Bazarr uses /asr on localhost; OpenAI /v1 for litellm)
     ];
 
     volumes = [
@@ -403,31 +404,36 @@
     extraOptions = [ "--network=container:gluetun" ];
   };
 
-  # whisper — speech-to-text subtitle generation (Bazarr's whisperai
-  # provider). Shares gluetun's netns so Bazarr reaches it on
-  # 127.0.0.1:9000 (Bazarr's default whisper endpoint) with no
-  # published port. Fallback-only: fires when no provider has a text
-  # subtitle. Transcribes original audio (X->X) or translates to
-  # English (X->en); it cannot produce Spanish subs from English
-  # audio, so es-LA subs still come from the real providers.
+  # subgen — speech-to-text subtitle generation (Bazarr's whisperai
+  # provider) + OpenAI-compatible STT for the platform. Dual API on
+  # :9000: /asr (whisper-asr-webservice shape — Bazarr dials
+  # 127.0.0.1:9000 inside the shared netns) and /v1/audio/
+  # transcriptions|translations (OpenAI shape — published on gluetun's
+  # port block so LiteLLM reaches it at host.containers.internal:9000).
   #
-  # First start downloads the ~460MB "small" model through the VPN
-  # into the cache bind below; subsequent starts are instant.
+  # Plex/Jellyfin-webhook + folder-monitor features stay OFF — Bazarr
+  # owns the subtitle pipeline (whisper is fallback-only). faster-
+  # whisper "small" on CPU; first start downloads into the cache bind.
   systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/tv/whisper 0755 santiago users -"
+    "d /home/santiago/selfhost/tv/subgen 0755 santiago users -"
   ];
 
-  virtualisation.oci-containers.containers.whisper = mkRootlessContainer {
-    image = "docker.io/onerahmet/openai-whisper-asr-webservice:latest@sha256:f8b323e5c8c6706cb1723813f0638e94e9d2f7fcc2c88441ba2bac27d1d63c1c";
+  virtualisation.oci-containers.containers.subgen = mkRootlessContainer {
+    image = "docker.io/mccloud/subgen:cpu@sha256:de40992da49bad8643e0795ec41739776b1e1c16af7684d7337aea98bb11c9cd";
     dependsOn = [ "gluetun" ];
 
     volumes = [
-      "/home/santiago/selfhost/tv/whisper:/root/.cache"
+      "/home/santiago/selfhost/tv/subgen:/models"
     ];
 
     environment = {
-      ASR_MODEL = "small";
-      ASR_ENGINE = "faster_whisper";
+      PUID = "0"; # container root -> host santiago (stack convention)
+      PGID = "0";
+      TRANSCRIBE_DEVICE = "cpu";
+      WHISPER_MODEL = "small";
+      CONCURRENT_TRANSCRIPTIONS = "1";
+      MODEL_PATH = "/models";
+      DEBUG = "False";
     };
 
     extraOptions = [ "--network=container:gluetun" ];
