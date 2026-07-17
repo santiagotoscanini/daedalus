@@ -19,7 +19,12 @@
 #   zfs-scrub              -> zfs-scrub            (monthly)
 #   flake-autoupgrade      -> flake-autoupgrade    (weekly)
 
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   baseUrl = "https://hc.toscanini.me/ping";
