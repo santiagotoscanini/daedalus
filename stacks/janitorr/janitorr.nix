@@ -29,7 +29,7 @@
       name = "Janitorr";
       href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore?from=now-7d&to=now&var-ds=loki-default&var-filters=container%7C%3D%7Cjanitorr";
       description = "Media retention (dry-run) — log review";
-      icon = "janitorr.png";
+      icon = "/icons/janitorr.png";
       widget = {
         type = "customapi";
         url = "http://loki:3100/loki/api/v1/query?query=sum%28count_over_time%28%7Bcontainer%3D%22janitorr%22%7D%20%7C%3D%20%60Deleting%60%20%5B7d%5D%29%29%20or%20vector%280%29";
