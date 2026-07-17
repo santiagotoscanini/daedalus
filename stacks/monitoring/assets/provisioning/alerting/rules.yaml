@@ -1,12 +1,13 @@
 # All alert rules for the home server. Exported via Grafana's
 # /api/v1/provisioning/alert-rules/export endpoint. Grouped by
-# severity tier; folder is matched by title ("Home Server Alerts").
+# dashboards they monitor (all current rules are host-level).
+# severity tier. Rules live in the "System" folder, next to the host
 
 apiVersion: 1
 groups:
   - orgId: 1
     name: Container Alerts
-    folder: Home Server Alerts
+    folder: System
     interval: 1m
     rules:
       # PAUSED: relies on cadvisor per-container memory series
@@ -152,7 +153,7 @@ groups:
         isPaused: false
   - orgId: 1
     name: Critical Alerts
-    folder: Home Server Alerts
+    folder: System
     interval: 1m
     rules:
       - uid: ffal28xmfal1cf
@@ -356,7 +357,7 @@ groups:
         isPaused: false
   - orgId: 1
     name: Predictive Alerts
-    folder: Home Server Alerts
+    folder: System
     interval: 1m
     rules:
       - uid: afal2fwv7mmtce
@@ -441,7 +442,7 @@ groups:
         isPaused: false
   - orgId: 1
     name: Warning Alerts
-    folder: Home Server Alerts
+    folder: System
     interval: 1m
     rules:
       - uid: ffal2b36ys1dsf
