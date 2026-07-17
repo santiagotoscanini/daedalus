@@ -43,15 +43,6 @@
       description = "Factorio server manager";
       icon = "/icons/factorio.png";
       siteMonitor = "https://factorio-admin.toscanini.me";
-      # gamedig speaks Factorio's UDP query protocol on the game port:
-      # up/down + player count on the tile. Shows Offline whenever no
-      # save is running in ofsm (the manager stays up regardless).
-      widget = {
-        type = "gamedig";
-        serverType = "factorio";
-        url = "udp://192.168.0.2:34197";
-        fields = [ "status" "currentPlayers" "maxPlayers" "ping" ];
-      };
     }
   ];
 
