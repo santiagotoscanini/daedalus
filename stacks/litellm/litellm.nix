@@ -159,6 +159,13 @@
     ];
 
     environment = {
+      # Pocket ID SSO for the admin UI (free ≤5 users; AUTH.md).
+      # GENERIC_CLIENT_ID/SECRET ride env.sops. The OpenAI-compatible
+      # API keeps Bearer virtual-key auth — SSO only changes the UI.
+      PROXY_BASE_URL = "https://litellm.toscanini.me";
+      GENERIC_AUTHORIZATION_ENDPOINT = "https://id.toscanini.me/authorize";
+      GENERIC_TOKEN_ENDPOINT = "https://id.toscanini.me/api/oidc/token";
+      GENERIC_USERINFO_ENDPOINT = "https://id.toscanini.me/api/oidc/userinfo";
       STORE_MODEL_IN_DB = "True";
     };
 

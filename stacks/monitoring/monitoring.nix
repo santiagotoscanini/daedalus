@@ -302,6 +302,26 @@ in
       GF_SMTP_FROM_ADDRESS = config.myStack.mail.sender;
       GF_SMTP_FROM_NAME = "s2-server Grafana";
       GF_SMTP_STARTTLS_POLICY = "MandatoryStartTLS";
+
+      # Pocket ID SSO (AUTH.md). Client creds ride env.sops
+      # (GF_AUTH_GENERIC_OAUTH_CLIENT_ID/SECRET). Single-user box:
+      # every Pocket ID account maps to Grafana Admin. Basic auth stays
+      # on — the homepage widget authenticates with the admin user/pass
+      # against the API. Escape hatch: /login?disableAutoLogin.
+      GF_AUTH_GENERIC_OAUTH_ENABLED = "true";
+      GF_AUTH_GENERIC_OAUTH_NAME = "Pocket ID";
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL = "https://id.toscanini.me/authorize";
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL = "https://id.toscanini.me/api/oidc/token";
+      GF_AUTH_GENERIC_OAUTH_API_URL = "https://id.toscanini.me/api/oidc/userinfo";
+      GF_AUTH_GENERIC_OAUTH_SCOPES = "openid email profile groups";
+      GF_AUTH_GENERIC_OAUTH_USE_PKCE = "true";
+      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP = "true";
+      GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN = "true";
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH = "'Admin'";
+      GF_AUTH_DISABLE_LOGIN_FORM = "true";
+      # Link by email instead of erroring if an existing account shares
+      # the address (single-user box; "insecure" is fine here).
+      GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP = "true";
     };
 
     # GF_SECURITY_ADMIN_USER + GF_SECURITY_ADMIN_PASSWORD.

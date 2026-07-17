@@ -42,6 +42,7 @@
   config,
   lib,
   pkgs,
+  mkDotenvSecret,
   mkRootlessContainer,
   ...
 }:
@@ -69,12 +70,28 @@ let
       };
       metrics = true;
       ui.title = "s2-server · status";
+      # Pocket ID SSO (AUTH.md). gatus expands ''${VAR} from its env at
+      # load — creds come from env.sops, never the /nix/store YAML.
+      # allowed-subjects is MANDATORY: without it any Pocket ID account
+      # gets in. Value = santito's sub UUID.
+      security.oidc = {
+        issuer-url = "https://id.toscanini.me";
+        client-id = "\${GATUS_OIDC_CLIENT_ID}";
+        client-secret = "\${GATUS_OIDC_CLIENT_SECRET}";
+        redirect-url = "https://status.toscanini.me/authorization-code/callback";
+        scopes = [ "openid" ];
+        allowed-subjects = [ "1ae66034-d627-46f7-9c04-1d8c05639a1a" ];
+      };
       inherit endpoints;
     }
   );
 in
 {
   myStack.containerNetworks.gatus = "traefik";
+
+  # GATUS_OIDC_CLIENT_ID + GATUS_OIDC_CLIENT_SECRET (Pocket ID SSO):
+  # sops-encrypted env.sops. Edit with `sops env.sops`.
+  sops.secrets."gatus-env" = mkDotenvSecret ./env.sops;
 
   myStack.webApps.gatus = {
     hostname = "status.toscanini.me";
@@ -101,6 +118,10 @@ in
     environment = {
       GATUS_CONFIG_PATH = "/config/config.yaml";
     };
+
+    # GATUS_OIDC_CLIENT_ID + GATUS_OIDC_CLIENT_SECRET: sops-encrypted
+    # env.sops, decrypted to /run/secrets/gatus-env at activation.
+    environmentFiles = [ config.sops.secrets."gatus-env".path ];
 
     volumes = [
       "${gatusConfig}:/config/config.yaml:ro"

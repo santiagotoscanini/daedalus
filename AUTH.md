@@ -13,7 +13,7 @@ behind forward-auth > bare forward-auth. No double logins: services
 whose local login can't be disabled and have OIDC coming upstream WAIT
 for the official implementation instead.
 
-Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.toscanini.me, LAN+tunnel); oidc-auth@file middleware (vendored traefik-oidc-auth v0.20.1, localPlugins); `myStack.webApps.<name>.auth = "oidc"` knob gates websecure+cfweb routers; gated so far: homepage, prometheus, metube, myspeed, stirling-pdf, pihole (password still set — blank after passkey verify), traefik dashboard (widget moved to internal :8080 api.insecure). Remaining: *arrs batch (External + api bypass), Tier 1 native-OIDC apps, Tier 2 header-auth apps. Audit date 2026-07-17.
+Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.toscanini.me, LAN+tunnel); oidc-auth@file middleware (vendored traefik-oidc-auth v0.20.1, localPlugins); `myStack.webApps.<name>.auth = "oidc"` knob gates websecure+cfweb routers; gated so far: homepage, prometheus, metube, myspeed, stirling-pdf, pihole (password still set — blank after passkey verify), traefik dashboard (widget moved to internal :8080 api.insecure). Native OIDC live: grafana (auto-login, basic-auth API kept for the widget), gatus (allowed-subjects, /metrics stays open), wealthfolio (public client, PKCE, password fallback kept), litellm UI (API keys untouched). Remaining: immich OAuth (needs an admin-scoped API key or UI click-through — widget key lacks systemConfig.read), nextcloud (occ + household-user planning), *arrs batch (External + api bypass), Tier 2 header-auth apps. Audit date 2026-07-17.
 
 ## Tier 1 — native OIDC (app is a Pocket ID client)
 
