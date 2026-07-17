@@ -10,15 +10,20 @@
 #   - Jellyfin is OUTSIDE the VPN (joins traefik-net) so LAN streaming
 #     doesn't loop through ProtonVPN exit nodes.
 #
-# WireGuard config: /home/santiago/selfhost/tv/gluetun/wireguard/wg0.conf
-# (ProtonVPN custom-WireGuard export, 1-year expiry — re-export from
-# https://account.protonvpn.com/downloads when peers fail). ProtonVPN
-# only shows the private key ONCE at export — if you lose this file,
-# you must create a fresh export, not recover.
+# WireGuard key: sops-encrypted (tv-wg0 below), bind-mounted over the
+# wg0.conf path inside the /gluetun dir mount. ProtonVPN shows the
+# private key ONCE at export — a lost key means a fresh export, not
+# recovery. The current key EXPIRES 2027-04-03 (reminder emails fire
+# 30/7 days ahead). Renewal: re-export from
+# https://account.protonvpn.com/downloads, then
+#   sops -e --input-type binary --output-type binary wg0.conf \
+#     > stacks/tv/wg0.conf.sops
+# and bump the reminder dates below.
 
 {
   config,
   lib,
+  pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
   gluetunImage,
@@ -177,6 +182,33 @@ in
     sopsFile = ./wg0.conf.sops;
     format = "binary";
     owner = "santiago";
+  };
+
+  # The key expires 2027-04-03 and the tunnel then dies silently (all
+  # *arr/torrent egress stops). Renewal runbook in the header.
+  systemd.services.tv-wg-expiry-reminder = {
+    description = "Reminder: TV ProtonVPN WireGuard key expires 2027-04-03";
+    serviceConfig.Type = "oneshot";
+    script = ''
+      {
+        echo "From: ${config.myStack.mail.sender}"
+        echo "To: ${config.myStack.mail.alertTo}"
+        echo "Subject: [s2-server] TV VPN WireGuard key expires 2027-04-03"
+        echo
+        echo "The ProtonVPN WireGuard key for the TV stack (gluetun) expires 2027-04-03."
+        echo "Renewal runbook: header of /etc/nixos/stacks/tv/tv.nix."
+      } | ${pkgs.msmtp}/bin/msmtp --account=default -t
+    '';
+  };
+  systemd.timers.tv-wg-expiry-reminder = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = [
+        "2027-03-04" # 30 days out
+        "2027-03-27" # 7 days out
+      ];
+      Persistent = true; # fire on next boot if the box was off
+    };
   };
 
   # NZBGET_USER + NZBGET_PASS: sops-encrypted env.sops, decrypted to
