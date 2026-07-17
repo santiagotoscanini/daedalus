@@ -23,6 +23,9 @@
     exposeRemotely = true;
     homepage = {
       group = "Productivity";
+      # Deep-link the SSO start — skips the login page's button click
+      # (silent round-trip through Pocket ID when a session is alive).
+      href = "https://wealthfolio.toscanini.me/api/v1/auth/oidc/login";
       description = "Personal finance";
       icon = "/icons/wealthfolio.png";
     };
@@ -40,8 +43,9 @@
     ];
 
     # Pocket ID SSO (AUTH.md) — public client, PKCE, no secret, so
-    # plain env suffices. Password login (WF_AUTH_PASSWORD_HASH in
-    # env.sops) stays as the fallback; both render on the login page.
+    # plain env suffices. OIDC-only: WF_AUTH_PASSWORD_HASH was removed
+    # from env.sops (git history has it, or regenerate per the header
+    # comment) — the login page offers just "Sign in with SSO".
     environment = {
       WF_OIDC_ISSUER_URL = "https://id.toscanini.me";
       WF_OIDC_CLIENT_ID = "36e5f60b-173f-4686-8b2b-830ff5d98fd8";
