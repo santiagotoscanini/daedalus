@@ -431,7 +431,9 @@
       PGID = "0";
       TRANSCRIBE_DEVICE = "cpu";
       WHISPER_MODEL = "small";
-      CONCURRENT_TRANSCRIPTIONS = "1";
+      # 2 workers: Bazarr's multi-minute episode jobs must not starve
+      # short gateway calls (litellm health probe times out at 60s)
+      CONCURRENT_TRANSCRIPTIONS = "2";
       MODEL_PATH = "/models";
       # keep the model resident (~1GB RAM) — default purges it 30s after
       # idle, making every next call pay a ~25s CPU reload
