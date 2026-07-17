@@ -103,6 +103,10 @@ in
     metrics.enable = true;
     homepage = {
       group = "Monitoring";
+      # /oidc/login skips gatus's hard-coded "Login with OIDC" button
+      # page — silent round-trip through Pocket ID when a session is
+      # alive (no auto-redirect option upstream).
+      href = "https://status.toscanini.me/oidc/login";
       description = "Outside-in uptime + cert expiry";
       icon = "gatus.png";
       widget = {
