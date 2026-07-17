@@ -53,6 +53,7 @@
     sonarr = null;
     bazarr = null;
     gluetun-exporter = null; # shares gluetun's netns
+    whisper = null; # shares gluetun's netns
     jellyfin = "traefik";
   };
 
@@ -397,6 +398,36 @@
     environment = {
       PUID = "0";
       PGID = "0";
+    };
+
+    extraOptions = [ "--network=container:gluetun" ];
+  };
+
+  # whisper — speech-to-text subtitle generation (Bazarr's whisperai
+  # provider). Shares gluetun's netns so Bazarr reaches it on
+  # 127.0.0.1:9000 (Bazarr's default whisper endpoint) with no
+  # published port. Fallback-only: fires when no provider has a text
+  # subtitle. Transcribes original audio (X->X) or translates to
+  # English (X->en); it cannot produce Spanish subs from English
+  # audio, so es-LA subs still come from the real providers.
+  #
+  # First start downloads the ~460MB "small" model through the VPN
+  # into the cache bind below; subsequent starts are instant.
+  systemd.tmpfiles.rules = [
+    "d /home/santiago/selfhost/tv/whisper 0755 santiago users -"
+  ];
+
+  virtualisation.oci-containers.containers.whisper = mkRootlessContainer {
+    image = "docker.io/onerahmet/openai-whisper-asr-webservice:latest@sha256:f8b323e5c8c6706cb1723813f0638e94e9d2f7fcc2c88441ba2bac27d1d63c1c";
+    dependsOn = [ "gluetun" ];
+
+    volumes = [
+      "/home/santiago/selfhost/tv/whisper:/root/.cache"
+    ];
+
+    environment = {
+      ASR_MODEL = "small";
+      ASR_ENGINE = "faster_whisper";
     };
 
     extraOptions = [ "--network=container:gluetun" ];
