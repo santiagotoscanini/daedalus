@@ -433,6 +433,9 @@
       WHISPER_MODEL = "small";
       CONCURRENT_TRANSCRIPTIONS = "1";
       MODEL_PATH = "/models";
+      # keep the model resident (~1GB RAM) — default purges it 30s after
+      # idle, making every next call pay a ~25s CPU reload
+      MODEL_CLEANUP_DELAY = "86400";
       DEBUG = "False";
     };
 

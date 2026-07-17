@@ -21,3 +21,8 @@ model_list:
       model: openai/whisper-1
       api_base: http://host.containers.internal:9000/v1
       api_key: "local-no-auth"
+      timeout: 300  # cold calls reload the model (~25s); default probe timeout is too tight
+    model_info:
+      # health checks send litellm's bundled sample audio through the
+      # real /v1/audio/transcriptions path (visible in UI -> Models)
+      mode: audio_transcription
