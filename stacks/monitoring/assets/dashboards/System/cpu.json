@@ -1,8 +1,8 @@
 {
   "uid": "s2-cpu",
-  "title": "Home Server \u2014 CPU",
+  "title": "CPU",
   "tags": [
-    "s2-server",
+    "system",
     "cpu"
   ],
   "timezone": "browser",
@@ -1146,7 +1146,7 @@
     {
       "id": 251,
       "type": "timeseries",
-      "title": "CPU Pressure \u2014 Waiting",
+      "title": "CPU Pressure — Waiting",
       "gridPos": {
         "x": 0,
         "y": 51,

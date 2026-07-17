@@ -1,8 +1,8 @@
 {
   "uid": "s2-network",
-  "title": "Home Server — Network",
+  "title": "Network",
   "tags": [
-    "s2-server",
+    "system",
     "network"
   ],
   "timezone": "browser",

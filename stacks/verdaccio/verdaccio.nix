@@ -63,7 +63,7 @@
     }
   ];
 
-  myStack.grafanaDashboards.verdaccio = builtins.readFile ./assets/dashboard.json;
+  myStack.grafanaDashboardsByFolder."Services".verdaccio = builtins.readFile ./assets/dashboard.json;
 
   # 110000:100 = container UID 10001 : GID 0 in santiago's subuid range.
   systemd.tmpfiles.rules = [

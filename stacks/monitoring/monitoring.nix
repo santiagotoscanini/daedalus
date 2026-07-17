@@ -128,6 +128,9 @@ let
     ''
       mkdir -p $out
       cp -r ${./assets/dashboards}/. $out/
+      # store copies are read-only; byFolder contributions below must be able
+      # to write into subdirs the assets tree now ships (e.g. System/)
+      chmod -R u+w $out
     ''
     + lib.concatStringsSep "\n" (
       lib.mapAttrsToList (

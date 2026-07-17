@@ -86,7 +86,7 @@ in
     }
   ];
 
-  myStack.grafanaDashboards.immich = builtins.readFile ./assets/dashboard.json;
+  myStack.grafanaDashboardsByFolder."Services".immich = builtins.readFile ./assets/dashboard.json;
 
   myStack.homepageServices."Cloud & AI" = [
     {

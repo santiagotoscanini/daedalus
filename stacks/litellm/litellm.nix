@@ -98,7 +98,7 @@
     }
   ];
 
-  myStack.grafanaDashboards.litellm = builtins.readFile ./assets/dashboard.json;
+  myStack.grafanaDashboardsByFolder."Services".litellm = builtins.readFile ./assets/dashboard.json;
 
   myStack.homepageServices."Cloud & AI" = [
     {

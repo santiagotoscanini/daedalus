@@ -120,6 +120,6 @@ in
     ];
 
     # Per-app cluster dashboard.
-    myStack.grafanaDashboards."pg-overview" = builtins.readFile ./assets/postgres.json;
+    myStack.grafanaDashboardsByFolder."Services"."pg-overview" = builtins.readFile ./assets/postgres.json;
   };
 }

@@ -1,8 +1,8 @@
 {
   "uid": "s2-immich",
-  "title": "Home Server — Immich",
+  "title": "Immich",
   "tags": [
-    "s2-server",
+    "services",
     "immich"
   ],
   "timezone": "browser",

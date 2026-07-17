@@ -38,7 +38,7 @@
     }
   ];
 
-  myStack.grafanaDashboards.media-pipeline = builtins.readFile ./assets/media-pipeline.json;
+  myStack.grafanaDashboardsByFolder."Media".media-pipeline = builtins.readFile ./assets/media-pipeline.json;
 
   virtualisation.oci-containers.containers.scraparr = mkRootlessContainer {
     image = "ghcr.io/thecfu/scraparr:3.0.3@sha256:44f09d30009508a2a422ae7cd9cce38fa36122d6bd0592f2e4158398d9ccb7a6";

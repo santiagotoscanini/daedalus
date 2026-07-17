@@ -1,8 +1,8 @@
 {
   "uid": "s2-memory",
-  "title": "Home Server \u2014 Memory",
+  "title": "Memory",
   "tags": [
-    "s2-server",
+    "system",
     "memory"
   ],
   "timezone": "browser",

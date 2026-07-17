@@ -1,9 +1,9 @@
 {
   "uid": "s2-ai",
-  "title": "Home Server \u2014 AI (LiteLLM)",
+  "title": "AI (LiteLLM)",
   "tags": [
-    "s2-server",
-    "ai"
+    "services",
+    "litellm"
   ],
   "timezone": "browser",
   "refresh": "30s",

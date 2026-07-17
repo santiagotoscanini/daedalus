@@ -38,7 +38,7 @@
     }
   ];
 
-  myStack.grafanaDashboards.intel-gpu = builtins.readFile ./assets/dashboard.json;
+  myStack.grafanaDashboardsByFolder."System".gpu = builtins.readFile ./assets/dashboard.json;
 
   virtualisation.oci-containers.containers.intel-gpu-exporter = mkRootlessContainer {
     image = "ghcr.io/clambin/intel-gpu-exporter:0.7.0";

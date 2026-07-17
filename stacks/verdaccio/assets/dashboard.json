@@ -1,10 +1,9 @@
 {
   "uid": "verdaccio-registry-overview",
-  "title": "Verdaccio — Registry Overview",
+  "title": "Verdaccio",
   "tags": [
-    "verdaccio",
-    "registry",
-    "traefik"
+    "services",
+    "verdaccio"
   ],
   "timezone": "browser",
   "refresh": "30s",
@@ -15,7 +14,12 @@
       "id": 100,
       "type": "row",
       "title": "Traffic",
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
       "collapsed": false,
       "panels": []
     },
@@ -23,32 +27,54 @@
       "id": 101,
       "type": "stat",
       "title": "RPS (5m avg)",
-      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "sum(rate(traefik_service_requests_total{service=~\"verdaccio.*\"}[5m]))",
           "legendFormat": "",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
           "decimals": 2,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "blue", "value": null }
+              {
+                "color": "blue",
+                "value": null
+              }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto",
         "colorMode": "value",
         "graphMode": "area"
@@ -58,34 +84,62 @@
       "id": 102,
       "type": "stat",
       "title": "4xx (5m)",
-      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "sum(rate(traefik_service_requests_total{service=~\"verdaccio.*\",code=~\"4..\"}[5m]))",
           "legendFormat": "",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
           "decimals": 2,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 0.1 },
-              { "color": "orange", "value": 1 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.1
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto",
         "colorMode": "value",
         "graphMode": "area"
@@ -95,33 +149,58 @@
       "id": 103,
       "type": "stat",
       "title": "5xx (5m)",
-      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "sum(rate(traefik_service_requests_total{service=~\"verdaccio.*\",code=~\"5..\"}[5m]))",
           "legendFormat": "",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
           "decimals": 2,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 0.01 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.01
+              }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto",
         "colorMode": "value",
         "graphMode": "area"
@@ -131,31 +210,53 @@
       "id": 104,
       "type": "stat",
       "title": "Open connections",
-      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "sum(traefik_service_open_connections{service=~\"verdaccio.*\"})",
           "legendFormat": "",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "blue", "value": null }
+              {
+                "color": "blue",
+                "value": null
+              }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto",
         "colorMode": "value",
         "graphMode": "none"
@@ -165,14 +266,25 @@
       "id": 110,
       "type": "timeseries",
       "title": "Requests by status code",
-      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "sum by (code) (rate(traefik_service_requests_total{service=~\"verdaccio.*\"}[5m]))",
           "legendFormat": "{{code}}",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         }
       ],
       "fieldConfig": {
@@ -182,41 +294,71 @@
             "drawStyle": "line",
             "lineWidth": 1,
             "fillOpacity": 20,
-            "stacking": { "mode": "normal", "group": "A" },
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
             "showPoints": "never"
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "lastNotNull"] },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
     {
       "id": 111,
       "type": "timeseries",
       "title": "Latency percentiles",
-      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "histogram_quantile(0.5, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{service=~\"verdaccio.*\"}[5m])))",
           "legendFormat": "p50",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         },
         {
           "refId": "B",
           "expr": "histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{service=~\"verdaccio.*\"}[5m])))",
           "legendFormat": "p95",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         },
         {
           "refId": "C",
           "expr": "histogram_quantile(0.99, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{service=~\"verdaccio.*\"}[5m])))",
           "legendFormat": "p99",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         }
       ],
       "fieldConfig": {
@@ -232,15 +374,31 @@
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
     {
       "id": 120,
       "type": "row",
       "title": "Bandwidth",
-      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 1 },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 1
+      },
       "collapsed": false,
       "panels": []
     },
@@ -248,20 +406,34 @@
       "id": 121,
       "type": "timeseries",
       "title": "Bytes in/out",
-      "gridPos": { "x": 0, "y": 14, "w": 24, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dfakbms70z4zke"
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "sum(rate(traefik_service_requests_bytes_total{service=~\"verdaccio.*\"}[5m]))",
           "legendFormat": "ingress",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         },
         {
           "refId": "B",
           "expr": "sum(rate(traefik_service_responses_bytes_total{service=~\"verdaccio.*\"}[5m]))",
           "legendFormat": "egress",
-          "datasource": { "type": "prometheus", "uid": "dfakbms70z4zke" }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dfakbms70z4zke"
+          }
         }
       ],
       "fieldConfig": {
@@ -277,8 +449,19 @@
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     }
   ]

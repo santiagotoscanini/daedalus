@@ -1,8 +1,8 @@
 {
   "uid": "s2-storage",
-  "title": "Home Server \u2014 Storage",
+  "title": "Storage",
   "tags": [
-    "s2-server",
+    "system",
     "storage"
   ],
   "timezone": "browser",
