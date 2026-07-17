@@ -1,0 +1,18 @@
+{
+	"data": "ENC[AES256_GCM,data:XNdc/mxJLTp5cgjhY0uzJu8KFekvGpLTEall29aGB9ZsWF2qxtJ1SQo4nzcwUz95oX7LB6VbzchDgKICfejFiD6SzQiHrw/62+S2mQZArl7XJtHEjS8KnDY+Fk0JQtH0jB6Rx74/BQ4i91XzAw4UprgpNBUSoH6huY6bShwFt78LvsPuAbOWkaH6KRxhvP2L2lo93lhr8l3+jt8mjsJ5bKsIlox9rMGUbU7aPmwxufplIgQ2axzdZ78+p8DqjeWD9FlfF5bp+uL9xjLa3n7Hp/dD3M/8Hu+0zklHfHAq/vZLfpmxcXJU1WJ2guMz39ZgL5Vbw8RXH3jVx9mKOAZr2MsYCqYMTIMF5eLizE/RHJo38HPuhOEv87lIQxLrIGKKCYhSGupC2JCYAsmUTM1oYI/E1/2Ns89fnpmzLSRHkTXmkNUxSsK84Gfpu4VfBbBjgntonDP1S0IFmnesEDOBpdpqd9eLz/iNOEIUk3Fev5GIgY3gVb9tpe7qatToC0MynmQHkBI1Z8LlWVnhI4EocPhTYu5Rhr166RAZ,iv:RisbdLhwb3IpbDbG9S2GXWyJYkxxhtn3ZtJtgww5D5I=,tag:g2qaeVXraer5T6BVaXFVFw==,type:str]",
+	"sops": {
+		"age": [
+			{
+				"recipient": "age13xjamkkjcc2wdan3c8tscslqulgwz9uvxxs532paldqqfn4vxfqq65p0wa",
+				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB5VU1QK2xhMzIvTTZIRjc5\nL1BIRmhFQzBuQ1FzMVRLOUhtSzc3UTBrbVNNClBTdXRtQmpJUlBtYlBUUHJGZDl0\nYUVlM3ZVMndBcHdGWkZMYlI5VGd4WWcKLS0tIGxJWTdKcTUrTFNlNGdSaTRGdWFz\nRVJwZ2lBN0djWFRFcjhubExoVWR5WjQKtFMhhlFIJ/4FLVu0NHKTwIx3jRH7L3VN\nrYubOwzLX6BIJGqy33bLHZovTd/+UebpFpg2LLKx8TLXYHK/WpTCww==\n-----END AGE ENCRYPTED FILE-----\n"
+			},
+			{
+				"recipient": "age1av4gwap6v2pf53acau25l4c8ksmhfu770x4glq7n6uunvq9szvvs3gcpkk",
+				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBSc3JKK0FsY3krYitTRGNV\nVFVjYjNpWjNFU0xDbVVTRnQzaDlDMGxiVW1vCmlJTlNTMkNTNWgwbmtRVHkrQWZl\nN3h2UDVKOUJIekVOcjViOE9mbzVQMEkKLS0tIEt6NnVzYVFmVjcySUxWTjZPRXNN\nM2o5SXhLTWxXcVgrSHZDd0hPS2tSRFkKwjsnG5tL3eY8W3snPUkrjFqYVzEDww/m\nZdlna3JIoLVm3bvFXvuzxQTYNYIDMzAQSKM9+8nXuzv9pNC09FRXQw==\n-----END AGE ENCRYPTED FILE-----\n"
+			}
+		],
+		"lastmodified": "2026-07-17T19:29:42Z",
+		"mac": "ENC[AES256_GCM,data:S8MIshlRN0V83TEqJOWPUmAV7dVzzfWoz26hrMcKvPom0jblTiHJzjk8NmbHe8OW86NzjoTO7ryNde6FNI8+ywm9DuL2no6XhPgP88DLQwRbrlKHmOI39pbRHwoD/XHpo/G4qvqvzihf7dtTq+81cH4q98VCz2v0UQXUgN/HlWM=,iv:uuux1HhjvHlJAnwFWTBD0bRsN6REvixgl06V5eCR/bU=,tag:db8fBGjAMvpLal5GbGmm4A==,type:str]",
+		"version": "3.12.1"
+	}
+}

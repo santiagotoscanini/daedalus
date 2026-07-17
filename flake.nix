@@ -5,7 +5,7 @@
 #   - Build:   sudo nixos-rebuild test|switch   (auto-detects this file)
 #   - Upgrade: nix flake update && sudo nixos-rebuild test   (then switch)
 #   - Format:  nix fmt        (treefmt: nixfmt-rfc-style + statix + deadnix)
-#   - Lint CI: nix flake check (includes the treefmt formatting check)
+#   - Checks: nix flake check (treefmt formatting/lint gate + eval)
 #   - Inputs:
 #       nixpkgs           NixOS 25.11 (system packages + modules)
 #       nixpkgs-unstable  newer packages cherry-picked via overlay
@@ -67,7 +67,7 @@
     in
     {
       nixosConfigurations.s2-server = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
+        inherit system;
         # Hand the unstable input to modules that cherry-pick from it
         # (configuration.nix's claude-code overlay).
         specialArgs = { inherit nixpkgs nixpkgs-unstable; };

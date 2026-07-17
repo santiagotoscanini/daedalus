@@ -53,6 +53,9 @@ in
     nextcloud-app = "nextcloud";
   };
 
+  # nextcloud-redis BGSAVE under memory pressure (1 = always allow).
+  boot.kernel.sysctl."vm.overcommit_memory" = 1;
+
   # Split-horizon publish — same hostname for LAN (websecure) + off-LAN
   # (cfweb via CF tunnel), wildcard cert covers both. HSTS is set by
   # Nextcloud itself in its .htaccess/config.php.

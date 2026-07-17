@@ -13,49 +13,28 @@
 }:
 
 {
-  imports = [
-    ./hardware-configuration.nix
-    ./platform/common.nix
-    ./platform/sops.nix
-    ./platform/git.nix
-    ./platform/ddclient/ddclient.nix
-    ./platform/zfs.nix
-    ./platform/backup.nix
-    ./platform/mail/mail.nix
-    ./platform/hc-ping.nix
-    ./stacks/calibre-web/calibre-web.nix
-    ./stacks/cloudflared/cloudflared.nix
-    ./stacks/factorio/factorio.nix
-    ./stacks/grocy/grocy.nix
-    ./stacks/gatus/gatus.nix
-    ./stacks/healthchecks/healthchecks.nix
-    ./stacks/homepage/homepage.nix
-    ./stacks/immich/immich.nix
-    ./stacks/intel-gpu-exporter/intel-gpu-exporter.nix
-    ./stacks/seerr/seerr.nix
-    ./stacks/litellm/litellm.nix
-    ./stacks/logging/logging.nix
-    ./stacks/metube/metube.nix
-    ./stacks/monitoring/monitoring.nix
-    ./stacks/myspeed/myspeed.nix
-    ./stacks/n8n/n8n.nix
-    ./stacks/nextcloud/nextcloud.nix
-    ./stacks/pihole/pihole.nix
-    ./stacks/stirling-pdf/stirling-pdf.nix
-    ./stacks/apps/apps.nix
-    ./stacks/apps/declarations.nix
-    ./stacks/ipcrawl-vpn/ipcrawl-vpn.nix
-    ./stacks/app-db/app-db.nix
-    ./stacks/app-db/exporter.nix
-    ./stacks/traefik/traefik.nix
-    ./stacks/tv/tv.nix
-    ./stacks/recyclarr/recyclarr.nix
-    ./stacks/janitorr/janitorr.nix
-    ./stacks/scraparr/scraparr.nix
-    ./stacks/verdaccio/verdaccio.nix
-    ./stacks/wealthfolio/wealthfolio.nix
-    ./stacks/wireguard/wireguard.nix
-  ];
+  imports =
+    let
+      # Recursively collect every *.nix under a dir. Convention: any
+      # .nix file under platform/ or stacks/ IS a NixOS module (assets
+      # stay non-nix). The flake only sees git-tracked files — a new
+      # stack still needs `git add` before it evaluates.
+      nixFilesIn =
+        dir:
+        builtins.concatMap (
+          name:
+          let
+            type = (builtins.readDir dir).${name};
+          in
+          if type == "directory" then
+            nixFilesIn (dir + "/${name}")
+          else if builtins.match ".*\\.nix" name != null then
+            [ (dir + "/${name}") ]
+          else
+            [ ]
+        ) (builtins.attrNames (builtins.readDir dir));
+    in
+    [ ./hardware-configuration.nix ] ++ nixFilesIn ./platform ++ nixFilesIn ./stacks;
 
   # ── Boot ────────────────────────────────────────────────────────────────────
 
@@ -65,22 +44,6 @@
     configurationLimit = 10;
   };
   boot.loader.efi.canTouchEfiVariables = true;
-
-  # Force i915 on Alder Lake iGPU (UHD 770, PCI ID 4680) for Jellyfin's
-  # QSV/VAAPI hardware-accelerated transcoding. Drop this if hardware
-  # transcoding ever stops being used.
-  boot.kernelParams = [ "i915.force_probe=4680" ];
-
-  # ── Disk health monitoring ──────────────────────────────────────────────────
-
-  # smartd polls every drive's SMART counters and logs failures to
-  # journald. `autodetect` picks up every disk without per-drive config.
-  services.smartd = {
-    enable = true;
-    autodetect = true;
-    # Short test Sat 02:00, long test 1st-of-month 03:00.
-    defaults.autodetected = "-a -s (S/../../6/02|L/../01/./03)";
-  };
 
   # ── Networking ──────────────────────────────────────────────────────────────
 
@@ -127,8 +90,8 @@
       }
     ];
 
-    # Every surviving host port is opened by its owning stack module.
-    # See CLAUDE.md's "Must-keep host ports" table.
+    # Every surviving host port is opened by its owning stack module —
+    # grep `networking.firewall.allowed` under stacks/.
     firewall.enable = true;
   };
 
@@ -210,33 +173,6 @@
     };
   };
 
-  # ── Podman ──────────────────────────────────────────────────────────────────
-
-  # All containers via virtualisation.oci-containers run rootless as santiago
-  # (subuid 100000:65536). dockerCompat installs a `docker` shim → podman.
-  virtualisation.podman = {
-    enable = true;
-    dockerCompat = true;
-  };
-  virtualisation.oci-containers.backend = "podman";
-
-  # Let rootless pasta bind 80/443 for traefik (no CAP_NET_BIND_SERVICE).
-  # Trade-off: any unprivileged process can now bind ≥80. Single-user box.
-  boot.kernel.sysctl."net.ipv4.ip_unprivileged_port_start" = 80;
-
-  # nextcloud-redis BGSAVE under memory pressure (1 = always allow).
-  boot.kernel.sysctl."vm.overcommit_memory" = 1;
-
-  # ── Intel iGPU userspace (Jellyfin transcoding) ─────────────────────────────
-
-  # OpenGL/Vulkan/VAAPI userspace stack + intel-media-driver — runtime
-  # libs Jellyfin's QSV transcoding needs (paired with the i915
-  # force_probe kernel param above).
-  hardware.graphics = {
-    enable = true;
-    extraPackages = with pkgs; [ intel-media-driver ];
-  };
-
   # ── System packages ─────────────────────────────────────────────────────────
 
   environment.systemPackages = with pkgs; [
@@ -288,59 +224,14 @@
     dates = [ "weekly" ];
   };
 
-  # ── Auto-upgrade ────────────────────────────────────────────────────────────
+  # ── Nix registry pins ───────────────────────────────────────────────────────
 
   # Pin the system registry + NIX_PATH to the flake input, so ad-hoc
   # tooling (nix-shell -p, nix shell nixpkgs#foo, nix run) resolves to
   # the SAME nixpkgs the system was built from — no channel needed.
+  # (The weekly upgrade itself lives in platform/autoupgrade/.)
   nix.registry.nixpkgs.flake = nixpkgs;
   nix.nixPath = [ "nixpkgs=flake:nixpkgs" ];
-
-  # Weekly flake-native upgrade (replaces channel-based system.autoUpgrade):
-  # advance flake.lock within the pinned branches, commit the lock, stage
-  # the new generation for next boot. Never auto-reboots (you reboot
-  # manually) and never touches the running system. Every upgrade is a
-  # git commit — inspectable, revertible. Push runs as santiago (offline-tolerant).
-  systemd.services.flake-autoupgrade = {
-    description = "Update flake.lock, commit, stage next-boot generation, push";
-    serviceConfig.Type = "oneshot";
-    # System nix (not pkgs.nix): the running nix honors /etc/gitconfig
-    # safe.directory for the santiago-owned repo; a mismatched pkgs.nix
-    # trips the libgit2 ownership check and the unit fails.
-    path = [ pkgs.git ];
-    script = ''
-      cd /etc/nixos
-      /run/current-system/sw/bin/nix flake update --commit-lock-file
-      /run/current-system/sw/bin/nixos-rebuild boot --flake /etc/nixos
-
-      # Push the lock-bump commit to origin. Only santiago has the GitHub
-      # SSH key (root has none — see platform/git.nix), so drop to santiago
-      # with setpriv (no PAM session, matching stacks/apps). The commit
-      # above ran as root and wrote root-owned objects into .git; chown it
-      # back to santiago first so santiago can push now AND hand-commit
-      # later without hitting "insufficient permission" on root-owned
-      # objects. Offline must not fail the upgrade: the lock is already
-      # committed locally, so a failed push is swallowed and the next run
-      # carries it forward.
-      ${pkgs.coreutils}/bin/chown -R santiago:users /etc/nixos/.git
-      ${pkgs.util-linux}/bin/setpriv --reuid santiago --regid users --init-groups \
-        ${pkgs.coreutils}/bin/env HOME=/home/santiago \
-          GIT_SSH_COMMAND="${pkgs.openssh}/bin/ssh -i /home/santiago/.ssh/id_ed25519_github -o BatchMode=yes -o IdentitiesOnly=yes" \
-        ${pkgs.git}/bin/git push origin main \
-        || echo "flake-autoupgrade: git push failed (offline?); lock committed locally, retrying next run"
-    '';
-  };
-  # Dead-man's-switch ping (platform/hc-ping): weekly.
-  myStack.hcPings."flake-autoupgrade" = "flake-autoupgrade";
-
-  systemd.timers.flake-autoupgrade = {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "weekly";
-      Persistent = true; # catch up if the box was off
-      RandomizedDelaySec = "45min";
-    };
-  };
 
   # Pinned at initial-install version. Do NOT bump — controls compat defaults.
   # https://nixos.org/manual/nixos/stable/options#opt-system.stateVersion

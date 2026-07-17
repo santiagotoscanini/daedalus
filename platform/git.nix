@@ -21,19 +21,14 @@
 #     IdentityFile, no global User override). IdentitiesOnly=yes so
 #     ssh-agent never offers unrelated keys to GitHub.
 #
-# Imperative one-time bootstrap (NOT declarable without sops-nix —
-# the private key IS secret state by definition):
-#
-#   mkdir -m 700 -p ~/.ssh
-#   ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github -N '' \
-#     -C "santiago@s2-server"
-#   cat ~/.ssh/id_ed25519_github.pub        # paste at https://github.com/settings/ssh/new
-#   ssh -T git@github.com                   # expect: Hi <user>! You've successfully authenticated...
-#
-# When sops-nix lands, the private key moves into a sops-encrypted
-# tree and gets materialized at /run/secrets/github-ssh-key.
+# The private key is sops-managed: platform/autoupgrade/github-key.sops
+# decrypts to /run/secrets/github-ssh-key at activation (santiago,
+# 0400). Rotation: generate a new keypair, `sops -e` the private half
+# over github-key.sops, register the public half at
+# https://github.com/settings/ssh/new, rebuild, then delete the old
+# key on GitHub. Verify with `ssh -T git@github.com`.
 
-_:
+{ config, ... }:
 
 {
   programs.git = {
@@ -50,8 +45,9 @@ _:
       };
       merge.conflictstyle = "zdiff3";
       diff.colorMoved = "default";
-      # Root-run units (flake-autoupgrade) operate on this root-owned repo;
-      # without this git refuses with "dubious ownership".
+      # The repo is santiago-owned; root-run git (flake-autoupgrade,
+      # nixos-rebuild's flake eval) would refuse with "dubious
+      # ownership" without this.
       safe.directory = "/etc/nixos";
     };
   };
@@ -64,7 +60,7 @@ _:
   programs.ssh.extraConfig = ''
     Host github.com
       User git
-      IdentityFile ~/.ssh/id_ed25519_github
+      IdentityFile ${config.sops.secrets."github-ssh-key".path}
       IdentitiesOnly yes
   '';
 }

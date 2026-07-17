@@ -118,6 +118,11 @@ in
     443
   ];
 
+  # Let rootless pasta bind 80/443 (no CAP_NET_BIND_SERVICE for
+  # rootless). Trade-off: any unprivileged process can now bind ≥80.
+  # Single-user box.
+  boot.kernel.sysctl."net.ipv4.ip_unprivileged_port_start" = 80;
+
   # Opens TCP 5432 ONLY on the LAN interface, only when a TCP route is
   # declared (postgres SNI routing). Belt-and-suspenders: the box only
   # has enp3s0, but restricting per-interface keeps any future second

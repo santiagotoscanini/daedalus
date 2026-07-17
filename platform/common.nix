@@ -648,6 +648,14 @@ in
     # stacks keep functioning. Opt out per-container with
     # `noNewPrivileges = false` (the key is stripped before reaching
     # oci-containers) for the rare image that legitimately needs to escalate.
+    # Container runtime for the whole fleet: rootless podman as santiago
+    # (subuid 100000:65536). dockerCompat installs a `docker` shim.
+    virtualisation.podman = {
+      enable = true;
+      dockerCompat = true;
+    };
+    virtualisation.oci-containers.backend = "podman";
+
     _module.args.mkRootlessContainer = mkRootlessContainer;
 
     # Shared gluetun (VPN netns owner) plumbing — used by stacks/tv and
