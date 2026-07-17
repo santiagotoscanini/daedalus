@@ -21,9 +21,153 @@
   lib,
   mkRootlessContainer,
   mkDotenvSecret,
+  gluetunImage,
+  mkGluetunExporter,
   ...
 }:
 
+let
+  # Netns-tenant decorator: linuxserver s6 maps container root to host
+  # santiago under rootless podman, so PUID/PGID=0 means "run as the
+  # user that owns the data" (non-linuxserver tenants ignore the vars).
+  # Every tenant depends on the netns owner and rides
+  # --network=container:gluetun.
+  mkNetnsTenant =
+    args:
+    mkRootlessContainer (
+      args
+      // {
+        dependsOn = [ "gluetun" ];
+        environment = {
+          PUID = "0";
+          PGID = "0";
+        }
+        // (args.environment or { });
+        extraOptions = [ "--network=container:gluetun" ] ++ (args.extraOptions or [ ]);
+      }
+    );
+
+  # Containers sharing gluetun's netns (no bridge of their own).
+  netnsTenants = [
+    "qbittorrent"
+    "nzbget"
+    "flaresolverr"
+    "prowlarr"
+    "radarr"
+    "sonarr"
+    "bazarr"
+    "gluetun-exporter"
+    "subgen"
+  ];
+
+  # gluetun-published web UIs — one entry per service, generating the
+  # port publish on gluetun, the webApp (traefik dials the host port
+  # via host.containers.internal), and the homepage tile. A LIST, not
+  # an attrset: the order fixes gluetun's ports block, and reordering
+  # would change podman-gluetun's ExecStart → gluetun recreate → every
+  # netns tenant needs a manual restart.
+  vpnUis = [
+    {
+      name = "qbittorrent";
+      port = 8090;
+      homepage = {
+        group = "Media";
+        name = "qBittorrent";
+        description = "BitTorrent (via gluetun/ProtonVPN)";
+        icon = "qbittorrent.png";
+        widget = {
+          # Direct host.containers.internal:8090 returns 403 to homepage's
+          # widget (CSRF / SameSite cookie). Go through traefik.
+          type = "qbittorrent";
+          url = "https://qbittorrent.toscanini.me";
+          username = "{{HOMEPAGE_VAR_QBT_USER}}";
+          password = "{{HOMEPAGE_VAR_QBT_PASS}}";
+          enableLeechProgress = true;
+        };
+      };
+    }
+    {
+      name = "nzbget";
+      port = 6789;
+      homepage = {
+        group = "Media";
+        name = "NZBGet";
+        description = "Usenet downloader (via gluetun)";
+        icon = "nzbget.png";
+        # undici Connection: close bug — probe + widget through traefik.
+        siteMonitor = "https://nzbget.toscanini.me";
+        widget = {
+          type = "nzbget";
+          url = "https://nzbget.toscanini.me";
+          username = "{{HOMEPAGE_VAR_NZBGET_USER}}";
+          password = "{{HOMEPAGE_VAR_NZBGET_PASS}}";
+        };
+      };
+    }
+    {
+      name = "prowlarr";
+      port = 9696;
+      homepage = {
+        group = "Media";
+        name = "Prowlarr";
+        description = "Indexer aggregator";
+        icon = "prowlarr.png";
+        widget = {
+          type = "prowlarr";
+          url = "http://host.containers.internal:9696";
+          key = "{{HOMEPAGE_VAR_PROWLARR_API_KEY}}";
+        };
+      };
+    }
+    {
+      name = "radarr";
+      port = 7878;
+      homepage = {
+        group = "Media";
+        name = "Radarr";
+        description = "Movies";
+        icon = "radarr.png";
+        widget = {
+          type = "radarr";
+          url = "http://host.containers.internal:7878";
+          key = "{{HOMEPAGE_VAR_RADARR_API_KEY}}";
+          enableQueue = true;
+        };
+      };
+    }
+    {
+      name = "sonarr";
+      port = 8989;
+      homepage = {
+        group = "Media";
+        name = "Sonarr";
+        description = "TV shows";
+        icon = "sonarr.png";
+        widget = {
+          type = "sonarr";
+          url = "http://host.containers.internal:8989";
+          key = "{{HOMEPAGE_VAR_SONARR_API_KEY}}";
+          enableQueue = true;
+        };
+      };
+    }
+    {
+      name = "bazarr";
+      port = 6767;
+      homepage = {
+        group = "Media";
+        name = "Bazarr";
+        description = "Subtitles";
+        icon = "bazarr.png";
+        widget = {
+          type = "bazarr";
+          url = "http://host.containers.internal:6767";
+          key = "{{HOMEPAGE_VAR_BAZARR_API_KEY}}";
+        };
+      };
+    }
+  ];
+in
 {
   # ProtonVPN WireGuard config for gluetun — sops-encrypted and IN THE
   # REBUILD TRAIL (ProtonVPN shows the private key only once, at
@@ -39,60 +183,48 @@
   # /run/secrets/nzbget-env at activation. Edit with `sops env.sops`.
   sops.secrets."nzbget-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks = {
-    gluetun = null;
-    qbittorrent = null;
-    nzbget = null;
-    flaresolverr = null;
-    prowlarr = null;
-    radarr = null;
-    sonarr = null;
-    bazarr = null;
-    gluetun-exporter = null; # shares gluetun's netns
-    subgen = null; # shares gluetun's netns
-    jellyfin = "traefik";
-  };
+  # gluetun owns the netns; tenants have no bridge (null = pasta shape,
+  # which here just earns the Type=oneshot systemd override). Jellyfin
+  # is bridge-routed (outside the VPN).
+  myStack.containerNetworks =
+    lib.listToAttrs (map (n: lib.nameValuePair n null) ([ "gluetun" ] ++ netnsTenants))
+    // {
+      jellyfin = "traefik";
+    };
 
-  # Jellyfin is bridge-routed. The 6 gluetun-netns UIs use explicit
-  # serviceUrl pointing at gluetun's host-published ports — putting
-  # gluetun on traefik-net would mix VPN-exit and bridge traffic.
-  myStack.webApps = {
-    jellyfin = {
-      hostname = "jellyfin.toscanini.me";
-      serviceName = "jellyfin";
-      port = 8096;
+  # Jellyfin is bridge-routed. The gluetun-netns UIs (from vpnUis) use
+  # explicit serviceUrl pointing at gluetun's host-published ports —
+  # putting gluetun on traefik-net would mix VPN-exit and bridge traffic.
+  myStack.webApps =
+    lib.listToAttrs (
+      map (
+        u:
+        lib.nameValuePair u.name {
+          inherit (u) port homepage;
+          serviceUrl = "http://host.containers.internal:${toString u.port}";
+        }
+      ) vpnUis
+    )
+    // {
+      jellyfin = {
+        serviceName = "jellyfin";
+        port = 8096;
+        homepage = {
+          group = "Media";
+          name = "Jellyfin";
+          description = "Movies, TV, music — household media server";
+          icon = "jellyfin.png";
+          widget = {
+            type = "jellyfin";
+            url = "http://jellyfin:8096";
+            key = "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}";
+            enableBlocks = true;
+            enableNowPlaying = true;
+            enableUser = false;
+          };
+        };
+      };
     };
-    sonarr = {
-      hostname = "sonarr.toscanini.me";
-      port = 8989;
-      serviceUrl = "http://host.containers.internal:8989";
-    };
-    radarr = {
-      hostname = "radarr.toscanini.me";
-      port = 7878;
-      serviceUrl = "http://host.containers.internal:7878";
-    };
-    bazarr = {
-      hostname = "bazarr.toscanini.me";
-      port = 6767;
-      serviceUrl = "http://host.containers.internal:6767";
-    };
-    prowlarr = {
-      hostname = "prowlarr.toscanini.me";
-      port = 9696;
-      serviceUrl = "http://host.containers.internal:9696";
-    };
-    qbittorrent = {
-      hostname = "qbittorrent.toscanini.me";
-      port = 8090;
-      serviceUrl = "http://host.containers.internal:8090";
-    };
-    nzbget = {
-      hostname = "nzbget.toscanini.me";
-      port = 6789;
-      serviceUrl = "http://host.containers.internal:6789";
-    };
-  };
 
   # wireguard.nix also declares wireguard/iptables modules; NixOS
   # merges the lists. `tun` is exclusive to gluetun (/dev/net/tun).
@@ -108,108 +240,6 @@
       job_name = "gluetun";
       static_configs = [ { targets = [ "host.containers.internal:8001" ]; } ];
     }
-  ];
-
-  myStack.homepageServices."Media" = lib.mkMerge [
-    (lib.mkOrder 400 [
-      {
-        name = "Jellyfin";
-        href = "https://jellyfin.toscanini.me";
-        description = "Movies, TV, music — household media server";
-        icon = "jellyfin.png";
-        siteMonitor = "http://jellyfin:8096";
-        widget = {
-          type = "jellyfin";
-          url = "http://jellyfin:8096";
-          key = "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}";
-          enableBlocks = true;
-          enableNowPlaying = true;
-          enableUser = false;
-        };
-      }
-      {
-        name = "qBittorrent";
-        href = "https://qbittorrent.toscanini.me";
-        description = "BitTorrent (via gluetun/ProtonVPN)";
-        icon = "qbittorrent.png";
-        siteMonitor = "http://host.containers.internal:8090";
-        widget = {
-          # Direct host.containers.internal:8090 returns 403 to homepage's
-          # widget (CSRF / SameSite cookie). Go through traefik.
-          type = "qbittorrent";
-          url = "https://qbittorrent.toscanini.me";
-          username = "{{HOMEPAGE_VAR_QBT_USER}}";
-          password = "{{HOMEPAGE_VAR_QBT_PASS}}";
-          enableLeechProgress = true;
-        };
-      }
-      {
-        name = "NZBGet";
-        href = "https://nzbget.toscanini.me";
-        description = "Usenet downloader (via gluetun)";
-        icon = "nzbget.png";
-        siteMonitor = "https://nzbget.toscanini.me";
-        widget = {
-          # undici Connection: close bug — go through traefik.
-          type = "nzbget";
-          url = "https://nzbget.toscanini.me";
-          username = "{{HOMEPAGE_VAR_NZBGET_USER}}";
-          password = "{{HOMEPAGE_VAR_NZBGET_PASS}}";
-        };
-      }
-    ])
-    (lib.mkOrder 600 [
-      {
-        name = "Sonarr";
-        href = "https://sonarr.toscanini.me";
-        description = "TV shows";
-        icon = "sonarr.png";
-        siteMonitor = "http://host.containers.internal:8989";
-        widget = {
-          type = "sonarr";
-          url = "http://host.containers.internal:8989";
-          key = "{{HOMEPAGE_VAR_SONARR_API_KEY}}";
-          enableQueue = true;
-        };
-      }
-      {
-        name = "Radarr";
-        href = "https://radarr.toscanini.me";
-        description = "Movies";
-        icon = "radarr.png";
-        siteMonitor = "http://host.containers.internal:7878";
-        widget = {
-          type = "radarr";
-          url = "http://host.containers.internal:7878";
-          key = "{{HOMEPAGE_VAR_RADARR_API_KEY}}";
-          enableQueue = true;
-        };
-      }
-      {
-        name = "Bazarr";
-        href = "https://bazarr.toscanini.me";
-        description = "Subtitles";
-        icon = "bazarr.png";
-        siteMonitor = "http://host.containers.internal:6767";
-        widget = {
-          type = "bazarr";
-          url = "http://host.containers.internal:6767";
-          key = "{{HOMEPAGE_VAR_BAZARR_API_KEY}}";
-        };
-      }
-      {
-        name = "Prowlarr";
-        href = "https://prowlarr.toscanini.me";
-        description = "Indexer aggregator";
-        icon = "prowlarr.png";
-        siteMonitor = "http://host.containers.internal:9696";
-        widget = {
-          type = "prowlarr";
-          url = "http://host.containers.internal:9696";
-          key = "{{HOMEPAGE_VAR_PROWLARR_API_KEY}}";
-        };
-      }
-    ])
   ];
 
   myStack.homepageServices."Network" = [
@@ -228,23 +258,17 @@
   ];
 
   virtualisation.oci-containers.containers.gluetun = mkRootlessContainer {
-    image = "docker.io/qmcgaw/gluetun:latest@sha256:b0ee2135e6ba52ad3f102aae9663707cd1c9531485117067a380d3b2b6dd991d";
+    image = gluetunImage;
 
-    # Ports for all containers sharing gluetun's netns. None of these
-    # are opened in the host firewall — traefik dials them via
-    # host.containers.internal.
+    # Ports for all containers sharing gluetun's netns — the web UIs
+    # come from vpnUis (in order). None of these are opened in the host
+    # firewall — traefik dials them via host.containers.internal.
     #
     # Not published: 8191 (flaresolverr — internal to prowlarr only);
     # 6881 (qbittorrent BT — actual P2P comes through the tunnel, not
     # the host port); 8388/8888 (gluetun's built-in shadowsocks/http
     # proxy, unused).
-    ports = [
-      "8090:8090" # qbittorrent web UI
-      "6789:6789" # nzbget web UI
-      "9696:9696" # prowlarr web UI
-      "7878:7878" # radarr web UI
-      "8989:8989" # sonarr web UI
-      "6767:6767" # bazarr web UI
+    ports = map (u: "${toString u.port}:${toString u.port}") vpnUis ++ [
       "8001:8001" # gluetun-exporter (shares this netns)
       "8000:8000" # gluetun HTTP control server
       "9000:9000" # subgen (Bazarr uses /asr on localhost; OpenAI /v1 for litellm)
@@ -272,13 +296,8 @@
     ];
   };
 
-  # Netns-sharing pattern: PUID=0/PGID=0 (linuxserver s6 maps container
-  # root to host santiago in our rootless setup; UID=0 means "don't drop
-  # privs"), `--network=container:gluetun`, /config + data binds.
-
-  virtualisation.oci-containers.containers.qbittorrent = mkRootlessContainer {
+  virtualisation.oci-containers.containers.qbittorrent = mkNetnsTenant {
     image = "docker.io/linuxserver/qbittorrent:5.2.3_v2.0.13-ls468@sha256:352371a7242e8b4aa10958ca02076d1023758070519b89a10251475fb9f1a35a";
-    dependsOn = [ "gluetun" ];
 
     volumes = [
       "/home/santiago/selfhost/tv/qbittorrent:/config"
@@ -286,118 +305,69 @@
       "/s2/tv/torrents:/data/torrents:rw"
     ];
 
-    environment = {
-      PUID = "0";
-      PGID = "0";
-      WEBUI_PORT = "8090";
-    };
-
-    extraOptions = [ "--network=container:gluetun" ];
+    environment.WEBUI_PORT = "8090";
   };
 
-  virtualisation.oci-containers.containers.nzbget = mkRootlessContainer {
+  virtualisation.oci-containers.containers.nzbget = mkNetnsTenant {
     image = "docker.io/linuxserver/nzbget:v26.2-ls253@sha256:20439658454cbe39f8be90b7d8e5027340c7f7ce99e3cac151992acd15785303";
-    dependsOn = [ "gluetun" ];
 
     volumes = [
       "/home/santiago/selfhost/tv/nzbget:/config"
       "/s2/tv/usenet:/data/usenet:rw"
     ];
 
-    environment = {
-      PUID = "0";
-      PGID = "0";
-    };
-
     # NZBGET_USER + NZBGET_PASS (admin credentials).
     environmentFiles = [ config.sops.secrets."nzbget-env".path ];
-
-    extraOptions = [ "--network=container:gluetun" ];
   };
 
   # Internal CF-bypass API; only prowlarr calls it on 127.0.0.1:8191.
-  virtualisation.oci-containers.containers.flaresolverr = mkRootlessContainer {
+  virtualisation.oci-containers.containers.flaresolverr = mkNetnsTenant {
     image = "docker.io/flaresolverr/flaresolverr:v3.5.0@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47";
-    dependsOn = [ "gluetun" ];
 
     environment = {
       LOG_LEVEL = "info";
       LOG_HTML = "false";
       CAPTCHA_SOLVER = "none";
     };
-
-    extraOptions = [ "--network=container:gluetun" ];
   };
 
-  virtualisation.oci-containers.containers.prowlarr = mkRootlessContainer {
+  virtualisation.oci-containers.containers.prowlarr = mkNetnsTenant {
     image = "docker.io/linuxserver/prowlarr:2.4.0.5397-ls153@sha256:536036aeb2c740d1a660ccf143b58a8bd6222f09010258fdfc10a538af7bec78";
-    dependsOn = [ "gluetun" ];
 
     volumes = [
       "/home/santiago/selfhost/tv/prowlarr:/config"
     ];
-
-    environment = {
-      PUID = "0";
-      PGID = "0";
-    };
-
-    extraOptions = [ "--network=container:gluetun" ];
   };
 
   # /s2/tv (not /s2/tv/media) because radarr's "import from download
   # client" hardlinks across /downloads, /torrents, /media — all need
   # to be on the same filesystem under one bind mount.
-  virtualisation.oci-containers.containers.radarr = mkRootlessContainer {
+  virtualisation.oci-containers.containers.radarr = mkNetnsTenant {
     image = "docker.io/linuxserver/radarr:6.3.0.10514-ls311@sha256:2b2c1c05eb3f648d2c80dfab9486147dd7bb0ad4d77fa972fc1c5de8f1da3738";
-    dependsOn = [ "gluetun" ];
 
     volumes = [
       "/home/santiago/selfhost/tv/radarr:/config"
       "/s2/tv:/data"
     ];
-
-    environment = {
-      PUID = "0";
-      PGID = "0";
-    };
-
-    extraOptions = [ "--network=container:gluetun" ];
   };
 
-  virtualisation.oci-containers.containers.sonarr = mkRootlessContainer {
+  virtualisation.oci-containers.containers.sonarr = mkNetnsTenant {
     image = "docker.io/linuxserver/sonarr:4.0.19.2979-ls319@sha256:4b025354d338999e03bf6dbdadcdde94815d39d4a5aba5de3cdc86a56d7d6c51";
-    dependsOn = [ "gluetun" ];
 
     volumes = [
       "/home/santiago/selfhost/tv/sonarr:/config"
       "/s2/tv:/data"
     ];
-
-    environment = {
-      PUID = "0";
-      PGID = "0";
-    };
-
-    extraOptions = [ "--network=container:gluetun" ];
   };
 
   # bazarr only reads what the *arrs produce, so a narrower bind.
-  virtualisation.oci-containers.containers.bazarr = mkRootlessContainer {
+  virtualisation.oci-containers.containers.bazarr = mkNetnsTenant {
     image = "docker.io/linuxserver/bazarr:v1.6.0-ls354@sha256:5d916d07404296ec35ee726e13e0e558f05952724cf494a7f009d913fb2b12f3";
-    dependsOn = [ "gluetun" ];
 
     volumes = [
       "/home/santiago/selfhost/tv/bazarr:/config"
       "/s2/tv/media:/data/media"
     ];
-
-    environment = {
-      PUID = "0";
-      PGID = "0";
-    };
-
-    extraOptions = [ "--network=container:gluetun" ];
   };
 
   # subgen — speech-to-text subtitle generation (Bazarr's whisperai
@@ -414,17 +384,14 @@
     "d /home/santiago/selfhost/tv/subgen 0755 santiago users -"
   ];
 
-  virtualisation.oci-containers.containers.subgen = mkRootlessContainer {
+  virtualisation.oci-containers.containers.subgen = mkNetnsTenant {
     image = "docker.io/mccloud/subgen:cpu@sha256:de40992da49bad8643e0795ec41739776b1e1c16af7684d7337aea98bb11c9cd";
-    dependsOn = [ "gluetun" ];
 
     volumes = [
       "/home/santiago/selfhost/tv/subgen:/models"
     ];
 
     environment = {
-      PUID = "0"; # container root -> host santiago (stack convention)
-      PGID = "0";
       TRANSCRIBE_DEVICE = "cpu";
       WHISPER_MODEL = "small";
       # 2 workers: Bazarr's multi-minute episode jobs must not starve
@@ -436,25 +403,10 @@
       MODEL_CLEANUP_DELAY = "86400";
       DEBUG = "False";
     };
-
-    extraOptions = [ "--network=container:gluetun" ];
   };
 
-  # Reads gluetun's control server (localhost:8000 inside the shared
-  # netns), exports as Prometheus metrics on :8001. The published port
-  # lives on gluetun's block (netns owner).
-  virtualisation.oci-containers.containers.gluetun-exporter = mkRootlessContainer {
-    image = "ghcr.io/thecfu/gluetun-exporter:latest@sha256:bafeabb2a9638bf6b0800c2d3d47d49c6236d879bd01eec8caea45dfca2b50c5";
-    dependsOn = [ "gluetun" ];
-
-    environment = {
-      GLUETUN_URL = "http://localhost:8000";
-      EXPORTER_PORT = "8001";
-      EXPORTER_INTERVAL = "30";
-    };
-
-    extraOptions = [ "--network=container:gluetun" ];
-  };
+  # Prometheus metrics for the tunnel (platform/common.nix helper).
+  virtualisation.oci-containers.containers.gluetun-exporter = mkGluetunExporter "gluetun";
 
   # Jellyfin runs outside gluetun (was looping LAN streaming through
   # ProtonVPN — slow, paid bandwidth). renderD128 = Intel Alder Lake

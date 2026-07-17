@@ -99,6 +99,28 @@ let
     w: if w.serviceName != null then "http://${w.serviceName}:${toString w.port}" else w.serviceUrl;
 
   capitalize = s: (lib.toUpper (lib.substring 0 1 s)) + (lib.substring 1 (lib.stringLength s) s);
+
+  # Body of _module.args.mkRootlessContainer — bound here so other
+  # helpers (mkGluetunExporter) can compose with it.
+  mkRootlessContainer =
+    args:
+    let
+      nnp = args.noNewPrivileges or true;
+      cleanArgs = removeAttrs args [ "noNewPrivileges" ];
+      secOpts = lib.optional nnp "--security-opt=no-new-privileges:true";
+    in
+    {
+      autoStart = true;
+      podman.user = "santiago";
+    }
+    // cleanArgs
+    // {
+      environment = {
+        TZ = config.time.timeZone;
+      }
+      // (cleanArgs.environment or { });
+      extraOptions = secOpts ++ (cleanArgs.extraOptions or [ ]);
+    };
 in
 {
   options.myStack = {
@@ -626,24 +648,26 @@ in
     # stacks keep functioning. Opt out per-container with
     # `noNewPrivileges = false` (the key is stripped before reaching
     # oci-containers) for the rare image that legitimately needs to escalate.
-    _module.args.mkRootlessContainer =
-      args:
-      let
-        nnp = args.noNewPrivileges or true;
-        cleanArgs = removeAttrs args [ "noNewPrivileges" ];
-        secOpts = lib.optional nnp "--security-opt=no-new-privileges:true";
-      in
-      {
-        autoStart = true;
-        podman.user = "santiago";
-      }
-      // cleanArgs
-      // {
+    _module.args.mkRootlessContainer = mkRootlessContainer;
+
+    # Shared gluetun (VPN netns owner) plumbing — used by stacks/tv and
+    # stacks/ipcrawl-vpn. Two separate tunnels on purpose: one WireGuard
+    # key cannot run two live sessions, and their traffic must not mix.
+    # One pinned image for both instances, and one exporter shape: it
+    # polls the owner's control API (localhost:8000 inside the shared
+    # netns) and serves metrics on :8001, host-published by the owner.
+    _module.args.gluetunImage = "docker.io/qmcgaw/gluetun:latest@sha256:b0ee2135e6ba52ad3f102aae9663707cd1c9531485117067a380d3b2b6dd991d";
+    _module.args.mkGluetunExporter =
+      netnsOwner:
+      mkRootlessContainer {
+        image = "ghcr.io/thecfu/gluetun-exporter:latest@sha256:bafeabb2a9638bf6b0800c2d3d47d49c6236d879bd01eec8caea45dfca2b50c5";
+        dependsOn = [ netnsOwner ];
         environment = {
-          TZ = config.time.timeZone;
-        }
-        // (cleanArgs.environment or { });
-        extraOptions = secOpts ++ (cleanArgs.extraOptions or [ ]);
+          GLUETUN_URL = "http://localhost:8000";
+          EXPORTER_PORT = "8001";
+          EXPORTER_INTERVAL = "30";
+        };
+        extraOptions = [ "--network=container:${netnsOwner}" ];
       };
 
     # Container-UID -> host-UID under santiago's subuid range

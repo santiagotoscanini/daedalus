@@ -19,14 +19,23 @@
 # live tunnels conflicts, and it would mix ipcrawl traffic with the torrent
 # VPN exit. This is a separate instance with its own ProtonVPN config.
 #
-# WireGuard config lives at
-#   /home/santiago/selfhost/ipcrawl-vpn/gluetun/wireguard/wg0.conf
-# placed imperatively (like tv/gluetun's) — NOT in the rebuild trail. ProtonVPN
-# shows the private key once at export; re-export from
-# account.protonvpn.com/downloads if lost. No VPN_PORT_FORWARDING — ipcrawl is
-# outbound-only and needs no inbound forwarded port.
+# WireGuard config: sops-encrypted (ipcrawl-wg0 below), bind-mounted over
+# the wg0.conf path inside the /gluetun dir mount. ProtonVPN shows the
+# private key once at export; re-export from account.protonvpn.com/downloads
+# if lost. No VPN_PORT_FORWARDING — ipcrawl is outbound-only and needs no
+# inbound forwarded port.
+#
+# Host-port convention: the TV gluetun owns 8000 (control) + 8001
+# (exporter); this instance publishes the same in-netns ports at +2
+# (8002/8003). A third gluetun instance would take 8004/8005.
 
-{ config, mkRootlessContainer, ... }:
+{
+  config,
+  mkRootlessContainer,
+  gluetunImage,
+  mkGluetunExporter,
+  ...
+}:
 
 {
   # ProtonVPN WireGuard config — sops-encrypted, in the rebuild trail
@@ -93,7 +102,7 @@
   ];
 
   virtualisation.oci-containers.containers.gluetun-ipcrawl = mkRootlessContainer {
-    image = "docker.io/qmcgaw/gluetun:latest@sha256:b0ee2135e6ba52ad3f102aae9663707cd1c9531485117067a380d3b2b6dd991d";
+    image = gluetunImage;
 
     # host 3100 → ipcrawl UI (:3000 in-netns); traefik dials it via
     # host.containers.internal:3100. host 8002 → gluetun's control API
@@ -127,21 +136,7 @@
     ];
   };
 
-  # Prometheus exporter for gluetun-ipcrawl — a sibling in the same netns that
-  # polls the control API (localhost:8000, the readonly routes in config.toml)
-  # and exposes gluetun_vpn_status / gluetun_vpn_infos / forwarded-port metrics
-  # on :8001 (host-published as 8003 by gluetun-ipcrawl). Same image + shape as
-  # the TV stack's gluetun-exporter.
-  virtualisation.oci-containers.containers.gluetun-exporter-ipcrawl = mkRootlessContainer {
-    image = "ghcr.io/thecfu/gluetun-exporter:latest@sha256:bafeabb2a9638bf6b0800c2d3d47d49c6236d879bd01eec8caea45dfca2b50c5";
-    dependsOn = [ "gluetun-ipcrawl" ];
-
-    environment = {
-      GLUETUN_URL = "http://localhost:8000";
-      EXPORTER_PORT = "8001";
-      EXPORTER_INTERVAL = "30";
-    };
-
-    extraOptions = [ "--network=container:gluetun-ipcrawl" ];
-  };
+  # Prometheus metrics for this tunnel (platform/common.nix helper);
+  # :8001 in-netns, host-published as 8003 by gluetun-ipcrawl.
+  virtualisation.oci-containers.containers.gluetun-exporter-ipcrawl = mkGluetunExporter "gluetun-ipcrawl";
 }
