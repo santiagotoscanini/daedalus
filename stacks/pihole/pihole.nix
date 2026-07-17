@@ -34,14 +34,15 @@ in
   myStack.webApps.pihole = {
     port = 8080;
     serviceUrl = "http://host.containers.internal:8080";
+    # Gate only — the admin password stays until the passkey flow is
+    # verified (AUTH.md order), then gets blanked. Widget + API dial
+    # host.containers.internal:8080, bypassing traefik.
+      auth = "oidc";
     homepage = {
       group = "Network";
       name = "Pi-hole";
       description = "LAN DNS, DHCP, ad-blocking";
       icon = "pi-hole.png";
-      # Probe through traefik: homepage reaches pihole via the
-      # --add-host workaround (undici trips on FTL's Connection: close).
-      siteMonitor = "https://pihole.toscanini.me";
       widget = {
         type = "pihole";
         url = "http://host.containers.internal:8080";

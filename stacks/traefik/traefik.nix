@@ -131,28 +131,34 @@ in
   myStack.traefikStaticRules."oidc-middlewares.yml" =
     let
       envPrefix = n: "POCKET_OIDC_" + lib.toUpper (lib.replaceStrings [ "-" ] [ "_" ] n);
+      mkOidcMw = n: {
+        plugin.oidc = {
+          Secret = "\${POCKET_OIDC_COOKIE_SECRET}";
+          Provider = {
+            Url = "https://id.${cfg.baseDomain}";
+            ClientId = "\${${envPrefix n}_CLIENT_ID}";
+            ClientSecret = "\${${envPrefix n}_CLIENT_SECRET}";
+            UsePkce = true;
+          };
+          Scopes = [
+            "openid"
+            "profile"
+            "email"
+            "groups"
+          ];
+        };
+      };
     in
     builtins.toJSON {
-      http.middlewares = lib.mapAttrs' (
-        n: _:
-        lib.nameValuePair "oidc-${n}" {
-          plugin.oidc = {
-            Secret = "\${POCKET_OIDC_COOKIE_SECRET}";
-            Provider = {
-              Url = "https://id.${cfg.baseDomain}";
-              ClientId = "\${${envPrefix n}_CLIENT_ID}";
-              ClientSecret = "\${${envPrefix n}_CLIENT_SECRET}";
-              UsePkce = true;
-            };
-            Scopes = [
-              "openid"
-              "profile"
-              "email"
-              "groups"
-            ];
-          };
-        }
-      ) (lib.filterAttrs (_: w: w.auth == "oidc") cfg.webApps);
+      http.middlewares =
+        (lib.mapAttrs' (n: _: lib.nameValuePair "oidc-${n}" (mkOidcMw n)) (
+          lib.filterAttrs (_: w: w.auth == "oidc") cfg.webApps
+        ))
+        // {
+          # The dashboard is a hand-declared route (api@internal), not
+          # a webApp — its middleware is declared here alongside.
+          oidc-traefik-dashboard = mkOidcMw "traefik-dashboard";
+        };
     };
 
   # Dashboard / API — LAN-only via pi-hole dns.hosts; `api@internal`
@@ -160,6 +166,7 @@ in
   myStack.traefikRoutes.traefik-dashboard = {
     host = "traefik.${config.myStack.baseDomain}";
     service = "api@internal";
+    middlewares = [ "oidc-traefik-dashboard@file" ];
   };
 
   # Opens TCP 80/443 — LAN HTTPS ingress.
@@ -196,10 +203,9 @@ in
       href = "https://traefik.toscanini.me";
       description = "Reverse proxy — all *.s2 / *.toscanini routes";
       icon = "traefik.png";
-      siteMonitor = "https://traefik.toscanini.me";
       widget = {
         type = "traefik";
-        url = "https://traefik.toscanini.me";
+        url = "http://traefik:8080";
       };
     }
   ];
@@ -238,6 +244,11 @@ in
     cmd = [
       "--api=true"
       "--api.dashboard=true"
+      # Serve /api on the internal :8080 entrypoint too — the homepage
+      # widget reads it container-direct now that the public dashboard
+      # route is behind the Pocket ID gate. :8080 is traefik-net-only
+      # (never host-published), same trust boundary as /metrics.
+      "--api.insecure=true"
 
       # Prometheus metrics. addRoutersLabels=true adds per-router labels
       # (small cardinality cost; fine at our scale).

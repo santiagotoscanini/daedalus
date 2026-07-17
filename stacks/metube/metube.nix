@@ -17,6 +17,9 @@
   myStack.webApps.metube = {
     serviceName = "metube";
     port = 8081;
+    # No auth of its own (upstream: none planned). Homepage widget
+    # dials http://metube:8081 container-direct, unaffected.
+      auth = "oidc";
     homepage = {
       group = "Media";
       name = "MeTube";

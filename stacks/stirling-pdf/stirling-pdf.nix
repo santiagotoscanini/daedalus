@@ -12,6 +12,9 @@
   myStack.webApps.stirling-pdf = {
     serviceName = "stirling-pdf";
     port = 8080; # in-container port
+    # Login stays disabled (native OIDC is paywalled — AUTH.md); the
+    # Pocket ID gate is the only auth. Widget dials container-direct.
+      auth = "oidc";
     homepage = {
       group = "Productivity";
       name = "Stirling-PDF";

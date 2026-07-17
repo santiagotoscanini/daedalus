@@ -189,14 +189,11 @@ in
     extraOptions = [
       # --add-host workarounds for widgets that can't reach a service
       # by raw bridge name:
-      #  - traefik: api@internal only serves on websecure with the right
-      #    Host header, so we route through the public FQDN.
       #  - nextcloud: NC_overwriteprotocol="https" 30x-redirects every
       #    plain-HTTP request, and homepage's proxy can't follow http→https.
       #  - nzbget / pihole / qbittorrent: homepage's undici client trips
       #    on their `Connection: close` responses → ECONNRESET. Going
       #    through traefik gets keep-alive and sidesteps the bug.
-      "--add-host=traefik.toscanini.me:host-gateway"
       "--add-host=nextcloud.toscanini.me:host-gateway"
       "--add-host=nzbget.toscanini.me:host-gateway"
       "--add-host=pihole.toscanini.me:host-gateway"

@@ -206,6 +206,10 @@ in
     prometheus = {
       serviceName = "prometheus";
       port = 9090;
+      # No auth of its own; grafana + self-scrape dial container-direct
+      # and never cross traefik. NOTE: host port 9090 stays open and
+      # ungated (external scrapers) — see AUTH.md open decision.
+      auth = "oidc";
       homepage = {
         group = "Monitoring";
         description = "TSDB — 30d / 100GB retention";

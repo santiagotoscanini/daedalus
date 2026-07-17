@@ -25,6 +25,10 @@
   myStack.webApps.myspeed = {
     serviceName = "myspeed";
     port = 5216; # in-container port
+    # MySpeed's optional password stays unset — its "auth" sends the
+    # plaintext password as a header on every request; the Pocket ID
+    # gate is the real boundary. Widget dials container-direct.
+      auth = "oidc";
     homepage = {
       group = "Network";
       name = "MySpeed";
