@@ -173,11 +173,13 @@ in
               description = "FQDN matched by the `Host(...)` rule.";
             };
             serviceUrl = lib.mkOption {
-              type = lib.types.str;
+              type = lib.types.nullOr lib.types.str;
+              default = null;
               description = ''
-                Full upstream URL traefik dials. Required — there is no
-                implicit `host.containers.internal` fallback; every
-                route declares its upstream explicitly.
+                Full upstream URL traefik dials. No implicit
+                `host.containers.internal` fallback; every route
+                declares its upstream explicitly (exactly one of
+                `serviceUrl` / `service`, enforced by an assertion).
 
                 Typical shape: `http://<container-name>:<in-container-port>`
                 for stacks attached to `traefik-net`. Use `https://`
@@ -191,6 +193,16 @@ in
                 `serviceName` (preferred) or `serviceUrl`.
               '';
               example = "http://grocy:80";
+            };
+            service = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Named traefik service instead of a URL upstream — for
+                built-ins like `api@internal` (the dashboard). No
+                loadBalancer block is emitted.
+              '';
+              example = "api@internal";
             };
             entrypoint = lib.mkOption {
               type = lib.types.enum [
@@ -745,6 +757,14 @@ in
           must be set.
         '';
       }) cfg.webApps)
+      ++ (lib.mapAttrsToList (n: r: {
+        assertion = (r.serviceUrl != null) != (r.service != null);
+        message = ''
+          myStack.traefikRoutes.${n}: exactly one of `serviceUrl`
+          (URL upstream) or `service` (named traefik service, e.g.
+          api@internal) must be set.
+        '';
+      }) cfg.traefikRoutes)
       ++ (lib.mapAttrsToList (n: w: {
         assertion = w.metrics.enable -> (w.serviceName != null);
         message = ''

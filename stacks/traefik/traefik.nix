@@ -36,50 +36,45 @@ let
   # (one fixed `postgres.toscanini.me` route — no per-app fan-out).
   pgwireEnabled = config.myStack.appDatabases != { };
 
-  mkTraefikRouteContent =
+  yamlFormat = pkgs.formats.yaml { };
+
+  # One structured YAML file per route — no hand-rolled indentation.
+  # Edit the attrset (in the owning stack's module), not the rendered
+  # file (it lives in /nix/store, read-only).
+  mkTraefikRouteFile =
     name: route:
     let
-      entry = route.entrypoint or "websecure";
+      entry = route.entrypoint;
       needsTls = entry == "websecure";
       hasCert = route.certMain != null;
-      upstreamUrl = route.serviceUrl;
-      # tlsLine is substituted at the position marked `${tlsLine}  services:`
-      # — must end with a newline AND include its own leading whitespace
-      # (the template dedent strips 6 columns; we re-add).
-      tlsLine =
-        if !needsTls then
-          ""
-        else if !hasCert then
-          "      tls: { options: tls-opts@file }\n"
-        else
-          let
-            sansBlock = lib.concatMapStringsSep "\n" (s: "              - \"${s}\"") route.certSans;
-          in
-          "      tls:\n"
-          + "        options: tls-opts@file\n"
-          + "        certResolver: dns-cloudflare\n"
-          + "        domains:\n"
-          + "          - main: \"${route.certMain}\"\n"
-          + "            sans:\n"
-          + sansBlock
-          + "\n";
+      internal = route.service != null;
     in
-    ''
-      # Auto-generated from myStack.traefikRoutes.${name}.
-      # Edit the attrset (in the owning stack's module), not this file
-      # (it lives in /nix/store, read-only).
-      http:
-        routers:
-          ${name}-rtr:
-            entryPoints: [ ${entry} ]
-            rule: "Host(`${route.host}`)"
-            service: ${name}-svc
-      ${tlsLine}  services:
-          ${name}-svc:
-            loadBalancer:
-              servers:
-                - url: "${upstreamUrl}"
-    '';
+    yamlFormat.generate "${name}.yml" {
+      http = {
+        routers."${name}-rtr" = {
+          entryPoints = [ entry ];
+          rule = "Host(`${route.host}`)";
+          service = if internal then route.service else "${name}-svc";
+        }
+        // lib.optionalAttrs needsTls {
+          tls = {
+            options = "tls-opts@file";
+          }
+          // lib.optionalAttrs hasCert {
+            certResolver = "dns-cloudflare";
+            domains = [
+              {
+                main = route.certMain;
+                sans = route.certSans;
+              }
+            ];
+          };
+        };
+      }
+      // lib.optionalAttrs (!internal) {
+        services."${name}-svc".loadBalancer.servers = [ { url = route.serviceUrl; } ];
+      };
+    };
 
   # Use runCommand+cp (not symlinkJoin) so $out contains real files.
   # /rules bind mount doesn't include /nix/store; symlinks would dangle
@@ -90,8 +85,7 @@ let
     ''
     + lib.concatStringsSep "\n" (
       (lib.mapAttrsToList (
-        name: route:
-        "cp ${pkgs.writeText "${name}.yml" (mkTraefikRouteContent name route)} $out/${name}.yml"
+        name: route: "cp ${mkTraefikRouteFile name route} $out/${name}.yml"
       ) cfg.traefikRoutes)
       ++ (lib.mapAttrsToList (
         filename: contents: "cp ${pkgs.writeText filename contents} $out/${filename}"
@@ -107,11 +101,15 @@ in
   myStack.containerNetworks.traefik = "traefik";
 
   # Static rules that don't fit the Host->port shape. Each stack reads
-  # its own asset and contributes here (e.g. nextcloud's dual-router
-  # rule lives in stacks/nextcloud/).
-  myStack.traefikStaticRules = {
-    "tls-opts.yml" = builtins.readFile ./assets/tls-opts.yml;
-    "traefik-dashboard.yml" = builtins.readFile ./assets/dashboard-rule.yml;
+  # its own asset and contributes here (e.g. app-db's TCP/SNI route
+  # lives in stacks/app-db/).
+  myStack.traefikStaticRules."tls-opts.yml" = builtins.readFile ./assets/tls-opts.yml;
+
+  # Dashboard / API — LAN-only via pi-hole dns.hosts; `api@internal`
+  # serves /api/* and /dashboard/*.
+  myStack.traefikRoutes.traefik-dashboard = {
+    host = "traefik.${config.myStack.baseDomain}";
+    service = "api@internal";
   };
 
   # Opens TCP 80/443 — LAN HTTPS ingress.
@@ -223,12 +221,11 @@ in
       "--providers.file.directory=/rules"
       "--providers.file.watch=true"
 
-      # ACME — Cloudflare DNS challenge.
+      # ACME — Cloudflare DNS challenge. One apex+wildcard pair covers
+      # every published hostname (all one level under the apex).
       "--entrypoints.websecure.http.tls.certresolver=dns-cloudflare"
-      "--entrypoints.websecure.http.tls.domains[0].main=s2.toscanini.me"
-      "--entrypoints.websecure.http.tls.domains[0].sans=*.toscanini.me"
-      "--entrypoints.websecure.http.tls.domains[1].main=toscanini.me"
-      "--entrypoints.websecure.http.tls.domains[1].sans=*.toscanini.me"
+      "--entrypoints.websecure.http.tls.domains[0].main=${config.myStack.baseDomain}"
+      "--entrypoints.websecure.http.tls.domains[0].sans=*.${config.myStack.baseDomain}"
       "--certificatesResolvers.dns-cloudflare.acme.storage=/acme.json"
       "--certificatesResolvers.dns-cloudflare.acme.email=nextcloud@account.toscanini.me"
       "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.provider=cloudflare"
