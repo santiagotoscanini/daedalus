@@ -110,8 +110,20 @@ in
       description = "Outside-in uptime + cert expiry";
       icon = "gatus.png";
       widget = {
-        type = "gatus";
-        url = "http://gatus:8080";
+        # NOT type=gatus: OIDC security gates gatus's own API (no token
+        # concept), so the native widget can't authenticate. /metrics
+        # stays open — surface the same signal via prometheus instead.
+        # Query: count of endpoints currently failing, 0 when none.
+        type = "customapi";
+        url = "http://prometheus:9090/api/v1/query?query=count%28gatus_results_endpoint_success%20%3D%3D%200%29%20or%20vector%280%29";
+        refreshInterval = 60000;
+        mappings = [
+          {
+            field = "data.result.0.value.1";
+            format = "number";
+            label = "Failing endpoints";
+          }
+        ];
       };
     };
   };
