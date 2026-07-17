@@ -50,6 +50,7 @@
     ./stacks/tv/tv.nix
     ./stacks/recyclarr/recyclarr.nix
     ./stacks/janitorr/janitorr.nix
+    ./stacks/scraparr/scraparr.nix
     ./stacks/verdaccio/verdaccio.nix
     ./stacks/wealthfolio/wealthfolio.nix
     ./stacks/wireguard/wireguard.nix
