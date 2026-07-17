@@ -19,6 +19,7 @@
   lib,
   pkgs,
   mkRootlessContainer,
+  mkDotenvSecret,
   ...
 }:
 
@@ -44,12 +45,7 @@ in
 {
   # PG_PASS + REDIS_PASS (shared by postgres, redis, app): sops-encrypted env.sops, decrypted to
   # /run/secrets/nextcloud-env at activation. Edit with `sops env.sops`.
-  sops.secrets."nextcloud-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."nextcloud-env" = mkDotenvSecret ./env.sops;
 
   myStack.containerNetworks = {
     nextcloud-postgres = "nextcloud";
@@ -158,7 +154,7 @@ in
       POSTGRES_DB = "nc_postgres";
       POSTGRES_USER = "oc_santi";
 
-      TRUSTED_PROXIES = "192.168.0.2/24";
+      TRUSTED_PROXIES = "${config.myStack.lanIp}/24";
       PHP_MEMORY_LIMIT = "2G";
       NEXTCLOUD_TRUSTED_DOMAINS = "nextcloud.toscanini.me host.containers.internal";
       NEXTCLOUD_INIT_HTACCESS = "true";

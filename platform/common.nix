@@ -95,6 +95,47 @@ let
 in
 {
   options.myStack = {
+    lanIp = lib.mkOption {
+      type = lib.types.str;
+      description = ''
+        The box's static LAN IPv4 — single source of truth, set in
+        configuration.nix (which also feeds it to the interface
+        config). Consumed by the dnsHosts generator and any stack that
+        must dial the host by IP.
+      '';
+      example = "192.168.0.2";
+    };
+
+    baseDomain = lib.mkOption {
+      type = lib.types.str;
+      description = ''
+        Apex domain every published hostname sits one level under
+        (`<app>.<baseDomain>`) — the shape the traefik wildcard cert
+        and the CF-tunnel CNAMEs assume.
+      '';
+      example = "toscanini.me";
+    };
+
+    mail = {
+      sender = lib.mkOption {
+        type = lib.types.str;
+        description = "From address every mail-sending service uses (the relay account).";
+      };
+      alertTo = lib.mkOption {
+        type = lib.types.str;
+        description = "Recipient for all alert/notification mail.";
+      };
+      smtpHost = lib.mkOption {
+        type = lib.types.str;
+        description = "SMTP relay host shared by all mail-sending services.";
+      };
+      smtpPort = lib.mkOption {
+        type = lib.types.port;
+        default = 587;
+        description = "SMTP submission port (STARTTLS).";
+      };
+    };
+
     containerNetworks = lib.mkOption {
       type = lib.types.attrsOf (lib.types.nullOr lib.types.str);
       default = { };
@@ -495,6 +536,72 @@ in
         extraOptions = secOpts ++ (cleanArgs.extraOptions or [ ]);
       };
 
+    # Container-UID -> host-UID under santiago's subuid range
+    # (100000:65536): container uid 0 is santiago (1000); uid N >= 1
+    # lands at 99999 + N (www-data 33 -> 100032, linuxserver abc
+    # 911 -> 100910). Use for tmpfiles ownership of bind-mounted dirs
+    # instead of hand-computed magic numbers.
+    _module.args.hostUid = containerUid: 99999 + containerUid;
+
+    # Standard operator-managed dotenv secret: age-encrypted file at
+    # the stack root, decrypted to /run/secrets/<name> owned by
+    # santiago so rootless podman reads it pre-userns-remap.
+    #   sops.secrets."foo-env" = mkDotenvSecret ./env.sops;
+    _module.args.mkDotenvSecret = sopsFile: {
+      inherit sopsFile;
+      format = "dotenv";
+      key = "";
+      owner = "santiago";
+    };
+
+    # Activation-render idiom: a oneshot that materializes a small file
+    # on tmpfs before its consumers start — a bare token, an --env-file,
+    # a DSN — sourced from an already-decrypted secret. `prep` computes
+    # shell vars; `content` is the heredoc body written to `file`.
+    # The dir is 0755 santiago so rootless podman can traverse it at
+    # --env-file mount time (pre-userns-remap); the file itself stays
+    # `mode` (default 0400).
+    #   systemd.services."foo-render" = mkSecretRender { ... };
+    _module.args.mkSecretRender =
+      {
+        description,
+        gates, # consumer units; the render runs before= / wantedBy= them
+        dir,
+        file,
+        content,
+        mode ? "0400",
+        prep ? "",
+        after ? [ ],
+        wants ? [ ],
+      }:
+      {
+        inherit description wants;
+        before = gates;
+        wantedBy = gates;
+        # /run/secrets/* are materialized during activation, ahead of
+        # every multi-user unit — no explicit sops ordering needed.
+        after = [ "local-fs.target" ] ++ after;
+        path = [
+          pkgs.coreutils
+          pkgs.gnugrep
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          Restart = "on-failure";
+          RestartSec = "5s";
+        };
+        script = ''
+          set -eu
+          install -d -m 0755 -o santiago -g users ${dir}
+          umask 077
+          ${prep}
+          install -m ${mode} -o santiago -g users /dev/stdin ${file} <<RENDER_EOF
+          ${content}
+          RENDER_EOF
+        '';
+      };
+
     # systemd overrides + bridge units generated from the registry.
     # Per-stack `systemd.services.<X>` additions merge with these.
     systemd.services =
@@ -544,7 +651,7 @@ in
       '';
     }) cfg.webApps;
 
-    myStack.dnsHosts = lib.mapAttrsToList (_: w: "192.168.0.2 ${w.hostname}") cfg.webApps;
+    myStack.dnsHosts = lib.mapAttrsToList (_: w: "${cfg.lanIp} ${w.hostname}") cfg.webApps;
 
     myStack.cloudflareRoutes = lib.mapAttrs (_: w: { inherit (w) hostname; }) (
       lib.filterAttrs (_: w: w.exposeRemotely) cfg.webApps

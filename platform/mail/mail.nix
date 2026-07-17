@@ -29,8 +29,7 @@
 }:
 
 let
-  sender = "s2.toscanini.me@gmail.com";
-  alertTo = "santiago@toscanini.me";
+  inherit (config.myStack.mail) sender alertTo;
   pwPath = config.sops.secrets."mail-relay-password".path;
 
   # Recipients/From come from the message headers (-t).
@@ -71,8 +70,8 @@ in
       logfile = "/var/log/msmtp.log";
     };
     accounts.default = {
-      host = "smtp.gmail.com";
-      port = 587;
+      host = config.myStack.mail.smtpHost;
+      port = config.myStack.mail.smtpPort;
       auth = true;
       from = sender;
       user = sender;

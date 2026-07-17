@@ -16,17 +16,17 @@
 # on the host (boot.kernelModules below); container just needs
 # /lib/modules read-only to find it.
 
-{ config, mkRootlessContainer, ... }:
+{
+  config,
+  mkRootlessContainer,
+  mkDotenvSecret,
+  ...
+}:
 
 {
   # wg-easy INIT_USERNAME + INIT_PASSWORD: sops-encrypted env.sops, decrypted to
   # /run/secrets/wireguard-env at activation. Edit with `sops env.sops`.
-  sops.secrets."wireguard-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."wireguard-env" = mkDotenvSecret ./env.sops;
 
   myStack.containerNetworks.wireguard = "traefik";
   myStack.webApps.wireguard = {

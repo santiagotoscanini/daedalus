@@ -33,6 +33,7 @@
   lib,
   pkgs,
   mkRootlessContainer,
+  mkDotenvSecret,
   ...
 }:
 
@@ -156,12 +157,7 @@ in
 {
   # grafana admin credentials: sops-encrypted env.sops, decrypted to
   # /run/secrets/grafana-env at activation. Edit with `sops env.sops`.
-  sops.secrets."grafana-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."grafana-env" = mkDotenvSecret ./env.sops;
 
   # Persistent textfile-collector dir. Owned by santiago so the rootless
   # liveness sweep writes it and node-exporter (UID 0 → host santiago) reads
@@ -304,10 +300,10 @@ in
       # read from the bind-mounted mail secret through Grafana's __FILE
       # convention (grafana runs --user=0:0 → santiago, which owns it).
       GF_SMTP_ENABLED = "true";
-      GF_SMTP_HOST = "smtp.gmail.com:587";
-      GF_SMTP_USER = "s2.toscanini.me@gmail.com";
+      GF_SMTP_HOST = "${config.myStack.mail.smtpHost}:${toString config.myStack.mail.smtpPort}";
+      GF_SMTP_USER = config.myStack.mail.sender;
       GF_SMTP_PASSWORD__FILE = "/run/secrets/mail-relay-password";
-      GF_SMTP_FROM_ADDRESS = "s2.toscanini.me@gmail.com";
+      GF_SMTP_FROM_ADDRESS = config.myStack.mail.sender;
       GF_SMTP_FROM_NAME = "s2-server Grafana";
       GF_SMTP_STARTTLS_POLICY = "MandatoryStartTLS";
     };

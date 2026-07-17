@@ -16,17 +16,17 @@
 # container start (yes, every start — harmless but slow). Keep it
 # matched to the clients' game version or they will refuse to join.
 
-{ config, mkRootlessContainer, ... }:
+{
+  config,
+  mkRootlessContainer,
+  mkDotenvSecret,
+  ...
+}:
 
 {
   # ofsm admin credentials: sops-encrypted env.sops, decrypted to
   # /run/secrets/factorio-env at activation. Edit with `sops env.sops`.
-  sops.secrets."factorio-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."factorio-env" = mkDotenvSecret ./env.sops;
 
   myStack.containerNetworks.factorio = "traefik";
 

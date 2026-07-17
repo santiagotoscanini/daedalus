@@ -5,6 +5,7 @@
 # NixOS merges across modules.
 
 {
+  config,
   pkgs,
   nixpkgs,
   nixpkgs-unstable,
@@ -83,6 +84,19 @@
 
   # ── Networking ──────────────────────────────────────────────────────────────
 
+  # Host identity consumed fleet-wide via myStack.* (platform/common.nix):
+  # the LAN IP below also feeds the interface config, so this block is
+  # the single place these values are written.
+  myStack = {
+    lanIp = "192.168.0.2";
+    baseDomain = "toscanini.me";
+    mail = {
+      sender = "s2.toscanini.me@gmail.com";
+      alertTo = "santiago@toscanini.me";
+      smtpHost = "smtp.gmail.com";
+    };
+  };
+
   networking = {
     # ZFS records the host ID of the machine that imported a pool last,
     # then refuses to import on a host with a different ID. Must be
@@ -108,7 +122,7 @@
 
     interfaces.enp3s0.ipv4.addresses = [
       {
-        address = "192.168.0.2";
+        address = config.myStack.lanIp;
         prefixLength = 24;
       }
     ];

@@ -92,7 +92,7 @@ in
         # from this entry. No DHCP transaction (it IS the DHCP server;
         # static IP from configuration.nix).
         hosts = [
-          "XX:XX:XX:XX:XX:00,192.168.0.2,s2-server"
+          "XX:XX:XX:XX:XX:00,${config.myStack.lanIp},s2-server"
           "XX:XX:XX:XX:XX:01,192.168.0.120,Gaming-PC"
           "XX:XX:XX:XX:XX:02,192.168.0.100,MBP-Santiago"
           "XX:XX:XX:XX:XX:03,192.168.0.101,MBP-B"

@@ -16,7 +16,12 @@
 # Image user is 1002:1001 (CNB buildpacks) -> host 101001:101000; only
 # /logs needs to be writable.
 
-{ config, mkRootlessContainer, ... }:
+{
+  config,
+  mkRootlessContainer,
+  mkDotenvSecret,
+  ...
+}:
 
 {
   myStack.containerNetworks.janitorr = "traefik";
@@ -47,12 +52,7 @@
 
   # RADARR/SONARR/JELLYFIN/SEERR_API_KEY for the ${...} placeholders in
   # assets/application.yml. Edit with `sops env.sops`.
-  sops.secrets."janitorr-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."janitorr-env" = mkDotenvSecret ./env.sops;
 
   systemd.tmpfiles.rules = [
     "d /home/santiago/selfhost/janitorr 0755 santiago users -"

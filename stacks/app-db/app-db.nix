@@ -149,7 +149,7 @@ in
     # nextcloud's dual-router uses). traefik.nix gates the :5432
     # entrypoint + firewall on `myStack.appDatabases != { }`.
     myStack.traefikStaticRules."postgres-tcp.yml" = builtins.readFile ./assets/traefik-tcp.yml;
-    myStack.dnsHosts = [ "192.168.0.2 postgres.toscanini.me" ];
+    myStack.dnsHosts = [ "${config.myStack.lanIp} postgres.toscanini.me" ];
 
     systemd.tmpfiles.rules = [
       "d ${hostRoot}                  0755 santiago users  -"

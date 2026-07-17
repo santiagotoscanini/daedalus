@@ -17,7 +17,12 @@
 # Secrets (env.sops): SECRET_KEY + EMAIL_HOST_PASSWORD. The SMTP password is
 # the same Gmail app password as platform/mail — rotate both together.
 
-{ config, mkRootlessContainer, ... }:
+{
+  config,
+  mkRootlessContainer,
+  mkDotenvSecret,
+  ...
+}:
 
 {
   myStack.containerNetworks.healthchecks = "traefik";
@@ -43,12 +48,7 @@
     }
   ];
 
-  sops.secrets."healthchecks-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."healthchecks-env" = mkDotenvSecret ./env.sops;
 
   virtualisation.oci-containers.containers.healthchecks = mkRootlessContainer {
     image = "docker.io/healthchecks/healthchecks:v4.3@sha256:a5c9daf1759988defe122b6a6a29e401a76b7ea94dfffa1340245c5bcb57cb72";
@@ -62,11 +62,11 @@
       REGISTRATION_OPEN = "False";
       DB = "sqlite";
       DB_NAME = "/data/hc.sqlite";
-      EMAIL_HOST = "smtp.gmail.com";
-      EMAIL_PORT = "587";
-      EMAIL_HOST_USER = "s2.toscanini.me@gmail.com";
+      EMAIL_HOST = config.myStack.mail.smtpHost;
+      EMAIL_PORT = toString config.myStack.mail.smtpPort;
+      EMAIL_HOST_USER = config.myStack.mail.sender;
       EMAIL_USE_TLS = "True";
-      DEFAULT_FROM_EMAIL = "s2.toscanini.me@gmail.com";
+      DEFAULT_FROM_EMAIL = config.myStack.mail.sender;
     };
 
     environmentFiles = [ config.sops.secrets."healthchecks-env".path ];

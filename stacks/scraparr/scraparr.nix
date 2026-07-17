@@ -16,7 +16,12 @@
 # (grafana.com/22934) with its datasource var pinned to the provisioned
 # prometheus uid.
 
-{ config, mkRootlessContainer, ... }:
+{
+  config,
+  mkRootlessContainer,
+  mkDotenvSecret,
+  ...
+}:
 
 {
   myStack.containerNetworks.scraparr = "monitoring";
@@ -24,12 +29,7 @@
   # SONARR/RADARR/PROWLARR/BAZARR/JELLYSEERR/JELLYFIN_API_KEY.
   # Jellyfin uses a dedicated "Scraparr" API key (minted via /Auth/Keys).
   # Edit with `sops env.sops`.
-  sops.secrets."scraparr-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."scraparr-env" = mkDotenvSecret ./env.sops;
 
   myStack.prometheusScrapes = [
     {
@@ -38,7 +38,8 @@
     }
   ];
 
-  myStack.grafanaDashboardsByFolder."Media".media-pipeline = builtins.readFile ./assets/media-pipeline.json;
+  myStack.grafanaDashboardsByFolder."Media".media-pipeline =
+    builtins.readFile ./assets/media-pipeline.json;
 
   virtualisation.oci-containers.containers.scraparr = mkRootlessContainer {
     image = "ghcr.io/thecfu/scraparr:3.0.3@sha256:44f09d30009508a2a422ae7cd9cce38fa36122d6bd0592f2e4158398d9ccb7a6";

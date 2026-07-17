@@ -23,18 +23,14 @@
 {
   config,
   mkRootlessContainer,
+  mkDotenvSecret,
   ...
 }:
 
 {
   myStack.containerNetworks.recyclarr = "traefik";
 
-  sops.secrets."recyclarr-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."recyclarr-env" = mkDotenvSecret ./env.sops;
 
   # /config data dir (repo clones, logs, state). Container runs as its
   # image default UID 1000 -> host 100999 under rootless podman (no

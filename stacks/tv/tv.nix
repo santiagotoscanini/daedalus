@@ -20,6 +20,7 @@
   config,
   lib,
   mkRootlessContainer,
+  mkDotenvSecret,
   ...
 }:
 
@@ -36,12 +37,7 @@
 
   # NZBGET_USER + NZBGET_PASS: sops-encrypted env.sops, decrypted to
   # /run/secrets/nzbget-env at activation. Edit with `sops env.sops`.
-  sops.secrets."nzbget-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."nzbget-env" = mkDotenvSecret ./env.sops;
 
   myStack.containerNetworks = {
     gluetun = null;

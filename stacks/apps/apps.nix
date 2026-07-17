@@ -99,9 +99,9 @@ let
   # subsequent no-op ticks.
   deployStateDir = "/var/lib/app-deploy";
 
-  # The box's static IP. The deploy health-check dials traefik directly rather
+  # The deploy health-check dials traefik at the LAN IP directly rather
   # than trusting DNS, so a pi-hole hiccup can't read as a dead app.
-  lanIp = "192.168.0.2";
+  inherit (config.myStack) lanIp;
 
   # Capitalize first letter; used for the per-app homepage group.
   capitalize = s: (lib.toUpper (lib.substring 0 1 s)) + (lib.substring 1 (lib.stringLength s) s);
@@ -166,11 +166,9 @@ let
           SETPRIV=${pkgs.util-linux}/bin/setpriv
           ENV_BIN=${pkgs.coreutils}/bin/env
           PODMAN=${pkgs.podman}/bin/podman
-          # Deploy-failure alert relay (platform/mail msmtp -> Gmail). These
-          # mirror platform/mail/mail.nix {sender, alertTo}; kept literal to
-          # avoid a shared option for two addresses.
-          NOTIFY_FROM=${lib.escapeShellArg "s2.toscanini.me@gmail.com"}
-          NOTIFY_TO=${lib.escapeShellArg "santiago@toscanini.me"}
+          # Deploy-failure alert relay (platform/mail msmtp -> Gmail).
+          NOTIFY_FROM=${lib.escapeShellArg config.myStack.mail.sender}
+          NOTIFY_TO=${lib.escapeShellArg config.myStack.mail.alertTo}
 
           ${builtins.readFile ./assets/deploy.sh}
         '';

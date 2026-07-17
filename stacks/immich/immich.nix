@@ -34,6 +34,7 @@
   lib,
   pkgs,
   mkRootlessContainer,
+  mkDotenvSecret,
   ...
 }:
 
@@ -48,12 +49,7 @@ in
 {
   # POSTGRES_PASSWORD + DB_PASSWORD (shared by db and server): sops-encrypted env.sops, decrypted to
   # /run/secrets/immich-env at activation. Edit with `sops env.sops`.
-  sops.secrets."immich-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."immich-env" = mkDotenvSecret ./env.sops;
 
   myStack.containerNetworks = {
     immich-postgres = "immich";
@@ -176,7 +172,7 @@ in
       REDIS_HOSTNAME = "redis";
 
       # Honor X-Forwarded-For from traefik (correct IPs in audit logs).
-      IMMICH_TRUSTED_PROXIES = "192.168.0.2/24";
+      IMMICH_TRUSTED_PROXIES = "${config.myStack.lanIp}/24";
       # /metrics on :8081 (api) + :8082 (microservices).
       IMMICH_TELEMETRY_INCLUDE = "all";
     };

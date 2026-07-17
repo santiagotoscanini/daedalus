@@ -19,20 +19,16 @@
 
 {
   config,
-  pkgs,
+  mkDotenvSecret,
   mkRootlessContainer,
+  mkSecretRender,
   ...
 }:
 
 {
   # DATABASE_URL + UI creds + LITELLM_MASTER_KEY: sops-encrypted env.sops,
   # decrypted to /run/secrets/litellm-env. Edit with `sops env.sops`.
-  sops.secrets."litellm-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."litellm-env" = mkDotenvSecret ./env.sops;
 
   # Prometheus scrapes litellm's /metrics with a Bearer token that IS the
   # LITELLM_MASTER_KEY. `credentials_file` wants a file holding ONLY the
@@ -46,33 +42,14 @@
   # still needs manual sync on
   # rotation — stacks/homepage/env.sops HOMEPAGE_VAR_LITELLM_KEY (the homepage
   # tile substitutes its own var and can't read this rendered file).
-  systemd.services."litellm-prom-token" = {
+  # Gates prometheus: podman bind-mounts the token file at container start.
+  systemd.services."litellm-prom-token" = mkSecretRender {
     description = "Render litellm master key as a bare bearer token for the prometheus scrape";
-    # Gate prometheus: podman bind-mounts the token file at container start.
-    before = [ "podman-prometheus.service" ];
-    wantedBy = [ "podman-prometheus.service" ];
-    # /run/secrets/litellm-env is materialized during activation, ahead of
-    # every multi-user unit — no explicit sops ordering needed beyond local-fs.
-    after = [ "local-fs.target" ];
-    path = [
-      pkgs.coreutils
-      pkgs.gnugrep
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      Restart = "on-failure";
-      RestartSec = "5s";
-    };
-    script = ''
-      set -eu
-      install -d -m 0755 -o santiago -g users /run/litellm-prom-token
-      umask 077
-      TOKEN=$(grep '^LITELLM_MASTER_KEY=' /run/secrets/litellm-env | head -1 | cut -d= -f2-)
-      install -m 0400 -o santiago -g users /dev/stdin /run/litellm-prom-token/token <<TOK
-      $TOKEN
-      TOK
-    '';
+    gates = [ "podman-prometheus.service" ];
+    dir = "/run/litellm-prom-token";
+    file = "/run/litellm-prom-token/token";
+    prep = "TOKEN=$(grep '^LITELLM_MASTER_KEY=' /run/secrets/litellm-env | head -1 | cut -d= -f2-)";
+    content = "$TOKEN";
   };
 
   myStack.containerNetworks = {

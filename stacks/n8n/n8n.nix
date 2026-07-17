@@ -7,20 +7,16 @@
 
 {
   config,
-  pkgs,
+  mkDotenvSecret,
   mkRootlessContainer,
+  mkSecretRender,
   ...
 }:
 
 {
   # PG_PASS + N8N_* creds + encryption key: sops-encrypted env.sops, decrypted to
   # /run/secrets/n8n-env at activation. Edit with `sops env.sops`.
-  sops.secrets."n8n-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."n8n-env" = mkDotenvSecret ./env.sops;
 
   myStack.containerNetworks = {
     n8n-postgres = "n8n";
@@ -95,26 +91,12 @@
   # directly, so render N8N_SMTP_PASS into an --env-file podman injects as
   # santiago (same activation-render idiom as litellm-prom-token). Single
   # source of truth stays the shared platform/mail secret.
-  systemd.services."n8n-smtp-env" = {
+  systemd.services."n8n-smtp-env" = mkSecretRender {
     description = "Render N8N_SMTP_PASS from the shared mail relay secret";
-    before = [ "podman-n8n.service" ];
-    wantedBy = [ "podman-n8n.service" ];
-    after = [ "local-fs.target" ];
-    path = [ pkgs.coreutils ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      Restart = "on-failure";
-      RestartSec = "5s";
-    };
-    script = ''
-      set -eu
-      install -d -m 0755 -o santiago -g users /run/n8n-smtp
-      umask 077
-      install -m 0400 -o santiago -g users /dev/stdin /run/n8n-smtp/env <<EOF
-      N8N_SMTP_PASS=$(cat ${config.sops.secrets."mail-relay-password".path})
-      EOF
-    '';
+    gates = [ "podman-n8n.service" ];
+    dir = "/run/n8n-smtp";
+    file = "/run/n8n-smtp/env";
+    content = "N8N_SMTP_PASS=$(cat ${config.sops.secrets."mail-relay-password".path})";
   };
 
   # Wait for the rendered env file (merges with common.nix's generated override).
@@ -178,10 +160,10 @@
       # runs as a mapped uid that can't read the santiago-owned mail secret,
       # so podman injects it as an --env-file instead.
       N8N_EMAIL_MODE = "smtp";
-      N8N_SMTP_HOST = "smtp.gmail.com";
-      N8N_SMTP_PORT = "587";
-      N8N_SMTP_USER = "s2.toscanini.me@gmail.com";
-      N8N_SMTP_SENDER = "s2.toscanini.me@gmail.com";
+      N8N_SMTP_HOST = config.myStack.mail.smtpHost;
+      N8N_SMTP_PORT = toString config.myStack.mail.smtpPort;
+      N8N_SMTP_USER = config.myStack.mail.sender;
+      N8N_SMTP_SENDER = config.myStack.mail.sender;
       N8N_SMTP_SSL = "false";
       N8N_SMTP_STARTTLS = "true";
     };

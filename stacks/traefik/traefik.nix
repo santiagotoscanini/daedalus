@@ -23,6 +23,7 @@
   lib,
   pkgs,
   mkRootlessContainer,
+  mkDotenvSecret,
   ...
 }:
 
@@ -101,12 +102,7 @@ in
 {
   # CF_API_TOKEN + CF_DNS_API_TOKEN (ACME DNS-01): sops-encrypted env.sops,
   # decrypted to /run/secrets/traefik-env at activation. Edit with `sops env.sops`.
-  sops.secrets."traefik-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."traefik-env" = mkDotenvSecret ./env.sops;
 
   myStack.containerNetworks.traefik = "traefik";
 
@@ -130,7 +126,7 @@ in
   # interface (wireguard, etc.) off-limits by default.
   networking.firewall.interfaces.enp3s0.allowedTCPPorts = lib.optional pgwireEnabled 5432;
 
-  myStack.dnsHosts = [ "192.168.0.2 traefik.toscanini.me" ];
+  myStack.dnsHosts = [ "${config.myStack.lanIp} traefik.toscanini.me" ];
 
   myStack.prometheusScrapes = [
     {

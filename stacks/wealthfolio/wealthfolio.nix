@@ -8,7 +8,12 @@
 # escaping). Then
 # `systemctl restart podman-wealthfolio`.
 
-{ config, mkRootlessContainer, ... }:
+{
+  config,
+  mkRootlessContainer,
+  mkDotenvSecret,
+  ...
+}:
 
 {
   myStack.containerNetworks.wealthfolio = "traefik";
@@ -31,12 +36,7 @@
 
   # WF_* secrets: sops-encrypted env.sops -> /run/secrets/wealthfolio-env
   # (tmpfs, 0400 santiago). Edit with `sops env.sops`.
-  sops.secrets."wealthfolio-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."wealthfolio-env" = mkDotenvSecret ./env.sops;
 
   virtualisation.oci-containers.containers.wealthfolio = mkRootlessContainer {
     image = "docker.io/afadil/wealthfolio:3.6.1@sha256:2819715df7057a46a29f30cd3c3e713df3bbe424b3a1bf7f2c92dc1dea1f84a6";

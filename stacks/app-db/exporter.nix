@@ -19,8 +19,8 @@
 {
   config,
   lib,
-  pkgs,
   mkRootlessContainer,
+  mkSecretRender,
   ...
 }:
 
@@ -46,43 +46,20 @@ in
     # stay in extraOptions below (common.nix doesn't auto-inject).
     myStack.containerNetworks."pg-exporter" = "app-db";
 
-    # Compose the DSN from the cluster superuser env at activation
-    # time. Atomic mv so the exporter never reads a half-written file.
-    systemd.services."pg-exporter-config" = {
+    # Compose the DSN from the cluster superuser env at activation time.
+    systemd.services."pg-exporter-config" = mkSecretRender {
       description = "Render pg-exporter DSN from the cluster superuser env";
-      before = [ "podman-pg-exporter.service" ];
-      wantedBy = [ "podman-pg-exporter.service" ];
-      after = [
-        "local-fs.target"
-        "pg-cluster-bootstrap.service"
-      ];
+      gates = [ "podman-pg-exporter.service" ];
+      after = [ "pg-cluster-bootstrap.service" ];
       wants = [ "pg-cluster-bootstrap.service" ];
-      path = [
-        pkgs.coreutils
-        pkgs.gnugrep
-        pkgs.gnused
-      ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        Restart = "on-failure";
-        RestartSec = "5s";
-      };
-      script = ''
-        set -eu
-        # cfgDir is read by santiago (env file mount happens at
-        # podman-run time, before user-NS remap); mode 0755 + owned by
-        # santiago is enough. The env file itself stays 0600.
-        install -d -m 0755 -o santiago -g users ${cfgDir}
-
-        umask 077
+      dir = cfgDir;
+      file = envFile;
+      mode = "0600";
+      prep = ''
         SUPER_PWD=$(grep '^POSTGRES_PASSWORD=' "${clusterEnv}" | head -1 | cut -d= -f2-)
         DSN="postgresql://postgres:$SUPER_PWD@pg:5432/postgres?sslmode=disable"
-
-        install -m 0600 -o santiago -g users /dev/stdin "${envFile}" <<EOF
-        DATA_SOURCE_NAME=$DSN
-        EOF
       '';
+      content = "DATA_SOURCE_NAME=$DSN";
     };
 
     virtualisation.oci-containers.containers."pg-exporter" = mkRootlessContainer {
@@ -120,6 +97,7 @@ in
     ];
 
     # Per-app cluster dashboard.
-    myStack.grafanaDashboardsByFolder."Services"."pg-overview" = builtins.readFile ./assets/postgres.json;
+    myStack.grafanaDashboardsByFolder."Services"."pg-overview" =
+      builtins.readFile ./assets/postgres.json;
   };
 }

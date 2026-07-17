@@ -29,6 +29,7 @@
   lib,
   pkgs,
   mkRootlessContainer,
+  mkDotenvSecret,
   ...
 }:
 
@@ -97,12 +98,7 @@ in
   # secret only at tunnel creation) + CF_DNS_API_TOKEN for route-sync.
   # Both sops-encrypted and tracked: the tunnel identity is in the
   # rebuild trail, so no out-of-tree backup is needed.
-  sops.secrets."cloudflared-env" = {
-    sopsFile = ./env.sops;
-    format = "dotenv";
-    key = "";
-    owner = "santiago";
-  };
+  sops.secrets."cloudflared-env" = mkDotenvSecret ./env.sops;
   sops.secrets."cloudflared-credentials" = {
     sopsFile = ./credentials.json.sops;
     format = "binary";
