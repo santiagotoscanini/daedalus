@@ -112,16 +112,30 @@ in
       widget = {
         # NOT type=gatus: OIDC security gates gatus's own API (no token
         # concept), so the native widget can't authenticate. /metrics
-        # stays open — surface the same signal via prometheus instead.
-        # Query: count of endpoints currently failing, 0 when none.
-        type = "customapi";
-        url = "http://prometheus:9090/api/v1/query?query=count%28gatus_results_endpoint_success%20%3D%3D%200%29%20or%20vector%280%29";
+        # stays open — mirror the native widget's up/down/uptime trio
+        # from prometheus instead.
+        type = "prometheusmetric";
+        url = "http://prometheus:9090";
         refreshInterval = 60000;
-        mappings = [
+        metrics = [
           {
-            field = "data.result.0.value.1";
-            format = "number";
-            label = "Failing endpoints";
+            label = "Up";
+            query = "count(gatus_results_endpoint_success == 1) or vector(0)";
+          }
+          {
+            label = "Down";
+            query = "count(gatus_results_endpoint_success == 0) or vector(0)";
+          }
+          {
+            label = "Uptime (24h)";
+            query = "100 * avg(avg_over_time(gatus_results_endpoint_success[24h]))";
+            format = {
+              type = "number";
+              suffix = "%";
+              options = {
+                maximumFractionDigits = 2;
+              };
+            };
           }
         ];
       };

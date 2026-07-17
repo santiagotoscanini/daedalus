@@ -226,6 +226,10 @@ in
       homepage = {
         group = "Monitoring";
         href = "https://grafana.toscanini.me/bookmarks";
+        # Default probe (upstream /) now 302s into the OAuth auto-login
+        # chain, which homepage's proxy can't follow. /api/health is
+        # auth-exempt.
+        siteMonitor = "http://grafana:3000/api/health";
         description = "Dashboards (prometheus + loki)";
         icon = "grafana.png";
         widget = {
