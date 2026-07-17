@@ -46,6 +46,13 @@
 _:
 
 {
+  # Dead-man's-switch: healthchecks pages if a replication stops running
+  # (period/grace: hourly).
+  myStack.hcPings = {
+    "syncoid-rpool-selfhost" = "backup-selfhost";
+    "syncoid-rpool-home" = "backup-home";
+  };
+
   services.syncoid = {
     enable = true;
     interval = "hourly";

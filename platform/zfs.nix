@@ -224,6 +224,13 @@ in
     }
   ) toMount;
 
+  # Dead-man's-switch pings (platform/hc-ping): daily snapshots + the
+  # monthly scrub must keep firing.
+  myStack.hcPings = {
+    "zfs-snapshot-daily" = "zfs-snapshot-daily";
+    "zfs-scrub" = "zfs-scrub";
+  };
+
   services.zfs = {
     autoScrub.enable = true; # monthly — catches bit-rot
     trim.enable = true; # SSD; no-op on HDDs in s2-pool

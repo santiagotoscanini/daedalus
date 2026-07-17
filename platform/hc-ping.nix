@@ -4,20 +4,14 @@
 # stops running entirely — its check goes red when no ping arrives within the
 # expected window.
 #
-# Each wired unit maps to a healthchecks slug. Pings are best-effort: the
+# Units self-register via `myStack.hcPings` (unit -> slug) from the
+# module that owns them. Pings are best-effort: the
 # curl runs with the systemd "-+" prefix (root + no sandbox, matching the
 # unit's existing zfs-allow hooks) so it can read the 0400 ping-key secret
 # and reach the network even from the sandboxed syncoid user, and it always
 # exits 0 so a healthchecks outage never fails the underlying job. Checks
 # self-provision on first ping (?create=1); set each check's period + grace
 # in the healthchecks UI.
-#
-# Wired unit -> slug (set period/grace to match):
-#   syncoid-rpool-selfhost -> backup-selfhost     (hourly)
-#   syncoid-rpool-home     -> backup-home         (hourly)
-#   zfs-snapshot-daily     -> zfs-snapshot-daily   (daily)
-#   zfs-scrub              -> zfs-scrub            (monthly)
-#   flake-autoupgrade      -> flake-autoupgrade    (weekly)
 
 {
   config,
@@ -52,31 +46,38 @@ let
     fi
     exit 0
   '';
-
-  # unit name -> healthchecks slug
-  wired = {
-    "syncoid-rpool-selfhost" = "backup-selfhost";
-    "syncoid-rpool-home" = "backup-home";
-    "zfs-snapshot-daily" = "zfs-snapshot-daily";
-    "zfs-scrub" = "zfs-scrub";
-    "flake-autoupgrade" = "flake-autoupgrade";
-  };
 in
 {
-  sops.secrets."hc-ping-key" = {
-    sopsFile = ./hc-ping/ping-key.sops;
-    format = "binary";
-    key = "";
-    # Root-only: the "-+" prefixed pings run as root. Low-sensitivity token.
-    mode = "0400";
+  options.myStack.hcPings = lib.mkOption {
+    type = lib.types.attrsOf lib.types.str;
+    default = { };
+    description = ''
+      systemd unit name -> healthchecks slug. Each entry appends
+      best-effort start/result pings to that unit. Modules register
+      their own scheduled units; set the check's period + grace in
+      the healthchecks UI (checks self-provision on first ping).
+    '';
+    example = {
+      "flake-autoupgrade" = "flake-autoupgrade";
+    };
   };
 
-  # Append start/result pings to each wired unit. mkAfter keeps them after
-  # the units' own Exec hooks (e.g. syncoid's zfs-allow / zfs-unallow).
-  systemd.services = lib.mapAttrs (_unit: slug: {
-    serviceConfig = {
-      ExecStartPre = lib.mkAfter [ "-+${hcPing} ${slug} start" ];
-      ExecStopPost = lib.mkAfter [ "-+${hcPingResult} ${slug}" ];
+  config = {
+    sops.secrets."hc-ping-key" = {
+      sopsFile = ./hc-ping/ping-key.sops;
+      format = "binary";
+      key = "";
+      # Root-only: the "-+" prefixed pings run as root. Low-sensitivity token.
+      mode = "0400";
     };
-  }) wired;
+
+    # Append start/result pings to each registered unit. mkAfter keeps them
+    # after the units' own Exec hooks (e.g. syncoid's zfs-allow / zfs-unallow).
+    systemd.services = lib.mapAttrs (_unit: slug: {
+      serviceConfig = {
+        ExecStartPre = lib.mkAfter [ "-+${hcPing} ${slug} start" ];
+        ExecStopPost = lib.mkAfter [ "-+${hcPingResult} ${slug}" ];
+      };
+    }) config.myStack.hcPings;
+  };
 }

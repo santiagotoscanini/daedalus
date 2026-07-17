@@ -330,6 +330,9 @@
         || echo "flake-autoupgrade: git push failed (offline?); lock committed locally, retrying next run"
     '';
   };
+  # Dead-man's-switch ping (platform/hc-ping): weekly.
+  myStack.hcPings."flake-autoupgrade" = "flake-autoupgrade";
+
   systemd.timers.flake-autoupgrade = {
     wantedBy = [ "timers.target" ];
     timerConfig = {
