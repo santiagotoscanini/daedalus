@@ -483,9 +483,14 @@ in
                 description = ''
                   "oidc" gates the generated router(s) — websecure AND
                   the cfweb twin when `exposeRemotely` — behind the
-                  `oidc-auth@file` forward-auth middleware (Pocket ID,
-                  see AUTH.md). "none" for apps that authenticate
-                  against Pocket ID natively or keep their own auth.
+                  generated `oidc-<name>@file` forward-auth middleware.
+                  Each gated app is its OWN Pocket ID client (consent +
+                  audit log name the service): create it via the admin
+                  API and land its creds in stacks/traefik/env.sops as
+                  POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET} — see AUTH.md
+                  for the per-service rollout recipe. "none" for apps
+                  that authenticate against Pocket ID natively or keep
+                  their own auth.
                 '';
               };
               homepage = lib.mkOption {
@@ -785,17 +790,17 @@ in
     # for edge cases at the same time.
     myStack.traefikRoutes =
       let
-        baseRoute = w: {
+        baseRoute = n: w: {
           host = w.hostname;
           serviceUrl = resolveUrl w;
-          middlewares = lib.optional (w.auth == "oidc") "oidc-auth@file";
+          middlewares = lib.optional (w.auth == "oidc") "oidc-${n}@file";
         };
       in
-      (lib.mapAttrs (_: baseRoute) cfg.webApps)
+      (lib.mapAttrs baseRoute cfg.webApps)
       // (lib.mapAttrs' (
         n: w:
         lib.nameValuePair "${n}-cf" (
-          baseRoute w
+          baseRoute n w
           // {
             entrypoint = "cfweb";
           }

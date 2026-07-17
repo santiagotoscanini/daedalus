@@ -77,6 +77,20 @@ Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.tosca
   network-dependent).
 - Pocket ID: keep `EMAIL_ONE_TIME_ACCESS_*` OFF (passkey-only);
   per-client "allowed groups" = coarse authorization before any app.
+- Per-service clients: every gated app is its OWN Pocket ID client
+  (consent + audit log show the service name; per-client group
+  restrictions possible). Rollout recipe per service:
+  1. `POST /api/oidc/clients` (header `X-API-KEY` = STATIC_API_KEY from
+     `stacks/pocket-id/env.sops`) with `name` = display name,
+     `callbackURLs` = `logoutCallbackURLs` =
+     `https://<hostname>/oidc/callback`, `pkceEnabled: true`,
+     `skipConsent: true` (own infra); then
+     `POST /api/oidc/clients/<id>/secret`.
+  2. Append `POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET}` (name uppercased,
+     dashes to underscores) to `stacks/traefik/env.sops`.
+  3. Set `auth = "oidc"` on the webApp entry; rebuild. env.sops-only
+     changes do NOT restart traefik (same path) — `systemctl restart
+     podman-traefik` by hand.
 - Lockout paths: SSH by IP always works; NixOS generation rollback;
   per-app escapes noted per row above.
 - Order per service: gate first → verify from LAN + tunnel → only then

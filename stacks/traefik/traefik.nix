@@ -118,10 +118,42 @@ in
   # lives in stacks/app-db/).
   myStack.traefikStaticRules."tls-opts.yml" = builtins.readFile ./assets/tls-opts.yml;
 
-  # Pocket ID forward-auth middleware (AUTH.md). POCKET_OIDC_* values
-  # come from env.sops via the plugin's own ''${VAR} resolution — the
-  # rendered YAML in /nix/store carries no secrets.
-  myStack.traefikStaticRules."oidc-middleware.yml" = builtins.readFile ./assets/oidc-middleware.yml;
+  # One forward-auth middleware per gated webApp (`auth = "oidc"`),
+  # each dialing Pocket ID as its OWN client, so consent screens and
+  # the audit log name the actual service. Creds live in env.sops as
+  # POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET} (name uppercased, dashes to
+  # underscores); the PLUGIN resolves the ''${VAR} placeholders from
+  # traefik's process env — the rendered file in /nix/store carries no
+  # secrets. Session cookies stay host-scoped (no SessionCookie.Domain):
+  # one silent redirect through id.* per app instead of a domain-wide
+  # cookie every subdomain could replay. Emitted as JSON (valid YAML)
+  # to keep this pure string templating, no IFD.
+  myStack.traefikStaticRules."oidc-middlewares.yml" =
+    let
+      envPrefix = n: "POCKET_OIDC_" + lib.toUpper (lib.replaceStrings [ "-" ] [ "_" ] n);
+    in
+    builtins.toJSON {
+      http.middlewares = lib.mapAttrs' (
+        n: _:
+        lib.nameValuePair "oidc-${n}" {
+          plugin.oidc = {
+            Secret = "\${POCKET_OIDC_COOKIE_SECRET}";
+            Provider = {
+              Url = "https://id.${cfg.baseDomain}";
+              ClientId = "\${${envPrefix n}_CLIENT_ID}";
+              ClientSecret = "\${${envPrefix n}_CLIENT_SECRET}";
+              UsePkce = true;
+            };
+            Scopes = [
+              "openid"
+              "profile"
+              "email"
+              "groups"
+            ];
+          };
+        }
+      ) (lib.filterAttrs (_: w: w.auth == "oidc") cfg.webApps);
+    };
 
   # Dashboard / API — LAN-only via pi-hole dns.hosts; `api@internal`
   # serves /api/* and /dashboard/*.
