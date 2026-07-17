@@ -27,10 +27,10 @@
 
   myStack.homepageServices."Media" = [
     {
-      name = "Jellyseerr";
+      name = "Seerr";
       href = "https://jellyseerr.toscanini.me";
       description = "Media requests & discovery";
-      icon = "jellyseerr.png";
+      icon = "seerr.png";
       siteMonitor = "http://jellyseerr:5055";
       widget = {
         type = "seerr";
