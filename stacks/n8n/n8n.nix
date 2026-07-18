@@ -40,9 +40,15 @@ let
     anchor = "\t\tif (shouldShowNormalLogin() || !isSigninPage()) return;\n\n\t\tinjectSsoButton();\n\n\t\tvar observer"
     repl = "\t\tif (shouldShowNormalLogin() || !isSigninPage()) return;\n\n\t\tif (!new URLSearchParams(window.location.search).get('error')) { window.location.replace('/auth/oidc/login'); return; }\n\n\t\tinjectSsoButton();\n\n\t\tvar observer"
     assert src.count(anchor) == 1, "anchor not unique"
+    src = src.replace(anchor, repl)
+    # Don't let the browser cache the login-flow script — it must reflect
+    # config/redirect changes immediately (tiny, only served on /signin).
+    cache_anchor = "res.set('Cache-Control', 'public, max-age=3600');"
+    assert src.count(cache_anchor) == 1, "cache anchor not unique"
+    src = src.replace(cache_anchor, "res.set('Cache-Control', 'no-store');")
     import os
     os.makedirs(os.environ["out"])
-    open(os.path.join(os.environ["out"], "hooks.js"), "w").write(src.replace(anchor, repl))
+    open(os.path.join(os.environ["out"], "hooks.js"), "w").write(src)
     PATCH
   '';
 in
