@@ -53,7 +53,7 @@ let
   '';
 in
 {
-  # Declared here (not in common.nix) per the owning-module convention:
+  # Declared here (not in platform/podman.nix) per the owning-module convention:
   # every mail-sending consumer reads these; this module owns the relay.
   options.fleet.mail = {
     sender = lib.mkOption {

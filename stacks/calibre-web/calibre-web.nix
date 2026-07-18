@@ -8,7 +8,7 @@
 # The library lives on the HDD pool at /s2/books — its own snapshotted
 # dataset (platform/zfs.nix) so it rides the s2-pool schedule and stays off
 # the 16K-recordsize selfhost dataset. The /books bind auto-emits
-# RequiresMountsFor=/s2/books (platform/common.nix), closing the cold-boot
+# RequiresMountsFor=/s2/books (platform/podman.nix), closing the cold-boot
 # race where the container could start before the dataset mounts.
 #
 # calibre itself (ebook-convert/calibredb for library init, format

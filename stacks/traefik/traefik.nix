@@ -107,7 +107,7 @@ in
   # membership to this list when the postgres TCP route is active.
   fleet.bridgeMemberships.traefik = [ "traefik" ];
   # Pinned so TRUSTED_PROXIES-style consumers can reference it (see
-  # bridgeSubnets in platform/common.nix).
+  # bridgeSubnets in platform/podman.nix).
   fleet.bridgeSubnets.traefik = "10.89.7.0/24";
 
   # Pre-creating the file 0600 keeps a fresh restore from letting podman

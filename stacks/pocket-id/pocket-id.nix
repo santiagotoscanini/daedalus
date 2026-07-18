@@ -61,7 +61,7 @@
     # after it: verdaccio, wealthfolio) until the app's own healthcheck
     # passes, so first-attempt discovery can't race a cold boot.
     systemd.services.podman-pocket-id.serviceConfig.ExecStartPost =
-      # 120s: generous because a mass restart (a common.nix change touches
+      # 120s: generous because a mass restart (a podman.nix change touches
       # every unit) starts the whole fleet at once and the IdP competes
       # for CPU with ~50 containers.
       pkgs.writeShellScript "wait-pocket-id-ready" ''

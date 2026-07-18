@@ -108,7 +108,7 @@ echo "new image: $running -> $new_id ($after) — restarting $UNIT"
 echo "$after failed" > "$STATE"
 systemctl restart "$UNIT"
 
-# The container unit is Type=oneshot (see platform/common.nix): `podman run -d`
+# The container unit is Type=oneshot (see platform/podman.nix): `podman run -d`
 # returns in milliseconds, so systemd calls the restart a success even for a
 # container that dies on startup. Asking traefik is the only honest signal.
 # --resolve rather than DNS, so a pi-hole hiccup can't read as a dead app.

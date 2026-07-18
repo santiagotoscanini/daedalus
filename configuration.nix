@@ -54,7 +54,7 @@
 
   # ── Networking ──────────────────────────────────────────────────────────────
 
-  # Host identity consumed fleet-wide via fleet.* (platform/common.nix):
+  # Host identity consumed fleet-wide via fleet.* (platform/podman.nix):
   # the LAN IP below also feeds the interface config, so this block is
   # the single place these values are written.
   fleet = {

@@ -45,56 +45,56 @@ in
 {
   config = lib.mkMerge [
     (mkGluetunInstance {
-    name = "gluetun-ipcrawl";
-    exporterName = "gluetun-exporter-ipcrawl";
-    secretName = "ipcrawl-wg0";
-    wgConfSops = ./wg0.conf.sops;
-    authConfig = ./assets/config.toml;
-    stateRoot = "/home/santiago/selfhost/ipcrawl-vpn";
-    keyExpiry = "2027-07-14";
-    reminderDates = [
-      "2027-06-14" # 30 days out
-      "2027-07-07" # 7 days out
-    ];
-    reminderPrefix = "ipcrawl";
-    subject = "ipcrawl VPN (gluetun-ipcrawl)";
-    runbookPath = "/etc/nixos/stacks/ipcrawl-vpn/ipcrawl-vpn.nix";
+      name = "gluetun-ipcrawl";
+      exporterName = "gluetun-exporter-ipcrawl";
+      secretName = "ipcrawl-wg0";
+      wgConfSops = ./wg0.conf.sops;
+      authConfig = ./assets/config.toml;
+      stateRoot = "/home/santiago/selfhost/ipcrawl-vpn";
+      keyExpiry = "2027-07-14";
+      reminderDates = [
+        "2027-06-14" # 30 days out
+        "2027-07-07" # 7 days out
+      ];
+      reminderPrefix = "ipcrawl";
+      subject = "ipcrawl VPN (gluetun-ipcrawl)";
+      runbookPath = "/etc/nixos/stacks/ipcrawl-vpn/ipcrawl-vpn.nix";
 
-    # Host-port convention: the TV gluetun owns 8000 (control) + 8001
-    # (exporter); this instance publishes the same in-netns ports at +2.
-    # A third gluetun instance would take 8004/8005. None of these are
-    # firewall-opened; all LAN-only via host.containers.internal.
-    ports = [
-      "3100:3000" # ipcrawl UI (traefik dials host.containers.internal:3100)
-      "8002:8000" # gluetun control API (homepage widget)
-      "8003:8001" # gluetun-exporter → prometheus
-    ];
+      # Host-port convention: the TV gluetun owns 8000 (control) + 8001
+      # (exporter); this instance publishes the same in-netns ports at +2.
+      # A third gluetun instance would take 8004/8005. None of these are
+      # firewall-opened; all LAN-only via host.containers.internal.
+      ports = [
+        "3100:3000" # ipcrawl UI (traefik dials host.containers.internal:3100)
+        "8002:8000" # gluetun control API (homepage widget)
+        "8003:8001" # gluetun-exporter → prometheus
+      ];
 
-    # Distinct job so the Grafana panels can tell this instance apart
-    # from the TV gluetun (job="gluetun").
-    scrapeJob = "gluetun-ipcrawl";
-    scrapeTarget = "host.containers.internal:8003";
+      # Distinct job so the Grafana panels can tell this instance apart
+      # from the TV gluetun (job="gluetun").
+      scrapeJob = "gluetun-ipcrawl";
+      scrapeTarget = "host.containers.internal:8003";
 
-    homepage = {
-      name = "Gluetun (ipcrawl)";
-      href = "https://ipcrawl.toscanini.me";
-      description = "ProtonVPN WireGuard tunnel (netns egress for ipcrawl)";
-      icon = "gluetun.png";
-      siteMonitor = "http://host.containers.internal:8002/v1/publicip/ip";
-      widget = {
-        type = "gluetun";
-        url = "http://host.containers.internal:8002";
-        version = 2;
+      homepage = {
+        name = "Gluetun (ipcrawl)";
+        href = "https://ipcrawl.toscanini.me";
+        description = "ProtonVPN WireGuard tunnel (netns egress for ipcrawl)";
+        icon = "gluetun.png";
+        siteMonitor = "http://host.containers.internal:8002/v1/publicip/ip";
+        widget = {
+          type = "gluetun";
+          url = "http://host.containers.internal:8002";
+          version = 2;
+        };
       };
-    };
-  })
-  {
-    fleet.logStacks.ipcrawl-vpn = [
-      "gluetun-ipcrawl"
-      "gluetun-exporter-ipcrawl"
-    ];
+    })
+    {
+      fleet.logStacks.ipcrawl-vpn = [
+        "gluetun-ipcrawl"
+        "gluetun-exporter-ipcrawl"
+      ];
 
-    fleet.statePaths."/home/santiago/selfhost/ipcrawl-vpn" = { };
-  }
+      fleet.statePaths."/home/santiago/selfhost/ipcrawl-vpn" = { };
+    }
   ];
 }

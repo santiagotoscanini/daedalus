@@ -131,7 +131,7 @@ in
   };
 
   # Wait for the rendered SMTP env file (the app-db ordering comes
-  # from appDatabases.consumers). Merges with common.nix's override.
+  # from appDatabases.consumers). Merges with podman.nix's override.
   systemd.services.podman-n8n = {
     after = [ "n8n-smtp-env.service" ];
     wants = [ "n8n-smtp-env.service" ];

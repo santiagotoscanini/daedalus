@@ -332,7 +332,7 @@ in
       # Direct pg edge on every consumer. At boot the bootstrap chain
       # orders this transitively (consumer → bootstrap → pg), but
       # systemd ordering is per-transaction: a mass restart (a
-      # common.nix change touching every unit) re-queues consumers while
+      # podman.nix change touching every unit) re-queues consumers while
       # the already-active bootstrap stays put, and tenants then race
       # pg's start. Declaring the edge on the consumer itself keeps it
       # in every transaction.

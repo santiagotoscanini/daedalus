@@ -439,7 +439,7 @@ let
           inherit (app) image;
 
           # A /s2/* hostPath additionally picks up RequiresMountsFor for
-          # free — common.nix extracts it from `volumes`, closing the
+          # free — podman.nix extracts it from `volumes`, closing the
           # cold-boot race where the container starts before the ZFS
           # dataset mounts and writes into the empty underlay.
           volumes = lib.optional storageEnabled "${storageHostPath}:/app/data";

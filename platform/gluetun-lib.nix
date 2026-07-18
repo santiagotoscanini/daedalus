@@ -112,7 +112,7 @@ rec {
       };
 
       # `[ ]` = pasta, no bridge — which still earns the mandatory
-      # Type=oneshot systemd override from platform/common.nix. The
+      # Type=oneshot systemd override from platform/podman.nix. The
       # exporter shares the owner's netns and needs the same.
       fleet.bridgeMemberships.${name} = [ ];
       fleet.bridgeMemberships.${exporterName} = [ ];
