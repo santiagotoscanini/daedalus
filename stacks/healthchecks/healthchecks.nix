@@ -27,6 +27,13 @@
 {
   myStack.containerNetworks.healthchecks = "traefik";
 
+  # Database on the shared app-db cluster (see stacks/app-db/).
+  myStack.appDatabases.healthchecks = { };
+  systemd.services.podman-healthchecks = {
+    after = [ "app-db-healthchecks-bootstrap.service" ];
+    wants = [ "app-db-healthchecks-bootstrap.service" ];
+  };
+
   myStack.webApps.healthchecks = {
     hostname = "hc.toscanini.me";
     serviceName = "healthchecks";
@@ -73,8 +80,12 @@
       REMOTE_USER_HEADER = "HTTP_X_FORWARDED_EMAIL";
       DEBUG = "False";
       REGISTRATION_OPEN = "False";
-      DB = "sqlite";
-      DB_NAME = "/data/hc.sqlite";
+      # DB_PASSWORD rides the app-db bootstrap env file.
+      DB = "postgres";
+      DB_HOST = "pg";
+      DB_PORT = "5432";
+      DB_NAME = "healthchecks";
+      DB_USER = "healthchecks";
       EMAIL_HOST = config.myStack.mail.smtpHost;
       EMAIL_PORT = toString config.myStack.mail.smtpPort;
       EMAIL_HOST_USER = config.myStack.mail.sender;
@@ -82,7 +93,10 @@
       DEFAULT_FROM_EMAIL = config.myStack.mail.sender;
     };
 
-    environmentFiles = [ config.sops.secrets."healthchecks-env".path ];
+    environmentFiles = [
+      config.sops.secrets."healthchecks-env".path
+      "/etc/nixos/stacks/app-db/secrets/healthchecks/env"
+    ];
 
     volumes = [
       "/home/santiago/selfhost/healthchecks/data:/data"
@@ -90,6 +104,7 @@
 
     extraOptions = [
       "--network=traefik-net"
+      "--network=app-db-net" # dials pg:5432
     ];
   };
 }

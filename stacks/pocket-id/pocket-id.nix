@@ -42,6 +42,15 @@
 
   myStack.containerNetworks.pocket-id = "traefik";
 
+  # Database on the shared app-db cluster (db/role `pocket_id` —
+  # hyphens aren't valid there). DB_CONNECTION_STRING rides the
+  # bootstrap env file.
+  myStack.appDatabases.pocket_id = { };
+  systemd.services.podman-pocket-id = {
+    after = [ "app-db-pocket_id-bootstrap.service" ];
+    wants = [ "app-db-pocket_id-bootstrap.service" ];
+  };
+
   myStack.webApps.pocket-id = {
     hostname = "id.toscanini.me";
     serviceName = "pocket-id";
@@ -67,9 +76,13 @@
       "/home/santiago/selfhost/pocket-id/data:/app/data"
     ];
 
-    environmentFiles = [ config.sops.secrets."pocket-id-env".path ];
+    environmentFiles = [
+      config.sops.secrets."pocket-id-env".path
+      "/etc/nixos/stacks/app-db/secrets/pocket_id/env"
+    ];
 
     environment = {
+      DB_PROVIDER = "postgres";
       APP_URL = "https://id.toscanini.me";
       ANALYTICS_DISABLED = "true";
       # Traefik fronts everything; without this the audit log records
@@ -82,6 +95,7 @@
 
     extraOptions = [
       "--network=traefik-net"
+      "--network=app-db-net" # dials pg:5432
     ];
   };
 }

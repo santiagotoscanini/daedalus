@@ -68,16 +68,20 @@ SQL
 done
 
 # Write env file last so a partial bootstrap doesn't leave a stale
-# env file pointing at a non-existent role. The password is emitted
-# under every name our images read (n8n: DB_POSTGRESDB_PASSWORD,
-# seerr: DB_PASS, grafana: GF_DATABASE_PASSWORD, bazarr:
-# POSTGRES_PASSWORD) — one uniform file shape for every tenant.
+# env file pointing at a non-existent role. The password (and the
+# connection URL) are emitted under every name our images read —
+# n8n: DB_POSTGRESDB_PASSWORD, seerr: DB_PASS, grafana:
+# GF_DATABASE_PASSWORD, healthchecks: DB_PASSWORD, bazarr:
+# POSTGRES_PASSWORD, pocket-id: DB_CONNECTION_STRING — one uniform
+# file shape for every tenant.
 install -m 0600 -o santiago -g users /dev/stdin "$APP_ENV_FILE" <<EOF
 POSTGRES_USER=${APP_NAME}
 POSTGRES_DB=${APP_NAME}
 POSTGRES_PASSWORD=$APP_PWD
 DB_POSTGRESDB_PASSWORD=$APP_PWD
 DB_PASS=$APP_PWD
+DB_PASSWORD=$APP_PWD
 GF_DATABASE_PASSWORD=$APP_PWD
 DATABASE_URL=postgresql://${APP_NAME}:$APP_PWD@pg:5432/${APP_NAME}
+DB_CONNECTION_STRING=postgresql://${APP_NAME}:$APP_PWD@pg:5432/${APP_NAME}
 EOF

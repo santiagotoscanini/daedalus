@@ -64,9 +64,13 @@ let
   gatusConfig = pkgs.writeText "gatus.yaml" (
     builtins.toJSON {
       web.port = 8080;
+      # Uptime history on the shared app-db cluster; the password
+      # placeholder expands from the app-db bootstrap env file. Fresh
+      # history at migration (2026-07-18) — gatus has no sqlite->pg
+      # migration path; config regenerates from nix either way.
       storage = {
-        type = "sqlite";
-        path = "/data/data.db";
+        type = "postgres";
+        path = "postgres://gatus:\${POSTGRES_PASSWORD}@pg:5432/gatus?sslmode=disable";
       };
       metrics = true;
       ui.title = "s2-server · status";
@@ -88,6 +92,13 @@ let
 in
 {
   myStack.containerNetworks.gatus = "traefik";
+
+  # Database on the shared app-db cluster (see stacks/app-db/).
+  myStack.appDatabases.gatus = { };
+  systemd.services.podman-gatus = {
+    after = [ "app-db-gatus-bootstrap.service" ];
+    wants = [ "app-db-gatus-bootstrap.service" ];
+  };
 
   # GATUS_OIDC_CLIENT_ID + GATUS_OIDC_CLIENT_SECRET (Pocket ID SSO):
   # sops-encrypted env.sops. Edit with `sops env.sops`.
@@ -151,7 +162,10 @@ in
 
     # GATUS_OIDC_CLIENT_ID + GATUS_OIDC_CLIENT_SECRET: sops-encrypted
     # env.sops, decrypted to /run/secrets/gatus-env at activation.
-    environmentFiles = [ config.sops.secrets."gatus-env".path ];
+    environmentFiles = [
+      config.sops.secrets."gatus-env".path
+      "/etc/nixos/stacks/app-db/secrets/gatus/env"
+    ];
 
     volumes = [
       "${gatusConfig}:/config/config.yaml:ro"
@@ -160,6 +174,7 @@ in
 
     extraOptions = [
       "--network=traefik-net"
+      "--network=app-db-net" # dials pg:5432
     ];
   };
 }
