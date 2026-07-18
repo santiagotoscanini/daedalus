@@ -18,8 +18,16 @@
 {
   myStack.containerNetworks.seerr = "traefik";
 
-  # Database on the shared app-db cluster (see stacks/app-db/).
+  # Database on the shared app-db cluster (see stacks/app-db/); the
+  # container joins app-db-net and dials `pg` by container DNS.
   myStack.appDatabases.seerr = { };
+
+  # The bootstrap gates `podman-app-<name>` for apps-platform tenants;
+  # seerr is a stack, so pull it in explicitly.
+  systemd.services.podman-seerr = {
+    after = [ "app-db-seerr-bootstrap.service" ];
+    wants = [ "app-db-seerr-bootstrap.service" ];
+  };
 
   # The image's node user (uid 1000) maps to host 100999; the config
   # dir must exist with that ownership or a fresh install fails on
@@ -50,8 +58,20 @@
       "/home/santiago/selfhost/seerr/config:/app/config"
     ];
 
+    environment = {
+      DB_TYPE = "postgres";
+      DB_HOST = "pg";
+      DB_PORT = "5432";
+      DB_USER = "seerr";
+      DB_NAME = "seerr";
+    };
+
+    # DB_PASS from the app-db bootstrap env file.
+    environmentFiles = [ "/etc/nixos/stacks/app-db/secrets/seerr/env" ];
+
     extraOptions = [
       "--network=traefik-net"
+      "--network=app-db-net" # dials pg:5432
     ];
   };
 }
