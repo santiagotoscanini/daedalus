@@ -46,7 +46,6 @@ in
   config = lib.mkMerge [
     (mkGluetunInstance {
       name = "gluetun-ipcrawl";
-      exporterName = "gluetun-exporter-ipcrawl";
       secretName = "ipcrawl-wg0";
       wgConfSops = ./wg0.conf.sops;
       authConfig = ./assets/config.toml;
@@ -70,9 +69,8 @@ in
         "8003:8001" # gluetun-exporter → prometheus
       ];
 
-      # Distinct job so the Grafana panels can tell this instance apart
-      # from the TV gluetun (job="gluetun").
-      scrapeJob = "gluetun-ipcrawl";
+      # job defaults to the instance name ("gluetun-ipcrawl"), distinct
+      # from the TV gluetun's job="gluetun" for the Grafana panels.
       scrapeTarget = "host.containers.internal:8003";
 
       homepage = {
@@ -91,7 +89,7 @@ in
     {
       fleet.logStacks.ipcrawl-vpn = [
         "gluetun-ipcrawl"
-        "gluetun-exporter-ipcrawl"
+        "gluetun-ipcrawl-exporter"
       ];
 
       fleet.statePaths."/home/santiago/selfhost/ipcrawl-vpn" = { };

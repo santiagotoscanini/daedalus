@@ -59,21 +59,32 @@ rec {
   mkGluetunInstance =
     {
       name, # netns-owner container name ("gluetun", "gluetun-ipcrawl")
-      exporterName, # exporter container name
-      secretName, # sops secret key for the wg config
+      exporterName ? "${name}-exporter", # exporter container name
+      secretName ? "${name}-wg0", # sops secret key for the wg config
       wgConfSops, # ./wg0.conf.sops (sops-encrypted binary, IN the rebuild trail)
       authConfig, # ./assets/config.toml — control-server auth policy (tracked)
       stateRoot, # host dir that holds <stateRoot>/gluetun
       keyExpiry, # "YYYY-MM-DD" — ProtonVPN key expiry
       reminderDates, # OnCalendar list for the expiry reminder (30/7 days out)
-      reminderPrefix, # unit name: <prefix>-wg-expiry-reminder
+      reminderPrefix ? name, # unit name: <prefix>-wg-expiry-reminder
       subject, # what the tunnel serves, for the reminder mail
       runbookPath, # file whose header holds the renewal runbook
       ports, # host-publish list — ALL netns tenants' ports live here
       environment ? { }, # instance-specific gluetun env (kill-switch holes, port forwarding)
-      scrapeJob, # prometheus job_name for the exporter
+      scrapeJob ? name, # prometheus job_name for the exporter
       scrapeTarget, # exporter target ("host.containers.internal:<port>")
       homepage ? null, # tile attrset for homepageServices."Network", or null
+      # In-netns web UIs published on this gluetun, each
+      # { name, port, healthPath, homepage, authBypassRule?, healthHeaders? }.
+      # Emits the fleet.webApps entry per UI: serviceUrl dials the
+      # host-published port (host.containers.internal — the netns owner
+      # can't join traefik-net without mixing VPN-exit and bridge
+      # traffic) and auth = "oidc" gates the browser path; the bypass
+      # rule lets machine callers (API keys, RPC paths) through, since
+      # they can't do an OIDC redirect. The instance still lists each
+      # UI's port in `ports` — order there is load-bearing (it fixes
+      # the container's ExecStart).
+      webUis ? [ ],
     }:
     {
       # ProtonVPN shows the private key ONCE at export — the sops copy
@@ -140,6 +151,21 @@ rec {
       ];
 
       fleet.homepageServices."Network" = lib.optional (homepage != null) homepage;
+
+      fleet.webApps = lib.listToAttrs (
+        map (
+          u:
+          lib.nameValuePair u.name (
+            {
+              inherit (u) homepage healthPath;
+              serviceUrl = "http://host.containers.internal:${toString u.port}";
+              auth = "oidc";
+            }
+            // lib.optionalAttrs (u ? authBypassRule) { inherit (u) authBypassRule; }
+            // lib.optionalAttrs (u ? healthHeaders) { inherit (u) healthHeaders; }
+          )
+        ) webUis
+      );
 
       virtualisation.oci-containers.containers.${name} = mkRootlessContainer {
         image = gluetunImage;

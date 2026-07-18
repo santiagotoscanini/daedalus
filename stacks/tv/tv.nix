@@ -79,12 +79,14 @@ let
   # Pocket ID gate.
   arrApiBypass = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
 
-  # gluetun-published web UIs — one entry per service, generating the
-  # port publish on gluetun, the webApp (traefik dials the host port
-  # via host.containers.internal), and the homepage tile. A LIST, not
-  # an attrset: the order fixes gluetun's ports block, and reordering
-  # would change podman-gluetun's ExecStart → gluetun recreate → every
-  # netns tenant needs a manual restart.
+  # gluetun-published web UIs — one entry per service; mkGluetunInstance
+  # turns each into a Pocket-ID-gated webApp (AUTH.md: every app's own
+  # login is disabled — arrs: AuthenticationMethod=External; qbt: subnet
+  # whitelist; nzbget: no password; bazarr: auth type null — so the gate
+  # is the sole browser auth). A LIST, not an attrset: the order fixes
+  # gluetun's ports block below, and reordering would change
+  # podman-gluetun's ExecStart → gluetun recreate → every netns tenant
+  # needs a manual restart.
   vpnUis = [
     {
       name = "qbittorrent";
@@ -211,7 +213,6 @@ in
     # platform/gluetun-lib.nix. Everything instance-specific is right here.
     (mkGluetunInstance {
       name = "gluetun";
-      exporterName = "gluetun-exporter";
       secretName = "tv-wg0";
       wgConfSops = ./wg0.conf.sops;
       authConfig = ./assets/config.toml;
@@ -223,6 +224,7 @@ in
       ];
       reminderPrefix = "tv";
       subject = "TV VPN (gluetun)";
+      webUis = vpnUis;
       runbookPath = "/etc/nixos/stacks/tv/tv.nix";
 
       # Ports for all containers sharing gluetun's netns — the web UIs
@@ -254,7 +256,6 @@ in
         VPN_PORT_FORWARDING_UP_COMMAND = "/bin/sh -c 'wget -O- --retry-connrefused --post-data \"json={\\\"listen_port\\\":{{PORTS}}}\" http://127.0.0.1:8090/api/v2/app/setPreferences 2>&1'";
       };
 
-      scrapeJob = "gluetun";
       scrapeTarget = "host.containers.internal:8001";
 
       homepage = {
@@ -298,8 +299,12 @@ in
         bazarr.consumers = [ "bazarr" ];
       };
 
+      # gluetun + gluetun-exporter's entries come from mkGluetunInstance;
+      # the remaining tenants are declared here.
       fleet.bridgeMemberships =
-        lib.listToAttrs (map (n: lib.nameValuePair n [ ]) ([ "gluetun" ] ++ netnsTenants))
+        lib.listToAttrs (
+          map (n: lib.nameValuePair n [ ]) (lib.subtractLists [ "gluetun-exporter" ] netnsTenants)
+        )
         // {
           jellyfin = [ "traefik" ];
         };
@@ -312,32 +317,10 @@ in
       ]
       ++ netnsTenants;
 
-      # Jellyfin is bridge-routed. The gluetun-netns UIs (from vpnUis) use
-      # explicit serviceUrl pointing at gluetun's host-published ports —
-      # putting gluetun on traefik-net would mix VPN-exit and bridge traffic.
+      # The gluetun-netns webApps come from mkGluetunInstance (webUis).
+      # Jellyfin is bridge-routed — outside the VPN.
       fleet.webApps =
-        lib.listToAttrs (
-          map (
-            u:
-            lib.nameValuePair u.name (
-              {
-                inherit (u) homepage healthPath;
-                serviceUrl = "http://host.containers.internal:${toString u.port}";
-                # Pocket ID gate (AUTH.md). Each app's own login is disabled
-                # (arrs: AuthenticationMethod=External; qbt: subnet whitelist;
-                # nzbget: no password; bazarr: auth type null), so the gate
-                # is the sole browser auth. authBypassRule lets machine
-                # callers (seerr, prowlarr<->arr sync, recyclarr, homepage
-                # widgets) through by their own API key / RPC path — they
-                # can't do an OIDC redirect.
-                auth = "oidc";
-              }
-              // lib.optionalAttrs (u ? authBypassRule) { inherit (u) authBypassRule; }
-              // lib.optionalAttrs (u ? healthHeaders) { inherit (u) healthHeaders; }
-            )
-          ) vpnUis
-        )
-        // {
+        {
           jellyfin = {
             serviceName = "jellyfin";
             port = 8096;
