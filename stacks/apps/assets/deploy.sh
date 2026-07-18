@@ -119,9 +119,12 @@ systemctl restart "$UNIT"
 deadline=$((SECONDS + HEALTH_TIMEOUT))
 code=000
 while [ "$SECONDS" -lt "$deadline" ]; do
+  # The fallback must be an assignment, not appended output: curl prints
+  # its -w format (000) even on a failed transfer, so `|| echo 000` inside
+  # the substitution would yield "000000" — which passes both guards below.
   code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 \
            --resolve "$APP_HOST:443:$LAN_IP" \
-           "https://$APP_HOST$HEALTH_PATH" || echo 000)
+           "https://$APP_HOST$HEALTH_PATH") || code=000
 
   if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
     echo "$after ok" > "$STATE"
