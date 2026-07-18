@@ -445,10 +445,12 @@ in
         # systemd-tmpfiles refuses to descend from the santiago-owned
         # /home prefix into differently-owned children ("unsafe path
         # transition") and silently skips every rule under /home.
-        # Sorted paths create parents before children; ownership and
-        # mode are enforced non-recursively at boot and whenever the
-        # declaration changes. Every podman-<name> unit orders after
-        # this via mkContainerOverride.
+        # Sorted paths create declared parents before children; missing
+        # UNdeclared parents are created santiago-owned first (the
+        # fresh-restore path — existing directories are never re-owned).
+        # Ownership and mode are enforced non-recursively at boot and
+        # whenever the declaration changes. Every podman-<name> unit
+        # orders after this via mkContainerOverride.
         #
         # Failure semantics: one bad entry logs and continues (the other
         # entries still apply), then the unit fails at the end — loud via
@@ -465,7 +467,22 @@ in
             RemainAfterExit = true;
           };
           script =
-            "fail=0\n"
+            ''
+              fail=0
+              # Create missing parents santiago-owned; never re-own an
+              # existing directory ([ -d ] walk stops at the first one).
+              ensure_parents() {
+                local missing=() parent i
+                parent=$(dirname "$1")
+                while [ ! -d "$parent" ]; do
+                  missing+=("$parent")
+                  parent=$(dirname "$parent")
+                done
+                for ((i = ''${#missing[@]} - 1; i >= 0; i--)); do
+                  install -d -o santiago -g users "''${missing[$i]}"
+                done
+              }
+            ''
             + lib.concatMapStrings (
               path:
               let
@@ -475,7 +492,8 @@ in
                 p = lib.escapeShellArg path;
               in
               ''
-                { ${if d.type == "d" then "mkdir -p ${p}" else "[ -e ${p} ] || : > ${p}"} \
+                { ensure_parents ${p} \
+                  && ${if d.type == "d" then "mkdir -p ${p}" else "[ -e ${p} ] || : > ${p}"} \
                   && chown ${owner} ${p} && chmod ${d.mode} ${p}; } \
                   || { echo "state-paths: failed to apply ${p}" >&2; fail=1; }
               ''

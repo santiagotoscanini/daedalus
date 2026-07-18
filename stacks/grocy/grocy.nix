@@ -20,6 +20,9 @@
   # exist with that ownership or a fresh install fails on first write.
   fleet.statePaths = {
     "/home/santiago/selfhost/grocy/config".uid = 911;
+    # data/ holds grocy.db — declared explicitly so a fresh restore
+    # creates it abc-owned, not as a root mkdir -p side effect.
+    "/home/santiago/selfhost/grocy/config/data".uid = 911;
     # Grocy reads highest-precedence settings from data/settingoverrides
     # (over env + config.php); the bind-mounted .txt files below land here.
     "/home/santiago/selfhost/grocy/config/data/settingoverrides".uid = 911;
