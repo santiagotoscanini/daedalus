@@ -278,7 +278,7 @@ in
   };
 
   virtualisation.oci-containers.containers.grafana = mkRootlessContainer {
-    image = "docker.io/grafana/grafana:12.4.5@sha256:26b8f35a9e4e4431995cf64c3f396505a4faf17bcfc19f9ed84943ec6bfd5ecd";
+    image = "docker.io/grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63";
     dependsOn = [ "prometheus" ];
 
     volumes = [
@@ -342,7 +342,7 @@ in
   # and reports actual NIC traffic. Inside a bridge it would only see
   # a synthetic `eth0` with meaningless 0 traffic.
   virtualisation.oci-containers.containers.node-exporter = mkRootlessContainer {
-    image = "docker.io/prom/node-exporter:v1.12.0@sha256:9b0ade5e607f9dbedb0a8e11151b6011ae5bd79304c261804cfdd2cadf200a80";
+    image = "docker.io/prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0";
 
     cmd = [
       "--path.procfs=/host/proc"

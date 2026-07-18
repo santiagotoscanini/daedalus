@@ -63,7 +63,7 @@ in
     };
 
     virtualisation.oci-containers.containers."pg-exporter" = mkRootlessContainer {
-      image = "quay.io/prometheuscommunity/postgres-exporter:v0.20.1";
+      image = "quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e";
       # DATA_SOURCE_NAME is read directly from podman's --env-file.
       # The DSN file stays out of `podman inspect` output (env file
       # contents aren't reflected in Config.Env when injected via

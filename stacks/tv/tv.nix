@@ -356,7 +356,7 @@ in
   };
 
   virtualisation.oci-containers.containers.nzbget = mkNetnsTenant {
-    image = "docker.io/linuxserver/nzbget:v26.2-ls253@sha256:20439658454cbe39f8be90b7d8e5027340c7f7ce99e3cac151992acd15785303";
+    image = "docker.io/linuxserver/nzbget:v26.2-ls254@sha256:87eba87ec46982b003ab1f54cfabd962c5c5e95cb9eb2069cbec7b6370d0784b";
 
     volumes = [
       "/home/santiago/selfhost/tv/nzbget:/config"
@@ -376,7 +376,7 @@ in
   };
 
   virtualisation.oci-containers.containers.prowlarr = mkNetnsTenant {
-    image = "docker.io/linuxserver/prowlarr:2.4.0.5397-ls153@sha256:536036aeb2c740d1a660ccf143b58a8bd6222f09010258fdfc10a538af7bec78";
+    image = "docker.io/linuxserver/prowlarr:2.4.0.5397-ls154@sha256:4fd7a166c8f46dd3370a871c250ee577d6c2ae97a0dbe0e3614b5ef736205620";
 
     volumes = [
       "/home/santiago/selfhost/tv/prowlarr:/config"
@@ -396,7 +396,7 @@ in
   };
 
   virtualisation.oci-containers.containers.sonarr = mkNetnsTenant {
-    image = "docker.io/linuxserver/sonarr:4.0.19.2979-ls319@sha256:4b025354d338999e03bf6dbdadcdde94815d39d4a5aba5de3cdc86a56d7d6c51";
+    image = "docker.io/linuxserver/sonarr:4.0.19.2979-ls320@sha256:24acea2956a0ccb11f103877d9f4f8576600fb34bff34820ed749c2256dab89f";
 
     volumes = [
       "/home/santiago/selfhost/tv/sonarr:/config"
@@ -406,7 +406,7 @@ in
 
   # bazarr only reads what the *arrs produce, so a narrower bind.
   virtualisation.oci-containers.containers.bazarr = mkNetnsTenant {
-    image = "docker.io/linuxserver/bazarr:v1.6.0-ls354@sha256:5d916d07404296ec35ee726e13e0e558f05952724cf494a7f009d913fb2b12f3";
+    image = "docker.io/linuxserver/bazarr:v1.6.0-ls355@sha256:4c30dc0bb9a5d223075e7f5d12c77bd293c4b460f86d696dbe64763104c1e88c";
 
     volumes = [
       "/home/santiago/selfhost/tv/bazarr:/config"
@@ -460,7 +460,7 @@ in
   # If LAN client auto-discovery is ever needed back, SSDP 1900 + 7359
   # have to land on host networking — multicast doesn't cross bridges.
   virtualisation.oci-containers.containers.jellyfin = mkRootlessContainer {
-    image = "docker.io/linuxserver/jellyfin:10.11.11ubu2404-ls40@sha256:a569ae0bfbd67ca404ae51f54cead7a2522d270179f57b3d12cf80ebff5d683b";
+    image = "docker.io/linuxserver/jellyfin:10.11.11ubu2404-ls41@sha256:32aa0d4565c633db95af29a58e8a5dc9becdfa58564a3aea68436623fd45f5a1";
 
     volumes = [
       "/home/santiago/selfhost/tv/jellyfin:/config"

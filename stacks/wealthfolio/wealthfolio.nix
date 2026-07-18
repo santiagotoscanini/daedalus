@@ -36,7 +36,7 @@
   sops.secrets."wealthfolio-env" = mkDotenvSecret ./env.sops;
 
   virtualisation.oci-containers.containers.wealthfolio = mkRootlessContainer {
-    image = "docker.io/afadil/wealthfolio:3.6.1@sha256:2819715df7057a46a29f30cd3c3e713df3bbe424b3a1bf7f2c92dc1dea1f84a6";
+    image = "docker.io/afadil/wealthfolio:3.6.2@sha256:f24c607692c1b494a477382aa3dfedc11ede1b433768b66546940c8f6b8a474f";
 
     volumes = [
       "/home/santiago/selfhost/wealthfolio/data:/data"

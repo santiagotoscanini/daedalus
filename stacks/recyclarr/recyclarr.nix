@@ -40,7 +40,7 @@
   ];
 
   virtualisation.oci-containers.containers.recyclarr = mkRootlessContainer {
-    image = "ghcr.io/recyclarr/recyclarr:8@sha256:7ae7a32a40ba0e140301412a58c5bdf267884f5cf76a009e0cfc5d83bdfe6206";
+    image = "ghcr.io/recyclarr/recyclarr:8@sha256:2d6107f758d882a59fe9d646aa54fa8a5a4fb7a40995125fade575652a3f7871";
 
     volumes = [
       "/home/santiago/selfhost/recyclarr:/config"

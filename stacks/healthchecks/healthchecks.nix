@@ -61,7 +61,7 @@
   sops.secrets."healthchecks-env" = mkDotenvSecret ./env.sops;
 
   virtualisation.oci-containers.containers.healthchecks = mkRootlessContainer {
-    image = "docker.io/healthchecks/healthchecks:v4.3@sha256:a5c9daf1759988defe122b6a6a29e401a76b7ea94dfffa1340245c5bcb57cb72";
+    image = "docker.io/healthchecks/healthchecks:v4.3@sha256:cd7bcd94350818b3944f82eb5995f48bdeab8c8627977578a569ffa73f56f56f";
 
     environment = {
       SITE_ROOT = "https://hc.toscanini.me";

@@ -42,7 +42,7 @@ let
   # Pin server + ML to the same tag. Bump intentionally — iOS app
   # version mismatches stall background sync silently. The per-image
   # @sha256 digests below must be bumped together with the tag.
-  immichVersion = "v3.0.2";
+  immichVersion = "v3.0.3";
 
   # Tied to the immich major; check before bumping immichVersion.
   immichPostgresImage = "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23";
@@ -126,7 +126,7 @@ in
   };
 
   virtualisation.oci-containers.containers.immich-redis = mkRootlessContainer {
-    image = "docker.io/valkey/valkey:9@sha256:4963247afc4cd33c7d3b2d2816b9f7f8eeebab148d29056c2ca4d7cbc966f2d9";
+    image = "docker.io/valkey/valkey:9@sha256:8e8d64b405ce18f41b8e5ee20aa4687a8ed0022d1298f2ce31cdcf3a76e09411";
 
     extraOptions = [
       "--network=immich-net:alias=redis"
@@ -134,7 +134,7 @@ in
   };
 
   virtualisation.oci-containers.containers.immich-machine-learning = mkRootlessContainer {
-    image = "ghcr.io/immich-app/immich-machine-learning:${immichVersion}-openvino@sha256:6b3c1f779df2e0f93be57bb2ad15681a43b7731cb325e8e66be7d984eca1949d";
+    image = "ghcr.io/immich-app/immich-machine-learning:${immichVersion}-openvino@sha256:42295f06067186ee62f8bc20379c72a263e600b8ad22dc9fb22385712d00944e";
 
     volumes = [
       "/home/santiago/selfhost/immich/model-cache:/cache"
@@ -147,7 +147,7 @@ in
   };
 
   virtualisation.oci-containers.containers.immich = mkRootlessContainer {
-    image = "ghcr.io/immich-app/immich-server:${immichVersion}@sha256:14390f3dc9512dc3273b12ccee6363d9be16c388699abc3f3fe0498bb9829937";
+    image = "ghcr.io/immich-app/immich-server:${immichVersion}@sha256:c716dc20f957aafd89fa9d284a2ec63e25c9e2d8d8e87c6197d540a3dce237db";
     dependsOn = [
       "immich-postgres"
       "immich-redis"

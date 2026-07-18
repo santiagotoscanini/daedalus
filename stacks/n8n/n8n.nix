@@ -145,7 +145,7 @@ in
   };
 
   virtualisation.oci-containers.containers.n8n = mkRootlessContainer {
-    image = "docker.io/n8nio/n8n:2.29.10@sha256:9cb60554716a0ab11a966e79ed65171e1bbf00b6d262ba12aa119bba22eb6000";
+    image = "docker.io/n8nio/n8n:2.30.7@sha256:23a26975c21aa6f7113286668b35e2831ec898d3a7fbfa1ac8ff16f1bdf88c37";
     dependsOn = [ "n8n-postgres" ];
 
     volumes = [
