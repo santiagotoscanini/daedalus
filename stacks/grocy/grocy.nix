@@ -46,7 +46,6 @@
       group = "Productivity";
       description = "Household inventory & chores";
       icon = "grocy.png";
-      siteMonitor = "https://grocy.toscanini.me";
       widget = {
         type = "customapi";
         # /api/stock/volatile?days=3 → {due_products, overdue_products,

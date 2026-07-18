@@ -32,7 +32,10 @@ let
 
   # Private ingress bridges for `webApps.<n>.isolated` (bridge short
   # name per app; traefik joins each as an extra membership).
-  isolatedApps = lib.filterAttrs (_: w: w.isolated) cfg.webApps;
+  # serviceName != null guard: a null name would crash the
+  # bridgeMemberships materialization below before the friendly
+  # "`isolated` needs `serviceName`" assertion could fire.
+  isolatedApps = lib.filterAttrs (_: w: w.isolated && w.serviceName != null) cfg.webApps;
   isoBridge = n: "iso-${n}";
 in
 {
@@ -654,13 +657,38 @@ in
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
         assertion =
-          w.isolated -> !(lib.elem "traefik" (map bridgeOf (cfg.bridgeMemberships.${w.serviceName} or [ ])));
+          (w.isolated && w.serviceName != null)
+          -> !(lib.elem "traefik" (map bridgeOf (cfg.bridgeMemberships.${w.serviceName} or [ ])));
         message = ''
           fleet.webApps.${n}: `isolated` is defeated by also listing
           "traefik" in bridgeMemberships.${toString w.serviceName} — the
           shared bridge reopens the direct path isolation exists to close.
         '';
       }) cfg.webApps)
+      ++ (lib.mapAttrsToList (n: w: {
+        assertion = (w.authHeaders != { } || w.authBypassRule != null) -> w.auth == "oidc";
+        message = ''
+          fleet.webApps.${n}: `authHeaders`/`authBypassRule` only take
+          effect with `auth = "oidc"` — without it no oidc middleware is
+          generated, so nothing injects (or strips) those headers.
+        '';
+      }) cfg.webApps)
+      ++ [
+        (
+          let
+            keys = lib.mapAttrsToList (_: r: "${r.entrypoint}:${r.host}") cfg.traefikRoutes;
+            dups = lib.unique (lib.filter (k: lib.count (x: x == k) keys > 1) keys);
+          in
+          {
+            assertion = dups == [ ];
+            message = ''
+              fleet.traefikRoutes: two routers claim the same
+              entrypoint+host (${lib.concatStringsSep ", " dups}) —
+              traefik's pick between identical rules is nondeterministic.
+            '';
+          }
+        )
+      ]
       ++ (lib.mapAttrsToList (n: w: {
         assertion = w.auth == "oidc" -> w.healthPath != null;
         message = ''
@@ -719,15 +747,16 @@ in
           {
             name = if w.homepage.name != null then w.homepage.name else lib.toSentenceCase n;
             href = if w.homepage.href != null then w.homepage.href else "https://${w.hostname}";
-            # Isolated upstreams aren't reachable from homepage's
-            # bridges — probe through traefik via the public hostname.
             siteMonitor =
               if w.homepage.siteMonitor != null then
                 w.homepage.siteMonitor
               # Isolated and named-service upstreams aren't dialable from
-              # homepage's bridges — probe through traefik instead.
+              # homepage's bridges — probe through traefik instead, at the
+              # oidc-bypassed healthPath: probing / on an auth-gated app
+              # only certifies the forward-auth middleware (its 302 fires
+              # before any upstream dial), not the app.
               else if w.isolated || w.service != null then
-                "https://${w.hostname}"
+                "https://${w.hostname}${if w.healthPath != null then w.healthPath else "/"}"
               else
                 resolveUrl w;
             inherit (w.homepage) icon;

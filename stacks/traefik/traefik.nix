@@ -95,6 +95,22 @@ let
   );
 in
 {
+  # The rules dir copies <route>.yml then raw-rule files into one
+  # namespace — a raw rule named after a route would silently win.
+  assertions = [
+    (
+      let
+        clashes = lib.intersectLists (map (n: "${n}.yml") (
+          lib.attrNames config.fleet.traefikRoutes
+        )) (lib.attrNames config.fleet.traefikRawRules);
+      in
+      {
+        assertion = clashes == [ ];
+        message = "fleet.traefikRawRules: filename(s) ${lib.concatStringsSep ", " clashes} collide with generated route files — rename the raw rule.";
+      }
+    )
+  ];
+
   # CF_DNS_API_TOKEN (the one variable lego's cloudflare provider reads
   # for DNS-01) + the POCKET_OIDC_* client creds: sops-encrypted
   # env.sops, decrypted to /run/secrets/traefik-env at activation. Edit
@@ -327,9 +343,10 @@ in
 
       # cloudflared dials cfweb from traefik-net; trust its
       # X-Forwarded-* (proto=https from the CF edge) or OIDC
-      # middlewares build http:// redirect URIs and loop. /16 not /24:
-      # podman renumbers bridge subnets if networks are recreated.
-      "--entrypoints.cfweb.forwardedHeaders.trustedIPs=10.89.0.0/16"
+      # middlewares build http:// redirect URIs and loop. Scoped to the
+      # pinned traefik-net subnet (fleet.bridgeSubnets.traefik) so other
+      # bridge members can't forge client IPs into cfweb routers.
+      "--entrypoints.cfweb.forwardedHeaders.trustedIPs=${config.fleet.bridgeSubnets.traefik}"
 
       # In-process OIDC forward-auth plugin (vendored — see oidcPlugin).
       "--experimental.localPlugins.oidc.moduleName=github.com/sevensolutions/traefik-oidc-auth"
