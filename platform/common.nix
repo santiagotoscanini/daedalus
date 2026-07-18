@@ -3,13 +3,17 @@
 # merging combines all contributions across modules.
 #
 # Exposed:
-#   - `_module.args.mkRootlessContainer` — oci-containers decorator
-#     that applies per-host defaults (podman.user=santiago,
-#     autoStart=true, TZ).
+#   - `_module.args` helpers: mkRootlessContainer (oci-containers
+#     decorator applying per-host defaults: podman.user=santiago,
+#     autoStart=true, TZ), mkGluetunExporter, hostUid, mkDotenvSecret,
+#     mkSecretRender, mkImageBuild.
 #   - Options under `myStack.*` — see each `mkOption` description below
-#     for the per-option contract (containerNetworks, traefikRoutes,
-#     traefikStaticRules, cloudflareRoutes, dnsHosts, prometheusScrapes,
-#     grafanaDashboards{,ByFolder}, webApps, homepageServices).
+#     for the per-option contract (containerNetworks, bridgeSubnets,
+#     stateDirs, traefikRoutes, traefikStaticRules, cloudflareRoutes,
+#     dnsHosts, prometheusScrapes, grafanaDashboards{,ByFolder}, webApps,
+#     homepageServices, homepageLayout, lanIp, baseDomain, mail).
+#     appDatabases, logStacks, emailOnFailure, and hcPings are declared
+#     in their owning modules.
 
 {
   config,
