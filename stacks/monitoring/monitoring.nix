@@ -195,6 +195,11 @@ in
     };
   };
 
+  # Grafana's database on the shared app-db cluster (see
+  # stacks/app-db/). Dashboards/datasources stay nix-provisioned; the
+  # DB holds what the UI created: alert rules, users, service accounts.
+  myStack.appDatabases.grafana = { };
+
   myStack.containerNetworks = {
     prometheus = "monitoring";
     grafana = "monitoring";

@@ -222,6 +222,19 @@ in
   # gluetun owns the netns; tenants have no bridge (null = pasta shape,
   # which here just earns the Type=oneshot systemd override). Jellyfin
   # is bridge-routed (outside the VPN).
+  # *arr databases on the shared app-db cluster: one role per app,
+  # main + log database each (the *arrs keep logs in a separate db).
+  # The apps dial host.containers.internal:5433 (= 169.254.1.2, the
+  # pasta host address; plain-TCP host port on pg) since the gluetun
+  # netns can't join app-db-net; connection settings live in each
+  # app's config.xml (mutable state, written at migration).
+  myStack.appDatabases = {
+    sonarr.extraDatabases = [ "sonarr_log" ];
+    radarr.extraDatabases = [ "radarr_log" ];
+    prowlarr.extraDatabases = [ "prowlarr_log" ];
+    bazarr = { };
+  };
+
   myStack.containerNetworks =
     lib.listToAttrs (map (n: lib.nameValuePair n null) ([ "gluetun" ] ++ netnsTenants))
     // {
@@ -329,6 +342,12 @@ in
     environment = {
       VPN_SERVICE_PROVIDER = "custom";
       VPN_TYPE = "wireguard";
+      # Direct (non-VPN) egress to the host ONLY — the *arrs dial the
+      # shared app-db cluster at host.containers.internal:5433. Under
+      # pasta the host is 169.254.1.2 (the LAN IP 192.168.0.2 refers
+      # back to the container itself); a /32 so the VPN netns can't
+      # reach anything else.
+      FIREWALL_OUTBOUND_SUBNETS = "169.254.1.2/32";
       VPN_PORT_FORWARDING = "on";
       VPN_PORT_FORWARDING_PROVIDER = "protonvpn";
       # When ProtonVPN hands out a new forwarded port, push it to

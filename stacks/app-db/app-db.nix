@@ -88,6 +88,7 @@ let
     set -eu
 
     export APP_NAME=${lib.escapeShellArg name}
+    export EXTRA_DBS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.${name}.extraDatabases)}
     export ENV_BASE=${lib.escapeShellArg envBase}
     export CLUSTER_ENV=${lib.escapeShellArg clusterEnv}
     export APP_ENV_FILE=${lib.escapeShellArg (appEnvFile name)}
@@ -97,11 +98,22 @@ let
 in
 {
   options.myStack.appDatabases = lib.mkOption {
-    # Empty submodule: an entry's presence IS the enable signal. The
-    # submodule is kept (rather than `attrsOf null`) so we have a
-    # place to grow per-app fields (connection caps, extensions, ...)
-    # without churning the call sites.
-    type = lib.types.attrsOf (lib.types.submodule { });
+    # An entry's presence IS the enable signal; per-app fields live
+    # in the submodule (room to grow: connection caps, extensions...).
+    type = lib.types.attrsOf (
+      lib.types.submodule {
+        options.extraDatabases = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          example = [ "sonarr_log" ];
+          description = ''
+            Additional databases owned by the same role. Used by the
+            *arr apps, which keep config/history and log entries in
+            two separate databases behind one login.
+          '';
+        };
+      }
+    );
     default = { };
     description = ''
       Per-app Postgres databases on the single shared `pg` cluster.
@@ -122,14 +134,25 @@ in
     # Validate app names at eval time. The name lands in SQL (via
     # psql's `%I` for the role/db) and in the env file path — catch
     # garbage names at build time, not at first podman exec.
-    assertions = map (n: {
-      assertion = builtins.match nameRegex n != null;
-      message = ''
-        myStack.appDatabases."${n}": invalid app name.
-        Must match ${nameRegex} — used as the postgres role,
-        database, and env-file directory.
-      '';
-    }) activeApps;
+    assertions =
+      (map (n: {
+        assertion = builtins.match nameRegex n != null;
+        message = ''
+          myStack.appDatabases."${n}": invalid app name.
+          Must match ${nameRegex} — used as the postgres role,
+          database, and env-file directory.
+        '';
+      }) activeApps)
+      ++ (lib.concatMap (
+        n:
+        map (d: {
+          assertion = builtins.match nameRegex d != null;
+          message = ''
+            myStack.appDatabases."${n}".extraDatabases: "${d}" is not a
+            valid database name (${nameRegex}).
+          '';
+        }) cfg.${n}.extraDatabases
+      ) activeApps);
 
     # Shared bridge: pg + every app container join `app-db-net`.
     myStack.containerNetworks."pg" = "app-db";
@@ -150,6 +173,9 @@ in
     # entrypoint + firewall on `myStack.appDatabases != { }`.
     myStack.traefikStaticRules."postgres-tcp.yml" = builtins.readFile ./assets/traefik-tcp.yml;
     myStack.dnsHosts = [ "${config.myStack.lanIp} postgres.toscanini.me" ];
+
+    # The plain-TCP host port (see `ports` on the pg container).
+    networking.firewall.allowedTCPPorts = [ 5433 ];
 
     systemd.tmpfiles.rules = [
       "d ${hostRoot}                  0755 santiago users  -"
@@ -273,6 +299,14 @@ in
         PGDATA = "/var/lib/postgresql/data";
       };
       volumes = [ "${dataDir}:/var/lib/postgresql/data" ];
+      ports = [
+        # Plain-TCP LAN access for tenants that can't ride a bridge:
+        # the gluetun-netns *arrs dial 192.168.0.2:5433 directly
+        # (their Npgsql client can't do the direct-TLS handshake the
+        # traefik :5432 TCP/SNI route requires — that route stays the
+        # TLS front door for DBeaver-style clients).
+        "5433:5432"
+      ];
       cmd = [
         "postgres"
         "-c"

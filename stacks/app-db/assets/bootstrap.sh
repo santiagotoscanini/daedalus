@@ -3,6 +3,8 @@
 #
 # Expects env vars (exported by the wrapper):
 #   APP_NAME       — postgres role + database name
+#   EXTRA_DBS      — space-separated additional databases owned by the
+#                    same role (may be empty; e.g. sonarr_log)
 #   ENV_BASE       — /etc/nixos/stacks/app-db/secrets
 #   CLUSTER_ENV    — $ENV_BASE/cluster/env  (POSTGRES_PASSWORD line)
 #   APP_ENV_FILE   — $ENV_BASE/$APP_NAME/env (per-app env we emit)
@@ -53,14 +55,29 @@ REVOKE ALL ON DATABASE ${APP_NAME} FROM PUBLIC;
 GRANT  ALL ON DATABASE ${APP_NAME} TO ${APP_NAME};
 SQL
 
+# Additional databases owned by the same role (may be empty).
+for db in $EXTRA_DBS; do
+  podman exec -i -e PGPASSWORD="$SUPER_PWD" pg \
+    psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres <<SQL
+SELECT format('CREATE DATABASE %I OWNER %I', '${db}', '${APP_NAME}')
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${db}')
+\gexec
+REVOKE ALL ON DATABASE ${db} FROM PUBLIC;
+GRANT  ALL ON DATABASE ${db} TO ${APP_NAME};
+SQL
+done
+
 # Write env file last so a partial bootstrap doesn't leave a stale
-# env file pointing at a non-existent role. DB_POSTGRESDB_PASSWORD
-# duplicates the password under the name n8n-style images read —
-# always emitted so every tenant gets the same env file shape.
+# env file pointing at a non-existent role. The password is emitted
+# under every name our images read (n8n: DB_POSTGRESDB_PASSWORD,
+# seerr: DB_PASS, grafana: GF_DATABASE_PASSWORD, bazarr:
+# POSTGRES_PASSWORD) — one uniform file shape for every tenant.
 install -m 0600 -o santiago -g users /dev/stdin "$APP_ENV_FILE" <<EOF
 POSTGRES_USER=${APP_NAME}
 POSTGRES_DB=${APP_NAME}
 POSTGRES_PASSWORD=$APP_PWD
 DB_POSTGRESDB_PASSWORD=$APP_PWD
+DB_PASS=$APP_PWD
+GF_DATABASE_PASSWORD=$APP_PWD
 DATABASE_URL=postgresql://${APP_NAME}:$APP_PWD@pg:5432/${APP_NAME}
 EOF

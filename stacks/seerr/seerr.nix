@@ -18,6 +18,9 @@
 {
   myStack.containerNetworks.seerr = "traefik";
 
+  # Database on the shared app-db cluster (see stacks/app-db/).
+  myStack.appDatabases.seerr = { };
+
   # The image's node user (uid 1000) maps to host 100999; the config
   # dir must exist with that ownership or a fresh install fails on
   # first write.
