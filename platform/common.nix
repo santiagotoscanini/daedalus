@@ -78,8 +78,14 @@ let
       };
     }
     // {
-      after = bridgeUnits ++ [ "state-dirs.service" ];
-      wants = bridgeUnits ++ [ "state-dirs.service" ];
+      # user@1000.service in after/wants: at shutdown systemd stops each
+      # container BEFORE santiago's user manager and /run/user/1000 tear
+      # down. Without it, `podman stop` finds the rootless runtime gone
+      # ("RunRoot not writable" → crun not found), the stop fails, and the
+      # container is cgroup-killed — dirty DB shutdowns / WAL recovery next
+      # boot (app-db pg is stopped last, so it is the most exposed).
+      after = bridgeUnits ++ [ "state-dirs.service" "user@1000.service" ];
+      wants = bridgeUnits ++ [ "state-dirs.service" "user@1000.service" ];
     };
 
   # Idempotent — `--ignore` returns 0 if the network already exists,
