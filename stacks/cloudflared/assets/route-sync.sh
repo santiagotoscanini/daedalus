@@ -11,19 +11,25 @@
 
 TARGET="${TUNNEL_ID}.cfargotunnel.com"
 
-if [[ -z "${CF_DNS_API_TOKEN:-}" ]]; then
-  echo "ERROR: CF_DNS_API_TOKEN not set in EnvironmentFile" >&2
-  exit 1
-fi
-
+# Every call — GETs included — is validated for `success: true` here at
+# the source, so an API error (expired token, 429, CF outage) aborts
+# with the CF error body instead of being misread downstream (a null
+# `result` parses as "record missing" and triggers a spurious POST).
+# --retry absorbs transient 5xx/connection blips.
 api() {
-  local method="$1" path="$2"
+  local method="$1" path="$2" body
   shift 2
-  curl -sS -X "$method" \
+  body=$(curl -sS --retry 3 --retry-connrefused -X "$method" \
     -H "Authorization: Bearer $CF_DNS_API_TOKEN" \
     -H "Content-Type: application/json" \
     "$@" \
-    "https://api.cloudflare.com/client/v4${path}"
+    "https://api.cloudflare.com/client/v4${path}")
+  if ! jq -e '.success == true' >/dev/null <<<"$body"; then
+    echo "ERROR: Cloudflare API $method $path failed:" >&2
+    jq '.errors' <<<"$body" >&2 || echo "$body" >&2
+    exit 1
+  fi
+  printf '%s' "$body"
 }
 
 # 1. Upsert declared hostnames
@@ -37,7 +43,7 @@ while IFS= read -r HOST; do
     api POST "/zones/$ZONE_ID/dns_records" \
       -d "$(jq -n --arg n "$HOST" --arg c "$TARGET" --arg m "$MANAGED_COMMENT" \
         '{type:"CNAME",name:$n,content:$c,proxied:true,ttl:1,comment:$m}')" \
-      | jq -e '.success' >/dev/null
+      >/dev/null
   else
     RID=$(echo "$EXISTING" | jq -r '.result[0].id')
     CONTENT=$(echo "$EXISTING" | jq -r '.result[0].content')
@@ -52,7 +58,7 @@ while IFS= read -r HOST; do
       api PATCH "/zones/$ZONE_ID/dns_records/$RID" \
         -d "$(jq -n --arg c "$TARGET" --arg m "$MANAGED_COMMENT" \
           '{content:$c,proxied:true,comment:$m}')" \
-        | jq -e '.success' >/dev/null
+        >/dev/null
     fi
   fi
 done <<<"$HOSTS"
@@ -65,8 +71,7 @@ while IFS=$'\t' read -r RID NAME; do
   [ -z "${RID:-}" ] && continue
   if ! grep -qxF "$NAME" <<<"$HOSTS"; then
     echo "[delete] $NAME (orphan; was managed, no longer in cloudflareRoutes)"
-    api DELETE "/zones/$ZONE_ID/dns_records/$RID" \
-      | jq -e '.success' >/dev/null
+    api DELETE "/zones/$ZONE_ID/dns_records/$RID" >/dev/null
   fi
 done < <(echo "$ALL" | jq -r --arg m "$MANAGED_COMMENT" \
   '.result | map(select(.comment == $m)) | .[] | .id + "\t" + .name')

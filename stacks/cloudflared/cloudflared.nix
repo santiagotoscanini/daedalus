@@ -152,9 +152,10 @@ in
     ];
 
     extraOptions = [
-      # /etc/hosts shortcut for the `traefik` name — redundant with
-      # aardvark-dns on traefik-net but harmless.
-      "--add-host=traefik:host-gateway"
+      # `traefik` resolves via aardvark-dns on traefik-net — do NOT add
+      # an --add-host shortcut for it: /etc/hosts wins over aardvark,
+      # and a host-gateway entry silently reroutes the whole tunnel
+      # through the host-published port instead of the bridge.
       # Override the image's `nonroot` user (UID 65532) so the container
       # runs as UID 0 → host santiago (UID 1000), owner of the 0600
       # credentials.json. Same idiom as the linuxserver PUID=0 trick.

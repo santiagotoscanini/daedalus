@@ -14,9 +14,9 @@
 # service) set `serviceUrl` to an explicit `host.containers.internal`
 # URL instead.
 #
-# Opens host TCP 80/443 (LAN HTTPS ingress) + 8888 (cfweb entrypoint
-# for cloudflared, bound but not firewall-opened — internal only).
-# The dashboard on :8080 is reached over traefik-net, not host-published.
+# Opens host TCP 80/443 (LAN HTTPS ingress). The cfweb entrypoint
+# (:8888, plain HTTP for cloudflared) and the dashboard (:8080) are
+# reached over traefik-net only — no host publish.
 
 {
   config,
@@ -129,6 +129,23 @@ in
   # its own asset and contributes here (e.g. app-db's TCP/SNI route
   # lives in stacks/app-db/).
   myStack.traefikStaticRules."tls-opts.yml" = builtins.readFile ./assets/tls-opts.yml;
+
+  # Baseline security headers, applied as the websecure entrypoint's
+  # default middleware (covers every router on it — generated and
+  # static — with no per-route wiring). Kept off cfweb: CF's edge sets
+  # its own, and HSTS over plain HTTP is ignored anyway. No frameDeny
+  # fleet-wide — some apps embed themselves; apps that want it add a
+  # per-route middleware.
+  myStack.traefikStaticRules."sec-headers.yml" = ''
+    http:
+      middlewares:
+        sec-headers:
+          headers:
+            stsSeconds: 31536000
+            stsIncludeSubdomains: true
+            contentTypeNosniff: true
+            referrerPolicy: strict-origin-when-cross-origin
+  '';
 
   # One forward-auth middleware per gated webApp (`auth = "oidc"`),
   # each dialing Pocket ID as its OWN client, so consent screens and
@@ -244,7 +261,7 @@ in
   # interface (wireguard, etc.) off-limits by default.
   networking.firewall.interfaces.enp3s0.allowedTCPPorts = lib.optional pgwireEnabled 5432;
 
-  myStack.dnsHosts = [ "${config.myStack.lanIp} traefik.toscanini.me" ];
+  myStack.dnsHosts = [ "${cfg.lanIp} traefik.${cfg.baseDomain}" ];
 
   myStack.prometheusScrapes = [
     {
@@ -274,9 +291,10 @@ in
     ports = [
       "80:80"
       "443:443"
-      # cfweb — plain HTTP for the Cloudflare tunnel; CF terminates TLS
-      # at the edge so a 443 hop would mean double-TLS.
-      "8888:8888"
+      # cfweb (:8888) is deliberately NOT host-published: cloudflared
+      # dials it over traefik-net only, so the plain-HTTP entrypoint
+      # that trusts X-Forwarded-* is unreachable from host processes
+      # and non-bridge containers.
     ]
     ++ (lib.optional pgwireEnabled
       # postgres TCP entrypoint — SNI route for postgres.toscanini.me.
@@ -334,6 +352,7 @@ in
     ++ (lib.optional pgwireEnabled "--entrypoints.postgres.address=:5432")
     ++ [
 
+      "--entrypoints.websecure.http.middlewares=sec-headers@file"
       "--entrypoints.websecure.http.tls=true"
       "--entrypoints.websecure.http.tls.options=tls-opts@file"
       "--entrypoints.web.http.redirections.entrypoint.to=websecure"
