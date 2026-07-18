@@ -75,6 +75,7 @@ let
     {
       name = "qbittorrent";
       port = 8090;
+      authBypassRule = "PathPrefix(`/api`)";
       homepage = {
         group = "Media";
         name = "qBittorrent";
@@ -94,6 +95,7 @@ let
     {
       name = "nzbget";
       port = 6789;
+      authBypassRule = "PathPrefix(`/jsonrpc`)";
       homepage = {
         group = "Media";
         name = "NZBGet";
@@ -104,14 +106,16 @@ let
         widget = {
           type = "nzbget";
           url = "https://nzbget.toscanini.me";
-          username = "{{HOMEPAGE_VAR_NZBGET_USER}}";
-          password = "{{HOMEPAGE_VAR_NZBGET_PASS}}";
+          # No creds: auth disabled (AUTH.md) — env password removed,
+          # ControlPassword blanked, so the API is open (LAN-closed +
+          # behind the Pocket ID gate).
         };
       };
     }
     {
       name = "prowlarr";
       port = 9696;
+      authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
       homepage = {
         group = "Media";
         name = "Prowlarr";
@@ -127,6 +131,7 @@ let
     {
       name = "radarr";
       port = 7878;
+      authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
       homepage = {
         group = "Media";
         name = "Radarr";
@@ -143,6 +148,7 @@ let
     {
       name = "sonarr";
       port = 8989;
+      authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
       homepage = {
         group = "Media";
         name = "Sonarr";
@@ -159,6 +165,7 @@ let
     {
       name = "bazarr";
       port = 6767;
+      authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
       homepage = {
         group = "Media";
         name = "Bazarr";
@@ -211,9 +218,6 @@ in
     };
   };
 
-  # NZBGET_USER + NZBGET_PASS: sops-encrypted env.sops, decrypted to
-  # /run/secrets/nzbget-env at activation. Edit with `sops env.sops`.
-  sops.secrets."nzbget-env" = mkDotenvSecret ./env.sops;
 
   # gluetun owns the netns; tenants have no bridge (null = pasta shape,
   # which here just earns the Type=oneshot systemd override). Jellyfin
@@ -231,10 +235,21 @@ in
     lib.listToAttrs (
       map (
         u:
-        lib.nameValuePair u.name {
-          inherit (u) port homepage;
-          serviceUrl = "http://host.containers.internal:${toString u.port}";
-        }
+        lib.nameValuePair u.name (
+          {
+            inherit (u) port homepage;
+            serviceUrl = "http://host.containers.internal:${toString u.port}";
+            # Pocket ID gate (AUTH.md). Each app's own login is disabled
+            # (arrs: AuthenticationMethod=External; qbt: subnet whitelist;
+            # nzbget: no password; bazarr: auth type null), so the gate
+            # is the sole browser auth. authBypassRule lets machine
+            # callers (seerr, prowlarr<->arr sync, recyclarr, homepage
+            # widgets) through by their own API key / RPC path — they
+            # can't do an OIDC redirect.
+            auth = "oidc";
+          }
+          // lib.optionalAttrs (u ? authBypassRule) { inherit (u) authBypassRule; }
+        )
       ) vpnUis
     )
     // {
@@ -347,9 +362,6 @@ in
       "/home/santiago/selfhost/tv/nzbget:/config"
       "/s2/tv/usenet:/data/usenet:rw"
     ];
-
-    # NZBGET_USER + NZBGET_PASS (admin credentials).
-    environmentFiles = [ config.sops.secrets."nzbget-env".path ];
   };
 
   # Internal CF-bypass API; only prowlarr calls it on 127.0.0.1:8191.
