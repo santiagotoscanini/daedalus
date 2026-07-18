@@ -3,8 +3,6 @@
 #
 # Expects env vars (exported by the wrapper):
 #   APP_NAME       — postgres role + database name
-#   APP_PWD_ALIASES — space-separated extra env keys that also carry
-#                     the per-app password (may be empty)
 #   ENV_BASE       — /etc/nixos/stacks/app-db/secrets
 #   CLUSTER_ENV    — $ENV_BASE/cluster/env  (POSTGRES_PASSWORD line)
 #   APP_ENV_FILE   — $ENV_BASE/$APP_NAME/env (per-app env we emit)
@@ -55,17 +53,14 @@ REVOKE ALL ON DATABASE ${APP_NAME} FROM PUBLIC;
 GRANT  ALL ON DATABASE ${APP_NAME} TO ${APP_NAME};
 SQL
 
-# Extra keys duplicating the password for images that expect another
-# name (command substitution strips the trailing newline; an empty
-# list yields one blank line, which dotenv readers ignore).
-ALIAS_LINES=$(for a in $APP_PWD_ALIASES; do printf '%s=%s\n' "$a" "$APP_PWD"; done)
-
 # Write env file last so a partial bootstrap doesn't leave a stale
-# env file pointing at a non-existent role.
+# env file pointing at a non-existent role. DB_POSTGRESDB_PASSWORD
+# duplicates the password under the name n8n-style images read —
+# always emitted so every tenant gets the same env file shape.
 install -m 0600 -o santiago -g users /dev/stdin "$APP_ENV_FILE" <<EOF
 POSTGRES_USER=${APP_NAME}
 POSTGRES_DB=${APP_NAME}
 POSTGRES_PASSWORD=$APP_PWD
+DB_POSTGRESDB_PASSWORD=$APP_PWD
 DATABASE_URL=postgresql://${APP_NAME}:$APP_PWD@pg:5432/${APP_NAME}
-$ALIAS_LINES
 EOF

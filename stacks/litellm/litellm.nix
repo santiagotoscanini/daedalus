@@ -161,6 +161,10 @@
       # PKCE is disabled on the Pocket ID client (litellm's GENERIC SSO
       # sends no code_challenge); safe to auto-redirect now.
       AUTO_REDIRECT_UI_LOGIN_TO_SSO = "true";
+      # SSO user_id litellm promotes to proxy_admin in its UserTable —
+      # without this, SSO logins land as internal_user_viewer and the
+      # UI shows no keys/models (docs/proxy/admin_ui_sso).
+      PROXY_ADMIN_ID = "santito";
       STORE_MODEL_IN_DB = "True";
     };
 

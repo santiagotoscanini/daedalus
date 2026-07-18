@@ -80,16 +80,14 @@ let
   pgImage = "docker.io/library/postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15";
 
   # The bash body lives at assets/bootstrap.sh (shellcheckable
-  # standalone). This wrapper exports the parameters it reads
-  # (APP_NAME, APP_PWD_ALIASES, ENV_BASE, CLUSTER_ENV, APP_ENV_FILE)
-  # and concatenates
+  # standalone). This wrapper exports the four parameters it reads
+  # (APP_NAME, ENV_BASE, CLUSTER_ENV, APP_ENV_FILE) and concatenates
   # the body so it all runs in a single shell with `set -eu` from
   # the systemd script preamble.
   perAppBootstrapScript = name: ''
     set -eu
 
     export APP_NAME=${lib.escapeShellArg name}
-    export APP_PWD_ALIASES=${lib.escapeShellArg (lib.concatStringsSep " " cfg.${name}.passwordAliases)}
     export ENV_BASE=${lib.escapeShellArg envBase}
     export CLUSTER_ENV=${lib.escapeShellArg clusterEnv}
     export APP_ENV_FILE=${lib.escapeShellArg (appEnvFile name)}
@@ -99,23 +97,11 @@ let
 in
 {
   options.myStack.appDatabases = lib.mkOption {
-    # An entry's presence IS the enable signal; per-app fields live in
-    # the submodule (room to grow: connection caps, extensions, ...).
-    type = lib.types.attrsOf (
-      lib.types.submodule {
-        options.passwordAliases = lib.mkOption {
-          type = lib.types.listOf lib.types.str;
-          default = [ ];
-          example = [ "DB_POSTGRESDB_PASSWORD" ];
-          description = ''
-            Extra keys in the generated env file carrying the same
-            per-app password, for images that read it under a name
-            other than POSTGRES_PASSWORD. Keeps the env file the
-            single source of truth — no entrypoint re-export shims.
-          '';
-        };
-      }
-    );
+    # Empty submodule: an entry's presence IS the enable signal. The
+    # submodule is kept (rather than `attrsOf null`) so we have a
+    # place to grow per-app fields (connection caps, extensions, ...)
+    # without churning the call sites.
+    type = lib.types.attrsOf (lib.types.submodule { });
     default = { };
     description = ''
       Per-app Postgres databases on the single shared `pg` cluster.
@@ -136,25 +122,14 @@ in
     # Validate app names at eval time. The name lands in SQL (via
     # psql's `%I` for the role/db) and in the env file path — catch
     # garbage names at build time, not at first podman exec.
-    assertions =
-      (map (n: {
-        assertion = builtins.match nameRegex n != null;
-        message = ''
-          myStack.appDatabases."${n}": invalid app name.
-          Must match ${nameRegex} — used as the postgres role,
-          database, and env-file directory.
-        '';
-      }) activeApps)
-      ++ (lib.concatMap (
-        n:
-        map (a: {
-          assertion = builtins.match "[A-Z][A-Z0-9_]*" a != null;
-          message = ''
-            myStack.appDatabases."${n}".passwordAliases: "${a}" is not a
-            valid env var name ([A-Z][A-Z0-9_]*).
-          '';
-        }) cfg.${n}.passwordAliases
-      ) activeApps);
+    assertions = map (n: {
+      assertion = builtins.match nameRegex n != null;
+      message = ''
+        myStack.appDatabases."${n}": invalid app name.
+        Must match ${nameRegex} — used as the postgres role,
+        database, and env-file directory.
+      '';
+    }) activeApps;
 
     # Shared bridge: pg + every app container join `app-db-net`.
     myStack.containerNetworks."pg" = "app-db";

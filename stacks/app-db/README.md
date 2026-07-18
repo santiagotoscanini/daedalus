@@ -53,6 +53,7 @@ gitignored). The env file lands in the app container with:
 POSTGRES_USER=foo
 POSTGRES_DB=foo
 POSTGRES_PASSWORD=<hex32>
+DB_POSTGRESDB_PASSWORD=<hex32>   # same value, the name n8n-style images read
 DATABASE_URL=postgresql://foo:<hex32>@pg:5432/foo
 ```
 

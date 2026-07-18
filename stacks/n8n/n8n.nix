@@ -43,12 +43,10 @@ in
   myStack.containerNetworks.n8n = "app-db";
 
   # Database on the shared app-db cluster: role + db + env file with
-  # DATABASE_URL, materialized by app-db-n8n-bootstrap.service
-  # (see stacks/app-db/). The image reads the password as
-  # DB_POSTGRESDB_PASSWORD, so the env file carries that name too.
-  myStack.appDatabases.n8n = {
-    passwordAliases = [ "DB_POSTGRESDB_PASSWORD" ];
-  };
+  # DATABASE_URL (and the password under both POSTGRES_PASSWORD and
+  # DB_POSTGRESDB_PASSWORD — the name this image reads), materialized
+  # by app-db-n8n-bootstrap.service (see stacks/app-db/).
+  myStack.appDatabases.n8n = { };
 
   myStack.webApps.n8n = {
     serviceName = "n8n";
@@ -194,8 +192,8 @@ in
 
     # N8N_BASIC_AUTH_* + N8N_ENCRYPTION_KEY from sops, the rendered
     # N8N_SMTP_PASS (from the shared mail secret via n8n-smtp-env),
-    # and DB_POSTGRESDB_PASSWORD (via passwordAliases) from the app-db
-    # bootstrap env. Later files win.
+    # and DB_POSTGRESDB_PASSWORD from the app-db bootstrap env.
+    # Later files win.
     environmentFiles = [
       config.sops.secrets."n8n-env".path
       "/run/n8n-smtp/env"
