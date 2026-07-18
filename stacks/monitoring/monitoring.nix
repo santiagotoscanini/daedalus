@@ -282,6 +282,13 @@ in
     ];
   };
 
+  # The bootstrap gates `podman-app-<name>` for apps-platform tenants;
+  # grafana is a stack, so pull it in explicitly.
+  systemd.services.podman-grafana = {
+    after = [ "app-db-grafana-bootstrap.service" ];
+    wants = [ "app-db-grafana-bootstrap.service" ];
+  };
+
   virtualisation.oci-containers.containers.grafana = mkRootlessContainer {
     image = "docker.io/grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63";
     dependsOn = [ "prometheus" ];
@@ -297,6 +304,14 @@ in
     ];
 
     environment = {
+      # Database on the shared app-db cluster; GF_DATABASE_PASSWORD
+      # rides the app-db bootstrap env file (environmentFiles below).
+      GF_DATABASE_TYPE = "postgres";
+      GF_DATABASE_HOST = "pg:5432";
+      GF_DATABASE_NAME = "grafana";
+      GF_DATABASE_USER = "grafana";
+      GF_DATABASE_SSL_MODE = "disable";
+
       GF_USERS_ALLOW_SIGN_UP = "false";
       GF_SERVER_ROOT_URL = "https://grafana.toscanini.me";
       GF_SERVER_SERVE_FROM_SUB_PATH = "false";
@@ -334,11 +349,16 @@ in
     };
 
     # GF_SECURITY_ADMIN_USER + GF_SECURITY_ADMIN_PASSWORD.
-    environmentFiles = [ config.sops.secrets."grafana-env".path ];
+    environmentFiles = [
+      config.sops.secrets."grafana-env".path
+      # GF_DATABASE_PASSWORD (+ POSTGRES_*) from the app-db bootstrap.
+      "/etc/nixos/stacks/app-db/secrets/grafana/env"
+    ];
 
     extraOptions = [
       "--user=0:0"
       "--network=monitoring-net"
+      "--network=app-db-net" # dials pg:5432
       "--network=traefik-net"
     ];
   };
