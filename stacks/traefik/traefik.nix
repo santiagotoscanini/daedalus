@@ -245,7 +245,7 @@ in
   # probe certifies the dashboard, not the IdP), homepage tile.
   fleet.webApps.traefik-dashboard = {
     hostname = "traefik.${cfg.baseDomain}";
-    service = "api@internal";
+    traefikService = "api@internal";
     auth = "oidc";
     healthPath = "/api/version";
     homepage = {

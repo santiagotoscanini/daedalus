@@ -313,9 +313,9 @@ let
       # metrics-driven, so without a scrape it would only render empty
       # panels.
       fleet.grafanaDashboardsByFolder =
-        lib.optionalAttrs (app.prometheus.enable && app.dashboard != null)
+        lib.optionalAttrs (app.prometheus.enable && app.prometheus.dashboard != null)
           {
-            "Apps"."${cName}" = lib.replaceStrings [ "%APP_NAME%" ] [ name ] (builtins.readFile app.dashboard);
+            "Apps"."${cName}" = lib.replaceStrings [ "%APP_NAME%" ] [ name ] (builtins.readFile app.prometheus.dashboard);
           };
 
       # Homepage tile lands in the per-app section.
@@ -466,7 +466,7 @@ let
             AUTH_TRUST_HOST = "true";
             AUTH_URL = publicUrl;
           }
-          // (lib.optionalAttrs app.litellm {
+          // (lib.optionalAttrs app.litellm.enable {
             LITELLM_BASE_URL = "http://litellm:4000";
           })
           // app.env;
@@ -608,7 +608,7 @@ in
               };
             };
 
-            litellm = lib.mkOption {
+            litellm.enable = lib.mkOption {
               type = lib.types.bool;
               default = false;
               description = ''
@@ -686,18 +686,17 @@ in
                 default = "/metrics";
                 description = "metrics_path of the prometheus scrape.";
               };
-            };
-
-            dashboard = lib.mkOption {
-              type = lib.types.nullOr lib.types.path;
-              default = null;
-              description = ''
-                Optional Grafana dashboard JSON. `%APP_NAME%` placeholders
-                are substituted with the app's name. Lands under the "Apps"
-                folder. Only materialized when `prometheus.enable` — the
-                dashboard is metrics-driven, so without the scrape it would
-                only render empty panels.
-              '';
+              dashboard = lib.mkOption {
+                type = lib.types.nullOr lib.types.path;
+                default = null;
+                description = ''
+                  Optional Grafana dashboard JSON. `%APP_NAME%` placeholders
+                  are substituted with the app's name. Lands under the "Apps"
+                  folder. Nested under `prometheus` because it only renders
+                  when `enable` is on — the dashboard is metrics-driven, so
+                  without the scrape it would only show empty panels.
+                '';
+              };
             };
 
             homepage = {

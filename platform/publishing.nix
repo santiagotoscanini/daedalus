@@ -24,7 +24,7 @@ let
 
   # Resolve a webApp's upstream URL from whichever input is set (the
   # exactly-one assertion below enforces the shape); named-service
-  # apps (`service`) have no URL.
+  # apps (`traefikService`) have no URL.
   resolveUrl =
     w: if w.serviceName != null then "http://${w.serviceName}:${toString w.port}" else w.serviceUrl;
 
@@ -73,7 +73,7 @@ in
                 Full upstream URL traefik dials. No implicit
                 `host.containers.internal` fallback; every route
                 declares its upstream explicitly (exactly one of
-                `serviceUrl` / `service`, enforced by an assertion).
+                `serviceUrl` / `traefikService`, enforced by an assertion).
 
                 Typical shape: `http://<container-name>:<in-container-port>`
                 for stacks attached to `traefik-net`. Use `https://`
@@ -300,12 +300,12 @@ in
                   - Native NixOS services (pi-hole): no container/bridge.
                   - TLS-internal upstreams: `https://name:port`.
 
-                  Exactly one of `serviceName` / `serviceUrl` / `service`
+                  Exactly one of `serviceName` / `serviceUrl` / `traefikService`
                   must be set — enforced by an assertion.
                 '';
                 example = "http://host.containers.internal:8989";
               };
-              service = lib.mkOption {
+              traefikService = lib.mkOption {
                 type = lib.types.nullOr lib.types.str;
                 default = null;
                 description = ''
@@ -608,7 +608,7 @@ in
               lib.optional (w.auth == "oidc" && w.authHeaders != { }) "oidc-${n}-strip@file"
               ++ lib.optional (w.auth == "oidc") "oidc-${n}@file";
           }
-          // (if w.service != null then { inherit (w) service; } else { serviceUrl = resolveUrl w; });
+          // (if w.traefikService != null then { service = w.traefikService; } else { serviceUrl = resolveUrl w; });
       in
       (lib.mapAttrs baseRoute cfg.webApps)
       // (lib.mapAttrs' (
@@ -629,13 +629,13 @@ in
           lib.count (x: x) [
             (w.serviceName != null)
             (w.serviceUrl != null)
-            (w.service != null)
+            (w.traefikService != null)
           ] == 1;
         message = ''
           fleet.webApps.${n}: exactly one of `serviceName` (bridge-routed
           via traefik-net), `serviceUrl` (explicit upstream URL, e.g. for
-          gluetun-shared or native services), or `service` (named traefik
-          service like api@internal) must be set.
+          gluetun-shared or native services), or `traefikService` (named
+          traefik service like api@internal) must be set.
         '';
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
@@ -643,7 +643,7 @@ in
         message = "fleet.webApps.${n}: `serviceName` needs `port` (traefik dials http://<serviceName>:<port>).";
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
-        assertion = (w.serviceUrl != null || w.service != null) -> w.port == null;
+        assertion = (w.serviceUrl != null || w.traefikService != null) -> w.port == null;
         message = "fleet.webApps.${n}: `port` only pairs with `serviceName` (a serviceUrl carries its own port; a named service has none) — leave it null.";
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
@@ -746,7 +746,7 @@ in
               # oidc-bypassed healthPath: probing / on an auth-gated app
               # only certifies the forward-auth middleware (its 302 fires
               # before any upstream dial), not the app.
-              else if w.isolated || w.service != null then
+              else if w.isolated || w.traefikService != null then
                 "https://${w.hostname}${if w.healthPath != null then w.healthPath else "/"}"
               else
                 resolveUrl w;
