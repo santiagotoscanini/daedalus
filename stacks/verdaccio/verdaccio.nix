@@ -49,8 +49,9 @@ in
 
   # verdaccio-openid fetches the IdP discovery document at plugin load
   # and does not retry on failure, leaving OIDC npm login broken until
-  # a restart. Start after traefik + pocket-id so discovery succeeds on
-  # the first attempt.
+  # a restart. Start after traefik + pocket-id — whose ExecStartPost
+  # readiness gate holds until the IdP answers — so discovery succeeds
+  # on the first attempt.
   systemd.services.podman-verdaccio = {
     after = [
       "podman-traefik.service"

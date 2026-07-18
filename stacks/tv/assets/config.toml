@@ -1,0 +1,18 @@
+# Gluetun control-server auth policy for the tv-stack gluetun.
+#
+# Recent gluetun denies EVERY control-server route by default unless an auth
+# file is present (that's the "Unauthorized" you get otherwise). Two consumers
+# read this instance's control API over host :8000 / in-netns :8000, both
+# unauthenticated read-only: the homepage "gluetun" widget (publicip/ip +
+# vpn/status) and gluetun-exporter (all four, for the Grafana VPN panels and
+# the VPN-down / port-forward-lost alerts). Shared shape with
+# stacks/ipcrawl-vpn/assets/config.toml.
+[[roles]]
+name = "readonly"
+routes = [
+  "GET /v1/publicip/ip",
+  "GET /v1/vpn/status",
+  "GET /v1/openvpn/portforwarded",
+  "GET /v1/portforward",
+]
+auth = "none"

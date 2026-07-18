@@ -52,6 +52,9 @@
     "/home/santiago/selfhost/factorio/fsm-data" = { };
     "/home/santiago/selfhost/factorio/mod_packs" = { };
     "/home/santiago/selfhost/factorio/data" = { };
+    "/home/santiago/selfhost/factorio/data/config" = { };
+    "/home/santiago/selfhost/factorio/data/mods" = { };
+    "/home/santiago/selfhost/factorio/data/saves" = { };
   };
 
   virtualisation.oci-containers.containers.factorio = mkRootlessContainer {

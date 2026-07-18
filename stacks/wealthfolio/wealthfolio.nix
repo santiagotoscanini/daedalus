@@ -19,8 +19,9 @@
 
   # OIDC discovery against id.toscanini.me runs at startup and is fatal
   # on failure; under --rm the crash leaves the oneshot unit green with
-  # no container behind it. Start after traefik + pocket-id so the IdP
-  # answers the discovery request on the first attempt.
+  # no container behind it. Start after traefik + pocket-id — whose
+  # ExecStartPost readiness gate holds until the IdP answers — so the
+  # discovery request succeeds on the first attempt.
   systemd.services.podman-wealthfolio = {
     after = [
       "podman-traefik.service"

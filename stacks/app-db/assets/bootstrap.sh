@@ -9,9 +9,12 @@
 #   CLUSTER_ENV    — $ENV_BASE/cluster/env  (POSTGRES_PASSWORD line)
 #   APP_ENV_FILE   — $ENV_BASE/$APP_NAME/env (per-app env we emit)
 #
-# `set -eu` is already on (set by the wrapper). The target directory
-# for APP_ENV_FILE is pre-created by tmpfiles.rules (0700 santiago:users),
-# so we can write into it without needing sudo here.
+# `set -eu` is already on (set by the wrapper). state-dirs.service also
+# declares the APP_ENV_FILE directory, but there is no ordering edge
+# between the oneshots — create it here so a fresh restore can't race.
+# This unit runs as santiago, so the dir lands santiago-owned.
+
+install -d -m 0700 "$(dirname "$APP_ENV_FILE")"
 
 # Wait for postgres to be ready (up to 60s), then hard-fail — without
 # this the timeout falls through and surfaces as a confusing psql

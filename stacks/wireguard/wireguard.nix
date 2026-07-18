@@ -61,17 +61,22 @@
 
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
-  # Non-traversable parent closes the world-readable window if wg-easy
-  # rewrites its db loosely; container root maps to santiago, so the
-  # bind mount still works.
-  myStack.stateDirs."/home/santiago/selfhost/wireguard".mode = "0700";
-
-  # wg-easy writes wg-easy.db (server private key + client configs/PSKs)
-  # world-readable (0644). Tighten to 0600 on each activation — a private
-  # key has no business being world-readable, even on a single-user box.
-  systemd.tmpfiles.rules = [
-    "z /home/santiago/selfhost/wireguard/wg-easy.db 0600 santiago users - -"
-  ];
+  myStack.stateDirs = {
+    # Non-traversable parent closes the world-readable window if wg-easy
+    # rewrites its db loosely; container root maps to santiago, so the
+    # bind mount still works.
+    "/home/santiago/selfhost/wireguard".mode = "0700";
+    # wg-easy writes wg-easy.db (server private key + client configs/PSKs)
+    # world-readable (0644). state-dirs re-tightens it to 0600 at boot —
+    # a private key has no business being world-readable, even on a
+    # single-user box. (tmpfiles can't do this: it silently skips rules
+    # under the santiago-owned /home prefix. `f` pre-creates the file
+    # empty if missing, which SQLite treats as a valid empty DB.)
+    "/home/santiago/selfhost/wireguard/wg-easy.db" = {
+      type = "f";
+      mode = "0600";
+    };
+  };
 
   virtualisation.oci-containers.containers.wireguard = mkRootlessContainer {
     image = "ghcr.io/wg-easy/wg-easy:15.3.0@sha256:93bbd593e07bab98d02807a28770ac87ab6c48818e319e68c1f66561feb99876";

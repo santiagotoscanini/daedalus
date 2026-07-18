@@ -171,9 +171,13 @@ let
 
   mountUnits = lib.mapAttrsToList (_: v: "${utils.escapeSystemdPath v.mount}.mount") toMount;
 
+  # One bad property must not abort the rest (or, worse, block the
+  # mounts ordered after this unit): each `zfs set` failure logs and
+  # continues, and the unit exits nonzero at the end for visibility.
   convergeScript = pkgs.writeShellScript "zfs-converge" ''
-    set -eu
+    set -u
     ZFS=${pkgs.zfs}/bin/zfs
+    fail=0
 
     # Reads current value, writes only on diff. Skips missing datasets
     # (e.g. recovery boot before s2-pool import).
@@ -185,7 +189,10 @@ let
       }
       if [ "$have" != "$want" ]; then
         echo "  set:   $ds  $key: $have -> $want"
-        $ZFS set "$key=$want" "$ds"
+        $ZFS set "$key=$want" "$ds" || {
+          echo "  FAIL:  $ds  $key" >&2
+          fail=1
+        }
       fi
     }
 
@@ -202,6 +209,8 @@ let
         )
       ) datasets
     )}
+
+    exit "$fail"
   '';
 in
 {
@@ -247,6 +256,10 @@ in
   };
 
   # Quiet no-op when properties match; logs `set:` on actual changes.
+  # wantedBy (not requiredBy): a failed converge must never block the
+  # /s2 mounts — and with them most of the container fleet. Ordering
+  # via `before` still guarantees properties apply first when it runs;
+  # a failure surfaces through emailOnFailure + the failed-units alert.
   systemd.services.zfs-converge = {
     description = "Converge ZFS dataset properties";
     after = [
@@ -258,7 +271,7 @@ in
       "zfs-import-s2-pool.service"
     ];
     before = mountUnits;
-    requiredBy = mountUnits;
+    wantedBy = mountUnits;
     unitConfig.DefaultDependencies = false;
     serviceConfig = {
       Type = "oneshot";
@@ -266,4 +279,7 @@ in
       ExecStart = convergeScript;
     };
   };
+
+  # A silently-failed converge would leave declared properties drifted.
+  myStack.emailOnFailure = [ "zfs-converge" ];
 }

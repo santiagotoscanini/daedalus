@@ -336,6 +336,8 @@ in
   myStack.stateDirs = {
     "/home/santiago/selfhost/tv/bazarr" = { };
     "/home/santiago/selfhost/tv/gluetun" = { };
+    "/home/santiago/selfhost/tv/gluetun/auth" = { };
+    "/home/santiago/selfhost/tv/gluetun/wireguard".mode = "0700";
     "/home/santiago/selfhost/tv/jellyfin" = { };
     "/home/santiago/selfhost/tv/nzbget" = { };
     # nzbget's LogFile points at /config/logs and never creates the dir;
@@ -346,6 +348,12 @@ in
     "/home/santiago/selfhost/tv/radarr" = { };
     "/home/santiago/selfhost/tv/sonarr" = { };
     "/home/santiago/selfhost/tv/subgen" = { };
+    # Content dirs on s2-pool that containers bind directly — declared
+    # so a fresh restore pre-creates them with santiago ownership.
+    "/s2/tv/downloads/qbittorrent" = { };
+    "/s2/tv/media" = { };
+    "/s2/tv/torrents" = { };
+    "/s2/tv/usenet" = { };
   };
 
   myStack.homepageServices."Network" = [
@@ -383,6 +391,10 @@ in
     volumes = [
       "/home/santiago/selfhost/tv/gluetun:/gluetun"
       "${config.sops.secrets."tv-wg0".path}:/gluetun/wireguard/wg0.conf:ro"
+      # Control-server auth policy is config, not state — tracked in the
+      # repo so a fresh restore keeps the exporter (and the VPN alerts
+      # that feed off it) working.
+      "${./assets/config.toml}:/gluetun/auth/config.toml:ro"
     ];
 
     environment = {

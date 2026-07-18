@@ -63,13 +63,14 @@ let
         Type = lib.mkForce "oneshot";
         RemainAfterExit = true;
         Restart = lib.mkForce "on-failure";
-        RestartSec = "5s";
+        RestartSec = "15s";
       };
       # StartLimit* and RequiresMountsFor are [Unit] keys; systemd drops
       # them silently from [Service], turning the guards above into no-ops.
       unitConfig = {
         # systemd default (5 in 10s) trips first-boot races where
-        # auth/storage/pooler wait on db. 20 over 10 min lets slow paths converge.
+        # app-db tenants wait on pg. 20 retries x 15s = 5 min of retry
+        # headroom inside the 10-min window; slow paths converge.
         StartLimitBurst = 20;
         StartLimitIntervalSec = 600;
       }
@@ -1054,6 +1055,13 @@ in
         # mode are enforced non-recursively at boot and whenever the
         # declaration changes. Every podman-<name> unit orders after
         # this via mkContainerOverride.
+        #
+        # Failure semantics: one bad entry logs and continues (the other
+        # entries still apply), then the unit fails at the end — loud via
+        # emailOnFailure + the failed-units alert. Containers deliberately
+        # only `wants` this unit: `requires` would propagate every
+        # state-dirs restart (any declaration change) into a fleet-wide
+        # container restart.
         state-dirs = {
           description = "Create and own declared container state paths";
           wantedBy = [ "multi-user.target" ];
@@ -1062,22 +1070,29 @@ in
             Type = "oneshot";
             RemainAfterExit = true;
           };
-          script = lib.concatMapStrings (
-            path:
-            let
-              d = cfg.stateDirs.${path};
-              mapId = id: name: if id == 0 then name else toString (99999 + id);
-              owner = "${mapId d.uid "santiago"}:${mapId (if d.gid != null then d.gid else d.uid) "users"}";
-              p = lib.escapeShellArg path;
-            in
-            ''
-              ${if d.type == "d" then "mkdir -p ${p}" else "[ -e ${p} ] || : > ${p}"}
-              chown ${owner} ${p}
-              chmod ${d.mode} ${p}
-            ''
-          ) (lib.sort lib.lessThan (lib.attrNames cfg.stateDirs));
+          script =
+            "fail=0\n"
+            + lib.concatMapStrings (
+              path:
+              let
+                d = cfg.stateDirs.${path};
+                mapId = id: name: if id == 0 then name else toString (99999 + id);
+                owner = "${mapId d.uid "santiago"}:${mapId (if d.gid != null then d.gid else d.uid) "users"}";
+                p = lib.escapeShellArg path;
+              in
+              ''
+                { ${if d.type == "d" then "mkdir -p ${p}" else "[ -e ${p} ] || : > ${p}"} \
+                  && chown ${owner} ${p} && chmod ${d.mode} ${p}; } \
+                  || { echo "state-dirs: failed to apply ${p}" >&2; fail=1; }
+              ''
+            ) (lib.sort lib.lessThan (lib.attrNames cfg.stateDirs))
+            + ''exit "$fail"'';
         };
       };
+
+    # A broken state-dirs run means containers may start against
+    # wrongly-owned dirs — make that loud.
+    myStack.emailOnFailure = [ "state-dirs" ];
 
     # Bridge membership → --network flags, injected from the registry.
     # List options merge, so these compose with each stack's own

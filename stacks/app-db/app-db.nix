@@ -249,7 +249,10 @@ in
           };
           script = ''
             set -eu
-            # ${envBase}/cluster is pre-created by tmpfiles.rules.
+            # state-dirs.service also declares this dir, but there is no
+            # ordering edge between the two oneshots — create it here so
+            # a fresh restore can't race (install -d is idempotent).
+            install -d -m 0700 -o santiago -g users "${envBase}/cluster"
             if [ ! -e "${clusterEnv}" ]; then
               PASSWORD=$(openssl rand -hex 32)
               install -m 0600 -o santiago -g users /dev/stdin "${clusterEnv}" <<EOF

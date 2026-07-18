@@ -29,6 +29,7 @@
 
 {
   config,
+  pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
   ...
@@ -38,6 +39,24 @@
   # ENCRYPTION_KEY: sops-encrypted env.sops, decrypted to
   # /run/secrets/pocket-id-env at activation. Edit with `sops env.sops`.
   sops.secrets."pocket-id-env" = mkDotenvSecret ./env.sops;
+
+  # Readiness gate, mirroring podman-pg's: "podman-pocket-id finished"
+  # only means `podman run -d` returned — the IdP answers HTTP a moment
+  # later. ExecStartPost holds the unit (and every OIDC consumer ordered
+  # after it: verdaccio, wealthfolio) until the app's own healthcheck
+  # passes, so first-attempt discovery can't race a cold boot.
+  systemd.services.podman-pocket-id.serviceConfig.ExecStartPost =
+    # 120s: generous because a mass restart (a common.nix change touches
+    # every unit) starts the whole fleet at once and the IdP competes
+    # for CPU with ~50 containers.
+    pkgs.writeShellScript "wait-pocket-id-ready" ''
+      for _ in $(seq 1 120); do
+        ${pkgs.podman}/bin/podman exec pocket-id /app/pocket-id healthcheck && exit 0
+        sleep 1
+      done
+      echo "pocket-id did not become ready within 120s" >&2
+      exit 1
+    '';
 
   myStack.containerNetworks.pocket-id = [
     "traefik"
