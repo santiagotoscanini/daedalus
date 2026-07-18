@@ -21,36 +21,16 @@ let
   # paths (@n8n/di, jwt.service.js) verified present in the 2.29.10 image
   # — re-verify on every n8n image bump (upstream is thin, last commit
   # 2025-12-29). Escape hatch if the hook ever breaks: /signin?showLogin=true.
-  n8nOidcHookSrc = pkgs.fetchFromGitHub {
+  # cweagans/n8n-oidc — OIDC login for n8n community edition, stock. The
+  # homepage tile + Pocket ID launch URL deep-link straight to
+  # /auth/oidc/login, so no button-page patch is needed; a direct visit
+  # to n8n just shows the hook's one-click "Sign in with SSO" button.
+  n8nOidcHook = pkgs.fetchFromGitHub {
     owner = "cweagans";
     repo = "n8n-oidc";
     rev = "f2961d6c6ac103989f4920523b6d3faad7547bc2";
     hash = "sha256-35+prcUzRhtPdVc9sRduwKKNpce5mQfl7WiR7bK1s+A=";
   };
-
-  # Patch the frontend hook to auto-redirect to SSO instead of rendering a
-  # "Sign in with SSO" button page: the moment the SPA lands on /signin
-  # unauthenticated (and there's no ?error=), jump straight into the OIDC
-  # flow — silent when a Pocket ID session is alive. The ?error= guard and
-  # the upstream ?showLogin=true escape hatch keep the password form
-  # reachable (a failed login shows the button + error, no redirect loop).
-  n8nOidcHook = pkgs.runCommand "n8n-oidc-hooks" { } ''
-    ${pkgs.python3}/bin/python3 - <<'PATCH'
-    src = open("${n8nOidcHookSrc}/hooks.js").read()
-    anchor = "\t\tif (shouldShowNormalLogin() || !isSigninPage()) return;\n\n\t\tinjectSsoButton();\n\n\t\tvar observer"
-    repl = "\t\tif (shouldShowNormalLogin() || !isSigninPage()) return;\n\n\t\tif (!new URLSearchParams(window.location.search).get('error')) { window.location.replace('/auth/oidc/login'); return; }\n\n\t\tinjectSsoButton();\n\n\t\tvar observer"
-    assert src.count(anchor) == 1, "anchor not unique"
-    src = src.replace(anchor, repl)
-    # Don't let the browser cache the login-flow script — it must reflect
-    # config/redirect changes immediately (tiny, only served on /signin).
-    cache_anchor = "res.set('Cache-Control', 'public, max-age=3600');"
-    assert src.count(cache_anchor) == 1, "cache anchor not unique"
-    src = src.replace(cache_anchor, "res.set('Cache-Control', 'no-store');")
-    import os
-    os.makedirs(os.environ["out"])
-    open(os.path.join(os.environ["out"], "hooks.js"), "w").write(src)
-    PATCH
-  '';
 in
 {
   # DB password (as both POSTGRES_PASSWORD and DB_POSTGRESDB_PASSWORD —
@@ -70,6 +50,9 @@ in
     homepage = {
       group = "Productivity";
       name = "n8n";
+      # Deep-link the tile straight into the OIDC flow (silent with a live
+      # Pocket ID session) — skips the hook's "Sign in with SSO" button.
+      href = "https://n8n.toscanini.me/auth/oidc/login";
       description = "Workflow automation";
       icon = "n8n.png";
       widget = {
