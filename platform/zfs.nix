@@ -262,14 +262,10 @@ in
   # a failure surfaces through emailOnFailure + the failed-units alert.
   systemd.services.zfs-converge = {
     description = "Converge ZFS dataset properties";
-    after = [
-      "zfs-import-rpool.service"
-      "zfs-import-s2-pool.service"
-    ];
-    wants = [
-      "zfs-import-rpool.service"
-      "zfs-import-s2-pool.service"
-    ];
+    # zfs-import.target covers every imported pool (rpool is imported in
+    # initrd and has no per-pool import unit).
+    after = [ "zfs-import.target" ];
+    wants = [ "zfs-import.target" ];
     before = mountUnits;
     wantedBy = mountUnits;
     unitConfig.DefaultDependencies = false;

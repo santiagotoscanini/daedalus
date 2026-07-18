@@ -159,7 +159,7 @@ let
       // Drilldown's stack grouping covers them.
       rule {
         source_labels = ["__journal__systemd_unit"]
-        regex         = "^(pihole-(ftl|web)|ddclient|smartd|fail2ban)\\.service$"
+        regex         = "^(pihole-(ftl|ready)|ddclient|smartd|fail2ban)\\.service$"
         target_label  = "stack"
         replacement   = "infra"
       }
@@ -175,6 +175,17 @@ let
         regex         = ";(.+)"
         target_label  = "stack"
         replacement   = "$1"
+      }
+
+      // Final catch-all: native units not claimed above (syncoid,
+      // app-*-deploy, sshd, timers, ...) land in stack="system" so
+      // every journald line carries a stack label.
+      rule {
+        source_labels = ["stack", "__journal__systemd_unit"]
+        separator     = ";"
+        regex         = ";(.+)\\.service"
+        target_label  = "stack"
+        replacement   = "system"
       }
     }
 

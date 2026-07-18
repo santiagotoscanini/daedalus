@@ -22,6 +22,18 @@
 
   systemd.services.flake-autoupgrade = {
     description = "Update flake.lock, commit, stage next-boot generation, push";
+    # Persistent=true replays a missed window right at boot, where the
+    # flake update needs GitHub over DNS that resolves through the
+    # local pi-hole — gate on both (same accepted platform->stacks
+    # layering inversion as ddclient).
+    after = [
+      "network-online.target"
+      "pihole-ready.service"
+    ];
+    wants = [
+      "network-online.target"
+      "pihole-ready.service"
+    ];
     serviceConfig.Type = "oneshot";
     # System nix (not pkgs.nix): the running nix honors /etc/gitconfig
     # safe.directory for the santiago-owned repo; a mismatched pkgs.nix
