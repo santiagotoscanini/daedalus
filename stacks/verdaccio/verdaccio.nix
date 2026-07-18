@@ -24,11 +24,20 @@
   config,
   lib,
   pkgs,
+  mkDotenvSecret,
   mkRootlessContainer,
   ...
 }:
 
+let
+  # Dir holding the Containerfile the image-build oneshot uses.
+  verdaccioImageBuildDir = ./assets;
+in
 {
+  # VERDACCIO_OPENID_CLIENT_ID + VERDACCIO_OPENID_CLIENT_SECRET (Pocket ID
+  # SSO): sops-encrypted env.sops. Edit with `sops env.sops`.
+  sops.secrets."verdaccio-env" = mkDotenvSecret ./env.sops;
+
   myStack.containerNetworks.verdaccio = "traefik";
 
   myStack.webApps.verdaccio = {
@@ -67,7 +76,8 @@
   ];
 
   virtualisation.oci-containers.containers.verdaccio = mkRootlessContainer {
-    image = "docker.io/verdaccio/verdaccio:6.7.4@sha256:e3ac7e335e69504cd0b09616aa52066399868282313c34762d2a77b8169a3575";
+    # Built by verdaccio-image-build below (verdaccio:6.7.4 + verdaccio-openid).
+    image = "localhost/verdaccio-openid:6.7.4";
 
     volumes = [
       "/home/santiago/selfhost/verdaccio/storage:/verdaccio/storage"
@@ -81,9 +91,50 @@
       VERDACCIO_PUBLIC_URL = "https://verdaccio.toscanini.me";
     };
 
+    # VERDACCIO_OPENID_CLIENT_ID + _SECRET (referenced by name in config.yaml).
+    environmentFiles = [ config.sops.secrets."verdaccio-env".path ];
+
     extraOptions = [
       "--user=10001:0" # See header for UID rationale.
       "--network=traefik-net"
     ];
+  };
+
+  # Build localhost/verdaccio-openid:6.7.4 (base + plugin) before verdaccio
+  # starts. Same pattern as nextcloud-image-build; layer cache makes
+  # rebuilds after the first ~instant.
+  systemd.services.verdaccio-image-build = {
+    description = "Build localhost/verdaccio-openid:6.7.4";
+    after = [
+      "network-online.target"
+      "linger-users.service"
+    ];
+    wants = [
+      "network-online.target"
+      "linger-users.service"
+    ];
+    before = [ "podman-verdaccio.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "santiago";
+      Group = "users";
+      Environment = "XDG_RUNTIME_DIR=/run/user/1000";
+      Restart = "on-failure";
+      RestartSec = "1s";
+      ExecStart = pkgs.writeShellScript "build-verdaccio-image" ''
+        set -eu
+        cd ${verdaccioImageBuildDir}
+        ${pkgs.podman}/bin/podman build \
+          --tag localhost/verdaccio-openid:6.7.4 \
+          --file Containerfile \
+          .
+      '';
+    };
+  };
+
+  systemd.services.podman-verdaccio = {
+    after = [ "verdaccio-image-build.service" ];
+    wants = [ "verdaccio-image-build.service" ];
   };
 }

@@ -1,0 +1,15 @@
+# Bakes the verdaccio-openid plugin (Pocket ID SSO) into the pinned
+# verdaccio:6 image. Built by the verdaccio-image-build oneshot before
+# podman-verdaccio starts (same pattern as nextcloud-ffmpeg). The
+# plugin dir name must be the full package name; config.yaml references
+# it as `openid` (verdaccio prepends `verdaccio-`).
+FROM docker.io/library/node:22-alpine AS builder
+RUN mkdir -p /verdaccio/plugins \
+  && cd /verdaccio/plugins \
+  && npm install --install-strategy=shallow --no-bin-links \
+     --omit=optional --omit=dev verdaccio-openid@0.17.2
+
+FROM docker.io/verdaccio/verdaccio:6.7.4@sha256:e3ac7e335e69504cd0b09616aa52066399868282313c34762d2a77b8169a3575
+COPY --chown=10001:root --from=builder \
+  /verdaccio/plugins/node_modules/verdaccio-openid \
+  /verdaccio/plugins/verdaccio-openid

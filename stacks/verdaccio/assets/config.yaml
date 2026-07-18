@@ -18,6 +18,22 @@ auth:
     # sign-up so a compromised LAN device can't self-register and then
     # publish/overwrite packages (publish requires $authenticated).
     max_users: -1
+  # Pocket ID SSO. client-id/secret are ENV VAR NAMES the plugin reads
+  # at runtime (VERDACCIO_OPENID_CLIENT_{ID,SECRET} from env.sops) — no
+  # secrets in this tracked file. provider-host discovery finds
+  # <host>/.well-known/openid-configuration. username-claim=preferred_username
+  # (Pocket ID). File store survives restarts (in-memory default is 60s
+  # TTL, too short for the npm login handoff).
+  openid:
+    provider-host: https://id.toscanini.me
+    client-id: VERDACCIO_OPENID_CLIENT_ID
+    client-secret: VERDACCIO_OPENID_CLIENT_SECRET
+    username-claim: preferred_username
+    groups-claim: groups
+    scope: openid profile email groups
+    store-type: file
+    store-config: /verdaccio/storage/openid-store
+    login-button-text: Login with Pocket ID
 
 uplinks:
   npmjs:
@@ -43,6 +59,9 @@ server:
 
 middlewares:
   audit:
+    enabled: true
+  # Registers /-/oauth/* routes + the web-UI SSO button (Pocket ID).
+  openid:
     enabled: true
 
 log:
