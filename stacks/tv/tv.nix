@@ -176,6 +176,10 @@ let
       port = 6767;
       authBypassRule = arrApiBypass;
       healthPath = "/api/system/status";
+      # Authenticated probe: without the key bazarr answers 401, which
+      # still passes [STATUS] < 500 — certifying traefik, not bazarr.
+      # The value expands from gatus's env.sops at config load.
+      healthHeaders."X-API-KEY" = "\${BAZARR_API_KEY}";
       homepage = {
         group = "Media";
         name = "Bazarr";
@@ -285,6 +289,7 @@ in
             auth = "oidc";
           }
           // lib.optionalAttrs (u ? authBypassRule) { inherit (u) authBypassRule; }
+          // lib.optionalAttrs (u ? healthHeaders) { inherit (u) healthHeaders; }
         )
       ) vpnUis
     )

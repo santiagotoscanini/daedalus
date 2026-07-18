@@ -292,6 +292,40 @@ in
           }
         ) activeApps
       ))
+
+      # pg readiness gate: "podman-pg finished" only means `podman run
+      # -d` returned; postgres accepts connections ~1s later, and
+      # tenants that dial fatally at startup (pocket-id, gatus) crash
+      # into --rm oblivion inside that window. ExecStartPost holds the
+      # unit — and everything ordered after it — until the server
+      # actually answers.
+      {
+        podman-pg.serviceConfig.ExecStartPost = pkgs.writeShellScript "wait-pg-ready" ''
+          for _ in $(seq 1 60); do
+            ${pkgs.podman}/bin/podman exec pg pg_isready -q && exit 0
+            sleep 1
+          done
+          echo "pg did not become ready within 60s" >&2
+          exit 1
+        '';
+      }
+
+      # Direct pg edge on every consumer. At boot the bootstrap chain
+      # orders this transitively (consumer → bootstrap → pg), but
+      # systemd ordering is per-transaction: a mass restart (a
+      # common.nix change touching every unit) re-queues consumers while
+      # the already-active bootstrap stays put, and tenants then race
+      # pg's start. Declaring the edge on the consumer itself keeps it
+      # in every transaction.
+      (lib.listToAttrs (
+        lib.concatMap (
+          name:
+          map (c: lib.nameValuePair "podman-${c}" {
+            after = [ "podman-pg.service" ];
+            wants = [ "podman-pg.service" ];
+          }) cfg.${name}.consumers
+        ) activeApps
+      ))
     ];
 
     virtualisation.oci-containers.containers."pg" = mkRootlessContainer {

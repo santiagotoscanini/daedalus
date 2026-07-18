@@ -52,16 +52,20 @@ let
   # set. oidc-gated apps declare `healthPath` (bypassed from the auth
   # middleware) so the probe reaches the real upstream — a bare "/"
   # would be 302'd to Pocket ID and certify the IdP instead.
-  endpoints = lib.mapAttrsToList (name: w: {
-    inherit name;
-    group = "web-apps";
-    url = "https://${w.hostname}${if w.healthPath != null then w.healthPath else "/"}";
-    interval = "60s";
-    conditions = [
-      "[STATUS] < 500"
-      "[CERTIFICATE_EXPIRATION] > 168h"
-    ];
-  }) config.myStack.webApps;
+  endpoints = lib.mapAttrsToList (
+    name: w:
+    {
+      inherit name;
+      group = "web-apps";
+      url = "https://${w.hostname}${if w.healthPath != null then w.healthPath else "/"}";
+      interval = "60s";
+      conditions = [
+        "[STATUS] < 500"
+        "[CERTIFICATE_EXPIRATION] > 168h"
+      ];
+    }
+    // lib.optionalAttrs (w.healthHeaders != { }) { headers = w.healthHeaders; }
+  ) config.myStack.webApps;
 
   # gatus reads YAML; JSON is a valid subset, so toJSON avoids quoting pain.
   gatusConfig = pkgs.writeText "gatus.yaml" (

@@ -77,10 +77,10 @@ let
         RequiresMountsFor = mountPaths;
       };
     }
-    // (lib.optionalAttrs (nets != [ ]) {
-      after = bridgeUnits;
-      wants = bridgeUnits;
-    });
+    // {
+      after = bridgeUnits ++ [ "state-dirs.service" ];
+      wants = bridgeUnits ++ [ "state-dirs.service" ];
+    };
 
   # Idempotent — `--ignore` returns 0 if the network already exists,
   # so this can re-run on every rebuild without churn. NOTE: `--ignore`
@@ -269,12 +269,13 @@ in
       description = ''
         Host paths a container binds for persistent state, keyed by
         absolute path and declared with their CONTAINER-side ownership.
-        Rendered into systemd.tmpfiles rules with the subuid mapping
-        applied — the single convention for pre-creating bind-mount
-        sources so a fresh restore (repo clone + rebuild) starts every
-        container with correctly-owned dirs instead of podman-created
-        root ones. tmpfiles re-enforces ownership on every rebuild, so
-        a wrong uid here actively breaks the app: match the image.
+        Applied by the root `state-dirs.service` oneshot with the
+        subuid mapping — the single convention for pre-creating
+        bind-mount sources so a fresh restore (repo clone + rebuild)
+        starts every container with correctly-owned dirs instead of
+        podman-created root ones. Ownership and mode are re-enforced
+        (non-recursively) at boot, so a wrong uid here actively breaks
+        the app: match the image.
       '';
       example = lib.literalExpression ''
         {
@@ -634,6 +635,22 @@ in
                   probe ([STATUS] < 500) and proves the upstream is up.
                 '';
                 example = "/api/health";
+              };
+              healthHeaders = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+                description = ''
+                  Extra HTTP headers gatus sends with the healthPath
+                  probe (e.g. an API key), upgrading it from a liveness
+                  check (a 401 passes [STATUS] < 500) to an
+                  authenticated health check. Values may use gatus
+                  ''${ENV_VAR} placeholders resolved from gatus's env at
+                  config load — keep real secrets in gatus's env.sops,
+                  never literal in the store-rendered YAML.
+                '';
+                example = lib.literalExpression ''
+                  { "X-API-KEY" = "''${BAZARR_API_KEY}"; }
+                '';
               };
               isolated = lib.mkOption {
                 type = lib.types.bool;
@@ -1013,19 +1030,40 @@ in
       ) cfg.containerNetworks)
       // (lib.listToAttrs (
         map (net: lib.nameValuePair "podman-network-${net}-net" (mkBridgeUnit net)) distinctBridges
-      ));
-
-    # stateDirs → tmpfiles rules (subuid-mapped). systemd-tmpfiles
-    # sorts entries by path, so parents are created before children.
-    systemd.tmpfiles.rules = lib.mapAttrsToList (
-      path: d:
-      let
-        mapId = id: name: if id == 0 then name else toString (99999 + id);
-        user = mapId d.uid "santiago";
-        group = mapId (if d.gid != null then d.gid else d.uid) "users";
-      in
-      "${d.type} ${path} ${d.mode} ${user} ${group} -"
-    ) cfg.stateDirs;
+      ))
+      // {
+        # stateDirs → a root oneshot (subuid-mapped). NOT tmpfiles:
+        # systemd-tmpfiles refuses to descend from the santiago-owned
+        # /home prefix into differently-owned children ("unsafe path
+        # transition") and silently skips every rule under /home.
+        # Sorted paths create parents before children; ownership and
+        # mode are enforced non-recursively at boot and whenever the
+        # declaration changes. Every podman-<name> unit orders after
+        # this via mkContainerOverride.
+        state-dirs = {
+          description = "Create and own declared container state paths";
+          wantedBy = [ "multi-user.target" ];
+          unitConfig.RequiresMountsFor = lib.attrNames cfg.stateDirs;
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+          };
+          script = lib.concatMapStrings (
+            path:
+            let
+              d = cfg.stateDirs.${path};
+              mapId = id: name: if id == 0 then name else toString (99999 + id);
+              owner = "${mapId d.uid "santiago"}:${mapId (if d.gid != null then d.gid else d.uid) "users"}";
+              p = lib.escapeShellArg path;
+            in
+            ''
+              ${if d.type == "d" then "mkdir -p ${p}" else "[ -e ${p} ] || : > ${p}"}
+              chown ${owner} ${p}
+              chmod ${d.mode} ${p}
+            ''
+          ) (lib.sort lib.lessThan (lib.attrNames cfg.stateDirs));
+        };
+      };
 
     # Bridge membership → --network flags, injected from the registry.
     # List options merge, so these compose with each stack's own
