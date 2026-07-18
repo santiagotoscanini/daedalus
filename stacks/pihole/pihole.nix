@@ -105,10 +105,16 @@ in
 
       webserver = {
         # No admin password — the web UI sits behind traefik's Pocket ID
-        # gate (AUTH.md) and :8080 stays LAN-closed, so FTL's own login
-        # is redundant. BOTH hashes empty: any configured password
-        # (app passwords included) re-enables the login wall. The
-        # homepage widget needs no key against an auth-less API.
+        # gate (AUTH.md) and :8080 stays LAN-closed. Deliberate
+        # trade-off (2026-07-18): the API remains reachable WITHOUT
+        # auth from any container on the box via
+        # host.containers.internal:8080 (that's also how traefik and
+        # the homepage widget get in). FTL has no "password on the API,
+        # UI stays login-free" mode — the UI is an API client, so ANY
+        # configured hash (app passwords included) re-enables the login
+        # wall, and a second login behind SSO is explicitly not wanted.
+        # Accepted: containers can read the DNS query log / toggle
+        # blocking; misc.readOnly still blocks config writes.
         api.pwhash = "";
         api.app_pwhash = "";
         # Relaxed CSP (upstream default is too strict for Chart.js inline scripts).
