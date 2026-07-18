@@ -44,8 +44,11 @@ in
 
   # Database on the shared app-db cluster: role + db + env file with
   # DATABASE_URL, materialized by app-db-n8n-bootstrap.service
-  # (see stacks/app-db/).
-  myStack.appDatabases.n8n = { };
+  # (see stacks/app-db/). The image reads the password as
+  # DB_POSTGRESDB_PASSWORD, so the env file carries that name too.
+  myStack.appDatabases.n8n = {
+    passwordAliases = [ "DB_POSTGRESDB_PASSWORD" ];
+  };
 
   myStack.webApps.n8n = {
     serviceName = "n8n";
@@ -140,15 +143,6 @@ in
   virtualisation.oci-containers.containers.n8n = mkRootlessContainer {
     image = "docker.io/n8nio/n8n:2.30.7@sha256:23a26975c21aa6f7113286668b35e2831ec898d3a7fbfa1ac8ff16f1bdf88c37";
 
-    # The image expects DB_POSTGRESDB_PASSWORD; the app-db env file
-    # provides POSTGRES_PASSWORD — alias at exec time (the re-export
-    # idiom; image entrypoint is `tini -- /docker-entrypoint.sh`).
-    entrypoint = "/bin/sh";
-    cmd = [
-      "-c"
-      "export DB_POSTGRESDB_PASSWORD=\"$POSTGRES_PASSWORD\" && exec /sbin/tini -- /docker-entrypoint.sh"
-    ];
-
     volumes = [
       "/home/santiago/selfhost/n8n/data:/home/node/.n8n"
       "/home/santiago/selfhost/n8n/local-files:/files"
@@ -200,8 +194,8 @@ in
 
     # N8N_BASIC_AUTH_* + N8N_ENCRYPTION_KEY from sops, the rendered
     # N8N_SMTP_PASS (from the shared mail secret via n8n-smtp-env),
-    # and POSTGRES_PASSWORD (aliased to DB_POSTGRESDB_PASSWORD in the
-    # entrypoint) from the app-db bootstrap env. Later files win.
+    # and DB_POSTGRESDB_PASSWORD (via passwordAliases) from the app-db
+    # bootstrap env. Later files win.
     environmentFiles = [
       config.sops.secrets."n8n-env".path
       "/run/n8n-smtp/env"
