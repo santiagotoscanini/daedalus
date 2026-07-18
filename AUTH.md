@@ -13,7 +13,7 @@ behind forward-auth > bare forward-auth. No double logins: services
 whose local login can't be disabled and have OIDC coming upstream WAIT
 for the official implementation instead.
 
-Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.toscanini.me, LAN+tunnel); oidc-auth@file middleware (vendored traefik-oidc-auth v0.20.1, localPlugins); `myStack.webApps.<name>.auth = "oidc"` knob gates websecure+cfweb routers; gated so far: homepage, prometheus, metube, myspeed, stirling-pdf, pihole (password still set — blank after passkey verify), traefik dashboard (widget moved to internal :8080 api.insecure). Native OIDC live: grafana (auto-login, basic-auth API kept for the widget), gatus (allowed-subjects, /metrics stays open), wealthfolio (public client, PKCE, password fallback kept), litellm UI (API keys untouched). Remaining: immich OAuth (needs an admin-scoped API key or UI click-through — widget key lacks systemConfig.read), nextcloud (occ + household-user planning), Tier 2 grocy + calibre-web, verdaccio (openid plugin), n8n (cweagans hook), immich, nextcloud. TV STACK DONE: sonarr/radarr/prowlarr AuthenticationMethod=External, bazarr auth off, qbt subnet-whitelist, nzbget password removed — all six gated with X-Api-Key/RPC bypasses so seerr/recyclarr/widgets keep working. healthchecks DONE: gated + REMOTE_USER_HEADER via X-Forwarded-Email (strip middleware guards spoofing; /ping /api /badge bypassed; widget + probe moved onto traefik — kills the old uwsgi/undici flap). Audit date 2026-07-17.
+Status: COMPLETE (2026-07-18). Every web UI authenticates through Pocket ID (passkeys, 24h session) except the two apps tracked in FUTURE.md (seerr, wg-easy — waiting on upstream OIDC) and the two permanent out-of-scope ones below (jellyfin, factorio-admin). This file is now the operator reference for the box's auth: the per-service mechanism map (Tiers 1-3), the group access model, and the recipe to onboard a new service or household member.
 
 ## Tier 1 — native OIDC (app is a Pocket ID client)
 
@@ -52,20 +52,19 @@ Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.tosca
 | metube | none | — (needs WebSocket passthrough; traefik default OK) |
 | myspeed | none | leave its password unset (its auth sends plaintext password as a header — worthless) |
 | stirling-pdf | none | native OIDC is paywalled ($99/mo tier) — forward-auth is the maintainers' endorsed path |
-| factorio-admin | local user/pass (sops), OFSM unmaintained | OPEN: login can't be disabled → forward-auth means the box's ONLY double login. Alternative: leave outside Pocket ID like jellyfin. Decide at implementation |
 
-## Waiting on upstream (keep current auth until release — no double login)
+## Waiting on upstream
 
-| Service | Current auth | Waiting for |
-|---|---|---|
-| seerr | Jellyfin-credential login | native OIDC — merged in [PR #2715](https://github.com/seerr-team/seerr/pull/2715), milestoned v3.5.0; testing thread [discussion #2721](https://github.com/seerr-team/seerr/discussions/2721). Adopt on stable release |
-| wg-easy | v15 local account (+TOTP) | native OIDC — [issue #1923](https://github.com/wg-easy/wg-easy/issues/1923) (also tracked as #2374). Adopt when shipped |
+**seerr** and **wg-easy** keep their current local login until each ships
+native OIDC (no double login in the meantime). Tracked in `FUTURE.md` #1
+with the upstream issue links and the adopt-it recipe.
 
 ## Out of scope — stays on native auth
 
 | Service | Why |
 |---|---|
 | jellyfin | native mobile/TV clients can't do OIDC (plugin covers web only, and the 9p4 plugin was archived May 2026); Seerr authenticates users via Jellyfin passwords. Decision: keep Jellyfin's own auth everywhere — easy logins on TVs/devices matter more than SSO here. Do NOT forward-auth this hostname |
+| factorio-admin | OFSM unmaintained (since 2021); its login can't be disabled and it has no OIDC/header support, so the only options were a double login (unwanted) or leaving it out. Decision: leave outside Pocket ID, keep its local user/pass (sops). LAN-only admin UI; game UDP port is unrelated |
 
 ## Access control — Pocket ID groups (per-client)
 

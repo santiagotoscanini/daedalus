@@ -1,6 +1,7 @@
-# n8n — workflow automation + postgres on n8n-net. The n8n container
-# also joins traefik-net so traefik dials it as `http://n8n:5678` —
-# no host port published.
+# n8n — workflow automation. Its database lives on the shared app-db
+# cluster (stacks/app-db); the container joins app-db-net to dial `pg`
+# and traefik-net so traefik dials it as `http://n8n:5678` — no host
+# port published.
 #
 # docker.io path NOT `docker.n8n.io` — the latter is blocked by
 # pi-hole (resolves to us, returns traefik's default cert).
@@ -33,16 +34,18 @@ let
   };
 in
 {
-  # DB password (as both POSTGRES_PASSWORD and DB_POSTGRESDB_PASSWORD —
-  # one value, the two names the two images expect) + N8N_BASIC_AUTH_* +
-  # encryption key: sops-encrypted env.sops, decrypted to
-  # /run/secrets/n8n-env at activation. Edit with `sops env.sops`.
+  # N8N_BASIC_AUTH_* + encryption key + OIDC client creds:
+  # sops-encrypted env.sops, decrypted to /run/secrets/n8n-env at
+  # activation. Edit with `sops env.sops`. The DB password comes from
+  # the app-db-generated env file, not from here.
   sops.secrets."n8n-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks = {
-    n8n-postgres = "n8n";
-    n8n = "n8n";
-  };
+  myStack.containerNetworks.n8n = "app-db";
+
+  # Database on the shared app-db cluster: role + db + env file with
+  # DATABASE_URL, materialized by app-db-n8n-bootstrap.service
+  # (see stacks/app-db/).
+  myStack.appDatabases.n8n = { };
 
   myStack.webApps.n8n = {
     serviceName = "n8n";
@@ -118,35 +121,33 @@ in
     content = "N8N_SMTP_PASS=$(cat ${config.sops.secrets."mail-relay-password".path})";
   };
 
-  # Wait for the rendered env file (merges with common.nix's generated override).
+  # Wait for the rendered SMTP env file and the app-db bootstrap (the
+  # bootstrap gates `podman-app-<name>` for apps-platform tenants; n8n
+  # is a stack, so pull it in explicitly). Merges with common.nix's
+  # generated override.
   systemd.services.podman-n8n = {
-    after = [ "n8n-smtp-env.service" ];
-    wants = [ "n8n-smtp-env.service" ];
-  };
-
-  virtualisation.oci-containers.containers.n8n-postgres = mkRootlessContainer {
-    image = "docker.io/library/postgres:15-alpine@sha256:3d0f7584ed7d04e27fa050d6683a74746608faf21f202be78460d679cc56461f";
-
-    volumes = [
-      "/home/santiago/selfhost/n8n/db:/var/lib/postgresql/data"
+    after = [
+      "n8n-smtp-env.service"
+      "app-db-n8n-bootstrap.service"
     ];
-
-    environment = {
-      POSTGRES_DB = "n8n";
-      POSTGRES_USER = "n8n";
-    };
-
-    # POSTGRES_PASSWORD (native key name — no entrypoint aliasing).
-    environmentFiles = [ config.sops.secrets."n8n-env".path ];
-
-    extraOptions = [
-      "--network=n8n-net"
+    wants = [
+      "n8n-smtp-env.service"
+      "app-db-n8n-bootstrap.service"
     ];
   };
+
 
   virtualisation.oci-containers.containers.n8n = mkRootlessContainer {
     image = "docker.io/n8nio/n8n:2.30.7@sha256:23a26975c21aa6f7113286668b35e2831ec898d3a7fbfa1ac8ff16f1bdf88c37";
-    dependsOn = [ "n8n-postgres" ];
+
+    # The image expects DB_POSTGRESDB_PASSWORD; the app-db env file
+    # provides POSTGRES_PASSWORD — alias at exec time (the re-export
+    # idiom; image entrypoint is `tini -- /docker-entrypoint.sh`).
+    entrypoint = "/bin/sh";
+    cmd = [
+      "-c"
+      "export DB_POSTGRESDB_PASSWORD=\"$POSTGRES_PASSWORD\" && exec /sbin/tini -- /docker-entrypoint.sh"
+    ];
 
     volumes = [
       "/home/santiago/selfhost/n8n/data:/home/node/.n8n"
@@ -156,7 +157,7 @@ in
 
     environment = {
       DB_TYPE = "postgresdb";
-      DB_POSTGRESDB_HOST = "n8n-postgres";
+      DB_POSTGRESDB_HOST = "pg";
       DB_POSTGRESDB_PORT = "5432";
       DB_POSTGRESDB_DATABASE = "n8n";
       DB_POSTGRESDB_USER = "n8n";
@@ -197,16 +198,18 @@ in
       OIDC_SCOPES = "openid email profile";
     };
 
-    # DB_POSTGRESDB_PASSWORD + N8N_BASIC_AUTH_* + N8N_ENCRYPTION_KEY
-    # (native key names), plus the rendered N8N_SMTP_PASS (from the
-    # shared mail secret via n8n-smtp-env.service).
+    # N8N_BASIC_AUTH_* + N8N_ENCRYPTION_KEY from sops, the rendered
+    # N8N_SMTP_PASS (from the shared mail secret via n8n-smtp-env),
+    # and POSTGRES_PASSWORD (aliased to DB_POSTGRESDB_PASSWORD in the
+    # entrypoint) from the app-db bootstrap env. Later files win.
     environmentFiles = [
       config.sops.secrets."n8n-env".path
       "/run/n8n-smtp/env"
+      "/etc/nixos/stacks/app-db/secrets/n8n/env"
     ];
 
     extraOptions = [
-      "--network=n8n-net"
+      "--network=app-db-net"
       # Also join traefik-net so the file-provider rule can dial
       # `http://n8n:5678` by container DNS — no host port needed.
       "--network=traefik-net"

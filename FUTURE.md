@@ -2,20 +2,29 @@
 
 Items consciously deferred from the 2026-07-15 gap-to-SOTA audit.
 
-## 1. Forward-auth SSO for admin UIs (Pocket-ID + traefik-forward-auth)
+## 1. Adopt native OIDC for wg-easy + seerr when upstream ships it
 
-Admin surfaces (traefik dashboard, prometheus, *arrs, qbittorrent,
-myspeed, stirling-pdf) are reachable by anything on the LAN, including
-IoT devices — they're LAN-only, so the risk is accepted for now.
+The box-wide Pocket ID SSO migration (2026-07) is done — every web UI
+authenticates through Pocket ID (passkeys) except two, which keep their
+current local login to avoid a second login prompt until each ships
+native OIDC. Full per-service auth map, group access model, and the
+recipe to onboard a service/user live in `/etc/nixos/AUTH.md`.
 
-Plan when picked up: Pocket-ID (OIDC + passkeys, single container) as
-a new stack + an opt-in `protect = true` flag on `myStack.webApps`
-that attaches a forward-auth middleware. Admin UIs only — family apps
-with their own auth (Jellyfin, Immich, Nextcloud) and public apps stay
-untouched.
+- **seerr** — Jellyfin-credential login today. Native OIDC merged in
+  [PR #2715](https://github.com/seerr-team/seerr/pull/2715), milestoned
+  v3.5.0 (testing: [discussion #2721](https://github.com/seerr-team/seerr/discussions/2721)).
+  When released: create a Pocket ID client, enable OIDC in Seerr, add it
+  to the `family` group.
+- **wg-easy** — v15 local account (+TOTP). Native OIDC requested in
+  [issue #1923](https://github.com/wg-easy/wg-easy/issues/1923) (also
+  #2374), unshipped. When it lands: Pocket ID client, keep in `admins`.
 
-Trigger to revisit: any admin UI gets exposed off-LAN, or untrusted
-devices join the network.
+Not candidates (no viable OIDC path — stay on their own auth, documented
+in AUTH.md "Out of scope"): **jellyfin** (native TV/mobile clients can't
+do OIDC) and **factorio-admin** (OFSM unmaintained, login can't be
+disabled → would force a double login, explicitly not wanted).
+
+Trigger to revisit: either seerr or wg-easy cuts a release with OIDC.
 
 ## 2. Off-site ZFS sync to an external service
 

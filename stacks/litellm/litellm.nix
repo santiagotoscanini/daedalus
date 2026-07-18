@@ -1,5 +1,6 @@
-# litellm — LLM gateway + postgres on litellm-net. The gateway also
-# joins traefik-net so traefik dials `http://litellm:4000` — no host port.
+# litellm — LLM gateway. Its database lives on the shared app-db
+# cluster (stacks/app-db); the container joins app-db-net to dial `pg`
+# and traefik-net so traefik dials `http://litellm:4000` — no host port.
 #
 # LiteLLM proxies LAN/cloud LLM endpoints behind one OpenAI-compatible
 # API. The actual model server runs on the Windows gaming PC at
@@ -26,8 +27,10 @@
 }:
 
 {
-  # DATABASE_URL + UI creds + LITELLM_MASTER_KEY: sops-encrypted env.sops,
-  # decrypted to /run/secrets/litellm-env. Edit with `sops env.sops`.
+  # UI creds + LITELLM_MASTER_KEY + SSO client creds: sops-encrypted
+  # env.sops, decrypted to /run/secrets/litellm-env. Edit with
+  # `sops env.sops`. DATABASE_URL comes from the app-db-generated env
+  # file, not from here.
   sops.secrets."litellm-env" = mkDotenvSecret ./env.sops;
 
   # Prometheus scrapes litellm's /metrics with a Bearer token that IS the
@@ -52,10 +55,19 @@
     content = "$TOKEN";
   };
 
-  myStack.containerNetworks = {
-    litellm-db = "litellm";
-    litellm = "litellm";
+  myStack.containerNetworks.litellm = "app-db";
+
+  # The bootstrap gates `podman-app-<name>` for apps-platform tenants;
+  # litellm is a stack, so pull it in explicitly.
+  systemd.services.podman-litellm = {
+    after = [ "app-db-litellm-bootstrap.service" ];
+    wants = [ "app-db-litellm-bootstrap.service" ];
   };
+
+  # Database on the shared app-db cluster: role + db + env file with
+  # DATABASE_URL, materialized by app-db-litellm-bootstrap.service
+  # (see stacks/app-db/).
+  myStack.appDatabases.litellm = { };
 
   myStack.webApps.litellm = {
     serviceName = "litellm";
@@ -121,29 +133,9 @@
     }
   ];
 
-  virtualisation.oci-containers.containers.litellm-db = mkRootlessContainer {
-    image = "docker.io/library/postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777";
-
-    volumes = [
-      "/home/santiago/selfhost/litellm/db:/var/lib/postgresql/data"
-    ];
-
-    environment = {
-      POSTGRES_DB = "litellm";
-      POSTGRES_USER = "llmproxy";
-    };
-
-    # POSTGRES_PASSWORD shared with litellm (DATABASE_URL).
-    environmentFiles = [ config.sops.secrets."litellm-env".path ];
-
-    extraOptions = [
-      "--network=litellm-net"
-    ];
-  };
 
   virtualisation.oci-containers.containers.litellm = mkRootlessContainer {
     image = "ghcr.io/berriai/litellm:main-stable@sha256:9ef6f45bc0104940571765e610c52a1d761b5ec85efcd193795281086ee61277";
-    dependsOn = [ "litellm-db" ];
 
     # config.yaml enables the prometheus callback (without
     # `callbacks: ["prometheus"]` in litellm_settings, /metrics 404s).
@@ -172,11 +164,16 @@
       STORE_MODEL_IN_DB = "True";
     };
 
-    # DATABASE_URL + UI_USERNAME/UI_PASSWORD + LITELLM_MASTER_KEY.
-    environmentFiles = [ config.sops.secrets."litellm-env".path ];
+    # UI_USERNAME/UI_PASSWORD + LITELLM_MASTER_KEY + SSO creds from
+    # sops; DATABASE_URL (+ POSTGRES_*) from the app-db bootstrap env.
+    # Later files win on key collisions.
+    environmentFiles = [
+      config.sops.secrets."litellm-env".path
+      "/etc/nixos/stacks/app-db/secrets/litellm/env"
+    ];
 
     extraOptions = [
-      "--network=litellm-net"
+      "--network=app-db-net"
       "--network=traefik-net"
     ];
   };
