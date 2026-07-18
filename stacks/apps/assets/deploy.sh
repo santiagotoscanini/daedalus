@@ -52,13 +52,19 @@ send_alert() {  # $1 = subject; body on stdin
 running=$(podman_ container inspect --format '{{.Image}}' "app-$APP" 2>/dev/null || echo none)
 last=$(cat "$STATE" 2>/dev/null || true)
 
+# Two independent state axes, two files: $STATE holds deploy health
+# (`<digest> ok|failed`), the $STATE.pull marker means "pulls are
+# failing". Sharing one file would let a pull blip overwrite a failed
+# deploy record — and the pull recovery would then report all-clear
+# over a still-unhealthy app.
+#
 # A pull of an unchanged tag is one manifest request, so this is cheap to run
 # every couple of minutes. --retry rides out a transient ghcr.io blip; a real
 # pull failure (expired GHCR PAT is the classic) alerts once on transition and
 # keeps the unit failed so `systemctl --failed` shows it.
 if ! podman_ pull --authfile "$AUTHFILE" --retry 3 --retry-delay 5s --quiet "$IMAGE" >/dev/null; then
-  if [ "$last" != "pull-failed" ]; then
-    echo "pull-failed" > "$STATE"
+  if [ ! -e "$STATE.pull" ]; then
+    touch "$STATE.pull"
     send_alert "[s2-server] DEPLOY PULL FAILED: app-$APP" <<EOF
 podman pull $IMAGE failed (after retries).
 Classic cause: the GHCR classic PAT in stacks/apps/ghcr-auth.json.sops expired.
@@ -68,6 +74,13 @@ EOF
   fi
   echo "PULL FAILED for $IMAGE"
   exit 1
+fi
+if [ -e "$STATE.pull" ]; then
+  rm -f "$STATE.pull"
+  send_alert "[s2-server] RECOVERED: app-$APP pulls" <<EOF
+podman pull works again for app-$APP.
+Deploy health is tracked separately; current state: ${last:-none}
+EOF
 fi
 
 new_id=$(podman_ image inspect --format '{{.Id}}' "$IMAGE")
@@ -80,12 +93,6 @@ if [ "$new_id" = "$running" ]; then
   if [ "$last" = "$after failed" ]; then
     echo "app-$APP is serving $after, which failed its health check on deploy"
     exit 1
-  fi
-  if [ "$last" = "pull-failed" ]; then
-    echo "$after ok" > "$STATE"
-    send_alert "[s2-server] RECOVERED: app-$APP deploys" <<EOF
-podman pull works again for app-$APP; the running image is current ($after).
-EOF
   fi
   echo "no change ($after)"
   exit 0

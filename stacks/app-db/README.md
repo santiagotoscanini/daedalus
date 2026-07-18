@@ -172,6 +172,9 @@ ZFS snapshots of `rpool/selfhost` also cover the cluster data dir at
 1. Delete the app's entry from `stacks/apps/declarations.nix`.
 2. `sudo nixos-rebuild switch`. The app container goes away; the
    `app-db-<name>-bootstrap` unit is no longer generated.
+   Also remove the deploy state (`sudo rm -f /var/lib/app-deploy/<name>*`)
+   and the app's images from santiago's rootless store
+   (`podman rmi ghcr.io/santiagotoscanini/<name>:latest`).
 3. **Manual cleanup** of postgres-side state:
 
    ```bash

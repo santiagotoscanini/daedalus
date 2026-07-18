@@ -96,9 +96,11 @@ let
   # loudly rather than silently going stale.
   ghcrAuthFile = config.sops.secrets."ghcr-auth".path;
 
-  # Last deploy result per app, `<digest> ok|failed`. systemd owns the dir
-  # (StateDirectory below); the file is what keeps a failed deploy loud across
-  # subsequent no-op ticks.
+  # Last deploy result per app, `<digest> ok|failed`; a sibling
+  # `<name>.pull` marker file means pulls are currently failing (the two
+  # axes are independent — see deploy.sh). systemd owns the dir
+  # (StateDirectory below); the state file is what keeps a failed deploy
+  # loud across subsequent no-op ticks.
   deployStateDir = "/var/lib/app-deploy";
 
   # The deploy health-check dials traefik at the LAN IP directly rather
