@@ -22,16 +22,17 @@ the eval fails with "file not found".
 
 ```bash
 cd /etc/nixos
-sudo nix flake update        # advance all inputs within their branches
+nix flake update             # as santiago — the repo is santiago-owned;
+                             # sudo would leave root-owned .git objects
 sudo nixos-rebuild test      # verify
 sudo nixos-rebuild switch
-sudo git add flake.lock && sudo git commit -m "flake.lock: update"
+git add flake.lock && git commit -m "flake.lock: update" && git push
 ```
 
-`flake-autoupgrade.timer` does this weekly (staged for next boot, never
-auto-reboots, commits the lock to git). Push to origin stays manual:
-`git push`. Roll back an upgrade with `git revert` on the lock commit +
-rebuild, or pick an older generation from the boot menu.
+`flake-autoupgrade.timer` does all of this weekly — lock update, commit,
+`nixos-rebuild boot` (staged for next boot, never auto-reboots), AND the
+push to origin. Roll back an upgrade with `git revert` on the lock
+commit + rebuild, or pick an older generation from the boot menu.
 
 Container images are pinned per-stack; updating one is
 `podman pull` + `systemctl restart podman-<name>` (moving tags) or a
@@ -56,11 +57,12 @@ for env files, binary for everything else. `sops <file>` needs an
 identity: as santiago it Just Works (keys.txt); as root prefix with
 `SOPS_AGE_KEY_FILE=/home/santiago/.config/sops/age/keys.txt`.
 
-Special case: the LiteLLM master key also feeds the prometheus
-scrape's bearer token, activation-rendered from `env.sops` by
-`litellm-prom-token.service` — and a copy lives in
-`stacks/homepage/env.sops` (`HOMEPAGE_VAR_LITELLM_KEY`). Rotate both
-files together.
+Special case: the LiteLLM master key has one encrypted source
+(`stacks/litellm/env.sops`); its other consumers — the prometheus
+bearer token and homepage's `HOMEPAGE_VAR_LITELLM_KEY` — are rendered
+from it at boot, so rotation touches that one file. The Cloudflare DNS
+token is the opposite: the same value lives in traefik, cloudflared and
+homepage env.sops files — rotate all three together.
 
 ## Adding a stack
 
@@ -93,6 +95,7 @@ sudo git commit -am "<name>: add stack"
    apps reconnect via the regenerated env files).
 
 What is NOT in this repo: ZFS pool contents (`/s2/*`, app data under
-`/home/santiago/selfhost/`), pi-hole's gravity.db, grafana.db,
-`acme.json` (re-issues automatically; LE rate-limits apply), the
-machine-generated `secrets/` dirs, and santiago's GitHub SSH key.
+`/home/santiago/selfhost/`), pi-hole's gravity.db, `acme.json`
+(re-issues automatically; LE rate-limits apply), the machine-generated
+`secrets/` dirs, and grafana's own DB state (UI users/service accounts
+— on the shared app-db cluster, covered by its backup story).

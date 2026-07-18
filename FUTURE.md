@@ -54,11 +54,11 @@ cluster approaching ~150 concurrent connections
 
 ## 4. Logical Postgres backups (pg_dump timers)
 
-The shared cluster, litellm-db, and n8n-postgres are protected only by
-crash-consistent ZFS snapshots + syncoid (immich runs its own built-in
-dumps). Snapshots faithfully preserve logical corruption — a bad app
-migration survives restore, and the daily ring buffer recycles past
-the last good state in 7 days.
+The shared app-db cluster is protected only by crash-consistent ZFS
+snapshots + syncoid (immich runs its own built-in dumps). Snapshots
+faithfully preserve logical corruption — a bad app migration survives
+restore, and the daily ring buffer recycles past the last good state
+in 7 days.
 
 Plan when picked up: a weekly `pg_dump -Fc` per database (systemd
 timer, output under `/home/santiago/selfhost/<stack>/dumps/` so dumps

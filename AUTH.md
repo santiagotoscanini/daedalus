@@ -1,7 +1,7 @@
-# AUTH.md — single sign-on plan (Pocket ID + passkeys)
+# AUTH.md — single sign-on reference (Pocket ID + passkeys)
 
-Target: every browser login on the box goes through one OIDC provider
-— [Pocket ID](https://github.com/pocket-id/pocket-id) (passkey-only,
+Every browser login on the box goes through one OIDC provider —
+[Pocket ID](https://github.com/pocket-id/pocket-id) (passkey-only,
 `id.toscanini.me`, published on websecure + cfweb so remote apps can
 log in through the tunnel) — plus one Traefik forward-auth middleware
 ([sevensolutions/traefik-oidc-auth](https://github.com/sevensolutions/traefik-oidc-auth),
@@ -11,47 +11,56 @@ auth by header, not just by path) for apps without native OIDC.
 Rule of preference: native OIDC against Pocket ID > trusted-header
 behind forward-auth > bare forward-auth. No double logins: services
 whose local login can't be disabled and have OIDC coming upstream WAIT
-for the official implementation instead.
+for the official implementation instead — seerr and wg-easy do that
+today (FUTURE.md #1), and jellyfin + factorio-admin are permanently
+out of scope (below).
 
-Status: COMPLETE (2026-07-18). Every web UI authenticates through Pocket ID (passkeys, 24h session) except the two apps tracked in FUTURE.md (seerr, wg-easy — waiting on upstream OIDC) and the two permanent out-of-scope ones below (jellyfin, factorio-admin). This file is now the operator reference for the box's auth: the per-service mechanism map (Tiers 1-3), the group access model, and the recipe to onboard a new service or household member.
+This file is the operator reference for the box's auth: the
+per-service mechanism map (Tiers 1-3), the group access model, and the
+recipe to onboard a new service or household member.
 
 ## Tier 1 — native OIDC (app is a Pocket ID client)
 
-| Service | Current auth | Plan | Notes |
-|---|---|---|---|
-| immich | local email/password | native OAuth settings | add `app.immich:///oauth-callback` redirect URI (mobile); disable password login after verifying; API keys / homepage widget unaffected |
-| nextcloud | local users | official `user_oidc` app | `--unique-uid=0` + UID-mapping `preferred_username` so existing accounts are reused; sync clients fine via Login Flow v2; `/login?direct=1` = recovery |
-| grafana | admin user/pass (sops) | generic OAuth ([Pocket ID example](https://pocket-id.org/docs/client-examples/grafana)) | `auto_login`; keep `[auth.basic]` enabled — homepage widget uses user/pass API; `/login?disableAutoLogin` = recovery |
-| gatus | none | built-in `security.oidc` | MUST set `allowed-subjects` (our sub UUID) or any IdP account gets in |
-| wealthfolio | argon2 password (`WF_AUTH_PASSWORD_HASH`) | native OIDC (`WF_OIDC_*`) | docs name PocketID; set `WF_OIDC_ALLOWED_SUBS` |
-| litellm | UI user/pass + master key | `GENERIC_CLIENT_ID`/`GENERIC_*` SSO | free ≤5 users since v1.76.0; API Bearer keys untouched — never forward-auth `/v1` |
-| verdaccio | DONE (2026-07-17) | verdaccio-openid plugin baked into a custom image (verdaccio:6.7.4 + plugin via image-build oneshot); Pocket ID SSO for web UI + npm login --auth-type=web; htpasswd + existing CLI tokens still work; registry API ungated so npm install unaffected |
-| n8n | DONE (2026-07-17) | cweagans/n8n-oidc hook (pinned commit, bind-mounted hooks.js); owner email aligned to santiago@toscanini.me so SSO lands as owner; password fallback via /signin?showLogin=true; webhooks untouched |
-| anansi / ipcrawl | own `AUTH_SECRET` sessions | wire app auth to Pocket ID (generic OIDC provider) | self-built — change in the app repos, not here |
+| Service | Mechanism | Escape hatch / notes |
+|---|---|---|
+| immich | native OAuth; password login disabled; mobile uses the `app.immich:///oauth-callback` redirect URI | API keys / homepage widget unaffected |
+| nextcloud | official `user_oidc` app, UID-mapped `preferred_username` (existing accounts reused); sync clients via Login Flow v2 | `/login?direct=1` |
+| grafana | generic OAuth with `auto_login`; `[auth.basic]` stays enabled (homepage widget + admin API use user/pass from sops) | `/login?disableAutoLogin` |
+| gatus | built-in `security.oidc` with `allowed-subjects` (sub UUID allow-list — without it any IdP account gets in) | — |
+| wealthfolio | native OIDC (`WF_OIDC_*`, `WF_OIDC_ALLOWED_SUBS`); OIDC-only, no password hash set | mint `WF_AUTH_PASSWORD_HASH` per the module header |
+| litellm | `GENERIC_*` SSO (free ≤5 users), auto-redirect to Pocket ID | API Bearer keys untouched — never forward-auth `/v1` |
+| verdaccio | verdaccio-openid plugin baked into the custom image; web UI + `npm login --auth-type=web` | htpasswd + existing CLI tokens still work; registry API ungated so `npm install` is unaffected |
+| n8n | cweagans/n8n-oidc hook (pinned commit, bind-mounted hooks.js); SSO lands as owner | `/signin?showLogin=true`; webhooks untouched |
+| anansi / ipcrawl | app-side OIDC against Pocket ID (implemented in the app repos) | own `AUTH_SECRET` sessions |
 
 ## Tier 2 — forward-auth + trusted header (auto-login, no second screen)
 
-| Service | Current auth | Plan | Notes |
-|---|---|---|---|
-| healthchecks | Django email/password | `REMOTE_USER_HEADER` ([Pocket ID example](https://pocket-id.org/docs/client-examples/healthchecks)) | bypass `/ping/*`, `/api/*`, `/badge/*` — hc-ping jobs authenticate by UUID |
-| grocy | DONE (2026-07-17) | header auth via settingoverrides bind-mount, maps to existing `admin` (sofi deleted); `/api` bypass keeps GROCY-API-KEY |
-| calibre-web | DONE (2026-07-17) | Pocket ID gate + reverse-proxy header (UI: Allow Reverse Proxy Auth, header Remote-User); maps to existing `santi`; /opds + /kobo bypassed for e-reader Basic auth; widget dials container-direct |
+| Service | Mechanism | Escape hatch / notes |
+|---|---|---|
+| healthchecks | `REMOTE_USER_HEADER` = the middleware's X-Forwarded-Email | `/ping/*`, `/api/*`, `/badge/*` bypassed — hc-ping jobs authenticate by UUID |
+| grocy | header auth via settingoverrides bind-mount, maps to `admin` | `/api` bypass keeps GROCY-API-KEY callers working |
+| calibre-web | reverse-proxy header auth (Remote-User), maps to `santi` | `/opds` + `/kobo` bypassed for e-reader Basic auth; widget dials container-direct |
+
+Tier-2 apps trust the identity header blindly, so each runs `isolated`
+(private iso-<name>-net bridge, traefik the only peer) and the
+middleware strips client-supplied copies of the header on bypassed
+paths.
 
 ## Tier 3 — forward-auth only (local auth disabled or nonexistent)
 
-| Service | Current auth | Change behind the gate |
-|---|---|---|
-| homepage | none | — (auth-blind by design) |
-| traefik dashboard | none (`:9080` insecure API) | move to `api@internal` router; closes the unauthenticated host port |
-| prometheus | none | Grafana dials container-direct, unaffected. DECISION: host port 9090 stays open for external scrapers = LAN auth bypass — close or accept |
-| pihole | password, app password for widget | blank admin password once gated; widget dials `host.containers.internal:8080` direct |
-| sonarr / radarr / prowlarr | forms login | `AuthenticationMethod=External` in config.xml (Servarr wiki FAQ); bypass rule for `X-Api-Key`/`/api` — Seerr, recyclarr, widgets keep working |
-| bazarr | forms | set auth None (never Basic — breaks API-key calls) |
-| qbittorrent | user/pass | already bypasses localhost (gluetun PF hook needs it); add whitelist for the pasta gateway subnet → login gone |
-| nzbget | ControlUsername/Password (sops) | empty `ControlPassword` disables auth; *arrs use blank creds |
-| metube | none | — (needs WebSocket passthrough; traefik default OK) |
-| myspeed | none | leave its password unset (its auth sends plaintext password as a header — worthless) |
-| stirling-pdf | none | native OIDC is paywalled ($99/mo tier) — forward-auth is the maintainers' endorsed path |
+| Service | Local auth state |
+|---|---|
+| homepage | none (auth-blind by design) |
+| traefik dashboard | none — a `service = "api@internal"` webApp; bridge-only :8080, no host port |
+| prometheus | none — no host port; grafana + scrapes dial container-direct over the bridges |
+| pihole | FTL password blanked (see the module's webserver comment for the accepted trade-off) |
+| sonarr / radarr / prowlarr | `AuthenticationMethod=External` in config.xml; `X-Api-Key`/`/api` bypass keeps Seerr, recyclarr and widgets working |
+| bazarr | auth None (never Basic — it breaks API-key calls) |
+| qbittorrent | localhost bypass (the gluetun port-forward hook needs it) + subnet whitelist — no login |
+| nzbget | empty `ControlPassword` — auth disabled; *arrs use blank creds |
+| metube | none (WebSocket passthrough works through traefik defaults) |
+| myspeed | password unset (its own auth sends the password as a plaintext header — worthless) |
+| stirling-pdf | none — its native OIDC is paywalled; forward-auth is the maintainers' endorsed path |
 
 ## Waiting on upstream
 

@@ -24,8 +24,8 @@ module owns everything else from there: role, database, env file, LAN
 TCP route, pi-hole hosts entry.
 
 Name shape: `[a-z][a-z0-9_]*`. Enforced by an assertion at build time
-(used directly as the postgres role/db, the `pg-<name>.toscanini.me`
-hostname, and the env file dir).
+(used directly as the postgres role/db and the env file dir; `cluster`
+and `monitoring` are reserved — they hold infrastructure env files).
 
 Then:
 
@@ -120,9 +120,9 @@ sudo -u santiago HOME=/home/santiago XDG_RUNTIME_DIR=/run/user/1000 \
 ## File storage for apps
 
 Apps store user uploads as a `bytea` column in their own database.
-Same constraints as before: ≤ ~10 MB per file, total per-app volume in
-the low GBs. Ping santiago if any app grows past that — separate S3
-storage can be wired up.
+Constraints: ≤ ~10 MB per file, total per-app volume in the low GBs.
+Ping santiago if any app grows past that — separate S3 storage can be
+wired up.
 
 Example schema:
 
@@ -208,25 +208,31 @@ sudo -u santiago HOME=/home/santiago XDG_RUNTIME_DIR=/run/user/1000 \
 
 If a single app needs its own postgres version, special extensions, or
 hard resource isolation, the shared model isn't the right fit. The
-clean path is to introduce a sibling module (e.g. `dedicated-pg.nix`)
-that materializes a standalone container for that app — modeled on the
-old `pg-<name>` per-app pattern that lived here before the
-consolidation. Not implemented today; document the deviation in the
-app's declaration when it happens.
+clean path is a sibling module (e.g. `dedicated-pg.nix`) materializing
+a standalone container + bootstrap for that one app (immich's dedicated
+vectorchord postgres is the live example of the shape). Not implemented
+here today; document the deviation in the app's declaration when it
+happens.
 
 ## What lives where
 
 ```
 /etc/nixos/stacks/app-db/
-├── app-db.nix         # shared pg + per-app bootstrap
-├── exporter.nix       # postgres_exporter (single target) + dashboard
-├── README.md          # this file
+├── app-db.nix          # shared pg + per-app bootstrap units
+├── exporter.nix        # app-db-exporter (postgres_exporter) + dashboard
+├── README.md           # this file
 ├── assets/
-│   └── postgres.json  # `$app`-templated Grafana dashboard (datname-based)
-└── secrets/           # gitignored
-    ├── cluster/env    # POSTGRES_PASSWORD (cluster superuser)
-    └── <name>/env     # per-app DATABASE_URL + POSTGRES_PASSWORD
+│   ├── bootstrap.sh    # per-app role/db SQL, concatenated into the units
+│   ├── postgres.json   # `$app`-templated Grafana dashboard (datname-based)
+│   └── traefik-tcp.yml # postgres.toscanini.me TCP/SNI route
+└── secrets/            # gitignored (machine-generated)
+    ├── cluster/env     # POSTGRES_PASSWORD (cluster superuser)
+    ├── monitoring/env  # exporter role password (reserved name)
+    └── <name>/env      # per-app DATABASE_URL + password under every
+                        # key our images read (POSTGRES_PASSWORD,
+                        # DB_PASSWORD, DB_PASS, DB_POSTGRESDB_PASSWORD,
+                        # GF_DATABASE_PASSWORD, DB_CONNECTION_STRING)
 
 /home/santiago/selfhost/app-db/
-└── postgres/          # bind-mounted into pg:/var/lib/postgresql/data
+└── postgres/           # bind-mounted into pg:/var/lib/postgresql/data
 ```
