@@ -1,10 +1,13 @@
-# nextcloud — 3 containers on nextcloud-net + custom-built image +
-# host-side cron timer.
+# nextcloud — app + redis on nextcloud-net, custom-built image +
+# host-side cron timer. The database lives on the shared app-db
+# cluster (stacks/app-db); config.php holds the live connection
+# values (dbhost=pg, db/role `nextcloud`).
 #
-# nextcloud-net carries inter-container DNS (postgres/redis). The app
-# container also joins traefik-net so traefik dials it as
-# `http://nextcloud-app:80` without host-publishing. The websecure +
-# cfweb dual-router shape is materialized by `exposeRemotely = true`.
+# nextcloud-net carries inter-container DNS (redis). The app container
+# also joins app-db-net (to dial `pg`) and traefik-net so traefik
+# dials it as `http://nextcloud-app:80` without host-publishing. The
+# websecure + cfweb dual-router shape is materialized by
+# `exposeRemotely = true`.
 #
 # Post-Nextcloud-version-upgrade manual steps (NOT auto-run — slow on
 # large instances, would block startup):
@@ -45,12 +48,18 @@ let
   '';
 in
 {
-  # PG_PASS + REDIS_PASS (shared by postgres, redis, app): sops-encrypted env.sops, decrypted to
-  # /run/secrets/nextcloud-env at activation. Edit with `sops env.sops`.
+  # REDIS_PASS (shared by redis + app): sops-encrypted env.sops,
+  # decrypted to /run/secrets/nextcloud-env at activation. Edit with
+  # `sops env.sops`. The DB password lives in config.php (mutable app
+  # state), sourced from the app-db bootstrap env at migration time.
   sops.secrets."nextcloud-env" = mkDotenvSecret ./env.sops;
 
+  # Database on the shared app-db cluster: role + db + env file with
+  # DATABASE_URL, materialized by app-db-nextcloud-bootstrap.service
+  # (see stacks/app-db/). config.php holds the live connection values.
+  myStack.appDatabases.nextcloud = { };
+
   myStack.containerNetworks = {
-    nextcloud-postgres = "nextcloud";
     nextcloud-redis = "nextcloud";
     nextcloud-app = "nextcloud";
   };
@@ -86,29 +95,6 @@ in
     };
   };
 
-  # `:16` is load-bearing: the on-disk cluster was initdb'd for PG 16.
-  # Bumping requires a pg_upgrade dance, NOT just a tag bump.
-  virtualisation.oci-containers.containers.nextcloud-postgres = mkRootlessContainer {
-    image = "docker.io/library/postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777";
-
-    volumes = [
-      "/home/santiago/selfhost/nextcloud/nc_postgres:/var/lib/postgresql/data"
-    ];
-
-    environment = {
-      POSTGRES_DB = "nc_postgres";
-      POSTGRES_USER = "nc_postgres";
-    };
-
-    # PG_PASS — also used by nextcloud-app to log in as oc_santi.
-    environmentFiles = [ config.sops.secrets."nextcloud-env".path ];
-
-    extraOptions = [
-      # `:alias=postgres` — persisted config.php (from compose era when
-      # the service was named just `postgres`) resolves both names.
-      "--network=nextcloud-net:alias=postgres"
-    ];
-  };
 
   virtualisation.oci-containers.containers.nextcloud-redis = mkRootlessContainer {
     image = "docker.io/library/redis:alpine@sha256:9d317178eceac8454a2284a9e6df2466b93c745529947f0cd42a0fa9609d7005";
@@ -135,10 +121,7 @@ in
   virtualisation.oci-containers.containers.nextcloud-app = mkRootlessContainer {
     # Built by nextcloud-image-build below.
     image = "localhost/nextcloud-ffmpeg:${nextcloudVersion}";
-    dependsOn = [
-      "nextcloud-postgres"
-      "nextcloud-redis"
-    ];
+    dependsOn = [ "nextcloud-redis" ];
 
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_config:/var/www/html"
@@ -152,9 +135,8 @@ in
 
     environment = {
       REDIS_HOST = "nextcloud-redis";
-      POSTGRES_HOST = "nextcloud-postgres";
-      POSTGRES_DB = "nc_postgres";
-      POSTGRES_USER = "oc_santi";
+      # No POSTGRES_* vars: the instance is installed, so the image
+      # only reads DB settings from config.php.
 
       TRUSTED_PROXIES = "${config.myStack.lanIp}/24";
       PHP_MEMORY_LIMIT = "2G";
@@ -184,6 +166,7 @@ in
 
     extraOptions = [
       "--network=nextcloud-net"
+      "--network=app-db-net" # config.php dials pg:5432 here
       "--network=traefik-net" # traefik dials http://nextcloud-app:80
       # tmpfs for /tmp speeds up the `recognize` ML app per its README.
       "--tmpfs=/tmp:exec"
@@ -225,8 +208,14 @@ in
   # NixOS module merging concatenates after/wants with common.nix's
   # auto-generated override.
   systemd.services.podman-nextcloud-app = {
-    after = [ "nextcloud-image-build.service" ];
-    wants = [ "nextcloud-image-build.service" ];
+    after = [
+      "nextcloud-image-build.service"
+      "app-db-nextcloud-bootstrap.service"
+    ];
+    wants = [
+      "nextcloud-image-build.service"
+      "app-db-nextcloud-bootstrap.service"
+    ];
   };
 
   # Nextcloud expects cron.php every 5 min for background jobs
