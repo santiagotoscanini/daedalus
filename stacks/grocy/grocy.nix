@@ -8,7 +8,13 @@
 # 911 → host UID 100910 in the subuid range (100000 + 910); the data
 # dir is chowned 100910:100910 to match.
 
-{ hostUid, mkRootlessContainer, ... }:
+{
+  hostUid,
+  lib,
+  pkgs,
+  mkRootlessContainer,
+  ...
+}:
 
 {
   myStack.containerNetworks.grocy = "traefik";
@@ -17,11 +23,22 @@
   # exist with that ownership or a fresh install fails on first write.
   systemd.tmpfiles.rules = [
     "d /home/santiago/selfhost/grocy/config 0755 ${toString (hostUid 911)} ${toString (hostUid 911)} -"
+    # Grocy reads highest-precedence settings from data/settingoverrides
+    # (over env + config.php); the bind-mounted .txt files below land here.
+    "d /home/santiago/selfhost/grocy/config/data/settingoverrides 0755 ${toString (hostUid 911)} ${toString (hostUid 911)} -"
   ];
   myStack.webApps.grocy = {
     serviceName = "grocy";
     port = 80;
     exposeRemotely = true;
+    # Pocket ID gate (AUTH.md tier 2). Everyone through the gate maps to
+    # grocy's existing `admin` account (single-user; grocy data is shared,
+    # not per-user). GROCY-API-KEY auth is checked before the header in
+    # ReverseProxyAuthMiddleware, so the /api bypass keeps API clients +
+    # the container-direct homepage widget working.
+    auth = "oidc";
+    authBypassRule = "PathPrefix(`/api`)";
+    authHeaders."Remote-User" = "admin";
     homepage = {
       group = "Productivity";
       description = "Household inventory & chores";
@@ -71,6 +88,9 @@
 
     volumes = [
       "/home/santiago/selfhost/grocy/config:/config"
+      # Enable reverse-proxy header auth declaratively (over config.php).
+      "${pkgs.writeText "grocy-auth-class" "Grocy\\Middleware\\ReverseProxyAuthMiddleware"}:/config/data/settingoverrides/AUTH_CLASS.txt:ro"
+      "${pkgs.writeText "grocy-auth-header" "Remote-User"}:/config/data/settingoverrides/REVERSE_PROXY_AUTH_HEADER.txt:ro"
     ];
 
     extraOptions = [
