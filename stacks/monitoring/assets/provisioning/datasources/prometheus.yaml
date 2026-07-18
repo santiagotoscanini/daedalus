@@ -1,16 +1,8 @@
 # Provisioned Prometheus datasource. UID is preserved across reboots so
 # the dashboard panels and alert rules (which reference this UID) keep
 # resolving. `editable: false` makes the UI read-only for this entry.
-#
-# deleteDatasources: grafana cannot change a provisioned datasource's
-# uid in place ("data source not found" at startup) — drop the row by
-# name first, then recreate it with the pinned uid. Idempotent.
 
 apiVersion: 1
-
-deleteDatasources:
-  - name: prometheus
-    orgId: 1
 
 datasources:
   - name: prometheus

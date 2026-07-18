@@ -5,17 +5,16 @@
 # by Immich/Jellyfin transcoding?" persistently + alertably (otherwise
 # only `sudo intel_gpu_top` interactively).
 #
-# Three host-level requirements declared HERE (not configuration.nix)
+# Host-level requirements declared HERE (not configuration.nix)
 # so removing this module cleanly removes the host changes too:
 #   - kernel.perf_event_paranoid=0: required for intel_gpu_top PMU
 #     access. mkDefault so a future configuration.nix setting wins.
-#   - /dev/dri bind: full dir so renderD128 + card0 are both available.
 #   - --privileged: the i915 PMU privilege check happens in the host's
 #     init userns, so rootless can't pass it via --cap-add. In rootless
 #     mode --privileged does NOT grant host root — the container still
 #     runs as santiago (1000), it just unmasks /proc/sys/dev paths +
-#     grants the full bounding set within santiago's userns. Same
-#     trick cadvisor uses.
+#     grants the full bounding set within santiago's userns (also
+#     covers /dev/dri access — no explicit bind needed).
 
 { lib, mkRootlessContainer, ... }:
 

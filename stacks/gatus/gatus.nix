@@ -24,8 +24,9 @@
 # host's resolv.conf (127.0.0.1 = pi-hole on this box), so `*.toscanini.me`
 # resolves to 192.168.0.2 via the same dnsHosts short-circuit every LAN
 # client uses — gatus then hits traefik at 192.168.0.2:443. (Do NOT force
-# --dns=192.168.0.2: that bypasses aardvark and hits pi-hole from the bridge
-# subnet, which pi-hole's LOCAL listening mode drops → every probe times out.)
+# --dns=192.168.0.2: that bypasses aardvark and dials pi-hole straight from
+# the bridge subnet — probes were observed timing out that way; the
+# resolv.conf chain is the supported path.)
 #
 # ── Alerting deliberately left unconfigured ─────────────────────────────
 # gatus can alert on its own (email/slack/etc.), but Grafana owns
@@ -82,7 +83,7 @@ let
       # Pocket ID SSO (AUTH.md). gatus expands ''${VAR} from its env at
       # load — creds come from env.sops, never the /nix/store YAML.
       # allowed-subjects is MANDATORY: without it any Pocket ID account
-      # gets in. Value = santito's sub UUID.
+      # gets in. Value = the sole admin account's sub UUID.
       security.oidc = {
         issuer-url = config.fleet.sso.issuerUrl;
         client-id = "\${GATUS_OIDC_CLIENT_ID}";

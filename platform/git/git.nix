@@ -1,4 +1,4 @@
-# platform/git.nix — git + outbound GitHub SSH (single home for both).
+# platform/git — git + outbound GitHub SSH (single home for both).
 #
 # Declares (all reproducible from nix):
 #
@@ -12,8 +12,7 @@
 #       SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU
 #     Matches the key GitHub publishes at
 #     https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
-#     (and what `ssh-keyscan -t ed25519 github.com | ssh-keygen -lf -`
-#     prints today).
+#     (verify anytime: `ssh-keyscan -t ed25519 github.com | ssh-keygen -lf -`).
 #
 #   - A `Host github.com` block in /etc/ssh/ssh_config so
 #     `ssh git@github.com` auto-uses the right key. Scoped — every

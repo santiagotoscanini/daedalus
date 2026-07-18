@@ -570,8 +570,8 @@ in
                   file. See stacks/app-db/README.md.
                 '';
               };
-              # Per-app resource tunables are gone — the cluster is
-              # shared, so cpus/memory are set once in stacks/app-db/app-db.nix.
+              # No per-app resource tunables: the cluster is shared, so
+              # cpus/memory are set once in stacks/app-db/app-db.nix.
               # For app-scoped throttling, use postgres role-level
               # settings: ALTER ROLE <name> CONNECTION LIMIT N;
               # ALTER ROLE <name> SET statement_timeout = '30s'; etc.

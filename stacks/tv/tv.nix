@@ -3,7 +3,7 @@
 # Architecture:
 #   - gluetun holds a ProtonVPN WireGuard tunnel and owns the netns.
 #   - The downloaders (qbittorrent, nzbget), the indexer (prowlarr),
-#     the *arrs (radarr, sonarr, bazarr), flaresolverr, and
+#     the *arrs (radarr, sonarr, bazarr), flaresolverr, subgen, and
 #     gluetun-exporter all run with `--net=container:gluetun` so their
 #     egress goes through the VPN. Only the netns owner (gluetun) can
 #     publish ports — every UI port lives on gluetun's container block.
@@ -208,7 +208,7 @@ in
   config = lib.mkMerge [
     # The VPN netns kit — sops wg key + expiry reminder, kernel modules,
     # gluetun + exporter containers, scrape, homepage tile — comes from
-    # stacks/gluetun-common. Everything instance-specific is right here.
+    # platform/gluetun-lib.nix. Everything instance-specific is right here.
     (mkGluetunInstance {
       name = "gluetun";
       exporterName = "gluetun-exporter";

@@ -141,9 +141,10 @@ in
       default = { };
       description = ''
         Raw YAML rule contents keyed by filename. For Traefik dynamic
-        configs that don't fit the simple `traefikRoutes` shape:
-        dual-entrypoint routers (e.g. nextcloud cfweb + websecure),
-        named TLS options, the dashboard router using `api@internal`.
+        configs that don't fit the `traefikRoutes` shape. Current users:
+        named TLS options (tls-opts), entrypoint-default middlewares
+        (sec-headers), the oidc middleware file, and app-db's TCP/SNI
+        postgres router.
       '';
     };
 

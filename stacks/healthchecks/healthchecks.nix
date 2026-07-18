@@ -58,7 +58,7 @@
       description = "Cron / job dead-man's-switch";
       icon = "healthchecks.png";
       # Via traefik, not uwsgi-direct: homepage's undici client trips
-      # intermittently on uwsgi keep-alive (the old flapping red dot).
+      # intermittently on uwsgi keep-alive and the tile flaps red.
       # /api/v1/status/ rides the auth bypass, so it stays probeable.
       siteMonitor = "https://hc.toscanini.me/api/v1/status/";
       widget = {

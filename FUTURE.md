@@ -67,7 +67,7 @@ with an hc-ping.
 
 ## 5. Memory caps on heavy containers
 
-Only janitorr and app-db's pg set `--memory`. Uncapped heavy hitters:
+Only janitorr, app-db's pg, and the pg exporter set `--memory`. Uncapped heavy hitters:
 immich-machine-learning (multi-GB OpenVINO), jellyfin (transcode),
 subgen (~1 GB resident whisper model × 2 concurrent jobs),
 nextcloud-app (PHP_MEMORY_LIMIT=2G but no container cap), and the

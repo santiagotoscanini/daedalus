@@ -13,8 +13,8 @@
 # volumes.
 #
 # assets/media-pipeline.json is the official scraparr dashboard
-# (grafana.com/22934) with its datasource var pinned to the provisioned
-# prometheus uid.
+# (grafana.com/22934); it keeps a free datasource template variable and
+# resolves via the provisioned prometheus datasource being isDefault.
 
 {
   config,

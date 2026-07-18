@@ -41,7 +41,7 @@ groups:
             model:
               # Aggregate by name so each frame is uniquely labelled — raw
               # container_up carries instance/job labels that the threshold
-              # reducer collapses to {}, colliding across all 45 series
+              # reducer collapses to {}, colliding across every series
               # ("frame cannot uniquely be identified by its labels").
               expr: min by (name) (container_up)
               instant: true

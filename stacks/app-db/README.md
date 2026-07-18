@@ -53,9 +53,19 @@ gitignored). The env file lands in the app container with:
 POSTGRES_USER=foo
 POSTGRES_DB=foo
 POSTGRES_PASSWORD=<hex32>
-DB_POSTGRESDB_PASSWORD=<hex32>   # same value, the name n8n-style images read
+DB_POSTGRESDB_PASSWORD=<hex32>   # n8n          (same value under every
+DB_PASS=<hex32>                  # seerr         name a stock image might
+DB_PASSWORD=<hex32>              # healthchecks  read — add new spellings
+GF_DATABASE_PASSWORD=<hex32>     # grafana       in assets/bootstrap.sh)
 DATABASE_URL=postgresql://foo:<hex32>@pg:5432/foo
+DB_CONNECTION_STRING=postgresql://foo:<hex32>@pg:5432/foo   # pocket-id
 ```
+
+Beyond `fleet.appDatabases.<name>` itself, the submodule offers:
+`consumers` (container names ordered after the bootstrap; default
+`[ "app-<name>" ]`), `extraDatabases` (additional DBs owned by the same
+role), and read-only `envFile` (the generated env file's path — reference
+it, never hardcode).
 
 ## How the app connects
 
@@ -91,7 +101,7 @@ Requires libpq 17+ / pgjdbc 42.7+ (for `sslnegotiation=direct`).
 
 ## Per-app resource controls
 
-The cluster is sized for ~10 hobby apps total (see `app-db.nix` for
+The cluster is sized for the current tenant count (see `app-db.nix` for
 the tuning constants). Within that envelope, you can throttle a single
 greedy app at the role level:
 

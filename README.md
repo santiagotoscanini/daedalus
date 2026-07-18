@@ -67,17 +67,19 @@ homepage env.sops files — rotate all three together.
 ## Adding a stack
 
 ```bash
-sudo mkdir -p /etc/nixos/stacks/<name>/assets
-sudoedit /etc/nixos/stacks/<name>/<name>.nix     # see any stack as template
+# the repo is santiago-owned — no sudo for file/git operations (root-made
+# .git objects break santiago's push; only nixos-rebuild needs root)
+mkdir -p /etc/nixos/stacks/<name>/assets
+$EDITOR /etc/nixos/stacks/<name>/<name>.nix      # see any stack as template
 # secrets, if any:
 #   printf 'KEY=value\n' | sops -e --input-type dotenv --output-type dotenv \
-#     /dev/stdin | sudo tee /etc/nixos/stacks/<name>/env.sops
+#     /dev/stdin > /etc/nixos/stacks/<name>/env.sops
 #   then in the module:  sops.secrets."<name>-env" = mkDotenvSecret ./env.sops;
 #   and:  environmentFiles = [ config.sops.secrets."<name>-env".path ];
 # no import line needed — configuration.nix auto-imports every *.nix
 # under stacks/ (the flake only sees git-tracked files, so `git add` first)
-sudo git add -A && sudo nixos-rebuild test && sudo nixos-rebuild switch
-sudo git commit -am "<name>: add stack"
+git -C /etc/nixos add -A && sudo nixos-rebuild test && sudo nixos-rebuild switch
+git -C /etc/nixos commit -am "<name>: add stack"
 ```
 
 ## Disaster recovery

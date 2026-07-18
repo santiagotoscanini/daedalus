@@ -137,7 +137,7 @@ let
       mkdir -p $out
       cp -r ${./assets/dashboards}/. $out/
       # store copies are read-only; byFolder contributions below must be able
-      # to write into subdirs the assets tree now ships (e.g. System/)
+      # to write into the subdirs the assets tree ships (e.g. System/)
       chmod -R u+w $out
     ''
     + lib.concatStringsSep "\n" (
@@ -282,7 +282,7 @@ in
       homepage = {
         group = "Monitoring";
         href = "https://grafana.toscanini.me/bookmarks";
-        # Default probe (upstream /) now 302s into the OAuth auto-login
+        # Default probe (upstream /) 302s into the OAuth auto-login
         # chain, which homepage's proxy can't follow. /api/health is
         # auth-exempt.
         siteMonitor = "http://grafana:3000/api/health";

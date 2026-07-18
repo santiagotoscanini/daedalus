@@ -18,7 +18,7 @@
 # Deliberately NOT reusing the TV stack's gluetun: same WireGuard key on two
 # live tunnels conflicts, and it would mix ipcrawl traffic with the torrent
 # VPN exit. This is a separate instance with its own ProtonVPN config; the
-# shared per-instance kit comes from stacks/gluetun-common. No
+# shared per-instance kit comes from platform/gluetun-lib.nix. No
 # VPN_PORT_FORWARDING — ipcrawl is outbound-only.
 
 {

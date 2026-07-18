@@ -60,9 +60,8 @@ html::before {
   z-index: -2;
 }
 
-/* Tint overlay — keeps tile text legible against any photo without
-   washing the photo out. Lighter than before so the forest is
-   actually visible. */
+/* Tint overlay — keeps tile text legible against any photo while
+   staying light enough that the photo itself remains visible. */
 body {
   background-color: transparent !important;
   min-height: 100vh;

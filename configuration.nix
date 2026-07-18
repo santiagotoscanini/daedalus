@@ -97,7 +97,7 @@
       }
     ];
 
-    # Every surviving host port is opened by its owning stack module —
+    # Every host-published port is opened by its owning stack module —
     # grep `networking.firewall.allowed` under stacks/.
     firewall.enable = true;
   };
@@ -139,7 +139,7 @@
   # `nix flake update`.
   nixpkgs.overlays = [
     (
-      final: prev:
+      _final: prev:
       let
         unstable = import nixpkgs-unstable {
           inherit (prev.stdenv.hostPlatform) system;
@@ -230,7 +230,7 @@
     options = "--delete-older-than 30d";
   };
 
-  # Weekly catch-up for store paths inserted before auto-optimise was on.
+  # Weekly catch-up for store paths that predate auto-optimise.
   nix.optimise = {
     automatic = true;
     dates = [ "weekly" ];

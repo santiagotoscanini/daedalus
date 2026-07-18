@@ -321,9 +321,9 @@ in
     cmd = [
       "--api=true"
       "--api.dashboard=true"
-      # Serve /api on the internal :8080 entrypoint too — the homepage
-      # widget reads it container-direct now that the public dashboard
-      # route is behind the Pocket ID gate. :8080 is traefik-net-only
+      # Serve /api on the internal :8080 entrypoint too — the public
+      # dashboard route is behind the Pocket ID gate, so the homepage
+      # widget reads it container-direct. :8080 is traefik-net-only
       # (never host-published), same trust boundary as /metrics.
       "--api.insecure=true"
 

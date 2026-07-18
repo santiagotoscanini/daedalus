@@ -26,7 +26,6 @@
 #   s2-pool/tv                no snapshots (re-downloadable).
 
 {
-  config,
   lib,
   pkgs,
   utils,

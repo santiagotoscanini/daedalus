@@ -163,7 +163,7 @@
       GENERIC_TOKEN_ENDPOINT = "${config.fleet.sso.issuerUrl}/api/oidc/token";
       GENERIC_USERINFO_ENDPOINT = "${config.fleet.sso.issuerUrl}/api/oidc/userinfo";
       # PKCE is disabled on the Pocket ID client (litellm's GENERIC SSO
-      # sends no code_challenge); safe to auto-redirect now.
+      # sends no code_challenge), which makes the auto-redirect safe.
       AUTO_REDIRECT_UI_LOGIN_TO_SSO = "true";
       # SSO user_id litellm promotes to proxy_admin in its UserTable —
       # without this, SSO logins land as internal_user_viewer and the

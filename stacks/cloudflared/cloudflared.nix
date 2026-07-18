@@ -11,8 +11,8 @@
 #     CF_DNS_API_TOKEN from env.sops (sops). Idempotent.
 #   - `credentials.json.sops` (sops) carries `{AccountTag, TunnelID,
 #     TunnelSecret}` — CF exposes the secret ONLY at tunnel creation
-#     (POST response), so this is the one-time output that must be
-#     backed up out-of-tree to recover the tunnel identity.
+#     (POST response). Encrypted and tracked, the tunnel identity is in
+#     the rebuild trail; no out-of-tree backup is needed.
 #
 # DNS fallback if the tunnel ever fails to register with a DNS error:
 # add `"--dns=1.1.1.1"` to extraOptions below (pasta's normal DNS chain
