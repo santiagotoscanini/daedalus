@@ -1,8 +1,9 @@
-# monitoring — prometheus + grafana + node-exporter + cadvisor.
+# monitoring — prometheus + grafana + node-exporter.
 #
-# Four containers on `monitoring-net`:
-#   - prometheus scrapes node-exporter and cadvisor by container DNS
-#     (e.g. `node-exporter:9100`, `cadvisor:8080`).
+# Three containers on `monitoring-net`:
+#   - prometheus scrapes node-exporter at host.containers.internal:9100
+#     (node-exporter runs on the host network to read real NIC stats,
+#     so bridge DNS can't reach it).
 #   - grafana queries prometheus on `prometheus:9090`.
 #   - prometheus + grafana also join traefik-net so (a) traefik dials
 #     them by container DNS, and (b) prometheus reaches any other
@@ -40,10 +41,11 @@
 
 let
   # ── Container liveness metric ─────────────────────────
-  # cadvisor can't see rootless-podman container cgroups (they live under
-  # user@1000.service, invisible to cadvisor), so its per-container series
-  # are empty and a dead container fires no alert while its systemd unit
-  # stays `active (exited)`. This closes the gap: a 1-min timer writes
+  # No cgroup-based exporter (cadvisor-style) can see rootless-podman
+  # containers — their cgroups live under user@1000.service, invisible
+  # from a system-level mount view — and a dead container's systemd unit
+  # stays `active (exited)` (Type=oneshot). This closes the gap: a 1-min
+  # timer writes
   # `container_up{name=...} 0|1` for EVERY declared oci-container into
   # node-exporter's textfile-collector dir. The set is derived from the
   # config at eval time (attrNames below), never hand-maintained, so a
@@ -105,10 +107,6 @@ let
       static_configs = [ { targets = [ "host.containers.internal:9100" ]; } ];
     }
 
-    {
-      job_name = "cadvisor";
-      static_configs = [ { targets = [ "cadvisor:8080" ]; } ];
-    }
   ];
 
   # JSON is a YAML 1.1 superset — toJSON sidesteps quoting/escape pitfalls.
@@ -250,14 +248,12 @@ in
       "app-db"
       "traefik"
     ];
-    cadvisor = [ "monitoring" ];
     node-exporter = [ ]; # host net — see comment on container below
   };
 
   fleet.logStacks.monitoring = [
     "prometheus"
     "grafana"
-    "cadvisor"
     "node-exporter"
   ];
 
@@ -424,27 +420,4 @@ in
     ];
   };
 
-  # No /var/lib/docker or /var/run mounts — the latter would overlay the
-  # container's /run and hide /run/.containerenv that podman's crun
-  # needs. cadvisor still reports cgroup-level container stats via the
-  # /sys mount; per-container CPU/RAM works.
-  virtualisation.oci-containers.containers.cadvisor = mkRootlessContainer {
-    image = "gcr.io/cadvisor/cadvisor:v0.55.1@sha256:3de2bd5203120b866d74a9b283b2ffb8ec382fbf9dc321814700c6ea6f44ec57";
-
-    volumes = [
-      "/:/rootfs:ro"
-      "/sys:/sys:ro"
-      "/dev/disk:/dev/disk:ro"
-      "/etc/machine-id:/etc/machine-id:ro"
-    ];
-
-    extraOptions = [
-      # cadvisor needs no privilege: host cgroup / machine stats come
-      # from the ro /sys + /rootfs mounts. /dev/kmsg (OOM-event parsing)
-      # is best-effort — with
-      # kernel.dmesg_restrict=1 it needs CAP_SYSLOG, deliberately NOT
-      # granted; the container_* metrics don't depend on it.
-      "--device=/dev/kmsg"
-    ];
-  };
 }

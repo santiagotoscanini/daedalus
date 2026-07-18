@@ -4,10 +4,20 @@
 # truth; UI edits to these rules don't persist.
 #
 # NOTE: no per-container CPU/RAM alerts exist because no rootless-visible
-# per-container metric exists — cadvisor can't see cgroups under
+# per-container metric exists — cgroup exporters can't see cgroups under
 # user.slice/user@1000.service. Liveness (container_up) is the coverage.
 
 apiVersion: 1
+
+# Orphaned docker-era rules stuck in grafana.db with file provenance
+# (their provisioning file predates this one); the API refuses to
+# delete file-provenance rules, so the deletion is file-provisioned too.
+deleteRules:
+  - orgId: 1
+    uid: efal2elu6y5tse # Container High Memory Usage (docker-only metrics)
+  - orgId: 1
+    uid: efal2epnyckcga # Container CPU Throttled (docker-only metrics)
+
 groups:
   - orgId: 1
     name: Container Alerts
@@ -15,8 +25,8 @@ groups:
     interval: 1m
     rules:
       # Liveness via the container_up{} textfile metric (monitoring.nix's
-      # host-liveness-exporter timer), NOT cadvisor's container_last_seen —
-      # cadvisor can't see rootless-podman cgroups so that series is empty.
+      # host-liveness-exporter timer) — the only rootless-visible
+      # per-container liveness signal.
       # container_up{name="X"} is 1 when the declared container is running,
       # 0 when stopped/missing; fire on 0.
       - uid: container-disappeared-1

@@ -1,7 +1,7 @@
 # gatus — outside-in uptime + TLS-expiry probing.
 #
 # Everything else on this box watches from the INSIDE (node-exporter,
-# container_up, cadvisor). gatus is the one component that probes the
+# container_up). gatus is the one component that probes the
 # published HTTPS surface the way a client on the LAN would: DNS →
 # traefik → cert → upstream. If traefik wedges, a cert fails to renew,
 # or a router breaks, the internal metrics can still look green while
