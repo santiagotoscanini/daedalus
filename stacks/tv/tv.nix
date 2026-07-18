@@ -232,7 +232,6 @@ in
     };
   };
 
-
   # gluetun owns the netns; tenants have no bridge (null = pasta shape,
   # which here just earns the Type=oneshot systemd override). Jellyfin
   # is bridge-routed (outside the VPN).
@@ -266,7 +265,11 @@ in
 
   # Loki stack label (stacks/logging logStacks): group the whole
   # netns family + jellyfin under one queryable stack.
-  myStack.logStacks.tv = [ "gluetun" "jellyfin" ] ++ netnsTenants;
+  myStack.logStacks.tv = [
+    "gluetun"
+    "jellyfin"
+  ]
+  ++ netnsTenants;
 
   # Jellyfin is bridge-routed. The gluetun-netns UIs (from vpnUis) use
   # explicit serviceUrl pointing at gluetun's host-published ports —

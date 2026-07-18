@@ -98,7 +98,10 @@ let
   );
 in
 {
-  myStack.containerNetworks.gatus = [ "traefik" "app-db" ];
+  myStack.containerNetworks.gatus = [
+    "traefik"
+    "app-db"
+  ];
 
   # Database on the shared app-db cluster (see stacks/app-db/).
   myStack.appDatabases.gatus.consumers = [ "gatus" ];

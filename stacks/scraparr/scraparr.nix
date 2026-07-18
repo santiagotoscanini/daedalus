@@ -24,7 +24,10 @@
 }:
 
 {
-  myStack.containerNetworks.scraparr = [ "monitoring" "traefik" ];
+  myStack.containerNetworks.scraparr = [
+    "monitoring"
+    "traefik"
+  ];
 
   # SONARR/RADARR/PROWLARR/BAZARR/JELLYSEERR/JELLYFIN_API_KEY.
   # Jellyfin uses a dedicated "Scraparr" API key (minted via /Auth/Keys).

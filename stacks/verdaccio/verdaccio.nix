@@ -100,7 +100,7 @@ in
 
   virtualisation.oci-containers.containers.verdaccio = mkRootlessContainer {
     # Built by verdaccio-image-build below.
-    image = verdaccioImage.image;
+    inherit (verdaccioImage) image;
 
     volumes = [
       "/home/santiago/selfhost/verdaccio/storage:/verdaccio/storage"

@@ -64,9 +64,7 @@ let
     stack: names:
     "  rule {\n"
     + "    source_labels = [\"__journal_container_name\"]\n"
-    + "    regex         = \"^(${
-      lib.concatStringsSep "|" (map escapeName (lib.naturalSort (lib.unique names)))
-    })$\"\n"
+    + "    regex         = \"^(${lib.concatStringsSep "|" (map escapeName (lib.naturalSort (lib.unique names)))})$\"\n"
     + "    target_label  = \"stack\"\n"
     + "    replacement   = \"${stack}\"\n"
     + "  }\n";

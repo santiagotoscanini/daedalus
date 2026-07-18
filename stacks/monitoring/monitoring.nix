@@ -212,8 +212,15 @@ in
   myStack.appDatabases.grafana.consumers = [ "grafana" ];
 
   myStack.containerNetworks = {
-    prometheus = [ "monitoring" "traefik" ];
-    grafana = [ "monitoring" "app-db" "traefik" ];
+    prometheus = [
+      "monitoring"
+      "traefik"
+    ];
+    grafana = [
+      "monitoring"
+      "app-db"
+      "traefik"
+    ];
     cadvisor = [ "monitoring" ];
     node-exporter = [ ]; # host net — see comment on container below
   };

@@ -320,10 +320,13 @@ in
       (lib.listToAttrs (
         lib.concatMap (
           name:
-          map (c: lib.nameValuePair "podman-${c}" {
-            after = [ "podman-pg.service" ];
-            wants = [ "podman-pg.service" ];
-          }) cfg.${name}.consumers
+          map (
+            c:
+            lib.nameValuePair "podman-${c}" {
+              after = [ "podman-pg.service" ];
+              wants = [ "podman-pg.service" ];
+            }
+          ) cfg.${name}.consumers
         ) activeApps
       ))
     ];

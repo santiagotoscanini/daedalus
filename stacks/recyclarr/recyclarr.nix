@@ -51,6 +51,5 @@
 
     environmentFiles = [ config.sops.secrets."recyclarr-env".path ];
 
-
   };
 }

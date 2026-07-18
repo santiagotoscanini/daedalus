@@ -84,8 +84,14 @@ let
       # ("RunRoot not writable" → crun not found), the stop fails, and the
       # container is cgroup-killed — dirty DB shutdowns / WAL recovery next
       # boot (app-db pg is stopped last, so it is the most exposed).
-      after = bridgeUnits ++ [ "state-dirs.service" "user@1000.service" ];
-      wants = bridgeUnits ++ [ "state-dirs.service" "user@1000.service" ];
+      after = bridgeUnits ++ [
+        "state-dirs.service"
+        "user@1000.service"
+      ];
+      wants = bridgeUnits ++ [
+        "state-dirs.service"
+        "user@1000.service"
+      ];
     };
 
   # Idempotent — `--ignore` returns 0 if the network already exists,
@@ -123,7 +129,9 @@ let
     };
   };
 
-  distinctBridges = lib.unique (map bridgeOf (lib.concatLists (lib.attrValues cfg.containerNetworks)));
+  distinctBridges = lib.unique (
+    map bridgeOf (lib.concatLists (lib.attrValues cfg.containerNetworks))
+  );
 
   # Resolve a webApp's upstream URL from whichever of the two inputs is
   # set (the exactly-one assertion below enforces the shape).

@@ -56,7 +56,10 @@ in
     immich-postgres = [ "immich:alias=database" ];
     immich-redis = [ "immich:alias=redis" ];
     immich-machine-learning = [ "immich" ];
-    immich = [ "immich" "traefik" ];
+    immich = [
+      "immich"
+      "traefik"
+    ];
   };
 
   myStack.logStacks.immich = [

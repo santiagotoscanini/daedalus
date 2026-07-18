@@ -70,7 +70,11 @@ in
 
   myStack.containerNetworks = {
     nextcloud-redis = [ "nextcloud:alias=redis" ]; # config.php has redis.host = redis
-    nextcloud-app = [ "nextcloud" "app-db" "traefik" ]; # config.php dials pg:5432
+    nextcloud-app = [
+      "nextcloud"
+      "app-db"
+      "traefik"
+    ]; # config.php dials pg:5432
   };
 
   myStack.logStacks.nextcloud = [
@@ -111,7 +115,6 @@ in
     };
   };
 
-
   virtualisation.oci-containers.containers.nextcloud-redis = mkRootlessContainer {
     image = "docker.io/library/redis:alpine@sha256:9d317178eceac8454a2284a9e6df2466b93c745529947f0cd42a0fa9609d7005";
 
@@ -136,7 +139,7 @@ in
   virtualisation.oci-containers.containers.nextcloud-app = mkRootlessContainer {
     # Built by nextcloud-image-build below; the tag carries the build
     # context hash so digest/Containerfile bumps restart the app.
-    image = nextcloudImage.image;
+    inherit (nextcloudImage) image;
     dependsOn = [ "nextcloud-redis" ];
 
     volumes = [

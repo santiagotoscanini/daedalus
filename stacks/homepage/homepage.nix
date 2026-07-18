@@ -68,7 +68,10 @@ in
   # /run/secrets/homepage-env at activation. Edit with `sops env.sops`.
   sops.secrets."homepage-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.homepage = [ "traefik" "monitoring" ]; # monitoring: the per-app log widget queries loki:3100 directly
+  myStack.containerNetworks.homepage = [
+    "traefik"
+    "monitoring"
+  ]; # monitoring: the per-app log widget queries loki:3100 directly
 
   myStack.webApps.homepage = {
     serviceName = "homepage";

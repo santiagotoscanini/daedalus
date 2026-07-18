@@ -44,7 +44,10 @@ in
 {
   config = lib.mkIf enabled {
     # app-db-net to dial pg; monitoring-net so prometheus scrapes it.
-    myStack.containerNetworks."pg-exporter" = [ "app-db" "monitoring" ];
+    myStack.containerNetworks."pg-exporter" = [
+      "app-db"
+      "monitoring"
+    ];
 
     myStack.stateDirs."/etc/nixos/stacks/app-db/secrets/monitoring".mode = "0700";
 

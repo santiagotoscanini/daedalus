@@ -55,7 +55,10 @@
     content = "$TOKEN";
   };
 
-  myStack.containerNetworks.litellm = [ "app-db" "traefik" ];
+  myStack.containerNetworks.litellm = [
+    "app-db"
+    "traefik"
+  ];
 
   # Database on the shared app-db cluster: role + db + env file with
   # DATABASE_URL, materialized by app-db-litellm-bootstrap.service
@@ -125,7 +128,6 @@
       siteMonitor = "http://gaming-pc.local.toscanini.me:13305/";
     }
   ];
-
 
   virtualisation.oci-containers.containers.litellm = mkRootlessContainer {
     image = "ghcr.io/berriai/litellm:main-stable@sha256:9ef6f45bc0104940571765e610c52a1d761b5ec85efcd193795281086ee61277";

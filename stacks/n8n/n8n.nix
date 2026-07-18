@@ -40,7 +40,10 @@ in
   # the app-db-generated env file, not from here.
   sops.secrets."n8n-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.n8n = [ "app-db" "traefik" ];
+  myStack.containerNetworks.n8n = [
+    "app-db"
+    "traefik"
+  ];
 
   myStack.stateDirs = {
     "/home/santiago/selfhost/n8n/data".uid = 1000;
@@ -133,7 +136,6 @@ in
     after = [ "n8n-smtp-env.service" ];
     wants = [ "n8n-smtp-env.service" ];
   };
-
 
   virtualisation.oci-containers.containers.n8n = mkRootlessContainer {
     image = "docker.io/n8nio/n8n:2.30.7@sha256:23a26975c21aa6f7113286668b35e2831ec898d3a7fbfa1ac8ff16f1bdf88c37";

@@ -94,7 +94,7 @@ in
   };
 
   virtualisation.oci-containers.containers.calibre-web = mkRootlessContainer {
-    image = calibreWebImage.image;
+    inherit (calibreWebImage) image;
 
     environment = {
       PUID = "0";

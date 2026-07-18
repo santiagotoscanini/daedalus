@@ -66,63 +66,63 @@ in
 
   config = {
     sops.secrets."mail-relay-password" = {
-    sopsFile = ./password.sops;
-    format = "binary";
-    owner = "santiago";
-    mode = "0400";
-  };
-
-  programs.msmtp = {
-    enable = true;
-    setSendmail = true;
-    defaults = {
-      tls = true;
-      tls_starttls = true;
-      tls_trust_file = "/etc/ssl/certs/ca-certificates.crt";
-      logfile = "/var/log/msmtp.log";
+      sopsFile = ./password.sops;
+      format = "binary";
+      owner = "santiago";
+      mode = "0400";
     };
-    accounts.default = {
-      host = config.myStack.mail.smtpHost;
-      port = config.myStack.mail.smtpPort;
-      auth = true;
-      from = sender;
-      user = sender;
-      passwordeval = "${pkgs.coreutils}/bin/cat ${pwPath}";
-    };
-  };
 
-  # smartd → email on a disk that reports pre-failure/failure.
-  services.smartd.notifications.mail = {
-    enable = true;
-    inherit sender;
-    recipient = alertTo;
-    mailer = "/run/wrappers/bin/sendmail";
-  };
-
-  # ZFS ZED → email on pool faults / errors (verbose off = problems only).
-  services.zfs.zed.settings = {
-    ZED_EMAIL_ADDR = [ alertTo ];
-    ZED_EMAIL_PROG = "${pkgs.msmtp}/bin/msmtp";
-    ZED_EMAIL_OPTS = "--account=default @ADDRESS@";
-    ZED_NOTIFY_VERBOSE = false;
-  };
-
-  # Reusable failure-notifier: OnFailure=notify-email@%N.service on a
-  # unit emails its status + recent journal. Units opt in via the
-  # emailOnFailure option (self-registered by their owning module,
-  # next to its hcPings entry) — mail.nix never reaches into units it
-  # doesn't own.
-  systemd.services = {
-    "notify-email@" = {
-      description = "Email ${alertTo} when %i fails";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${notifyEmail} %i";
+    programs.msmtp = {
+      enable = true;
+      setSendmail = true;
+      defaults = {
+        tls = true;
+        tls_starttls = true;
+        tls_trust_file = "/etc/ssl/certs/ca-certificates.crt";
+        logfile = "/var/log/msmtp.log";
+      };
+      accounts.default = {
+        host = config.myStack.mail.smtpHost;
+        port = config.myStack.mail.smtpPort;
+        auth = true;
+        from = sender;
+        user = sender;
+        passwordeval = "${pkgs.coreutils}/bin/cat ${pwPath}";
       };
     };
-  }
-  // lib.genAttrs config.myStack.emailOnFailure (_: {
-    onFailure = [ "notify-email@%N.service" ];
-  });
+
+    # smartd → email on a disk that reports pre-failure/failure.
+    services.smartd.notifications.mail = {
+      enable = true;
+      inherit sender;
+      recipient = alertTo;
+      mailer = "/run/wrappers/bin/sendmail";
+    };
+
+    # ZFS ZED → email on pool faults / errors (verbose off = problems only).
+    services.zfs.zed.settings = {
+      ZED_EMAIL_ADDR = [ alertTo ];
+      ZED_EMAIL_PROG = "${pkgs.msmtp}/bin/msmtp";
+      ZED_EMAIL_OPTS = "--account=default @ADDRESS@";
+      ZED_NOTIFY_VERBOSE = false;
+    };
+
+    # Reusable failure-notifier: OnFailure=notify-email@%N.service on a
+    # unit emails its status + recent journal. Units opt in via the
+    # emailOnFailure option (self-registered by their owning module,
+    # next to its hcPings entry) — mail.nix never reaches into units it
+    # doesn't own.
+    systemd.services = {
+      "notify-email@" = {
+        description = "Email ${alertTo} when %i fails";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${notifyEmail} %i";
+        };
+      };
+    }
+    // lib.genAttrs config.myStack.emailOnFailure (_: {
+      onFailure = [ "notify-email@%N.service" ];
+    });
   };
 }

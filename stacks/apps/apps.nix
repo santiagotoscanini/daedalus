@@ -105,7 +105,6 @@ let
   # than trusting DNS, so a pi-hole hiccup can't read as a dead app.
   inherit (config.myStack) lanIp;
 
-
   mkApp =
     name: app:
     let
@@ -310,9 +309,11 @@ let
       # prometheus.enable alongside the scrape: the dashboard is
       # metrics-driven, so without a scrape it would only render empty
       # panels.
-      myStack.grafanaDashboardsByFolder = lib.optionalAttrs (app.prometheus.enable && app.dashboard != null) {
-        "Apps"."${cName}" = lib.replaceStrings [ "%APP_NAME%" ] [ name ] (builtins.readFile app.dashboard);
-      };
+      myStack.grafanaDashboardsByFolder =
+        lib.optionalAttrs (app.prometheus.enable && app.dashboard != null)
+          {
+            "Apps"."${cName}" = lib.replaceStrings [ "%APP_NAME%" ] [ name ] (builtins.readFile app.dashboard);
+          };
 
       # Homepage tile lands in the per-app section.
       myStack.homepageServices."${tileGroup}" = [

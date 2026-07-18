@@ -28,7 +28,6 @@
 # unhealthy leaves the unit failed (and the new image running — there is no
 # auto-rollback). See stacks/apps/apps.nix + assets/deploy.sh.
 
-
 { config, mkDotenvSecret, ... }:
 
 {

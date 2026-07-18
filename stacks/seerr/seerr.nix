@@ -20,7 +20,10 @@
 }:
 
 {
-  myStack.containerNetworks.seerr = [ "traefik" "app-db" ];
+  myStack.containerNetworks.seerr = [
+    "traefik"
+    "app-db"
+  ];
 
   # Database on the shared app-db cluster (see stacks/app-db/); the
   # container joins app-db-net and dials `pg` by container DNS.
