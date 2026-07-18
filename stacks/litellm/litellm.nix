@@ -159,9 +159,9 @@
       # GENERIC_CLIENT_ID/SECRET ride env.sops. The OpenAI-compatible
       # API keeps Bearer virtual-key auth — SSO only changes the UI.
       PROXY_BASE_URL = "https://litellm.toscanini.me";
-      GENERIC_AUTHORIZATION_ENDPOINT = "https://id.toscanini.me/authorize";
-      GENERIC_TOKEN_ENDPOINT = "https://id.toscanini.me/api/oidc/token";
-      GENERIC_USERINFO_ENDPOINT = "https://id.toscanini.me/api/oidc/userinfo";
+      GENERIC_AUTHORIZATION_ENDPOINT = "${config.fleet.sso.issuerUrl}/authorize";
+      GENERIC_TOKEN_ENDPOINT = "${config.fleet.sso.issuerUrl}/api/oidc/token";
+      GENERIC_USERINFO_ENDPOINT = "${config.fleet.sso.issuerUrl}/api/oidc/userinfo";
       # PKCE is disabled on the Pocket ID client (litellm's GENERIC SSO
       # sends no code_challenge); safe to auto-redirect now.
       AUTO_REDIRECT_UI_LOGIN_TO_SSO = "true";

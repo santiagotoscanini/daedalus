@@ -183,7 +183,7 @@ in
       N8N_ADDITIONAL_NON_UI_ROUTES = "auth";
       # Frontend patch (served by the hook itself at this /assets path).
       EXTERNAL_FRONTEND_HOOKS_URLS = "/assets/oidc-frontend-hook.js";
-      OIDC_ISSUER_URL = "https://id.toscanini.me";
+      OIDC_ISSUER_URL = config.fleet.sso.issuerUrl;
       OIDC_REDIRECT_URI = "https://n8n.toscanini.me/auth/oidc/callback";
       OIDC_SCOPES = "openid email profile";
     };

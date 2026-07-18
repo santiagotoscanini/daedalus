@@ -95,40 +95,60 @@ let
       ];
     };
 
+  # Container-UID -> host-UID under santiago's subuid range
+  # (100000:65536) for uids >= 1: www-data 33 -> 100032, linuxserver
+  # abc 911 -> 100910. NOT for uid 0 (container root is santiago,
+  # 1000, outside the subuid range). Exposed via _module.args below.
+  hostUid = containerUid: 99999 + containerUid;
+
+  # Shared shell for "run rootless podman as santiago at boot" oneshots
+  # (bridge creation, local image builds): linger ordering so
+  # /run/user/1000 exists, /run/wrappers on PATH (newuidmap is a setuid
+  # wrapper only there — the boot's first rootless podman needs it to
+  # create santiago's userns, and the store-only default PATH cannot
+  # see it), oneshot + retry. `needsNetwork = false` for work that only
+  # writes local state (a network-online edge would delay boot and add
+  # a spurious failure dependency).
+  mkRootlessOneshot =
+    {
+      description,
+      execStart,
+      needsNetwork ? true,
+      before ? [ ],
+      wantedBy ? [ "multi-user.target" ],
+    }:
+    {
+      inherit description before wantedBy;
+      after = [ "linger-users.service" ] ++ lib.optional needsNetwork "network-online.target";
+      wants = [ "linger-users.service" ] ++ lib.optional needsNetwork "network-online.target";
+      path = [ "/run/wrappers" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "santiago";
+        Group = "users";
+        Environment = "XDG_RUNTIME_DIR=/run/user/1000";
+        Restart = "on-failure";
+        RestartSec = "1s";
+        ExecStart = execStart;
+      };
+    };
+
   # Idempotent — `--ignore` returns 0 if the network already exists,
   # so this can re-run on every rebuild without churn. NOTE: `--ignore`
   # also means a changed `bridgeSubnets` pin does NOT renumber an
   # existing bridge — that needs a manual `podman network rm` while its
   # members are stopped.
-  # Waits on linger-users.service so /run/user/1000 is populated before
-  # rootless podman runs.
-  mkBridgeUnit = net: {
-    description = "Create the ${net}-net podman bridge";
-    after = [
-      "network-online.target"
-      "linger-users.service"
-    ];
-    wants = [
-      "network-online.target"
-      "linger-users.service"
-    ];
-    wantedBy = [ "multi-user.target" ];
-    # newuidmap is a setuid wrapper that exists only in /run/wrappers/bin;
-    # the boot's first rootless podman needs it to create santiago's
-    # userns, and the store-only default PATH cannot see it.
-    path = [ "/run/wrappers" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "santiago";
-      Environment = "XDG_RUNTIME_DIR=/run/user/1000";
-      Restart = "on-failure";
-      RestartSec = "1s";
-      ExecStart = "${pkgs.podman}/bin/podman network create --ignore${
+  mkBridgeUnit =
+    net:
+    mkRootlessOneshot {
+      description = "Create the ${net}-net podman bridge";
+      # `podman network create` only writes local config.
+      needsNetwork = false;
+      execStart = "${pkgs.podman}/bin/podman network create --ignore${
         lib.optionalString (cfg.bridgeSubnets ? ${net}) " --subnet ${cfg.bridgeSubnets.${net}}"
       } ${net}-net";
     };
-  };
 
   distinctBridges = lib.unique (
     map bridgeOf (lib.concatLists (lib.attrValues cfg.bridgeMemberships))
@@ -552,10 +572,21 @@ in
                   - Native NixOS services (pi-hole): no container/bridge.
                   - TLS-internal upstreams: `https://name:port`.
 
-                  Exactly one of `serviceName` / `serviceUrl` must be
-                  set — enforced by an assertion.
+                  Exactly one of `serviceName` / `serviceUrl` / `service`
+                  must be set — enforced by an assertion.
                 '';
                 example = "http://host.containers.internal:8989";
+              };
+              service = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Named traefik service instead of a URL upstream — for
+                  built-ins like `api@internal` (the dashboard). The full
+                  webApps surface (auth gate, healthPath probe, dnsHosts,
+                  homepage tile) applies; only the upstream shape differs.
+                '';
+                example = "api@internal";
               };
               exposeRemotely = lib.mkOption {
                 type = lib.types.bool;
@@ -900,48 +931,24 @@ in
       in
       {
         inherit image;
-        service = {
+        # needsNetwork: a cold cache pulls the FROM base from its registry.
+        service = mkRootlessOneshot {
           description = "Build ${image}";
-          after = [
-            "network-online.target"
-            "linger-users.service"
-          ];
-          wants = [
-            "network-online.target"
-            "linger-users.service"
-          ];
-          # newuidmap: setuid wrapper, only in /run/wrappers/bin (see
-          # mkBridgeUnit) -- rootless podman build needs the userns too.
-          path = [ "/run/wrappers" ];
           before = gates;
           wantedBy = gates;
-          serviceConfig = {
-            Type = "oneshot";
-            RemainAfterExit = true;
-            User = "santiago";
-            Group = "users";
-            Environment = "XDG_RUNTIME_DIR=/run/user/1000";
-            Restart = "on-failure";
-            RestartSec = "1s";
-            ExecStart = pkgs.writeShellScript "build-${name}-image" ''
-              set -eu
-              cd ${ctx}
-              ${pkgs.podman}/bin/podman build \
-                --tag ${image} \
-                --file Containerfile \
-                .
-            '';
-          };
+          execStart = pkgs.writeShellScript "build-${name}-image" ''
+            set -eu
+            cd ${ctx}
+            ${pkgs.podman}/bin/podman build \
+              --tag ${image} \
+              --file Containerfile \
+              .
+          '';
         };
       };
 
-    # Container-UID -> host-UID under santiago's subuid range
-    # (100000:65536) for uids >= 1: www-data 33 -> 100032, linuxserver
-    # abc 911 -> 100910. NOT for uid 0 (container root is santiago,
-    # 1000, outside the subuid range). Use wherever a host-side path
-    # needs container-matching ownership, instead of hand-computed
-    # magic numbers.
-    _module.args.hostUid = containerUid: 99999 + containerUid;
+    # See the let-binding's doc; state-paths below uses the same mapping.
+    _module.args.hostUid = hostUid;
 
     # Standard operator-managed dotenv secret: age-encrypted file at
     # the stack root, decrypted to /run/secrets/<name> owned by
@@ -1046,7 +1053,7 @@ in
               path:
               let
                 d = cfg.statePaths.${path};
-                mapId = id: name: if id == 0 then name else toString (99999 + id);
+                mapId = id: name: if id == 0 then name else toString (hostUid id);
                 owner = "${mapId d.uid "santiago"}:${mapId (if d.gid != null then d.gid else d.uid) "users"}";
                 p = lib.escapeShellArg path;
               in
@@ -1079,13 +1086,15 @@ in
     # for edge cases at the same time.
     fleet.traefikRoutes =
       let
-        baseRoute = n: w: {
-          host = w.hostname;
-          serviceUrl = resolveUrl w;
-          middlewares =
-            lib.optional (w.auth == "oidc" && w.authHeaders != { }) "oidc-${n}-strip@file"
-            ++ lib.optional (w.auth == "oidc") "oidc-${n}@file";
-        };
+        baseRoute =
+          n: w:
+          {
+            host = w.hostname;
+            middlewares =
+              lib.optional (w.auth == "oidc" && w.authHeaders != { }) "oidc-${n}-strip@file"
+              ++ lib.optional (w.auth == "oidc") "oidc-${n}@file";
+          }
+          // (if w.service != null then { inherit (w) service; } else { serviceUrl = resolveUrl w; });
       in
       (lib.mapAttrs baseRoute cfg.webApps)
       // (lib.mapAttrs' (
@@ -1102,12 +1111,17 @@ in
     # `host.containers.internal` fallback.
     assertions =
       (lib.mapAttrsToList (n: w: {
-        assertion = (w.serviceName != null) != (w.serviceUrl != null);
+        assertion =
+          lib.count (x: x) [
+            (w.serviceName != null)
+            (w.serviceUrl != null)
+            (w.service != null)
+          ] == 1;
         message = ''
-          fleet.webApps.${n}: exactly one of `serviceName`
-          (bridge-routed via traefik-net) or `serviceUrl` (explicit
-          upstream URL, e.g. for gluetun-shared or native services)
-          must be set.
+          fleet.webApps.${n}: exactly one of `serviceName` (bridge-routed
+          via traefik-net), `serviceUrl` (explicit upstream URL, e.g. for
+          gluetun-shared or native services), or `service` (named traefik
+          service like api@internal) must be set.
         '';
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
@@ -1115,8 +1129,8 @@ in
         message = "fleet.webApps.${n}: `serviceName` needs `port` (traefik dials http://<serviceName>:<port>).";
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
-        assertion = w.serviceUrl != null -> w.port == null;
-        message = "fleet.webApps.${n}: `port` is meaningless with `serviceUrl` (the URL already carries the port) — leave it null.";
+        assertion = (w.serviceUrl != null || w.service != null) -> w.port == null;
+        message = "fleet.webApps.${n}: `port` only pairs with `serviceName` (a serviceUrl carries its own port; a named service has none) — leave it null.";
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
         assertion =
@@ -1211,7 +1225,9 @@ in
             siteMonitor =
               if w.homepage.siteMonitor != null then
                 w.homepage.siteMonitor
-              else if w.isolated then
+              # Isolated and named-service upstreams aren't dialable from
+              # homepage's bridges — probe through traefik instead.
+              else if w.isolated || w.service != null then
                 "https://${w.hostname}"
               else
                 resolveUrl w;

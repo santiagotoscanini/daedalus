@@ -150,7 +150,7 @@ in
   services.pihole-web = {
     enable = true;
     ports = [ 8080 ]; # HTTP only — traefik terminates TLS on 443
-    hostName = "pihole.toscanini.me";
+    hostName = config.fleet.webApps.pihole.hostname;
   };
 
   # Force a /nix/store symlink (not a copy). The pihole-ftl module sets

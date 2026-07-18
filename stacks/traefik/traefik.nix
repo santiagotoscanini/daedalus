@@ -161,7 +161,7 @@ in
           plugin.oidc = {
             Secret = "\${POCKET_OIDC_COOKIE_SECRET}";
             Provider = {
-              Url = "https://id.${cfg.baseDomain}";
+              Url = cfg.sso.issuerUrl;
               ClientId = "\${${envPrefix n}_CLIENT_ID}";
               ClientSecret = "\${${envPrefix n}_CLIENT_SECRET}";
               UsePkce = true;
@@ -212,11 +212,6 @@ in
         (lib.mapAttrs' (n: _: lib.nameValuePair "oidc-${n}" (mkOidcMw n)) (
           lib.filterAttrs (_: w: w.auth == "oidc") cfg.webApps
         ))
-        // {
-          # The dashboard is a hand-declared route (api@internal), not
-          # a webApp — its middleware is declared here alongside.
-          oidc-traefik-dashboard = mkOidcMw "traefik-dashboard";
-        }
         // lib.mapAttrs' (
           # Companion strippers: drop client-supplied copies of each
           # identity header BEFORE the oidc middleware runs, so bypassed
@@ -228,12 +223,25 @@ in
         ) (lib.filterAttrs (_: w: w.auth == "oidc" && w.authHeaders != { }) cfg.webApps);
     };
 
-  # Dashboard / API — LAN-only via pi-hole dns.hosts; `api@internal`
-  # serves /api/* and /dashboard/*.
-  fleet.traefikRoutes.traefik-dashboard = {
-    host = "traefik.${config.fleet.baseDomain}";
+  # Dashboard / API — `api@internal` serves /api/* and /dashboard/*.
+  # A regular webApp: Pocket ID gate, LAN DNS entry, gatus probe
+  # (/api/version is the harmless-unauthenticated bypass path, so the
+  # probe certifies the dashboard, not the IdP), homepage tile.
+  fleet.webApps.traefik-dashboard = {
+    hostname = "traefik.${cfg.baseDomain}";
     service = "api@internal";
-    middlewares = [ "oidc-traefik-dashboard@file" ];
+    auth = "oidc";
+    healthPath = "/api/version";
+    homepage = {
+      group = "Network";
+      name = "Traefik";
+      description = "Reverse proxy — all *.toscanini.me routes";
+      icon = "traefik.png";
+      widget = {
+        type = "traefik";
+        url = "http://traefik:8080";
+      };
+    };
   };
 
   # Opens TCP 80/443 — LAN HTTPS ingress.
@@ -253,27 +261,12 @@ in
   # interface (wireguard, etc.) off-limits by default.
   networking.firewall.interfaces.enp3s0.allowedTCPPorts = lib.optional pgwireEnabled 5432;
 
-  fleet.dnsHosts = [ "${cfg.lanIp} traefik.${cfg.baseDomain}" ];
-
   fleet.prometheusScrapes = [
     {
       job_name = "traefik";
       # Prometheus joins traefik-net (see monitoring.nix) and reaches the
       # api@internal/metrics endpoint by container DNS.
       static_configs = [ { targets = [ "traefik:8080" ]; } ];
-    }
-  ];
-
-  fleet.homepageServices."Network" = [
-    {
-      name = "Traefik";
-      href = "https://traefik.toscanini.me";
-      description = "Reverse proxy — all *.toscanini.me routes";
-      icon = "traefik.png";
-      widget = {
-        type = "traefik";
-        url = "http://traefik:8080";
-      };
     }
   ];
 

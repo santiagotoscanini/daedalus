@@ -84,7 +84,7 @@ let
       # allowed-subjects is MANDATORY: without it any Pocket ID account
       # gets in. Value = santito's sub UUID.
       security.oidc = {
-        issuer-url = "https://id.toscanini.me";
+        issuer-url = config.fleet.sso.issuerUrl;
         client-id = "\${GATUS_OIDC_CLIENT_ID}";
         client-secret = "\${GATUS_OIDC_CLIENT_SECRET}";
         redirect-url = "https://status.toscanini.me/authorization-code/callback";

@@ -159,7 +159,6 @@ in
     ];
 
     # Per-app cluster dashboard.
-    fleet.grafanaDashboardsByFolder."Services"."pg-overview" =
-      builtins.readFile ./assets/postgres.json;
+    fleet.grafanaDashboardsByFolder."Services"."pg-overview" = builtins.readFile ./assets/postgres.json;
   };
 }

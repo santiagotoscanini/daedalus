@@ -65,7 +65,7 @@
       WF_LISTEN_ADDR = "0.0.0.0:8088";
       WF_DB_PATH = "/data/wealthfolio.db";
       WF_CORS_ALLOW_ORIGINS = "https://wealthfolio.toscanini.me";
-      WF_OIDC_ISSUER_URL = "https://id.toscanini.me";
+      WF_OIDC_ISSUER_URL = config.fleet.sso.issuerUrl;
       WF_OIDC_CLIENT_ID = "36e5f60b-173f-4686-8b2b-830ff5d98fd8";
       WF_OIDC_REDIRECT_URL = "https://wealthfolio.toscanini.me/api/v1/auth/oidc/callback";
       # santito's Pocket ID sub — the only allowed account.

@@ -162,6 +162,35 @@ let
       ) config.fleet.grafanaDashboardsByFolder
     )
   );
+
+  # Alerting provisioning: rules + policies are static assets; the
+  # contact point is GENERATED so the recipient derives from
+  # fleet.mail.alertTo instead of a second hardcoded copy.
+  contactPointsYaml = (pkgs.formats.yaml { }).generate "contact-points.yaml" {
+    apiVersion = 1;
+    contactPoints = [
+      {
+        orgId = 1;
+        name = "email";
+        receivers = [
+          {
+            uid = "email-cp-1";
+            type = "email";
+            # Delivered via Grafana's own SMTP (GF_SMTP_*, below; the
+            # same Gmail relay msmtp uses).
+            settings.addresses = config.fleet.mail.alertTo;
+            disableResolveMessage = false;
+          }
+        ];
+      }
+    ];
+  };
+  alertingDir = pkgs.runCommand "grafana-alerting" { } ''
+    mkdir -p $out
+    cp ${./assets/provisioning/alerting/rules.yaml} $out/rules.yaml
+    cp ${./assets/provisioning/alerting/policies.yaml} $out/policies.yaml
+    cp ${contactPointsYaml} $out/contact-points.yaml
+  '';
 in
 {
   # grafana admin credentials: sops-encrypted env.sops, decrypted to
@@ -306,7 +335,7 @@ in
       "${config.sops.secrets."mail-relay-password".path}:/run/secrets/mail-relay-password:ro"
       "${./assets/provisioning/datasources}:/etc/grafana/provisioning/datasources:ro"
       "${./assets/provisioning/dashboards}:/etc/grafana/provisioning/dashboards:ro"
-      "${./assets/provisioning/alerting}:/etc/grafana/provisioning/alerting:ro"
+      "${alertingDir}:/etc/grafana/provisioning/alerting:ro"
       "${dashboardsDir}:/var/lib/grafana/dashboards:ro"
     ];
 
@@ -341,9 +370,9 @@ in
       # against the API. Escape hatch: /login?disableAutoLogin.
       GF_AUTH_GENERIC_OAUTH_ENABLED = "true";
       GF_AUTH_GENERIC_OAUTH_NAME = "Pocket ID";
-      GF_AUTH_GENERIC_OAUTH_AUTH_URL = "https://id.toscanini.me/authorize";
-      GF_AUTH_GENERIC_OAUTH_TOKEN_URL = "https://id.toscanini.me/api/oidc/token";
-      GF_AUTH_GENERIC_OAUTH_API_URL = "https://id.toscanini.me/api/oidc/userinfo";
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL = "${config.fleet.sso.issuerUrl}/authorize";
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL = "${config.fleet.sso.issuerUrl}/api/oidc/token";
+      GF_AUTH_GENERIC_OAUTH_API_URL = "${config.fleet.sso.issuerUrl}/api/oidc/userinfo";
       GF_AUTH_GENERIC_OAUTH_SCOPES = "openid email profile groups";
       GF_AUTH_GENERIC_OAUTH_USE_PKCE = "true";
       GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP = "true";
