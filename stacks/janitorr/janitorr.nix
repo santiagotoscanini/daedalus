@@ -18,6 +18,7 @@
 
 {
   config,
+  pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
   ...
@@ -33,6 +34,22 @@
   systemd.services.podman-janitorr = {
     after = [ "podman-seerr.service" ];
     wants = [ "podman-seerr.service" ];
+    # `after` only orders behind seerr's *container launch*; seerr's HTTP
+    # comes up ~10s later, and janitorr dials seerr:5055 during Spring
+    # startup and hard-exits on connection-refused (the oneshot unit then
+    # masks the dead container — it stays green with nothing behind it).
+    # Gate the start on seerr actually answering: poll from inside the
+    # seerr container (this unit runs as santiago, so podman is in
+    # context). Bounded to ~2 min so a genuinely-down seerr can't wedge
+    # the boot.
+    preStart = ''
+      for _ in $(seq 1 60); do
+        ${pkgs.podman}/bin/podman exec seerr wget -q -O- \
+          http://localhost:5055/api/v1/status >/dev/null 2>&1 && exit 0
+        sleep 2
+      done
+      exit 0
+    '';
   };
 
   # No web UI upstream — this tile is the face: Drilldown deep-link to

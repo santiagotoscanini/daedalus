@@ -321,7 +321,11 @@ in
       {
         podman-pg.serviceConfig.ExecStartPost = pkgs.writeShellScript "wait-pg-ready" ''
           for _ in $(seq 1 60); do
-            ${pkgs.podman}/bin/podman exec pg pg_isready -q && exit 0
+            # -U postgres: podman exec defaults to the container root user,
+            # so a bare pg_isready probes as role "root" and logs a FATAL
+            # "role \"root\" does not exist" each poll until pg is up. The
+            # superuser role exists from first boot, so probe as it.
+            ${pkgs.podman}/bin/podman exec pg pg_isready -q -U postgres && exit 0
             sleep 1
           done
           echo "pg did not become ready within 60s" >&2

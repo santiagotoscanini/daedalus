@@ -78,5 +78,13 @@
       "/home/santiago/selfhost/factorio/data/config:/opt/factorio/config"
     ];
 
+    # The ofsm wrapper needs >10s to forward SIGTERM and let the Factorio
+    # server flush a final autosave; the default 10s stop-timeout SIGKILLs
+    # it mid-save at reboot, so live players lose progress since the last
+    # periodic save.
+    extraOptions = [
+      "--stop-timeout=30"
+    ];
+
   };
 }

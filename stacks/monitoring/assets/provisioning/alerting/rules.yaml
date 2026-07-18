@@ -17,6 +17,47 @@ deleteRules:
     uid: efal2elu6y5tse # Container High Memory Usage (docker-only metrics)
   - orgId: 1
     uid: efal2epnyckcga # Container CPU Throttled (docker-only metrics)
+  # Duplicate host/container rules from the pre-`prometheus-default`
+  # provisioning generation: file provenance, hash UIDs, and they point at
+  # a datasource UID (dfakbms70z4zke) that no longer exists — so each threw
+  # "data source not found" every eval cycle. Their working twins (the
+  # human-readable UIDs below) stay.
+  - orgId: 1
+    uid: bfal2ethfrdhcc # Container Disappeared
+  - orgId: 1
+    uid: ffal28xmfal1cf # Host Out of Disk Space
+  - orgId: 1
+    uid: afal291gvnz0ge # Host Out of Memory
+  - orgId: 1
+    uid: bfal295czyxa8b # Host OOM Kill Detected
+  - orgId: 1
+    uid: bfal299afpy4gb # Host CPU Overtemperature
+  - orgId: 1
+    uid: afal29d6u0hs0d # Host Systemd Service Failed
+  - orgId: 1
+    uid: afal2fwv7mmtce # Disk Will Fill In 24 Hours
+  - orgId: 1
+    uid: dfal2g0pbij28e # Inodes Will Fill In 24 Hours
+  - orgId: 1
+    uid: ffal2b36ys1dsf # Host High CPU Load
+  - orgId: 1
+    uid: afal2b6y5s740a # Host High CPU IOWait
+  - orgId: 1
+    uid: dfal2bapfa96oc # Host Swap Filling Up
+  - orgId: 1
+    uid: efal2befic1dsc # Host Memory Under Pressure
+  - orgId: 1
+    uid: efal2bi8zquiob # Host Out of Inodes
+  - orgId: 1
+    uid: dfal2cuy5hb7ke # Host Disk Read Latency High
+  - orgId: 1
+    uid: ffal2cyt5tvy8d # Host Disk Write Latency High
+  - orgId: 1
+    uid: efal2d2n2835se # Host Network Receive Errors
+  - orgId: 1
+    uid: ffal2d6fs60hsf # Host Network Transmit Errors
+  - orgId: 1
+    uid: bfal2da9w1wqod # Host Clock Skew Detected
 
 groups:
   - orgId: 1

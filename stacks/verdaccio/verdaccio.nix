@@ -119,6 +119,7 @@ in
 
     extraOptions = [
       "--user=10001:0" # See header for UID rationale.
+      "--stop-timeout=30" # >10s so storage/registry writes flush before SIGKILL at reboot.
     ];
   };
 

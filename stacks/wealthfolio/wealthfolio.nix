@@ -76,5 +76,11 @@
     # reviewable in `environment` above.
     environmentFiles = [ config.sops.secrets."wealthfolio-env".path ];
 
+    # SQLite at WF_DB_PATH — give it >10s to flush and close cleanly on
+    # stop so a reboot SIGKILL can't corrupt the DB mid-write.
+    extraOptions = [
+      "--stop-timeout=30"
+    ];
+
   };
 }
