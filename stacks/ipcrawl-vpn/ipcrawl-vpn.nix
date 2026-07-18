@@ -86,6 +86,11 @@
   myStack.containerNetworks.gluetun-ipcrawl = [ ];
   myStack.containerNetworks.gluetun-exporter-ipcrawl = [ ];
 
+  myStack.logStacks.ipcrawl-vpn = [
+    "gluetun-ipcrawl"
+    "gluetun-exporter-ipcrawl"
+  ];
+
   # Prometheus scrapes the exporter by its own job so the Grafana panels can
   # tell this instance apart from the TV gluetun (job="gluetun"). Reached via
   # the host port gluetun-ipcrawl publishes for the exporter (8003 → :8001).

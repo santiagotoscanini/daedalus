@@ -1,7 +1,8 @@
-# All alert rules for the home server. Exported via Grafana's
-# /api/v1/provisioning/alert-rules/export endpoint. Grouped by
-# dashboards they monitor (all current rules are host-level).
-# severity tier. Rules live in the "System" folder, next to the host
+# All alert rules for the home server, file-provisioned into Grafana's
+# "System" folder, grouped by severity tier (Container / Critical /
+# Predictive / Warning). Originally exported via Grafana's
+# /api/v1/provisioning/alert-rules/export endpoint; this file is now the
+# source of truth — UI edits to these rules don't persist.
 
 apiVersion: 1
 groups:
@@ -148,6 +149,52 @@ groups:
         annotations:
           description: Container {{ $labels.name }} is down (container_up = 0).
           summary: A declared container has stopped unexpectedly
+        labels:
+          severity: warning
+        isPaused: false
+      # Watchdog for the watchdog: if the container-up-exporter timer dies,
+      # container_up (and systemd_failed_units) freeze at their last values
+      # and every liveness reading above is stale. node-exporter exports the
+      # .prom file's mtime; alert when it stops being rewritten (the timer
+      # ticks every 1min). noDataState: Alerting — the file vanishing
+      # entirely is the same failure, worse.
+      - uid: container-watchdog-stale-1
+        title: Container Watchdog Stale
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: time() - node_textfile_mtime_seconds{file="/var/lib/node-exporter/textfile/container_up.prom"}
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 300
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: container_up.prom has not been rewritten for over 5 minutes — the container-up-exporter timer is dead and every container_up / systemd_failed_units reading is stale. Check `systemctl status container-up-exporter.timer`.
+          summary: Container liveness exporter has stopped updating
         labels:
           severity: warning
         isPaused: false
@@ -315,6 +362,11 @@ groups:
         labels:
           severity: critical
         isPaused: false
+      # systemd_failed_units is a textfile gauge written by monitoring.nix's
+      # container-up-exporter sweep (node-exporter runs WITHOUT
+      # --collector.systemd, so node_systemd_unit_state does not exist).
+      # noDataState: Alerting — if the gauge ever vanishes again this pages
+      # instead of going silently green.
       - uid: afal29d6u0hs0d
         title: Host Systemd Service Failed
         condition: C
@@ -325,7 +377,7 @@ groups:
               to: 0
             datasourceUid: dfakbms70z4zke
             model:
-              expr: node_systemd_unit_state{state="failed"}
+              expr: systemd_failed_units
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -346,12 +398,99 @@ groups:
               maxDataPoints: 43200
               refId: C
               type: threshold
-        noDataState: OK
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: "{{ $values.A }} systemd system unit(s) on {{ $labels.instance }} are in failed state. Run `systemctl --failed` on the host to see which."
+          summary: Systemd service has failed
+        labels:
+          severity: critical
+        isPaused: false
+      # node_zfs_zpool_state emits one series per (zpool, state) — 1 on the
+      # active state, 0 on the rest — so the non-online selector always
+      # returns data on a healthy box (all zeros) and noDataState: Alerting
+      # is safe: it only fires if the metric itself disappears. A degraded
+      # mirror is otherwise completely silent.
+      - uid: zfs-pool-state-1
+        title: ZFS Pool Not Online
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: node_zfs_zpool_state{state!="online"}
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: Alerting
         execErrState: Error
         for: 1m
         annotations:
-          description: Service {{ $labels.name }} on {{ $labels.instance }} is in failed state.
-          summary: Systemd service has failed
+          description: ZFS pool {{ $labels.zpool }} is in state {{ $labels.state }}. A degraded mirror is otherwise silent — run `zpool status` on the host.
+          summary: ZFS pool is not ONLINE
+        labels:
+          severity: critical
+        isPaused: false
+      # Covers both gluetun instances via the job label (job="gluetun" is
+      # the TV stack, job="gluetun-ipcrawl" the ipcrawl app tunnel).
+      - uid: vpn-tunnel-down-1
+        title: VPN Tunnel Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: gluetun_vpn_status
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: VPN tunnel for {{ $labels.job }} ({{ $labels.instance }}) has been down for 10 minutes (gluetun_vpn_status = 0).
+          summary: Gluetun VPN tunnel is down
         labels:
           severity: critical
         isPaused: false
@@ -882,6 +1021,130 @@ groups:
         annotations:
           description: Prometheus TSDB is at {{ $values.A | humanizePercentage }} of its retention size cap. Either cardinality is growing or someone bumped retention. The size cap will start dropping old data at 100%.
           summary: Prometheus TSDB > 80% of size cap
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: scrape-target-down-1
+        title: Scrape Target Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: up
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Scrape target {{ $labels.instance }} of job {{ $labels.job }} is unreachable or returning errors (up = 0) — the exporter is down, the container is gone, or the endpoint 404s.
+          summary: A prometheus scrape target is down
+        labels:
+          severity: warning
+        isPaused: false
+      # Scoped to job="gluetun" (the TV stack): ProtonVPN port forwarding
+      # feeds qBittorrent there. job="gluetun-ipcrawl" has no port
+      # forwarding configured and permanently reports 0 — including it
+      # would fire forever.
+      - uid: vpn-portfwd-lost-1
+        title: VPN Port Forward Lost
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: gluetun_forwarded_ports_total{job="gluetun"}
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          description: Gluetun ({{ $labels.job }}) has had no forwarded port for 30 minutes — qBittorrent is unconnectable for incoming peers. Check the gluetun container logs and the ProtonVPN port-forward loop.
+          summary: ProtonVPN forwarded port has been lost
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: tls-cert-expiry-1
+        title: TLS Certificate Expiring
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: dfakbms70z4zke
+            model:
+              expr: (min(traefik_tls_certs_not_after) - time()) / 86400
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 14
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 1h
+        annotations:
+          description: The soonest-expiring traefik TLS certificate has {{ $values.A }} days left — ACME renewal (normally at 30 days out) is not working. Check traefik logs and the Cloudflare DNS-01 credentials.
+          summary: A traefik TLS certificate expires in < 14 days
         labels:
           severity: warning
         isPaused: false

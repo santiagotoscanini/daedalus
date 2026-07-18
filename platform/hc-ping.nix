@@ -21,7 +21,7 @@
 }:
 
 let
-  baseUrl = "https://hc.toscanini.me/ping";
+  baseUrl = "https://hc.${config.myStack.baseDomain}/ping";
   keyPath = config.sops.secrets."hc-ping-key".path;
 
   # hc-ping <slug> [start|fail]. Always exits 0.

@@ -256,6 +256,10 @@ in
       jellyfin = [ "traefik" ];
     };
 
+  # Loki stack label (stacks/logging logStacks): group the whole
+  # netns family + jellyfin under one queryable stack.
+  myStack.logStacks.tv = [ "gluetun" "jellyfin" ] ++ netnsTenants;
+
   # Jellyfin is bridge-routed. The gluetun-netns UIs (from vpnUis) use
   # explicit serviceUrl pointing at gluetun's host-published ports —
   # putting gluetun on traefik-net would mix VPN-exit and bridge traffic.

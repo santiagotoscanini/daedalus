@@ -10,6 +10,8 @@
 #
 # Optional opt-ins:
 #   - postgres.enable = true   → per-app postgres via stacks/app-db/
+#   - prometheus.enable = true → /metrics scrape + Grafana dashboard; flip
+#                                once the app actually ships /metrics
 #   - stage = "live"           → public CNAME via Cloudflare tunnel
 #   - deploy.enable = false    → freeze the app on its current image
 #
@@ -50,11 +52,6 @@ _:
     # so there's no migration step to run — the migrations/ dir upstream is
     # for their Cloudflare D1 path, not this one.
     storage.enable = true;
-
-    # Nuxt app, no /metrics endpoint — a scrape here would just be a
-    # permanently-down target in Prometheus. (Also required for egress: a
-    # netns'd app isn't reachable from monitoring-net anyway.)
-    prometheus.enable = false;
 
     # All outbound (camera live-probes + the daily Shodan pull) exits through
     # the dedicated ProtonVPN tunnel in stacks/ipcrawl-vpn/ instead of the

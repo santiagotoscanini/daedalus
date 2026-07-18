@@ -53,7 +53,19 @@ let
   '';
 in
 {
-  sops.secrets."mail-relay-password" = {
+  options.myStack.emailOnFailure = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    example = [ "flake-autoupgrade" ];
+    description = ''
+      Systemd unit names (no .service suffix) that email on failure via
+      notify-email@. Owning modules self-register here, next to their
+      myStack.hcPings entry — the two registries pair up per module.
+    '';
+  };
+
+  config = {
+    sops.secrets."mail-relay-password" = {
     sopsFile = ./password.sops;
     format = "binary";
     owner = "santiago";
@@ -95,17 +107,22 @@ in
     ZED_NOTIFY_VERBOSE = false;
   };
 
-  # Reusable failure-notifier: OnFailure=notify-email@%N.service on a unit
-  # emails its status + recent journal.
-  systemd.services."notify-email@" = {
-    description = "Email ${alertTo} when %i fails";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${notifyEmail} %i";
+  # Reusable failure-notifier: OnFailure=notify-email@%N.service on a
+  # unit emails its status + recent journal. Units opt in via the
+  # emailOnFailure option (self-registered by their owning module,
+  # next to its hcPings entry) — mail.nix never reaches into units it
+  # doesn't own.
+  systemd.services = {
+    "notify-email@" = {
+      description = "Email ${alertTo} when %i fails";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${notifyEmail} %i";
+      };
     };
+  }
+  // lib.genAttrs config.myStack.emailOnFailure (_: {
+    onFailure = [ "notify-email@%N.service" ];
+  });
   };
-
-  systemd.services.flake-autoupgrade.onFailure = [ "notify-email@%N.service" ];
-  systemd.services.syncoid-rpool-home.onFailure = [ "notify-email@%N.service" ];
-  systemd.services.syncoid-rpool-selfhost.onFailure = [ "notify-email@%N.service" ];
 }

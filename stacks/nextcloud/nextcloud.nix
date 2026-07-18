@@ -64,6 +64,11 @@ in
     nextcloud-app = [ "nextcloud" "app-db" "traefik" ]; # config.php dials pg:5432
   };
 
+  myStack.logStacks.nextcloud = [
+    "nextcloud-app"
+    "nextcloud-redis"
+  ];
+
   myStack.stateDirs = {
     "/home/santiago/selfhost/nextcloud/nc_config".uid = 33; # www-data
     "/home/santiago/selfhost/nextcloud/nc_redis".uid = 999;

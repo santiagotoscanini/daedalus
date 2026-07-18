@@ -8,8 +8,9 @@
 #     them by container DNS, and (b) prometheus reaches any other
 #     traefik-net-attached stack (litellm:4000, immich:8081, …) without
 #     per-stack host-port publishing.
-#   - prometheus keeps its host port :9090 for external scrapers /
-#     remote_write / federation; grafana drops its host port.
+#   - neither prometheus nor grafana publishes a host port — both are
+#     reachable via traefik (prometheus.toscanini.me / grafana.toscanini.me)
+#     or by container DNS on their bridges.
 #
 # `prometheus.yml` and the dashboards dir are nix-generated:
 #   - `prometheusConfig`: base scrape list + each stack's
@@ -67,11 +68,16 @@ let
         pkgs.podman
         pkgs.coreutils
         pkgs.gnugrep
+        pkgs.systemd
       ]
     }
     tmp="${textfileDir}/container_up.prom.$$"
     # One podman call; each declared name is 1 iff it appears in `ps`.
     running=$(podman ps --format '{{.Names}}' || true)
+    # Failed system units — node-exporter runs without --collector.systemd,
+    # so this textfile gauge is the only systemd-health signal prometheus
+    # sees. `systemctl list-units` is read-only; works unprivileged.
+    failed=$(systemctl --failed --plain --no-legend --no-pager | wc -l)
     {
       echo "# HELP container_up Declared oci-container running (1) or stopped/missing (0)."
       echo "# TYPE container_up gauge"
@@ -79,6 +85,9 @@ let
         if printf '%s\n' "$running" | grep -qxF "$name"; then up=1; else up=0; fi
         echo "container_up{name=\"$name\"} $up"
       done
+      echo "# HELP systemd_failed_units Count of systemd system units in failed state."
+      echo "# TYPE systemd_failed_units gauge"
+      echo "systemd_failed_units $failed"
     } > "$tmp"
     # Atomic swap — node-exporter reads whole files; a half-written file
     # would export a truncated series.
@@ -177,10 +186,7 @@ in
   # podman socket; writes the .prom file node-exporter serves.
   systemd.services.container-up-exporter = {
     description = "Export container_up{name} liveness to node-exporter textfile";
-    after = [
-      "podman.service"
-      "systemd-tmpfiles-setup.service"
-    ];
+    after = [ "systemd-tmpfiles-setup.service" ];
     wants = [ "systemd-tmpfiles-setup.service" ];
     serviceConfig = {
       Type = "oneshot";
@@ -212,13 +218,20 @@ in
     node-exporter = [ ]; # host net — see comment on container below
   };
 
+  myStack.logStacks.monitoring = [
+    "prometheus"
+    "grafana"
+    "cadvisor"
+    "node-exporter"
+  ];
+
   myStack.webApps = {
     prometheus = {
       serviceName = "prometheus";
       port = 9090;
       # No auth of its own; grafana + self-scrape dial container-direct
-      # and never cross traefik. NOTE: host port 9090 stays open and
-      # ungated (external scrapers) — see AUTH.md open decision.
+      # and never cross traefik. No host port — traefik (OIDC-gated) is
+      # the only path in from outside the bridges.
       auth = "oidc";
       healthPath = "/-/healthy";
       homepage = {
@@ -257,14 +270,9 @@ in
   virtualisation.oci-containers.containers.prometheus = mkRootlessContainer {
     image = "docker.io/prom/prometheus:v3.13.1@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893";
 
-    # Host port kept for external scrapers / remote_write / federation
-    # (raw API access — bridge-routing via traefik would lose that).
-    ports = [ "9090:9090" ];
-
     cmd = [
       "--config.file=/etc/prometheus/prometheus.yml"
       "--storage.tsdb.path=/prometheus"
-      "--web.enable-lifecycle"
       "--storage.tsdb.retention.time=30d"
       "--storage.tsdb.retention.size=100GB"
     ];

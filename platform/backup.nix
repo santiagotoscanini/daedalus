@@ -23,13 +23,24 @@
 #   - The replica's history mirrors the source's snapshot history for free
 #     — restores can reach into `.zfs/snapshot/` on the backup copy too.
 #
-# ── Target datasets: not mounted, not re-snapshotted ─────────────────────
+# ── Target datasets: not mounted, not re-snapshotted, mirror-pruned ──────
 # `s2-pool/backup` is created with mountpoint=none and
 # com.sun:auto-snapshot=false; children inherit both. mountpoint=none keeps
 # the replica from ever mounting over /home or the live selfhost tree, and
 # auto-snapshot=false keeps the receive side from growing its own snapshot
-# set (which would also break incremental `zfs receive`). The replica's
-# retained history is whatever came across from the source.
+# set (which would also break incremental `zfs receive`).
+#
+# `--delete-target-snapshots` makes the replica a strict MIRROR of the
+# source's snapshot set: after each successful sync, target snapshots
+# that no longer exist on the source are destroyed (oldest-first). The
+# common incremental base is structurally safe — it exists on both
+# sides, so it's never in the delete set. Without this flag nothing
+# prunes the target: every 15-min/hourly/daily snapshot that ever
+# crossed accumulated forever (~28/day/dataset, 337 found when this was
+# added). Consequence to remember: MANUAL snapshots (`pre-*`) also live
+# and die with their source copy — the replica is a mirror, not an
+# archive. Anything to keep forever needs its own dataset or a `zfs
+# send` to somewhere else first.
 #
 # ── One-time bootstrap (imperative, allowed) ─────────────────────────────
 # The parent dataset must exist before the first receive:
@@ -52,6 +63,10 @@ _:
     "syncoid-rpool-selfhost" = "backup-selfhost";
     "syncoid-rpool-home" = "backup-home";
   };
+  myStack.emailOnFailure = [
+    "syncoid-rpool-selfhost"
+    "syncoid-rpool-home"
+  ];
 
   services.syncoid = {
     enable = true;
@@ -68,7 +83,23 @@ _:
     #   journald/Loki — only errors remain. mbuffer (buffering) stays.
     commonArgs = [
       "--no-sync-snap"
+      "--delete-target-snapshots"
       "--quiet"
+    ];
+
+    # Module default + destroy: --delete-target-snapshots prunes via
+    # `zfs destroy` on the target, which the default delegation set
+    # doesn't include — without it the flag is a silent no-op (syncoid
+    # swallows the permission error under --quiet).
+    localTargetAllow = [
+      "change-key"
+      "compression"
+      "create"
+      "destroy"
+      "mount"
+      "mountpoint"
+      "receive"
+      "rollback"
     ];
 
     commands = {

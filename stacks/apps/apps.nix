@@ -7,10 +7,10 @@
 #     cluster there — see stacks/app-db/).
 #   - A webApp at `<name>.toscanini.me`. `stage = "live"` flips
 #     exposeRemotely so cloudflared-route-sync upserts the public CNAME.
-#   - (Optional) prometheus scrape on the app's own /metrics and, when
-#     postgres is enabled, a second scrape via the shared `pg-exporter`
-#     (multi-target).
-#   - Grafana dashboard if supplied (in the "Apps" folder).
+#   - (Opt-in, `prometheus.enable`) scrape on the app's own /metrics,
+#     plus the per-app Grafana dashboard (in the "Apps" folder) when
+#     one is supplied. Postgres metrics are separate — the shared
+#     `pg-exporter` (stacks/app-db/) covers them either way.
 #   - Homepage tiles under a per-app section named after the app (e.g.
 #     `Anansi`): the app, Repo, Logs.
 #   - An auto-deploy timer + oneshot (`deploy.enable`, ON by default) that
@@ -43,9 +43,10 @@
 #     The app uses it for session signing / JWT / CSRF / etc.
 #
 # Optional features (opt-in; `false` by default):
-#   - postgres.enable → injects DATABASE_URL (+ POSTGRES_*)
-#   - storage.enable  → bind-mounts a persistent data dir at /app/data
-#   - litellm         → injects LITELLM_BASE_URL
+#   - postgres.enable   → injects DATABASE_URL (+ POSTGRES_*)
+#   - storage.enable    → bind-mounts a persistent data dir at /app/data
+#   - litellm           → injects LITELLM_BASE_URL
+#   - prometheus.enable → /metrics scrape + per-app Grafana dashboard
 #   - …future features follow the same pattern (off by default,
 #     env injection conditional on opt-in).
 #
@@ -124,20 +125,10 @@ let
       storageHostPath = app.storage.hostPath;
 
       # VPN egress: borrow a gluetun container's netns for ALL traffic
-      # instead of joining traefik-net (see stacks/ipcrawl-vpn/). Guarded:
-      # incompatible with postgres (a netns-borrowing container can't also
-      # join the app-db bridge), and hostPort is mandatory when set.
-      egressEnabled =
-        let
-          e = app.egress.container != null;
-        in
-        lib.throwIf (e && postgresEnabled)
-          "myStack.apps.${name}: `egress` cannot combine with `postgres.enable` — a container sharing gluetun's netns can't also join the app-db-net bridge."
-          (
-            lib.throwIf (e && app.egress.hostPort == null)
-              "myStack.apps.${name}: `egress.container` is set but `egress.hostPort` is null — set the host port the netns owner publishes for this app."
-              e
-          );
+      # instead of joining traefik-net (see stacks/ipcrawl-vpn/). The
+      # incompatibilities (postgres, prometheus, missing hostPort) are
+      # enforced via `assertions` below.
+      egressEnabled = app.egress.container != null;
 
       tileGroup = capitalize name;
 
@@ -251,6 +242,21 @@ let
       };
     in
     {
+      assertions = [
+        {
+          assertion = !(egressEnabled && postgresEnabled);
+          message = "myStack.apps.${name}: `egress` cannot combine with `postgres.enable` — a container sharing gluetun's netns can't also join the app-db-net bridge.";
+        }
+        {
+          assertion = !(egressEnabled && app.egress.hostPort == null);
+          message = "myStack.apps.${name}: `egress.container` is set but `egress.hostPort` is null — set the host port the netns owner publishes for this app.";
+        }
+        {
+          assertion = !(egressEnabled && app.prometheus.enable);
+          message = "myStack.apps.${name}: `egress` cannot combine with `prometheus.enable` — a netns'd app isn't reachable from monitoring-net, so the scrape target would be permanently down.";
+        }
+      ];
+
       # Delegate per-app Postgres entirely to stacks/app-db/. The
       # presence of the key triggers role + database creation and the
       # per-app env file. LAN access is the single shared
@@ -302,8 +308,11 @@ let
         metrics_path = app.prometheus.path;
       };
 
-      # Grafana dashboard in the "Apps" folder (when supplied).
-      myStack.grafanaDashboardsByFolder = lib.optionalAttrs (app.dashboard != null) {
+      # Grafana dashboard in the "Apps" folder (when supplied). Gated on
+      # prometheus.enable alongside the scrape: the dashboard is
+      # metrics-driven, so without a scrape it would only render empty
+      # panels.
+      myStack.grafanaDashboardsByFolder = lib.optionalAttrs (app.prometheus.enable && app.dashboard != null) {
         "Apps"."${cName}" = lib.replaceStrings [ "%APP_NAME%" ] [ name ] (builtins.readFile app.dashboard);
       };
 
@@ -537,8 +546,8 @@ in
             # outbound exits the VPN (fail-closed), and traefik reaches the UI via
             # the host port the netns owner publishes
             # (`host.containers.internal:<egress.hostPort>`). Mutually exclusive
-            # with `postgres.enable`; leave `prometheus.enable = false` too (a
-            # netns'd app isn't scrapable from monitoring-net).
+            # with `postgres.enable` and `prometheus.enable` (a netns'd app
+            # isn't scrapable from monitoring-net) — enforced via assertions.
             egress = {
               container = lib.mkOption {
                 type = lib.types.nullOr lib.types.str;
@@ -677,8 +686,14 @@ in
             prometheus = {
               enable = lib.mkOption {
                 type = lib.types.bool;
-                default = true;
-                description = "Add a prometheus scrape for `<cName>:3000<path>`.";
+                default = false;
+                description = ''
+                  Add a prometheus scrape for `<cName>:3000<path>` and
+                  materialize the per-app Grafana dashboard (when one is
+                  supplied). Off by default — flip to true when the app
+                  ships a /metrics endpoint; a scrape without one is just
+                  a permanently-down target in Prometheus.
+                '';
               };
               path = lib.mkOption {
                 type = lib.types.str;
@@ -693,7 +708,9 @@ in
               description = ''
                 Optional Grafana dashboard JSON. `%APP_NAME%` placeholders
                 are substituted with the app's name. Lands under the "Apps"
-                folder.
+                folder. Only materialized when `prometheus.enable` — the
+                dashboard is metrics-driven, so without the scrape it would
+                only render empty panels.
               '';
             };
 
@@ -755,6 +772,8 @@ in
       listOpt = path: lib.concatLists (map (f: lib.attrByPath path [ ] f) fragments);
     in
     {
+      assertions = listOpt [ "assertions" ];
+
       # GHCR classic PAT (read:packages) in podman auth.json form —
       # sops-encrypted, used by container pulls + the deploy oneshots.
       sops.secrets."ghcr-auth" = {

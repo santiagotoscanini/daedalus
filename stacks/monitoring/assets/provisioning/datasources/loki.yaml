@@ -1,6 +1,6 @@
 # Provisioned Loki datasource. UID pinned so dashboards / alert rules
-# that reference it keep resolving across rebuilds. Loki reaches this
-# Grafana over the shared `monitoring-net` bridge (aardvark-dns).
+# that reference it keep resolving across rebuilds. Grafana reaches
+# Loki over the shared `monitoring-net` bridge (aardvark-dns).
 
 apiVersion: 1
 

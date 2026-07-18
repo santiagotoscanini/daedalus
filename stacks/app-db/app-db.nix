@@ -191,6 +191,11 @@ in
     ];
     myStack.containerNetworks.traefik = [ "pg-wire" ];
 
+    myStack.logStacks.app-db = [
+      "pg"
+      "pg-exporter"
+    ];
+
     # LAN access for direct-TLS postgres clients (DBeaver, psql, JDBC).
     # One shared hostname for the whole cluster; the client picks the
     # database (and matching role) via the `dbname=` / `user=` fields

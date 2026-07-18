@@ -59,6 +59,13 @@ in
     immich = [ "immich" "traefik" ];
   };
 
+  myStack.logStacks.immich = [
+    "immich"
+    "immich-postgres"
+    "immich-redis"
+    "immich-machine-learning"
+  ];
+
   myStack.stateDirs = {
     "/home/santiago/selfhost/immich/model-cache".uid = 1000;
     "/home/santiago/selfhost/immich/postgres" = {
