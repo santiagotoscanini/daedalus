@@ -30,8 +30,8 @@
     # MySpeed's optional password stays unset — its "auth" sends the
     # plaintext password as a header on every request; the Pocket ID
     # gate is the real boundary. Widget dials container-direct.
-      auth = "oidc";
-      healthPath = "/favicon.ico";
+    auth = "oidc";
+    healthPath = "/favicon.ico";
     homepage = {
       group = "Network";
       name = "MySpeed";

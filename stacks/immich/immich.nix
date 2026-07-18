@@ -180,7 +180,9 @@ in
       REDIS_HOSTNAME = "redis";
 
       # Honor X-Forwarded-For from traefik (correct IPs in audit logs).
-      IMMICH_TRUSTED_PROXIES = "${config.myStack.lanIp}/24";
+      # Traefik dials immich over traefik-net, so the trusted peer is
+      # that bridge's subnet (pinned in stacks/traefik).
+      IMMICH_TRUSTED_PROXIES = config.myStack.bridgeSubnets.traefik;
       # /metrics on :8081 (api) + :8082 (microservices).
       IMMICH_TELEMETRY_INCLUDE = "all";
     };

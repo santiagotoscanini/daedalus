@@ -2,11 +2,10 @@
 # horizon publish. Joins traefik-net so traefik dials
 # `http://wealthfolio:8088` — no host port published.
 #
-# To rotate the admin password, regenerate the argon2 hash:
-#   echo -n "<new-pass>" | argon2 "<salt>" -id -m 12 -t 3 -p 1 -e
-# The output is WF_AUTH_PASSWORD_HASH, verbatim (single `$`, no
-# escaping). Then
-# `systemctl restart podman-wealthfolio`.
+# To enable password login alongside SSO, generate an argon2 hash:
+#   echo -n "<pass>" | argon2 "<salt>" -id -m 12 -t 3 -p 1 -e
+# and add it to env.sops as WF_AUTH_PASSWORD_HASH, verbatim (single
+# `$`, no escaping). Then `systemctl restart podman-wealthfolio`.
 
 {
   config,
@@ -45,9 +44,10 @@
     ];
 
     # Pocket ID SSO (AUTH.md) — public client, PKCE, no secret, so
-    # plain env suffices. OIDC-only: WF_AUTH_PASSWORD_HASH was removed
-    # from env.sops (git history has it, or regenerate per the header
-    # comment) — the login page offers just "Sign in with SSO".
+    # plain env suffices. OIDC-only: env.sops carries no
+    # WF_AUTH_PASSWORD_HASH (the header runbook mints one if password
+    # login is ever wanted) — the login page offers just "Sign in
+    # with SSO".
     environment = {
       WF_OIDC_ISSUER_URL = "https://id.toscanini.me";
       WF_OIDC_CLIENT_ID = "36e5f60b-173f-4686-8b2b-830ff5d98fd8";
@@ -56,8 +56,7 @@
       WF_OIDC_ALLOWED_SUBS = "1ae66034-d627-46f7-9c04-1d8c05639a1a";
     };
 
-    # WF_LISTEN_ADDR + WF_DB_PATH + WF_SECRET_KEY + WF_AUTH_PASSWORD_HASH
-    # + WF_CORS_ALLOW_ORIGINS.
+    # WF_LISTEN_ADDR + WF_DB_PATH + WF_SECRET_KEY + WF_CORS_ALLOW_ORIGINS.
     environmentFiles = [ config.sops.secrets."wealthfolio-env".path ];
 
     extraOptions = [

@@ -28,9 +28,17 @@
 # unhealthy leaves the unit failed (and the new image running — there is no
 # auto-rollback). See stacks/apps/apps.nix + assets/deploy.sh.
 
-_:
+
+{ config, mkDotenvSecret, ... }:
 
 {
+  # Operator-managed secrets for ipcrawl (Shodan key + hash peppers) —
+  # sops class, tracked, editable with `sops ipcrawl-env.sops`. The
+  # machine-generated secrets/ipcrawl/env keeps only the bootstrap
+  # AUTH_SECRET (rotation: delete file + rebuild — never carries
+  # operator values).
+  sops.secrets."app-ipcrawl-env" = mkDotenvSecret ./ipcrawl-env.sops;
+
   myStack.apps.anansi = {
     postgres.enable = true;
     stage = "live";
@@ -103,11 +111,11 @@ _:
     # i.e. inside the storage bind mount) — deliberately not restated here,
     # so there's one source of truth for it.
 
-    # NUXT_SHODAN_API_KEY + NUXT_VOTER_PEPPER + NUXT_CAM_ID_PEPPER live in
-    # the baseline per-app secrets file that app-ipcrawl-secrets-bootstrap
-    # creates (/etc/nixos/stacks/apps/secrets/ipcrawl/env) — no extra
-    # environmentFiles entry needed. Without a Shodan key the app still
-    # boots and serves; the catalogue is just empty.
+    # NUXT_SHODAN_API_KEY + NUXT_VOTER_PEPPER + NUXT_CAM_ID_PEPPER —
+    # operator secrets from ipcrawl-env.sops (see top of file). Without
+    # a Shodan key the app still boots and serves; the catalogue is
+    # just empty.
+    environmentFiles = [ config.sops.secrets."app-ipcrawl-env".path ];
 
     homepage = {
       description = "ipcrawl — exposed-webcam catalogue (Shodan)";

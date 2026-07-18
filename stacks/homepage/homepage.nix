@@ -190,12 +190,11 @@ in
       # by raw bridge name:
       #  - nextcloud: NC_overwriteprotocol="https" 30x-redirects every
       #    plain-HTTP request, and homepage's proxy can't follow http→https.
-      #  - nzbget / pihole / qbittorrent: homepage's undici client trips
-      #    on their `Connection: close` responses → ECONNRESET. Going
-      #    through traefik gets keep-alive and sidesteps the bug.
+      #  - nzbget / qbittorrent: homepage's undici client trips on their
+      #    `Connection: close` responses → ECONNRESET. Going through
+      #    traefik gets keep-alive and sidesteps the bug.
       "--add-host=nextcloud.toscanini.me:host-gateway"
       "--add-host=nzbget.toscanini.me:host-gateway"
-      "--add-host=pihole.toscanini.me:host-gateway"
       "--add-host=qbittorrent.toscanini.me:host-gateway"
     ];
 

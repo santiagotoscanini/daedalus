@@ -41,6 +41,10 @@
   myStack.grafanaDashboardsByFolder."Media".media-pipeline =
     builtins.readFile ./assets/media-pipeline.json;
 
+  # No log-level knob: the level and the wsgiref access lines are
+  # hardcoded upstream (scraparr.py logging.basicConfig(INFO)), so its
+  # INFO chatter lands at journald err priority — known upstream
+  # limitation.
   virtualisation.oci-containers.containers.scraparr = mkRootlessContainer {
     image = "ghcr.io/thecfu/scraparr:3.0.3@sha256:44f09d30009508a2a422ae7cd9cce38fa36122d6bd0592f2e4158398d9ccb7a6";
 

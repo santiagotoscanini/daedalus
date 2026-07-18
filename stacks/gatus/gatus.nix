@@ -34,9 +34,9 @@
 # else: one alert path instead of two. Add `alerting:` + per-endpoint
 # `alerts:` only if gatus must page independently of Grafana.
 #
-# State (history DB) persists at ~/selfhost/gatus/data (sqlite) so restarts
-# don't wipe the uptime history. LAN-only (status.toscanini.me); no
-# exposeRemotely.
+# Uptime history lives in the `gatus` database on the shared app-db
+# cluster (stacks/app-db) so restarts don't wipe it. LAN-only
+# (status.toscanini.me); no exposeRemotely.
 
 {
   config,
@@ -182,10 +182,6 @@ in
 
     volumes = [
       "${gatusConfig}:/config/config.yaml:ro"
-      "/home/santiago/selfhost/gatus/data:/data"
-    ];
-
-    extraOptions = [
     ];
   };
 }

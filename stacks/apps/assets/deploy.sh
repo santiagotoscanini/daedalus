@@ -69,6 +69,15 @@ if [ "$after" = "$before" ]; then
 fi
 
 echo "new image: $before -> $after — restarting $UNIT"
+
+# Write the failed sentinel BEFORE the restart: if systemctl itself
+# dies here (bad entrypoint, podman run failure), set -e aborts this
+# script with no state written — and since the image is already
+# pulled, the next tick would see after == before, read the OLD "ok"
+# state, and exit 0, silently clearing the unit's failed status. The
+# pre-written sentinel keeps that tick loud; the health-check below
+# overwrites it with "ok" on success.
+echo "$after failed" > "$STATE"
 systemctl restart "$UNIT"
 
 # The container unit is Type=oneshot (see platform/common.nix): `podman run -d`

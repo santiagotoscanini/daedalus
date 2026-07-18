@@ -19,8 +19,8 @@
     port = 8081;
     # No auth of its own (upstream: none planned). Homepage widget
     # dials http://metube:8081 container-direct, unaffected.
-      auth = "oidc";
-      healthPath = "/favicon.ico";
+    auth = "oidc";
+    healthPath = "/favicon.ico";
     homepage = {
       group = "Media";
       name = "MeTube";
@@ -62,6 +62,9 @@
     environment = {
       UID = "0";
       GID = "0";
+      # Default INFO logs "Sending download history" to stderr on every
+      # poll — journald err-priority noise.
+      LOGLEVEL = "WARNING";
     };
 
     extraOptions = [

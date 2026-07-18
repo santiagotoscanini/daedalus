@@ -872,6 +872,64 @@ in
         extraOptions = [ "--network=container:${netnsOwner}" ];
       };
 
+    # Locally-built image + its build oneshot, as one helper:
+    #   inherit (mkImageBuild { ... }) image service;
+    # The tag embeds the build context's store hash, so ANY change to
+    # the context (base-image digest bump, Containerfile edit, asset
+    # change) changes the consumer unit's ExecStart and restarts it.
+    # Without that, a rebuilt image sits unused behind an unchanged tag
+    # until something else happens to restart the container — a silent
+    # partial deploy. Layer cache keeps no-change rebuilds ~instant.
+    _module.args.mkImageBuild =
+      {
+        name, # localhost/<name>
+        tagPrefix, # human-readable tag part (e.g. the app version)
+        contextDir, # store path with the Containerfile + context
+        gates, # consumer units; build runs before= / wantedBy= them
+      }:
+      let
+        # Interpolation imports a literal path into its own
+        # content-addressed store path (a derivation is already one) —
+        # /nix/store/<hash32>-…, where the hash IS the fingerprint of
+        # exactly this context, not of the whole repo.
+        ctx = "${contextDir}";
+        ctxHash = builtins.substring 11 8 ctx;
+        image = "localhost/${name}:${tagPrefix}-${ctxHash}";
+      in
+      {
+        inherit image;
+        service = {
+          description = "Build ${image}";
+          after = [
+            "network-online.target"
+            "linger-users.service"
+          ];
+          wants = [
+            "network-online.target"
+            "linger-users.service"
+          ];
+          before = gates;
+          wantedBy = gates;
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            User = "santiago";
+            Group = "users";
+            Environment = "XDG_RUNTIME_DIR=/run/user/1000";
+            Restart = "on-failure";
+            RestartSec = "1s";
+            ExecStart = pkgs.writeShellScript "build-${name}-image" ''
+              set -eu
+              cd ${ctx}
+              ${pkgs.podman}/bin/podman build \
+                --tag ${image} \
+                --file Containerfile \
+                .
+            '';
+          };
+        };
+      };
+
     # Container-UID -> host-UID under santiago's subuid range
     # (100000:65536): container uid 0 is santiago (1000); uid N >= 1
     # lands at 99999 + N (www-data 33 -> 100032, linuxserver abc

@@ -23,6 +23,7 @@
   pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
+  mkImageBuild,
   ...
 }:
 
@@ -46,12 +47,20 @@ let
      && apt-get clean \
      && rm -rf /var/lib/apt/lists/*
   '';
+
+  nextcloudImage = mkImageBuild {
+    name = "nextcloud-ffmpeg";
+    tagPrefix = nextcloudVersion;
+    contextDir = nextcloudImageBuildDir;
+    gates = [ "podman-nextcloud-app.service" ];
+  };
 in
 {
-  # REDIS_PASS (shared by redis + app): sops-encrypted env.sops,
-  # decrypted to /run/secrets/nextcloud-env at activation. Edit with
-  # `sops env.sops`. The DB password lives in config.php (mutable app
-  # state), sourced from the app-db bootstrap env at migration time.
+  # REDIS_HOST_PASSWORD (shared by redis + app; the stock entrypoint
+  # reads it directly): sops-encrypted env.sops, decrypted to
+  # /run/secrets/nextcloud-env at activation. Edit with `sops env.sops`.
+  # The DB password lives in config.php (mutable app state), sourced
+  # from the app-db bootstrap env at migration time.
   sops.secrets."nextcloud-env" = mkDotenvSecret ./env.sops;
 
   # Database on the shared app-db cluster: role + db + env file with
@@ -73,9 +82,6 @@ in
     "/home/santiago/selfhost/nextcloud/nc_config".uid = 33; # www-data
     "/home/santiago/selfhost/nextcloud/nc_redis".uid = 999;
   };
-
-  # nextcloud-redis BGSAVE under memory pressure (1 = always allow).
-  boot.kernel.sysctl."vm.overcommit_memory" = 1;
 
   # Split-horizon publish — same hostname for LAN (websecure) + off-LAN
   # (cfweb via CF tunnel), wildcard cert covers both. HSTS is set by
@@ -113,14 +119,14 @@ in
       "/home/santiago/selfhost/nextcloud/nc_redis:/data"
     ];
 
-    # Read REDIS_PASS in the cmd's shell so the secret isn't baked
-    # into the unit's argv.
+    # Read REDIS_HOST_PASSWORD in the cmd's shell so the secret isn't
+    # baked into the unit's argv.
     environmentFiles = [ config.sops.secrets."nextcloud-env".path ];
 
     cmd = [
       "sh"
       "-c"
-      "exec redis-server --requirepass \"$REDIS_PASS\""
+      "exec redis-server --requirepass \"$REDIS_HOST_PASSWORD\""
     ];
 
     extraOptions = [
@@ -128,8 +134,9 @@ in
   };
 
   virtualisation.oci-containers.containers.nextcloud-app = mkRootlessContainer {
-    # Built by nextcloud-image-build below.
-    image = "localhost/nextcloud-ffmpeg:${nextcloudVersion}";
+    # Built by nextcloud-image-build below; the tag carries the build
+    # context hash so digest/Containerfile bumps restart the app.
+    image = nextcloudImage.image;
     dependsOn = [ "nextcloud-redis" ];
 
     volumes = [
@@ -147,7 +154,7 @@ in
       # No POSTGRES_* vars: the instance is installed, so the image
       # only reads DB settings from config.php.
 
-      TRUSTED_PROXIES = "${config.myStack.lanIp}/24";
+      TRUSTED_PROXIES = config.myStack.bridgeSubnets.traefik;
       PHP_MEMORY_LIMIT = "2G";
       NEXTCLOUD_TRUSTED_DOMAINS = "nextcloud.toscanini.me host.containers.internal";
       NEXTCLOUD_INIT_HTACCESS = "true";
@@ -162,16 +169,9 @@ in
       "NC_maintenance_window_start" = "100";
     };
 
-    # PG_PASS + REDIS_PASS (REDIS_HOST_PASSWORD aliased below).
+    # REDIS_HOST_PASSWORD — read by the stock entrypoint's
+    # redis.config.php; no entrypoint override needed.
     environmentFiles = [ config.sops.secrets."nextcloud-env".path ];
-
-    # Image reads REDIS_HOST_PASSWORD; our env file uses REDIS_PASS for
-    # naming consistency. Alias here.
-    entrypoint = "/bin/sh";
-    cmd = [
-      "-c"
-      "export REDIS_HOST_PASSWORD=\"$REDIS_PASS\" && exec /entrypoint.sh apache2-foreground"
-    ];
 
     extraOptions = [
       # tmpfs for /tmp speeds up the `recognize` ML app per its README.
@@ -179,44 +179,7 @@ in
     ];
   };
 
-  # Build localhost/nextcloud-ffmpeg:<ver>. Runs before nextcloud-app.
-  systemd.services.nextcloud-image-build = {
-    description = "Build localhost/nextcloud-ffmpeg:${nextcloudVersion}";
-    # linger-users gates /run/user/1000 → rootless podman → newuidmap.
-    after = [
-      "network-online.target"
-      "linger-users.service"
-    ];
-    wants = [
-      "network-online.target"
-      "linger-users.service"
-    ];
-    before = [ "podman-nextcloud-app.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "santiago";
-      Group = "users";
-      Environment = "XDG_RUNTIME_DIR=/run/user/1000";
-      Restart = "on-failure";
-      RestartSec = "1s";
-      ExecStart = pkgs.writeShellScript "build-nextcloud-image" ''
-        set -eu
-        cd ${nextcloudImageBuildDir}
-        ${pkgs.podman}/bin/podman build \
-          --tag localhost/nextcloud-ffmpeg:${nextcloudVersion} \
-          --file Containerfile \
-          .
-      '';
-    };
-  };
-
-  # NixOS module merging concatenates after/wants with common.nix's
-  # auto-generated override.
-  systemd.services.podman-nextcloud-app = {
-    after = [ "nextcloud-image-build.service" ];
-    wants = [ "nextcloud-image-build.service" ];
-  };
+  systemd.services.nextcloud-image-build = nextcloudImage.service;
 
   # Nextcloud expects cron.php every 5 min for background jobs
   # (file scans, notifications, indexing). Official image doesn't ship

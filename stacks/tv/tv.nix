@@ -25,7 +25,6 @@
   lib,
   pkgs,
   mkRootlessContainer,
-  mkDotenvSecret,
   gluetunImage,
   mkGluetunExporter,
   ...
@@ -64,6 +63,11 @@ let
     "gluetun-exporter"
     "subgen"
   ];
+
+  # Shared auth-bypass rule for the *arrs (Servarr apps expose the same
+  # API surface): API-key callers, /api, RSS /feed, and /ping skip the
+  # Pocket ID gate.
+  arrApiBypass = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
 
   # gluetun-published web UIs — one entry per service, generating the
   # port publish on gluetun, the webApp (traefik dials the host port
@@ -117,7 +121,7 @@ let
     {
       name = "prowlarr";
       port = 9696;
-      authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
+      authBypassRule = arrApiBypass;
       healthPath = "/ping";
       homepage = {
         group = "Media";
@@ -134,7 +138,7 @@ let
     {
       name = "radarr";
       port = 7878;
-      authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
+      authBypassRule = arrApiBypass;
       healthPath = "/ping";
       homepage = {
         group = "Media";
@@ -152,7 +156,7 @@ let
     {
       name = "sonarr";
       port = 8989;
-      authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
+      authBypassRule = arrApiBypass;
       healthPath = "/ping";
       homepage = {
         group = "Media";
@@ -170,7 +174,7 @@ let
     {
       name = "bazarr";
       port = 6767;
-      authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
+      authBypassRule = arrApiBypass;
       healthPath = "/api/system/status";
       homepage = {
         group = "Media";

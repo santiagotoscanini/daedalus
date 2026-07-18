@@ -18,14 +18,14 @@
 let
   # cweagans/n8n-oidc — OIDC login for n8n community edition via the
   # external-hooks system (a single self-contained hooks.js, no npm
-  # install). Pinned by commit; it hardcodes two n8n-internal require()
-  # paths (@n8n/di, jwt.service.js) verified present in the 2.29.10 image
-  # — re-verify on every n8n image bump (upstream is thin, last commit
-  # 2025-12-29). Escape hatch if the hook ever breaks: /signin?showLogin=true.
-  # cweagans/n8n-oidc — OIDC login for n8n community edition, stock. The
-  # homepage tile + Pocket ID launch URL deep-link straight to
-  # /auth/oidc/login, so no button-page patch is needed; a direct visit
-  # to n8n just shows the hook's one-click "Sign in with SSO" button.
+  # install), used stock. Pinned by commit; it hardcodes two n8n-internal
+  # require() paths (@n8n/di, jwt.service.js) verified present in the
+  # 2.30.7 image — re-verify on every n8n image bump (upstream is thin,
+  # last commit 2025-12-29). The homepage tile + Pocket ID launch URL
+  # deep-link straight to /auth/oidc/login, so no button-page patch is
+  # needed; a direct visit to n8n just shows the hook's one-click
+  # "Sign in with SSO" button. Escape hatch if the hook ever breaks:
+  # /signin?showLogin=true.
   n8nOidcHook = pkgs.fetchFromGitHub {
     owner = "cweagans";
     repo = "n8n-oidc";
@@ -34,7 +34,7 @@ let
   };
 in
 {
-  # N8N_BASIC_AUTH_* + encryption key + OIDC client creds:
+  # Encryption key + OIDC client creds:
   # sops-encrypted env.sops, decrypted to /run/secrets/n8n-env at
   # activation. Edit with `sops env.sops`. The DB password comes from
   # the app-db-generated env file, not from here.
@@ -150,7 +150,6 @@ in
       DB_POSTGRESDB_PORT = "5432";
       DB_POSTGRESDB_DATABASE = "n8n";
       DB_POSTGRESDB_USER = "n8n";
-      N8N_BASIC_AUTH_ACTIVE = "true";
       N8N_HOST = "n8n.toscanini.me";
       N8N_PORT = "5678";
       N8N_PROTOCOL = "https";
@@ -187,7 +186,7 @@ in
       OIDC_SCOPES = "openid email profile";
     };
 
-    # N8N_BASIC_AUTH_* + N8N_ENCRYPTION_KEY from sops, the rendered
+    # N8N_ENCRYPTION_KEY + OIDC creds from sops, the rendered
     # N8N_SMTP_PASS (from the shared mail secret via n8n-smtp-env),
     # and DB_POSTGRESDB_PASSWORD from the app-db bootstrap env.
     # Later files win.

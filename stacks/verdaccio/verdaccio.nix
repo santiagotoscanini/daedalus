@@ -23,15 +23,22 @@
 {
   config,
   lib,
-  pkgs,
   mkDotenvSecret,
   mkRootlessContainer,
+  mkImageBuild,
   ...
 }:
 
 let
-  # Dir holding the Containerfile the image-build oneshot uses.
-  verdaccioImageBuildDir = ./assets;
+  # verdaccio 6.7.4 base + verdaccio-openid plugin, built locally from
+  # assets/Containerfile. The tag carries the build-context hash so a
+  # plugin/Containerfile bump restarts the consumer.
+  verdaccioImage = mkImageBuild {
+    name = "verdaccio-openid";
+    tagPrefix = "6.7.4";
+    contextDir = ./assets;
+    gates = [ "podman-verdaccio.service" ];
+  };
 in
 {
   # VERDACCIO_OPENID_CLIENT_ID + VERDACCIO_OPENID_CLIENT_SECRET (Pocket ID
@@ -80,8 +87,8 @@ in
   };
 
   virtualisation.oci-containers.containers.verdaccio = mkRootlessContainer {
-    # Built by verdaccio-image-build below (verdaccio:6.7.4 + verdaccio-openid).
-    image = "localhost/verdaccio-openid:6.7.4";
+    # Built by verdaccio-image-build below.
+    image = verdaccioImage.image;
 
     volumes = [
       "/home/santiago/selfhost/verdaccio/storage:/verdaccio/storage"
@@ -103,41 +110,5 @@ in
     ];
   };
 
-  # Build localhost/verdaccio-openid:6.7.4 (base + plugin) before verdaccio
-  # starts. Same pattern as nextcloud-image-build; layer cache makes
-  # rebuilds after the first ~instant.
-  systemd.services.verdaccio-image-build = {
-    description = "Build localhost/verdaccio-openid:6.7.4";
-    after = [
-      "network-online.target"
-      "linger-users.service"
-    ];
-    wants = [
-      "network-online.target"
-      "linger-users.service"
-    ];
-    before = [ "podman-verdaccio.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "santiago";
-      Group = "users";
-      Environment = "XDG_RUNTIME_DIR=/run/user/1000";
-      Restart = "on-failure";
-      RestartSec = "1s";
-      ExecStart = pkgs.writeShellScript "build-verdaccio-image" ''
-        set -eu
-        cd ${verdaccioImageBuildDir}
-        ${pkgs.podman}/bin/podman build \
-          --tag localhost/verdaccio-openid:6.7.4 \
-          --file Containerfile \
-          .
-      '';
-    };
-  };
-
-  systemd.services.podman-verdaccio = {
-    after = [ "verdaccio-image-build.service" ];
-    wants = [ "verdaccio-image-build.service" ];
-  };
+  systemd.services.verdaccio-image-build = verdaccioImage.service;
 }

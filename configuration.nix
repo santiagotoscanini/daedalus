@@ -194,6 +194,11 @@
   # Compressed RAM-swap — avoids ZFS CoW-thrash if spikes ever hit 64 GiB.
   zramSwap.enable = true;
 
+  # Redis BGSAVE under memory pressure (1 = always allow) — needed by
+  # both redis consumers on the box (nextcloud-redis, immich-redis).
+  # Host-wide kernel knob, so it lives here rather than in one stack.
+  boot.kernel.sysctl."vm.overcommit_memory" = 1;
+
   # ── Logging ─────────────────────────────────────────────────────────────────
 
   # Cap journal size + retention so a chatty service can't fill /.
