@@ -16,7 +16,6 @@
 }:
 
 {
-  myStack.containerNetworks.grocy = [ "traefik" ];
 
   # linuxserver abc (uid 911) maps to host 100910; the config dir must
   # exist with that ownership or a fresh install fails on first write.
@@ -36,6 +35,8 @@
     # ReverseProxyAuthMiddleware, so the /api bypass keeps API clients +
     # the container-direct homepage widget working.
     auth = "oidc";
+    healthPath = "/login";
+    isolated = true;
     authBypassRule = "PathPrefix(`/api`)";
     authHeaders."Remote-User" = "admin";
     homepage = {

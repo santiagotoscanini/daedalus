@@ -17,7 +17,6 @@
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.calibre-web = [ "traefik" ];
 
   myStack.stateDirs."/home/santiago/selfhost/calibre-web/config" = { };
 
@@ -36,6 +35,8 @@
     # widget dials calibre-web:8083 container-direct (no gate, no header
     # → standard login), unaffected.
     auth = "oidc";
+    healthPath = "/login";
+    isolated = true;
     authBypassRule = "PathPrefix(`/opds`) || PathPrefix(`/kobo`)";
     authHeaders."Remote-User" = "santi";
     homepage = {

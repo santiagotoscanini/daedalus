@@ -20,6 +20,7 @@
     # No auth of its own (upstream: none planned). Homepage widget
     # dials http://metube:8081 container-direct, unaffected.
       auth = "oidc";
+      healthPath = "/favicon.ico";
     homepage = {
       group = "Media";
       name = "MeTube";

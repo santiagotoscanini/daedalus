@@ -25,7 +25,7 @@
 }:
 
 {
-  myStack.containerNetworks.healthchecks = [ "traefik" "app-db" ];
+  myStack.containerNetworks.healthchecks = [ "app-db" ]; # iso-healthchecks membership comes from webApps.isolated
 
   myStack.stateDirs."/home/santiago/selfhost/healthchecks/data".uid = 999;
 
@@ -46,6 +46,8 @@
     # account (santiago@toscanini.me already exists — same address
     # Pocket ID asserts) and disables Django's own login.
     auth = "oidc";
+    healthPath = "/accounts/login/";
+    isolated = true;
     # Machine paths keep their own auth: pings are authorized by their
     # UUID, /api by X-Api-Key, badges by badge key. The companion strip
     # middleware removes spoofed X-Forwarded-Email on these.

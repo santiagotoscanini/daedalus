@@ -21,10 +21,13 @@
       # stack still needs `git add` before it evaluates.
       nixFilesIn =
         dir:
+        let
+          entries = builtins.readDir dir;
+        in
         builtins.concatMap (
           name:
           let
-            type = (builtins.readDir dir).${name};
+            type = entries.${name};
           in
           if type == "directory" then
             nixFilesIn (dir + "/${name}")
@@ -32,7 +35,7 @@
             [ (dir + "/${name}") ]
           else
             [ ]
-        ) (builtins.attrNames (builtins.readDir dir));
+        ) (builtins.attrNames entries);
     in
     [ ./hardware-configuration.nix ] ++ nixFilesIn ./platform ++ nixFilesIn ./stacks;
 

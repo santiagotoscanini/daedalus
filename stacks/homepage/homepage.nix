@@ -76,6 +76,7 @@ in
     # No auth of its own (upstream: none planned) — Pocket ID gate is
     # the only login. Pilot service for the oidc-auth middleware.
     auth = "oidc";
+    healthPath = "/api/healthcheck";
   };
 
   # Per-group layout — keyed on the same group names contributed via

@@ -173,9 +173,19 @@ in
             # back from id.* to the app's /oidc/callback (top-level nav).
             SessionCookie.SameSite = "lax";
           }
-          // lib.optionalAttrs (w != null && w.authBypassRule != null) {
-            BypassAuthenticationRule = w.authBypassRule;
-          }
+          // (
+            # Bypass = the app's own machine-endpoint rule plus the
+            # gatus healthPath (exact match) — so probes reach the real
+            # upstream instead of being 302'd to Pocket ID.
+            let
+              parts =
+                lib.optional (w != null && w.authBypassRule != null) "(${w.authBypassRule})"
+                ++ lib.optional (w != null && w.healthPath != null) "Path(`${w.healthPath}`)";
+            in
+            lib.optionalAttrs (parts != [ ]) {
+              BypassAuthenticationRule = lib.concatStringsSep " || " parts;
+            }
+          )
           // lib.optionalAttrs (w != null && w.authHeaders != { }) {
             Headers = lib.mapAttrsToList (hn: hv: {
               Name = hn;

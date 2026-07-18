@@ -220,6 +220,7 @@ in
       # and never cross traefik. NOTE: host port 9090 stays open and
       # ungated (external scrapers) — see AUTH.md open decision.
       auth = "oidc";
+      healthPath = "/-/healthy";
       homepage = {
         group = "Monitoring";
         description = "TSDB — 30d / 100GB retention";

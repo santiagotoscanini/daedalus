@@ -76,6 +76,7 @@ let
       name = "qbittorrent";
       port = 8090;
       authBypassRule = "PathPrefix(`/api`)";
+      healthPath = "/api/v2/app/version";
       homepage = {
         group = "Media";
         name = "qBittorrent";
@@ -96,6 +97,7 @@ let
       name = "nzbget";
       port = 6789;
       authBypassRule = "PathPrefix(`/jsonrpc`)";
+      healthPath = "/jsonrpc";
       homepage = {
         group = "Media";
         name = "NZBGet";
@@ -116,6 +118,7 @@ let
       name = "prowlarr";
       port = 9696;
       authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
+      healthPath = "/ping";
       homepage = {
         group = "Media";
         name = "Prowlarr";
@@ -132,6 +135,7 @@ let
       name = "radarr";
       port = 7878;
       authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
+      healthPath = "/ping";
       homepage = {
         group = "Media";
         name = "Radarr";
@@ -149,6 +153,7 @@ let
       name = "sonarr";
       port = 8989;
       authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
+      healthPath = "/ping";
       homepage = {
         group = "Media";
         name = "Sonarr";
@@ -166,6 +171,7 @@ let
       name = "bazarr";
       port = 6767;
       authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`) || PathPrefix(`/api`) || PathPrefix(`/feed`) || PathPrefix(`/ping`)";
+      healthPath = "/api/system/status";
       homepage = {
         group = "Media";
         name = "Bazarr";
@@ -250,7 +256,7 @@ in
         u:
         lib.nameValuePair u.name (
           {
-            inherit (u) port homepage;
+            inherit (u) port homepage healthPath;
             serviceUrl = "http://host.containers.internal:${toString u.port}";
             # Pocket ID gate (AUTH.md). Each app's own login is disabled
             # (arrs: AuthenticationMethod=External; qbt: subnet whitelist;

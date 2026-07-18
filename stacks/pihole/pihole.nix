@@ -38,6 +38,7 @@ in
     # verified (AUTH.md order), then gets blanked. Widget + API dial
     # host.containers.internal:8080, bypassing traefik.
       auth = "oidc";
+      healthPath = "/api/info/login";
     homepage = {
       group = "Network";
       name = "Pi-hole";

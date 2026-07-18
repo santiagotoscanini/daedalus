@@ -118,7 +118,10 @@ let
   resolveUrl =
     w: if w.serviceName != null then "http://${w.serviceName}:${toString w.port}" else w.serviceUrl;
 
-  capitalize = s: (lib.toUpper (lib.substring 0 1 s)) + (lib.substring 1 (lib.stringLength s) s);
+  # Private ingress bridges for `webApps.<n>.isolated` (bridge short
+  # name per app; traefik joins each as an extra membership).
+  isolatedApps = lib.filterAttrs (_: w: w.isolated) cfg.webApps;
+  isoBridge = n: "iso-${n}";
 
   # Body of _module.args.mkRootlessContainer — bound here so other
   # helpers (mkGluetunExporter) can compose with it.
@@ -524,12 +527,13 @@ in
                 '';
               };
               port = lib.mkOption {
-                type = lib.types.port;
+                type = lib.types.nullOr lib.types.port;
+                default = null;
                 description = ''
-                  Upstream port traefik dials. With `serviceName` (preferred):
-                  in-container port → bridge DNS as
-                  `http://''${serviceName}:''${port}`. With `serviceUrl`:
-                  informational only (the URL already carries the port).
+                  Upstream port traefik dials — required with
+                  `serviceName` (dials `http://''${serviceName}:''${port}`
+                  over bridge DNS), meaningless with `serviceUrl` (the
+                  URL already carries the port; leave null).
                 '';
               };
               serviceName = lib.mkOption {
@@ -606,6 +610,40 @@ in
                   the oidc middleware entirely. For machine endpoints
                   that carry their own auth (API keys, ping UUIDs), e.g.
                   "PathPrefix(`/api`) || HeaderRegexp(`X-Api-Key`, `.+`)".
+                '';
+              };
+              healthPath = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Path gatus probes (`https://<hostname><healthPath>`)
+                  to assert the real upstream answers. Mandatory for
+                  `auth = "oidc"` apps (assertion): without it the
+                  forward-auth middleware 302s every probe to Pocket ID
+                  and gatus certifies the IdP, not the app. The path is
+                  appended to the oidc bypass rule (exact `Path()`
+                  match), so pick an endpoint that is harmless
+                  unauthenticated — an app health/version endpoint or
+                  /favicon.ico; a 401/403 from the app still passes the
+                  probe ([STATUS] < 500) and proves the upstream is up.
+                '';
+                example = "/api/health";
+              };
+              isolated = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  Put the upstream on a private `iso-<name>-net` bridge
+                  with traefik as the only other member, instead of the
+                  shared traefik-net. For apps that blindly trust
+                  reverse-proxy identity headers (authHeaders): on the
+                  shared bridge any container could dial them directly
+                  and forge the header; isolation makes traefik the only
+                  possible caller. Requires `serviceName`. The stack's
+                  own containerNetworks entry must NOT also list
+                  "traefik" (that would re-open the shared path).
+                  Homepage siteMonitor auto-falls back to the public
+                  hostname (homepage isn't on the private bridge).
                 '';
               };
               authHeaders = lib.mkOption {
@@ -968,6 +1006,42 @@ in
           must be set.
         '';
       }) cfg.webApps)
+      ++ (lib.mapAttrsToList (n: w: {
+        assertion = w.serviceName != null -> w.port != null;
+        message = "myStack.webApps.${n}: `serviceName` needs `port` (traefik dials http://<serviceName>:<port>).";
+      }) cfg.webApps)
+      ++ (lib.mapAttrsToList (n: w: {
+        assertion = w.auth == "oidc" -> w.healthPath != null;
+        message = ''
+          myStack.webApps.${n}: oidc-gated apps must declare
+          `healthPath` — otherwise the gatus probe is 302'd to Pocket
+          ID and certifies the IdP instead of the app.
+        '';
+      }) cfg.webApps)
+      ++ (lib.mapAttrsToList (n: w: {
+        assertion = w.isolated -> (w.serviceName != null && !w.metrics.enable);
+        message = ''
+          myStack.webApps.${n}: `isolated` needs `serviceName` (traefik
+          dials the private bridge by container DNS) and is incompatible
+          with `metrics.enable` (prometheus only scrapes traefik-net).
+        '';
+      }) cfg.webApps)
+      ++ [
+        (
+          let
+            jobs = map (j: j.job_name) config.myStack.prometheusScrapes;
+          in
+          {
+            assertion = lib.length jobs == lib.length (lib.unique jobs);
+            message = ''
+              myStack.prometheusScrapes: duplicate job_name (webApps
+              metrics jobs are named after their attr key; a free-form
+              scrape collides with one of them). Prometheus would reject
+              the whole config at runtime.
+            '';
+          }
+        )
+      ]
       ++ (lib.mapAttrsToList (n: r: {
         assertion = (r.serviceUrl != null) != (r.service != null);
         message = ''
@@ -992,9 +1066,17 @@ in
         mkTile =
           n: w:
           {
-            name = if w.homepage.name != null then w.homepage.name else capitalize n;
+            name = if w.homepage.name != null then w.homepage.name else lib.toSentenceCase n;
             href = if w.homepage.href != null then w.homepage.href else "https://${w.hostname}";
-            siteMonitor = if w.homepage.siteMonitor != null then w.homepage.siteMonitor else resolveUrl w;
+            # Isolated upstreams aren't reachable from homepage's
+            # bridges — probe through traefik via the public hostname.
+            siteMonitor =
+              if w.homepage.siteMonitor != null then
+                w.homepage.siteMonitor
+              else if w.isolated then
+                "https://${w.hostname}"
+              else
+                resolveUrl w;
             inherit (w.homepage) icon;
           }
           // lib.optionalAttrs (w.homepage.description != null) { inherit (w.homepage) description; }
@@ -1024,6 +1106,15 @@ in
     ) (lib.filterAttrs (_: w: w.metrics.enable) cfg.webApps);
 
     myStack.dnsHosts = lib.mapAttrsToList (_: w: "${cfg.lanIp} ${w.hostname}") cfg.webApps;
+
+    # Isolated apps: the upstream lives on its private bridge and
+    # traefik joins it as an extra membership (lists merge with the
+    # traefik stack's own entry).
+    myStack.containerNetworks =
+      (lib.mapAttrs' (n: w: lib.nameValuePair w.serviceName [ (isoBridge n) ]) isolatedApps)
+      // lib.optionalAttrs (isolatedApps != { }) {
+        traefik = lib.mapAttrsToList (n: _: isoBridge n) isolatedApps;
+      };
 
     myStack.cloudflareRoutes = lib.mapAttrs (_: w: { inherit (w) hostname; }) (
       lib.filterAttrs (_: w: w.exposeRemotely) cfg.webApps

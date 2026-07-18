@@ -48,11 +48,14 @@
 }:
 
 let
-  # One probe per published web app, derived from the merged webApps set.
+  # One probe per published web app, derived from the merged webApps
+  # set. oidc-gated apps declare `healthPath` (bypassed from the auth
+  # middleware) so the probe reaches the real upstream — a bare "/"
+  # would be 302'd to Pocket ID and certify the IdP instead.
   endpoints = lib.mapAttrsToList (name: w: {
     inherit name;
     group = "web-apps";
-    url = "https://${w.hostname}";
+    url = "https://${w.hostname}${if w.healthPath != null then w.healthPath else "/"}";
     interval = "60s";
     conditions = [
       "[STATUS] < 500"
@@ -95,9 +98,21 @@ in
 
   # Database on the shared app-db cluster (see stacks/app-db/).
   myStack.appDatabases.gatus = { };
+  # Also order after traefik + pocket-id: gatus fetches the OIDC
+  # discovery document at startup and PANICS if id.toscanini.me is
+  # unreachable — during a fleet-wide restart that leaves the unit
+  # "Finished" with a dead container (the documented oneshot trap).
   systemd.services.podman-gatus = {
-    after = [ "app-db-gatus-bootstrap.service" ];
-    wants = [ "app-db-gatus-bootstrap.service" ];
+    after = [
+      "app-db-gatus-bootstrap.service"
+      "podman-traefik.service"
+      "podman-pocket-id.service"
+    ];
+    wants = [
+      "app-db-gatus-bootstrap.service"
+      "podman-traefik.service"
+      "podman-pocket-id.service"
+    ];
   };
 
   # GATUS_OIDC_CLIENT_ID + GATUS_OIDC_CLIENT_SECRET (Pocket ID SSO):
