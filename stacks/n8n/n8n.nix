@@ -7,12 +7,27 @@
 
 {
   config,
+  pkgs,
   mkDotenvSecret,
   mkRootlessContainer,
   mkSecretRender,
   ...
 }:
 
+let
+  # cweagans/n8n-oidc — OIDC login for n8n community edition via the
+  # external-hooks system (a single self-contained hooks.js, no npm
+  # install). Pinned by commit; it hardcodes two n8n-internal require()
+  # paths (@n8n/di, jwt.service.js) verified present in the 2.29.10 image
+  # — re-verify on every n8n image bump (upstream is thin, last commit
+  # 2025-12-29). Escape hatch if the hook ever breaks: /signin?showLogin=true.
+  n8nOidcHook = pkgs.fetchFromGitHub {
+    owner = "cweagans";
+    repo = "n8n-oidc";
+    rev = "f2961d6c6ac103989f4920523b6d3faad7547bc2";
+    hash = "sha256-35+prcUzRhtPdVc9sRduwKKNpce5mQfl7WiR7bK1s+A=";
+  };
+in
 {
   # DB password (as both POSTGRES_PASSWORD and DB_POSTGRESDB_PASSWORD —
   # one value, the two names the two images expect) + N8N_BASIC_AUTH_* +
@@ -129,6 +144,7 @@
     volumes = [
       "/home/santiago/selfhost/n8n/data:/home/node/.n8n"
       "/home/santiago/selfhost/n8n/local-files:/files"
+      "${n8nOidcHook}/hooks.js:/opt/oidc-hooks.js:ro"
     ];
 
     environment = {
@@ -156,6 +172,22 @@
       N8N_SMTP_SENDER = config.myStack.mail.sender;
       N8N_SMTP_SSL = "false";
       N8N_SMTP_STARTTLS = "true";
+
+      # Pocket ID SSO via the external hook (AUTH.md). The hook adds a
+      # "Sign in with SSO" button + /auth/oidc/{login,callback}; password
+      # login stays as the fallback (/signin?showLogin=true). Webhooks and
+      # /rest/oauth2-credential/callback are untouched. OIDC_CLIENT_ID +
+      # OIDC_CLIENT_SECRET ride env.sops; the hook derives its state/nonce
+      # HMAC key from N8N_ENCRYPTION_KEY (also in env.sops).
+      EXTERNAL_HOOK_FILES = "/opt/oidc-hooks.js";
+      # Keep /auth/* off the SPA history-API catchall so the two backend
+      # routes aren't swallowed by index.html.
+      N8N_ADDITIONAL_NON_UI_ROUTES = "auth";
+      # Frontend patch (served by the hook itself at this /assets path).
+      EXTERNAL_FRONTEND_HOOKS_URLS = "/assets/oidc-frontend-hook.js";
+      OIDC_ISSUER_URL = "https://id.toscanini.me";
+      OIDC_REDIRECT_URI = "https://n8n.toscanini.me/auth/oidc/callback";
+      OIDC_SCOPES = "openid email profile";
     };
 
     # DB_POSTGRESDB_PASSWORD + N8N_BASIC_AUTH_* + N8N_ENCRYPTION_KEY

@@ -26,7 +26,7 @@ Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.tosca
 | wealthfolio | argon2 password (`WF_AUTH_PASSWORD_HASH`) | native OIDC (`WF_OIDC_*`) | docs name PocketID; set `WF_OIDC_ALLOWED_SUBS` |
 | litellm | UI user/pass + master key | `GENERIC_CLIENT_ID`/`GENERIC_*` SSO | free ≤5 users since v1.76.0; API Bearer keys untouched — never forward-auth `/v1` |
 | verdaccio | htpasswd | [verdaccio-openid](https://github.com/kuoruan/verdaccio-openid) plugin | forward-auth would break npm CLI; plugin issues real registry tokens via `npm login --auth-type=web` |
-| n8n | owner email/password | [cweagans/n8n-oidc](https://github.com/cweagans/n8n-oidc) external hook ([announcement](https://www.cweagans.net/2025/12/announcing-n8n-oidc/)) | community project (Dec 2025) — n8n's own OIDC is enterprise-only; keep webhooks (`/webhook*`, `/rest/oauth2-credential/callback`) out of any middleware |
+| n8n | DONE (2026-07-17) | cweagans/n8n-oidc hook (pinned commit, bind-mounted hooks.js); owner email aligned to santiago@toscanini.me so SSO lands as owner; password fallback via /signin?showLogin=true; webhooks untouched |
 | anansi / ipcrawl | own `AUTH_SECRET` sessions | wire app auth to Pocket ID (generic OIDC provider) | self-built — change in the app repos, not here |
 
 ## Tier 2 — forward-auth + trusted header (auto-login, no second screen)
