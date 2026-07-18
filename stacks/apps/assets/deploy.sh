@@ -41,22 +41,39 @@ send_alert() {  # $1 = subject; body on stdin
   } | msmtp --account=default -t 2>/dev/null || true
 }
 
-# One inspect for both fields — see the setpriv note above; each podman call
-# costs a process spawn. Missing image (first boot, or untagged) yields an
-# empty id and the sentinel digest `none`, which reads as "everything is new".
-info=$(podman_ image inspect --format '{{.Id}}|{{.Digest}}' "$IMAGE" 2>/dev/null || echo "|none")
-old_id=${info%%|*}
-before=${info#*|}
-
-# A pull of an unchanged tag is one manifest request, so this is cheap to run
-# every couple of minutes. --retry rides out a transient ghcr.io blip rather
-# than reporting a failed deploy over one.
-podman_ pull --authfile "$AUTHFILE" --retry 3 --retry-delay 5s --quiet "$IMAGE" >/dev/null
-
-after=$(podman_ image inspect --format '{{.Digest}}' "$IMAGE")
+# The restart decision keys on IMAGE IDs, comparing what the CONTAINER runs
+# against what the tag points at after the pull. Not registry digests of the
+# local tag: (a) a crash between pull and restart would leave the tag moved
+# with the old container still running, and a digest-of-tag comparison then
+# reads "no change" forever — silent stale deploy; (b) a container's
+# .ImageDigest is the arch manifest digest while image .Digest is the list
+# digest, so those two never compare equal. IDs are config-blob hashes,
+# identical on both sides. `none` (no container yet) reads as "deploy".
+running=$(podman_ container inspect --format '{{.Image}}' "app-$APP" 2>/dev/null || echo none)
 last=$(cat "$STATE" 2>/dev/null || true)
 
-if [ "$after" = "$before" ]; then
+# A pull of an unchanged tag is one manifest request, so this is cheap to run
+# every couple of minutes. --retry rides out a transient ghcr.io blip; a real
+# pull failure (expired GHCR PAT is the classic) alerts once on transition and
+# keeps the unit failed so `systemctl --failed` shows it.
+if ! podman_ pull --authfile "$AUTHFILE" --retry 3 --retry-delay 5s --quiet "$IMAGE" >/dev/null; then
+  if [ "$last" != "pull-failed" ]; then
+    echo "pull-failed" > "$STATE"
+    send_alert "[s2-server] DEPLOY PULL FAILED: app-$APP" <<EOF
+podman pull $IMAGE failed (after retries).
+Classic cause: the GHCR classic PAT in stacks/apps/ghcr-auth.json.sops expired.
+Deploys for app-$APP are stalled until the pull succeeds; this alerts once.
+Investigate: journalctl -u app-$APP-deploy
+EOF
+  fi
+  echo "PULL FAILED for $IMAGE"
+  exit 1
+fi
+
+new_id=$(podman_ image inspect --format '{{.Id}}' "$IMAGE")
+after=$(podman_ image inspect --format '{{.Digest}}' "$IMAGE")
+
+if [ "$new_id" = "$running" ]; then
   # Nothing new upstream. If what we're already serving failed its health
   # check when it was deployed, keep failing: a quiet exit 0 here would clear
   # the unit's failed state and the report would evaporate two minutes later.
@@ -64,11 +81,22 @@ if [ "$after" = "$before" ]; then
     echo "app-$APP is serving $after, which failed its health check on deploy"
     exit 1
   fi
+  if [ "$last" = "pull-failed" ]; then
+    echo "$after ok" > "$STATE"
+    send_alert "[s2-server] RECOVERED: app-$APP deploys" <<EOF
+podman pull works again for app-$APP; the running image is current ($after).
+EOF
+  fi
   echo "no change ($after)"
   exit 0
 fi
 
-echo "new image: $before -> $after — restarting $UNIT"
+# The image the container was running is what this deploy supersedes (rmi'd
+# after a healthy deploy so a moving :latest doesn't fill rpool/selfhost).
+old_id=$running
+[ "$old_id" = "none" ] && old_id=""
+
+echo "new image: $running -> $new_id ($after) — restarting $UNIT"
 
 # Write the failed sentinel BEFORE the restart: if systemctl itself
 # dies here (bad entrypoint, podman run failure), set -e aborts this
@@ -84,6 +112,8 @@ systemctl restart "$UNIT"
 # returns in milliseconds, so systemd calls the restart a success even for a
 # container that dies on startup. Asking traefik is the only honest signal.
 # --resolve rather than DNS, so a pi-hole hiccup can't read as a dead app.
+# -k because this root unit has no CA bundle in its env; --resolve already
+# pins the connection to our own traefik, so verification adds nothing here.
 # Anything under 500 counts as alive — an Auth.js app 302-ing to a login page
 # is a working app.
 deadline=$((SECONDS + HEALTH_TIMEOUT))

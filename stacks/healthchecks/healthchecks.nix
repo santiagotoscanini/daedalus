@@ -16,13 +16,15 @@
 # SECURE_PROXY_SSL_HEADER makes Django trust traefik's X-Forwarded-Proto so
 # the HTTPS-terminated login POST passes Django's CSRF origin check.
 #
-# Secrets (env.sops): SECRET_KEY + EMAIL_HOST_PASSWORD. The SMTP password is
-# the same Gmail app password as platform/mail — rotate both together.
+# Secrets: SECRET_KEY (env.sops). EMAIL_HOST_PASSWORD is rendered from
+# the shared platform/mail secret — one source of truth for the Gmail
+# app password.
 
 {
   config,
   mkRootlessContainer,
   mkDotenvSecret,
+  mkSecretRender,
   ...
 }:
 
@@ -69,6 +71,21 @@
 
   sops.secrets."healthchecks-env" = mkDotenvSecret ./env.sops;
 
+  # EMAIL_HOST_PASSWORD is the shared Gmail app password from
+  # platform/mail — rendered from that single sops source (same idiom
+  # as n8n's SMTP env) so rotation touches one file.
+  systemd.services.healthchecks-smtp-env = mkSecretRender {
+    description = "Render EMAIL_HOST_PASSWORD from the shared mail relay secret";
+    gates = [ "podman-healthchecks.service" ];
+    dir = "/run/healthchecks-smtp";
+    file = "/run/healthchecks-smtp/env";
+    content = "EMAIL_HOST_PASSWORD=$(cat ${config.sops.secrets."mail-relay-password".path})";
+  };
+  systemd.services.podman-healthchecks = {
+    after = [ "healthchecks-smtp-env.service" ];
+    wants = [ "healthchecks-smtp-env.service" ];
+  };
+
   virtualisation.oci-containers.containers.healthchecks = mkRootlessContainer {
     image = "docker.io/healthchecks/healthchecks:v4.3@sha256:cd7bcd94350818b3944f82eb5995f48bdeab8c8627977578a569ffa73f56f56f";
 
@@ -98,13 +115,11 @@
     environmentFiles = [
       config.sops.secrets."healthchecks-env".path
       config.myStack.appDatabases.healthchecks.envFile
+      "/run/healthchecks-smtp/env"
     ];
 
     volumes = [
       "/home/santiago/selfhost/healthchecks/data:/data"
-    ];
-
-    extraOptions = [
     ];
   };
 }

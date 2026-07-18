@@ -154,10 +154,12 @@ let
 
       // ===== per-stack rules (generated from myStack.logStacks) =====
     ${stackRules}
-      // Pi-hole runs as a native NixOS service (no container) — match on unit.
+      // Native NixOS services (no container) — match on unit. Everything
+      // the header promises as a journald source gets a stack label so
+      // Drilldown's stack grouping covers them.
       rule {
         source_labels = ["__journal__systemd_unit"]
-        regex         = "^pihole-(ftl|web)\\.service$"
+        regex         = "^(pihole-(ftl|web)|ddclient|smartd|fail2ban)\\.service$"
         target_label  = "stack"
         replacement   = "infra"
       }

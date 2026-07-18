@@ -22,9 +22,13 @@
     username = "cloudflare@account.toscanini.me";
     passwordFile = config.sops.secrets."ddclient-password".path;
     ssl = true;
-    usev4 = "webv4, webv4=https://cloudflare.com/cdn-cgi/trace, web-skip='ip='";
+    usev4 = "webv4";
     usev6 = "disabled";
-    extraConfig = "ttl=1\n";
+    extraConfig = ''
+      ttl=1
+      webv4=https://cloudflare.com/cdn-cgi/trace
+      web-skip='ip='
+    '';
     domains = [ "s2.toscanini.me" ];
     interval = "300s";
   };

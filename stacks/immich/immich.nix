@@ -32,8 +32,6 @@
 
 {
   config,
-  lib,
-  pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
   ...
@@ -147,8 +145,6 @@ in
   virtualisation.oci-containers.containers.immich-redis = mkRootlessContainer {
     image = "docker.io/valkey/valkey:9@sha256:8e8d64b405ce18f41b8e5ee20aa4687a8ed0022d1298f2ce31cdcf3a76e09411";
 
-    extraOptions = [
-    ];
   };
 
   virtualisation.oci-containers.containers.immich-machine-learning = mkRootlessContainer {

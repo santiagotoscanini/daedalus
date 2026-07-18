@@ -115,7 +115,5 @@
       SESSION_DURATION = "1440";
     };
 
-    extraOptions = [
-    ];
   };
 }

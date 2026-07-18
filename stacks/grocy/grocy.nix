@@ -9,7 +9,6 @@
 # dir is chowned 100910:100910 to match.
 
 {
-  lib,
   pkgs,
   mkRootlessContainer,
   ...
@@ -94,7 +93,5 @@
       "${pkgs.writeText "grocy-auth-header" "Remote-User"}:/config/data/settingoverrides/REVERSE_PROXY_AUTH_HEADER.txt:ro"
     ];
 
-    extraOptions = [
-    ];
   };
 }

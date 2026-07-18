@@ -67,7 +67,5 @@
       LOGLEVEL = "WARNING";
     };
 
-    extraOptions = [
-    ];
   };
 }

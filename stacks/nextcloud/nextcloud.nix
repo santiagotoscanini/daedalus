@@ -19,11 +19,12 @@
 
 {
   config,
-  lib,
   pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
   mkImageBuild,
+  mkSecretRender,
+  hostUid,
   ...
 }:
 
@@ -56,13 +57,35 @@ let
   };
 in
 {
-  # REDIS_HOST_PASSWORD (shared by redis + app; the stock entrypoint
-  # reads it directly): sops-encrypted env.sops, decrypted to
+  # REDIS_HOST_PASSWORD (one sops source, two consumers: the app's
+  # redis.config.php reads it from env; the redis server gets it via
+  # the rendered redis.conf below): env.sops, decrypted to
   # /run/secrets/nextcloud-env at activation. Edit with `sops env.sops`.
   # The DB password lives in config.php (mutable app state), sourced
   # from the app-db bootstrap env (they must stay in sync — rotation
   # of the nextcloud db password means updating config.php too).
   sops.secrets."nextcloud-env" = mkDotenvSecret ./env.sops;
+
+  # redis.conf on tmpfs: the stock entrypoint drops privileges to the
+  # image's redis user only when argv is `redis-server <conf...>` — a
+  # password-in-cmd shell wrapper would defeat the drop and run redis
+  # as container root. The file is owned by the container redis uid
+  # (999 → host 100998) so the dropped process can read it; the DIR is
+  # mounted (not the file) so a re-render can't pin a stale inode.
+  systemd.services.nextcloud-redis-conf = mkSecretRender {
+    description = "Render redis.conf for nextcloud-redis (requirepass from sops)";
+    gates = [ "podman-nextcloud-redis.service" ];
+    dir = "/run/nextcloud-redis";
+    file = "/run/nextcloud-redis/redis.conf";
+    owner = hostUid 999;
+    prep = ''
+      REDIS_HOST_PASSWORD=$(grep '^REDIS_HOST_PASSWORD=' /run/secrets/nextcloud-env | cut -d= -f2-)
+    '';
+    content = ''
+      requirepass ''${REDIS_HOST_PASSWORD}
+      dir /data
+    '';
+  };
 
   # Database on the shared app-db cluster: role + db + env file with
   # DATABASE_URL, materialized by app-db-nextcloud-bootstrap.service
@@ -70,7 +93,9 @@ in
   myStack.appDatabases.nextcloud.consumers = [ "nextcloud-app" ];
 
   myStack.containerNetworks = {
-    nextcloud-redis = [ "nextcloud:alias=redis" ]; # config.php has redis.host = redis
+    # The app resolves redis via REDIS_HOST (redis.config.php overrides
+    # config.php's legacy redis block), so the container name is enough.
+    nextcloud-redis = [ "nextcloud" ];
     nextcloud-app = [
       "nextcloud"
       "app-db"
@@ -121,19 +146,15 @@ in
 
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_redis:/data"
+      "/run/nextcloud-redis:/etc/redis:ro"
     ];
 
-    # Read REDIS_HOST_PASSWORD in the cmd's shell so the secret isn't
-    # baked into the unit's argv.
-    environmentFiles = [ config.sops.secrets."nextcloud-env".path ];
-
+    # Stock entrypoint: `redis-server <conf>` argv → gosu-drop to the
+    # redis user (uid 999 → host 100998) before serving. The requirepass
+    # lives in the rendered conf, not in argv or env.
     cmd = [
-      "sh"
-      "-c"
-      "exec redis-server --requirepass \"$REDIS_HOST_PASSWORD\""
-    ];
-
-    extraOptions = [
+      "redis-server"
+      "/etc/redis/redis.conf"
     ];
   };
 
@@ -167,7 +188,9 @@ in
       "NC_overwrite.cli.url" = "https://nextcloud.toscanini.me";
       "NC_overwriteprotocol" = "https";
       "NC_default_phone_region" = "UY";
-      "NC_loglevel" = "0";
+      # 2 = warning (upstream default). 0 would be full debug — floods
+      # nextcloud.log on the 16K-recordsize, frequent-snapshot dataset.
+      "NC_loglevel" = "2";
       # >= 24 disables the window gate: background jobs may run at any
       # hour (100 is also upstream's "not configured" default).
       "NC_maintenance_window_start" = "100";

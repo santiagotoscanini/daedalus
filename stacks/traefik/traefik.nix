@@ -95,8 +95,12 @@ let
   );
 in
 {
-  # CF_API_TOKEN + CF_DNS_API_TOKEN (ACME DNS-01): sops-encrypted env.sops,
-  # decrypted to /run/secrets/traefik-env at activation. Edit with `sops env.sops`.
+  # CF_DNS_API_TOKEN (the one variable lego's cloudflare provider reads
+  # for DNS-01) + the POCKET_OIDC_* client creds: sops-encrypted
+  # env.sops, decrypted to /run/secrets/traefik-env at activation. Edit
+  # with `sops env.sops`. NOTE: the same token value also lives in
+  # stacks/cloudflared/env.sops (route-sync) and homepage's
+  # HOMEPAGE_VAR_CF_API_TOKEN — rotate all three together.
   sops.secrets."traefik-env" = mkDotenvSecret ./env.sops;
 
   # traefik-net is the shared ingress bridge; app-db appends pg-wire

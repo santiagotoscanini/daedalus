@@ -22,7 +22,6 @@
 
 {
   config,
-  lib,
   mkDotenvSecret,
   mkRootlessContainer,
   mkImageBuild,

@@ -54,7 +54,5 @@
       "/home/santiago/selfhost/myspeed/data:/myspeed/data"
     ];
 
-    extraOptions = [
-    ];
   };
 }

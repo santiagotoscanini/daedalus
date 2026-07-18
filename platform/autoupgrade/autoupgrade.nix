@@ -5,10 +5,9 @@
 # (you reboot manually) and never touches the running system. Every
 # upgrade is a git commit — inspectable, revertible.
 #
-# The GitHub SSH key is sops-managed: github-key.sops decrypts to
-# /run/secrets/github-ssh-key (santiago, 0400); the public half is
-# registered at https://github.com/settings/ssh. platform/git.nix
-# points interactive `ssh git@github.com` at the same path.
+# The GitHub SSH identity is owned by platform/git (github-key.sops →
+# /run/secrets/github-ssh-key); the push below consumes it via the
+# sops option reference.
 
 {
   config,
@@ -17,13 +16,6 @@
 }:
 
 {
-  sops.secrets."github-ssh-key" = {
-    sopsFile = ./github-key.sops;
-    format = "binary";
-    owner = "santiago";
-    mode = "0400";
-  };
-
   # Dead-man's-switch ping (platform/hc-ping): weekly.
   myStack.hcPings."flake-autoupgrade" = "flake-autoupgrade";
   myStack.emailOnFailure = [ "flake-autoupgrade" ];

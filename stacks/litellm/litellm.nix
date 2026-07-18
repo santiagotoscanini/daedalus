@@ -37,14 +37,12 @@
   # LITELLM_MASTER_KEY. `credentials_file` wants a file holding ONLY the
   # token, but env.sops is a full dotenv — so litellm-prom-token.service
   # extracts just the token from the already-decrypted /run/secrets/litellm-env
-  # at boot and writes it to /run/litellm-prom-token/token, which
-  # monitoring.nix bind-mounts into prometheus. Same activation-render idiom
-  # as app-db's pg-exporter-config.
+  # at boot and writes it to /run/litellm-prom-token/token. Same
+  # activation-render idiom as app-db's pg-exporter-config.
   #
-  # The key has ONE encrypted source of truth (env.sops). ONE copy
-  # still needs manual sync on
-  # rotation — stacks/homepage/env.sops HOMEPAGE_VAR_LITELLM_KEY (the homepage
-  # tile substitutes its own var and can't read this rendered file).
+  # The key has ONE encrypted source of truth (env.sops); every other
+  # consumer (this token file, homepage's HOMEPAGE_VAR_LITELLM_KEY) is
+  # rendered from it at boot — rotation touches only env.sops.
   # Gates prometheus: podman bind-mounts the token file at container start.
   systemd.services."litellm-prom-token" = mkSecretRender {
     description = "Render litellm master key as a bare bearer token for the prometheus scrape";
@@ -54,6 +52,16 @@
     prep = "TOKEN=$(grep '^LITELLM_MASTER_KEY=' /run/secrets/litellm-env | head -1 | cut -d= -f2-)";
     content = "$TOKEN";
   };
+
+  # This stack owns the token; it contributes the mount to prometheus
+  # itself (list-merge with monitoring.nix's volumes) instead of
+  # monitoring hardcoding a path into another stack's /run dir. The DIR
+  # is mounted (not the file) so a re-render/rotation is picked up
+  # without a prometheus restart — a single-file bind pins the old
+  # inode until the container restarts.
+  virtualisation.oci-containers.containers.prometheus.volumes = [
+    "/run/litellm-prom-token:/run/secrets/litellm-prom-token:ro"
+  ];
 
   myStack.containerNetworks.litellm = [
     "app-db"
@@ -134,8 +142,9 @@
 
     # config.yaml enables the prometheus callback (without
     # `callbacks: ["prometheus"]` in litellm_settings, /metrics 404s).
+    # Store-mounted so a config change restarts the container.
     volumes = [
-      "/etc/nixos/stacks/litellm/assets/config.yaml:/app/config.yaml:ro"
+      "${./assets/config.yaml}:/app/config.yaml:ro"
     ];
 
     cmd = [
@@ -171,7 +180,5 @@
       config.myStack.appDatabases.litellm.envFile
     ];
 
-    extraOptions = [
-    ];
   };
 }

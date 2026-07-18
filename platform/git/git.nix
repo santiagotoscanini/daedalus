@@ -21,16 +21,24 @@
 #     IdentityFile, no global User override). IdentitiesOnly=yes so
 #     ssh-agent never offers unrelated keys to GitHub.
 #
-# The private key is sops-managed: platform/autoupgrade/github-key.sops
-# decrypts to /run/secrets/github-ssh-key at activation (santiago,
-# 0400). Rotation: generate a new keypair, `sops -e` the private half
-# over github-key.sops, register the public half at
-# https://github.com/settings/ssh/new, rebuild, then delete the old
-# key on GitHub. Verify with `ssh -T git@github.com`.
+# The private key is sops-managed here (github-key.sops → decrypts to
+# /run/secrets/github-ssh-key at activation, santiago 0400); the
+# flake-autoupgrade push consumes the same secret. Rotation: generate a
+# new keypair, `sops -e` the private half over github-key.sops,
+# register the public half at https://github.com/settings/ssh/new,
+# rebuild, then delete the old key on GitHub. Verify with
+# `ssh -T git@github.com`.
 
 { config, ... }:
 
 {
+  sops.secrets."github-ssh-key" = {
+    sopsFile = ./github-key.sops;
+    format = "binary";
+    owner = "santiago";
+    mode = "0400";
+  };
+
   programs.git = {
     enable = true;
     config = {

@@ -121,8 +121,10 @@ in
       icon = "cloudflare.png";
       widget = {
         type = "cloudflared";
-        accountid = "{{HOMEPAGE_VAR_CF_ACCOUNT_ID}}";
-        tunnelid = "{{HOMEPAGE_VAR_CF_TUNNEL_ID}}";
+        # Account/tunnel ids aren't secrets (they're in the public href
+        # above) — only the API token stays in homepage's env.sops.
+        accountid = accountId;
+        tunnelid = tunnelId;
         key = "{{HOMEPAGE_VAR_CF_API_TOKEN}}";
       };
     }

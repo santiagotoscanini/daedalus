@@ -286,11 +286,6 @@ in
 
     volumes = [
       "${prometheusDir}:/etc/prometheus:ro"
-      # litellm scrape auth — bare token rendered from env.sops at boot by
-      # litellm-prom-token.service (stacks/litellm/). Mount the DIR (not the
-      # file) so a re-render/rotation is picked up without a prometheus restart
-      # — a single-file bind pins the old inode until the container restarts.
-      "/run/litellm-prom-token:/run/secrets/litellm-prom-token:ro"
       "/home/santiago/selfhost/monitoring/prometheus/data:/prometheus"
     ];
 

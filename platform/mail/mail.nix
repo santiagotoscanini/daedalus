@@ -53,6 +53,28 @@ let
   '';
 in
 {
+  # Declared here (not in common.nix) per the owning-module convention:
+  # every mail-sending consumer reads these; this module owns the relay.
+  options.myStack.mail = {
+    sender = lib.mkOption {
+      type = lib.types.str;
+      description = "From address every mail-sending service uses (the relay account).";
+    };
+    alertTo = lib.mkOption {
+      type = lib.types.str;
+      description = "Recipient for all alert/notification mail.";
+    };
+    smtpHost = lib.mkOption {
+      type = lib.types.str;
+      description = "SMTP relay host shared by all mail-sending services.";
+    };
+    smtpPort = lib.mkOption {
+      type = lib.types.port;
+      default = 587;
+      description = "SMTP submission port (STARTTLS).";
+    };
+  };
+
   options.myStack.emailOnFailure = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [ ];

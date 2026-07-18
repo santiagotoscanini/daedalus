@@ -62,6 +62,9 @@
     # login is ever wanted) — the login page offers just "Sign in
     # with SSO".
     environment = {
+      WF_LISTEN_ADDR = "0.0.0.0:8088";
+      WF_DB_PATH = "/data/wealthfolio.db";
+      WF_CORS_ALLOW_ORIGINS = "https://wealthfolio.toscanini.me";
       WF_OIDC_ISSUER_URL = "https://id.toscanini.me";
       WF_OIDC_CLIENT_ID = "36e5f60b-173f-4686-8b2b-830ff5d98fd8";
       WF_OIDC_REDIRECT_URL = "https://wealthfolio.toscanini.me/api/v1/auth/oidc/callback";
@@ -69,10 +72,9 @@
       WF_OIDC_ALLOWED_SUBS = "1ae66034-d627-46f7-9c04-1d8c05639a1a";
     };
 
-    # WF_LISTEN_ADDR + WF_DB_PATH + WF_SECRET_KEY + WF_CORS_ALLOW_ORIGINS.
+    # WF_SECRET_KEY — the only actual secret; non-secret config lives
+    # reviewable in `environment` above.
     environmentFiles = [ config.sops.secrets."wealthfolio-env".path ];
 
-    extraOptions = [
-    ];
   };
 }

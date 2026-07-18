@@ -16,6 +16,7 @@
   pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
+  mkSecretRender,
   ...
 }:
 
@@ -67,6 +68,30 @@ in
   # HOMEPAGE_VAR_* widget keys: sops-encrypted env.sops, decrypted to
   # /run/secrets/homepage-env at activation. Edit with `sops env.sops`.
   sops.secrets."homepage-env" = mkDotenvSecret ./env.sops;
+
+  # homepage only substitutes {{HOMEPAGE_VAR_*}} from its own env, so
+  # the litellm master key is appended to the decrypted env at boot —
+  # rendered from litellm's sops secret, the single source of truth
+  # (no second copy to sync on rotation).
+  systemd.services.homepage-env = mkSecretRender {
+    description = "Render homepage env (sops env + litellm master key)";
+    gates = [ "podman-homepage.service" ];
+    dir = "/run/homepage-env";
+    file = "/run/homepage-env/env";
+    prep = ''
+      LITELLM_KEY=$(grep '^LITELLM_MASTER_KEY=' ${
+        config.sops.secrets."litellm-env".path
+      } | cut -d= -f2-)
+    '';
+    content = ''
+      $(cat ${config.sops.secrets."homepage-env".path})
+      HOMEPAGE_VAR_LITELLM_KEY=''${LITELLM_KEY}
+    '';
+  };
+  systemd.services.podman-homepage = {
+    after = [ "homepage-env.service" ];
+    wants = [ "homepage-env.service" ];
+  };
 
   myStack.containerNetworks.homepage = [
     "traefik"
@@ -184,8 +209,9 @@ in
 
     environment = {
       # Host-header allow-list (defense in depth; traefik already routes
-      # by host). Comma-separated, no spaces. localhost always allowed.
-      HOMEPAGE_ALLOWED_HOSTS = "homepage.toscanini.me";
+      # by host). Derived from the webApp so a hostname change can't
+      # silently 400 every request. localhost always allowed.
+      HOMEPAGE_ALLOWED_HOSTS = config.myStack.webApps.homepage.hostname;
     };
 
     extraOptions = [
@@ -196,13 +222,14 @@ in
       #  - nzbget / qbittorrent: homepage's undici client trips on their
       #    `Connection: close` responses → ECONNRESET. Going through
       #    traefik gets keep-alive and sidesteps the bug.
+      # (The pinned entries also keep these widgets working while
+      # pi-hole is down — container DNS otherwise resolves the public
+      # hostnames through it.)
       "--add-host=nextcloud.toscanini.me:host-gateway"
       "--add-host=nzbget.toscanini.me:host-gateway"
       "--add-host=qbittorrent.toscanini.me:host-gateway"
     ];
 
-    environmentFiles = [
-      config.sops.secrets."homepage-env".path
-    ];
+    environmentFiles = [ "/run/homepage-env/env" ];
   };
 }

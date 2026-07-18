@@ -106,8 +106,6 @@ in
       "/s2/books:/books"
     ];
 
-    extraOptions = [
-    ];
   };
 
   systemd.services.calibre-web-image-build = calibreWebImage.service;

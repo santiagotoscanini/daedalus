@@ -78,7 +78,5 @@
       "/home/santiago/selfhost/factorio/data/config:/opt/factorio/config"
     ];
 
-    extraOptions = [
-    ];
   };
 }

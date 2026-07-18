@@ -64,7 +64,5 @@
 
     environmentFiles = [ config.sops.secrets."scraparr-env".path ];
 
-    extraOptions = [
-    ];
   };
 }

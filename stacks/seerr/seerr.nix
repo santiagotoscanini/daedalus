@@ -67,7 +67,5 @@
     # DB_PASS from the app-db bootstrap env file.
     environmentFiles = [ config.myStack.appDatabases.seerr.envFile ];
 
-    extraOptions = [
-    ];
   };
 }

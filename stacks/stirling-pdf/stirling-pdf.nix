@@ -71,7 +71,5 @@
       INSTALL_BOOK_AND_ADVANCED_HTML_OPS = "false";
     };
 
-    extraOptions = [
-    ];
   };
 }

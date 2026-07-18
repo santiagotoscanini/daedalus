@@ -49,8 +49,11 @@
     ];
 
     extraOptions = [
-      "--device=/dev/dri:/dev/dri"
+      # --privileged already exposes host devices (/dev/dri included) —
+      # no separate --device needed.
       "--privileged"
+      # Host PID namespace: intel_gpu_top resolves per-client process
+      # names from /proc, which only works when it sees host pids.
       "--pid=host"
     ];
   };

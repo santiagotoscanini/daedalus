@@ -195,26 +195,6 @@ in
       example = "toscanini.me";
     };
 
-    mail = {
-      sender = lib.mkOption {
-        type = lib.types.str;
-        description = "From address every mail-sending service uses (the relay account).";
-      };
-      alertTo = lib.mkOption {
-        type = lib.types.str;
-        description = "Recipient for all alert/notification mail.";
-      };
-      smtpHost = lib.mkOption {
-        type = lib.types.str;
-        description = "SMTP relay host shared by all mail-sending services.";
-      };
-      smtpPort = lib.mkOption {
-        type = lib.types.port;
-        default = 587;
-        description = "SMTP submission port (STARTTLS).";
-      };
-    };
-
     containerNetworks = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf lib.types.str);
       default = { };
@@ -990,6 +970,11 @@ in
         file,
         content,
         mode ? "0400",
+        # Owner of the rendered FILE (the dir stays santiago 0755). Set
+        # to a subuid (hostUid N) when the consumer container reads the
+        # file as a non-root user after its entrypoint privilege-drop.
+        owner ? "santiago",
+        group ? "users",
         prep ? "",
         after ? [ ],
         wants ? [ ],
@@ -1016,7 +1001,7 @@ in
           install -d -m 0755 -o santiago -g users ${dir}
           umask 077
           ${prep}
-          install -m ${mode} -o santiago -g users /dev/stdin ${file} <<RENDER_EOF
+          install -m ${mode} -o ${toString owner} -g ${toString group} /dev/stdin ${file} <<RENDER_EOF
           ${content}
           RENDER_EOF
         '';
