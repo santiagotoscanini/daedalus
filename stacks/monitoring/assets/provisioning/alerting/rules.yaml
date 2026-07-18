@@ -64,6 +64,53 @@ groups:
         labels:
           severity: warning
         isPaused: false
+      # Outside-in: gatus probes every webApp's healthPath through
+      # traefik. container_up alone misses the failure mode where the
+      # container runs but the app serves 5xx (e.g. an aardvark-dns
+      # reload dropping a sibling's name — nextcloud 500'd for ~2h on
+      # 2026-07-18 with every container "up"). 10m tolerance: probes
+      # run every 60s, so this needs a real outage, not a blip.
+      - uid: webapp-probe-failing-1
+        title: Web App Probe Failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: min by (name) (gatus_results_endpoint_success)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          description: The gatus probe for {{ $labels.name }} has been failing for 10 minutes (HTTP >= 500, timeout, or cert problem).
+          summary: A published web app is failing its health probe
+        labels:
+          severity: warning
+        isPaused: false
       # Watchdog for the watchdog: if the host-liveness-exporter timer dies,
       # container_up (and systemd_failed_units) freeze at their last values
       # and every liveness reading above is stale. node-exporter exports the
