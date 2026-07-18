@@ -75,6 +75,9 @@
       # Traefik fronts everything; without this the audit log records
       # the bridge IP instead of the real client.
       TRUST_PROXY = "true";
+      # Stay signed in for 24h before a passkey is required again
+      # (default 60 min). Every app SSO within this window is silent.
+      SESSION_DURATION = "1440";
     };
 
     extraOptions = [
