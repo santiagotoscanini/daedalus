@@ -54,7 +54,7 @@
 # /app/data. Same reasoning as the port — we build the images, so we
 # pick the path. `storage.enable = true` bind-mounts
 # /home/santiago/selfhost/apps/<name>/data there (overridable via
-# storage.hostPath) and tmpfiles-owns it `santiago:users`, which is
+# storage.hostPath); fleet.statePaths pre-creates it `santiago:users`, which is
 # what container UID 0 maps to under rootless podman. This is what
 # SQLite / file-backed apps need; Postgres apps use postgres.enable
 # instead, and an app can use both.
@@ -582,8 +582,9 @@ in
                 default = false;
                 description = ''
                   When true, bind-mount `storage.hostPath` at `/app/data`
-                  inside the container and create it (0755 santiago:users)
-                  via tmpfiles. Off by default — stateless apps get no disk.
+                  inside the container and pre-create it (0755 santiago:users)
+                  via fleet.statePaths. Off by default — stateless apps get
+                  no disk.
 
                   /app/data is a convention, not an option, exactly like the
                   port-3000 rule: we build the images, so we pick the path.
@@ -753,9 +754,54 @@ in
       fragments = lib.mapAttrsToList mkApp cfg;
       attrsOpt = path: lib.mkMerge (map (f: lib.attrByPath path { } f) fragments);
       listOpt = path: lib.concatLists (map (f: lib.attrByPath path [ ] f) fragments);
+      # Every key a fragment may emit, by prefix. attrNames doesn't
+      # force values, so this map is recursion-safe; a mkApp output
+      # key missing here fails eval below instead of being silently
+      # discarded.
+      registered = {
+        "" = [
+          "assertions"
+          "fleet"
+          "systemd"
+          "virtualisation"
+        ];
+        fleet = [
+          "appDatabases"
+          "bridgeMemberships"
+          "statePaths"
+          "webApps"
+          "prometheusScrapes"
+          "grafanaDashboardsByFolder"
+          "homepageServices"
+          "homepageLayout"
+        ];
+        systemd = [
+          "services"
+          "timers"
+        ];
+        virtualisation = [ "oci-containers" ];
+      };
+      unregistered = lib.unique (
+        lib.concatMap (
+          f:
+          lib.subtractLists registered."" (lib.attrNames f)
+          ++ lib.concatMap (
+            p: map (k: "${p}.${k}") (lib.subtractLists registered.${p} (lib.attrNames (f.${p} or { })))
+          ) [
+            "fleet"
+            "systemd"
+            "virtualisation"
+          ]
+        ) fragments
+      );
     in
     {
-      assertions = listOpt [ "assertions" ];
+      assertions = listOpt [ "assertions" ] ++ [
+        {
+          assertion = unregistered == [ ];
+          message = "stacks/apps: mkApp emits unregistered option path(s): ${lib.concatStringsSep ", " unregistered} — register them in the per-path assembly.";
+        }
+      ];
 
       # GHCR classic PAT (read:packages) in podman auth.json form —
       # sops-encrypted, used by container pulls + the deploy oneshots.
@@ -773,6 +819,10 @@ in
         bridgeMemberships = attrsOpt [
           "fleet"
           "bridgeMemberships"
+        ];
+        statePaths = attrsOpt [
+          "fleet"
+          "statePaths"
         ];
         webApps = attrsOpt [
           "fleet"
@@ -809,11 +859,6 @@ in
       systemd.timers = attrsOpt [
         "systemd"
         "timers"
-      ];
-      systemd.tmpfiles.rules = listOpt [
-        "systemd"
-        "tmpfiles"
-        "rules"
       ];
     };
 }
