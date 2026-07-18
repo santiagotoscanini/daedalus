@@ -26,6 +26,15 @@
 {
   myStack.containerNetworks.janitorr = [ "traefik" ];
 
+  # janitorr resolves and dials seerr during Spring startup and exits on
+  # failure; under --rm the crash leaves the oneshot unit green with no
+  # container behind it. Start after seerr is attached to traefik-net so
+  # aardvark-dns can resolve the name on the first attempt.
+  systemd.services.podman-janitorr = {
+    after = [ "podman-seerr.service" ];
+    wants = [ "podman-seerr.service" ];
+  };
+
   # No web UI upstream — this tile is the face: Drilldown deep-link to
   # its Loki stream + a counter of dry-run deletion candidates (the
   # "Deleting ..." report lines) over the last 7 days.

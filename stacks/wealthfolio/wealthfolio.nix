@@ -17,6 +17,18 @@
 {
   myStack.containerNetworks.wealthfolio = [ "traefik" ];
 
+  # OIDC discovery against id.toscanini.me runs at startup and is fatal
+  # on failure; under --rm the crash leaves the oneshot unit green with
+  # no container behind it. Start after traefik + pocket-id so the IdP
+  # answers the discovery request on the first attempt.
+  systemd.services.podman-wealthfolio = {
+    after = [
+      "podman-traefik.service"
+      "podman-pocket-id.service"
+    ];
+    wants = [ "podman-pocket-id.service" ];
+  };
+
   myStack.stateDirs."/home/santiago/selfhost/wealthfolio/data".uid = 1000;
   myStack.webApps.wealthfolio = {
     serviceName = "wealthfolio";

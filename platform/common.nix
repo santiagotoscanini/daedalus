@@ -88,7 +88,7 @@ let
   # existing bridge — that needs a manual `podman network rm` while its
   # members are stopped.
   # Waits on linger-users.service so /run/user/1000 is populated before
-  # rootless podman runs (otherwise newuidmap lookup fails on first boot).
+  # rootless podman runs.
   mkBridgeUnit = net: {
     description = "Create the ${net}-net podman bridge";
     after = [
@@ -100,14 +100,16 @@ let
       "linger-users.service"
     ];
     wantedBy = [ "multi-user.target" ];
+    # newuidmap is a setuid wrapper that exists only in /run/wrappers/bin;
+    # the boot's first rootless podman needs it to create santiago's
+    # userns, and the store-only default PATH cannot see it.
+    path = [ "/run/wrappers" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
       User = "santiago";
       Environment = "XDG_RUNTIME_DIR=/run/user/1000";
       Restart = "on-failure";
-      # First-boot rootless-podman bootstrap fails (newuidmap)
-      # for reasons that aren't yet understood; 1s recovery is cheap.
       RestartSec = "1s";
       ExecStart = "${pkgs.podman}/bin/podman network create --ignore${
         lib.optionalString (cfg.bridgeSubnets ? ${net}) " --subnet ${cfg.bridgeSubnets.${net}}"
@@ -912,6 +914,9 @@ in
             "network-online.target"
             "linger-users.service"
           ];
+          # newuidmap: setuid wrapper, only in /run/wrappers/bin (see
+          # mkBridgeUnit) -- rootless podman build needs the userns too.
+          path = [ "/run/wrappers" ];
           before = gates;
           wantedBy = gates;
           serviceConfig = {

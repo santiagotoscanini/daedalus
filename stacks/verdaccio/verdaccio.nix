@@ -47,6 +47,18 @@ in
 
   myStack.containerNetworks.verdaccio = [ "traefik" ];
 
+  # verdaccio-openid fetches the IdP discovery document at plugin load
+  # and does not retry on failure, leaving OIDC npm login broken until
+  # a restart. Start after traefik + pocket-id so discovery succeeds on
+  # the first attempt.
+  systemd.services.podman-verdaccio = {
+    after = [
+      "podman-traefik.service"
+      "podman-pocket-id.service"
+    ];
+    wants = [ "podman-pocket-id.service" ];
+  };
+
   myStack.webApps.verdaccio = {
     serviceName = "verdaccio";
     port = 4873;
