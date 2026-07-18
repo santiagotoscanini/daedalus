@@ -23,6 +23,19 @@
     hostname = "calibre.toscanini.me";
     serviceName = "calibre-web";
     port = 8083;
+    # Pocket ID gate + trusted header (AUTH.md tier 2). Calibre-Web's
+    # "Allow Reverse Proxy Authentication" (enabled in its UI, header
+    # name = Remote-User) matches the header VALUE to an existing user,
+    # so map everyone through the gate to the sole account `santi`
+    # (single-user library). e-reader clients (OPDS/Kobo) speak HTTP
+    # Basic auth and can't follow an OIDC redirect, so bypass those
+    # paths — Calibre-Web's own Basic auth guards them, and the strip
+    # middleware removes any spoofed Remote-User there. The homepage
+    # widget dials calibre-web:8083 container-direct (no gate, no header
+    # → standard login), unaffected.
+    auth = "oidc";
+    authBypassRule = "PathPrefix(`/opds`) || PathPrefix(`/kobo`)";
+    authHeaders."Remote-User" = "santi";
     homepage = {
       group = "Productivity";
       name = "Calibre-Web";

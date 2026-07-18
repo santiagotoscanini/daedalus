@@ -35,7 +35,7 @@ Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.tosca
 |---|---|---|---|
 | healthchecks | Django email/password | `REMOTE_USER_HEADER` ([Pocket ID example](https://pocket-id.org/docs/client-examples/healthchecks)) | bypass `/ping/*`, `/api/*`, `/badge/*` — hc-ping jobs authenticate by UUID |
 | grocy | DONE (2026-07-17) | header auth via settingoverrides bind-mount, maps to existing `admin` (sofi deleted); `/api` bypass keeps GROCY-API-KEY |
-| calibre-web | local users | "Allow Reverse Proxy Authentication" + header name | user must pre-exist; separate un-authed router for `PathPrefix(/opds)` — e-readers speak Basic auth (calibre-web's own Basic guards it) |
+| calibre-web | DONE (2026-07-17) | Pocket ID gate + reverse-proxy header (UI: Allow Reverse Proxy Auth, header Remote-User); maps to existing `santi`; /opds + /kobo bypassed for e-reader Basic auth; widget dials container-direct |
 
 ## Tier 3 — forward-auth only (local auth disabled or nonexistent)
 
