@@ -431,6 +431,17 @@ in
       "/home/santiago/selfhost/tv/bazarr:/config"
       "/s2/tv/media:/data/media"
     ];
+
+    # Database on the shared app-db cluster (bazarr reads POSTGRES_*
+    # env natively; POSTGRES_PASSWORD rides the bootstrap env file).
+    environment = {
+      POSTGRES_ENABLED = "true";
+      POSTGRES_HOST = "host.containers.internal";
+      POSTGRES_PORT = "5433";
+      POSTGRES_DATABASE = "bazarr";
+      POSTGRES_USERNAME = "bazarr";
+    };
+    environmentFiles = [ "/etc/nixos/stacks/app-db/secrets/bazarr/env" ];
   };
 
   # subgen — speech-to-text subtitle generation (Bazarr's whisperai
