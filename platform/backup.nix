@@ -57,16 +57,12 @@
 _:
 
 {
-  # Dead-man's-switch: healthchecks pages if a replication stops running
-  # (period/grace: hourly).
-  fleet.hcPings = {
-    "syncoid-rpool-selfhost" = "backup-selfhost";
-    "syncoid-rpool-home" = "backup-home";
+  # Email on a failed run; healthchecks pages if replication stops
+  # running entirely (period/grace: hourly).
+  fleet.monitoredJobs = {
+    syncoid-rpool-selfhost.slug = "backup-selfhost";
+    syncoid-rpool-home.slug = "backup-home";
   };
-  fleet.emailOnFailure = [
-    "syncoid-rpool-selfhost"
-    "syncoid-rpool-home"
-  ];
 
   services.syncoid = {
     enable = true;

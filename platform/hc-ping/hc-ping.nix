@@ -4,8 +4,9 @@
 # stops running entirely — its check goes red when no ping arrives within the
 # expected window.
 #
-# Units self-register via `fleet.hcPings` (unit -> slug) from the
-# module that owns them. Pings are best-effort: the
+# Units self-register via `fleet.monitoredJobs.<unit>.slug`
+# (registry declared in platform/mail) from the module that owns
+# them. Pings are best-effort: the
 # curl runs with the systemd "-+" prefix (root + no sandbox, matching the
 # unit's existing zfs-allow hooks) so it can read the 0400 ping-key secret
 # and reach the network even from the sandboxed syncoid user, and it always
@@ -48,20 +49,6 @@ let
   '';
 in
 {
-  options.fleet.hcPings = lib.mkOption {
-    type = lib.types.attrsOf lib.types.str;
-    default = { };
-    description = ''
-      systemd unit name -> healthchecks slug. Each entry appends
-      best-effort start/result pings to that unit. Modules register
-      their own scheduled units; set the check's period + grace in
-      the healthchecks UI (checks self-provision on first ping).
-    '';
-    example = {
-      "flake-autoupgrade" = "flake-autoupgrade";
-    };
-  };
-
   config = {
     sops.secrets."hc-ping-key" = {
       sopsFile = ./ping-key.sops;
@@ -71,13 +58,15 @@ in
       mode = "0400";
     };
 
-    # Append start/result pings to each registered unit. mkAfter keeps them
-    # after the units' own Exec hooks (e.g. syncoid's zfs-allow / zfs-unallow).
-    systemd.services = lib.mapAttrs (_unit: slug: {
+    # Append start/result pings to each registered unit with a slug.
+    # mkAfter keeps them after the units' own Exec hooks (e.g. syncoid's
+    # zfs-allow / zfs-unallow). Set each check's period + grace in the
+    # healthchecks UI (checks self-provision on first ping).
+    systemd.services = lib.mapAttrs (_unit: job: {
       serviceConfig = {
-        ExecStartPre = lib.mkAfter [ "-+${hcPing} ${slug} start" ];
-        ExecStopPost = lib.mkAfter [ "-+${hcPingResult} ${slug}" ];
+        ExecStartPre = lib.mkAfter [ "-+${hcPing} ${job.slug} start" ];
+        ExecStopPost = lib.mkAfter [ "-+${hcPingResult} ${job.slug}" ];
       };
-    }) config.fleet.hcPings;
+    }) (lib.filterAttrs (_: j: j.slug != null) config.fleet.monitoredJobs);
   };
 }

@@ -232,11 +232,18 @@ in
     }
   ) toMount;
 
-  # Dead-man's-switch pings (platform/hc-ping): daily snapshots + the
-  # monthly scrub must keep firing.
-  fleet.hcPings = {
-    "zfs-snapshot-daily" = "zfs-snapshot-daily";
-    "zfs-scrub" = "zfs-scrub";
+  # Dead-man's-switch pings only (email = false): a MISSED run is the
+  # failure mode that matters for snapshots/scrub; a run that fails
+  # loudly already lands in the failed-units alert.
+  fleet.monitoredJobs = {
+    zfs-snapshot-daily = {
+      slug = "zfs-snapshot-daily";
+      email = false;
+    };
+    zfs-scrub = {
+      slug = "zfs-scrub";
+      email = false;
+    };
   };
 
   services.zfs = {
@@ -276,5 +283,5 @@ in
   };
 
   # A silently-failed converge would leave declared properties drifted.
-  fleet.emailOnFailure = [ "zfs-converge" ];
+  fleet.monitoredJobs.zfs-converge = { };
 }

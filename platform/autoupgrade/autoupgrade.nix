@@ -17,8 +17,7 @@
 
 {
   # Dead-man's-switch ping (platform/hc-ping): weekly.
-  fleet.hcPings."flake-autoupgrade" = "flake-autoupgrade";
-  fleet.emailOnFailure = [ "flake-autoupgrade" ];
+  fleet.monitoredJobs.flake-autoupgrade.slug = "flake-autoupgrade";
 
   systemd.services.flake-autoupgrade = {
     description = "Update flake.lock, commit, stage next-boot generation, push";

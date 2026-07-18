@@ -12,7 +12,9 @@
 # What emails you, and why:
 #   - smartd            → a failing / pre-failing disk
 #   - ZFS ZED           → pool DEGRADED / FAULTED / scrub-with-errors
-#   - systemd OnFailure → flake-autoupgrade + the two syncoid backups
+#   - systemd OnFailure → every fleet.monitoredJobs entry with
+#     email=true (grep the registry), plus per-job mail from the apps
+#     deploy oneshots and the gluetun WG-expiry reminders
 #
 # Grafana + n8n send their OWN mail (configured in their stack modules
 # against the same Gmail account + password secret), not via this sendmail.
@@ -75,15 +77,38 @@ in
     };
   };
 
-  options.fleet.emailOnFailure = lib.mkOption {
-    type = lib.types.listOf lib.types.str;
-    default = [ ];
-    example = [ "flake-autoupgrade" ];
+  # The single scheduled-job monitoring registry. Declared here (the
+  # module that owns the email half); platform/hc-ping consumes the
+  # slug half.
+  options.fleet.monitoredJobs = lib.mkOption {
+    default = { };
+    example = {
+      flake-autoupgrade.slug = "flake-autoupgrade";
+      state-paths = { };
+    };
     description = ''
-      Systemd unit names (no .service suffix) that email on failure via
-      notify-email@. Owning modules self-register here, next to their
-      fleet.hcPings entry — the two registries pair up per module.
+      Systemd unit name (no .service suffix) -> monitoring wiring.
+      `email` (default true) adds OnFailure=notify-email@; `slug`
+      (default null = no ping) adds best-effort healthchecks dead-man
+      pings via platform/hc-ping. Owning modules self-register their
+      scheduled units here.
     '';
+    type = lib.types.attrsOf (
+      lib.types.submodule {
+        options = {
+          email = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Email on unit failure via notify-email@.";
+          };
+          slug = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "healthchecks slug for start/result pings; null = none.";
+          };
+        };
+      }
+    );
   };
 
   config = {
@@ -129,11 +154,21 @@ in
       ZED_NOTIFY_VERBOSE = false;
     };
 
+    # A typo'd unit name in monitoredJobs would DEFINE a hollow unit
+    # (only OnFailure/ping hooks, no ExecStart) that systemd rejects at
+    # load — the registration would be a silent no-op. attrNames/
+    # serviceConfig reads don't feed back into the definitions below,
+    # so this is recursion-safe.
+    assertions = lib.mapAttrsToList (u: _: {
+      assertion =
+        (config.systemd.services ? ${u}) && config.systemd.services.${u}.serviceConfig ? ExecStart;
+      message = "fleet.monitoredJobs.${u}: no unit '${u}.service' with an ExecStart exists — typo'd registration?";
+    }) config.fleet.monitoredJobs;
+
     # Reusable failure-notifier: OnFailure=notify-email@%N.service on a
     # unit emails its status + recent journal. Units opt in via the
-    # emailOnFailure option (self-registered by their owning module,
-    # next to its hcPings entry) — mail.nix never reaches into units it
-    # doesn't own.
+    # monitoredJobs registry (self-registered by their owning module) —
+    # mail.nix never reaches into units it doesn't own.
     systemd.services = {
       "notify-email@" = {
         description = "Email ${alertTo} when %i fails";
@@ -143,8 +178,8 @@ in
         };
       };
     }
-    // lib.genAttrs config.fleet.emailOnFailure (_: {
+    // lib.mapAttrs (_: _: {
       onFailure = [ "notify-email@%N.service" ];
-    });
+    }) (lib.filterAttrs (_: j: j.email) config.fleet.monitoredJobs);
   };
 }

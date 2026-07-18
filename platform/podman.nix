@@ -17,8 +17,8 @@
 #     1:1 registry assertion.
 #
 # The publishing layer (webApps and friends) lives in
-# platform/publishing.nix; appDatabases, logStacks, emailOnFailure and
-# hcPings are declared in their owning modules.
+# platform/publishing.nix; appDatabases, logStacks and monitoredJobs
+# are declared in their owning modules.
 
 {
   config,
@@ -454,7 +454,7 @@ in
         #
         # Failure semantics: one bad entry logs and continues (the other
         # entries still apply), then the unit fails at the end — loud via
-        # emailOnFailure + the failed-units alert. Containers deliberately
+        # monitoredJobs email + the failed-units alert. Containers deliberately
         # only `wants` this unit: `requires` would propagate every
         # state-paths restart (any declaration change) into a fleet-wide
         # container restart.
@@ -504,7 +504,7 @@ in
 
     # A broken state-paths run means containers may start against
     # wrongly-owned dirs — make that loud.
-    fleet.emailOnFailure = [ "state-paths" ];
+    fleet.monitoredJobs.state-paths = { };
 
     # Bridge membership → --network flags, injected from the registry.
     # List options merge, so these compose with each stack's own
