@@ -31,6 +31,8 @@
 
   # First-boot race: ddclient hits cloudflare.com before pi-hole is
   # actually serving DNS. Gate on pihole-ready so the first run resolves
+  # (accepted layering inversion: platform/ depending on a stacks/ unit —
+  # ddclient is host plumbing but the box resolves through the pihole stack)
   # without burning ~5s of DNS retries.
   systemd.services.ddclient = {
     after = [ "pihole-ready.service" ];

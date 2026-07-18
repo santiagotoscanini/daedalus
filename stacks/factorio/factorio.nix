@@ -32,17 +32,16 @@
     hostname = "factorio-admin.toscanini.me";
     serviceName = "factorio";
     port = 80;
-  };
-
-  myStack.homepageServices."Productivity" = [
-    {
+    homepage = {
+      group = "Productivity";
       name = "Factorio Admin";
-      href = "https://factorio-admin.toscanini.me";
       description = "Factorio server manager";
       icon = "/icons/factorio.png";
+      # Through traefik (not container DNS): OFSM answers redirects the
+      # widget prober handles better on the public hostname.
       siteMonitor = "https://factorio-admin.toscanini.me";
-    }
-  ];
+    };
+  };
 
   # Only the game port faces the world; UI is LAN-only via Traefik.
   # (No RCON host port — ofsm drives RCON internally.)

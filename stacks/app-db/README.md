@@ -112,7 +112,8 @@ Apply with the cluster superuser via:
 
 ```bash
 sudo -u santiago HOME=/home/santiago XDG_RUNTIME_DIR=/run/user/1000 \
-  podman exec -e PGPASSWORD="$(sudo grep '^POSTGRES_PASSWORD=' /etc/nixos/stacks/app-db/secrets/cluster/env | cut -d= -f2-)" \
+  PGPASSWORD="$(sudo grep '^POSTGRES_PASSWORD=' /etc/nixos/stacks/app-db/secrets/cluster/env | cut -d= -f2-)" \
+  podman exec -e PGPASSWORD \
   pg psql -U postgres -d postgres -c "ALTER ROLE anansi CONNECTION LIMIT 10;"
 ```
 
@@ -176,7 +177,7 @@ ZFS snapshots of `rpool/selfhost` also cover the cluster data dir at
    ```bash
    SUPER_PWD=$(sudo grep '^POSTGRES_PASSWORD=' /etc/nixos/stacks/app-db/secrets/cluster/env | cut -d= -f2-)
    sudo -u santiago HOME=/home/santiago XDG_RUNTIME_DIR=/run/user/1000 \
-     podman exec -e PGPASSWORD="$SUPER_PWD" pg psql -U postgres -d postgres <<SQL
+     PGPASSWORD="$SUPER_PWD" podman exec -e PGPASSWORD pg psql -U postgres -d postgres <<SQL
      DROP DATABASE IF EXISTS <name>;
      DROP ROLE     IF EXISTS <name>;
    SQL

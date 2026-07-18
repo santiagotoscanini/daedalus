@@ -105,8 +105,6 @@ let
   # than trusting DNS, so a pi-hole hiccup can't read as a dead app.
   inherit (config.myStack) lanIp;
 
-  # Capitalize first letter; used for the per-app homepage group.
-  capitalize = s: (lib.toUpper (lib.substring 0 1 s)) + (lib.substring 1 (lib.stringLength s) s);
 
   mkApp =
     name: app:
@@ -130,7 +128,7 @@ let
       # enforced via `assertions` below.
       egressEnabled = app.egress.container != null;
 
-      tileGroup = capitalize name;
+      tileGroup = lib.toSentenceCase name;
 
       # Pull-and-redeploy. House style (cf. cloudflared-route-sync): nix
       # injects the parameters, the bash body lives in a standalone
