@@ -482,71 +482,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/s2/tv\"} - node_filesystem_avail_bytes{mountpoint=\"/s2/tv\"}",
-          "legendFormat": "tv",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-default"
-          }
-        },
-        {
-          "refId": "B",
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/s2/shared\"} - node_filesystem_avail_bytes{mountpoint=\"/s2/shared\"}",
-          "legendFormat": "shared",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-default"
-          }
-        },
-        {
-          "refId": "C",
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/s2/santi\"} - node_filesystem_avail_bytes{mountpoint=\"/s2/santi\"}",
-          "legendFormat": "santi",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-default"
-          }
-        },
-        {
-          "refId": "D",
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/s2/sofi\"} - node_filesystem_avail_bytes{mountpoint=\"/s2/sofi\"}",
-          "legendFormat": "sofi",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-default"
-          }
-        },
-        {
-          "refId": "E",
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/s2\"} - node_filesystem_avail_bytes{mountpoint=\"/s2\"}",
-          "legendFormat": "s2-pool (root)",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-default"
-          }
-        },
-        {
-          "refId": "F",
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/home\"} - node_filesystem_avail_bytes{mountpoint=\"/home\"}",
-          "legendFormat": "rpool/home",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-default"
-          }
-        },
-        {
-          "refId": "G",
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/nix\"} - node_filesystem_avail_bytes{mountpoint=\"/nix\"}",
-          "legendFormat": "rpool/nix",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-default"
-          }
-        },
-        {
-          "refId": "H",
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/\"} - node_filesystem_avail_bytes{mountpoint=\"/\"}",
-          "legendFormat": "rpool/root",
+          "expr": "node_filesystem_size_bytes{mountpoint=~\"/|/home|/nix|/s2|/s2/.+\"} - node_filesystem_avail_bytes{mountpoint=~\"/|/home|/nix|/s2|/s2/.+\"}",
+          "legendFormat": "{{mountpoint}}",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus-default"

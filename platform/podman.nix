@@ -30,17 +30,9 @@
 let
   cfg = config.fleet;
 
-  # A bridgeMemberships element is "<bridge>" or "<bridge>:alias=<name>";
-  # the part before the first ":" names the bridge, anything after it
-  # passes through to podman's --network option syntax.
-  bridgeOf = spec: lib.head (lib.splitString ":" spec);
-  networkFlag =
-    spec:
-    let
-      bridge = bridgeOf spec;
-      suffix = lib.removePrefix bridge spec;
-    in
-    "--network=${bridge}-net${suffix}";
+  # Bridge-membership spec parsing lives in fleet-lib (shared with
+  # publishing.nix — one parser, no hand-synced mirror).
+  inherit (import ./fleet-lib.nix { inherit lib; }) bridgeOf networkFlag;
 
   # Applied to every podman-<name>.service. Without this override
   # oci-containers ships Type=notify + Restart=always, which doesn't

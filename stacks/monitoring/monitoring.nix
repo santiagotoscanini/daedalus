@@ -128,10 +128,9 @@ let
     cp ${prometheusConfig} $out/prometheus.yml
   '';
 
-  # Three sources merged into one /nix/store dir mounted into grafana:
-  #   1. Static JSON under ./assets/dashboards/         (root)
-  #   2. fleet.grafanaDashboards                       (root)
-  #   3. fleet.grafanaDashboardsByFolder               (subdirs ↔ sidebar folders)
+  # Two sources merged into one /nix/store dir mounted into grafana:
+  #   1. Static JSON under ./assets/dashboards/         (root + subdirs)
+  #   2. fleet.grafanaDashboardsByFolder               (subdirs ↔ sidebar folders)
   dashboardsDir = pkgs.runCommand "grafana-dashboards" { } (
     ''
       mkdir -p $out
@@ -140,12 +139,6 @@ let
       # to write into the subdirs the assets tree ships (e.g. System/)
       chmod -R u+w $out
     ''
-    + lib.concatStringsSep "\n" (
-      lib.mapAttrsToList (
-        name: content: "cp ${pkgs.writeText "${name}.json" content} $out/${name}.json"
-      ) config.fleet.grafanaDashboards
-    )
-    + "\n"
     + lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
         folder: dashboards:

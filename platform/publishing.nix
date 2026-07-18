@@ -20,9 +20,7 @@
 let
   cfg = config.fleet;
 
-  # Mirror of podman.nix's parser: the part before the first ":" of a
-  # bridge membership names the bridge.
-  bridgeOf = spec: lib.head (lib.splitString ":" spec);
+  inherit (import ./fleet-lib.nix { inherit lib; }) bridgeOf;
 
   # Resolve a webApp's upstream URL from whichever input is set (the
   # exactly-one assertion below enforces the shape); named-service
@@ -216,25 +214,17 @@ in
       '';
     };
 
-    grafanaDashboards = lib.mkOption {
-      type = lib.types.attrsOf lib.types.lines;
-      default = { };
-      description = ''
-        Per-stack dashboard JSON keyed by filename (without `.json`).
-        monitoring.nix combines these with the static dashboards
-        under stacks/monitoring/assets/dashboards/ and bind-mounts
-        the resulting derivation into grafana.
-      '';
-    };
-
     grafanaDashboardsByFolder = lib.mkOption {
       type = lib.types.attrsOf (lib.types.attrsOf lib.types.lines);
       default = { };
       description = ''
         Per-stack dashboards organized into Grafana sidebar folders.
         Outer key is folder name (rendered via Grafana's
-        `foldersFromFilesStructure` provisioner mode); inner is the
-        same shape as `grafanaDashboards`.
+        `foldersFromFilesStructure` provisioner mode); inner is
+        dashboard JSON keyed by filename (without `.json`).
+        monitoring.nix combines these with the static dashboards under
+        stacks/monitoring/assets/dashboards/ and bind-mounts the
+        resulting derivation into grafana.
 
         Use this when a stack emits multiple related dashboards
         (e.g. the apps platform's per-app dashboards, all under "Apps").
