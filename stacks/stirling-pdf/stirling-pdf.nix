@@ -67,8 +67,9 @@
     ];
 
     environment = {
-      DOCKER_ENABLE_SECURITY = "false";
-      INSTALL_BOOK_AND_ADVANCED_HTML_OPS = "false";
+      # Login stays off — the Pocket ID forward-auth gate is the auth
+      # layer, matching the rest of the fleet.
+      SECURITY_ENABLELOGIN = "false";
     };
 
   };

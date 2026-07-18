@@ -67,11 +67,13 @@ done <<<"$HOSTS"
 # a personal zone; add pagination if it ever exceeds that).
 ALL=$(api GET "/zones/$ZONE_ID/dns_records?type=CNAME&per_page=100")
 
+# Ownership signal = the record points at OUR tunnel; the comment is
+# cosmetic (a comment-string rename must not strand orphans).
 while IFS=$'\t' read -r RID NAME; do
   [ -z "${RID:-}" ] && continue
   if ! grep -qxF "$NAME" <<<"$HOSTS"; then
-    echo "[delete] $NAME (orphan; was managed, no longer in cloudflareRoutes)"
+    echo "[delete] $NAME (points at the tunnel but not in cloudflareRoutes)"
     api DELETE "/zones/$ZONE_ID/dns_records/$RID" >/dev/null
   fi
-done < <(echo "$ALL" | jq -r --arg m "$MANAGED_COMMENT" \
-  '.result | map(select(.comment == $m)) | .[] | .id + "\t" + .name')
+done < <(echo "$ALL" | jq -r --arg t "$TARGET" \
+  '.result | map(select(.content == $t)) | .[] | .id + "\t" + .name')

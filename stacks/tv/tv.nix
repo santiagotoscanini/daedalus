@@ -355,7 +355,6 @@ in
         "/home/santiago/selfhost/tv/subgen" = { };
         # Content dirs on s2-pool that containers bind directly — declared
         # so a fresh restore pre-creates them with santiago ownership.
-        "/s2/tv/downloads/qbittorrent" = { };
         "/s2/tv/media" = { };
         "/s2/tv/torrents" = { };
         "/s2/tv/usenet" = { };
@@ -364,9 +363,13 @@ in
       virtualisation.oci-containers.containers.qbittorrent = mkNetnsTenant {
         image = "docker.io/linuxserver/qbittorrent:5.2.3_v2.0.13-ls468@sha256:352371a7242e8b4aa10958ca02076d1023758070519b89a10251475fb9f1a35a";
 
+        # No /downloads bind: everything lives under /data/torrents (the
+        # atomic-move/hardlink layout radarr+sonarr import from). If
+        # "keep incomplete in temp path" is ever enabled in the UI, the
+        # temp path must also live under /data/torrents — a second bind
+        # would force cross-mount copy+delete instead of rename().
         volumes = [
           "/home/santiago/selfhost/tv/qbittorrent:/config"
-          "/s2/tv/downloads/qbittorrent:/downloads"
           "/s2/tv/torrents:/data/torrents:rw"
         ];
 

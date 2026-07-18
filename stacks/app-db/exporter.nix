@@ -88,8 +88,9 @@ in
         fi
         SUPER_PWD=$(grep '^POSTGRES_PASSWORD=' "${clusterEnv}" | head -1 | cut -d= -f2-)
 
-        PGPASSWORD="$SUPER_PWD" podman exec -i -e PGPASSWORD pg \
-          psql -X -v ON_ERROR_STOP=1 -v qpwd="$MON_PWD" -U postgres -d postgres <<'SQL'
+        PGPASSWORD="$SUPER_PWD" MON_PWD="$MON_PWD" podman exec -i -e PGPASSWORD -e MON_PWD pg \
+          psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
+        \getenv qpwd MON_PWD
         SELECT 'CREATE ROLE monitoring LOGIN'
         WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'monitoring')
         \gexec

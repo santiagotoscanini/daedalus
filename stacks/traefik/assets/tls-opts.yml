@@ -10,12 +10,3 @@ tls:
     tls-opts:
       minVersion: VersionTLS12
       sniStrict: true
-
-    # Named options for the postgres TCP entrypoint. Direct-TLS
-    # postgres clients (libpq 17+ / pgjdbc 42.7+ with
-    # `sslnegotiation=direct`) send `postgresql` in the ALPN
-    # extension; traefik must advertise the same protocol or it
-    # responds with `tlsv1 alert no application protocol`.
-    pg-tls:
-      alpnProtocols:
-        - postgresql

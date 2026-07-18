@@ -2,10 +2,10 @@
 # postgres.toscanini.me:5432 on the LAN for DBeaver/psql clients.
 #
 # Consumed by stacks/app-db/app-db.nix via fleet.traefikRawRules.
-# `pg-tls@file` advertises the `postgresql` ALPN protocol so
-# direct-TLS clients (libpq 17+ / pgjdbc 42.7+) succeed instead of
-# getting `tlsv1 alert no application protocol`. The TLS options
-# are defined in stacks/traefik/assets/tls-opts.yml.
+# `pg-tls@file` (bottom of this file — traefik's file provider merges
+# tls.options across rule files) advertises the `postgresql` ALPN
+# protocol so direct-TLS clients (libpq 17+ / pgjdbc 42.7+) succeed
+# instead of getting `tlsv1 alert no application protocol`.
 
 tcp:
   routers:
@@ -25,3 +25,9 @@ tcp:
       loadBalancer:
         servers:
           - address: "pg:5432"
+
+tls:
+  options:
+    pg-tls:
+      alpnProtocols:
+        - postgresql

@@ -88,7 +88,7 @@ let
         issuer-url = config.fleet.sso.issuerUrl;
         client-id = "\${GATUS_OIDC_CLIENT_ID}";
         client-secret = "\${GATUS_OIDC_CLIENT_SECRET}";
-        redirect-url = "https://status.toscanini.me/authorization-code/callback";
+        redirect-url = "https://${config.fleet.webApps.gatus.hostname}/authorization-code/callback";
         scopes = [ "openid" ];
         allowed-subjects = [ "1ae66034-d627-46f7-9c04-1d8c05639a1a" ];
       };

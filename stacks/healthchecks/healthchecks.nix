@@ -92,7 +92,7 @@
     environment = {
       SITE_ROOT = "https://hc.toscanini.me";
       SITE_NAME = "s2-server";
-      ALLOWED_HOSTS = "hc.toscanini.me,healthchecks";
+      ALLOWED_HOSTS = "hc.toscanini.me";
       SECURE_PROXY_SSL_HEADER = "HTTP_X_FORWARDED_PROTO,https";
       # Trust the middleware-set X-Forwarded-Email as the login (Django
       # META name). Replaces email/password login entirely.

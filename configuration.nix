@@ -6,6 +6,7 @@
 
 {
   config,
+  lib,
   pkgs,
   nixpkgs,
   nixpkgs-unstable,
@@ -229,6 +230,15 @@
     dates = "weekly";
     options = "--delete-older-than 30d";
   };
+
+  # /boot holds the systemd-boot random-seed file; mask out all access
+  # for non-root. Declared here (mkForce) rather than in the generated
+  # hardware-configuration.nix so a `nixos-generate-config` refresh
+  # can't silently revert it.
+  fileSystems."/boot".options = lib.mkForce [
+    "fmask=0777"
+    "dmask=0777"
+  ];
 
   # Weekly catch-up for store paths that predate auto-optimise.
   nix.optimise = {

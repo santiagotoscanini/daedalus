@@ -181,7 +181,7 @@ in
 
       TRUSTED_PROXIES = config.fleet.bridgeSubnets.traefik;
       PHP_MEMORY_LIMIT = "2G";
-      NEXTCLOUD_TRUSTED_DOMAINS = "nextcloud.toscanini.me host.containers.internal";
+      NEXTCLOUD_TRUSTED_DOMAINS = "nextcloud.toscanini.me";
       NEXTCLOUD_INIT_HTACCESS = "true";
 
       # Nextcloud config.php overrides (NC_<key> -> config[key]).

@@ -27,7 +27,7 @@
     extraConfig = ''
       ttl=1
       webv4=https://cloudflare.com/cdn-cgi/trace
-      web-skip='ip='
+      webv4-skip='ip='
     '';
     domains = [ "s2.toscanini.me" ];
     interval = "300s";

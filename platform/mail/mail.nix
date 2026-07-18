@@ -126,7 +126,8 @@ in
         tls = true;
         tls_starttls = true;
         tls_trust_file = "/etc/ssl/certs/ca-certificates.crt";
-        logfile = "/var/log/msmtp.log";
+        # journald is the box's single log source — no flat logfile.
+        syslog = "on";
       };
       accounts.default = {
         host = config.fleet.mail.smtpHost;

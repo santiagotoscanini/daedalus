@@ -72,7 +72,6 @@ in
     "/home/santiago/selfhost/immich/model-cache".uid = 1000;
     "/home/santiago/selfhost/immich/postgres" = {
       uid = 999;
-      gid = 0;
       mode = "0700";
     };
   };

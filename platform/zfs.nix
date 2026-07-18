@@ -261,6 +261,11 @@ in
     };
   };
 
+  # monthly = 0 still generates an active timer whose service is a
+  # no-op (and no monthly snapshots exist to prune) — keep it out of
+  # list-timers and the log sweep.
+  systemd.timers.zfs-snapshot-monthly.enable = false;
+
   # Quiet no-op when properties match; logs `set:` on actual changes.
   # wantedBy (not requiredBy): a failed converge must never block the
   # /s2 mounts — and with them most of the container fleet. Ordering

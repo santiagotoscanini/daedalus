@@ -20,21 +20,25 @@ install -d -m 0700 "$(dirname "$APP_ENV_FILE")"
 # whose ExecStartPost gate holds until pg_isready answers — by the
 # time we run, the server accepts connections.
 
-# Read or generate the per-app password.
+# Read or generate the per-app password. The guards catch a
+# corrupt/truncated env file — without them an empty password would
+# reach ALTER ROLE and silently lock the app out.
 if [ -e "$APP_ENV_FILE" ]; then
   APP_PWD=$(grep '^POSTGRES_PASSWORD=' "$APP_ENV_FILE" | head -1 | cut -d= -f2-)
+  [ -n "$APP_PWD" ] || { echo "empty POSTGRES_PASSWORD in $APP_ENV_FILE" >&2; exit 1; }
 else
   APP_PWD=$(openssl rand -hex 32)
 fi
 
 # Read the cluster superuser password.
 SUPER_PWD=$(grep '^POSTGRES_PASSWORD=' "$CLUSTER_ENV" | head -1 | cut -d= -f2-)
+[ -n "$SUPER_PWD" ] || { echo "empty POSTGRES_PASSWORD in $CLUSTER_ENV" >&2; exit 1; }
 
 # Idempotent role + db materialization. -i pipes stdin to psql.
-# PGPASSWORD rides a value-less `-e PGPASSWORD` passthrough so the
-# secret never sits in podman argv (/proc/<pid>/cmdline).
-# -v qpwd=... binds the psql variable, substituted as :'qpwd'
-# (SQL-escaped string literal) below.
+# BOTH passwords ride value-less `-e` passthroughs so neither secret
+# ever sits in podman argv (/proc/<pid>/cmdline); \getenv binds the
+# psql variable, substituted as :'qpwd' (SQL-escaped string literal)
+# below.
 #
 # Note: psql client-side substitution (:'qpwd') does NOT work inside
 # a DO $$ ... $$ block — the block body is sent verbatim to the
@@ -43,8 +47,9 @@ SUPER_PWD=$(grep '^POSTGRES_PASSWORD=' "$CLUSTER_ENV" | head -1 | cut -d= -f2-)
 #
 # Heredoc is unquoted (<<SQL not <<'SQL') so ${APP_NAME} expands; psql's
 # :'qpwd' has no $ so bash leaves it alone.
-PGPASSWORD="$SUPER_PWD" podman exec -i -e PGPASSWORD pg \
-  psql -X -v ON_ERROR_STOP=1 -v qpwd="$APP_PWD" -U postgres -d postgres <<SQL
+PGPASSWORD="$SUPER_PWD" APP_PWD="$APP_PWD" podman exec -i -e PGPASSWORD -e APP_PWD pg \
+  psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres <<SQL
+\getenv qpwd APP_PWD
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', '${APP_NAME}', :'qpwd')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_NAME}')
 \gexec
