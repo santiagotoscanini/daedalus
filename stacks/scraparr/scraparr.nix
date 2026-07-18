@@ -49,6 +49,7 @@
     image = "ghcr.io/thecfu/scraparr:3.0.3@sha256:44f09d30009508a2a422ae7cd9cce38fa36122d6bd0592f2e4158398d9ccb7a6";
 
     environment = {
+      GENERAL_LOG_LEVEL = "WARNING";
       SONARR_URL = "http://host.containers.internal:8989";
       RADARR_URL = "http://host.containers.internal:7878";
       PROWLARR_URL = "http://host.containers.internal:9696";
