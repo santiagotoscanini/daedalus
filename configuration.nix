@@ -31,6 +31,10 @@
           in
           if type == "directory" then
             nixFilesIn (dir + "/${name}")
+          # `*-lib.nix` files are plain libraries (imported by path from
+          # their consumers), not modules.
+          else if builtins.match ".*-lib\\.nix" name != null then
+            [ ]
           else if builtins.match ".*\\.nix" name != null then
             [ (dir + "/${name}") ]
           else

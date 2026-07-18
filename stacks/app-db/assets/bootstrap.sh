@@ -16,19 +16,9 @@
 
 install -d -m 0700 "$(dirname "$APP_ENV_FILE")"
 
-# Wait for postgres to be ready (up to 60s), then hard-fail — without
-# this the timeout falls through and surfaces as a confusing psql
-# connection error deep in the heredoc below.
-for i in $(seq 1 60); do
-  if podman exec pg pg_isready -U postgres -d postgres >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-podman exec pg pg_isready -U postgres -d postgres >/dev/null 2>&1 || {
-  echo "pg not ready after 60s" >&2
-  exit 1
-}
+# No pg wait loop here: this unit orders after podman-pg.service,
+# whose ExecStartPost gate holds until pg_isready answers — by the
+# time we run, the server accepts connections.
 
 # Read or generate the per-app password.
 if [ -e "$APP_ENV_FILE" ]; then

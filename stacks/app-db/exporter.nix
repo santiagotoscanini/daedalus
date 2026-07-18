@@ -79,15 +79,8 @@ in
       };
       script = ''
         set -eu
-        for i in $(seq 1 60); do
-          podman exec pg pg_isready -U postgres -d postgres >/dev/null 2>&1 && break
-          sleep 1
-        done
-        podman exec pg pg_isready -U postgres -d postgres >/dev/null 2>&1 || {
-          echo "pg not ready after 60s" >&2
-          exit 1
-        }
-
+        # No pg wait loop: ordering after podman-pg.service means its
+        # ExecStartPost pg_isready gate has already held for readiness.
         if [ -e "${monEnv}" ]; then
           MON_PWD=$(grep '^POSTGRES_PASSWORD=' "${monEnv}" | head -1 | cut -d= -f2-)
         else

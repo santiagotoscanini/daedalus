@@ -334,27 +334,18 @@ let
         tab = "Apps";
       };
 
-      # Persistent data dir. 0755 santiago:users — container UID 0 maps
-      # to host santiago (1000) under rootless podman, so the app can
-      # write it as root-in-container. Recreated + re-owned on every
-      # rebuild by systemd-tmpfiles, which is also why the mode is
-      # stated here rather than left to whatever the app's umask did.
-      #
-      # The parent is declared explicitly, and that is load-bearing: for
-      # a leaf whose parent doesn't exist, systemd-tmpfiles creates the
-      # intermediate dirs as ROOT, then refuses its own santiago→root
-      # ownership transition ("Detected unsafe path transition") and
-      # silently never creates the leaf — leaving the container to die on
-      # `statfs ...: no such file or directory`. Only walk the parents we
-      # actually own: a hostPath outside the apps tree (e.g. /s2/<name>)
-      # sits directly under an existing mountpoint, and emitting a rule
-      # for *that* parent would chown the mountpoint itself.
-      systemd.tmpfiles.rules = lib.optionals storageEnabled (
-        (lib.optionals (lib.hasPrefix "${appsDataRoot}/" storageHostPath) [
-          "d ${appsDataRoot}       0755 santiago users -"
-          "d ${appsDataRoot}/${name} 0755 santiago users -"
-        ])
-        ++ [ "d ${storageHostPath} 0755 santiago users -" ]
+      # Persistent data dir — the fleet-standard statePaths convention
+      # (uid 0 default = container root = santiago; state-paths.service
+      # sorts paths so parents are created before children, and every
+      # podman unit orders after it).
+      fleet.statePaths = lib.optionalAttrs storageEnabled (
+        lib.optionalAttrs (lib.hasPrefix "${appsDataRoot}/" storageHostPath) {
+          "${appsDataRoot}" = { };
+          "${appsDataRoot}/${name}" = { };
+        }
+        // {
+          "${storageHostPath}" = { };
+        }
       );
 
       # Baseline secrets bootstrap. Generates AUTH_SECRET on first boot
@@ -426,27 +417,19 @@ let
         };
       };
 
-      # Container ordering. Always wait on secrets bootstrap; when
-      # postgres is on, also wait on the shared pg + the per-app
-      # role/database bootstrap. With shared cluster, multiple apps
-      # share `podman-pg.service` as a single ordering anchor.
+      # Container ordering: the secrets bootstrap plus (egress mode) the
+      # netns owner. The pg + per-app-bootstrap edges are NOT repeated
+      # here — appDatabases.consumers already generates both (including
+      # the transaction-proof direct podman-pg edge).
       systemd.services."podman-${cName}" = {
         after = [
           "app-${name}-secrets-bootstrap.service"
         ]
-        ++ (lib.optional egressEnabled "podman-${app.egress.container}.service")
-        ++ (lib.optionals postgresEnabled [
-          "app-db-${name}-bootstrap.service"
-          "podman-pg.service"
-        ]);
+        ++ (lib.optional egressEnabled "podman-${app.egress.container}.service");
         wants = [
           "app-${name}-secrets-bootstrap.service"
         ]
-        ++ (lib.optional egressEnabled "podman-${app.egress.container}.service")
-        ++ (lib.optionals postgresEnabled [
-          "app-db-${name}-bootstrap.service"
-          "podman-pg.service"
-        ]);
+        ++ (lib.optional egressEnabled "podman-${app.egress.container}.service");
       };
 
       # The container itself — pure declarative, identical pattern to

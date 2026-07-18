@@ -5,8 +5,10 @@
 # Exposed:
 #   - `_module.args` helpers: mkRootlessContainer (oci-containers
 #     decorator applying per-host defaults: podman.user=santiago,
-#     autoStart=true, TZ), mkGluetunExporter, hostUid, mkDotenvSecret,
-#     mkSecretRender, mkLocalImage.
+#     autoStart=true, TZ), hostUid, mkDotenvSecret, mkSecretRender,
+#     mkLocalImage. (The gluetun family is a by-path library —
+#     platform/gluetun-lib.nix — because its consumers force it inside
+#     a top-level mkMerge, where a module arg would recurse.)
 #   - Options under `fleet.*` — see each `mkOption` description below
 #     for the per-option contract (bridgeMemberships, bridgeSubnets,
 #     statePaths, traefikRoutes, traefikRawRules, cloudflareRoutes,
@@ -164,8 +166,8 @@ let
   isolatedApps = lib.filterAttrs (_: w: w.isolated) cfg.webApps;
   isoBridge = n: "iso-${n}";
 
-  # Body of _module.args.mkRootlessContainer — bound here so other
-  # helpers (mkGluetunExporter) can compose with it.
+  # Body of _module.args.mkRootlessContainer — bound in the let so
+  # in-file helpers can compose with it.
   mkRootlessContainer =
     args:
     let
@@ -191,6 +193,7 @@ let
       // (cleanArgs.environment or { });
       extraOptions = secOpts ++ (cleanArgs.extraOptions or [ ]);
     };
+
 in
 {
   options.fleet = {
@@ -884,26 +887,6 @@ in
     virtualisation.oci-containers.backend = "podman";
 
     _module.args.mkRootlessContainer = mkRootlessContainer;
-
-    # Shared gluetun (VPN netns owner) plumbing — used by stacks/tv and
-    # stacks/ipcrawl-vpn. Two separate tunnels on purpose: one WireGuard
-    # key cannot run two live sessions, and their traffic must not mix.
-    # One pinned image for both instances, and one exporter shape: it
-    # polls the owner's control API (localhost:8000 inside the shared
-    # netns) and serves metrics on :8001, host-published by the owner.
-    _module.args.gluetunImage = "docker.io/qmcgaw/gluetun:latest@sha256:b0ee2135e6ba52ad3f102aae9663707cd1c9531485117067a380d3b2b6dd991d";
-    _module.args.mkGluetunExporter =
-      netnsOwner:
-      mkRootlessContainer {
-        image = "ghcr.io/thecfu/gluetun-exporter:latest@sha256:bafeabb2a9638bf6b0800c2d3d47d49c6236d879bd01eec8caea45dfca2b50c5";
-        dependsOn = [ netnsOwner ];
-        environment = {
-          GLUETUN_URL = "http://localhost:8000";
-          EXPORTER_PORT = "8001";
-          EXPORTER_INTERVAL = "30";
-        };
-        extraOptions = [ "--network=container:${netnsOwner}" ];
-      };
 
     # Locally-built image + its build oneshot, as one helper:
     #   inherit (mkLocalImage { ... }) image service;
