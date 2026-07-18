@@ -57,7 +57,7 @@ in
   # Database on the shared app-db cluster: role + db + env file with
   # DATABASE_URL, materialized by app-db-nextcloud-bootstrap.service
   # (see stacks/app-db/). config.php holds the live connection values.
-  myStack.appDatabases.nextcloud = { };
+  myStack.appDatabases.nextcloud.consumers = [ "nextcloud-app" ];
 
   myStack.containerNetworks = {
     nextcloud-redis = [ "nextcloud:alias=redis" ]; # config.php has redis.host = redis
@@ -209,14 +209,8 @@ in
   # NixOS module merging concatenates after/wants with common.nix's
   # auto-generated override.
   systemd.services.podman-nextcloud-app = {
-    after = [
-      "nextcloud-image-build.service"
-      "app-db-nextcloud-bootstrap.service"
-    ];
-    wants = [
-      "nextcloud-image-build.service"
-      "app-db-nextcloud-bootstrap.service"
-    ];
+    after = [ "nextcloud-image-build.service" ];
+    wants = [ "nextcloud-image-build.service" ];
   };
 
   # Nextcloud expects cron.php every 5 min for background jobs

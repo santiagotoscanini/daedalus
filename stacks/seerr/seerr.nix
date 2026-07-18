@@ -13,22 +13,20 @@
 # The bridge can reach host.containers.internal, so gluetun's published
 # *arr ports are dialable without joining the VPN netns.
 
-{ mkRootlessContainer, ... }:
+{
+  config,
+  mkRootlessContainer,
+  ...
+}:
 
 {
   myStack.containerNetworks.seerr = [ "traefik" "app-db" ];
 
   # Database on the shared app-db cluster (see stacks/app-db/); the
   # container joins app-db-net and dials `pg` by container DNS.
-  myStack.appDatabases.seerr = { };
+  myStack.appDatabases.seerr.consumers = [ "seerr" ];
 
   # The bootstrap gates `podman-app-<name>` for apps-platform tenants;
-  # seerr is a stack, so pull it in explicitly.
-  systemd.services.podman-seerr = {
-    after = [ "app-db-seerr-bootstrap.service" ];
-    wants = [ "app-db-seerr-bootstrap.service" ];
-  };
-
   # The image's node user (uid 1000) maps to host 100999; the config
   # dir must exist with that ownership or a fresh install fails on
   # first write.
@@ -65,7 +63,7 @@
     };
 
     # DB_PASS from the app-db bootstrap env file.
-    environmentFiles = [ "/etc/nixos/stacks/app-db/secrets/seerr/env" ];
+    environmentFiles = [ config.myStack.appDatabases.seerr.envFile ];
 
     extraOptions = [
     ];

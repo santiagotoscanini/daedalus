@@ -57,17 +57,10 @@
 
   myStack.containerNetworks.litellm = [ "app-db" "traefik" ];
 
-  # The bootstrap gates `podman-app-<name>` for apps-platform tenants;
-  # litellm is a stack, so pull it in explicitly.
-  systemd.services.podman-litellm = {
-    after = [ "app-db-litellm-bootstrap.service" ];
-    wants = [ "app-db-litellm-bootstrap.service" ];
-  };
-
   # Database on the shared app-db cluster: role + db + env file with
   # DATABASE_URL, materialized by app-db-litellm-bootstrap.service
   # (see stacks/app-db/).
-  myStack.appDatabases.litellm = { };
+  myStack.appDatabases.litellm.consumers = [ "litellm" ];
 
   myStack.webApps.litellm = {
     serviceName = "litellm";
@@ -173,7 +166,7 @@
     # Later files win on key collisions.
     environmentFiles = [
       config.sops.secrets."litellm-env".path
-      "/etc/nixos/stacks/app-db/secrets/litellm/env"
+      config.myStack.appDatabases.litellm.envFile
     ];
 
     extraOptions = [

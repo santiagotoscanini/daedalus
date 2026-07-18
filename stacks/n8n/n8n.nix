@@ -51,7 +51,7 @@ in
   # DATABASE_URL (and the password under both POSTGRES_PASSWORD and
   # DB_POSTGRESDB_PASSWORD — the name this image reads), materialized
   # by app-db-n8n-bootstrap.service (see stacks/app-db/).
-  myStack.appDatabases.n8n = { };
+  myStack.appDatabases.n8n.consumers = [ "n8n" ];
 
   myStack.webApps.n8n = {
     serviceName = "n8n";
@@ -127,19 +127,11 @@ in
     content = "N8N_SMTP_PASS=$(cat ${config.sops.secrets."mail-relay-password".path})";
   };
 
-  # Wait for the rendered SMTP env file and the app-db bootstrap (the
-  # bootstrap gates `podman-app-<name>` for apps-platform tenants; n8n
-  # is a stack, so pull it in explicitly). Merges with common.nix's
-  # generated override.
+  # Wait for the rendered SMTP env file (the app-db ordering comes
+  # from appDatabases.consumers). Merges with common.nix's override.
   systemd.services.podman-n8n = {
-    after = [
-      "n8n-smtp-env.service"
-      "app-db-n8n-bootstrap.service"
-    ];
-    wants = [
-      "n8n-smtp-env.service"
-      "app-db-n8n-bootstrap.service"
-    ];
+    after = [ "n8n-smtp-env.service" ];
+    wants = [ "n8n-smtp-env.service" ];
   };
 
 
@@ -202,7 +194,7 @@ in
     environmentFiles = [
       config.sops.secrets."n8n-env".path
       "/run/n8n-smtp/env"
-      "/etc/nixos/stacks/app-db/secrets/n8n/env"
+      config.myStack.appDatabases.n8n.envFile
     ];
 
   };

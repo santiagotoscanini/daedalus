@@ -235,10 +235,19 @@ in
   # netns can't join app-db-net; connection settings live in each
   # app's config.xml (mutable state, written at migration).
   myStack.appDatabases = {
-    sonarr.extraDatabases = [ "sonarr_log" ];
-    radarr.extraDatabases = [ "radarr_log" ];
-    prowlarr.extraDatabases = [ "prowlarr_log" ];
-    bazarr = { };
+    sonarr = {
+      extraDatabases = [ "sonarr_log" ];
+      consumers = [ "sonarr" ];
+    };
+    radarr = {
+      extraDatabases = [ "radarr_log" ];
+      consumers = [ "radarr" ];
+    };
+    prowlarr = {
+      extraDatabases = [ "prowlarr_log" ];
+      consumers = [ "prowlarr" ];
+    };
+    bazarr.consumers = [ "bazarr" ];
   };
 
   myStack.containerNetworks =
@@ -462,7 +471,7 @@ in
       POSTGRES_DATABASE = "bazarr";
       POSTGRES_USERNAME = "bazarr";
     };
-    environmentFiles = [ "/etc/nixos/stacks/app-db/secrets/bazarr/env" ];
+    environmentFiles = [ config.myStack.appDatabases.bazarr.envFile ];
   };
 
   # subgen — speech-to-text subtitle generation (Bazarr's whisperai

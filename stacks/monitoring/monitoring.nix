@@ -203,7 +203,7 @@ in
   # Grafana's database on the shared app-db cluster (see
   # stacks/app-db/). Dashboards/datasources stay nix-provisioned; the
   # DB holds what the UI created: alert rules, users, service accounts.
-  myStack.appDatabases.grafana = { };
+  myStack.appDatabases.grafana.consumers = [ "grafana" ];
 
   myStack.containerNetworks = {
     prometheus = [ "monitoring" "traefik" ];
@@ -287,12 +287,6 @@ in
   };
 
   # The bootstrap gates `podman-app-<name>` for apps-platform tenants;
-  # grafana is a stack, so pull it in explicitly.
-  systemd.services.podman-grafana = {
-    after = [ "app-db-grafana-bootstrap.service" ];
-    wants = [ "app-db-grafana-bootstrap.service" ];
-  };
-
   virtualisation.oci-containers.containers.grafana = mkRootlessContainer {
     image = "docker.io/grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63";
     dependsOn = [ "prometheus" ];
@@ -356,7 +350,7 @@ in
     environmentFiles = [
       config.sops.secrets."grafana-env".path
       # GF_DATABASE_PASSWORD (+ POSTGRES_*) from the app-db bootstrap.
-      "/etc/nixos/stacks/app-db/secrets/grafana/env"
+      config.myStack.appDatabases.grafana.envFile
     ];
 
     extraOptions = [

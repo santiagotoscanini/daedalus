@@ -97,19 +97,17 @@ in
   myStack.containerNetworks.gatus = [ "traefik" "app-db" ];
 
   # Database on the shared app-db cluster (see stacks/app-db/).
-  myStack.appDatabases.gatus = { };
+  myStack.appDatabases.gatus.consumers = [ "gatus" ];
   # Also order after traefik + pocket-id: gatus fetches the OIDC
   # discovery document at startup and PANICS if id.toscanini.me is
   # unreachable — during a fleet-wide restart that leaves the unit
   # "Finished" with a dead container (the documented oneshot trap).
   systemd.services.podman-gatus = {
     after = [
-      "app-db-gatus-bootstrap.service"
       "podman-traefik.service"
       "podman-pocket-id.service"
     ];
     wants = [
-      "app-db-gatus-bootstrap.service"
       "podman-traefik.service"
       "podman-pocket-id.service"
     ];
@@ -179,7 +177,7 @@ in
     # env.sops, decrypted to /run/secrets/gatus-env at activation.
     environmentFiles = [
       config.sops.secrets."gatus-env".path
-      "/etc/nixos/stacks/app-db/secrets/gatus/env"
+      config.myStack.appDatabases.gatus.envFile
     ];
 
     volumes = [

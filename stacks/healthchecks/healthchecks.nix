@@ -30,11 +30,7 @@
   myStack.stateDirs."/home/santiago/selfhost/healthchecks/data".uid = 999;
 
   # Database on the shared app-db cluster (see stacks/app-db/).
-  myStack.appDatabases.healthchecks = { };
-  systemd.services.podman-healthchecks = {
-    after = [ "app-db-healthchecks-bootstrap.service" ];
-    wants = [ "app-db-healthchecks-bootstrap.service" ];
-  };
+  myStack.appDatabases.healthchecks.consumers = [ "healthchecks" ];
 
   myStack.webApps.healthchecks = {
     hostname = "hc.toscanini.me";
@@ -99,7 +95,7 @@
 
     environmentFiles = [
       config.sops.secrets."healthchecks-env".path
-      "/etc/nixos/stacks/app-db/secrets/healthchecks/env"
+      config.myStack.appDatabases.healthchecks.envFile
     ];
 
     volumes = [

@@ -44,11 +44,7 @@
   # Database on the shared app-db cluster (db/role `pocket_id` —
   # hyphens aren't valid there). DB_CONNECTION_STRING rides the
   # bootstrap env file.
-  myStack.appDatabases.pocket_id = { };
-  systemd.services.podman-pocket-id = {
-    after = [ "app-db-pocket_id-bootstrap.service" ];
-    wants = [ "app-db-pocket_id-bootstrap.service" ];
-  };
+  myStack.appDatabases.pocket_id.consumers = [ "pocket-id" ];
 
   myStack.webApps.pocket-id = {
     hostname = "id.toscanini.me";
@@ -80,7 +76,7 @@
 
     environmentFiles = [
       config.sops.secrets."pocket-id-env".path
-      "/etc/nixos/stacks/app-db/secrets/pocket_id/env"
+      config.myStack.appDatabases.pocket_id.envFile
     ];
 
     environment = {

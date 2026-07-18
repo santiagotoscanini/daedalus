@@ -101,18 +101,44 @@ in
     # An entry's presence IS the enable signal; per-app fields live
     # in the submodule (room to grow: connection caps, extensions...).
     type = lib.types.attrsOf (
-      lib.types.submodule {
-        options.extraDatabases = lib.mkOption {
-          type = lib.types.listOf lib.types.str;
-          default = [ ];
-          example = [ "sonarr_log" ];
-          description = ''
-            Additional databases owned by the same role. Used by the
-            *arr apps, which keep config/history and log entries in
-            two separate databases behind one login.
-          '';
-        };
-      }
+      lib.types.submodule (
+        { name, ... }:
+        {
+          options.extraDatabases = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "sonarr_log" ];
+            description = ''
+              Additional databases owned by the same role. Used by the
+              *arr apps, which keep config/history and log entries in
+              two separate databases behind one login.
+            '';
+          };
+          options.consumers = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ "app-${name}" ];
+            example = [ "nextcloud-app" ];
+            description = ''
+              Container names that must not start before this app's
+              bootstrap has materialized the role/db/env file — the
+              generated ordering is `podman-<consumer>.service`
+              after/wants `app-db-<name>-bootstrap.service`. Default
+              fits the apps platform (container `app-<name>`); stack
+              tenants set their own container name(s).
+            '';
+          };
+          options.envFile = lib.mkOption {
+            type = lib.types.str;
+            readOnly = true;
+            default = "/etc/nixos/stacks/app-db/secrets/${name}/env";
+            description = ''
+              Path of the bootstrap-written env file (DATABASE_URL +
+              the password under every tenant-read name). Reference
+              this instead of hardcoding the path.
+            '';
+          };
+        }
+      )
     );
     default = { };
     description = ''
@@ -236,8 +262,10 @@ in
           name:
           lib.nameValuePair "app-db-${name}-bootstrap" {
             description = "Materialize role + database `${name}` on shared pg cluster";
-            before = [ "podman-app-${name}.service" ];
-            wantedBy = [ "podman-app-${name}.service" ];
+            # Gate every declared consumer container on the bootstrap
+            # (role/db/env file must exist before the tenant dials pg).
+            before = map (c: "podman-${c}.service") cfg.${name}.consumers;
+            wantedBy = map (c: "podman-${c}.service") cfg.${name}.consumers;
             after = [ "podman-pg.service" ];
             wants = [ "podman-pg.service" ];
             path = [

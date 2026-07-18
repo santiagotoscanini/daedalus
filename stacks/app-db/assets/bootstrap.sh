@@ -13,13 +13,19 @@
 # for APP_ENV_FILE is pre-created by tmpfiles.rules (0700 santiago:users),
 # so we can write into it without needing sudo here.
 
-# Wait for postgres to be ready (up to 60s).
+# Wait for postgres to be ready (up to 60s), then hard-fail — without
+# this the timeout falls through and surfaces as a confusing psql
+# connection error deep in the heredoc below.
 for i in $(seq 1 60); do
   if podman exec pg pg_isready -U postgres -d postgres >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
+podman exec pg pg_isready -U postgres -d postgres >/dev/null 2>&1 || {
+  echo "pg not ready after 60s" >&2
+  exit 1
+}
 
 # Read or generate the per-app password.
 if [ -e "$APP_ENV_FILE" ]; then
@@ -32,6 +38,8 @@ fi
 SUPER_PWD=$(grep '^POSTGRES_PASSWORD=' "$CLUSTER_ENV" | head -1 | cut -d= -f2-)
 
 # Idempotent role + db materialization. -i pipes stdin to psql.
+# PGPASSWORD rides a value-less `-e PGPASSWORD` passthrough so the
+# secret never sits in podman argv (/proc/<pid>/cmdline).
 # -v qpwd=... binds the psql variable, substituted as :'qpwd'
 # (SQL-escaped string literal) below.
 #
@@ -42,7 +50,7 @@ SUPER_PWD=$(grep '^POSTGRES_PASSWORD=' "$CLUSTER_ENV" | head -1 | cut -d= -f2-)
 #
 # Heredoc is unquoted (<<SQL not <<'SQL') so ${APP_NAME} expands; psql's
 # :'qpwd' has no $ so bash leaves it alone.
-podman exec -i -e PGPASSWORD="$SUPER_PWD" pg \
+PGPASSWORD="$SUPER_PWD" podman exec -i -e PGPASSWORD pg \
   psql -X -v ON_ERROR_STOP=1 -v qpwd="$APP_PWD" -U postgres -d postgres <<SQL
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', '${APP_NAME}', :'qpwd')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_NAME}')
@@ -57,7 +65,7 @@ SQL
 
 # Additional databases owned by the same role (may be empty).
 for db in $EXTRA_DBS; do
-  podman exec -i -e PGPASSWORD="$SUPER_PWD" pg \
+  PGPASSWORD="$SUPER_PWD" podman exec -i -e PGPASSWORD pg \
     psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres <<SQL
 SELECT format('CREATE DATABASE %I OWNER %I', '${db}', '${APP_NAME}')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${db}')
