@@ -151,6 +151,15 @@ in
               "email"
               "groups"
             ];
+            # Always redirect unauthenticated requests to Pocket ID instead
+            # of 401'ing AJAX (the plugin can't tell XHR from page loads;
+            # Auto's 401 shows as an "Unauthorized" screen on SPA reloads
+            # after logout). Safe here: every gated app's /api* paths are
+            # bypassed, so only top-level documents ever hit the gate.
+            UnauthorizedBehavior = "Challenge";
+            # Lax so the state cookie survives the cross-subdomain redirect
+            # back from id.* to the app's /oidc/callback (top-level nav).
+            SessionCookie.SameSite = "lax";
           }
           // lib.optionalAttrs (w != null && w.authBypassRule != null) {
             BypassAuthenticationRule = w.authBypassRule;
