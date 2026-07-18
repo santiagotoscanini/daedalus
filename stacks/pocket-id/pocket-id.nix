@@ -1,23 +1,25 @@
 # pocket-id — OIDC identity provider (passkey-only) for the box-wide
-# SSO plan (see /etc/nixos/AUTH.md). Every service that can speak OIDC
-# authenticates against this; everything else will sit behind a
-# traefik forward-auth middleware that itself authenticates here.
+# SSO (see /etc/nixos/AUTH.md). Every service that can speak OIDC
+# authenticates against this; everything else sits behind a traefik
+# forward-auth middleware that itself authenticates here.
 #
-# Single Go binary + SQLite. Signing keys + DB are generated on first
-# boot under /app/data; the only operator secret is ENCRYPTION_KEY
-# (env.sops) which encrypts the signing keys at rest — the app refuses
-# to start without it. Rotating it requires re-encrypting stored keys,
-# so treat it as fixed once set.
+# Single Go binary. State is split across two places — BOTH matter for
+# recovery:
+#   - DB (users, clients, credentials, audit log) on the shared app-db
+#     cluster (`myStack.appDatabases.pocket_id` below) — covered by the
+#     cluster's backup story.
+#   - /app/data (~/selfhost/pocket-id/data) holds only the OIDC signing
+#     keys, encrypted at rest with ENCRYPTION_KEY (env.sops) — the app
+#     refuses to start without it. Rotating ENCRYPTION_KEY requires
+#     re-encrypting stored keys, so treat it as fixed once set.
 #
 # First-boot setup is INTERACTIVE — open https://id.toscanini.me/setup
 # once to create the admin account and register a passkey; there is no
 # seed/env bootstrap.
 #
 # Passkey-only by design: EMAIL_ONE_TIME_ACCESS_* stays unset (off).
-# Recovery if all passkeys are lost: the sqlite DB under
-# ~/selfhost/pocket-id/data rides rpool/selfhost snapshots, and
-# `pocket-id one-time-access-token <user>` inside the container mints
-# a login link from the CLI.
+# Recovery if all passkeys are lost: `pocket-id one-time-access-token
+# <user>` inside the container mints a login link from the CLI.
 #
 # exposeRemotely: the IdP must be reachable through the CF tunnel —
 # remote-exposed apps (nextcloud, immich, grocy, wealthfolio, anansi)

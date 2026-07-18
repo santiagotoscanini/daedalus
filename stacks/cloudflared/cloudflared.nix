@@ -15,10 +15,9 @@
 #     backed up out-of-tree to recover the tunnel identity.
 #
 # DNS fallback if the tunnel ever fails to register with a DNS error:
-# add `"--dns=1.1.1.1"` to extraOptions below. Pasta's DNS chain
-# (which forwards through pi-hole on the host) has worked since the
-# podman migration, but the pre-podman compose forced 1.1.1.1 because
-# its rootless-docker DNS was broken.
+# add `"--dns=1.1.1.1"` to extraOptions below (pasta's normal DNS chain
+# forwards through pi-hole on the host, so a broken pi-hole would
+# otherwise take the tunnel registration down with it).
 #
 # Why :8888 (cfweb) and not :443: CF terminates TLS at the edge — using
 # websecure would double-TLS with cert validation against the home cert

@@ -1,7 +1,9 @@
 # stirling-pdf — single-container PDF toolbox.
 #
-# Image runs as container root by default (no USER set), which maps to
-# host santiago in our rootless setup — owning the data dirs cleanly.
+# The app runs as in-container uid 1000 (stirlingpdfuser) → host 100999,
+# so its writable dirs are declared uid = 1000 below. `training-data` is
+# the one exception: uid 0 (→ santiago) on purpose — the operator drops
+# tesseract packs in; the container only reads them.
 # No secrets, no inter-container DNS, no VPN. Joins traefik-net so
 # traefik dials `http://stirling-pdf:8080` directly — no host port.
 

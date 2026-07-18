@@ -1,6 +1,5 @@
 # Email contact point → the operator's inbox, delivered via Grafana's own
 # SMTP (GF_SMTP_*, see monitoring.nix; the same Gmail relay msmtp uses).
-# Replaces the earlier `noop` placeholder now that SMTP is wired.
 
 apiVersion: 1
 

@@ -15,7 +15,7 @@
 #     `--llamacpp rocm`, pinning to discrete card with
 #     `--llamacpp-args "--device ROCM1"` if the iGPU interferes.
 #
-# Note: `docker.litellm.ai` (old compose used this) is sinkholed by
+# Note: `docker.litellm.ai` is sinkholed by
 # pi-hole — use `ghcr.io/berriai/litellm:main-stable@sha256:9ef6f45bc0104940571765e610c52a1d761b5ec85efcd193795281086ee61277` instead.
 
 {

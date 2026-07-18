@@ -16,9 +16,9 @@
 #   sudo -u santiago env HOME=/home/santiago XDG_RUNTIME_DIR=/run/user/1000 \
 #     podman exec recyclarr recyclarr sync
 #
-# Reaches the *arrs over traefik-net via host.containers.internal on the
-# ports gluetun publishes (7878/8989) — the same path seerr uses. API keys
-# are sops-encrypted in env.sops (RADARR_API_KEY + SONARR_API_KEY).
+# Reaches the *arrs via host.containers.internal (pasta's host alias) on
+# the ports gluetun publishes (7878/8989) — the same path seerr uses. API
+# keys are sops-encrypted in env.sops (RADARR_API_KEY + SONARR_API_KEY).
 
 {
   config,

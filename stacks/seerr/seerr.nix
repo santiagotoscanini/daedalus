@@ -29,7 +29,6 @@
   # container joins app-db-net and dials `pg` by container DNS.
   myStack.appDatabases.seerr.consumers = [ "seerr" ];
 
-  # The bootstrap gates `podman-app-<name>` for apps-platform tenants;
   # The image's node user (uid 1000) maps to host 100999; the config
   # dir must exist with that ownership or a fresh install fails on
   # first write.

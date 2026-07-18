@@ -36,8 +36,8 @@
 # common incremental base is structurally safe — it exists on both
 # sides, so it's never in the delete set. Without this flag nothing
 # prunes the target: every 15-min/hourly/daily snapshot that ever
-# crossed accumulated forever (~28/day/dataset, 337 found when this was
-# added). Consequence to remember: MANUAL snapshots (`pre-*`) also live
+# crossed would accumulate forever (~28/day/dataset).
+# Consequence to remember: MANUAL snapshots (`pre-*`) also live
 # and die with their source copy — the replica is a mirror, not an
 # archive. Anything to keep forever needs its own dataset or a `zfs
 # send` to somewhere else first.

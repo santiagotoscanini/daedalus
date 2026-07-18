@@ -10,7 +10,7 @@
 # 0400 satisfies msmtp (root ignores the mode) and grafana.
 #
 # What emails you, and why:
-#   - smartd            → a failing / pre-failing disk (was journal-only)
+#   - smartd            → a failing / pre-failing disk
 #   - ZFS ZED           → pool DEGRADED / FAULTED / scrub-with-errors
 #   - systemd OnFailure → flake-autoupgrade + the two syncoid backups
 #

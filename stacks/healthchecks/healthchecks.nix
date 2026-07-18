@@ -4,12 +4,14 @@
 # stops reporting. The box's periodic units (syncoid backups, zfs snapshot/
 # scrub, flake-autoupgrade) ping it — see platform/hc-ping.nix.
 #
-# LAN-only; traefik dials http://healthchecks:8000 over traefik-net. Runs as
-# the image's `hc` user (UID 999 -> host 100998), which owns /data.
+# LAN-only; traefik dials http://healthchecks:8000 over its private
+# iso-bridge. Runs as the image's `hc` user (UID 999 -> host 100998),
+# which owns /data.
 #
-# SQLite state at /data/hc.sqlite (rides rpool/selfhost snapshots). Django
-# migrations run automatically on container start (uwsgi hook-pre-app), and
-# the image's sendalerts/sendreports daemons deliver notifications.
+# Database on the shared app-db cluster (DB=postgres below); /data holds
+# only scratch state. Django migrations run automatically on container
+# start (uwsgi hook-pre-app), and the image's sendalerts/sendreports
+# daemons deliver notifications.
 #
 # SECURE_PROXY_SSL_HEADER makes Django trust traefik's X-Forwarded-Proto so
 # the HTTPS-terminated login POST passes Django's CSRF origin check.

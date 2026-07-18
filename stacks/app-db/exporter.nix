@@ -16,8 +16,8 @@
 #   (tmpfs, 0600 santiago — podman injects it pre-userns-remap). A
 #   compromised exporter reads statistics, not app data.
 #
-# Gated behind `lib.mkIf enabled` — a no-op until at least one app has
-# `myStack.appDatabases.<name>.enable = true`.
+# Gated behind `lib.mkIf enabled` — a no-op until `myStack.appDatabases`
+# has at least one entry.
 
 {
   config,

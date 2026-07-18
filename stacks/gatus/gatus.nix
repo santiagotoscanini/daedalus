@@ -72,9 +72,7 @@ let
     builtins.toJSON {
       web.port = 8080;
       # Uptime history on the shared app-db cluster; the password
-      # placeholder expands from the app-db bootstrap env file. Fresh
-      # history at migration (2026-07-18) — gatus has no sqlite->pg
-      # migration path; config regenerates from nix either way.
+      # placeholder expands from the app-db bootstrap env file.
       storage = {
         type = "postgres";
         path = "postgres://gatus:\${POSTGRES_PASSWORD}@pg:5432/gatus?sslmode=disable";

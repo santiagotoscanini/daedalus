@@ -5,8 +5,9 @@
 #
 #   - loki:  log DB. Filesystem store under
 #            /home/santiago/selfhost/logging/loki/data, 30-day retention
-#            (matches prometheus). Bridge-routed via traefik for LAN
-#            debugging; grafana uses `http://loki:3100` directly.
+#            (matches prometheus). Reachable ONLY over monitoring-net —
+#            no traefik route by design (see the containerNetworks
+#            comment below); grafana is the query UI.
 #
 #   - alloy: log collector. Reads the host's systemd journal — the ONE
 #            source (every rootless-podman unit's stdout/stderr lands
@@ -134,26 +135,20 @@ let
       // then the fallback (only fires while `stack` is still empty).
 
       // ===== myStack.apps platform =====
-      // app-<name> (the app container) and pg-<name> (its postgres) share
-      // a service_name = <name> so Grafana Drilldown groups them under one
-      // "service" entry. Apps platform containers land in stack=apps
-      // (differentiate via service_name).
+      // app-<name> containers land in stack=apps with
+      // service_name = <name>, so Grafana Drilldown groups per app.
+      // (Their DBs live on the shared pg cluster; those logs are under
+      // stack=app-db, not per-app.)
       rule {
         source_labels = ["__journal_container_name"]
-        regex         = "^(app|pg)-(.+)$"
+        regex         = "^app-(.+)$"
         target_label  = "stack"
         replacement   = "apps"
       }
       rule {
         source_labels = ["__journal_container_name"]
-        regex         = "^(app|pg)-(.+)$"
+        regex         = "^app-(.+)$"
         target_label  = "service_name"
-        replacement   = "$2"
-      }
-      rule {
-        source_labels = ["__journal_container_name"]
-        regex         = "^(app|pg)-(.+)$"
-        target_label  = "component"
         replacement   = "$1"
       }
 
@@ -256,11 +251,11 @@ in
       }
     ];
 
-    # Loki has NO traefik route by design: reachable only over
-    # monitoring-net (grafana is the UI; alloy pushes to it; homepage's
-    # per-app log widget joins monitoring-net to reach it). Dropping the
-    # former `logging.toscanini.me` webApp closes Loki's unauthenticated
-    # exposure (it was queryable by any LAN device + any traefik-net peer).
+    # Loki has NO traefik route by design: it is unauthenticated, so any
+    # route would let every LAN device (and every traefik-net peer) query
+    # all logs. Reachable only over monitoring-net — grafana is the UI,
+    # alloy pushes to it, homepage's per-app log widget joins
+    # monitoring-net to reach it.
 
     virtualisation.oci-containers.containers.loki = mkRootlessContainer {
       image = "docker.io/grafana/loki:3.7.3@sha256:70b9f699fc9bb868b62f1cfd4f787dfa50242f1fd92e6089787d5d7daea75fe8";

@@ -385,39 +385,17 @@ in
                 for routes reached through the Cloudflare tunnel.
               '';
             };
-            certMain = lib.mkOption {
-              type = lib.types.nullOr lib.types.str;
-              default = null;
-              description = ''
-                Optional `tls.domains[0].main` for this router. When
-                non-null, the generated YAML asks Traefik to request a
-                dedicated cert covering `certMain` + `certSans`. Used
-                by stacks whose host is two+ levels under s2.toscanini.me
-                (e.g. `studio.foo.supabase.toscanini.me`) where the
-                default `*.toscanini.me` wildcard doesn't apply.
-
-                Only emitted on `websecure` entrypoint routers.
-              '';
-              example = "foo.supabase.toscanini.me";
-            };
-            certSans = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              default = [ ];
-              description = ''
-                SANs accompanying `certMain`. Typically a single wildcard
-                like `*.foo.supabase.toscanini.me`. Ignored when
-                `certMain` is null.
-              '';
-              example = [ "*.foo.supabase.toscanini.me" ];
-            };
           };
         })
       );
       default = { };
       description = ''
-        `Host(...) -> serviceUrl` routes, rendered by modules/traefik.nix
-        into one YAML per route under a /nix/store-backed rules dir
-        bind-mounted into the traefik container.
+        `Host(...) -> serviceUrl` routes, rendered by
+        stacks/traefik/traefik.nix into one YAML per route under a
+        /nix/store-backed rules dir bind-mounted into the traefik
+        container. Every published hostname sits one level under
+        baseDomain, so the entrypoint-level wildcard cert covers all
+        routers — no per-route cert options exist.
       '';
     };
 
@@ -483,7 +461,7 @@ in
         LAN-resolvable hostnames here so pi-hole.nix doesn't need a
         hand-maintained list.
       '';
-      example = [ "192.168.0.2 foo.supabase.toscanini.me" ];
+      example = [ "192.168.0.2 foo.toscanini.me" ];
     };
 
     prometheusScrapes = lib.mkOption {
@@ -521,12 +499,12 @@ in
         same shape as `grafanaDashboards`.
 
         Use this when a stack emits multiple related dashboards
-        (e.g. one per supabase project, all under "Supabase").
+        (e.g. the apps platform's per-app dashboards, all under "Apps").
       '';
       example = lib.literalExpression ''
         {
-          "Supabase" = {
-            "supabase-anansi" = builtins.readFile ./dashboard.json;
+          "Apps" = {
+            "app-anansi" = builtins.readFile ./dashboard.json;
           };
         }
       '';
@@ -831,8 +809,8 @@ in
         homepage's services.yaml schema (`href`, `icon`,
         `description`, `widget`, `siteMonitor`, …).
 
-        modules/homepage.nix renders this to services.yaml: the `name`
-        field becomes the single-key wrapper homepage expects.
+        stacks/homepage/homepage.nix renders this to services.yaml: the
+        `name` field becomes the single-key wrapper homepage expects.
 
         Groups merge across modules. YAML output order is alphabetical;
         a service's `weight` field can override within-group order.
@@ -978,10 +956,11 @@ in
       };
 
     # Container-UID -> host-UID under santiago's subuid range
-    # (100000:65536): container uid 0 is santiago (1000); uid N >= 1
-    # lands at 99999 + N (www-data 33 -> 100032, linuxserver abc
-    # 911 -> 100910). Use for tmpfiles ownership of bind-mounted dirs
-    # instead of hand-computed magic numbers.
+    # (100000:65536) for uids >= 1: www-data 33 -> 100032, linuxserver
+    # abc 911 -> 100910. NOT for uid 0 (container root is santiago,
+    # 1000, outside the subuid range). Use wherever a host-side path
+    # needs container-matching ownership, instead of hand-computed
+    # magic numbers.
     _module.args.hostUid = containerUid: 99999 + containerUid;
 
     # Standard operator-managed dotenv secret: age-encrypted file at

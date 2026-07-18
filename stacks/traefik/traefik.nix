@@ -9,10 +9,10 @@
 # so traefik can reach upstreams by container DNS (aardvark-dns) instead
 # of host-port publishing. Stacks set
 # `myStack.webApps.<name>.serviceName = "<container>"` to opt in; the
-# rule then dials `http://<container>:<in-port>`. Legacy stacks that
-# can't join the bridge (gluetun-shared TV stack, pi-hole as a native
-# service) set `serviceUrl` to an explicit `host.containers.internal`
-# URL instead.
+# rule then dials `http://<container>:<in-port>`. Stacks that
+# structurally can't join the bridge (gluetun-shared TV stack, pi-hole
+# as a native service) set `serviceUrl` to an explicit
+# `host.containers.internal` URL instead.
 #
 # Opens host TCP 80/443 (LAN HTTPS ingress). The cfweb entrypoint
 # (:8888, plain HTTP for cloudflared) and the dashboard (:8080) are
@@ -56,7 +56,6 @@ let
     let
       entry = route.entrypoint;
       needsTls = entry == "websecure";
-      hasCert = route.certMain != null;
       internal = route.service != null;
     in
     yamlFormat.generate "${name}.yml" {
@@ -70,18 +69,7 @@ let
           inherit (route) middlewares;
         }
         // lib.optionalAttrs needsTls {
-          tls = {
-            options = "tls-opts@file";
-          }
-          // lib.optionalAttrs hasCert {
-            certResolver = "dns-cloudflare";
-            domains = [
-              {
-                main = route.certMain;
-                sans = route.certSans;
-              }
-            ];
-          };
+          tls.options = "tls-opts@file";
         };
       }
       // lib.optionalAttrs (!internal) {
@@ -276,7 +264,7 @@ in
     {
       name = "Traefik";
       href = "https://traefik.toscanini.me";
-      description = "Reverse proxy — all *.s2 / *.toscanini routes";
+      description = "Reverse proxy — all *.toscanini.me routes";
       icon = "traefik.png";
       widget = {
         type = "traefik";

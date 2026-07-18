@@ -112,9 +112,9 @@ let
         widget = {
           type = "nzbget";
           url = "https://nzbget.toscanini.me";
-          # No creds: auth disabled (AUTH.md) — env password removed,
-          # ControlPassword blanked, so the API is open (LAN-closed +
-          # behind the Pocket ID gate).
+          # No creds: nzbget auth is disabled (ControlPassword empty —
+          # AUTH.md); the API is open, LAN-closed + behind the Pocket
+          # ID gate.
         };
       };
     }
@@ -232,15 +232,15 @@ in
     };
   };
 
-  # gluetun owns the netns; tenants have no bridge (null = pasta shape,
-  # which here just earns the Type=oneshot systemd override). Jellyfin
-  # is bridge-routed (outside the VPN).
+  # gluetun owns the netns; tenants have no bridge (`[ ]`, which here
+  # just earns the Type=oneshot systemd override). Jellyfin is
+  # bridge-routed (outside the VPN).
   # *arr databases on the shared app-db cluster: one role per app,
   # main + log database each (the *arrs keep logs in a separate db).
   # The apps dial host.containers.internal:5433 (= 169.254.1.2, the
   # pasta host address; plain-TCP host port on pg) since the gluetun
   # netns can't join app-db-net; connection settings live in each
-  # app's config.xml (mutable state, written at migration).
+  # app's config.xml (mutable state, not in the rebuild trail).
   myStack.appDatabases = {
     sonarr = {
       extraDatabases = [ "sonarr_log" ];
@@ -536,10 +536,10 @@ in
   # Prometheus metrics for the tunnel (platform/common.nix helper).
   virtualisation.oci-containers.containers.gluetun-exporter = mkGluetunExporter "gluetun";
 
-  # Jellyfin runs outside gluetun (was looping LAN streaming through
-  # ProtonVPN — slow, paid bandwidth). renderD128 = Intel Alder Lake
-  # iGPU render node; mode 0666 on host so no `--group-add=render`
-  # needed for rootless. i915 is force-loaded in configuration.nix.
+  # Jellyfin runs outside gluetun: LAN streaming must not ride the VPN
+  # exit (slow, paid bandwidth). renderD128 = Intel Alder Lake iGPU
+  # render node; mode 0666 on host so no `--group-add=render` needed
+  # for rootless. i915 is force-loaded in platform/gpu.nix.
   #
   # If LAN client auto-discovery is ever needed back, SSDP 1900 + 7359
   # have to land on host networking — multicast doesn't cross bridges.

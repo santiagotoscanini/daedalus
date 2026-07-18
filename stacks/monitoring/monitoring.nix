@@ -301,7 +301,6 @@ in
     ];
   };
 
-  # The bootstrap gates `podman-app-<name>` for apps-platform tenants;
   virtualisation.oci-containers.containers.grafana = mkRootlessContainer {
     image = "docker.io/grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63";
     dependsOn = [ "prometheus" ];
@@ -416,9 +415,9 @@ in
     ];
 
     extraOptions = [
-      # De-privileged (was `--privileged`): cadvisor reads host cgroup /
-      # machine stats via the ro /sys + /rootfs mounts, which don't need
-      # full privilege. /dev/kmsg (OOM-event parsing) is best-effort — with
+      # cadvisor needs no privilege: host cgroup / machine stats come
+      # from the ro /sys + /rootfs mounts. /dev/kmsg (OOM-event parsing)
+      # is best-effort — with
       # kernel.dmesg_restrict=1 it needs CAP_SYSLOG, deliberately NOT
       # granted; the container_* metrics don't depend on it.
       "--device=/dev/kmsg"

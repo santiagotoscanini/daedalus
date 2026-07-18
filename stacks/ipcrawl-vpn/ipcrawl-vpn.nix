@@ -78,11 +78,11 @@
     };
   };
 
-  # Register in containerNetworks with `null` (pasta, no bridge) so common.nix
+  # Register in containerNetworks with `[ ]` (pasta, no bridge) so common.nix
   # gives it the mandatory Type=oneshot systemd override — without this the
   # container defaults to Type=notify, which is broken for rootless podman on
   # this box (podman run -d exits before READY). Same as the TV stack's
-  # `gluetun = null`. The exporter shares gluetun's netns and needs the same.
+  # `gluetun = [ ]`. The exporter shares gluetun's netns and needs the same.
   myStack.containerNetworks.gluetun-ipcrawl = [ ];
   myStack.containerNetworks.gluetun-exporter-ipcrawl = [ ];
 

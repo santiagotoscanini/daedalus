@@ -60,7 +60,8 @@ in
   # reads it directly): sops-encrypted env.sops, decrypted to
   # /run/secrets/nextcloud-env at activation. Edit with `sops env.sops`.
   # The DB password lives in config.php (mutable app state), sourced
-  # from the app-db bootstrap env at migration time.
+  # from the app-db bootstrap env (they must stay in sync — rotation
+  # of the nextcloud db password means updating config.php too).
   sops.secrets."nextcloud-env" = mkDotenvSecret ./env.sops;
 
   # Database on the shared app-db cluster: role + db + env file with

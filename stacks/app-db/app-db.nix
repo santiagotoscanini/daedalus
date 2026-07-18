@@ -1,7 +1,7 @@
 # app-db — single shared Postgres cluster, one database per app.
 #
-# Activated when at least one entry in `myStack.appDatabases` is
-# `enable = true`. Materializes:
+# Activated when `myStack.appDatabases` is non-empty (declaring an
+# entry IS the enable signal). Materializes:
 #
 #   - One `pg` container (`postgres:18.4-alpine`) on the shared
 #     `app-db-net` bridge. Data at /home/santiago/selfhost/app-db/postgres,
@@ -38,10 +38,10 @@
 #
 # Container caps: cpus=2, memory=2g, pids-limit=500.
 #
-# TODO: front this with PgBouncer (transaction pooling) once a second
-# app lands on the cluster. With ~10 vibe-coded apps each opening
-# ORM-style pools of 10–25 connections, max_connections=200 is a
-# real ceiling we'll trip well before RAM. PgBouncer would mean apps
+# TODO: front this with PgBouncer (transaction pooling) when
+# pg_stat_activity connection counts approach max_connections=200
+# (~15 tenants today, each opening ORM-style pools of 10–25
+# connections — the ceiling trips well before RAM). PgBouncer means apps
 # point DATABASE_URL at `pgbouncer:6432` instead of `pg:5432`; the
 # direct-pg TCP/SNI route at postgres.toscanini.me stays untouched
 # so DBeaver and superuser admin still hit the cluster directly.
@@ -148,9 +148,9 @@ in
       DATABASE_URL. LAN access is the shared
       `postgres.toscanini.me:5432` TCP/SNI route.
 
-      The attribute key is used directly as the postgres role,
-      database, and hostname segment — see [[nameRegex]] for the
-      allowed shape.
+      The attribute key is used directly as the postgres role, the
+      database name, and the env-file directory — the nameRegex
+      assertion enforces the allowed shape.
 
       See stacks/app-db/README.md.
     '';

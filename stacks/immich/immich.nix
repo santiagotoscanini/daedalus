@@ -2,9 +2,10 @@
 # postgres + redis). Custom bridge because the server dials postgres and
 # redis by DNS name (DB_HOSTNAME=database, REDIS_HOSTNAME=redis); pasta
 # doesn't do inter-container DNS, a user-defined bridge does (via
-# netavark/aardvark-dns). The server container also joins traefik-net so
-# traefik dials its three HTTP ports (2283 UI, 8081 api metrics, 8082
-# microservices metrics) by container DNS — no host ports published.
+# netavark/aardvark-dns). The server container also joins traefik-net:
+# traefik dials the UI on 2283 by container DNS, and prometheus (same
+# bridge) scrapes the api/microservices metrics ports 8081/8082 — no
+# host ports published.
 #
 # Faithful translation of the upstream docker-compose to rootless
 # oci-containers. Notable deviations:

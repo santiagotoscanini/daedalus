@@ -1,4 +1,4 @@
-# metube — youtube-dl web UI, sibling of the tv stack.
+# metube — yt-dlp web UI, sibling of the tv stack.
 #
 # Standalone (no VPN), traefik-net for HTTP routing — traefik reaches
 # via `http://metube:8081`, no host port published. Writes downloads
@@ -24,7 +24,7 @@
     homepage = {
       group = "Media";
       name = "MeTube";
-      description = "YouTube-dl web UI (writes to /s2/tv/media/videos)";
+      description = "yt-dlp web UI (writes to /s2/tv/media/videos)";
       icon = "metube.png";
       widget = {
         type = "customapi";

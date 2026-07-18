@@ -137,11 +137,11 @@ in
         # dnsmasq answers exclusively from local sources: A → 192.168.0.2,
         # AAAA → NODATA. Kills the iOS Happy-Eyeballs trap where an
         # upstream-forwarded AAAA returns CF anycast IPv6 for tunnel-
-        # proxied hostnames and outraces the LAN A. Names NOT in
-        # dns.hosts fall through to upstreams normally (so apex
-        # `toscanini.me`, blog, travel, etc. resolve to their real
-        # public records — previous zone-wide `local=/toscanini.me/`
-        # NXDOMAIN'd all of them).
+        # proxied hostnames and outraces the LAN A. Per-name (NOT a
+        # zone-wide `local=/toscanini.me/`, which would NXDOMAIN the
+        # apex and every public record): names NOT in dns.hosts fall
+        # through to upstreams normally, so `toscanini.me`, blog,
+        # travel, etc. resolve to their real public records.
         dnsmasq_lines = map (h: "local=/${h}/") localOnlyHostnames;
       };
     };

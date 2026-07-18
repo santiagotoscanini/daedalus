@@ -1,8 +1,11 @@
 # All alert rules for the home server, file-provisioned into Grafana's
 # "System" folder, grouped by severity tier (Container / Critical /
-# Predictive / Warning). Originally exported via Grafana's
-# /api/v1/provisioning/alert-rules/export endpoint; this file is now the
-# source of truth — UI edits to these rules don't persist.
+# Predictive / Warning). File-provisioned — this file is the source of
+# truth; UI edits to these rules don't persist.
+#
+# NOTE: no per-container CPU/RAM alerts exist because no rootless-visible
+# per-container metric exists — cadvisor can't see cgroups under
+# user.slice/user@1000.service. Liveness (container_up) is the coverage.
 
 apiVersion: 1
 groups:
@@ -11,97 +14,6 @@ groups:
     folder: System
     interval: 1m
     rules:
-      # PAUSED: relies on cadvisor per-container memory series
-      # (container_memory_working_set_bytes{name!=""}), which is empty
-      # under rootless podman — cadvisor can't see the container cgroups.
-      # No rootless-visible per-container RAM metric exists to alert on;
-      # only liveness (container_up) is available. Left here, paused, so
-      # it's re-armable if per-container cgroup visibility is ever solved.
-      - uid: efal2elu6y5tse
-        title: Container High Memory Usage
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: dfakbms70z4zke
-            model:
-              expr: (container_memory_working_set_bytes{name!="", container_label_com_docker_compose_project!=""} / container_spec_memory_limit_bytes{name!=""} * 100) and container_spec_memory_limit_bytes{name!=""} > 0
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: A
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params:
-                      - 80
-                    type: gt
-                  operator:
-                    type: and
-                  reducer:
-                    type: last
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          description: Container {{ $labels.name }} is using {{ $values.A | humanizePercentage }} of its memory limit.
-          summary: Container memory usage is high (> 80%)
-        labels:
-          severity: warning
-        isPaused: true
-      # PAUSED: relies on cadvisor per-container CPU throttle series
-      # (container_cpu_cfs_throttled_periods_total{id=~"/system.slice/docker-.*"}),
-      # empty under rootless podman (no docker system.slice cgroups, and
-      # cadvisor can't see the rootless ones). No metric to alert on; see
-      # the note on Container High Memory Usage above. Left paused.
-      - uid: efal2epnyckcga
-        title: Container CPU Throttled
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: dfakbms70z4zke
-            model:
-              expr: (increase(container_cpu_cfs_throttled_periods_total{id=~"/system.slice/docker-.*"}[5m]) / increase(container_cpu_cfs_periods_total{id=~"/system.slice/docker-.*"}[5m])) * 100
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: A
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              conditions:
-                - evaluator:
-                    params:
-                      - 25
-                    type: gt
-                  operator:
-                    type: and
-                  reducer:
-                    type: last
-              expression: A
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: C
-              type: threshold
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          description: Container {{ $labels.name }} is being throttled {{ $values.A | humanizePercentage }} of the time.
-          summary: Container is being CPU throttled (> 25%)
-        labels:
-          severity: warning
-        isPaused: true
       # Liveness via the container_up{} textfile metric (monitoring.nix's
       # container-up-exporter timer), NOT cadvisor's container_last_seen —
       # cadvisor can't see rootless-podman cgroups so that series is empty.
@@ -365,7 +277,7 @@ groups:
       # systemd_failed_units is a textfile gauge written by monitoring.nix's
       # container-up-exporter sweep (node-exporter runs WITHOUT
       # --collector.systemd, so node_systemd_unit_state does not exist).
-      # noDataState: Alerting — if the gauge ever vanishes again this pages
+      # noDataState: Alerting — if the gauge vanishes this pages
       # instead of going silently green.
       - uid: afal29d6u0hs0d
         title: Host Systemd Service Failed

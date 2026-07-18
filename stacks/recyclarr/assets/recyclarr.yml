@@ -11,7 +11,7 @@
 # existing movie/series to the new profiles — adopting them in Radarr/Sonarr/
 # Seerr is a deliberate manual step.
 #
-# Reached over traefik-net via host.containers.internal on gluetun's
+# Reached via host.containers.internal (pasta host alias) on gluetun's
 # published *arr ports. API keys come from env.sops (RADARR/SONARR_API_KEY).
 
 radarr:

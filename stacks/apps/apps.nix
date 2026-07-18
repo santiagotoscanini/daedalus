@@ -179,15 +179,14 @@ let
         inherit (app.homepage) description;
       });
 
-      # service_name=<name> is set by alloy for both app-<name> AND
-      # pg-<name> log streams (see stacks/logging/alloy/app/config.alloy),
-      # so Drilldown shows app + DB logs interleaved under one entry.
-      # The user can filter to just one via the `component` label
-      # (`app` for the Next.js container, `pg` for postgres).
+      # service_name=<name> is set by alloy for the app-<name> container
+      # (see stacks/logging/logging.nix), so Drilldown deep-links to this
+      # app's log stream. DB logs live on the shared cluster under
+      # stack=app-db.
       logsTile = {
         name = "Logs";
         href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${name}/logs?from=now-15m&to=now&var-ds=loki-default&var-filters=service_name%7C%3D%7C${name}";
-        description = "App + DB logs (Loki / Grafana Drilldown)";
+        description = "App logs (Loki / Grafana Drilldown)";
         icon = "/icons/loki.png";
         widget = {
           type = "customapi";

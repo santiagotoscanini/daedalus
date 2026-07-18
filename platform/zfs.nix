@@ -21,8 +21,8 @@
 # Per-dataset tier choices:
 #   rpool/{home,selfhost}     skip weekly (frequent+hourly+daily is plenty;
 #                             selfhost's DB churn × 1-month would balloon).
-#   s2-pool/{santi,sofi,
-#            shared,immich}   skip frequent (files don't change every 15min).
+#   s2-pool/{santi,sofi,shared,
+#            immich,books}    skip frequent (files don't change every 15min).
 #   s2-pool/tv                no snapshots (re-downloadable).
 
 {
@@ -219,8 +219,8 @@ in
   boot.zfs = {
     # Stable by-id paths survive kernel drive renames.
     devNodes = "/dev/disk/by-id";
-    # Off after the first force-import re-stamped rpool with this host's
-    # hostid; split-brain guard now active.
+    # The pool carries this host's hostid — force-import would defeat
+    # ZFS's split-brain guard.
     forceImportRoot = false;
   };
 
