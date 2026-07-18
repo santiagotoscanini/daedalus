@@ -169,6 +169,22 @@ in
           database, and env-file directory.
         '';
       }) activeApps)
+      # `cluster` holds the superuser env and `monitoring` the exporter
+      # role env under the same secrets/ tree — a tenant with either
+      # name would read the wrong password as its "existing" one (the
+      # cluster case: creating a login role that shares the SUPERUSER
+      # password) and then rewrite the env file in tenant shape.
+      ++ (map (n: {
+        assertion =
+          !(lib.elem n [
+            "cluster"
+            "monitoring"
+          ]);
+        message = ''
+          myStack.appDatabases."${n}": reserved name — `cluster` and
+          `monitoring` are infrastructure env dirs under secrets/.
+        '';
+      }) activeApps)
       ++ (lib.concatMap (
         n:
         map (d: {

@@ -280,7 +280,7 @@ in
         u:
         lib.nameValuePair u.name (
           {
-            inherit (u) port homepage healthPath;
+            inherit (u) homepage healthPath;
             serviceUrl = "http://host.containers.internal:${toString u.port}";
             # Pocket ID gate (AUTH.md). Each app's own login is disabled
             # (arrs: AuthenticationMethod=External; qbt: subnet whitelist;

@@ -277,14 +277,16 @@ let
       # host.containers.internal — the same escape hatch the TV stack uses.
       myStack.webApps."${name}" = {
         inherit hostname;
-        port = 3000;
         exposeRemotely = app.stage == "live";
       }
       // (
         if egressEnabled then
           { serviceUrl = "http://host.containers.internal:${toString app.egress.hostPort}"; }
         else
-          { serviceName = cName; }
+          {
+            serviceName = cName;
+            port = 3000;
+          }
       );
 
       # Prometheus scrapes the app's own /metrics endpoint (when

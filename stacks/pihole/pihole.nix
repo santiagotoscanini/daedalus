@@ -32,10 +32,9 @@ in
   # Native NixOS service, not a container — traefik dials it through
   # pasta's host gateway alias instead of via traefik-net.
   myStack.webApps.pihole = {
-    port = 8080;
     serviceUrl = "http://host.containers.internal:8080";
-    # Gate only — the admin password stays until the passkey flow is
-    # verified (AUTH.md order), then gets blanked. Widget + API dial
+    # The Pocket ID gate is the only browser auth — FTL's own password
+    # is blanked (see the webserver comment below). Widget + API dial
     # host.containers.internal:8080, bypassing traefik.
     auth = "oidc";
     healthPath = "/api/info/login";

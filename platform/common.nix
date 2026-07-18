@@ -155,10 +155,16 @@ let
     in
     {
       autoStart = true;
-      podman.user = "santiago";
     }
     // cleanArgs
     // {
+      # Deep-merged (not `// cleanArgs`-overridable as a whole): a stack
+      # passing its own `podman = { ... }` must not silently drop
+      # `user = "santiago"` and turn the container rootful.
+      podman = {
+        user = "santiago";
+      }
+      // (cleanArgs.podman or { });
       environment = {
         TZ = config.time.timeZone;
       }
@@ -1145,6 +1151,19 @@ in
         message = "myStack.webApps.${n}: `serviceName` needs `port` (traefik dials http://<serviceName>:<port>).";
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
+        assertion = w.serviceUrl != null -> w.port == null;
+        message = "myStack.webApps.${n}: `port` is meaningless with `serviceUrl` (the URL already carries the port) — leave it null.";
+      }) cfg.webApps)
+      ++ (lib.mapAttrsToList (n: w: {
+        assertion =
+          w.isolated -> !(lib.elem "traefik" (map bridgeOf (cfg.containerNetworks.${w.serviceName} or [ ])));
+        message = ''
+          myStack.webApps.${n}: `isolated` is defeated by also listing
+          "traefik" in containerNetworks.${toString w.serviceName} — the
+          shared bridge reopens the direct path isolation exists to close.
+        '';
+      }) cfg.webApps)
+      ++ (lib.mapAttrsToList (n: w: {
         assertion = w.auth == "oidc" -> w.healthPath != null;
         message = ''
           myStack.webApps.${n}: oidc-gated apps must declare
@@ -1172,6 +1191,27 @@ in
               metrics jobs are named after their attr key; a free-form
               scrape collides with one of them). Prometheus would reject
               the whole config at runtime.
+            '';
+          }
+        )
+        # The registry and the container set must stay 1:1 — a stale
+        # registry key with `[ ]` would otherwise emit an inert ghost
+        # unit, and an unregistered container would silently miss the
+        # oneshot override, mount ordering, and state-dirs edge.
+        (
+          let
+            registered = lib.attrNames cfg.containerNetworks;
+            declared = lib.attrNames config.virtualisation.oci-containers.containers;
+            ghostKeys = lib.subtractLists declared registered;
+            unregistered = lib.subtractLists registered declared;
+          in
+          {
+            assertion = ghostKeys == [ ] && unregistered == [ ];
+            message = ''
+              myStack.containerNetworks and oci-containers must stay 1:1.
+              Registered without a container: [${toString ghostKeys}].
+              Container without a registry entry: [${toString unregistered}]
+              — add `myStack.containerNetworks.<name>` (`[ ]` = pasta).
             '';
           }
         )
