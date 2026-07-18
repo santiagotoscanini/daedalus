@@ -75,8 +75,8 @@ in
   systemd.services.nextcloud-redis-conf = mkSecretRender {
     description = "Render redis.conf for nextcloud-redis (requirepass from sops)";
     gates = [ "podman-nextcloud-redis.service" ];
-    dir = "/run/nextcloud-redis";
-    file = "/run/nextcloud-redis/redis.conf";
+    dir = "/run/nextcloud-redis-conf";
+    file = "/run/nextcloud-redis-conf/redis.conf";
     owner = hostUid 999;
     prep = ''
       REDIS_HOST_PASSWORD=$(grep '^REDIS_HOST_PASSWORD=' /run/secrets/nextcloud-env | cut -d= -f2-)
@@ -146,7 +146,7 @@ in
 
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_redis:/data"
-      "/run/nextcloud-redis:/etc/redis:ro"
+      "/run/nextcloud-redis-conf:/etc/redis:ro"
     ];
 
     # Stock entrypoint: `redis-server <conf>` argv → gosu-drop to the
