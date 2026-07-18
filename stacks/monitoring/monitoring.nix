@@ -14,9 +14,9 @@
 #
 # `prometheus.yml` and the dashboards dir are nix-generated:
 #   - `prometheusConfig`: base scrape list + each stack's
-#     `myStack.prometheusScrapes` contribution.
+#     `fleet.prometheusScrapes` contribution.
 #   - `dashboardsDir`: static JSON under ./assets/dashboards/, plus
-#     `myStack.grafanaDashboards` (root) and `grafanaDashboardsByFolder`
+#     `fleet.grafanaDashboards` (root) and `grafanaDashboardsByFolder`
 #     (organized into sidebar folders via `foldersFromFilesStructure`).
 # Changing either changes the /nix/store hash → container restarts on
 # rebuild. No manual reload.
@@ -71,7 +71,7 @@ let
         pkgs.systemd
       ]
     }
-    tmp="${textfileDir}/container_up.prom.$$"
+    tmp="${textfileDir}/liveness.prom.$$"
     # One podman call; each declared name is 1 iff it appears in `ps`.
     running=$(podman ps --format '{{.Names}}' || true)
     # Failed system units — node-exporter runs without --collector.systemd,
@@ -91,7 +91,7 @@ let
     } > "$tmp"
     # Atomic swap — node-exporter reads whole files; a half-written file
     # would export a truncated series.
-    mv -f "$tmp" "${textfileDir}/container_up.prom"
+    mv -f "$tmp" "${textfileDir}/liveness.prom"
   '';
 
   baseScrapes = [
@@ -118,7 +118,7 @@ let
         scrape_interval = "15s";
         evaluation_interval = "15s";
       };
-      scrape_configs = baseScrapes ++ config.myStack.prometheusScrapes;
+      scrape_configs = baseScrapes ++ config.fleet.prometheusScrapes;
     }
   );
 
@@ -132,8 +132,8 @@ let
 
   # Three sources merged into one /nix/store dir mounted into grafana:
   #   1. Static JSON under ./assets/dashboards/         (root)
-  #   2. myStack.grafanaDashboards                       (root)
-  #   3. myStack.grafanaDashboardsByFolder               (subdirs ↔ sidebar folders)
+  #   2. fleet.grafanaDashboards                       (root)
+  #   3. fleet.grafanaDashboardsByFolder               (subdirs ↔ sidebar folders)
   dashboardsDir = pkgs.runCommand "grafana-dashboards" { } (
     ''
       mkdir -p $out
@@ -145,7 +145,7 @@ let
     + lib.concatStringsSep "\n" (
       lib.mapAttrsToList (
         name: content: "cp ${pkgs.writeText "${name}.json" content} $out/${name}.json"
-      ) config.myStack.grafanaDashboards
+      ) config.fleet.grafanaDashboards
     )
     + "\n"
     + lib.concatStringsSep "\n" (
@@ -159,7 +159,7 @@ let
             name: content: "cp ${pkgs.writeText "${name}.json" content} \"$out/${folder}/${name}.json\""
           ) dashboards
         )
-      ) config.myStack.grafanaDashboardsByFolder
+      ) config.fleet.grafanaDashboardsByFolder
     )
   );
 in
@@ -176,7 +176,7 @@ in
     "d ${textfileDir} 0755 santiago users -"
   ];
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/monitoring/grafana/data" = { };
     "/home/santiago/selfhost/monitoring/prometheus/data" = { };
     "/var/lib/node-exporter" = { };
@@ -184,7 +184,7 @@ in
 
   # 1-min liveness sweep. Runs as santiago so it can talk to the rootless
   # podman socket; writes the .prom file node-exporter serves.
-  systemd.services.container-up-exporter = {
+  systemd.services.host-liveness-exporter = {
     description = "Export container_up{name} liveness to node-exporter textfile";
     after = [ "systemd-tmpfiles-setup.service" ];
     wants = [ "systemd-tmpfiles-setup.service" ];
@@ -198,7 +198,7 @@ in
       ExecStart = livenessScript;
     };
   };
-  systemd.timers.container-up-exporter = {
+  systemd.timers.host-liveness-exporter = {
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "1min";
@@ -209,9 +209,9 @@ in
   # Grafana's database on the shared app-db cluster (see
   # stacks/app-db/). Dashboards/datasources stay nix-provisioned; the
   # DB holds what the UI created: alert rules, users, service accounts.
-  myStack.appDatabases.grafana.consumers = [ "grafana" ];
+  fleet.appDatabases.grafana.consumers = [ "grafana" ];
 
-  myStack.containerNetworks = {
+  fleet.bridgeMemberships = {
     prometheus = [
       "monitoring"
       "traefik"
@@ -225,14 +225,14 @@ in
     node-exporter = [ ]; # host net — see comment on container below
   };
 
-  myStack.logStacks.monitoring = [
+  fleet.logStacks.monitoring = [
     "prometheus"
     "grafana"
     "cadvisor"
     "node-exporter"
   ];
 
-  myStack.webApps = {
+  fleet.webApps = {
     prometheus = {
       serviceName = "prometheus";
       port = 9090;
@@ -327,10 +327,10 @@ in
       # read from the bind-mounted mail secret through Grafana's __FILE
       # convention (grafana runs --user=0:0 → santiago, which owns it).
       GF_SMTP_ENABLED = "true";
-      GF_SMTP_HOST = "${config.myStack.mail.smtpHost}:${toString config.myStack.mail.smtpPort}";
-      GF_SMTP_USER = config.myStack.mail.sender;
+      GF_SMTP_HOST = "${config.fleet.mail.smtpHost}:${toString config.fleet.mail.smtpPort}";
+      GF_SMTP_USER = config.fleet.mail.sender;
       GF_SMTP_PASSWORD__FILE = "/run/secrets/mail-relay-password";
-      GF_SMTP_FROM_ADDRESS = config.myStack.mail.sender;
+      GF_SMTP_FROM_ADDRESS = config.fleet.mail.sender;
       GF_SMTP_FROM_NAME = "s2-server Grafana";
       GF_SMTP_STARTTLS_POLICY = "MandatoryStartTLS";
 
@@ -359,7 +359,7 @@ in
     environmentFiles = [
       config.sops.secrets."grafana-env".path
       # GF_DATABASE_PASSWORD (+ POSTGRES_*) from the app-db bootstrap.
-      config.myStack.appDatabases.grafana.envFile
+      config.fleet.appDatabases.grafana.envFile
     ];
 
     extraOptions = [

@@ -1,6 +1,6 @@
 # traefik — reverse proxy + rule generator.
 #
-# Per-stack modules declare `myStack.traefikRoutes` (or `myStack.webApps`
+# Per-stack modules declare `fleet.traefikRoutes` (or `fleet.webApps`
 # which materializes into the same option); this file turns each entry
 # into one YAML file in a /nix/store-backed dir bind-mounted at /rules,
 # loaded by traefik's file provider.
@@ -8,7 +8,7 @@
 # Bridge: `traefik-net` is the shared bridge every HTTP-only stack joins
 # so traefik can reach upstreams by container DNS (aardvark-dns) instead
 # of host-port publishing. Stacks set
-# `myStack.webApps.<name>.serviceName = "<container>"` to opt in; the
+# `fleet.webApps.<name>.serviceName = "<container>"` to opt in; the
 # rule then dials `http://<container>:<in-port>`. Stacks that
 # structurally can't join the bridge (gluetun-shared TV stack, pi-hole
 # as a native service) set `serviceUrl` to an explicit
@@ -28,13 +28,13 @@
 }:
 
 let
-  cfg = config.myStack;
+  cfg = config.fleet;
 
   # Activates the postgres :5432 entrypoint + LAN firewall port when
   # the app-db cluster has at least one app database. The actual TCP
-  # route YAML is contributed by stacks/app-db via traefikStaticRules
+  # route YAML is contributed by stacks/app-db via traefikRawRules
   # (one fixed `postgres.toscanini.me` route — no per-app fan-out).
-  pgwireEnabled = config.myStack.appDatabases != { };
+  pgwireEnabled = config.fleet.appDatabases != { };
 
   yamlFormat = pkgs.formats.yaml { };
 
@@ -90,7 +90,7 @@ let
       ) cfg.traefikRoutes)
       ++ (lib.mapAttrsToList (
         filename: contents: "cp ${pkgs.writeText filename contents} $out/${filename}"
-      ) cfg.traefikStaticRules)
+      ) cfg.traefikRawRules)
     )
   );
 in
@@ -105,14 +105,14 @@ in
 
   # traefik-net is the shared ingress bridge; app-db appends pg-wire
   # membership to this list when the postgres TCP route is active.
-  myStack.containerNetworks.traefik = [ "traefik" ];
+  fleet.bridgeMemberships.traefik = [ "traefik" ];
   # Pinned so TRUSTED_PROXIES-style consumers can reference it (see
   # bridgeSubnets in platform/common.nix).
-  myStack.bridgeSubnets.traefik = "10.89.7.0/24";
+  fleet.bridgeSubnets.traefik = "10.89.7.0/24";
 
   # Pre-creating the file 0600 keeps a fresh restore from letting podman
   # create a directory here, which breaks ACME confusingly.
-  myStack.stateDirs."/home/santiago/selfhost/traefik/acme.json" = {
+  fleet.statePaths."/home/santiago/selfhost/traefik/acme.json" = {
     type = "f";
     mode = "0600";
   };
@@ -120,7 +120,7 @@ in
   # Static rules that don't fit the Host->port shape. Each stack reads
   # its own asset and contributes here (e.g. app-db's TCP/SNI route
   # lives in stacks/app-db/).
-  myStack.traefikStaticRules."tls-opts.yml" = builtins.readFile ./assets/tls-opts.yml;
+  fleet.traefikRawRules."tls-opts.yml" = builtins.readFile ./assets/tls-opts.yml;
 
   # Baseline security headers, applied as the websecure entrypoint's
   # default middleware (covers every router on it — generated and
@@ -128,7 +128,7 @@ in
   # its own, and HSTS over plain HTTP is ignored anyway. No frameDeny
   # fleet-wide — some apps embed themselves; apps that want it add a
   # per-route middleware.
-  myStack.traefikStaticRules."sec-headers.yml" = ''
+  fleet.traefikRawRules."sec-headers.yml" = ''
     http:
       middlewares:
         sec-headers:
@@ -149,7 +149,7 @@ in
   # one silent redirect through id.* per app instead of a domain-wide
   # cookie every subdomain could replay. Emitted as JSON (valid YAML)
   # to keep this pure string templating, no IFD.
-  myStack.traefikStaticRules."oidc-middlewares.yml" =
+  fleet.traefikRawRules."oidc-middlewares.yml" =
     let
       envPrefix = n: "POCKET_OIDC_" + lib.toUpper (lib.replaceStrings [ "-" ] [ "_" ] n);
       mkOidcMw =
@@ -230,8 +230,8 @@ in
 
   # Dashboard / API — LAN-only via pi-hole dns.hosts; `api@internal`
   # serves /api/* and /dashboard/*.
-  myStack.traefikRoutes.traefik-dashboard = {
-    host = "traefik.${config.myStack.baseDomain}";
+  fleet.traefikRoutes.traefik-dashboard = {
+    host = "traefik.${config.fleet.baseDomain}";
     service = "api@internal";
     middlewares = [ "oidc-traefik-dashboard@file" ];
   };
@@ -253,9 +253,9 @@ in
   # interface (wireguard, etc.) off-limits by default.
   networking.firewall.interfaces.enp3s0.allowedTCPPorts = lib.optional pgwireEnabled 5432;
 
-  myStack.dnsHosts = [ "${cfg.lanIp} traefik.${cfg.baseDomain}" ];
+  fleet.dnsHosts = [ "${cfg.lanIp} traefik.${cfg.baseDomain}" ];
 
-  myStack.prometheusScrapes = [
+  fleet.prometheusScrapes = [
     {
       job_name = "traefik";
       # Prometheus joins traefik-net (see monitoring.nix) and reaches the
@@ -264,7 +264,7 @@ in
     }
   ];
 
-  myStack.homepageServices."Network" = [
+  fleet.homepageServices."Network" = [
     {
       name = "Traefik";
       href = "https://traefik.toscanini.me";
@@ -327,7 +327,7 @@ in
       "--metrics.prometheus.addEntryPointsLabels=true"
 
       # Entrypoints
-      "--entryPoints.web.address=:80"
+      "--entrypoints.web.address=:80"
       "--entrypoints.websecure.address=:443"
       "--entrypoints.traefik.address=:8080"
       "--entrypoints.cfweb.address=:8888"
@@ -369,10 +369,10 @@ in
       # ACME — Cloudflare DNS challenge. One apex+wildcard pair covers
       # every published hostname (all one level under the apex).
       "--entrypoints.websecure.http.tls.certresolver=dns-cloudflare"
-      "--entrypoints.websecure.http.tls.domains[0].main=${config.myStack.baseDomain}"
-      "--entrypoints.websecure.http.tls.domains[0].sans=*.${config.myStack.baseDomain}"
+      "--entrypoints.websecure.http.tls.domains[0].main=${config.fleet.baseDomain}"
+      "--entrypoints.websecure.http.tls.domains[0].sans=*.${config.fleet.baseDomain}"
       "--certificatesResolvers.dns-cloudflare.acme.storage=/acme.json"
-      "--certificatesResolvers.dns-cloudflare.acme.email=nextcloud@account.toscanini.me"
+      "--certificatesResolvers.dns-cloudflare.acme.email=acme@account.toscanini.me"
       "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.provider=cloudflare"
       # Use CF's own resolvers — the LAN pi-hole can't see the freshly-
       # published _acme-challenge TXT before propagation.

@@ -1,6 +1,6 @@
 # apps — vibe-coded app wrapper.
 #
-# Each entry in `myStack.apps` materializes:
+# Each entry in `fleet.apps` materializes:
 #   - A container `app-<name>` on `traefik-net`, listening on the
 #     hardcoded internal port 3000. Also joins the shared `app-db-net`
 #     bridge when `postgres.enable = true` (dials the shared `pg`
@@ -10,7 +10,7 @@
 #   - (Opt-in, `prometheus.enable`) scrape on the app's own /metrics,
 #     plus the per-app Grafana dashboard (in the "Apps" folder) when
 #     one is supplied. Postgres metrics are separate — the shared
-#     `pg-exporter` (stacks/app-db/) covers them either way.
+#     `app-db-exporter` (stacks/app-db/) covers them either way.
 #   - Homepage tiles under a per-app section named after the app (e.g.
 #     `Anansi`): the app, Repo, Logs.
 #   - An auto-deploy timer + oneshot (`deploy.enable`, ON by default) that
@@ -81,7 +81,7 @@
 }:
 
 let
-  cfg = config.myStack.apps;
+  cfg = config.fleet.apps;
 
   appSecretsBase = "/etc/nixos/stacks/apps/secrets";
   appDbEnvBase = "/etc/nixos/stacks/app-db/secrets";
@@ -103,7 +103,7 @@ let
 
   # The deploy health-check dials traefik at the LAN IP directly rather
   # than trusting DNS, so a pi-hole hiccup can't read as a dead app.
-  inherit (config.myStack) lanIp;
+  inherit (config.fleet) lanIp;
 
   mkApp =
     name: app:
@@ -156,8 +156,8 @@ let
           ENV_BIN=${pkgs.coreutils}/bin/env
           PODMAN=${pkgs.podman}/bin/podman
           # Deploy-failure alert relay (platform/mail msmtp -> Gmail).
-          NOTIFY_FROM=${lib.escapeShellArg config.myStack.mail.sender}
-          NOTIFY_TO=${lib.escapeShellArg config.myStack.mail.alertTo}
+          NOTIFY_FROM=${lib.escapeShellArg config.fleet.mail.sender}
+          NOTIFY_TO=${lib.escapeShellArg config.fleet.mail.alertTo}
 
           ${builtins.readFile ./assets/deploy.sh}
         '';
@@ -241,15 +241,15 @@ let
       assertions = [
         {
           assertion = !(egressEnabled && postgresEnabled);
-          message = "myStack.apps.${name}: `egress` cannot combine with `postgres.enable` — a container sharing gluetun's netns can't also join the app-db-net bridge.";
+          message = "fleet.apps.${name}: `egress` cannot combine with `postgres.enable` — a container sharing gluetun's netns can't also join the app-db-net bridge.";
         }
         {
           assertion = !(egressEnabled && app.egress.hostPort == null);
-          message = "myStack.apps.${name}: `egress.container` is set but `egress.hostPort` is null — set the host port the netns owner publishes for this app.";
+          message = "fleet.apps.${name}: `egress.container` is set but `egress.hostPort` is null — set the host port the netns owner publishes for this app.";
         }
         {
           assertion = !(egressEnabled && app.prometheus.enable);
-          message = "myStack.apps.${name}: `egress` cannot combine with `prometheus.enable` — a netns'd app isn't reachable from monitoring-net, so the scrape target would be permanently down.";
+          message = "fleet.apps.${name}: `egress` cannot combine with `prometheus.enable` — a netns'd app isn't reachable from monitoring-net, so the scrape target would be permanently down.";
         }
       ];
 
@@ -257,24 +257,24 @@ let
       # presence of the key triggers role + database creation and the
       # per-app env file. LAN access is the single shared
       # `postgres.toscanini.me:5432` TCP/SNI route (stacks/app-db).
-      myStack.appDatabases = lib.optionalAttrs postgresEnabled {
+      fleet.appDatabases = lib.optionalAttrs postgresEnabled {
         "${name}" = { };
       };
 
-      # Register in containerNetworks either way — that's what earns the
+      # Register in bridgeMemberships either way — that's what earns the
       # mandatory Type=oneshot systemd override (rootless podman + Type=notify
       # is broken on this box). "traefik" joins the bridge for DNS routing;
       # `[ ]` means pasta/netns with NO bridge (egress mode borrows gluetun's
       # netns via extraOptions, and traefik reaches it via the published host
       # port — see webApps below). Same shape as the TV stack's `sonarr = [ ]`.
-      myStack.containerNetworks."${cName}" =
+      fleet.bridgeMemberships."${cName}" =
         lib.optional (!egressEnabled) "traefik" ++ lib.optional postgresEnabled "app-db";
 
       # Web exposure — hardcoded internal port 3000. Bridge-routed by default
       # (serviceName on traefik-net). In egress mode the app can't ride
       # traefik-net, so traefik dials the host port gluetun publishes via
       # host.containers.internal — the same escape hatch the TV stack uses.
-      myStack.webApps."${name}" = {
+      fleet.webApps."${name}" = {
         inherit hostname;
         exposeRemotely = app.stage == "live";
       }
@@ -290,10 +290,10 @@ let
 
       # Prometheus scrapes the app's own /metrics endpoint (when
       # prometheus.enable). Postgres metrics come from the single
-      # shared `pg-exporter` declared in stacks/app-db/exporter.nix —
+      # shared `app-db-exporter` declared in stacks/app-db/exporter.nix —
       # the dashboard breaks them out per-app via the `datname` label.
       # No per-app scrape entry here.
-      myStack.prometheusScrapes = lib.optional app.prometheus.enable {
+      fleet.prometheusScrapes = lib.optional app.prometheus.enable {
         job_name = cName;
         static_configs = [
           {
@@ -310,14 +310,14 @@ let
       # prometheus.enable alongside the scrape: the dashboard is
       # metrics-driven, so without a scrape it would only render empty
       # panels.
-      myStack.grafanaDashboardsByFolder =
+      fleet.grafanaDashboardsByFolder =
         lib.optionalAttrs (app.prometheus.enable && app.dashboard != null)
           {
             "Apps"."${cName}" = lib.replaceStrings [ "%APP_NAME%" ] [ name ] (builtins.readFile app.dashboard);
           };
 
       # Homepage tile lands in the per-app section.
-      myStack.homepageServices."${tileGroup}" = [
+      fleet.homepageServices."${tileGroup}" = [
         homepageTile
         repoTile
         logsTile
@@ -326,7 +326,7 @@ let
 
       # Per-group layout for the dynamically-named app group, so the
       # 3 or 4 tiles render in a row instead of stacking vertically.
-      myStack.homepageLayout."${tileGroup}" = {
+      fleet.homepageLayout."${tileGroup}" = {
         style = "row";
         columns = if postgresEnabled then 4 else 3;
         inherit (app.homepage) icon;
@@ -499,7 +499,7 @@ let
     };
 in
 {
-  options.myStack.apps = lib.mkOption {
+  options.fleet.apps = lib.mkOption {
     type = lib.types.attrsOf (
       lib.types.submodule (
         { name, ... }: {
@@ -759,11 +759,11 @@ in
   };
 
   # Per-path assembly, NOT `config = lib.mkMerge fragments`: the
-  # fragment list depends on `config.myStack.apps`, so a definition
-  # spanning the whole `myStack` attrset would force the list while
-  # resolving `myStack.apps` itself — infinite recursion. Keeping every
-  # contributed path explicit (one level below myStack/systemd/...)
-  # lets `myStack.apps` resolve without forcing the fragments. A new
+  # fragment list depends on `config.fleet.apps`, so a definition
+  # spanning the whole `fleet` attrset would force the list while
+  # resolving `fleet.apps` itself — infinite recursion. Keeping every
+  # contributed path explicit (one level below fleet/systemd/...)
+  # lets `fleet.apps` resolve without forcing the fragments. A new
   # output path in mkApp must be registered here too.
   config =
     let
@@ -782,33 +782,33 @@ in
         owner = "santiago";
       };
 
-      myStack = {
+      fleet = {
         appDatabases = attrsOpt [
-          "myStack"
+          "fleet"
           "appDatabases"
         ];
-        containerNetworks = attrsOpt [
-          "myStack"
-          "containerNetworks"
+        bridgeMemberships = attrsOpt [
+          "fleet"
+          "bridgeMemberships"
         ];
         webApps = attrsOpt [
-          "myStack"
+          "fleet"
           "webApps"
         ];
         prometheusScrapes = listOpt [
-          "myStack"
+          "fleet"
           "prometheusScrapes"
         ];
         grafanaDashboardsByFolder = attrsOpt [
-          "myStack"
+          "fleet"
           "grafanaDashboardsByFolder"
         ];
         homepageServices = attrsOpt [
-          "myStack"
+          "fleet"
           "homepageServices"
         ];
         homepageLayout = attrsOpt [
-          "myStack"
+          "fleet"
           "homepageLayout"
         ];
       };

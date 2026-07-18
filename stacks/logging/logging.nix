@@ -6,7 +6,7 @@
 #   - loki:  log DB. Filesystem store under
 #            /home/santiago/selfhost/logging/loki/data, 30-day retention
 #            (matches prometheus). Reachable ONLY over monitoring-net —
-#            no traefik route by design (see the containerNetworks
+#            no traefik route by design (see the bridgeMemberships
 #            comment below); grafana is the query UI.
 #
 #   - alloy: log collector. Reads the host's systemd journal — the ONE
@@ -22,9 +22,9 @@
 # container restarts on rebuild (same pattern as monitoring's
 # prometheus.yml). No hand-maintained config file.
 #
-# `myStack.logStacks` (declared here — logging owns the consumer) maps
+# `fleet.logStacks` (declared here — logging owns the consumer) maps
 # stack name -> list of container names; each stack contributes its own
-# entry and the entries merge across modules like every myStack option.
+# entry and the entries merge across modules like every fleet option.
 # Each entry becomes one relabel rule assigning the `stack` label.
 # FALLBACK: any container NOT claimed by an entry gets
 # `stack = <its own container name>` — unregistered single-container
@@ -50,7 +50,7 @@
 }:
 
 let
-  logStacks = lib.filterAttrs (_: names: names != [ ]) config.myStack.logStacks;
+  logStacks = lib.filterAttrs (_: names: names != [ ]) config.fleet.logStacks;
 
   # Container names are [a-z0-9-] so escaping is a no-op today; keep it
   # anyway so an exotic name can't corrupt the generated regex. Regex
@@ -85,7 +85,7 @@ let
     //   - container  → podman container name (set by --log-driver=journald)
     //   - host       → hostname
     //   - level      → priority keyword (info|warning|err|...)
-    //   - stack      → from myStack.logStacks; falls back to the
+    //   - stack      → from fleet.logStacks; falls back to the
     //                  container name itself (see below)
     //
     // Everything else stays in the log line (queryable via LogQL line
@@ -131,10 +131,10 @@ let
       //
       // Rule precedence = order: later rules overwrite `stack`. The
       // apps-platform pattern comes first, then the per-stack rules
-      // generated from myStack.logStacks (explicit registration wins),
+      // generated from fleet.logStacks (explicit registration wins),
       // then the fallback (only fires while `stack` is still empty).
 
-      // ===== myStack.apps platform =====
+      // ===== fleet.apps platform =====
       // app-<name> containers land in stack=apps with
       // service_name = <name>, so Grafana Drilldown groups per app.
       // (Their DBs live on the shared pg cluster; those logs are under
@@ -152,7 +152,7 @@ let
         replacement   = "$1"
       }
 
-      // ===== per-stack rules (generated from myStack.logStacks) =====
+      // ===== per-stack rules (generated from fleet.logStacks) =====
     ${stackRules}
       // Native NixOS services (no container) — match on unit. Everything
       // the header promises as a journald source gets a stack label so
@@ -190,14 +190,14 @@ let
   '';
 in
 {
-  options.myStack.logStacks = lib.mkOption {
+  options.fleet.logStacks = lib.mkOption {
     type = lib.types.attrsOf (lib.types.listOf lib.types.str);
     default = { };
     description = ''
       Map: stack name -> container names whose logs get
       `stack = <name>` in Loki. Rendered into alloy's relabel rules by
       stacks/logging. Each stack contributes its own entry; lists merge
-      across modules like every myStack option.
+      across modules like every fleet option.
 
       Containers covered by no entry fall back to
       `stack = <container name>` (still queryable, just ungrouped), so
@@ -212,12 +212,12 @@ in
   };
 
   config = {
-    myStack.containerNetworks = {
+    fleet.bridgeMemberships = {
       loki = [ "monitoring" ];
       alloy = [ "monitoring" ];
     };
 
-    myStack.logStacks.logging = [
+    fleet.logStacks.logging = [
       "loki"
       "alloy"
     ];
@@ -232,18 +232,18 @@ in
       [
         {
           assertion = dups == [ ];
-          message = "myStack.logStacks: container(s) listed under more than one stack: ${lib.concatStringsSep ", " dups}";
+          message = "fleet.logStacks: container(s) listed under more than one stack: ${lib.concatStringsSep ", " dups}";
         }
       ];
 
-    myStack.stateDirs = {
+    fleet.statePaths = {
       "/home/santiago/selfhost/logging/alloy/data" = { };
       "/home/santiago/selfhost/logging/loki/data" = { };
     };
 
     # Box-wide log browser (Grafana Drilldown -> Loki). The per-app
     # Logs tiles (apps.nix) deep-link filtered views of the same data.
-    myStack.homepageServices."Monitoring" = [
+    fleet.homepageServices."Monitoring" = [
       {
         name = "Logs";
         href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore?from=now-1h&to=now&var-ds=loki-default";

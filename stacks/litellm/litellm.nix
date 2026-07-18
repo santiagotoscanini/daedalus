@@ -38,7 +38,7 @@
   # token, but env.sops is a full dotenv — so litellm-prom-token.service
   # extracts just the token from the already-decrypted /run/secrets/litellm-env
   # at boot and writes it to /run/litellm-prom-token/token. Same
-  # activation-render idiom as app-db's pg-exporter-config.
+  # activation-render idiom as app-db's app-db-exporter-env.
   #
   # The key has ONE encrypted source of truth (env.sops); every other
   # consumer (this token file, homepage's HOMEPAGE_VAR_LITELLM_KEY) is
@@ -63,7 +63,7 @@
     "/run/litellm-prom-token:/run/secrets/litellm-prom-token:ro"
   ];
 
-  myStack.containerNetworks.litellm = [
+  fleet.bridgeMemberships.litellm = [
     "app-db"
     "traefik"
   ];
@@ -71,9 +71,9 @@
   # Database on the shared app-db cluster: role + db + env file with
   # DATABASE_URL, materialized by app-db-litellm-bootstrap.service
   # (see stacks/app-db/).
-  myStack.appDatabases.litellm.consumers = [ "litellm" ];
+  fleet.appDatabases.litellm.consumers = [ "litellm" ];
 
-  myStack.webApps.litellm = {
+  fleet.webApps.litellm = {
     serviceName = "litellm";
     port = 4000;
     homepage = {
@@ -112,7 +112,7 @@
   };
 
   # Prometheus on traefik-net scrapes by container DNS.
-  myStack.prometheusScrapes = [
+  fleet.prometheusScrapes = [
     {
       job_name = "litellm";
       authorization = {
@@ -123,9 +123,9 @@
     }
   ];
 
-  myStack.grafanaDashboardsByFolder."Services".litellm = builtins.readFile ./assets/dashboard.json;
+  fleet.grafanaDashboardsByFolder."Services".litellm = builtins.readFile ./assets/dashboard.json;
 
-  myStack.homepageServices."Cloud & AI" = [
+  fleet.homepageServices."Cloud & AI" = [
     {
       # External Windows-PC service — declared here because litellm is
       # the only nix-side piece of this dual-machine setup.
@@ -177,7 +177,7 @@
     # Later files win on key collisions.
     environmentFiles = [
       config.sops.secrets."litellm-env".path
-      config.myStack.appDatabases.litellm.envFile
+      config.fleet.appDatabases.litellm.envFile
     ];
 
   };

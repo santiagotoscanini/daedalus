@@ -26,9 +26,9 @@
   # /run/secrets/factorio-env at activation. Edit with `sops env.sops`.
   sops.secrets."factorio-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.factorio = [ "traefik" ];
+  fleet.bridgeMemberships.factorio = [ "traefik" ];
 
-  myStack.webApps.factorio-admin = {
+  fleet.webApps.factorio-admin = {
     hostname = "factorio-admin.toscanini.me";
     serviceName = "factorio";
     port = 80;
@@ -47,7 +47,7 @@
   # (No RCON host port — ofsm drives RCON internally.)
   networking.firewall.allowedUDPPorts = [ 34197 ];
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/factorio" = { };
     "/home/santiago/selfhost/factorio/fsm-data" = { };
     "/home/santiago/selfhost/factorio/mod_packs" = { };

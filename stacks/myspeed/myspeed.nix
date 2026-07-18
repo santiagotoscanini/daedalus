@@ -20,11 +20,11 @@
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.myspeed = [ "traefik" ];
+  fleet.bridgeMemberships.myspeed = [ "traefik" ];
 
-  myStack.stateDirs."/home/santiago/selfhost/myspeed/data" = { };
+  fleet.statePaths."/home/santiago/selfhost/myspeed/data" = { };
 
-  myStack.webApps.myspeed = {
+  fleet.webApps.myspeed = {
     serviceName = "myspeed";
     port = 5216; # in-container port
     # MySpeed's optional password stays unset — its "auth" sends the

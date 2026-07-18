@@ -29,14 +29,14 @@
 }:
 
 {
-  myStack.containerNetworks.healthchecks = [ "app-db" ]; # iso-healthchecks membership comes from webApps.isolated
+  fleet.bridgeMemberships.healthchecks = [ "app-db" ]; # iso-healthchecks membership comes from webApps.isolated
 
-  myStack.stateDirs."/home/santiago/selfhost/healthchecks/data".uid = 999;
+  fleet.statePaths."/home/santiago/selfhost/healthchecks/data".uid = 999;
 
   # Database on the shared app-db cluster (see stacks/app-db/).
-  myStack.appDatabases.healthchecks.consumers = [ "healthchecks" ];
+  fleet.appDatabases.healthchecks.consumers = [ "healthchecks" ];
 
-  myStack.webApps.healthchecks = {
+  fleet.webApps.healthchecks = {
     hostname = "hc.toscanini.me";
     serviceName = "healthchecks";
     port = 8000;
@@ -105,16 +105,16 @@
       DB_PORT = "5432";
       DB_NAME = "healthchecks";
       DB_USER = "healthchecks";
-      EMAIL_HOST = config.myStack.mail.smtpHost;
-      EMAIL_PORT = toString config.myStack.mail.smtpPort;
-      EMAIL_HOST_USER = config.myStack.mail.sender;
+      EMAIL_HOST = config.fleet.mail.smtpHost;
+      EMAIL_PORT = toString config.fleet.mail.smtpPort;
+      EMAIL_HOST_USER = config.fleet.mail.sender;
       EMAIL_USE_TLS = "True";
-      DEFAULT_FROM_EMAIL = config.myStack.mail.sender;
+      DEFAULT_FROM_EMAIL = config.fleet.mail.sender;
     };
 
     environmentFiles = [
       config.sops.secrets."healthchecks-env".path
-      config.myStack.appDatabases.healthchecks.envFile
+      config.fleet.appDatabases.healthchecks.envFile
       "/run/healthchecks-smtp/env"
     ];
 

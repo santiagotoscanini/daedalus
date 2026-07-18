@@ -1,7 +1,7 @@
 # cloudflared — Cloudflare Tunnel (outbound only), locally-managed.
 #
 # How the pieces fit together:
-#   - `myStack.cloudflareRoutes.<name>.hostname` is the public FQDN.
+#   - `fleet.cloudflareRoutes.<name>.hostname` is the public FQDN.
 #     `service` defaults to `http://traefik:8888` (the cfweb plain-HTTP
 #     entrypoint; CF terminates TLS at the edge).
 #   - `config.yml` is rendered from those entries via `pkgs.formats.yaml`
@@ -33,7 +33,7 @@
 }:
 
 let
-  cfg = config.myStack;
+  cfg = config.fleet;
 
   # Tunnel + account identifiers. Bound here so a tunnel rotation is
   # a single-line change (also referenced from the homepage tile).
@@ -59,7 +59,7 @@ let
   # Stamped on every CNAME we create; the sweep ONLY touches records
   # carrying this exact comment, so it can never wipe a hand-edited
   # DNS record or an ACME challenge record.
-  managedComment = "Managed by myStack.cloudflareRoutes";
+  managedComment = "Managed by fleet.cloudflareRoutes";
 
   # Idempotent CF DNS reconciler:
   #   1. UPSERT — for each cloudflareRoutes entry, ensure a proxied
@@ -104,16 +104,16 @@ in
     owner = "santiago";
   };
 
-  myStack.containerNetworks.cloudflared = [ "traefik" ];
+  fleet.bridgeMemberships.cloudflared = [ "traefik" ];
 
-  myStack.prometheusScrapes = [
+  fleet.prometheusScrapes = [
     {
       job_name = "cloudflared";
       static_configs = [ { targets = [ "cloudflared:2000" ]; } ];
     }
   ];
 
-  myStack.homepageServices."Network" = [
+  fleet.homepageServices."Network" = [
     {
       name = "Cloudflare Tunnel";
       href = "https://dash.cloudflare.com/${accountId}/tunnels/${tunnelId}/overview";
@@ -167,7 +167,7 @@ in
   # Runs on every rebuild (and at boot) before cloudflared starts;
   # safe if cloudflared is already up.
   systemd.services.cloudflared-route-sync = {
-    description = "Reconcile CF DNS CNAMEs for myStack.cloudflareRoutes";
+    description = "Reconcile CF DNS CNAMEs for fleet.cloudflareRoutes";
     after = [
       "network-online.target"
       "pihole-ready.service"

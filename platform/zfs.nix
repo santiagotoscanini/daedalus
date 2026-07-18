@@ -235,7 +235,7 @@ in
 
   # Dead-man's-switch pings (platform/hc-ping): daily snapshots + the
   # monthly scrub must keep firing.
-  myStack.hcPings = {
+  fleet.hcPings = {
     "zfs-snapshot-daily" = "zfs-snapshot-daily";
     "zfs-scrub" = "zfs-scrub";
   };
@@ -281,5 +281,5 @@ in
   };
 
   # A silently-failed converge would leave declared properties drifted.
-  myStack.emailOnFailure = [ "zfs-converge" ];
+  fleet.emailOnFailure = [ "zfs-converge" ];
 }

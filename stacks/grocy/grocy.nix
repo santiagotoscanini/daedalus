@@ -18,13 +18,13 @@
 
   # linuxserver abc (uid 911) maps to host 100910; the config dir must
   # exist with that ownership or a fresh install fails on first write.
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/grocy/config".uid = 911;
     # Grocy reads highest-precedence settings from data/settingoverrides
     # (over env + config.php); the bind-mounted .txt files below land here.
     "/home/santiago/selfhost/grocy/config/data/settingoverrides".uid = 911;
   };
-  myStack.webApps.grocy = {
+  fleet.webApps.grocy = {
     serviceName = "grocy";
     port = 80;
     exposeRemotely = true;

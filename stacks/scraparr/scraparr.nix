@@ -24,7 +24,7 @@
 }:
 
 {
-  myStack.containerNetworks.scraparr = [
+  fleet.bridgeMemberships.scraparr = [
     "monitoring"
     "traefik"
   ];
@@ -34,14 +34,14 @@
   # Edit with `sops env.sops`.
   sops.secrets."scraparr-env" = mkDotenvSecret ./env.sops;
 
-  myStack.prometheusScrapes = [
+  fleet.prometheusScrapes = [
     {
       job_name = "scraparr";
       static_configs = [ { targets = [ "scraparr:7100" ]; } ];
     }
   ];
 
-  myStack.grafanaDashboardsByFolder."Media".media-pipeline =
+  fleet.grafanaDashboardsByFolder."Media".media-pipeline =
     builtins.readFile ./assets/media-pipeline.json;
 
   # GENERAL_LOG_LEVEL=WARNING silences the connector INFO chatter. The

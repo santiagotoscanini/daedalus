@@ -59,11 +59,11 @@ _:
 {
   # Dead-man's-switch: healthchecks pages if a replication stops running
   # (period/grace: hourly).
-  myStack.hcPings = {
+  fleet.hcPings = {
     "syncoid-rpool-selfhost" = "backup-selfhost";
     "syncoid-rpool-home" = "backup-home";
   };
-  myStack.emailOnFailure = [
+  fleet.emailOnFailure = [
     "syncoid-rpool-selfhost"
     "syncoid-rpool-home"
   ];

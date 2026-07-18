@@ -15,11 +15,11 @@ groups:
     interval: 1m
     rules:
       # Liveness via the container_up{} textfile metric (monitoring.nix's
-      # container-up-exporter timer), NOT cadvisor's container_last_seen —
+      # host-liveness-exporter timer), NOT cadvisor's container_last_seen —
       # cadvisor can't see rootless-podman cgroups so that series is empty.
       # container_up{name="X"} is 1 when the declared container is running,
       # 0 when stopped/missing; fire on 0.
-      - uid: bfal2ethfrdhcc
+      - uid: container-disappeared-1
         title: Container Disappeared
         condition: C
         data:
@@ -27,7 +27,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               # Aggregate by name so each frame is uniquely labelled — raw
               # container_up carries instance/job labels that the threshold
@@ -64,7 +64,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      # Watchdog for the watchdog: if the container-up-exporter timer dies,
+      # Watchdog for the watchdog: if the host-liveness-exporter timer dies,
       # container_up (and systemd_failed_units) freeze at their last values
       # and every liveness reading above is stale. node-exporter exports the
       # .prom file's mtime; alert when it stops being rewritten (the timer
@@ -78,9 +78,9 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
-              expr: time() - node_textfile_mtime_seconds{file="/var/lib/node-exporter/textfile/container_up.prom"}
+              expr: time() - node_textfile_mtime_seconds{file="/var/lib/node-exporter/textfile/liveness.prom"}
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -105,7 +105,7 @@ groups:
         execErrState: Error
         for: 5m
         annotations:
-          description: container_up.prom has not been rewritten for over 5 minutes — the container-up-exporter timer is dead and every container_up / systemd_failed_units reading is stale. Check `systemctl status container-up-exporter.timer`.
+          description: liveness.prom has not been rewritten for over 5 minutes — the host-liveness-exporter timer is dead and every container_up / systemd_failed_units reading is stale. Check `systemctl status host-liveness-exporter.timer`.
           summary: Container liveness exporter has stopped updating
         labels:
           severity: warning
@@ -115,7 +115,7 @@ groups:
     folder: System
     interval: 1m
     rules:
-      - uid: ffal28xmfal1cf
+      - uid: host-disk-full-1
         title: Host Out of Disk Space
         condition: C
         data:
@@ -123,7 +123,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"} / node_filesystem_size_bytes{fstype!~"tmpfs|nfs|ramfs"}) * 100
               intervalMs: 1000
@@ -155,7 +155,7 @@ groups:
         labels:
           severity: critical
         isPaused: false
-      - uid: afal291gvnz0ge
+      - uid: host-oom-1
         title: Host Out of Memory
         condition: C
         data:
@@ -163,7 +163,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
               intervalMs: 1000
@@ -195,7 +195,7 @@ groups:
         labels:
           severity: critical
         isPaused: false
-      - uid: bfal295czyxa8b
+      - uid: host-oom-kill-1
         title: Host OOM Kill Detected
         condition: C
         data:
@@ -203,7 +203,7 @@ groups:
             relativeTimeRange:
               from: 300
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: increase(node_vmstat_oom_kill[5m])
               intervalMs: 1000
@@ -234,7 +234,7 @@ groups:
         labels:
           severity: critical
         isPaused: false
-      - uid: bfal299afpy4gb
+      - uid: host-cpu-overtemp-1
         title: Host CPU Overtemperature
         condition: C
         data:
@@ -242,7 +242,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: max(node_hwmon_temp_celsius{chip=~".*coretemp.*"}) or vector(0)
               intervalMs: 1000
@@ -275,11 +275,11 @@ groups:
           severity: critical
         isPaused: false
       # systemd_failed_units is a textfile gauge written by monitoring.nix's
-      # container-up-exporter sweep (node-exporter runs WITHOUT
+      # host-liveness-exporter sweep (node-exporter runs WITHOUT
       # --collector.systemd, so node_systemd_unit_state does not exist).
       # noDataState: Alerting — if the gauge vanishes this pages
       # instead of going silently green.
-      - uid: afal29d6u0hs0d
+      - uid: systemd-unit-failed-1
         title: Host Systemd Service Failed
         condition: C
         data:
@@ -287,7 +287,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: systemd_failed_units
               intervalMs: 1000
@@ -332,7 +332,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: node_zfs_zpool_state{state!="online"}
               intervalMs: 1000
@@ -374,7 +374,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: gluetun_vpn_status
               intervalMs: 1000
@@ -411,7 +411,7 @@ groups:
     folder: System
     interval: 1m
     rules:
-      - uid: afal2fwv7mmtce
+      - uid: disk-fill-24h-1
         title: Disk Will Fill In 24 Hours
         condition: C
         data:
@@ -419,7 +419,7 @@ groups:
             relativeTimeRange:
               from: 21600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
               intervalMs: 1000
@@ -451,7 +451,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: dfal2g0pbij28e
+      - uid: inodes-fill-24h-1
         title: Inodes Will Fill In 24 Hours
         condition: C
         data:
@@ -459,7 +459,7 @@ groups:
             relativeTimeRange:
               from: 21600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: predict_linear(node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
               intervalMs: 1000
@@ -496,7 +496,7 @@ groups:
     folder: System
     interval: 1m
     rules:
-      - uid: ffal2b36ys1dsf
+      - uid: host-cpu-load-1
         title: Host High CPU Load
         condition: C
         data:
@@ -504,7 +504,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100
               intervalMs: 1000
@@ -536,7 +536,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: afal2b6y5s740a
+      - uid: host-cpu-iowait-1
         title: Host High CPU IOWait
         condition: C
         data:
@@ -544,7 +544,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: avg by(instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100
               intervalMs: 1000
@@ -576,7 +576,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: dfal2bapfa96oc
+      - uid: host-swap-filling-1
         title: Host Swap Filling Up
         condition: C
         data:
@@ -584,7 +584,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) * 100 and node_memory_SwapTotal_bytes > 0
               intervalMs: 1000
@@ -616,7 +616,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: efal2befic1dsc
+      - uid: host-memory-pressure-1
         title: Host Memory Under Pressure
         condition: C
         data:
@@ -624,7 +624,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: rate(node_vmstat_pgmajfault[5m])
               intervalMs: 1000
@@ -656,7 +656,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: efal2bi8zquiob
+      - uid: host-inodes-full-1
         title: Host Out of Inodes
         condition: C
         data:
@@ -664,7 +664,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"} / node_filesystem_files{fstype!~"tmpfs|nfs|ramfs"}) * 100
               intervalMs: 1000
@@ -696,7 +696,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: dfal2cuy5hb7ke
+      - uid: disk-read-latency-1
         title: Host Disk Read Latency High
         condition: C
         data:
@@ -704,7 +704,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (rate(node_disk_read_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_reads_completed_total[5m])) and rate(node_disk_reads_completed_total[5m]) > 0
               intervalMs: 1000
@@ -736,7 +736,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: ffal2cyt5tvy8d
+      - uid: disk-write-latency-1
         title: Host Disk Write Latency High
         condition: C
         data:
@@ -744,7 +744,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (rate(node_disk_write_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_writes_completed_total[5m])) and rate(node_disk_writes_completed_total[5m]) > 0
               intervalMs: 1000
@@ -776,7 +776,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: efal2d2n2835se
+      - uid: net-rx-errors-1
         title: Host Network Receive Errors
         condition: C
         data:
@@ -784,7 +784,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (rate(node_network_receive_errs_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) / rate(node_network_receive_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m])) * 100 and rate(node_network_receive_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) > 0
               intervalMs: 1000
@@ -816,7 +816,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: ffal2d6fs60hsf
+      - uid: net-tx-errors-1
         title: Host Network Transmit Errors
         condition: C
         data:
@@ -824,7 +824,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (rate(node_network_transmit_errs_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) / rate(node_network_transmit_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m])) * 100 and rate(node_network_transmit_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) > 0
               intervalMs: 1000
@@ -856,7 +856,7 @@ groups:
         labels:
           severity: warning
         isPaused: false
-      - uid: bfal2da9w1wqod
+      - uid: host-clock-skew-1
         title: Host Clock Skew Detected
         condition: C
         data:
@@ -864,7 +864,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: abs(node_timex_offset_seconds)
               intervalMs: 1000
@@ -904,7 +904,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes * 100
               intervalMs: 1000
@@ -944,7 +944,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: up
               intervalMs: 1000
@@ -988,7 +988,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: gluetun_forwarded_ports_total{job="gluetun"}
               intervalMs: 1000
@@ -1028,7 +1028,7 @@ groups:
             relativeTimeRange:
               from: 600
               to: 0
-            datasourceUid: dfakbms70z4zke
+            datasourceUid: prometheus-default
             model:
               expr: (min(traefik_tls_certs_not_after) - time()) / 86400
               intervalMs: 1000

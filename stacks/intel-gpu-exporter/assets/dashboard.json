@@ -23,7 +23,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -95,7 +95,7 @@
       "datasource": {
         "default": true,
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -153,7 +153,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "editorMode": "code",
           "expr": "avg (gpumon_power{node=~\"^$node$\", type=\"gpu\"}) by (type, node)",
@@ -170,7 +170,7 @@
       "datasource": {
         "default": true,
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -223,7 +223,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "editorMode": "code",
           "expr": "sum (gpumon_clients_count{node=~\"^$node$\"}) by (name, node)",
@@ -240,7 +240,7 @@
       "datasource": {
         "default": true,
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -308,7 +308,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "editorMode": "code",
           "expr": "avg by (engine) (gpumon_engine_usage{attrib=\"busy\", node=~\"^$node$\"})",
@@ -325,7 +325,7 @@
       "datasource": {
         "default": true,
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -409,7 +409,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "editorMode": "code",
           "expr": "avg by (engine) (gpumon_engine_usage{attrib=\"busy\", node=~\"^$node$\"})",
@@ -425,7 +425,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -495,7 +495,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -513,7 +513,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -607,7 +607,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -639,7 +639,7 @@
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "dfakbms70z4zke"
+          "uid": "prometheus-default"
         },
         "definition": "label_values(gpumon_engine_usage,node)",
         "includeAll": true,

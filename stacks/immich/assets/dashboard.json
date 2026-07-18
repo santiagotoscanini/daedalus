@@ -56,7 +56,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -137,7 +137,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -210,7 +210,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -283,7 +283,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -337,7 +337,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -383,7 +383,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -455,7 +455,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -506,7 +506,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -557,7 +557,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -608,7 +608,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -682,7 +682,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -738,7 +738,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -789,7 +789,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -840,7 +840,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -904,7 +904,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {

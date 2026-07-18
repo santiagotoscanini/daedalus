@@ -20,21 +20,21 @@
 }:
 
 {
-  myStack.containerNetworks.seerr = [
+  fleet.bridgeMemberships.seerr = [
     "traefik"
     "app-db"
   ];
 
   # Database on the shared app-db cluster (see stacks/app-db/); the
   # container joins app-db-net and dials `pg` by container DNS.
-  myStack.appDatabases.seerr.consumers = [ "seerr" ];
+  fleet.appDatabases.seerr.consumers = [ "seerr" ];
 
   # The image's node user (uid 1000) maps to host 100999; the config
   # dir must exist with that ownership or a fresh install fails on
   # first write.
-  myStack.stateDirs."/home/santiago/selfhost/seerr/config".uid = 1000;
+  fleet.statePaths."/home/santiago/selfhost/seerr/config".uid = 1000;
 
-  myStack.webApps.seerr = {
+  fleet.webApps.seerr = {
     serviceName = "seerr";
     port = 5055;
     homepage = {
@@ -65,7 +65,7 @@
     };
 
     # DB_PASS from the app-db bootstrap env file.
-    environmentFiles = [ config.myStack.appDatabases.seerr.envFile ];
+    environmentFiles = [ config.fleet.appDatabases.seerr.envFile ];
 
   };
 }

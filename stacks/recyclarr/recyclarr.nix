@@ -28,14 +28,14 @@
 }:
 
 {
-  myStack.containerNetworks.recyclarr = [ ];
+  fleet.bridgeMemberships.recyclarr = [ ];
 
   sops.secrets."recyclarr-env" = mkDotenvSecret ./env.sops;
 
   # /config data dir (repo clones, logs, state). Container runs as its
   # image default UID 1000 -> host 100999 under rootless podman (no
   # privilege-drop in the entrypoint), so the dir must be 100999:100999.
-  myStack.stateDirs."/home/santiago/selfhost/recyclarr".uid = 1000;
+  fleet.statePaths."/home/santiago/selfhost/recyclarr".uid = 1000;
 
   virtualisation.oci-containers.containers.recyclarr = mkRootlessContainer {
     image = "ghcr.io/recyclarr/recyclarr:8@sha256:2d6107f758d882a59fe9d646aa54fa8a5a4fb7a40995125fade575652a3f7871";

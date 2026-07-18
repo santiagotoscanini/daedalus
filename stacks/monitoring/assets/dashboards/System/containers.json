@@ -30,10 +30,10 @@
       "id": 1,
       "type": "stat",
       "title": "Running",
-      "description": "container_up == 1 summed. Derived from every declared oci-container by the container-up-exporter timer (node-exporter textfile).",
+      "description": "container_up == 1 summed. Derived from every declared oci-container by the host-liveness-exporter timer (node-exporter textfile).",
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "gridPos": {
         "h": 4,
@@ -69,7 +69,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(container_up)",
           "instant": true,
@@ -84,7 +84,7 @@
       "description": "Declared containers currently not running (container_up == 0). Green at 0, red once any container is down.",
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "gridPos": {
         "h": 4,
@@ -129,7 +129,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(1 - container_up)",
           "instant": true,
@@ -144,7 +144,7 @@
       "description": "Number of oci-containers declared in the nix config (the exporter emits one series per declared container).",
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "gridPos": {
         "h": 4,
@@ -180,7 +180,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "count(container_up)",
           "instant": true,
@@ -195,7 +195,7 @@
       "description": "Rows appear only while a container is down. Empty table = whole fleet up.",
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "gridPos": {
         "h": 4,
@@ -255,7 +255,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "container_up == 0",
           "instant": true,
@@ -270,7 +270,7 @@
       "description": "Per-container up/down over the dashboard window. Gaps of red are outages the Container Disappeared alert fires on. Ordered by name.",
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "gridPos": {
         "h": 18,
@@ -344,7 +344,7 @@
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "container_up",
           "legendFormat": "{{name}}"

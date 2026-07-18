@@ -212,8 +212,8 @@ in
     serviceConfig.Type = "oneshot";
     script = ''
       {
-        echo "From: ${config.myStack.mail.sender}"
-        echo "To: ${config.myStack.mail.alertTo}"
+        echo "From: ${config.fleet.mail.sender}"
+        echo "To: ${config.fleet.mail.alertTo}"
         echo "Subject: [s2-server] TV VPN WireGuard key expires 2027-04-03"
         echo
         echo "The ProtonVPN WireGuard key for the TV stack (gluetun) expires 2027-04-03."
@@ -241,7 +241,7 @@ in
   # pasta host address; plain-TCP host port on pg) since the gluetun
   # netns can't join app-db-net; connection settings live in each
   # app's config.xml (mutable state, not in the rebuild trail).
-  myStack.appDatabases = {
+  fleet.appDatabases = {
     sonarr = {
       extraDatabases = [ "sonarr_log" ];
       consumers = [ "sonarr" ];
@@ -257,7 +257,7 @@ in
     bazarr.consumers = [ "bazarr" ];
   };
 
-  myStack.containerNetworks =
+  fleet.bridgeMemberships =
     lib.listToAttrs (map (n: lib.nameValuePair n [ ]) ([ "gluetun" ] ++ netnsTenants))
     // {
       jellyfin = [ "traefik" ];
@@ -265,7 +265,7 @@ in
 
   # Loki stack label (stacks/logging logStacks): group the whole
   # netns family + jellyfin under one queryable stack.
-  myStack.logStacks.tv = [
+  fleet.logStacks.tv = [
     "gluetun"
     "jellyfin"
   ]
@@ -274,7 +274,7 @@ in
   # Jellyfin is bridge-routed. The gluetun-netns UIs (from vpnUis) use
   # explicit serviceUrl pointing at gluetun's host-published ports —
   # putting gluetun on traefik-net would mix VPN-exit and bridge traffic.
-  myStack.webApps =
+  fleet.webApps =
     lib.listToAttrs (
       map (
         u:
@@ -317,7 +317,7 @@ in
       };
     };
 
-  # wireguard.nix also declares wireguard/iptables modules; NixOS
+  # stacks/wg-easy declares the same wireguard/iptables modules; NixOS
   # merges the lists. `tun` is exclusive to gluetun (/dev/net/tun).
   boot.kernelModules = [
     "wireguard"
@@ -326,14 +326,14 @@ in
     "tun"
   ];
 
-  myStack.prometheusScrapes = [
+  fleet.prometheusScrapes = [
     {
       job_name = "gluetun";
       static_configs = [ { targets = [ "host.containers.internal:8001" ]; } ];
     }
   ];
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/tv/bazarr" = { };
     "/home/santiago/selfhost/tv/gluetun" = { };
     "/home/santiago/selfhost/tv/gluetun/auth" = { };
@@ -356,10 +356,12 @@ in
     "/s2/tv/usenet" = { };
   };
 
-  myStack.homepageServices."Network" = [
+  fleet.homepageServices."Network" = [
     {
       name = "Gluetun";
-      href = "https://qbittorrent.toscanini.me";
+      # The VPN has no UI of its own — link the grafana network
+      # dashboard, where the gluetun/VPN panels live.
+      href = "https://grafana.toscanini.me/d/s2-network";
       description = "ProtonVPN WireGuard tunnel (host netns for tv stack)";
       icon = "gluetun.png";
       siteMonitor = "http://host.containers.internal:8000/v1/publicip/ip";
@@ -499,7 +501,7 @@ in
       POSTGRES_DATABASE = "bazarr";
       POSTGRES_USERNAME = "bazarr";
     };
-    environmentFiles = [ config.myStack.appDatabases.bazarr.envFile ];
+    environmentFiles = [ config.fleet.appDatabases.bazarr.envFile ];
   };
 
   # subgen — speech-to-text subtitle generation (Bazarr's whisperai

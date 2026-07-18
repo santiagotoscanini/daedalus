@@ -10,15 +10,15 @@
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.stirling-pdf = [ "traefik" ];
+  fleet.bridgeMemberships.stirling-pdf = [ "traefik" ];
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/stirling-pdf/custom-files".uid = 1000;
     "/home/santiago/selfhost/stirling-pdf/extra-configs".uid = 1000;
     "/home/santiago/selfhost/stirling-pdf/logs".uid = 1000;
     "/home/santiago/selfhost/stirling-pdf/training-data" = { };
   };
-  myStack.webApps.stirling-pdf = {
+  fleet.webApps.stirling-pdf = {
     serviceName = "stirling-pdf";
     port = 8080; # in-container port
     # Login stays disabled (native OIDC is paywalled — AUTH.md); the
@@ -54,7 +54,7 @@
   };
 
   virtualisation.oci-containers.containers.stirling-pdf = mkRootlessContainer {
-    image = "docker.io/frooodle/s-pdf:2.14.2@sha256:7ed4d9681d18e4fbc3aa6a63647c4b5c2bcc4b75841df7c05d7e3d2320f5c9a1";
+    image = "docker.io/stirlingtools/stirling-pdf:2.14.2@sha256:926adc3a7de84019484b6e2e77060349e193da64b827e927c7b0502ed0334fff";
 
     volumes = [
       # `training-data` holds tesseract `.traineddata` packs for OCR in

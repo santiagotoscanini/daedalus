@@ -15,7 +15,7 @@
 }:
 
 {
-  myStack.containerNetworks.wealthfolio = [ "traefik" ];
+  fleet.bridgeMemberships.wealthfolio = [ "traefik" ];
 
   # OIDC discovery against id.toscanini.me runs at startup and is fatal
   # on failure; under --rm the crash leaves the oneshot unit green with
@@ -30,8 +30,8 @@
     wants = [ "podman-pocket-id.service" ];
   };
 
-  myStack.stateDirs."/home/santiago/selfhost/wealthfolio/data".uid = 1000;
-  myStack.webApps.wealthfolio = {
+  fleet.statePaths."/home/santiago/selfhost/wealthfolio/data".uid = 1000;
+  fleet.webApps.wealthfolio = {
     serviceName = "wealthfolio";
     port = 8088;
     exposeRemotely = true;

@@ -22,7 +22,7 @@
   pkgs,
   mkRootlessContainer,
   mkDotenvSecret,
-  mkImageBuild,
+  mkLocalImage,
   mkSecretRender,
   hostUid,
   ...
@@ -49,7 +49,7 @@ let
      && rm -rf /var/lib/apt/lists/*
   '';
 
-  nextcloudImage = mkImageBuild {
+  nextcloudImage = mkLocalImage {
     name = "nextcloud-ffmpeg";
     tagPrefix = nextcloudVersion;
     contextDir = nextcloudImageBuildDir;
@@ -90,9 +90,9 @@ in
   # Database on the shared app-db cluster: role + db + env file with
   # DATABASE_URL, materialized by app-db-nextcloud-bootstrap.service
   # (see stacks/app-db/). config.php holds the live connection values.
-  myStack.appDatabases.nextcloud.consumers = [ "nextcloud-app" ];
+  fleet.appDatabases.nextcloud.consumers = [ "nextcloud-app" ];
 
-  myStack.containerNetworks = {
+  fleet.bridgeMemberships = {
     # The app resolves redis via REDIS_HOST (redis.config.php overrides
     # config.php's legacy redis block), so the container name is enough.
     nextcloud-redis = [ "nextcloud" ];
@@ -103,12 +103,12 @@ in
     ]; # config.php dials pg:5432
   };
 
-  myStack.logStacks.nextcloud = [
+  fleet.logStacks.nextcloud = [
     "nextcloud-app"
     "nextcloud-redis"
   ];
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/nextcloud/nc_config".uid = 33; # www-data
     "/home/santiago/selfhost/nextcloud/nc_redis".uid = 999;
   };
@@ -116,7 +116,7 @@ in
   # Split-horizon publish — same hostname for LAN (websecure) + off-LAN
   # (cfweb via CF tunnel), wildcard cert covers both. HSTS is set by
   # Nextcloud itself in its .htaccess/config.php.
-  myStack.webApps.nextcloud = {
+  fleet.webApps.nextcloud = {
     serviceName = "nextcloud-app";
     port = 80;
     exposeRemotely = true;
@@ -179,7 +179,7 @@ in
       # No POSTGRES_* vars: the instance is installed, so the image
       # only reads DB settings from config.php.
 
-      TRUSTED_PROXIES = config.myStack.bridgeSubnets.traefik;
+      TRUSTED_PROXIES = config.fleet.bridgeSubnets.traefik;
       PHP_MEMORY_LIMIT = "2G";
       NEXTCLOUD_TRUSTED_DOMAINS = "nextcloud.toscanini.me host.containers.internal";
       NEXTCLOUD_INIT_HTACCESS = "true";

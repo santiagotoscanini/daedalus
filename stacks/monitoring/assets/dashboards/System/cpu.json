@@ -35,7 +35,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -44,7 +44,7 @@
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -102,7 +102,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -111,7 +111,7 @@
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -152,7 +152,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -161,7 +161,7 @@
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -202,7 +202,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -211,7 +211,7 @@
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -252,7 +252,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -261,7 +261,7 @@
           "legendFormat": "{{mode}}",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -307,7 +307,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -316,7 +316,7 @@
           "legendFormat": "core {{cpu}}",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -362,7 +362,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -371,7 +371,7 @@
           "legendFormat": "1m",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         },
         {
@@ -380,7 +380,7 @@
           "legendFormat": "5m",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         },
         {
@@ -389,7 +389,7 @@
           "legendFormat": "15m",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         },
         {
@@ -398,7 +398,7 @@
           "legendFormat": "cores",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -457,7 +457,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -466,7 +466,7 @@
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -523,7 +523,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -532,7 +532,7 @@
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -589,7 +589,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -598,7 +598,7 @@
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -655,7 +655,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -664,7 +664,7 @@
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -717,7 +717,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -726,7 +726,7 @@
           "legendFormat": "avg",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         },
         {
@@ -735,7 +735,7 @@
           "legendFormat": "max",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         },
         {
@@ -744,7 +744,7 @@
           "legendFormat": "NVMe sensor {{sensor}}",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -790,7 +790,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -799,7 +799,7 @@
           "legendFormat": "core {{core}}",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -858,7 +858,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -867,7 +867,7 @@
           "legendFormat": "cpu {{cpu}}",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -913,7 +913,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -922,7 +922,7 @@
           "legendFormat": "ctx switches",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -968,7 +968,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -977,7 +977,7 @@
           "legendFormat": "interrupts",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -1023,7 +1023,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -1032,7 +1032,7 @@
           "legendFormat": "forks",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -1078,7 +1078,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -1087,7 +1087,7 @@
           "legendFormat": "runnable",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         },
         {
@@ -1096,7 +1096,7 @@
           "legendFormat": "blocked",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -1155,7 +1155,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -1164,7 +1164,7 @@
           "legendFormat": "% waiting",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],
@@ -1210,7 +1210,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "targets": [
         {
@@ -1219,7 +1219,7 @@
           "legendFormat": "cpu {{cpu}}",
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           }
         }
       ],

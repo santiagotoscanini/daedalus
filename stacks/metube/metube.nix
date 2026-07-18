@@ -13,8 +13,8 @@
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.metube = [ "traefik" ];
-  myStack.webApps.metube = {
+  fleet.bridgeMemberships.metube = [ "traefik" ];
+  fleet.webApps.metube = {
     serviceName = "metube";
     port = 8081;
     # No auth of its own (upstream: none planned). Homepage widget

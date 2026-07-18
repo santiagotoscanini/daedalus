@@ -38,7 +38,7 @@
   # operator values).
   sops.secrets."app-ipcrawl-env" = mkDotenvSecret ./ipcrawl-env.sops;
 
-  myStack.apps.anansi = {
+  fleet.apps.anansi = {
     postgres.enable = true;
     stage = "live";
 
@@ -53,7 +53,7 @@
   # Dockerfile + .github/workflows/image.yml that publishes
   # ghcr.io/santiagotoscanini/ipcrawl:latest, so the `image` default applies
   # unchanged. Rebase the fork on upstream to pick up changes.
-  myStack.apps.ipcrawl = {
+  fleet.apps.ipcrawl = {
     # SQLite + an fs-backed screenshot/SWR cache, no Postgres. Schema is
     # created in-process on boot (server/utils/exploreDb.ts ensureSchema),
     # so there's no migration step to run — the migrations/ dir upstream is

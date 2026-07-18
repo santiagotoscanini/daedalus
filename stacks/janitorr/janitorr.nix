@@ -24,7 +24,7 @@
 }:
 
 {
-  myStack.containerNetworks.janitorr = [ "traefik" ];
+  fleet.bridgeMemberships.janitorr = [ "traefik" ];
 
   # janitorr resolves and dials seerr during Spring startup and exits on
   # failure; under --rm the crash leaves the oneshot unit green with no
@@ -38,7 +38,7 @@
   # No web UI upstream — this tile is the face: Drilldown deep-link to
   # its Loki stream + a counter of dry-run deletion candidates (the
   # "Deleting ..." report lines) over the last 7 days.
-  myStack.homepageServices."Media" = [
+  fleet.homepageServices."Media" = [
     {
       name = "Janitorr";
       href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore?from=now-7d&to=now&var-ds=loki-default&var-filters=container%7C%3D%7Cjanitorr";
@@ -63,7 +63,7 @@
   # assets/application.yml. Edit with `sops env.sops`.
   sops.secrets."janitorr-env" = mkDotenvSecret ./env.sops;
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/janitorr" = { };
     "/home/santiago/selfhost/janitorr/logs" = {
       uid = 1002;

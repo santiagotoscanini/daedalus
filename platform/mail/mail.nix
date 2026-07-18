@@ -2,7 +2,7 @@
 #
 # msmtp is the system `sendmail`, relaying through Gmail
 # (smtp.gmail.com:587, STARTTLS) as s2.toscanini.me@gmail.com. The app
-# password is the single sops secret platform/mail/password.sops, read by
+# password is the single sops secret platform/mail/smtp-app-password.sops, read by
 # root (msmtp, invoked by smartd/ZED/systemd) and — bind-mounted — by the
 # grafana container (which runs --user=0:0 → santiago). n8n can't read a
 # santiago-owned bind mount (it runs as an unprivileged mapped uid), so it
@@ -29,7 +29,7 @@
 }:
 
 let
-  inherit (config.myStack.mail) sender alertTo;
+  inherit (config.fleet.mail) sender alertTo;
   pwPath = config.sops.secrets."mail-relay-password".path;
 
   # Recipients/From come from the message headers (-t).
@@ -55,7 +55,7 @@ in
 {
   # Declared here (not in common.nix) per the owning-module convention:
   # every mail-sending consumer reads these; this module owns the relay.
-  options.myStack.mail = {
+  options.fleet.mail = {
     sender = lib.mkOption {
       type = lib.types.str;
       description = "From address every mail-sending service uses (the relay account).";
@@ -75,20 +75,20 @@ in
     };
   };
 
-  options.myStack.emailOnFailure = lib.mkOption {
+  options.fleet.emailOnFailure = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [ ];
     example = [ "flake-autoupgrade" ];
     description = ''
       Systemd unit names (no .service suffix) that email on failure via
       notify-email@. Owning modules self-register here, next to their
-      myStack.hcPings entry — the two registries pair up per module.
+      fleet.hcPings entry — the two registries pair up per module.
     '';
   };
 
   config = {
     sops.secrets."mail-relay-password" = {
-      sopsFile = ./password.sops;
+      sopsFile = ./smtp-app-password.sops;
       format = "binary";
       owner = "santiago";
       mode = "0400";
@@ -104,8 +104,8 @@ in
         logfile = "/var/log/msmtp.log";
       };
       accounts.default = {
-        host = config.myStack.mail.smtpHost;
-        port = config.myStack.mail.smtpPort;
+        host = config.fleet.mail.smtpHost;
+        port = config.fleet.mail.smtpPort;
         auth = true;
         from = sender;
         user = sender;
@@ -143,7 +143,7 @@ in
         };
       };
     }
-    // lib.genAttrs config.myStack.emailOnFailure (_: {
+    // lib.genAttrs config.fleet.emailOnFailure (_: {
       onFailure = [ "notify-email@%N.service" ];
     });
   };

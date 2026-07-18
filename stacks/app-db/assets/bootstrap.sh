@@ -9,7 +9,7 @@
 #   CLUSTER_ENV    — $ENV_BASE/cluster/env  (POSTGRES_PASSWORD line)
 #   APP_ENV_FILE   — $ENV_BASE/$APP_NAME/env (per-app env we emit)
 #
-# `set -eu` is already on (set by the wrapper). state-dirs.service also
+# `set -eu` is already on (set by the wrapper). state-paths.service also
 # declares the APP_ENV_FILE directory, but there is no ordering edge
 # between the oneshots — create it here so a fresh restore can't race.
 # This unit runs as santiago, so the dir lands santiago-owned.

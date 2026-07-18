@@ -10,7 +10,7 @@
 # query history, macvendor.db, tls.pem) lives in /var/lib/pihole and
 # is fully mutable — UI changes go there, not into pihole.toml.
 #
-# Per-stack DNS entries flow in via `myStack.dnsHosts`. The literal
+# Per-stack DNS entries flow in via `fleet.dnsHosts`. The literal
 # list below catches non-stack hosts.
 
 {
@@ -21,7 +21,7 @@
 }:
 
 let
-  hostEntries = config.myStack.dnsHosts ++ [
+  hostEntries = config.fleet.dnsHosts ++ [
     "192.168.0.120 gaming-pc.local.toscanini.me"
   ];
 
@@ -31,7 +31,7 @@ in
 {
   # Native NixOS service, not a container — traefik dials it through
   # pasta's host gateway alias instead of via traefik-net.
-  myStack.webApps.pihole = {
+  fleet.webApps.pihole = {
     serviceUrl = "http://host.containers.internal:8080";
     # The Pocket ID gate is the only browser auth — FTL's own password
     # is blanked (see the webserver comment below). Widget + API dial
@@ -90,7 +90,7 @@ in
         # from this entry. No DHCP transaction (it IS the DHCP server;
         # static IP from configuration.nix).
         hosts = [
-          "XX:XX:XX:XX:XX:00,${config.myStack.lanIp},s2-server"
+          "XX:XX:XX:XX:XX:00,${config.fleet.lanIp},s2-server"
           "XX:XX:XX:XX:XX:01,192.168.0.120,Gaming-PC"
           "XX:XX:XX:XX:XX:02,192.168.0.100,MBP-Santiago"
           "XX:XX:XX:XX:XX:03,192.168.0.101,MBP-B"

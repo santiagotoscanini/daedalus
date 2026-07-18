@@ -9,7 +9,7 @@ its own login role; no other role can connect.
 One attribute in `stacks/apps/declarations.nix`:
 
 ```nix
-myStack.apps.foo = {
+fleet.apps.foo = {
   postgres.enable = true;
 
   homepage = {
@@ -19,7 +19,7 @@ myStack.apps.foo = {
 };
 ```
 
-`apps.nix` forwards that to `myStack.appDatabases.foo = { }`, and this
+`apps.nix` forwards that to `fleet.appDatabases.foo = { }`, and this
 module owns everything else from there: role, database, env file, LAN
 TCP route, pi-hole hosts entry.
 

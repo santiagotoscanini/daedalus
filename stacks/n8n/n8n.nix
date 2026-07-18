@@ -40,12 +40,12 @@ in
   # the app-db-generated env file, not from here.
   sops.secrets."n8n-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.n8n = [
+  fleet.bridgeMemberships.n8n = [
     "app-db"
     "traefik"
   ];
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/n8n/data".uid = 1000;
     "/home/santiago/selfhost/n8n/local-files".uid = 1000;
   };
@@ -54,9 +54,9 @@ in
   # DATABASE_URL (and the password under both POSTGRES_PASSWORD and
   # DB_POSTGRESDB_PASSWORD — the name this image reads), materialized
   # by app-db-n8n-bootstrap.service (see stacks/app-db/).
-  myStack.appDatabases.n8n.consumers = [ "n8n" ];
+  fleet.appDatabases.n8n.consumers = [ "n8n" ];
 
-  myStack.webApps.n8n = {
+  fleet.webApps.n8n = {
     serviceName = "n8n";
     port = 5678;
     homepage = {
@@ -164,10 +164,10 @@ in
       # runs as a mapped uid that can't read the santiago-owned mail secret,
       # so podman injects it as an --env-file instead.
       N8N_EMAIL_MODE = "smtp";
-      N8N_SMTP_HOST = config.myStack.mail.smtpHost;
-      N8N_SMTP_PORT = toString config.myStack.mail.smtpPort;
-      N8N_SMTP_USER = config.myStack.mail.sender;
-      N8N_SMTP_SENDER = config.myStack.mail.sender;
+      N8N_SMTP_HOST = config.fleet.mail.smtpHost;
+      N8N_SMTP_PORT = toString config.fleet.mail.smtpPort;
+      N8N_SMTP_USER = config.fleet.mail.sender;
+      N8N_SMTP_SENDER = config.fleet.mail.sender;
       N8N_SMTP_SSL = "false";
       N8N_SMTP_STARTTLS = "true";
 
@@ -195,7 +195,7 @@ in
     environmentFiles = [
       config.sops.secrets."n8n-env".path
       "/run/n8n-smtp/env"
-      config.myStack.appDatabases.n8n.envFile
+      config.fleet.appDatabases.n8n.envFile
     ];
 
   };

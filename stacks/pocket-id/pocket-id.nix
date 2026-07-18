@@ -6,7 +6,7 @@
 # Single Go binary. State is split across two places — BOTH matter for
 # recovery:
 #   - DB (users, clients, credentials, audit log) on the shared app-db
-#     cluster (`myStack.appDatabases.pocket_id` below) — covered by the
+#     cluster (`fleet.appDatabases.pocket_id` below) — covered by the
 #     cluster's backup story.
 #   - /app/data (~/selfhost/pocket-id/data) holds only the OIDC signing
 #     keys, encrypted at rest with ENCRYPTION_KEY (env.sops) — the app
@@ -60,7 +60,7 @@
       exit 1
     '';
 
-  myStack.containerNetworks.pocket-id = [
+  fleet.bridgeMemberships.pocket-id = [
     "traefik"
     "app-db"
   ];
@@ -68,9 +68,9 @@
   # Database on the shared app-db cluster (db/role `pocket_id` —
   # hyphens aren't valid there). DB_CONNECTION_STRING rides the
   # bootstrap env file.
-  myStack.appDatabases.pocket_id.consumers = [ "pocket-id" ];
+  fleet.appDatabases.pocket_id.consumers = [ "pocket-id" ];
 
-  myStack.webApps.pocket-id = {
+  fleet.webApps.pocket-id = {
     hostname = "id.toscanini.me";
     serviceName = "pocket-id";
     port = 1411;
@@ -83,7 +83,7 @@
     };
   };
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/pocket-id" = { };
     "/home/santiago/selfhost/pocket-id/data" = {
       uid = 1000;
@@ -100,7 +100,7 @@
 
     environmentFiles = [
       config.sops.secrets."pocket-id-env".path
-      config.myStack.appDatabases.pocket_id.envFile
+      config.fleet.appDatabases.pocket_id.envFile
     ];
 
     environment = {

@@ -1,7 +1,7 @@
 # s2-server — top-level NixOS configuration.
 # Host/system-level settings only (boot, networking, users, SSH, podman
 # runtime, GC). Per-stack modules under stacks/<name>/ each contribute
-# their own myStack.* entries, kernel modules, and firewall ports —
+# their own fleet.* entries, kernel modules, and firewall ports —
 # NixOS merges across modules.
 
 {
@@ -50,10 +50,10 @@
 
   # ── Networking ──────────────────────────────────────────────────────────────
 
-  # Host identity consumed fleet-wide via myStack.* (platform/common.nix):
+  # Host identity consumed fleet-wide via fleet.* (platform/common.nix):
   # the LAN IP below also feeds the interface config, so this block is
   # the single place these values are written.
-  myStack = {
+  fleet = {
     lanIp = "192.168.0.2";
     baseDomain = "toscanini.me";
     mail = {
@@ -88,7 +88,7 @@
 
     interfaces.enp3s0.ipv4.addresses = [
       {
-        address = config.myStack.lanIp;
+        address = config.fleet.lanIp;
         prefixLength = 24;
       }
     ];

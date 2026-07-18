@@ -2,16 +2,16 @@
 #
 # Updates the Cloudflare A record for s2.toscanini.me every 5 minutes
 # if our home public IP changes. The API token lives at
-# password.sops (sops-encrypted; ddclient runs as root).
+# cloudflare-token.sops (sops-encrypted; ddclient runs as root).
 #
 
 { config, ... }:
 
 {
-  # Cloudflare API token, sops-encrypted (password.sops). ddclient runs
+  # Cloudflare API token, sops-encrypted (cloudflare-token.sops). ddclient runs
   # as root; default root-owned /run/secrets path is correct.
   sops.secrets."ddclient-password" = {
-    sopsFile = ./password.sops;
+    sopsFile = ./cloudflare-token.sops;
     format = "binary";
   };
 

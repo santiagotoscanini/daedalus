@@ -8,7 +8,7 @@
 # every browser gets an error — gatus is what catches that.
 #
 # ── Endpoint list is generated, never hand-maintained ───────────────────
-# The probe set is built from `config.myStack.webApps` at eval time (same
+# The probe set is built from `config.fleet.webApps` at eval time (same
 # drift-proofing idea as the container_up exporter): every published web
 # app is probed automatically the moment its stack adds a webApps entry.
 # Each endpoint asserts two things:
@@ -65,7 +65,7 @@ let
       ];
     }
     // lib.optionalAttrs (w.healthHeaders != { }) { headers = w.healthHeaders; }
-  ) config.myStack.webApps;
+  ) config.fleet.webApps;
 
   # gatus reads YAML; JSON is a valid subset, so toJSON avoids quoting pain.
   gatusConfig = pkgs.writeText "gatus.yaml" (
@@ -96,13 +96,13 @@ let
   );
 in
 {
-  myStack.containerNetworks.gatus = [
+  fleet.bridgeMemberships.gatus = [
     "traefik"
     "app-db"
   ];
 
   # Database on the shared app-db cluster (see stacks/app-db/).
-  myStack.appDatabases.gatus.consumers = [ "gatus" ];
+  fleet.appDatabases.gatus.consumers = [ "gatus" ];
   # Also order after traefik + pocket-id: gatus fetches the OIDC
   # discovery document at startup and PANICS if id.toscanini.me is
   # unreachable — during a fleet-wide restart that leaves the unit
@@ -122,7 +122,7 @@ in
   # sops-encrypted env.sops. Edit with `sops env.sops`.
   sops.secrets."gatus-env" = mkDotenvSecret ./env.sops;
 
-  myStack.webApps.gatus = {
+  fleet.webApps.gatus = {
     hostname = "status.toscanini.me";
     serviceName = "gatus";
     port = 8080;
@@ -182,7 +182,7 @@ in
     # env.sops, decrypted to /run/secrets/gatus-env at activation.
     environmentFiles = [
       config.sops.secrets."gatus-env".path
-      config.myStack.appDatabases.gatus.envFile
+      config.fleet.appDatabases.gatus.envFile
     ];
 
     volumes = [

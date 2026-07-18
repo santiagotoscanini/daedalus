@@ -58,8 +58,8 @@
     serviceConfig.Type = "oneshot";
     script = ''
       {
-        echo "From: ${config.myStack.mail.sender}"
-        echo "To: ${config.myStack.mail.alertTo}"
+        echo "From: ${config.fleet.mail.sender}"
+        echo "To: ${config.fleet.mail.alertTo}"
         echo "Subject: [s2-server] ipcrawl VPN WireGuard key expires 2027-07-14"
         echo
         echo "The ProtonVPN WireGuard key for ipcrawl-vpn (gluetun-ipcrawl) expires 2027-07-14."
@@ -78,15 +78,15 @@
     };
   };
 
-  # Register in containerNetworks with `[ ]` (pasta, no bridge) so common.nix
+  # Register in bridgeMemberships with `[ ]` (pasta, no bridge) so common.nix
   # gives it the mandatory Type=oneshot systemd override — without this the
   # container defaults to Type=notify, which is broken for rootless podman on
   # this box (podman run -d exits before READY). Same as the TV stack's
   # `gluetun = [ ]`. The exporter shares gluetun's netns and needs the same.
-  myStack.containerNetworks.gluetun-ipcrawl = [ ];
-  myStack.containerNetworks.gluetun-exporter-ipcrawl = [ ];
+  fleet.bridgeMemberships.gluetun-ipcrawl = [ ];
+  fleet.bridgeMemberships.gluetun-exporter-ipcrawl = [ ];
 
-  myStack.logStacks.ipcrawl-vpn = [
+  fleet.logStacks.ipcrawl-vpn = [
     "gluetun-ipcrawl"
     "gluetun-exporter-ipcrawl"
   ];
@@ -94,7 +94,7 @@
   # Prometheus scrapes the exporter by its own job so the Grafana panels can
   # tell this instance apart from the TV gluetun (job="gluetun"). Reached via
   # the host port gluetun-ipcrawl publishes for the exporter (8003 → :8001).
-  myStack.prometheusScrapes = [
+  fleet.prometheusScrapes = [
     {
       job_name = "gluetun-ipcrawl";
       static_configs = [ { targets = [ "host.containers.internal:8003" ]; } ];
@@ -104,7 +104,7 @@
   # Homepage tile in the "Network" group, next to the TV gluetun. The native
   # gluetun widget reads the control API (public IP + region + country) — same
   # shape as stacks/tv/tv.nix, pointed at this instance's host :8002.
-  myStack.homepageServices."Network" = [
+  fleet.homepageServices."Network" = [
     {
       name = "Gluetun (ipcrawl)";
       href = "https://ipcrawl.toscanini.me";
@@ -129,7 +129,7 @@
     "tun"
   ];
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/ipcrawl-vpn" = { };
     "/home/santiago/selfhost/ipcrawl-vpn/gluetun" = { };
     "/home/santiago/selfhost/ipcrawl-vpn/gluetun/wireguard".mode = "0700";

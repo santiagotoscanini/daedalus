@@ -1,4 +1,4 @@
-# Shared helpers + myStack.* options for the rootless-podman fleet.
+# Shared helpers + fleet.* options for the rootless-podman fleet.
 # Each per-stack module contributes to these options; NixOS module-system
 # merging combines all contributions across modules.
 #
@@ -6,10 +6,10 @@
 #   - `_module.args` helpers: mkRootlessContainer (oci-containers
 #     decorator applying per-host defaults: podman.user=santiago,
 #     autoStart=true, TZ), mkGluetunExporter, hostUid, mkDotenvSecret,
-#     mkSecretRender, mkImageBuild.
-#   - Options under `myStack.*` — see each `mkOption` description below
-#     for the per-option contract (containerNetworks, bridgeSubnets,
-#     stateDirs, traefikRoutes, traefikStaticRules, cloudflareRoutes,
+#     mkSecretRender, mkLocalImage.
+#   - Options under `fleet.*` — see each `mkOption` description below
+#     for the per-option contract (bridgeMemberships, bridgeSubnets,
+#     statePaths, traefikRoutes, traefikRawRules, cloudflareRoutes,
 #     dnsHosts, prometheusScrapes, grafanaDashboards{,ByFolder}, webApps,
 #     homepageServices, homepageLayout, lanIp, baseDomain, mail).
 #     appDatabases, logStacks, emailOnFailure, and hcPings are declared
@@ -23,9 +23,9 @@
 }:
 
 let
-  cfg = config.myStack;
+  cfg = config.fleet;
 
-  # A containerNetworks element is "<bridge>" or "<bridge>:alias=<name>";
+  # A bridgeMemberships element is "<bridge>" or "<bridge>:alias=<name>";
   # the part before the first ":" names the bridge, anything after it
   # passes through to podman's --network option syntax.
   bridgeOf = spec: lib.head (lib.splitString ":" spec);
@@ -86,11 +86,11 @@ let
       # container is cgroup-killed — dirty DB shutdowns / WAL recovery next
       # boot (app-db pg is stopped last, so it is the most exposed).
       after = bridgeUnits ++ [
-        "state-dirs.service"
+        "state-paths.service"
         "user@1000.service"
       ];
       wants = bridgeUnits ++ [
-        "state-dirs.service"
+        "state-paths.service"
         "user@1000.service"
       ];
     };
@@ -131,7 +131,7 @@ let
   };
 
   distinctBridges = lib.unique (
-    map bridgeOf (lib.concatLists (lib.attrValues cfg.containerNetworks))
+    map bridgeOf (lib.concatLists (lib.attrValues cfg.bridgeMemberships))
   );
 
   # Resolve a webApp's upstream URL from whichever of the two inputs is
@@ -173,7 +173,7 @@ let
     };
 in
 {
-  options.myStack = {
+  options.fleet = {
     lanIp = lib.mkOption {
       type = lib.types.str;
       description = ''
@@ -195,7 +195,7 @@ in
       example = "toscanini.me";
     };
 
-    containerNetworks = lib.mkOption {
+    bridgeMemberships = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf lib.types.str);
       default = { };
       description = ''
@@ -231,7 +231,7 @@ in
       '';
     };
 
-    stateDirs = lib.mkOption {
+    statePaths = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule (_: {
           options = {
@@ -270,7 +270,7 @@ in
       description = ''
         Host paths a container binds for persistent state, keyed by
         absolute path and declared with their CONTAINER-side ownership.
-        Applied by the root `state-dirs.service` oneshot with the
+        Applied by the root `state-paths.service` oneshot with the
         subuid mapping — the single convention for pre-creating
         bind-mount sources so a fresh restore (repo clone + rebuild)
         starts every container with correctly-owned dirs instead of
@@ -379,7 +379,7 @@ in
       '';
     };
 
-    traefikStaticRules = lib.mkOption {
+    traefikRawRules = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
       description = ''
@@ -422,7 +422,7 @@ in
         ingress block (with the mandatory `http_status:404` catch-all
         appended).
 
-        Pairs with `myStack.traefikRoutes.<name>.entrypoint = "cfweb"`
+        Pairs with `fleet.traefikRoutes.<name>.entrypoint = "cfweb"`
         on the same hostname so traefik accepts the inbound request.
       '';
       example = lib.literalExpression ''
@@ -499,7 +499,7 @@ in
               hostname = lib.mkOption {
                 type = lib.types.str;
                 default = "${name}.${cfg.baseDomain}";
-                defaultText = lib.literalExpression ''"''${name}.''${myStack.baseDomain}"'';
+                defaultText = lib.literalExpression ''"''${name}.''${fleet.baseDomain}"'';
                 description = ''
                   Canonical FQDN clients hit (e.g. "immich.toscanini.me").
                   Same hostname for LAN HTTPS (pi-hole answers
@@ -532,7 +532,7 @@ in
                   "http://''${serviceName}:''${port}"`.
 
                   Requires the upstream container on `traefik-net`
-                  (`myStack.containerNetworks.<x>` lists "traefik";
+                  (`fleet.bridgeMemberships.<x>` lists "traefik";
                   multi-bridge stacks list it after their primary).
 
                   For stacks that can't ride `traefik-net` (gluetun-shared
@@ -642,7 +642,7 @@ in
                   shared bridge any container could dial them directly
                   and forge the header; isolation makes traefik the only
                   possible caller. Requires `serviceName`. The stack's
-                  own containerNetworks entry must NOT also list
+                  own bridgeMemberships entry must NOT also list
                   "traefik" (that would re-open the shared path).
                   Homepage siteMonitor auto-falls back to the public
                   hostname (homepage isn't on the private bridge).
@@ -717,7 +717,7 @@ in
                   siteMonitor derive from the hostname/upstream so they're
                   declared once. null = no tile. Tiles not tied to a
                   webApp (external links, no-UI stacks) still use
-                  `myStack.homepageServices` directly.
+                  `fleet.homepageServices` directly.
                 '';
               };
 
@@ -731,7 +731,7 @@ in
                     named after the attr key. Requires `serviceName`
                     (prometheus scrapes over traefik-net by container
                     DNS). Scrapes that need auth or non-webApp targets
-                    use `myStack.prometheusScrapes` directly.
+                    use `fleet.prometheusScrapes` directly.
                   '';
                 };
                 port = lib.mkOption {
@@ -757,7 +757,7 @@ in
 
         For custom shapes (HSTS middleware, dual-entrypoint sharing,
         per-route wildcard certs outside *.toscanini.me), use
-        `traefikRoutes` / `traefikStaticRules` / `cloudflareRoutes`
+        `traefikRoutes` / `traefikRawRules` / `cloudflareRoutes`
         directly.
       '';
       example = lib.literalExpression ''
@@ -875,14 +875,14 @@ in
       };
 
     # Locally-built image + its build oneshot, as one helper:
-    #   inherit (mkImageBuild { ... }) image service;
+    #   inherit (mkLocalImage { ... }) image service;
     # The tag embeds the build context's store hash, so ANY change to
     # the context (base-image digest bump, Containerfile edit, asset
     # change) changes the consumer unit's ExecStart and restarts it.
     # Without that, a rebuilt image sits unused behind an unchanged tag
     # until something else happens to restart the container — a silent
     # partial deploy. Layer cache keeps no-change rebuilds ~instant.
-    _module.args.mkImageBuild =
+    _module.args.mkLocalImage =
       {
         name, # localhost/<name>
         tagPrefix, # human-readable tag part (e.g. the app version)
@@ -1012,12 +1012,12 @@ in
     systemd.services =
       (lib.mapAttrs' (
         name: nets: lib.nameValuePair "podman-${name}" (mkContainerOverride name nets)
-      ) cfg.containerNetworks)
+      ) cfg.bridgeMemberships)
       // (lib.listToAttrs (
         map (net: lib.nameValuePair "podman-network-${net}-net" (mkBridgeUnit net)) distinctBridges
       ))
       // {
-        # stateDirs → a root oneshot (subuid-mapped). NOT tmpfiles:
+        # statePaths → a root oneshot (subuid-mapped). NOT tmpfiles:
         # systemd-tmpfiles refuses to descend from the santiago-owned
         # /home prefix into differently-owned children ("unsafe path
         # transition") and silently skips every rule under /home.
@@ -1030,12 +1030,12 @@ in
         # entries still apply), then the unit fails at the end — loud via
         # emailOnFailure + the failed-units alert. Containers deliberately
         # only `wants` this unit: `requires` would propagate every
-        # state-dirs restart (any declaration change) into a fleet-wide
+        # state-paths restart (any declaration change) into a fleet-wide
         # container restart.
-        state-dirs = {
+        state-paths = {
           description = "Create and own declared container state paths";
           wantedBy = [ "multi-user.target" ];
-          unitConfig.RequiresMountsFor = lib.attrNames cfg.stateDirs;
+          unitConfig.RequiresMountsFor = lib.attrNames cfg.statePaths;
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
@@ -1045,7 +1045,7 @@ in
             + lib.concatMapStrings (
               path:
               let
-                d = cfg.stateDirs.${path};
+                d = cfg.statePaths.${path};
                 mapId = id: name: if id == 0 then name else toString (99999 + id);
                 owner = "${mapId d.uid "santiago"}:${mapId (if d.gid != null then d.gid else d.uid) "users"}";
                 p = lib.escapeShellArg path;
@@ -1053,16 +1053,16 @@ in
               ''
                 { ${if d.type == "d" then "mkdir -p ${p}" else "[ -e ${p} ] || : > ${p}"} \
                   && chown ${owner} ${p} && chmod ${d.mode} ${p}; } \
-                  || { echo "state-dirs: failed to apply ${p}" >&2; fail=1; }
+                  || { echo "state-paths: failed to apply ${p}" >&2; fail=1; }
               ''
-            ) (lib.sort lib.lessThan (lib.attrNames cfg.stateDirs))
+            ) (lib.sort lib.lessThan (lib.attrNames cfg.statePaths))
             + ''exit "$fail"'';
         };
       };
 
-    # A broken state-dirs run means containers may start against
+    # A broken state-paths run means containers may start against
     # wrongly-owned dirs — make that loud.
-    myStack.emailOnFailure = [ "state-dirs" ];
+    fleet.emailOnFailure = [ "state-paths" ];
 
     # Bridge membership → --network flags, injected from the registry.
     # List options merge, so these compose with each stack's own
@@ -1070,14 +1070,14 @@ in
     # sharing, devices, caps).
     virtualisation.oci-containers.containers = lib.mapAttrs (_: nets: {
       extraOptions = map networkFlag nets;
-    }) (lib.filterAttrs (_: nets: nets != [ ]) cfg.containerNetworks);
+    }) (lib.filterAttrs (_: nets: nets != [ ]) cfg.bridgeMemberships);
 
     # Materialize webApps into the lower-level options the rest of
     # the box consumes (traefik route rendering, pi-hole dns.hosts,
     # cloudflared-route-sync). Module-system merging means a stack
     # can use webApps for the common case and the lower-level options
     # for edge cases at the same time.
-    myStack.traefikRoutes =
+    fleet.traefikRoutes =
       let
         baseRoute = n: w: {
           host = w.hostname;
@@ -1104,7 +1104,7 @@ in
       (lib.mapAttrsToList (n: w: {
         assertion = (w.serviceName != null) != (w.serviceUrl != null);
         message = ''
-          myStack.webApps.${n}: exactly one of `serviceName`
+          fleet.webApps.${n}: exactly one of `serviceName`
           (bridge-routed via traefik-net) or `serviceUrl` (explicit
           upstream URL, e.g. for gluetun-shared or native services)
           must be set.
@@ -1112,25 +1112,25 @@ in
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
         assertion = w.serviceName != null -> w.port != null;
-        message = "myStack.webApps.${n}: `serviceName` needs `port` (traefik dials http://<serviceName>:<port>).";
+        message = "fleet.webApps.${n}: `serviceName` needs `port` (traefik dials http://<serviceName>:<port>).";
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
         assertion = w.serviceUrl != null -> w.port == null;
-        message = "myStack.webApps.${n}: `port` is meaningless with `serviceUrl` (the URL already carries the port) — leave it null.";
+        message = "fleet.webApps.${n}: `port` is meaningless with `serviceUrl` (the URL already carries the port) — leave it null.";
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
         assertion =
-          w.isolated -> !(lib.elem "traefik" (map bridgeOf (cfg.containerNetworks.${w.serviceName} or [ ])));
+          w.isolated -> !(lib.elem "traefik" (map bridgeOf (cfg.bridgeMemberships.${w.serviceName} or [ ])));
         message = ''
-          myStack.webApps.${n}: `isolated` is defeated by also listing
-          "traefik" in containerNetworks.${toString w.serviceName} — the
+          fleet.webApps.${n}: `isolated` is defeated by also listing
+          "traefik" in bridgeMemberships.${toString w.serviceName} — the
           shared bridge reopens the direct path isolation exists to close.
         '';
       }) cfg.webApps)
       ++ (lib.mapAttrsToList (n: w: {
         assertion = w.auth == "oidc" -> w.healthPath != null;
         message = ''
-          myStack.webApps.${n}: oidc-gated apps must declare
+          fleet.webApps.${n}: oidc-gated apps must declare
           `healthPath` — otherwise the gatus probe is 302'd to Pocket
           ID and certifies the IdP instead of the app.
         '';
@@ -1138,7 +1138,7 @@ in
       ++ (lib.mapAttrsToList (n: w: {
         assertion = w.isolated -> (w.serviceName != null && !w.metrics.enable);
         message = ''
-          myStack.webApps.${n}: `isolated` needs `serviceName` (traefik
+          fleet.webApps.${n}: `isolated` needs `serviceName` (traefik
           dials the private bridge by container DNS) and is incompatible
           with `metrics.enable` (prometheus only scrapes traefik-net).
         '';
@@ -1146,12 +1146,12 @@ in
       ++ [
         (
           let
-            jobs = map (j: j.job_name) config.myStack.prometheusScrapes;
+            jobs = map (j: j.job_name) config.fleet.prometheusScrapes;
           in
           {
             assertion = lib.length jobs == lib.length (lib.unique jobs);
             message = ''
-              myStack.prometheusScrapes: duplicate job_name (webApps
+              fleet.prometheusScrapes: duplicate job_name (webApps
               metrics jobs are named after their attr key; a free-form
               scrape collides with one of them). Prometheus would reject
               the whole config at runtime.
@@ -1161,10 +1161,10 @@ in
         # The registry and the container set must stay 1:1 — a stale
         # registry key with `[ ]` would otherwise emit an inert ghost
         # unit, and an unregistered container would silently miss the
-        # oneshot override, mount ordering, and state-dirs edge.
+        # oneshot override, mount ordering, and state-paths edge.
         (
           let
-            registered = lib.attrNames cfg.containerNetworks;
+            registered = lib.attrNames cfg.bridgeMemberships;
             declared = lib.attrNames config.virtualisation.oci-containers.containers;
             ghostKeys = lib.subtractLists declared registered;
             unregistered = lib.subtractLists registered declared;
@@ -1172,10 +1172,10 @@ in
           {
             assertion = ghostKeys == [ ] && unregistered == [ ];
             message = ''
-              myStack.containerNetworks and oci-containers must stay 1:1.
+              fleet.bridgeMemberships and oci-containers must stay 1:1.
               Registered without a container: [${toString ghostKeys}].
               Container without a registry entry: [${toString unregistered}]
-              — add `myStack.containerNetworks.<name>` (`[ ]` = pasta).
+              — add `fleet.bridgeMemberships.<name>` (`[ ]` = pasta).
             '';
           }
         )
@@ -1183,7 +1183,7 @@ in
       ++ (lib.mapAttrsToList (n: r: {
         assertion = (r.serviceUrl != null) != (r.service != null);
         message = ''
-          myStack.traefikRoutes.${n}: exactly one of `serviceUrl`
+          fleet.traefikRoutes.${n}: exactly one of `serviceUrl`
           (URL upstream) or `service` (named traefik service, e.g.
           api@internal) must be set.
         '';
@@ -1191,15 +1191,15 @@ in
       ++ (lib.mapAttrsToList (n: w: {
         assertion = w.metrics.enable -> (w.serviceName != null);
         message = ''
-          myStack.webApps.${n}: `metrics.enable` needs `serviceName` —
+          fleet.webApps.${n}: `metrics.enable` needs `serviceName` —
           prometheus scrapes by container DNS on traefik-net. For
-          serviceUrl-shaped apps declare `myStack.prometheusScrapes`
+          serviceUrl-shaped apps declare `fleet.prometheusScrapes`
           directly.
         '';
       }) cfg.webApps);
 
     # Default homepage tile per webApp (see the `homepage` option).
-    myStack.homepageServices =
+    fleet.homepageServices =
       let
         mkTile =
           n: w:
@@ -1228,7 +1228,7 @@ in
       lib.mapAttrs (_: es: map (e: e.tile) es) (builtins.groupBy (e: e.group) entries);
 
     # Auth-less scrapes per webApp (see the `metrics` option).
-    myStack.prometheusScrapes = lib.mapAttrsToList (
+    fleet.prometheusScrapes = lib.mapAttrsToList (
       n: w:
       {
         job_name = n;
@@ -1243,18 +1243,18 @@ in
       // lib.optionalAttrs (w.metrics.path != "/metrics") { metrics_path = w.metrics.path; }
     ) (lib.filterAttrs (_: w: w.metrics.enable) cfg.webApps);
 
-    myStack.dnsHosts = lib.mapAttrsToList (_: w: "${cfg.lanIp} ${w.hostname}") cfg.webApps;
+    fleet.dnsHosts = lib.mapAttrsToList (_: w: "${cfg.lanIp} ${w.hostname}") cfg.webApps;
 
     # Isolated apps: the upstream lives on its private bridge and
     # traefik joins it as an extra membership (lists merge with the
     # traefik stack's own entry).
-    myStack.containerNetworks =
+    fleet.bridgeMemberships =
       (lib.mapAttrs' (n: w: lib.nameValuePair w.serviceName [ (isoBridge n) ]) isolatedApps)
       // lib.optionalAttrs (isolatedApps != { }) {
         traefik = lib.mapAttrsToList (n: _: isoBridge n) isolatedApps;
       };
 
-    myStack.cloudflareRoutes = lib.mapAttrs (_: w: { inherit (w) hostname; }) (
+    fleet.cloudflareRoutes = lib.mapAttrs (_: w: { inherit (w) hostname; }) (
       lib.filterAttrs (_: w: w.exposeRemotely) cfg.webApps
     );
   };

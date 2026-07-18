@@ -24,7 +24,7 @@
   config,
   mkDotenvSecret,
   mkRootlessContainer,
-  mkImageBuild,
+  mkLocalImage,
   ...
 }:
 
@@ -32,7 +32,7 @@ let
   # verdaccio 6.7.4 base + verdaccio-openid plugin, built locally from
   # assets/Containerfile. The tag carries the build-context hash so a
   # plugin/Containerfile bump restarts the consumer.
-  verdaccioImage = mkImageBuild {
+  verdaccioImage = mkLocalImage {
     name = "verdaccio-openid";
     tagPrefix = "6.7.4";
     contextDir = ./assets;
@@ -44,7 +44,7 @@ in
   # SSO): sops-encrypted env.sops. Edit with `sops env.sops`.
   sops.secrets."verdaccio-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.verdaccio = [ "traefik" ];
+  fleet.bridgeMemberships.verdaccio = [ "traefik" ];
 
   # verdaccio-openid fetches the IdP discovery document at plugin load
   # and does not retry on failure, leaving OIDC npm login broken until
@@ -59,7 +59,7 @@ in
     wants = [ "podman-pocket-id.service" ];
   };
 
-  myStack.webApps.verdaccio = {
+  fleet.webApps.verdaccio = {
     serviceName = "verdaccio";
     port = 4873;
     # LAN only — off-LAN clients reach it via WireGuard.
@@ -86,10 +86,10 @@ in
     };
   };
 
-  myStack.grafanaDashboardsByFolder."Services".verdaccio = builtins.readFile ./assets/dashboard.json;
+  fleet.grafanaDashboardsByFolder."Services".verdaccio = builtins.readFile ./assets/dashboard.json;
 
   # 110000:100 = container UID 10001 : GID 0 in santiago's subuid range.
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/verdaccio" = { };
     "/home/santiago/selfhost/verdaccio/storage" = {
       uid = 10001;

@@ -25,7 +25,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -93,7 +93,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "pg_up",
           "instant": true,
@@ -106,7 +106,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -155,7 +155,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(pg_stat_database_numbackends{datname=~\"$app\"})",
           "legendFormat": "Active",
@@ -168,7 +168,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -210,7 +210,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(pg_database_size_bytes{datname=~\"$app\"})",
           "refId": "A"
@@ -222,7 +222,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -274,7 +274,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "100 * sum(pg_stat_database_blks_hit{datname=~\"$app\"}) / (sum(pg_stat_database_blks_hit{datname=~\"$app\"}) + sum(pg_stat_database_blks_read{datname=~\"$app\"}))",
           "refId": "A"
@@ -286,7 +286,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -331,7 +331,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(pg_stat_database_deadlocks{datname=~\"$app\"})",
           "refId": "A"
@@ -343,7 +343,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -389,7 +389,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(rate(pg_stat_database_xact_commit{datname=~\"$app\"}[5m]))",
           "legendFormat": "commits/s",
@@ -398,7 +398,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(rate(pg_stat_database_xact_rollback{datname=~\"$app\"}[5m]))",
           "legendFormat": "rollbacks/s",
@@ -411,7 +411,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -457,7 +457,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(rate(pg_stat_database_tup_inserted{datname=~\"$app\"}[5m]))",
           "legendFormat": "inserted/s",
@@ -466,7 +466,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(rate(pg_stat_database_tup_updated{datname=~\"$app\"}[5m]))",
           "legendFormat": "updated/s",
@@ -475,7 +475,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(rate(pg_stat_database_tup_deleted{datname=~\"$app\"}[5m]))",
           "legendFormat": "deleted/s",
@@ -484,7 +484,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "sum(rate(pg_stat_database_tup_fetched{datname=~\"$app\"}[5m]))",
           "legendFormat": "fetched/s",
@@ -497,7 +497,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -543,7 +543,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "pg_stat_database_numbackends{datname=~\"$app\"}",
           "legendFormat": "{{datname}}",
@@ -556,7 +556,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -602,7 +602,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "pg_database_size_bytes{datname=~\"$app\"}",
           "legendFormat": "{{datname}}",
@@ -615,7 +615,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -660,7 +660,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "pg_locks_count{datname=~\"$app\"}",
           "legendFormat": "{{mode}} ({{datname}})",
@@ -673,7 +673,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dfakbms70z4zke"
+        "uid": "prometheus-default"
       },
       "fieldConfig": {
         "defaults": {
@@ -719,7 +719,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "dfakbms70z4zke"
+            "uid": "prometheus-default"
           },
           "expr": "pg_exporter_last_scrape_duration_seconds",
           "legendFormat": "scrape duration",
@@ -742,7 +742,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "dfakbms70z4zke"
+          "uid": "prometheus-default"
         },
         "definition": "label_values(last_over_time(pg_database_size_bytes{datname!~\"postgres|template[01]\"}[5m]), datname)",
         "hide": 0,

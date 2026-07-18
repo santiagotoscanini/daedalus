@@ -1,13 +1,13 @@
 # app-db — single shared Postgres cluster, one database per app.
 #
-# Activated when `myStack.appDatabases` is non-empty (declaring an
+# Activated when `fleet.appDatabases` is non-empty (declaring an
 # entry IS the enable signal). Materializes:
 #
 #   - One `pg` container (`postgres:18.4-alpine`) on the shared
 #     `app-db-net` bridge. Data at /home/santiago/selfhost/app-db/postgres,
 #     owner 100069:100069 (in-container UID 70 = postgres mapped via
 #     santiago's subuid range).
-#   - `pg-cluster-bootstrap.service` — one-time, generates the cluster
+#   - `app-db-cluster-bootstrap.service` — one-time, generates the cluster
 #     superuser POSTGRES_PASSWORD into
 #     /etc/nixos/stacks/app-db/secrets/cluster/env.
 #   - Per app, `app-db-<name>-bootstrap.service` — runs idempotent SQL
@@ -60,7 +60,7 @@
 }:
 
 let
-  cfg = config.myStack.appDatabases;
+  cfg = config.fleet.appDatabases;
 
   activeApps = lib.attrNames cfg;
   enabled = activeApps != [ ];
@@ -97,7 +97,7 @@ let
   '';
 in
 {
-  options.myStack.appDatabases = lib.mkOption {
+  options.fleet.appDatabases = lib.mkOption {
     # An entry's presence IS the enable signal; per-app fields live
     # in the submodule (room to grow: connection caps, extensions...).
     type = lib.types.attrsOf (
@@ -164,7 +164,7 @@ in
       (map (n: {
         assertion = builtins.match nameRegex n != null;
         message = ''
-          myStack.appDatabases."${n}": invalid app name.
+          fleet.appDatabases."${n}": invalid app name.
           Must match ${nameRegex} — used as the postgres role,
           database, and env-file directory.
         '';
@@ -181,7 +181,7 @@ in
             "monitoring"
           ]);
         message = ''
-          myStack.appDatabases."${n}": reserved name — `cluster` and
+          fleet.appDatabases."${n}": reserved name — `cluster` and
           `monitoring` are infrastructure env dirs under secrets/.
         '';
       }) activeApps)
@@ -190,7 +190,7 @@ in
         map (d: {
           assertion = builtins.match nameRegex d != null;
           message = ''
-            myStack.appDatabases."${n}".extraDatabases: "${d}" is not a
+            fleet.appDatabases."${n}".extraDatabases: "${d}" is not a
             valid database name (${nameRegex}).
           '';
         }) cfg.${n}.extraDatabases
@@ -200,16 +200,16 @@ in
     # carrying the TCP/SNI postgres wire — traefik and pg are its only
     # members, keeping the cluster unreachable from the other web
     # containers (traefik's membership is appended to its list here;
-    # containerNetworks lists merge across modules).
-    myStack.containerNetworks."pg" = [
+    # bridgeMemberships lists merge across modules).
+    fleet.bridgeMemberships."pg" = [
       "app-db"
       "pg-wire"
     ];
-    myStack.containerNetworks.traefik = [ "pg-wire" ];
+    fleet.bridgeMemberships.traefik = [ "pg-wire" ];
 
-    myStack.logStacks.app-db = [
+    fleet.logStacks.app-db = [
       "pg"
-      "pg-exporter"
+      "app-db-exporter"
     ];
 
     # LAN access for direct-TLS postgres clients (DBeaver, psql, JDBC).
@@ -223,16 +223,16 @@ in
     # shared route avoids fan-out in traefik rules + pi-hole entries.
     #
     # The TCP route is a single fixed YAML — contributed via the
-    # existing `traefikStaticRules` escape hatch (same mechanism
+    # existing `traefikRawRules` escape hatch (same mechanism
     # nextcloud's dual-router uses). traefik.nix gates the :5432
-    # entrypoint + firewall on `myStack.appDatabases != { }`.
-    myStack.traefikStaticRules."postgres-tcp.yml" = builtins.readFile ./assets/traefik-tcp.yml;
-    myStack.dnsHosts = [ "${config.myStack.lanIp} postgres.toscanini.me" ];
+    # entrypoint + firewall on `fleet.appDatabases != { }`.
+    fleet.traefikRawRules."postgres-tcp.yml" = builtins.readFile ./assets/traefik-tcp.yml;
+    fleet.dnsHosts = [ "${config.fleet.lanIp} postgres.toscanini.me" ];
 
     # The plain-TCP host port (see `ports` on the pg container).
     networking.firewall.allowedTCPPorts = [ 5433 ];
 
-    myStack.stateDirs = {
+    fleet.statePaths = {
       "${hostRoot}" = { };
       "${dataDir}" = {
         uid = 70;
@@ -248,7 +248,7 @@ in
     # the two assignments don't conflict.
     systemd.services = lib.mkMerge [
       {
-        "pg-cluster-bootstrap" = {
+        "app-db-cluster-bootstrap" = {
           description = "Bootstrap pg cluster: generate superuser POSTGRES_PASSWORD on first boot";
           before = [ "podman-pg.service" ];
           wantedBy = [ "podman-pg.service" ];
@@ -265,7 +265,7 @@ in
           };
           script = ''
             set -eu
-            # state-dirs.service also declares this dir, but there is no
+            # state-paths.service also declares this dir, but there is no
             # ordering edge between the two oneshots — create it here so
             # a fresh restore can't race (install -d is idempotent).
             install -d -m 0700 -o santiago -g users "${envBase}/cluster"

@@ -4,7 +4,7 @@
 # stops running entirely — its check goes red when no ping arrives within the
 # expected window.
 #
-# Units self-register via `myStack.hcPings` (unit -> slug) from the
+# Units self-register via `fleet.hcPings` (unit -> slug) from the
 # module that owns them. Pings are best-effort: the
 # curl runs with the systemd "-+" prefix (root + no sandbox, matching the
 # unit's existing zfs-allow hooks) so it can read the 0400 ping-key secret
@@ -21,7 +21,7 @@
 }:
 
 let
-  baseUrl = "https://hc.${config.myStack.baseDomain}/ping";
+  baseUrl = "https://hc.${config.fleet.baseDomain}/ping";
   keyPath = config.sops.secrets."hc-ping-key".path;
 
   # hc-ping <slug> [start|fail]. Always exits 0.
@@ -48,7 +48,7 @@ let
   '';
 in
 {
-  options.myStack.hcPings = lib.mkOption {
+  options.fleet.hcPings = lib.mkOption {
     type = lib.types.attrsOf lib.types.str;
     default = { };
     description = ''
@@ -64,7 +64,7 @@ in
 
   config = {
     sops.secrets."hc-ping-key" = {
-      sopsFile = ./hc-ping/ping-key.sops;
+      sopsFile = ./ping-key.sops;
       format = "binary";
       key = "";
       # Root-only: the "-+" prefixed pings run as root. Low-sensitivity token.
@@ -78,6 +78,6 @@ in
         ExecStartPre = lib.mkAfter [ "-+${hcPing} ${slug} start" ];
         ExecStopPost = lib.mkAfter [ "-+${hcPingResult} ${slug}" ];
       };
-    }) config.myStack.hcPings;
+    }) config.fleet.hcPings;
   };
 }

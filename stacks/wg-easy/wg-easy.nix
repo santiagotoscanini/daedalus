@@ -1,4 +1,4 @@
-# wireguard — wg-easy (WireGuard server + admin web UI).
+# wg-easy — WireGuard server + admin web UI.
 #
 # Ports:
 #   - 51820/udp — WireGuard protocol. Host-firewall-opened
@@ -25,12 +25,12 @@
 
 {
   # wg-easy INIT_USERNAME + INIT_PASSWORD: sops-encrypted env.sops, decrypted to
-  # /run/secrets/wireguard-env at activation. Edit with `sops env.sops`.
-  sops.secrets."wireguard-env" = mkDotenvSecret ./env.sops;
+  # /run/secrets/wg-easy-env at activation. Edit with `sops env.sops`.
+  sops.secrets."wg-easy-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.wireguard = [ "traefik" ];
-  myStack.webApps.wireguard = {
-    serviceName = "wireguard";
+  fleet.bridgeMemberships.wg-easy = [ "traefik" ];
+  fleet.webApps.wg-easy = {
+    serviceName = "wg-easy";
     port = 51821;
     metrics = {
       enable = true;
@@ -43,7 +43,7 @@
       icon = "wireguard.png";
       widget = {
         type = "wgeasy";
-        url = "http://wireguard:51821";
+        url = "http://wg-easy:51821";
         version = 2;
         username = "{{HOMEPAGE_VAR_WGEASY_USER}}";
         password = "{{HOMEPAGE_VAR_WGEASY_PASS}}";
@@ -61,24 +61,24 @@
 
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     # Non-traversable parent closes the world-readable window if wg-easy
     # rewrites its db loosely; container root maps to santiago, so the
     # bind mount still works.
-    "/home/santiago/selfhost/wireguard".mode = "0700";
+    "/home/santiago/selfhost/wg-easy".mode = "0700";
     # wg-easy writes wg-easy.db (server private key + client configs/PSKs)
-    # world-readable (0644). state-dirs re-tightens it to 0600 at boot —
+    # world-readable (0644). state-paths re-tightens it to 0600 at boot —
     # a private key has no business being world-readable, even on a
     # single-user box. (tmpfiles can't do this: it silently skips rules
     # under the santiago-owned /home prefix. `f` pre-creates the file
     # empty if missing, which SQLite treats as a valid empty DB.)
-    "/home/santiago/selfhost/wireguard/wg-easy.db" = {
+    "/home/santiago/selfhost/wg-easy/wg-easy.db" = {
       type = "f";
       mode = "0600";
     };
   };
 
-  virtualisation.oci-containers.containers.wireguard = mkRootlessContainer {
+  virtualisation.oci-containers.containers.wg-easy = mkRootlessContainer {
     image = "ghcr.io/wg-easy/wg-easy:15.3.0@sha256:93bbd593e07bab98d02807a28770ac87ab6c48818e319e68c1f66561feb99876";
 
     ports = [
@@ -86,7 +86,7 @@
     ];
 
     volumes = [
-      "/home/santiago/selfhost/wireguard:/etc/wireguard"
+      "/home/santiago/selfhost/wg-easy:/etc/wireguard"
       # NixOS keeps kernel modules under /run/booted-system, not
       # /lib/modules. Belt-and-suspenders bind (the module is loaded).
       "/run/booted-system/kernel-modules/lib/modules:/lib/modules:ro"
@@ -113,7 +113,7 @@
 
     # INIT_USERNAME + INIT_PASSWORD (admin web-UI credentials).
     environmentFiles = [
-      config.sops.secrets."wireguard-env".path
+      config.sops.secrets."wg-easy-env".path
     ];
 
     extraOptions = [

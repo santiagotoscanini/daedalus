@@ -6,7 +6,7 @@ apiVersion: 1
 
 datasources:
   - name: prometheus
-    uid: dfakbms70z4zke
+    uid: prometheus-default
     type: prometheus
     access: proxy
     url: http://prometheus:9090

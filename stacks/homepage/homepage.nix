@@ -1,6 +1,6 @@
 # homepage — single-pane dashboard for the whole fleet (gethomepage.dev).
 #
-# Each stack contributes tiles via `myStack.homepageServices`; this
+# Each stack contributes tiles via `fleet.homepageServices`; this
 # module renders them into `/app/config/services.yaml`. `/app/config`
 # is a writable host dir overlaid with per-file RO mounts for the
 # configs we own. Single RO bind would break homepage's startup
@@ -21,7 +21,7 @@
 }:
 
 let
-  # Render myStack.homepageServices into homepage's services.yaml shape:
+  # Render fleet.homepageServices into homepage's services.yaml shape:
   # a list of single-key attrsets (group → [service]), each service a
   # single-key attrset (name → properties). YAML is JSON-superset, so
   # toJSON suffices.
@@ -29,7 +29,7 @@ let
     builtins.toJSON (
       lib.mapAttrsToList (groupName: services: {
         "${groupName}" = map (svc: { "${svc.name}" = removeAttrs svc [ "name" ]; }) services;
-      }) config.myStack.homepageServices
+      }) config.fleet.homepageServices
     )
   );
 
@@ -53,12 +53,12 @@ let
   sortedGroupNames = lib.sort (
     a: b:
     let
-      tA = tabIdx (config.myStack.homepageLayout.${a}.tab or "");
-      tB = tabIdx (config.myStack.homepageLayout.${b}.tab or "");
+      tA = tabIdx (config.fleet.homepageLayout.${a}.tab or "");
+      tB = tabIdx (config.fleet.homepageLayout.${b}.tab or "");
     in
     if tA != tB then tA < tB else a < b
-  ) (lib.attrNames config.myStack.homepageLayout);
-  layoutList = map (n: { "${n}" = config.myStack.homepageLayout.${n}; }) sortedGroupNames;
+  ) (lib.attrNames config.fleet.homepageLayout);
+  layoutList = map (n: { "${n}" = config.fleet.homepageLayout.${n}; }) sortedGroupNames;
   settingsYaml = pkgs.writeText "settings.yaml" (
     builtins.readFile ./assets/settings.yaml + "\nlayout: " + builtins.toJSON layoutList + "\n"
   );
@@ -79,9 +79,7 @@ in
     dir = "/run/homepage-env";
     file = "/run/homepage-env/env";
     prep = ''
-      LITELLM_KEY=$(grep '^LITELLM_MASTER_KEY=' ${
-        config.sops.secrets."litellm-env".path
-      } | cut -d= -f2-)
+      LITELLM_KEY=$(grep '^LITELLM_MASTER_KEY=' ${config.sops.secrets."litellm-env".path} | cut -d= -f2-)
     '';
     content = ''
       $(cat ${config.sops.secrets."homepage-env".path})
@@ -93,12 +91,12 @@ in
     wants = [ "homepage-env.service" ];
   };
 
-  myStack.containerNetworks.homepage = [
+  fleet.bridgeMemberships.homepage = [
     "traefik"
     "monitoring"
   ]; # monitoring: the per-app log widget queries loki:3100 directly
 
-  myStack.webApps.homepage = {
+  fleet.webApps.homepage = {
     serviceName = "homepage";
     port = 3000;
     # No auth of its own (upstream: none planned) — Pocket ID gate is
@@ -108,10 +106,10 @@ in
   };
 
   # Per-group layout — keyed on the same group names contributed via
-  # `myStack.homepageServices` (e.g. "Media", "Cloud & AI"). Each stack
+  # `fleet.homepageServices` (e.g. "Media", "Cloud & AI"). Each stack
   # that introduces a NEW group is responsible for adding its own
   # layout entry — apps.nix does this dynamically per-app.
-  myStack.homepageLayout = {
+  fleet.homepageLayout = {
     Media = {
       style = "row";
       columns = 4;
@@ -158,7 +156,7 @@ in
 
   # External / ambient network links — not tied to any container, so
   # they live here rather than in a stack module.
-  myStack.homepageServices."Network" = [
+  fleet.homepageServices."Network" = [
     {
       name = "Router";
       href = "http://192.168.0.1/webpages/index.html?t=eb9856ea#networkMap";
@@ -188,7 +186,7 @@ in
 
   # Homepage auto-seeds the unpinned defaults (bookmarks fallback,
   # docker.yaml, kubernetes.yaml, etc.) into this dir on first run.
-  myStack.stateDirs."/home/santiago/selfhost/homepage/config" = { };
+  fleet.statePaths."/home/santiago/selfhost/homepage/config" = { };
 
   virtualisation.oci-containers.containers.homepage = mkRootlessContainer {
     # Bump intentionally — the YAML schema has occasionally added
@@ -211,7 +209,7 @@ in
       # Host-header allow-list (defense in depth; traefik already routes
       # by host). Derived from the webApp so a hostname change can't
       # silently 400 every request. localhost always allowed.
-      HOMEPAGE_ALLOWED_HOSTS = config.myStack.webApps.homepage.hostname;
+      HOMEPAGE_ALLOWED_HOSTS = config.fleet.webApps.homepage.hostname;
     };
 
     extraOptions = [

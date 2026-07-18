@@ -51,7 +51,7 @@ in
   # /run/secrets/immich-env at activation. Edit with `sops env.sops`.
   sops.secrets."immich-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks = {
+  fleet.bridgeMemberships = {
     immich-postgres = [ "immich:alias=database" ];
     immich-redis = [ "immich:alias=redis" ];
     immich-machine-learning = [ "immich" ];
@@ -61,14 +61,14 @@ in
     ];
   };
 
-  myStack.logStacks.immich = [
+  fleet.logStacks.immich = [
     "immich"
     "immich-postgres"
     "immich-redis"
     "immich-machine-learning"
   ];
 
-  myStack.stateDirs = {
+  fleet.statePaths = {
     "/home/santiago/selfhost/immich/model-cache".uid = 1000;
     "/home/santiago/selfhost/immich/postgres" = {
       uid = 999;
@@ -82,7 +82,7 @@ in
   # scrapes them directly by container DNS on traefik-net (see
   # prometheusScrapes below), so routing them through traefik + pi-hole +
   # gatus would be redundant surface for endpoints nobody browses by hand.
-  myStack.webApps.immich = {
+  fleet.webApps.immich = {
     serviceName = "immich";
     port = 2283;
     exposeRemotely = true;
@@ -106,7 +106,7 @@ in
   };
 
   # Bridge scrape — prometheus is on traefik-net too (see monitoring.nix).
-  myStack.prometheusScrapes = [
+  fleet.prometheusScrapes = [
     {
       job_name = "immich-api";
       static_configs = [ { targets = [ "immich:8081" ]; } ];
@@ -117,7 +117,7 @@ in
     }
   ];
 
-  myStack.grafanaDashboardsByFolder."Services".immich = builtins.readFile ./assets/dashboard.json;
+  fleet.grafanaDashboardsByFolder."Services".immich = builtins.readFile ./assets/dashboard.json;
 
   virtualisation.oci-containers.containers.immich-postgres = mkRootlessContainer {
     image = immichPostgresImage;
@@ -182,7 +182,7 @@ in
       # Honor X-Forwarded-For from traefik (correct IPs in audit logs).
       # Traefik dials immich over traefik-net, so the trusted peer is
       # that bridge's subnet (pinned in stacks/traefik).
-      IMMICH_TRUSTED_PROXIES = config.myStack.bridgeSubnets.traefik;
+      IMMICH_TRUSTED_PROXIES = config.fleet.bridgeSubnets.traefik;
       # /metrics on :8081 (api) + :8082 (microservices).
       IMMICH_TELEMETRY_INCLUDE = "all";
     };

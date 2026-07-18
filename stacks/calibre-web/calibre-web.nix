@@ -22,7 +22,7 @@
 
 {
   pkgs,
-  mkImageBuild,
+  mkLocalImage,
   mkRootlessContainer,
   ...
 }:
@@ -49,7 +49,7 @@ let
      && rm -rf /var/lib/apt/lists/*
   '';
 
-  calibreWebImage = mkImageBuild {
+  calibreWebImage = mkLocalImage {
     name = "calibre-web-calibre";
     tagPrefix = "0.6.26";
     contextDir = calibreWebImageBuildDir;
@@ -58,9 +58,9 @@ let
 in
 {
 
-  myStack.stateDirs."/home/santiago/selfhost/calibre-web/config" = { };
+  fleet.statePaths."/home/santiago/selfhost/calibre-web/config" = { };
 
-  myStack.webApps.calibre-web = {
+  fleet.webApps.calibre-web = {
     hostname = "calibre.toscanini.me";
     serviceName = "calibre-web";
     port = 8083;

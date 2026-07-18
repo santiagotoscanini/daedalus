@@ -1,7 +1,7 @@
 # TCP/SNI route for the shared `pg` cluster — exposes
 # postgres.toscanini.me:5432 on the LAN for DBeaver/psql clients.
 #
-# Consumed by stacks/app-db/app-db.nix via myStack.traefikStaticRules.
+# Consumed by stacks/app-db/app-db.nix via fleet.traefikRawRules.
 # `pg-tls@file` advertises the `postgresql` ALPN protocol so
 # direct-TLS clients (libpq 17+ / pgjdbc 42.7+) succeed instead of
 # getting `tlsv1 alert no application protocol`. The TLS options

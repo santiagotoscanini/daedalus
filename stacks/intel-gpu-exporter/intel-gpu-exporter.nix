@@ -20,11 +20,11 @@
 { lib, mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.intel-gpu-exporter = [ "monitoring" ];
+  fleet.bridgeMemberships.intel-gpu-exporter = [ "monitoring" ];
 
   boot.kernel.sysctl."kernel.perf_event_paranoid" = lib.mkDefault 0;
 
-  myStack.prometheusScrapes = [
+  fleet.prometheusScrapes = [
     {
       job_name = "intel-gpu";
       static_configs = [
@@ -38,7 +38,7 @@
     }
   ];
 
-  myStack.grafanaDashboardsByFolder."System".gpu = builtins.readFile ./assets/dashboard.json;
+  fleet.grafanaDashboardsByFolder."System".gpu = builtins.readFile ./assets/dashboard.json;
 
   virtualisation.oci-containers.containers.intel-gpu-exporter = mkRootlessContainer {
     image = "ghcr.io/clambin/intel-gpu-exporter:0.7.0@sha256:3dd5b35e860800d39c371364841f10b35e8d9615f024a48441f7708b929f131b";
