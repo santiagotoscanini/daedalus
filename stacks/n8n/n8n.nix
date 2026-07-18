@@ -42,6 +42,11 @@ in
 
   myStack.containerNetworks.n8n = [ "app-db" "traefik" ];
 
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/n8n/data".uid = 1000;
+    "/home/santiago/selfhost/n8n/local-files".uid = 1000;
+  };
+
   # Database on the shared app-db cluster: role + db + env file with
   # DATABASE_URL (and the password under both POSTGRES_PASSWORD and
   # DB_POSTGRESDB_PASSWORD — the name this image reads), materialized

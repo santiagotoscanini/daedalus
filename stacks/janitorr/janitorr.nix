@@ -54,11 +54,17 @@
   # assets/application.yml. Edit with `sops env.sops`.
   sops.secrets."janitorr-env" = mkDotenvSecret ./env.sops;
 
-  systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/janitorr 0755 santiago users -"
-    "d /home/santiago/selfhost/janitorr/logs 0755 101001 101000 -"
-    "d /home/santiago/selfhost/janitorr/leaving-soon 0755 101001 101000 -"
-  ];
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/janitorr" = { };
+    "/home/santiago/selfhost/janitorr/logs" = {
+      uid = 1002;
+      gid = 1001;
+    };
+    "/home/santiago/selfhost/janitorr/leaving-soon" = {
+      uid = 1002;
+      gid = 1001;
+    };
+  };
 
   virtualisation.oci-containers.containers.janitorr = mkRootlessContainer {
     image = "ghcr.io/schaka/janitorr:jvm-stable@sha256:270e9113c71182d30929f253ff6ff49c63078f4556487a668602c4114c7d665a";

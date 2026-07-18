@@ -48,12 +48,12 @@
   # (No RCON host port — ofsm drives RCON internally.)
   networking.firewall.allowedUDPPorts = [ 34197 ];
 
-  systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/factorio              0755 santiago users -"
-    "d /home/santiago/selfhost/factorio/fsm-data     0755 santiago users -"
-    "d /home/santiago/selfhost/factorio/mod_packs    0755 santiago users -"
-    "d /home/santiago/selfhost/factorio/data         0755 santiago users -"
-  ];
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/factorio" = { };
+    "/home/santiago/selfhost/factorio/fsm-data" = { };
+    "/home/santiago/selfhost/factorio/mod_packs" = { };
+    "/home/santiago/selfhost/factorio/data" = { };
+  };
 
   virtualisation.oci-containers.containers.factorio = mkRootlessContainer {
     image = "docker.io/ofsm/ofsm:0.10.1@sha256:2b031bc1ec51e437a90b24266ce87f82362b4d16670e3804688610b4ac03b608";

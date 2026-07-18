@@ -9,6 +9,13 @@
 
 {
   myStack.containerNetworks.stirling-pdf = [ "traefik" ];
+
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/stirling-pdf/custom-files".uid = 1000;
+    "/home/santiago/selfhost/stirling-pdf/extra-configs".uid = 1000;
+    "/home/santiago/selfhost/stirling-pdf/logs".uid = 1000;
+    "/home/santiago/selfhost/stirling-pdf/training-data" = { };
+  };
   myStack.webApps.stirling-pdf = {
     serviceName = "stirling-pdf";
     port = 8080; # in-container port

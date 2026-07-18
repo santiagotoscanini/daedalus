@@ -118,6 +118,13 @@ in
   # bridgeSubnets in platform/common.nix).
   myStack.bridgeSubnets.traefik = "10.89.7.0/24";
 
+  # Pre-creating the file 0600 keeps a fresh restore from letting podman
+  # create a directory here, which breaks ACME confusingly.
+  myStack.stateDirs."/home/santiago/selfhost/traefik/acme.json" = {
+    type = "f";
+    mode = "0600";
+  };
+
   # Static rules that don't fit the Host->port shape. Each stack reads
   # its own asset and contributes here (e.g. app-db's TCP/SNI route
   # lives in stacks/app-db/).

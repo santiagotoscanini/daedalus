@@ -61,6 +61,11 @@
 
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
+  # Non-traversable parent closes the world-readable window if wg-easy
+  # rewrites its db loosely; container root maps to santiago, so the
+  # bind mount still works.
+  myStack.stateDirs."/home/santiago/selfhost/wireguard".mode = "0700";
+
   # wg-easy writes wg-easy.db (server private key + client configs/PSKs)
   # world-readable (0644). Tighten to 0600 on each activation — a private
   # key has no business being world-readable, even on a single-user box.

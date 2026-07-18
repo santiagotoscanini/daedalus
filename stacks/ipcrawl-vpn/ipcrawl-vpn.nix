@@ -124,14 +124,14 @@
     "tun"
   ];
 
-  systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/ipcrawl-vpn                   0755 santiago users -"
-    "d /home/santiago/selfhost/ipcrawl-vpn/gluetun           0755 santiago users -"
-    "d /home/santiago/selfhost/ipcrawl-vpn/gluetun/wireguard 0700 santiago users -"
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/ipcrawl-vpn" = { };
+    "/home/santiago/selfhost/ipcrawl-vpn/gluetun" = { };
+    "/home/santiago/selfhost/ipcrawl-vpn/gluetun/wireguard".mode = "0700";
     # Must exist on the host so the config.toml file-mount below has a parent
     # inside the /gluetun dir mount.
-    "d /home/santiago/selfhost/ipcrawl-vpn/gluetun/auth      0755 santiago users -"
-  ];
+    "/home/santiago/selfhost/ipcrawl-vpn/gluetun/auth" = { };
+  };
 
   virtualisation.oci-containers.containers.gluetun-ipcrawl = mkRootlessContainer {
     image = gluetunImage;

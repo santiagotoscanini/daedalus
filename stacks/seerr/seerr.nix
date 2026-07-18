@@ -13,7 +13,7 @@
 # The bridge can reach host.containers.internal, so gluetun's published
 # *arr ports are dialable without joining the VPN netns.
 
-{ hostUid, mkRootlessContainer, ... }:
+{ mkRootlessContainer, ... }:
 
 {
   myStack.containerNetworks.seerr = [ "traefik" "app-db" ];
@@ -32,9 +32,7 @@
   # The image's node user (uid 1000) maps to host 100999; the config
   # dir must exist with that ownership or a fresh install fails on
   # first write.
-  systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/seerr/config 0755 ${toString (hostUid 1000)} ${toString (hostUid 1000)} -"
-  ];
+  myStack.stateDirs."/home/santiago/selfhost/seerr/config".uid = 1000;
 
   myStack.webApps.seerr = {
     serviceName = "seerr";

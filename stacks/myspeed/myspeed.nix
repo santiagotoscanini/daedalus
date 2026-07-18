@@ -22,6 +22,8 @@
 {
   myStack.containerNetworks.myspeed = [ "traefik" ];
 
+  myStack.stateDirs."/home/santiago/selfhost/myspeed/data" = { };
+
   myStack.webApps.myspeed = {
     serviceName = "myspeed";
     port = 5216; # in-container port

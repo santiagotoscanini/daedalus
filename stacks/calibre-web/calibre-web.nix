@@ -19,6 +19,8 @@
 {
   myStack.containerNetworks.calibre-web = [ "traefik" ];
 
+  myStack.stateDirs."/home/santiago/selfhost/calibre-web/config" = { };
+
   myStack.webApps.calibre-web = {
     hostname = "calibre.toscanini.me";
     serviceName = "calibre-web";

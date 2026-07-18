@@ -159,9 +159,7 @@ in
 
   # Homepage auto-seeds the unpinned defaults (bookmarks fallback,
   # docker.yaml, kubernetes.yaml, etc.) into this dir on first run.
-  systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/homepage/config 0755 santiago users -"
-  ];
+  myStack.stateDirs."/home/santiago/selfhost/homepage/config" = { };
 
   virtualisation.oci-containers.containers.homepage = mkRootlessContainer {
     # Bump intentionally — the YAML schema has occasionally added

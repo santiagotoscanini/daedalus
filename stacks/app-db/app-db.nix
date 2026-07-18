@@ -185,12 +185,15 @@ in
     # The plain-TCP host port (see `ports` on the pg container).
     networking.firewall.allowedTCPPorts = [ 5433 ];
 
-    systemd.tmpfiles.rules = [
-      "d ${hostRoot}                  0755 santiago users  -"
-      "d ${dataDir}                   0700 100069   100069 -"
-      "d ${envBase}/cluster           0700 santiago users  -"
-    ]
-    ++ (map (n: "d ${envBase}/${n}  0700 santiago users  -") activeApps);
+    myStack.stateDirs = {
+      "${hostRoot}" = { };
+      "${dataDir}" = {
+        uid = 70;
+        mode = "0700";
+      };
+      "${envBase}/cluster".mode = "0700";
+    }
+    // lib.listToAttrs (map (n: lib.nameValuePair "${envBase}/${n}" { mode = "0700"; }) activeApps);
 
     # Cluster bootstrap (one-shot: generate superuser POSTGRES_PASSWORD)
     # + per-app bootstrap services (idempotent SQL: materialize role +

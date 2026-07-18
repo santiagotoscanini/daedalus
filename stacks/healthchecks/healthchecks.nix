@@ -27,6 +27,8 @@
 {
   myStack.containerNetworks.healthchecks = [ "traefik" "app-db" ];
 
+  myStack.stateDirs."/home/santiago/selfhost/healthchecks/data".uid = 999;
+
   # Database on the shared app-db cluster (see stacks/app-db/).
   myStack.appDatabases.healthchecks = { };
   systemd.services.podman-healthchecks = {

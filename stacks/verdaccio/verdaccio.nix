@@ -70,10 +70,14 @@ in
   myStack.grafanaDashboardsByFolder."Services".verdaccio = builtins.readFile ./assets/dashboard.json;
 
   # 110000:100 = container UID 10001 : GID 0 in santiago's subuid range.
-  systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/verdaccio 0755 santiago users -"
-    "d /home/santiago/selfhost/verdaccio/storage 0775 110000 100 -"
-  ];
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/verdaccio" = { };
+    "/home/santiago/selfhost/verdaccio/storage" = {
+      uid = 10001;
+      gid = 0;
+      mode = "0775";
+    };
+  };
 
   virtualisation.oci-containers.containers.verdaccio = mkRootlessContainer {
     # Built by verdaccio-image-build below (verdaccio:6.7.4 + verdaccio-openid).

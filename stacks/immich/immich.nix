@@ -59,6 +59,15 @@ in
     immich = [ "immich" "traefik" ];
   };
 
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/immich/model-cache".uid = 1000;
+    "/home/santiago/selfhost/immich/postgres" = {
+      uid = 999;
+      gid = 0;
+      mode = "0700";
+    };
+  };
+
   # One webApp: the UI (exposed remotely). The two telemetry ports (8081
   # api, 8082 microservices) are NOT published as web routes — prometheus
   # scrapes them directly by container DNS on traefik-net (see

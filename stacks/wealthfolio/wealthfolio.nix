@@ -17,6 +17,8 @@
 
 {
   myStack.containerNetworks.wealthfolio = [ "traefik" ];
+
+  myStack.stateDirs."/home/santiago/selfhost/wealthfolio/data".uid = 1000;
   myStack.webApps.wealthfolio = {
     serviceName = "wealthfolio";
     port = 8088;

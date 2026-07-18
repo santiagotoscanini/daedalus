@@ -34,6 +34,11 @@
     alloy = [ "monitoring" ];
   };
 
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/logging/alloy/data" = { };
+    "/home/santiago/selfhost/logging/loki/data" = { };
+  };
+
   # Box-wide log browser (Grafana Drilldown -> Loki). The per-app
   # Logs tiles (apps.nix) deep-link filtered views of the same data.
   myStack.homepageServices."Monitoring" = [

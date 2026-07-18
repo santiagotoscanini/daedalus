@@ -29,7 +29,6 @@
 
 {
   config,
-  hostUid,
   mkRootlessContainer,
   mkDotenvSecret,
   ...
@@ -64,10 +63,13 @@
     };
   };
 
-  systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/pocket-id 0755 santiago users -"
-    "d /home/santiago/selfhost/pocket-id/data 0700 ${toString (hostUid 1000)} ${toString (hostUid 1000)} -"
-  ];
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/pocket-id" = { };
+    "/home/santiago/selfhost/pocket-id/data" = {
+      uid = 1000;
+      mode = "0700";
+    };
+  };
 
   virtualisation.oci-containers.containers.pocket-id = mkRootlessContainer {
     image = "ghcr.io/pocket-id/pocket-id:v2.11.0@sha256:8457defd3c58d59faf11effa1a682e94c723499930b13a359bf29f5ea0317584";

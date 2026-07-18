@@ -64,6 +64,11 @@ in
     nextcloud-app = [ "nextcloud" "app-db" "traefik" ]; # config.php dials pg:5432
   };
 
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/nextcloud/nc_config".uid = 33; # www-data
+    "/home/santiago/selfhost/nextcloud/nc_redis".uid = 999;
+  };
+
   # nextcloud-redis BGSAVE under memory pressure (1 = always allow).
   boot.kernel.sysctl."vm.overcommit_memory" = 1;
 

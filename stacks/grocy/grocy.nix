@@ -9,7 +9,6 @@
 # dir is chowned 100910:100910 to match.
 
 {
-  hostUid,
   lib,
   pkgs,
   mkRootlessContainer,
@@ -21,12 +20,12 @@
 
   # linuxserver abc (uid 911) maps to host 100910; the config dir must
   # exist with that ownership or a fresh install fails on first write.
-  systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/grocy/config 0755 ${toString (hostUid 911)} ${toString (hostUid 911)} -"
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/grocy/config".uid = 911;
     # Grocy reads highest-precedence settings from data/settingoverrides
     # (over env + config.php); the bind-mounted .txt files below land here.
-    "d /home/santiago/selfhost/grocy/config/data/settingoverrides 0755 ${toString (hostUid 911)} ${toString (hostUid 911)} -"
-  ];
+    "/home/santiago/selfhost/grocy/config/data/settingoverrides".uid = 911;
+  };
   myStack.webApps.grocy = {
     serviceName = "grocy";
     port = 80;

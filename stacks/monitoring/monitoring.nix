@@ -164,9 +164,14 @@ in
   # it. On /var/lib (persistent), so unlike a /run path it survives every
   # rebuild — the node-exporter bind source is always present, no 125 race.
   systemd.tmpfiles.rules = [
-    "d /var/lib/node-exporter 0755 santiago users -"
     "d ${textfileDir} 0755 santiago users -"
   ];
+
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/monitoring/grafana/data" = { };
+    "/home/santiago/selfhost/monitoring/prometheus/data" = { };
+    "/var/lib/node-exporter" = { };
+  };
 
   # 1-min liveness sweep. Runs as santiago so it can talk to the rootless
   # podman socket; writes the .prom file node-exporter serves.

@@ -221,6 +221,60 @@ in
       '';
     };
 
+    stateDirs = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (_: {
+          options = {
+            uid = lib.mkOption {
+              type = lib.types.int;
+              default = 0;
+              description = ''
+                CONTAINER uid that owns the path (0 = container root =
+                santiago on the host; N >= 1 maps to host 99999+N via
+                the subuid range). Declaring the container-side id keeps
+                the 70-vs-105 postgres class of trap visible: the value
+                here must match what the image actually runs as.
+              '';
+            };
+            gid = lib.mkOption {
+              type = lib.types.nullOr lib.types.int;
+              default = null;
+              description = "CONTAINER gid (same mapping; 0 = users). Default: same as uid.";
+            };
+            mode = lib.mkOption {
+              type = lib.types.str;
+              default = "0755";
+            };
+            type = lib.mkOption {
+              type = lib.types.enum [
+                "d"
+                "f"
+              ];
+              default = "d";
+              description = "tmpfiles entry type: directory or (empty-if-missing) file.";
+            };
+          };
+        })
+      );
+      default = { };
+      description = ''
+        Host paths a container binds for persistent state, keyed by
+        absolute path and declared with their CONTAINER-side ownership.
+        Rendered into systemd.tmpfiles rules with the subuid mapping
+        applied — the single convention for pre-creating bind-mount
+        sources so a fresh restore (repo clone + rebuild) starts every
+        container with correctly-owned dirs instead of podman-created
+        root ones. tmpfiles re-enforces ownership on every rebuild, so
+        a wrong uid here actively breaks the app: match the image.
+      '';
+      example = lib.literalExpression ''
+        {
+          "/home/santiago/selfhost/grocy/config" = { uid = 911; };
+          "/home/santiago/selfhost/app-db/postgres" = { uid = 70; mode = "0700"; };
+        }
+      '';
+    };
+
     bridgeSubnets = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -855,6 +909,18 @@ in
       // (lib.listToAttrs (
         map (net: lib.nameValuePair "podman-network-${net}-net" (mkBridgeUnit net)) distinctBridges
       ));
+
+    # stateDirs → tmpfiles rules (subuid-mapped). systemd-tmpfiles
+    # sorts entries by path, so parents are created before children.
+    systemd.tmpfiles.rules = lib.mapAttrsToList (
+      path: d:
+      let
+        mapId = id: name: if id == 0 then name else toString (99999 + id);
+        user = mapId d.uid "santiago";
+        group = mapId (if d.gid != null then d.gid else d.uid) "users";
+      in
+      "${d.type} ${path} ${d.mode} ${user} ${group} -"
+    ) cfg.stateDirs;
 
     # Bridge membership → --network flags, injected from the registry.
     # List options merge, so these compose with each stack's own

@@ -302,6 +302,21 @@ in
     }
   ];
 
+  myStack.stateDirs = {
+    "/home/santiago/selfhost/tv/bazarr" = { };
+    "/home/santiago/selfhost/tv/gluetun" = { };
+    "/home/santiago/selfhost/tv/jellyfin" = { };
+    "/home/santiago/selfhost/tv/nzbget" = { };
+    # nzbget's LogFile points at /config/logs and never creates the dir;
+    # missing dir = hundreds of stderr complaints per day.
+    "/home/santiago/selfhost/tv/nzbget/logs" = { };
+    "/home/santiago/selfhost/tv/prowlarr" = { };
+    "/home/santiago/selfhost/tv/qbittorrent" = { };
+    "/home/santiago/selfhost/tv/radarr" = { };
+    "/home/santiago/selfhost/tv/sonarr" = { };
+    "/home/santiago/selfhost/tv/subgen" = { };
+  };
+
   myStack.homepageServices."Network" = [
     {
       name = "Gluetun";
@@ -454,10 +469,6 @@ in
   # Plex/Jellyfin-webhook + folder-monitor features stay OFF — Bazarr
   # owns the subtitle pipeline (whisper is fallback-only). faster-
   # whisper "small" on CPU; first start downloads into the cache bind.
-  systemd.tmpfiles.rules = [
-    "d /home/santiago/selfhost/tv/subgen 0755 santiago users -"
-  ];
-
   virtualisation.oci-containers.containers.subgen = mkNetnsTenant {
     image = "docker.io/mccloud/subgen:cpu@sha256:de40992da49bad8643e0795ec41739776b1e1c16af7684d7337aea98bb11c9cd";
 
