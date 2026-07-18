@@ -67,6 +67,34 @@ Status: IN PROGRESS. Done 2026-07-17: Pocket ID live (stacks/pocket-id, id.tosca
 |---|---|
 | jellyfin | native mobile/TV clients can't do OIDC (plugin covers web only, and the 9p4 plugin was archived May 2026); Seerr authenticates users via Jellyfin passwords. Decision: keep Jellyfin's own auth everywhere — easy logins on TVs/devices matter more than SSO here. Do NOT forward-auth this hostname |
 
+## Access control — Pocket ID groups (per-client)
+
+Authorization is enforced in Pocket ID itself, before any app, via per-client
+`isGroupRestricted` + allowed groups. Two groups:
+
+- **admins** — santito. Allowed on ALL clients.
+- **family** — santito (+ household members as they register). Allowed only on
+  the shared apps below.
+
+Every OIDC client (native-OIDC AND forward-auth — each has its own client) is
+restricted:
+
+- **family apps** (allow admins + family): immich, nextcloud, calibre-web,
+  grocy, stirling-pdf, homepage, metube, myspeed
+- **admin-only** (allow admins): grafana, prometheus, traefik-dashboard, gatus,
+  healthchecks, litellm, n8n, verdaccio, wealthfolio, pihole, and the whole TV
+  stack (qbittorrent, nzbget, prowlarr, radarr, sonarr, bazarr)
+
+A user not in an allowed group gets `access_denied` at the Pocket ID authorize
+step (verified with a throwaway family-only user: blocked on gatus, allowed on
+myspeed). Adjust membership/allowed-groups in the Pocket ID admin UI or API
+(`PUT /api/oidc/clients/<id>/allowed-user-groups` + set `isGroupRestricted`).
+Each app also enforces its own per-user data isolation (sofi sees only her own
+immich/nextcloud data).
+
+Onboarding a household member: create their Pocket ID account, add to `family`,
+and (for nextcloud) set their `nextcloud_uid` custom claim = their NC username.
+
 ## Cross-cutting (implementation checklist)
 
 - cfweb entrypoint: trust cloudflared's forwarded headers or OIDC
