@@ -32,8 +32,8 @@
     # Basic auth and can't follow an OIDC redirect, so bypass those
     # paths — Calibre-Web's own Basic auth guards them, and the strip
     # middleware removes any spoofed Remote-User there. The homepage
-    # widget dials calibre-web:8083 container-direct (no gate, no header
-    # → standard login), unaffected.
+    # widget rides the /opds bypass through traefik on the public
+    # hostname (isolated = no shared bridge with homepage).
     auth = "oidc";
     healthPath = "/login";
     isolated = true;
@@ -46,7 +46,7 @@
       icon = "calibre-web.png";
       widget = {
         type = "calibreweb";
-        url = "http://calibre-web:8083";
+        url = "https://calibre.toscanini.me";
         username = "{{HOMEPAGE_VAR_CALIBREWEB_USER}}";
         password = "{{HOMEPAGE_VAR_CALIBREWEB_PASS}}";
       };

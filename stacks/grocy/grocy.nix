@@ -32,8 +32,9 @@
     # Pocket ID gate (AUTH.md tier 2). Everyone through the gate maps to
     # grocy's existing `admin` account (single-user; grocy data is shared,
     # not per-user). GROCY-API-KEY auth is checked before the header in
-    # ReverseProxyAuthMiddleware, so the /api bypass keeps API clients +
-    # the container-direct homepage widget working.
+    # ReverseProxyAuthMiddleware, so the /api bypass keeps API clients
+    # working — incl. the homepage widget, which dials through traefik
+    # on the public hostname (isolated = no shared bridge with homepage).
     auth = "oidc";
     healthPath = "/login";
     isolated = true;
@@ -52,7 +53,7 @@
         # `missing_products` = below min_stock_amount; `due_products` =
         # best_before within the days window; `overdue_products` =
         # best_before already past; `expired_products` = past use_by.
-        url = "http://grocy:80/api/stock/volatile?days=3";
+        url = "https://grocy.toscanini.me/api/stock/volatile?days=3";
         refreshInterval = 300000;
         headers = {
           "GROCY-API-KEY" = "{{HOMEPAGE_VAR_GROCY_API_KEY}}";
