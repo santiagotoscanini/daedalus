@@ -28,7 +28,7 @@
 }:
 
 {
-  myStack.containerNetworks.recyclarr = "traefik";
+  myStack.containerNetworks.recyclarr = [ ];
 
   sops.secrets."recyclarr-env" = mkDotenvSecret ./env.sops;
 
@@ -53,6 +53,6 @@
 
     environmentFiles = [ config.sops.secrets."recyclarr-env".path ];
 
-    extraOptions = [ "--network=traefik-net" ];
+
   };
 }

@@ -262,10 +262,11 @@ let
       # Register in containerNetworks either way — that's what earns the
       # mandatory Type=oneshot systemd override (rootless podman + Type=notify
       # is broken on this box). "traefik" joins the bridge for DNS routing;
-      # `null` means pasta/netns with NO bridge (egress mode borrows gluetun's
+      # `[ ]` means pasta/netns with NO bridge (egress mode borrows gluetun's
       # netns via extraOptions, and traefik reaches it via the published host
-      # port — see webApps below). Same shape as the TV stack's `sonarr = null`.
-      myStack.containerNetworks."${cName}" = if egressEnabled then null else "traefik";
+      # port — see webApps below). Same shape as the TV stack's `sonarr = [ ]`.
+      myStack.containerNetworks."${cName}" =
+        lib.optional (!egressEnabled) "traefik" ++ lib.optional postgresEnabled "app-db";
 
       # Web exposure — hardcoded internal port 3000. Bridge-routed by default
       # (serviceName on traefik-net). In egress mode the app can't ride
@@ -477,10 +478,9 @@ let
           // app.env;
 
           extraOptions = [
-            (if egressEnabled then "--network=container:${app.egress.container}" else "--network=traefik-net")
             "--authfile=${ghcrAuthFile}"
           ]
-          ++ (lib.optional postgresEnabled "--network=app-db-net");
+          ++ (lib.optional egressEnabled "--network=container:${app.egress.container}");
         }
         // (lib.optionalAttrs (app.cmd != null) { inherit (app) cmd; })
         # In egress mode podman needs the netns owner up first; dependsOn

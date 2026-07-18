@@ -40,7 +40,7 @@
   # /run/secrets/pocket-id-env at activation. Edit with `sops env.sops`.
   sops.secrets."pocket-id-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.pocket-id = "traefik";
+  myStack.containerNetworks.pocket-id = [ "traefik" "app-db" ];
 
   # Database on the shared app-db cluster (db/role `pocket_id` —
   # hyphens aren't valid there). DB_CONNECTION_STRING rides the
@@ -94,8 +94,6 @@
     };
 
     extraOptions = [
-      "--network=traefik-net"
-      "--network=app-db-net" # dials pg:5432
     ];
   };
 }

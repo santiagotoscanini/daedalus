@@ -38,7 +38,7 @@ in
   # SSO): sops-encrypted env.sops. Edit with `sops env.sops`.
   sops.secrets."verdaccio-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.verdaccio = "traefik";
+  myStack.containerNetworks.verdaccio = [ "traefik" ];
 
   myStack.webApps.verdaccio = {
     serviceName = "verdaccio";
@@ -96,7 +96,6 @@ in
 
     extraOptions = [
       "--user=10001:0" # See header for UID rationale.
-      "--network=traefik-net"
     ];
   };
 

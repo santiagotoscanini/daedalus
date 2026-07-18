@@ -13,7 +13,7 @@
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.metube = "traefik";
+  myStack.containerNetworks.metube = [ "traefik" ];
   myStack.webApps.metube = {
     serviceName = "metube";
     port = 8081;
@@ -64,7 +64,6 @@
     };
 
     extraOptions = [
-      "--network=traefik-net"
     ];
   };
 }

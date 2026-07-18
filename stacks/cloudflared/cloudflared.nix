@@ -105,7 +105,7 @@ in
     owner = "santiago";
   };
 
-  myStack.containerNetworks.cloudflared = "traefik";
+  myStack.containerNetworks.cloudflared = [ "traefik" ];
 
   myStack.prometheusScrapes = [
     {
@@ -155,7 +155,6 @@ in
       # /etc/hosts shortcut for the `traefik` name — redundant with
       # aardvark-dns on traefik-net but harmless.
       "--add-host=traefik:host-gateway"
-      "--network=traefik-net"
       # Override the image's `nonroot` user (UID 65532) so the container
       # runs as UID 0 → host santiago (UID 1000), owner of the 0600
       # credentials.json. Same idiom as the linuxserver PUID=0 trick.

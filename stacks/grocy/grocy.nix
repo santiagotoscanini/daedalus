@@ -17,7 +17,7 @@
 }:
 
 {
-  myStack.containerNetworks.grocy = "traefik";
+  myStack.containerNetworks.grocy = [ "traefik" ];
 
   # linuxserver abc (uid 911) maps to host 100910; the config dir must
   # exist with that ownership or a fresh install fails on first write.
@@ -94,7 +94,6 @@
     ];
 
     extraOptions = [
-      "--network=traefik-net"
     ];
   };
 }

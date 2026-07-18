@@ -21,23 +21,38 @@
 let
   cfg = config.myStack;
 
+  # A containerNetworks element is "<bridge>" or "<bridge>:alias=<name>";
+  # the part before the first ":" names the bridge, anything after it
+  # passes through to podman's --network option syntax.
+  bridgeOf = spec: lib.head (lib.splitString ":" spec);
+  networkFlag =
+    spec:
+    let
+      bridge = bridgeOf spec;
+      suffix = lib.removePrefix bridge spec;
+    in
+    "--network=${bridge}-net${suffix}";
+
   # Applied to every podman-<name>.service. Without this override
   # oci-containers ships Type=notify + Restart=always, which doesn't
   # survive rootless + system-unit boundaries.
   #
-  # Also emits `RequiresMountsFor` for any /s2/* host paths in the
+  # Also emits `RequiresMountsFor` for every absolute host path in the
   # container's volumes — closes the cold-boot race where a container
-  # starts before ZFS imports s2-pool, silently bind-mounting the
+  # starts before a ZFS dataset mounts, silently bind-mounting the
   # unmounted underlay (empty dir), then the dataset mounts on top
   # and the container writes into an orphan inode. Silent data loss.
+  # systemd resolves each path to its nearest mount, so paths on the
+  # root filesystem cost nothing.
   mkContainerOverride =
-    name: net:
+    name: nets:
     let
       container = config.virtualisation.oci-containers.containers.${name} or { };
       volumes = container.volumes or [ ];
       # Volume strings: "host:container[:opts]" → first segment is host path.
       hostPaths = map (v: lib.head (lib.splitString ":" v)) volumes;
-      s2Paths = lib.unique (lib.filter (lib.hasPrefix "/s2") hostPaths);
+      mountPaths = lib.unique (lib.filter (lib.hasPrefix "/") hostPaths);
+      bridgeUnits = map (b: "podman-network-${b}-net.service") (lib.unique (map bridgeOf nets));
     in
     {
       serviceConfig = {
@@ -54,17 +69,20 @@ let
         StartLimitBurst = 20;
         StartLimitIntervalSec = 600;
       }
-      // lib.optionalAttrs (s2Paths != [ ]) {
-        RequiresMountsFor = s2Paths;
+      // lib.optionalAttrs (mountPaths != [ ]) {
+        RequiresMountsFor = mountPaths;
       };
     }
-    // (lib.optionalAttrs (net != null) {
-      after = [ "podman-network-${net}-net.service" ];
-      wants = [ "podman-network-${net}-net.service" ];
+    // (lib.optionalAttrs (nets != [ ]) {
+      after = bridgeUnits;
+      wants = bridgeUnits;
     });
 
   # Idempotent — `--ignore` returns 0 if the network already exists,
-  # so this can re-run on every rebuild without churn.
+  # so this can re-run on every rebuild without churn. NOTE: `--ignore`
+  # also means a changed `bridgeSubnets` pin does NOT renumber an
+  # existing bridge — that needs a manual `podman network rm` while its
+  # members are stopped.
   # Waits on linger-users.service so /run/user/1000 is populated before
   # rootless podman runs (otherwise newuidmap lookup fails on first boot).
   mkBridgeUnit = net: {
@@ -87,11 +105,13 @@ let
       # First-boot rootless-podman bootstrap fails (newuidmap)
       # for reasons that aren't yet understood; 1s recovery is cheap.
       RestartSec = "1s";
-      ExecStart = "${pkgs.podman}/bin/podman network create --ignore ${net}-net";
+      ExecStart = "${pkgs.podman}/bin/podman network create --ignore${
+        lib.optionalString (cfg.bridgeSubnets ? ${net}) " --subnet ${cfg.bridgeSubnets.${net}}"
+      } ${net}-net";
     };
   };
 
-  distinctBridges = lib.unique (lib.filter (n: n != null) (lib.attrValues cfg.containerNetworks));
+  distinctBridges = lib.unique (map bridgeOf (lib.concatLists (lib.attrValues cfg.containerNetworks)));
 
   # Resolve a webApp's upstream URL from whichever of the two inputs is
   # set (the exactly-one assertion below enforces the shape).
@@ -166,22 +186,54 @@ in
     };
 
     containerNetworks = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.nullOr lib.types.str);
+      type = lib.types.attrsOf (lib.types.listOf lib.types.str);
       default = { };
       description = ''
-        Map: container name -> bridge name (or null for default
-        pasta networking).
+        Map: container name -> list of bridge memberships. `[ ]` means
+        default pasta networking. Elements are bridge short names
+        ("traefik" -> the traefik-net bridge), optionally with a podman
+        network-option suffix ("nextcloud:alias=redis" ->
+        `--network=nextcloud-net:alias=redis`).
 
-        Each entry produces a Type=oneshot systemd unit override and,
-        for non-null values, queues the bridge to be created by a
-        generated podman-network-<bridge>-net.service.
+        This is the single source of bridge membership: each entry
+        produces the Type=oneshot systemd unit override, injects the
+        `--network=<bridge>-net` flags into the container's
+        extraOptions (do NOT also write them by hand), orders the unit
+        after every listed bridge, and queues each bridge for creation
+        by a generated podman-network-<bridge>-net.service. Lists merge
+        across modules, so another stack can append a membership to a
+        container it doesn't own (app-db does this to put traefik on
+        pg-wire-net).
+
+        Non-bridge networking (`--network=host`,
+        `--network=container:<owner>`) stays in extraOptions with an
+        `[ ]` entry here. A key without a matching oci-container fails
+        eval (the injected extraOptions define the container, whose
+        mandatory `image` is then missing).
 
         Per-stack modules add their own containers here.
       '';
       example = lib.literalExpression ''
         {
-          wealthfolio = null;
-          nextcloud-app = "nextcloud";
+          wealthfolio = [ ];
+          nextcloud-app = [ "nextcloud" "app-db" "traefik" ];
+        }
+      '';
+    };
+
+    bridgeSubnets = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      description = ''
+        Optional subnet pin per bridge (short name -> CIDR), passed as
+        `--subnet` when the bridge is created. Pin a bridge when
+        something references its addresses (e.g. TRUSTED_PROXIES
+        derives from `bridgeSubnets.traefik`) so podman can't renumber
+        it on a fresh install. The owning stack declares its own pin.
+      '';
+      example = lib.literalExpression ''
+        {
+          traefik = "10.89.7.0/24";
         }
       '';
     };
@@ -436,9 +488,8 @@ in
                   "http://''${serviceName}:''${port}"`.
 
                   Requires the upstream container on `traefik-net`
-                  (`myStack.containerNetworks.<x> = "traefik"` and
-                  `"--network=traefik-net"` in extraOptions; multi-bridge
-                  stacks add it as a secondary bridge).
+                  (`myStack.containerNetworks.<x>` lists "traefik";
+                  multi-bridge stacks list it after their primary).
 
                   For stacks that can't ride `traefik-net` (gluetun-shared
                   netns, native NixOS services), leave null and set
@@ -799,11 +850,19 @@ in
     # Per-stack `systemd.services.<X>` additions merge with these.
     systemd.services =
       (lib.mapAttrs' (
-        name: net: lib.nameValuePair "podman-${name}" (mkContainerOverride name net)
+        name: nets: lib.nameValuePair "podman-${name}" (mkContainerOverride name nets)
       ) cfg.containerNetworks)
       // (lib.listToAttrs (
         map (net: lib.nameValuePair "podman-network-${net}-net" (mkBridgeUnit net)) distinctBridges
       ));
+
+    # Bridge membership → --network flags, injected from the registry.
+    # List options merge, so these compose with each stack's own
+    # extraOptions (which keep only non-bridge flags: host/netns
+    # sharing, devices, caps).
+    virtualisation.oci-containers.containers = lib.mapAttrs (_: nets: {
+      extraOptions = map networkFlag nets;
+    }) (lib.filterAttrs (_: nets: nets != [ ]) cfg.containerNetworks);
 
     # Materialize webApps into the lower-level options the rest of
     # the box consumes (traefik route rendering, pi-hole dns.hosts,

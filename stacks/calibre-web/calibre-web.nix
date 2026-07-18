@@ -17,7 +17,7 @@
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.calibre-web = "traefik";
+  myStack.containerNetworks.calibre-web = [ "traefik" ];
 
   myStack.webApps.calibre-web = {
     hostname = "calibre.toscanini.me";
@@ -65,7 +65,6 @@
     ];
 
     extraOptions = [
-      "--network=traefik-net"
     ];
   };
 }

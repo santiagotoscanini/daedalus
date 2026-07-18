@@ -20,7 +20,7 @@
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.myspeed = "traefik";
+  myStack.containerNetworks.myspeed = [ "traefik" ];
 
   myStack.webApps.myspeed = {
     serviceName = "myspeed";
@@ -52,7 +52,6 @@
     ];
 
     extraOptions = [
-      "--network=traefik-net"
     ];
   };
 }

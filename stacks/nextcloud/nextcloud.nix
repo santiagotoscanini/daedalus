@@ -60,8 +60,8 @@ in
   myStack.appDatabases.nextcloud = { };
 
   myStack.containerNetworks = {
-    nextcloud-redis = "nextcloud";
-    nextcloud-app = "nextcloud";
+    nextcloud-redis = [ "nextcloud:alias=redis" ]; # config.php has redis.host = redis
+    nextcloud-app = [ "nextcloud" "app-db" "traefik" ]; # config.php dials pg:5432
   };
 
   # nextcloud-redis BGSAVE under memory pressure (1 = always allow).
@@ -114,7 +114,6 @@ in
     ];
 
     extraOptions = [
-      "--network=nextcloud-net:alias=redis" # config.php has redis.host = redis
     ];
   };
 
@@ -165,9 +164,6 @@ in
     ];
 
     extraOptions = [
-      "--network=nextcloud-net"
-      "--network=app-db-net" # config.php dials pg:5432 here
-      "--network=traefik-net" # traefik dials http://nextcloud-app:80
       # tmpfs for /tmp speeds up the `recognize` ML app per its README.
       "--tmpfs=/tmp:exec"
     ];

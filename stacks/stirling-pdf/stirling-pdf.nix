@@ -8,7 +8,7 @@
 { mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.stirling-pdf = "traefik";
+  myStack.containerNetworks.stirling-pdf = [ "traefik" ];
   myStack.webApps.stirling-pdf = {
     serviceName = "stirling-pdf";
     port = 8080; # in-container port
@@ -62,7 +62,6 @@
     };
 
     extraOptions = [
-      "--network=traefik-net"
     ];
   };
 }

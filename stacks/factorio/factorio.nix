@@ -26,7 +26,7 @@
   # /run/secrets/factorio-env at activation. Edit with `sops env.sops`.
   sops.secrets."factorio-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.factorio = "traefik";
+  myStack.containerNetworks.factorio = [ "traefik" ];
 
   myStack.webApps.factorio-admin = {
     hostname = "factorio-admin.toscanini.me";
@@ -77,7 +77,6 @@
     ];
 
     extraOptions = [
-      "--network=traefik-net"
     ];
   };
 }

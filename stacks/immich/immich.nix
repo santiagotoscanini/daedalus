@@ -53,10 +53,10 @@ in
   sops.secrets."immich-env" = mkDotenvSecret ./env.sops;
 
   myStack.containerNetworks = {
-    immich-postgres = "immich";
-    immich-redis = "immich";
-    immich-machine-learning = "immich";
-    immich = "immich";
+    immich-postgres = [ "immich:alias=database" ];
+    immich-redis = [ "immich:alias=redis" ];
+    immich-machine-learning = [ "immich" ];
+    immich = [ "immich" "traefik" ];
   };
 
   # One webApp: the UI (exposed remotely). The two telemetry ports (8081
@@ -120,7 +120,6 @@ in
     environmentFiles = [ config.sops.secrets."immich-env".path ];
 
     extraOptions = [
-      "--network=immich-net:alias=database"
       "--shm-size=128m"
     ];
   };
@@ -129,7 +128,6 @@ in
     image = "docker.io/valkey/valkey:9@sha256:8e8d64b405ce18f41b8e5ee20aa4687a8ed0022d1298f2ce31cdcf3a76e09411";
 
     extraOptions = [
-      "--network=immich-net:alias=redis"
     ];
   };
 
@@ -141,7 +139,6 @@ in
     ];
 
     extraOptions = [
-      "--network=immich-net"
       "--device=/dev/dri:/dev/dri"
     ];
   };
@@ -176,8 +173,6 @@ in
     environmentFiles = [ config.sops.secrets."immich-env".path ];
 
     extraOptions = [
-      "--network=immich-net"
-      "--network=traefik-net" # traefik + prometheus reach by container DNS
       "--device=/dev/dri:/dev/dri" # iGPU for QSV transcoding
       "--userns=keep-id:uid=1000,gid=1000" # node (UID 1000) → santiago
     ];

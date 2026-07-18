@@ -111,7 +111,12 @@ in
   # decrypted to /run/secrets/traefik-env at activation. Edit with `sops env.sops`.
   sops.secrets."traefik-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.traefik = "traefik";
+  # traefik-net is the shared ingress bridge; app-db appends pg-wire
+  # membership to this list when the postgres TCP route is active.
+  myStack.containerNetworks.traefik = [ "traefik" ];
+  # Pinned so TRUSTED_PROXIES-style consumers can reference it (see
+  # bridgeSubnets in platform/common.nix).
+  myStack.bridgeSubnets.traefik = "10.89.7.0/24";
 
   # Static rules that don't fit the Host->port shape. Each stack reads
   # its own asset and contributes here (e.g. app-db's TCP/SNI route
@@ -348,14 +353,5 @@ in
       "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.delayBeforeCheck=90"
     ];
 
-    extraOptions = [
-      "--network=traefik-net"
-    ]
-    ++ (lib.optional pgwireEnabled
-      # pg-wire-net: private bridge to the app-db cluster; traefik and
-      # pg are its only members (declared in stacks/app-db). Carries
-      # the SNI-routed postgres TCP wire to `pg:5432`.
-      "--network=pg-wire-net"
-    );
   };
 }

@@ -25,7 +25,7 @@
 }:
 
 {
-  myStack.containerNetworks.healthchecks = "traefik";
+  myStack.containerNetworks.healthchecks = [ "traefik" "app-db" ];
 
   # Database on the shared app-db cluster (see stacks/app-db/).
   myStack.appDatabases.healthchecks = { };
@@ -103,8 +103,6 @@
     ];
 
     extraOptions = [
-      "--network=traefik-net"
-      "--network=app-db-net" # dials pg:5432
     ];
   };
 }

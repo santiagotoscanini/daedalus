@@ -236,9 +236,9 @@ in
   };
 
   myStack.containerNetworks =
-    lib.listToAttrs (map (n: lib.nameValuePair n null) ([ "gluetun" ] ++ netnsTenants))
+    lib.listToAttrs (map (n: lib.nameValuePair n [ ]) ([ "gluetun" ] ++ netnsTenants))
     // {
-      jellyfin = "traefik";
+      jellyfin = [ "traefik" ];
     };
 
   # Jellyfin is bridge-routed. The gluetun-netns UIs (from vpnUis) use
@@ -504,7 +504,6 @@ in
 
     extraOptions = [
       "--device=/dev/dri/renderD128"
-      "--network=traefik-net"
     ];
   };
 }

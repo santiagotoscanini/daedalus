@@ -28,7 +28,7 @@
   # /run/secrets/wireguard-env at activation. Edit with `sops env.sops`.
   sops.secrets."wireguard-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.wireguard = "traefik";
+  myStack.containerNetworks.wireguard = [ "traefik" ];
   myStack.webApps.wireguard = {
     serviceName = "wireguard";
     port = 51821;
@@ -111,7 +111,6 @@
       "--cap-add=NET_RAW"
       "--sysctl=net.ipv4.ip_forward=1"
       "--sysctl=net.ipv4.conf.all.src_valid_mark=1"
-      "--network=traefik-net"
     ];
   };
 }

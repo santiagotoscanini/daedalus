@@ -16,7 +16,7 @@
 }:
 
 {
-  myStack.containerNetworks.wealthfolio = "traefik";
+  myStack.containerNetworks.wealthfolio = [ "traefik" ];
   myStack.webApps.wealthfolio = {
     serviceName = "wealthfolio";
     port = 8088;
@@ -59,7 +59,6 @@
     environmentFiles = [ config.sops.secrets."wealthfolio-env".path ];
 
     extraOptions = [
-      "--network=traefik-net"
     ];
   };
 }

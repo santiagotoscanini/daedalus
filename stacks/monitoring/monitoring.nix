@@ -201,10 +201,10 @@ in
   myStack.appDatabases.grafana = { };
 
   myStack.containerNetworks = {
-    prometheus = "monitoring";
-    grafana = "monitoring";
-    cadvisor = "monitoring";
-    node-exporter = null; # host net — see comment on container below
+    prometheus = [ "monitoring" "traefik" ];
+    grafana = [ "monitoring" "app-db" "traefik" ];
+    cadvisor = [ "monitoring" ];
+    node-exporter = [ ]; # host net — see comment on container below
   };
 
   myStack.webApps = {
@@ -277,8 +277,6 @@ in
       # Image's default `nobody` (UID 65534) → host 100533, owner of
       # nothing. Override to UID 0 → host santiago, who owns the data dir.
       "--user=0:0"
-      "--network=monitoring-net"
-      "--network=traefik-net" # scrape migrated stacks + traefik dials by DNS
     ];
   };
 
@@ -357,9 +355,6 @@ in
 
     extraOptions = [
       "--user=0:0"
-      "--network=monitoring-net"
-      "--network=app-db-net" # dials pg:5432
-      "--network=traefik-net"
     ];
   };
 
@@ -412,7 +407,6 @@ in
       # kernel.dmesg_restrict=1 it needs CAP_SYSLOG, deliberately NOT
       # granted; the container_* metrics don't depend on it.
       "--device=/dev/kmsg"
-      "--network=monitoring-net"
     ];
   };
 }

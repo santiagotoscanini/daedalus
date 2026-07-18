@@ -30,8 +30,8 @@
 
 {
   myStack.containerNetworks = {
-    loki = "monitoring";
-    alloy = "monitoring";
+    loki = [ "monitoring" ];
+    alloy = [ "monitoring" ];
   };
 
   # Box-wide log browser (Grafana Drilldown -> Loki). The per-app
@@ -64,7 +64,6 @@
 
     extraOptions = [
       "--user=0:0" # → host santiago, owns the data dir
-      "--network=monitoring-net"
     ];
   };
 
@@ -91,7 +90,6 @@
     extraOptions = [
       "--user=0:0"
       "--group-add=keep-groups" # inherit systemd-journal in userns
-      "--network=monitoring-net"
     ];
   };
 

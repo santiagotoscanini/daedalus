@@ -154,8 +154,16 @@ in
         }) cfg.${n}.extraDatabases
       ) activeApps);
 
-    # Shared bridge: pg + every app container join `app-db-net`.
-    myStack.containerNetworks."pg" = "app-db";
+    # app-db-net: pg + every app container. pg-wire-net: private bridge
+    # carrying the TCP/SNI postgres wire — traefik and pg are its only
+    # members, keeping the cluster unreachable from the other web
+    # containers (traefik's membership is appended to its list here;
+    # containerNetworks lists merge across modules).
+    myStack.containerNetworks."pg" = [
+      "app-db"
+      "pg-wire"
+    ];
+    myStack.containerNetworks.traefik = [ "pg-wire" ];
 
     # LAN access for direct-TLS postgres clients (DBeaver, psql, JDBC).
     # One shared hostname for the whole cluster; the client picks the
@@ -190,45 +198,6 @@ in
     # the two assignments don't conflict.
     systemd.services = lib.mkMerge [
       {
-        # pg-wire-net: private bridge carrying the TCP/SNI postgres
-        # wire; traefik and pg are its only members. Declared by hand
-        # (mirrors mkBridgeUnit in platform/common.nix) because
-        # containerNetworks only creates a container's PRIMARY bridge,
-        # and this bridge is a secondary for both of its members.
-        "podman-network-pg-wire-net" = {
-          description = "Create the pg-wire-net podman bridge";
-          after = [
-            "network-online.target"
-            "linger-users.service"
-          ];
-          wants = [
-            "network-online.target"
-            "linger-users.service"
-          ];
-          wantedBy = [ "multi-user.target" ];
-          serviceConfig = {
-            Type = "oneshot";
-            RemainAfterExit = true;
-            User = "santiago";
-            Environment = "XDG_RUNTIME_DIR=/run/user/1000";
-            Restart = "on-failure";
-            RestartSec = "1s";
-            ExecStart = "${pkgs.podman}/bin/podman network create --ignore pg-wire-net";
-          };
-        };
-        # The fleet-wide override only orders pg after its PRIMARY
-        # bridge (app-db-net); order the secondary bridge explicitly.
-        "podman-pg" = {
-          after = [ "podman-network-pg-wire-net.service" ];
-          wants = [ "podman-network-pg-wire-net.service" ];
-        };
-        # Traefik's generated override likewise only orders it after its
-        # primary bridge (traefik-net); order its secondary here too.
-        "podman-traefik" = {
-          after = [ "podman-network-pg-wire-net.service" ];
-          wants = [ "podman-network-pg-wire-net.service" ];
-        };
-
         "pg-cluster-bootstrap" = {
           description = "Bootstrap pg cluster: generate superuser POSTGRES_PASSWORD on first boot";
           before = [ "podman-pg.service" ];
@@ -323,16 +292,6 @@ in
         "log_min_messages=warning"
       ];
       extraOptions = [
-        # Primary bridge: app containers dial `pg` here for the
-        # in-cluster DATABASE_URL (postgresql://...@pg:5432/<db>).
-        "--network=app-db-net"
-        # Secondary bridge: traefik dials `pg:5432` here for the TCP/SNI
-        # route that exposes the cluster on the LAN as
-        # `postgres.toscanini.me:5432`. A dedicated bridge (not
-        # traefik-net) keeps the cluster unreachable from the other web
-        # containers; traefik is the only other member. Created by the
-        # podman-network-pg-wire-net oneshot above.
-        "--network=pg-wire-net"
         "--cpus=2"
         "--memory=2g"
         "--pids-limit=500"

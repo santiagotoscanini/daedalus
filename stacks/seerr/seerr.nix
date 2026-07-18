@@ -16,7 +16,7 @@
 { hostUid, mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.seerr = "traefik";
+  myStack.containerNetworks.seerr = [ "traefik" "app-db" ];
 
   # Database on the shared app-db cluster (see stacks/app-db/); the
   # container joins app-db-net and dials `pg` by container DNS.
@@ -70,8 +70,6 @@
     environmentFiles = [ "/etc/nixos/stacks/app-db/secrets/seerr/env" ];
 
     extraOptions = [
-      "--network=traefik-net"
-      "--network=app-db-net" # dials pg:5432
     ];
   };
 }

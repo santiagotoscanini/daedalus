@@ -55,7 +55,7 @@
     content = "$TOKEN";
   };
 
-  myStack.containerNetworks.litellm = "app-db";
+  myStack.containerNetworks.litellm = [ "app-db" "traefik" ];
 
   # The bootstrap gates `podman-app-<name>` for apps-platform tenants;
   # litellm is a stack, so pull it in explicitly.
@@ -177,8 +177,6 @@
     ];
 
     extraOptions = [
-      "--network=app-db-net"
-      "--network=traefik-net"
     ];
   };
 }

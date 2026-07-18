@@ -83,8 +83,8 @@
   # container defaults to Type=notify, which is broken for rootless podman on
   # this box (podman run -d exits before READY). Same as the TV stack's
   # `gluetun = null`. The exporter shares gluetun's netns and needs the same.
-  myStack.containerNetworks.gluetun-ipcrawl = null;
-  myStack.containerNetworks.gluetun-exporter-ipcrawl = null;
+  myStack.containerNetworks.gluetun-ipcrawl = [ ];
+  myStack.containerNetworks.gluetun-exporter-ipcrawl = [ ];
 
   # Prometheus scrapes the exporter by its own job so the Grafana panels can
   # tell this instance apart from the TV gluetun (job="gluetun"). Reached via

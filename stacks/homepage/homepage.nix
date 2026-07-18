@@ -68,7 +68,7 @@ in
   # /run/secrets/homepage-env at activation. Edit with `sops env.sops`.
   sops.secrets."homepage-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.homepage = "traefik";
+  myStack.containerNetworks.homepage = [ "traefik" "monitoring" ]; # monitoring: the per-app log widget queries loki:3100 directly
 
   myStack.webApps.homepage = {
     serviceName = "homepage";
@@ -198,14 +198,6 @@ in
       "--add-host=nzbget.toscanini.me:host-gateway"
       "--add-host=pihole.toscanini.me:host-gateway"
       "--add-host=qbittorrent.toscanini.me:host-gateway"
-      # traefik-net is the primary bridge so siteMonitor / widget URLs
-      # targeting migrated stacks resolve via aardvark-dns
-      # (e.g. http://grafana:3000). Non-migrated stacks need
-      # host.containers.internal or --add-host above.
-      "--network=traefik-net"
-      # monitoring-net: homepage's per-app log widget queries loki:3100
-      # directly (loki left traefik-net), so homepage must share its bridge.
-      "--network=monitoring-net"
     ];
 
     environmentFiles = [

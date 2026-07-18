@@ -40,7 +40,7 @@ in
   # the app-db-generated env file, not from here.
   sops.secrets."n8n-env" = mkDotenvSecret ./env.sops;
 
-  myStack.containerNetworks.n8n = "app-db";
+  myStack.containerNetworks.n8n = [ "app-db" "traefik" ];
 
   # Database on the shared app-db cluster: role + db + env file with
   # DATABASE_URL (and the password under both POSTGRES_PASSWORD and
@@ -200,11 +200,5 @@ in
       "/etc/nixos/stacks/app-db/secrets/n8n/env"
     ];
 
-    extraOptions = [
-      "--network=app-db-net"
-      # Also join traefik-net so the file-provider rule can dial
-      # `http://n8n:5678` by container DNS — no host port needed.
-      "--network=traefik-net"
-    ];
   };
 }

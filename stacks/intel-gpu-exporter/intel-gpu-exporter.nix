@@ -20,7 +20,7 @@
 { lib, mkRootlessContainer, ... }:
 
 {
-  myStack.containerNetworks.intel-gpu-exporter = "monitoring";
+  myStack.containerNetworks.intel-gpu-exporter = [ "monitoring" ];
 
   boot.kernel.sysctl."kernel.perf_event_paranoid" = lib.mkDefault 0;
 
@@ -49,7 +49,6 @@
     ];
 
     extraOptions = [
-      "--network=monitoring-net"
       "--device=/dev/dri:/dev/dri"
       "--privileged"
       "--pid=host"

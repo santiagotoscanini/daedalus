@@ -91,7 +91,7 @@ let
   );
 in
 {
-  myStack.containerNetworks.gatus = "traefik";
+  myStack.containerNetworks.gatus = [ "traefik" "app-db" ];
 
   # Database on the shared app-db cluster (see stacks/app-db/).
   myStack.appDatabases.gatus = { };
@@ -173,8 +173,6 @@ in
     ];
 
     extraOptions = [
-      "--network=traefik-net"
-      "--network=app-db-net" # dials pg:5432
     ];
   };
 }

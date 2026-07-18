@@ -24,7 +24,7 @@
 }:
 
 {
-  myStack.containerNetworks.janitorr = "traefik";
+  myStack.containerNetworks.janitorr = [ "traefik" ];
 
   # No web UI upstream — this tile is the face: Drilldown deep-link to
   # its Loki stream + a counter of dry-run deletion candidates (the
@@ -76,7 +76,6 @@
     environmentFiles = [ config.sops.secrets."janitorr-env".path ];
 
     extraOptions = [
-      "--network=traefik-net"
       "--memory=768m" # JVM; CNB memory calculator sizes heap from this
     ];
   };

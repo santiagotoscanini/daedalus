@@ -44,7 +44,7 @@ in
     # podman's user-cgroup migration → unit fails with
     # `Failed with result 'protocol'`. The actual --network= flags
     # stay in extraOptions below (common.nix doesn't auto-inject).
-    myStack.containerNetworks."pg-exporter" = "app-db";
+    myStack.containerNetworks."pg-exporter" = [ "app-db" "monitoring" ];
 
     # Compose the DSN from the cluster superuser env at activation time.
     systemd.services."pg-exporter-config" = mkSecretRender {
@@ -75,8 +75,6 @@ in
         "--log.level=warn"
       ];
       extraOptions = [
-        "--network=app-db-net"
-        "--network=monitoring-net"
         "--cpus=0.25"
         "--memory=64m"
         "--pids-limit=100"

@@ -24,7 +24,7 @@
 }:
 
 {
-  myStack.containerNetworks.scraparr = "monitoring";
+  myStack.containerNetworks.scraparr = [ "monitoring" "traefik" ];
 
   # SONARR/RADARR/PROWLARR/BAZARR/JELLYSEERR/JELLYFIN_API_KEY.
   # Jellyfin uses a dedicated "Scraparr" API key (minted via /Auth/Keys).
@@ -56,8 +56,6 @@
     environmentFiles = [ config.sops.secrets."scraparr-env".path ];
 
     extraOptions = [
-      "--network=monitoring-net"
-      "--network=traefik-net"
     ];
   };
 }
