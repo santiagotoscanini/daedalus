@@ -24,6 +24,20 @@
 
   fleet.statePaths."/home/santiago/selfhost/myspeed/data" = { };
 
+  # Prometheus scrapes MySpeed's native endpoint (prom-client at
+  # /api/prometheus/metrics, no auth since passwordLevel=none) directly
+  # over traefik-net — going through traefik would hit the oidc gate.
+  # Emits myspeed_{ping,download,upload,server,time} for the latest
+  # hourly test; graphed on the Network dashboard's "Internet Speed" row.
+  fleet.prometheusScrapes = [
+    {
+      job_name = "myspeed";
+      metrics_path = "/api/prometheus/metrics";
+      scrape_interval = "60s";
+      static_configs = [ { targets = [ "myspeed:5216" ]; } ];
+    }
+  ];
+
   fleet.webApps.myspeed = {
     serviceName = "myspeed";
     port = 5216; # in-container port

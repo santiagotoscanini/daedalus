@@ -4206,6 +4206,225 @@
         "graphMode": "none",
         "justifyMode": "center"
       }
+    },
+    {
+      "id": 920,
+      "type": "row",
+      "collapsed": false,
+      "title": "Internet Speed (MySpeed)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 160
+      },
+      "panels": []
+    },
+    {
+      "id": 921,
+      "type": "timeseries",
+      "title": "Download",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-default"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 161
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Mbits",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "always",
+            "pointSize": 5,
+            "spanNulls": true,
+            "axisPlacement": "auto",
+            "gradientMode": "opacity"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "last",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-default"
+          },
+          "expr": "myspeed_download",
+          "legendFormat": "Download"
+        }
+      ]
+    },
+    {
+      "id": 922,
+      "type": "timeseries",
+      "title": "Upload",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-default"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 161
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Mbits",
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "semi-dark-blue"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "always",
+            "pointSize": 5,
+            "spanNulls": true,
+            "axisPlacement": "auto",
+            "gradientMode": "opacity"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "last",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-default"
+          },
+          "expr": "myspeed_upload",
+          "legendFormat": "Upload"
+        }
+      ]
+    },
+    {
+      "id": 923,
+      "type": "timeseries",
+      "title": "Ping",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-default"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 161
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 35
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "always",
+            "pointSize": 5,
+            "spanNulls": true,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "last",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-default"
+          },
+          "expr": "myspeed_ping",
+          "legendFormat": "Ping"
+        }
+      ]
     }
   ],
   "time": {
