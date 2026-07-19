@@ -179,6 +179,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: time() - node_textfile_mtime_seconds{file="/var/lib/node-exporter/textfile/liveness.prom"}
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -224,6 +225,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"} / node_filesystem_size_bytes{fstype!~"tmpfs|nfs|ramfs"}) * 100
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -264,6 +266,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -304,6 +307,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: increase(node_vmstat_oom_kill[5m])
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -343,6 +347,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: max(node_hwmon_temp_celsius{chip=~".*coretemp.*"}) or vector(0)
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -388,6 +393,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: systemd_failed_units
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -433,6 +439,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: node_zfs_zpool_state{state!="online"}
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -475,6 +482,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: gluetun_vpn_status
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -520,6 +528,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -560,6 +569,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: predict_linear(node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -605,6 +615,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -645,6 +656,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: avg by(instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -685,6 +697,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) * 100 and node_memory_SwapTotal_bytes > 0
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -725,6 +738,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: rate(node_vmstat_pgmajfault[5m])
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -765,6 +779,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"} / node_filesystem_files{fstype!~"tmpfs|nfs|ramfs"}) * 100
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -805,6 +820,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (rate(node_disk_read_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_reads_completed_total[5m])) and rate(node_disk_reads_completed_total[5m]) > 0
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -845,6 +861,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (rate(node_disk_write_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_writes_completed_total[5m])) and rate(node_disk_writes_completed_total[5m]) > 0
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -885,6 +902,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (rate(node_network_receive_errs_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) / rate(node_network_receive_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m])) * 100 and rate(node_network_receive_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) > 0
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -925,6 +943,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (rate(node_network_transmit_errs_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) / rate(node_network_transmit_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m])) * 100 and rate(node_network_transmit_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) > 0
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -965,6 +984,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: abs(node_timex_offset_seconds)
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -1005,6 +1025,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes * 100
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -1045,6 +1066,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: up
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -1089,6 +1111,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: gluetun_forwarded_ports_total{job="gluetun"}
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -1129,6 +1152,7 @@ groups:
             datasourceUid: prometheus-default
             model:
               expr: (min(traefik_tls_certs_not_after) - time()) / 86400
+              instant: true
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
