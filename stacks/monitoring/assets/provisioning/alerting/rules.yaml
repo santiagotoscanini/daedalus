@@ -1070,7 +1070,11 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: up
+              # myspeed is a speedtest app: its exporter predictably drops when
+              # the WAN blips (nightly dynamic-IP reset), which is not
+              # actionable. Excluded so those blips don't page. Its speed
+              # metrics still graph on the Network dashboard.
+              expr: up{job!="myspeed"}
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
