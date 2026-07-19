@@ -187,6 +187,10 @@ in
               "profile"
               "email"
               "groups"
+              # offline_access → refresh token, so the plugin renews access tokens
+              # server-side (no id.* redirect / passkey) for the full 24h Pocket
+              # ID session; without it re-auth is forced ~hourly at token expiry.
+              "offline_access"
             ];
             # Always redirect unauthenticated requests to Pocket ID instead
             # of 401'ing AJAX (the plugin can't tell XHR from page loads;
