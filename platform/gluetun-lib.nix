@@ -8,10 +8,10 @@
 # through the `_module.args` option evaluation. A by-path import has no
 # such round-trip.
 #
-# Two instances live today, deliberately separate tunnels: stacks/tv
-# (torrent egress, with ProtonVPN port forwarding) and stacks/ipcrawl-vpn
-# (scanner egress). One WireGuard key cannot run two live sessions, and
-# their traffic must not mix.
+# Two instances live today, deliberately separate tunnels: stacks/downloads
+# (torrent + book-downloader egress, with ProtonVPN port forwarding) and
+# stacks/ipcrawl-vpn (scanner egress). One WireGuard key cannot run two live
+# sessions, and their traffic must not mix.
 #
 # Host-port convention: the TV instance owns host 8000 (control API) +
 # 8001 (exporter); each further instance publishes the same in-netns
@@ -49,6 +49,28 @@ rec {
       };
       extraOptions = [ "--network=container:${netnsOwner}" ];
     };
+
+  # Netns-tenant decorator: a container that shares a gluetun instance's
+  # netns (`--network=container:<owner>`) instead of a bridge. Rootless
+  # podman maps container root -> host santiago, so PUID/PGID=0 means "run
+  # as the user that owns the data" (non-linuxserver images ignore the
+  # vars). Orders after the netns owner. Used by the downloads stack
+  # (flaresolverr), the tv stack (qbittorrent/nzbget/*arrs/subgen) and the
+  # shelfmark book downloader.
+  mkNetnsTenant =
+    netnsOwner: args:
+    mkRootlessContainer (
+      args
+      // {
+        dependsOn = [ netnsOwner ] ++ (args.dependsOn or [ ]);
+        environment = {
+          PUID = "0";
+          PGID = "0";
+        }
+        // (args.environment or { });
+        extraOptions = [ "--network=container:${netnsOwner}" ] ++ (args.extraOptions or [ ]);
+      }
+    );
 
   # Everything a gluetun instance needs, as one config fragment: the
   # sops-encrypted WireGuard key + its expiry-reminder timer, the

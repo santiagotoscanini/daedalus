@@ -7,7 +7,7 @@
 # vpn/status) and gluetun-exporter (all four, for the Grafana panels). The
 # port-forward routes always return empty here (ipcrawl runs no port
 # forwarding) but the exporter queries them, so allow them. Shared
-# shape with stacks/tv/assets/config.toml.
+# shape with stacks/downloads/assets/config.toml.
 [[roles]]
 name = "readonly"
 routes = [

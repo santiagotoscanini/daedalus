@@ -1,31 +1,47 @@
-# calibre-web — linuxserver image fronting a Calibre ebook library.
-# LAN-only; traefik dials http://calibre-web:8083 over traefik-net.
+# calibre-web — Calibre-Web-Automated (CWA) fronting the ebook library and
+# auto-importing new books from an ingest folder.
 #
-# Runs as container root (PUID=0/PGID=0): Calibre-Web is a Flask app and,
-# unlike the PHP-FPM linuxserver images (grocy), tolerates UID 0. Container
-# root -> host santiago (1000:100), which owns both /config and the library.
+# LAN-only; traefik dials http://calibre-web:8083 over an isolated bridge.
+#
+# Runs as container root (PUID=0/PGID=0): CWA is a Flask app and, like
+# vanilla Calibre-Web (and unlike the PHP-FPM linuxserver images), tolerates
+# UID 0. Container root -> host santiago (1000:100), which owns /config, the
+# library, and the ingest folder.
+#
+# CWA reuses the vanilla Calibre-Web /config (app.db) verbatim — users and
+# settings carry over. It BUNDLES Calibre itself (no DOCKER_MODS mod), so
+# ebook-convert/calibredb and format conversion work out of the box; the
+# External-Binaries path in the UI points at CWA's own calibre install.
+#
+# Three SEPARATE bind mounts — CWA errors if one bind nests inside another:
+#   /calibre-library <- /s2/books/library  the library (metadata.db + books).
+#     CWA auto-detects the library at this fixed path (ignores the old
+#     `/books` value in app.db); the container log names which metadata.db
+#     it picked.
+#   /cwa-book-ingest <- /s2/books/ingest    the shelfmark downloader drops
+#     files here; CWA imports them into the library, then DELETES the ingest
+#     copy. Shared bind with stacks/shelfmark.
+#   /config          <- selfhost/calibre-web/config
 #
 # The library lives on the HDD pool at /s2/books — its own snapshotted
-# dataset (platform/zfs.nix) so it rides the s2-pool schedule and stays off
-# the 16K-recordsize selfhost dataset. The /books bind auto-emits
-# RequiresMountsFor=/s2/books (platform/podman.nix), closing the cold-boot
-# race where the container could start before the dataset mounts.
-#
-# calibre itself (ebook-convert/calibredb for library init, format
-# conversion, send-to-Kindle) comes from the linuxserver
-# DOCKER_MODS=universal-calibre runtime install: the s6 init fetches
-# the mod layer and apt deps on every container start and links
-# /usr/bin/{ebook-convert,calibredb} (the paths calibre-web's UI
-# settings point at). Accepted trade-offs of staying on the stock
-# image over a local bake: a slower, network-dependent container start
-# (registry must be reachable) and an unpinned calibre version — the
-# mod tracks upstream. Container starts are rare (rebuild changes,
-# reboots), so the churn stays off the hot path.
+# dataset (platform/zfs.nix). library/ + ingest/ are siblings in that ONE
+# dataset (no separate ingest dataset); ingest churn is caught by snapshots
+# but is negligible for ebooks. The binds auto-emit RequiresMountsFor
+# (platform/podman.nix), closing the cold-boot race where the container
+# could start before the dataset mounts.
 
 { mkRootlessContainer, ... }:
 
 {
-  fleet.statePaths."/home/santiago/selfhost/calibre-web/config" = { };
+  fleet.statePaths = {
+    "/home/santiago/selfhost/calibre-web/config" = { };
+    # library/ + ingest/ siblings in the /s2/books dataset. Ownership is
+    # re-enforced NON-recursively, so declaring library/ can't touch its
+    # contents; both map to container root (santiago 1000:100), which CWA
+    # and shelfmark both run as.
+    "/s2/books/library" = { };
+    "/s2/books/ingest" = { };
+  };
 
   fleet.webApps.calibre-web = {
     hostname = "calibre.toscanini.me";
@@ -61,17 +77,17 @@
   };
 
   virtualisation.oci-containers.containers.calibre-web = mkRootlessContainer {
-    image = "lscr.io/linuxserver/calibre-web:0.6.26-ls391@sha256:18678f5a40ca01c0681fec60fe9ea4ebb25a9e4ad6fc2e30aa485c09066ab254";
+    image = "docker.io/crocodilestick/calibre-web-automated:v4.0.6@sha256:c31a738b6d5ec6982c050063dd3f063b6943eb1051fc81144789f840d9093a8d";
 
     environment = {
       PUID = "0";
       PGID = "0";
-      DOCKER_MODS = "linuxserver/mods:universal-calibre";
     };
 
     volumes = [
       "/home/santiago/selfhost/calibre-web/config:/config"
-      "/s2/books:/books"
+      "/s2/books/library:/calibre-library"
+      "/s2/books/ingest:/cwa-book-ingest"
     ];
   };
 }
