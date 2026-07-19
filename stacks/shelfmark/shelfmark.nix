@@ -81,12 +81,13 @@ in
       # if search starts failing (check Anna's Archive's Wikipedia page).
       DIRECT_DOWNLOAD_ENABLED = "true";
       AA_MIRROR_URLS = "https://annas-archive.gl,https://annas-archive.pk,https://annas-archive.gd";
-      # Reuse the tv stack's flaresolverr for AA's Cloudflare challenge
-      # (proven: solves annas-archive.gl search) — no second headless browser.
+      # Shelfmark's BUILT-IN bypasser (not the shared flaresolverr): AA's
+      # search pages are Cloudflare (flaresolverr solves those), but the
+      # slow_download pages sit behind DDoS-Guard, which flaresolverr can't
+      # solve (times out at 60s). The bundled bypasser handles AA's full
+      # download flow incl. DDoS-Guard + the no-donator countdown.
       USE_CF_BYPASS = "true";
-      USING_EXTERNAL_BYPASSER = "true";
-      EXT_BYPASSER_URL = "http://127.0.0.1:8191";
-      EXT_BYPASSER_PATH = "/v1";
+      USING_EXTERNAL_BYPASSER = "false";
     };
   };
 }

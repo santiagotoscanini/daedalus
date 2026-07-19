@@ -12,12 +12,6 @@ web:
   gravatar: false
 
 auth:
-  htpasswd:
-    file: /verdaccio/storage/htpasswd
-    # LAN-only registry, locked to existing accounts. -1 disables further
-    # sign-up so a compromised LAN device can't self-register and then
-    # publish/overwrite packages (publish requires $authenticated).
-    max_users: -1
   # Pocket ID SSO. client-id/secret are ENV VAR NAMES the plugin reads
   # at runtime (VERDACCIO_OPENID_CLIENT_{ID,SECRET} from env.sops) — no
   # secrets in this tracked file. provider-host discovery finds
