@@ -73,8 +73,16 @@ in
     environment = {
       FLASK_PORT = "8084";
       INGEST_DIR = "/cwa-book-ingest";
-      # Reuse the tv stack's flaresolverr in this shared netns instead of
-      # the bundled bypasser (no second headless browser).
+      # The "Direct Download" source IS the Anna's Archive / LibGen /
+      # Z-Library aggregator — Shelfmark searches nothing until it's
+      # enabled AND given a mirror URL (it ships no default AA domain, by
+      # design). AA rotates domains under legal pressure: .org died Jan
+      # 2026, .li March 2026; .gl/.pk/.gd are the live set. Update these
+      # if search starts failing (check Anna's Archive's Wikipedia page).
+      DIRECT_DOWNLOAD_ENABLED = "true";
+      AA_MIRROR_URLS = "https://annas-archive.gl,https://annas-archive.pk,https://annas-archive.gd";
+      # Reuse the tv stack's flaresolverr for AA's Cloudflare challenge
+      # (proven: solves annas-archive.gl search) — no second headless browser.
       USE_CF_BYPASS = "true";
       USING_EXTERNAL_BYPASSER = "true";
       EXT_BYPASSER_URL = "http://127.0.0.1:8191";

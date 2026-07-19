@@ -152,6 +152,14 @@ in
         # back to the container itself); a /32 so the VPN netns can't
         # reach anything else.
         FIREWALL_OUTBOUND_SUBNETS = "169.254.1.2/32";
+        # gluetun's DNS-over-TLS blocklist (BLOCK_MALICIOUS) flags shadow-
+        # library domains (Anna's Archive) as "malicious" and NXDOMAINs
+        # them, breaking shelfmark's release search. AA rotates domains
+        # constantly (.org/.se went dark, .li got parked, .gs is live),
+        # so an unblock allow-list is unmaintainable — turn the blocklist
+        # off for this download-only netns instead. The VPN egress is the
+        # protection here, not a DNS filter.
+        BLOCK_MALICIOUS = "off";
         VPN_PORT_FORWARDING = "on";
         VPN_PORT_FORWARDING_PROVIDER = "protonvpn";
         # When ProtonVPN hands out a new forwarded port, push it to
