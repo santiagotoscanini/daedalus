@@ -223,6 +223,14 @@ in
     forceImportRoot = false;
   };
 
+  # Cap the ARC at 32 GiB. Left uncapped, ZFS grows the ARC to ~all of
+  # RAM (c_max defaults to nearly the full 64 GiB), leaving no headroom
+  # for the container fleet + page cache; read bursts then fault from
+  # disk/zram and surface as spurious memory-pressure alerts. 32 GiB is
+  # still a large read cache for this box's DBs while reserving ~30 GiB
+  # for everything else. Applies at module load (reboot).
+  boot.extraModprobeConfig = "options zfs zfs_arc_max=34359738368";
+
   # rpool/* mounts stay in hardware-configuration.nix.
   fileSystems = lib.mapAttrs' (
     ds: v:

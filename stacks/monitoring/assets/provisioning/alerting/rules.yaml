@@ -737,7 +737,12 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: rate(node_vmstat_pgmajfault[5m])
+              # PSI "waiting" fraction × 100 = % of wall-clock that
+              # processes stalled waiting on memory. Unlike pgmajfault
+              # (which conflates cache reads / ARC eviction / mmap
+              # faults with real pressure), this only rises when the
+              # kernel actually withholds memory from a runnable task.
+              expr: rate(node_pressure_memory_waiting_seconds_total[5m]) * 100
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -748,7 +753,7 @@ groups:
               conditions:
                 - evaluator:
                     params:
-                      - 1000
+                      - 10
                     type: gt
                   operator:
                     type: and
@@ -761,9 +766,9 @@ groups:
               type: threshold
         noDataState: OK
         execErrState: OK
-        for: 5m
+        for: 10m
         annotations:
-          description: High rate of major page faults ({{ $values.A }}/s) on {{ $labels.instance }} indicates memory pressure.
+          description: Processes on {{ $labels.instance }} stalled waiting on memory {{ $values.A }}% of the time over 5m — sustained memory pressure.
           summary: Host is experiencing memory pressure
         labels:
           severity: warning
