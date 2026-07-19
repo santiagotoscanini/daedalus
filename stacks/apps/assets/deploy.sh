@@ -62,17 +62,20 @@ last=$(cat "$STATE" 2>/dev/null || true)
 # every couple of minutes. --retry rides out a sub-15s ghcr.io blip within one
 # tick; the debounce below rides out a longer WAN outage that spans ticks.
 #
-# The nightly dynamic-IP reset (Argentine ISP, ~04:00) drops the WAN for a
-# minute or two — long enough to blow past --retry, short enough to clear on
-# the next tick. Alerting on that is pure noise (and the alert email can't even
-# send while the WAN is down: "No route to host"). So the $STATE.pull marker is
-# a CONSECUTIVE-FAILURE COUNTER, not a boolean: we only email once the pull has
-# failed PULL_ALERT_AFTER ticks running (~6 min at a 2-min tick), mirroring
-# Grafana's `for:` pending period. A real failure (expired GHCR PAT is the
-# classic) persists and still alerts — just a few minutes later — and keeps the
-# unit failed so `systemctl --failed` shows it. Marker existence still means
-# "pulls are failing"; only its contents changed to a count.
-PULL_ALERT_AFTER=3
+# The nightly dynamic-IP reset (Argentine ISP, ~04:00) drops the WAN for
+# anywhere from a minute to ~10 min — long enough to blow past --retry and span
+# several ticks. Alerting on that is pure noise (and the alert email can't even
+# send while the WAN is down: "No route to host", so a threshold crossed
+# mid-outage yields only a confusing lone RECOVERED). So the $STATE.pull marker
+# is a CONSECUTIVE-FAILURE COUNTER, not a boolean: we only email once the pull
+# has failed PULL_ALERT_AFTER ticks running (~16 min at a 2-min tick), mirroring
+# Grafana's `for:` pending period. The threshold is set ABOVE the longest
+# expected WAN outage so a reset stays fully silent; a real failure (expired
+# GHCR PAT is the classic) persists well past that and still alerts — just
+# later, which is fine for a stalled pull — and keeps the unit failed so
+# `systemctl --failed` shows it. Marker existence still means "pulls are
+# failing"; only its contents changed to a count.
+PULL_ALERT_AFTER=8
 if ! podman_ pull --authfile "$AUTHFILE" --retry 3 --retry-delay 5s --quiet "$IMAGE" >/dev/null; then
   fails=$(( $(cat "$STATE.pull" 2>/dev/null || echo 0) + 1 ))
   echo "$fails" > "$STATE.pull"
