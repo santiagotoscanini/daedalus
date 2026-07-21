@@ -198,6 +198,32 @@ let
         job = "systemd-journal",
       }
     }
+
+    // ===== OTLP metrics =====
+    // Apps that PUSH OpenTelemetry (no /metrics scrape endpoint) send
+    // OTLP/gRPC here; alloy re-exports over OTLP/HTTP to prometheus's
+    // native receiver (--web.enable-otlp-receiver), which promotes
+    // service.name → the service_name label. Current pusher: open-webui
+    // (its exporter is gRPC-only, and prometheus's OTLP ingest is
+    // HTTP-only — alloy bridges the two). Reach it as alloy:4317 from
+    // monitoring-net.
+    otelcol.receiver.otlp "metrics" {
+      grpc {
+        endpoint = "0.0.0.0:4317"
+      }
+      output {
+        metrics = [otelcol.exporter.otlphttp.prometheus.input]
+      }
+    }
+
+    otelcol.exporter.otlphttp "prometheus" {
+      client {
+        endpoint = "http://prometheus:9090/api/v1/otlp"
+        tls {
+          insecure = true
+        }
+      }
+    }
   '';
 in
 {

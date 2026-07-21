@@ -283,7 +283,7 @@ in
       port = 3000;
       homepage = {
         group = "Monitoring";
-        href = "https://grafana.toscanini.me/bookmarks";
+        href = "https://grafana.toscanini.me/dashboards";
         # Default probe (upstream /) 302s into the OAuth auto-login
         # chain, which homepage's proxy can't follow. /api/health is
         # auth-exempt.
