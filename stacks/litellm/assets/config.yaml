@@ -1,8 +1,14 @@
-# LiteLLM proxy config. Currently used only to enable the Prometheus
-# callback — model definitions can still come from the UI/DB (we set
-# STORE_MODEL_IN_DB=True in the container env).
+# LiteLLM proxy config. Model definitions live HERE (source of truth,
+# in git) — not the UI. STORE_MODEL_IN_DB=True is set only so the DB
+# can hold virtual keys / budgets / spend logs (inherently stateful);
+# do NOT add models via the UI or they escape the rebuild trail.
 
 litellm_settings:
+  # llama.cpp/Lemonade rejects some OpenAI sampling params; drop the
+  # unsupported ones instead of 400ing the client.
+  drop_params: true
+  # One retry smooths transient failures while Lemonade swaps a model in.
+  num_retries: 1
   callbacks:
     - prometheus
   success_callback:
@@ -28,8 +34,9 @@ model_list:
       mode: audio_transcription
 
   # Local chat: Gemma 4 12B MTP on the Lemonade server (gaming PC).
-  # `openai/<id>` where <id> is Lemonade's model id from /api/v1/models.
-  # Lemonade loads models on demand — first call after an idle period
+  # `openai/<id>` where <id> is Lemonade's model id from /api/v1/models;
+  # the `openai/` prefix is the transport (OpenAI-compatible), not the
+  # vendor. Lemonade loads models on demand — first call after idle
   # swaps the weights in, so keep the timeout generous. MTP = the model
   # ships a draft head for speculative decoding (faster tok/s).
   - model_name: gemma-4-12b
@@ -40,3 +47,12 @@ model_list:
       timeout: 600  # cold model load on the gaming PC is slow
     model_info:
       mode: chat
+      # Capabilities reported by Lemonade's /api/v1/models for this id.
+      supports_function_calling: true
+      supports_vision: true
+      max_input_tokens: 262144
+      max_output_tokens: 16384
+      # Local model — pin cost to 0 so spend analytics are exact and
+      # LiteLLM stops logging "model not mapped, cost may be inaccurate".
+      input_cost_per_token: 0
+      output_cost_per_token: 0
