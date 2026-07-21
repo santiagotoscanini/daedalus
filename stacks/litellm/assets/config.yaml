@@ -16,26 +16,24 @@ litellm_settings:
   failure_callback:
     - prometheus
 
-# Local STT: subgen (tv stack, gluetun netns) exposes OpenAI-compatible
-# /v1/audio endpoints on gluetun's published :9000. Registered here so
-# any OpenAI-SDK consumer gets transcription through the gateway
-# (keys/budgets/metrics). Bazarr does NOT go through this — it speaks
-# subgen's /asr directly on netns localhost.
+# Media models below all run on the Lemonade GPU box (gaming PC): STT,
+# TTS, embeddings, image-gen. Open WebUI reaches them through this
+# gateway (keys/metrics), never Lemonade directly.
+#
+# STT: `whisper-1` (kept as the gateway alias) → Lemonade
+# Whisper-Large-v3-Turbo on the GPU. (subgen still serves bazarr
+# directly on the tv stack — that path does NOT go through litellm.)
 model_list:
   - model_name: whisper-1
     litellm_params:
-      model: openai/whisper-1
-      api_base: http://host.containers.internal:9000/v1
+      model: openai/Whisper-Large-v3-Turbo
+      api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
       api_key: "local-no-auth"
-      timeout: 300  # cold calls reload the model (~25s); default probe timeout is too tight
+      timeout: 300  # cold calls load the model on the GPU box
     model_info:
-      # health checks send litellm's bundled sample audio through the
-      # real /v1/audio/transcriptions path (visible in UI -> Models)
       mode: audio_transcription
-      # subgen transcribes locally for free, but the name `whisper-1`
-      # collides with OpenAI's whisper-1 in LiteLLM's built-in price
-      # map ($0.006/min) -- so health checks would bill phantom cost.
-      # Pin every cost axis to 0.
+      # Local — pin cost to 0 (the name whisper-1 otherwise matches
+      # OpenAI's $0.006/min in LiteLLM's price map).
       input_cost_per_second: 0
       output_cost_per_second: 0
       input_cost_per_token: 0
@@ -82,5 +80,45 @@ model_list:
       supports_vision: false
       max_input_tokens: 114688
       max_output_tokens: 16384
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+
+  # Embeddings for Open WebUI RAG → Lemonade nomic-embed on the GPU
+  # (replaces Open WebUI's in-container MiniLM). 768-dim.
+  - model_name: nomic-embed
+    litellm_params:
+      model: openai/nomic-embed-text-v1-GGUF
+      api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
+      api_key: "local-no-auth"
+      timeout: 120
+    model_info:
+      mode: embedding
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+
+  # Text-to-speech → Lemonade kokoro on the GPU.
+  - model_name: kokoro
+    litellm_params:
+      model: openai/kokoro-v1
+      api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
+      api_key: "local-no-auth"
+      timeout: 120
+    model_info:
+      mode: audio_speech
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+
+  # Image generation → Lemonade Z-Image-Turbo on the GPU. NOTE: the
+  # Lemonade sd-server backend was erroring at setup (backend_watchdog_
+  # reset) — this entry is ready but won't render until that's fixed on
+  # the GPU box.
+  - model_name: z-image
+    litellm_params:
+      model: openai/Z-Image-Turbo
+      api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
+      api_key: "local-no-auth"
+      timeout: 300
+    model_info:
+      mode: image_generation
       input_cost_per_token: 0
       output_cost_per_token: 0

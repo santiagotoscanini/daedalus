@@ -132,9 +132,14 @@ in
     dir = "/run/open-webui-litellm";
     file = litellmKeyFile;
     prep = "KEY=$(grep '^LITELLM_MASTER_KEY=' ${config.sops.secrets."litellm-env".path} | head -1 | cut -d= -f2-)";
+    # One key for every door into the gateway: chat, STT, TTS, embeddings,
+    # image-gen all hit litellm:4000 with the same master key.
     content = ''
       OPENAI_API_KEY=$KEY
       AUDIO_STT_OPENAI_API_KEY=$KEY
+      AUDIO_TTS_API_KEY=$KEY
+      RAG_OPENAI_API_KEY=$KEY
+      IMAGES_OPENAI_API_KEY=$KEY
     '';
   };
 
@@ -155,17 +160,38 @@ in
       # have env equivalents become env-authoritative.
       ENABLE_PERSISTENT_CONFIG = "false";
 
-      # LLM: every model registered on the gateway shows up here.
+      # LLM chat: the gateway. The gateway ALSO exposes non-chat models
+      # (whisper-1, nomic-embed, kokoro, z-image) that the media features
+      # below consume — but those must NOT appear in the chat model
+      # picker. OPENAI_API_CONFIGS pins the chat connection to an explicit
+      # allowlist of just the two chat models. The RAG/AUDIO/IMAGES
+      # settings reach their models by their own base-URL config, so this
+      # filter doesn't affect them.
       ENABLE_OPENAI_API = "true";
       OPENAI_API_BASE_URL = "http://litellm:4000/v1";
+      OPENAI_API_CONFIGS = builtins.toJSON {
+        "http://litellm:4000/v1" = {
+          enable = true;
+          model_ids = [
+            "gemma-4-12b"
+            "gemma-4-12b-uncensored"
+          ];
+        };
+      };
       # No bundled Ollama — LiteLLM is the only backend.
       ENABLE_OLLAMA_API = "false";
 
-      # Audio → LiteLLM whisper-1 → subgen. Talk to it; transcripts are
-      # metered through the gateway like everything else.
+      # Audio in (STT) → gateway whisper-1 → Lemonade Whisper-Large-v3-Turbo
+      # on the GPU (the litellm entry was repointed off CPU subgen).
       AUDIO_STT_ENGINE = "openai";
       AUDIO_STT_OPENAI_API_BASE_URL = "http://litellm:4000/v1";
       AUDIO_STT_MODEL = "whisper-1";
+
+      # Audio out (TTS) → gateway kokoro → Lemonade kokoro on the GPU.
+      AUDIO_TTS_ENGINE = "openai";
+      AUDIO_TTS_OPENAI_API_BASE_URL = "http://litellm:4000/v1";
+      AUDIO_TTS_MODEL = "kokoro";
+      AUDIO_TTS_VOICE = "af_sky";
 
       # Web search via the private SearXNG. Both the new and legacy env
       # names are set so the toggle appears across image versions.
@@ -177,8 +203,24 @@ in
       WEB_SEARCH_RESULT_COUNT = "5";
       WEB_SEARCH_CONCURRENT_REQUESTS = "10";
 
-      # RAG/PDF: built-in local embeddings (default engine) + Chroma,
-      # persisted in the data dir. No extra service needed.
+      # RAG/PDF embeddings → gateway nomic-embed → Lemonade on the GPU
+      # (replaces the in-container MiniLM). 768-dim; Chroma vector store
+      # stays in the data dir. NOTE: changing the embedding model needs a
+      # knowledge-base re-index (dim mismatch) — only matters once docs
+      # are indexed.
+      RAG_EMBEDDING_ENGINE = "openai";
+      RAG_OPENAI_API_BASE_URL = "http://litellm:4000/v1";
+      RAG_EMBEDDING_MODEL = "nomic-embed";
+
+      # Image generation → gateway z-image → Lemonade Z-Image-Turbo (GPU).
+      # Ready but won't render until the Lemonade sd-server backend is
+      # fixed (it was throwing backend_watchdog_reset at setup).
+      ENABLE_IMAGE_GENERATION = "true";
+      IMAGE_GENERATION_ENGINE = "openai";
+      IMAGES_OPENAI_API_BASE_URL = "http://litellm:4000/v1";
+      IMAGE_GENERATION_MODEL = "z-image";
+      IMAGE_SIZE = "1024x1024";
+      IMAGE_STEPS = "9";
 
       # Native OIDC SSO via Pocket ID (docs/features/.../auth/sso). The
       # client id/secret ride env.sops; issuer is the fleet SSO URL.
