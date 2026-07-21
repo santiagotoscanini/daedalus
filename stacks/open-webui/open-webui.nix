@@ -214,6 +214,18 @@ in
       RAG_OPENAI_API_BASE_URL = "http://litellm:4000/v1";
       RAG_EMBEDDING_MODEL = "qwen3-embed";
 
+      # RAG reranker — second-stage precision. Hybrid search retrieves a
+      # wider candidate set, then a cross-encoder re-scores query+chunk
+      # jointly and keeps the best. Runs the reranker LOCALLY in this
+      # container (default engine = sentence-transformers CrossEncoder,
+      # downloaded to the data dir) — it's a small model and reranking a
+      # top-K set is cheap on CPU, so it's the one AI piece not on the
+      # GPU (moving it to Lemonade would need a rerank endpoint + Open
+      # WebUI's external-reranker wiring; not worth the fragility).
+      ENABLE_RAG_HYBRID_SEARCH = "true";
+      RAG_RERANKING_MODEL = "BAAI/bge-reranker-v2-m3";
+      RAG_TOP_K_RERANKER = "10"; # fetch 10 candidates, rerank down to TOP_K
+
       # Image generation → gateway z-image → Lemonade Z-Image-Turbo (GPU).
       # Ready but won't render until the Lemonade sd-server backend is
       # fixed (it was throwing backend_watchdog_reset at setup).

@@ -110,16 +110,40 @@ model_list:
       input_cost_per_token: 0
       output_cost_per_token: 0
 
-  # Image generation → Lemonade Z-Image-Turbo on the GPU. NOTE: the
-  # Lemonade sd-server backend was erroring at setup (backend_watchdog_
-  # reset) — this entry is ready but won't render until that's fixed on
-  # the GPU box.
+  # Image generation → Lemonade on the GPU (working via ROCm; steps/cfg/
+  # size come from the request or Lemonade's per-model image_defaults).
+  # Open WebUI's built-in image button uses one of these (IMAGE_GENERATION_
+  # MODEL, default z-image — fast + reliable); all are reachable through
+  # the gateway. Chroma is the uncensored one (Flux.1 de-distilled);
+  # flux-klein is FLUX.2 (highest quality, slowest).
   - model_name: z-image
     litellm_params:
       model: openai/Z-Image-Turbo
       api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
       api_key: "local-no-auth"
       timeout: 300
+    model_info:
+      mode: image_generation
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+
+  - model_name: chroma
+    litellm_params:
+      model: openai/Chroma1-HD
+      api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
+      api_key: "local-no-auth"
+      timeout: 600  # de-distilled, real CFG → ~160s renders
+    model_info:
+      mode: image_generation
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+
+  - model_name: flux-klein
+    litellm_params:
+      model: openai/Flux-2-Klein-9B-GGUF
+      api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
+      api_key: "local-no-auth"
+      timeout: 600
     model_info:
       mode: image_generation
       input_cost_per_token: 0
