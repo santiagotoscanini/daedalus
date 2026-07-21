@@ -49,9 +49,21 @@ in
       "openwebui"
     ];
     searxng = [ "openwebui" ];
+    # Receives OTLP/gRPC from open-webui (openwebui-net); re-exports to
+    # prometheus's OTLP receiver (traefik-net).
+    otel-collector = [
+      "openwebui"
+      "traefik"
+    ];
   };
 
   fleet.statePaths."${dataDir}".uid = 0; # container root → santiago:users
+
+  # Loki stack label for both containers (alloy tags journal lines).
+  fleet.logStacks.open-webui = [
+    "open-webui"
+    "searxng"
+  ];
 
   # Postgres role/db `open_webui` (underscore — the bootstrap raw-
   # interpolates the name into ALTER ROLE/GRANT, so no hyphens) + env
@@ -169,6 +181,20 @@ in
       WEBUI_SESSION_COOKIE_SAME_SITE = "lax";
       WEBUI_SESSION_COOKIE_SECURE = "true";
 
+      # OpenTelemetry metrics. Open WebUI's exporter is hardcoded to
+      # OTLP/gRPC (it ignores OTEL_EXPORTER_OTLP_PROTOCOL), and
+      # Prometheus's OTLP receiver is HTTP-only — so we can't push to
+      # Prometheus directly. otel-collector (this stack) receives gRPC on
+      # :4317 and re-exports over OTLP/HTTP to Prometheus's receiver,
+      # which promotes service.name → the `service_name` label. Feeds the
+      # "AI" Grafana dashboard.
+      ENABLE_OTEL = "true";
+      ENABLE_OTEL_METRICS = "true";
+      OTEL_SERVICE_NAME = "open-webui";
+      OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel-collector:4317";
+      OTEL_EXPORTER_OTLP_INSECURE = "true";
+      OTEL_METRICS_EXPORT_INTERVAL_MILLIS = "10000";
+
       # Don't phone home.
       SCARF_NO_ANALYTICS = "true";
       DO_NOT_TRACK = "true";
@@ -199,5 +225,13 @@ in
     # SEARXNG_SECRET (machine-generated) overrides the placeholder
     # secret_key in settings.yml.
     environmentFiles = [ searxngSecretFile ];
+  };
+
+  virtualisation.oci-containers.containers.otel-collector = mkRootlessContainer {
+    image = "docker.io/otel/opentelemetry-collector:latest@sha256:0beba82d63792511591522a8d582904b9a8ae81710357bfcab731607b8b0ffe2";
+    volumes = [
+      "${./assets/otel-collector.yaml}:/etc/otelcol/config.yaml:ro"
+    ];
+    cmd = [ "--config=/etc/otelcol/config.yaml" ];
   };
 }

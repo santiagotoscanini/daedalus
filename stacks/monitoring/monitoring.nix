@@ -117,6 +117,15 @@ let
         evaluation_interval = "15s";
       };
       scrape_configs = baseScrapes ++ config.fleet.prometheusScrapes;
+      # OTLP-push ingestion (open-webui OpenTelemetry). Promote the OTel
+      # resource attribute service.name to a `service_name` label so
+      # pushed series are filterable per app (e.g. service_name="open-webui").
+      otlp = {
+        promote_resource_attributes = [
+          "service.name"
+          "service.instance.id"
+        ];
+      };
     }
   );
 
@@ -300,6 +309,10 @@ in
       "--storage.tsdb.path=/prometheus"
       "--storage.tsdb.retention.time=30d"
       "--storage.tsdb.retention.size=100GB"
+      # Accept OTLP metrics pushed by apps that don't expose a /metrics
+      # scrape endpoint (open-webui → OpenTelemetry). Ingest path is
+      # /api/v1/otlp/v1/metrics on the web port; reachable on traefik-net.
+      "--web.enable-otlp-receiver"
     ];
 
     volumes = [

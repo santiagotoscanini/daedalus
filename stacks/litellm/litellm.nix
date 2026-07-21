@@ -123,7 +123,9 @@
     }
   ];
 
-  fleet.grafanaDashboardsByFolder."Services".litellm = builtins.readFile ./assets/dashboard.json;
+  # Merged "AI" dashboard: LiteLLM gateway panels + Open WebUI OTel
+  # panels in one board (uid s2-ai), filed under the "AI" folder.
+  fleet.grafanaDashboardsByFolder."AI".ai = builtins.readFile ./assets/dashboard.json;
 
   fleet.homepageServices."Cloud & AI" = [
     {
