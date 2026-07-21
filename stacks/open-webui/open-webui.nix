@@ -180,11 +180,16 @@ in
       # keeps its role.
       ENABLE_OAUTH_SIGNUP = "true";
       OAUTH_MERGE_ACCOUNTS_BY_EMAIL = "true";
-      # Skip the Open WebUI sign-in page — go straight to Pocket ID (only
-      # fires with a single provider, which we have). Break-glass local
-      # login stays reachable at /auth?form=true (the `form` query param
-      # suppresses the auto-redirect; ENABLE_LOGIN_FORM stays true).
+      # Skip the Open WebUI sign-in page — go straight to Pocket ID.
+      # The frontend only auto-redirects when there's a single provider
+      # (we have one) AND the login form is disabled — so
+      # ENABLE_LOGIN_FORM MUST be false for the redirect to fire.
+      # Break-glass local password login is still reachable at
+      # /auth?form=true: the `form` query param both suppresses the
+      # auto-redirect and force-renders the password fields (the render
+      # gate is `enable_login_form || enable_ldap || form-param`).
       OAUTH_AUTO_REDIRECT = "true";
+      ENABLE_LOGIN_FORM = "false";
       OAUTH_PROVIDER_NAME = "Pocket ID";
       OAUTH_SCOPES = "openid email profile";
       OPENID_PROVIDER_URL = "${config.fleet.sso.issuerUrl}/.well-known/openid-configuration";
