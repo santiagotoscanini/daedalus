@@ -205,14 +205,14 @@ in
       WEB_SEARCH_RESULT_COUNT = "5";
       WEB_SEARCH_CONCURRENT_REQUESTS = "10";
 
-      # RAG/PDF embeddings → gateway nomic-embed → Lemonade on the GPU
-      # (replaces the in-container MiniLM). 768-dim; Chroma vector store
-      # stays in the data dir. NOTE: changing the embedding model needs a
+      # RAG/PDF embeddings → gateway qwen3-embed → Lemonade
+      # Qwen3-Embedding-0.6B on the GPU (1024-dim). Chroma vector store
+      # stays in the data dir. NOTE: switching the embedding model needs a
       # knowledge-base re-index (dim mismatch) — only matters once docs
       # are indexed.
       RAG_EMBEDDING_ENGINE = "openai";
       RAG_OPENAI_API_BASE_URL = "http://litellm:4000/v1";
-      RAG_EMBEDDING_MODEL = "nomic-embed";
+      RAG_EMBEDDING_MODEL = "qwen3-embed";
 
       # Image generation → gateway z-image → Lemonade Z-Image-Turbo (GPU).
       # Ready but won't render until the Lemonade sd-server backend is

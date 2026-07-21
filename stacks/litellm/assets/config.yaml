@@ -83,11 +83,13 @@ model_list:
       input_cost_per_token: 0
       output_cost_per_token: 0
 
-  # Embeddings for Open WebUI RAG → Lemonade nomic-embed on the GPU
-  # (replaces Open WebUI's in-container MiniLM). 768-dim.
-  - model_name: nomic-embed
+  # Embeddings for Open WebUI RAG → Lemonade Qwen3-Embedding-0.6B on the
+  # GPU (1024-dim; replaced nomic-embed-text-v1, which was 768-dim — so
+  # any already-indexed knowledge bases must be re-indexed after this
+  # switch). Tiny model, pinned on Lemonade so RAG stays warm.
+  - model_name: qwen3-embed
     litellm_params:
-      model: openai/nomic-embed-text-v1-GGUF
+      model: openai/Qwen3-Embedding-0.6B-GGUF
       api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
       api_key: "local-no-auth"
       timeout: 120
