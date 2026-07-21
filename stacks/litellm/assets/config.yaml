@@ -58,9 +58,29 @@ model_list:
       # Capabilities reported by Lemonade's /api/v1/models for this id.
       supports_function_calling: true
       supports_vision: true
-      max_input_tokens: 262144
+      # 262144 total ctx is input+output combined; reserve 16384 for the
+      # completion so long prompts don't starve the reply (245760+16384).
+      max_input_tokens: 245760
       max_output_tokens: 16384
       # Local model — pin cost to 0 so spend analytics are exact and
       # LiteLLM stops logging "model not mapped, cost may be inaccurate".
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+
+  # Local chat: Huihui abliterated ("uncensored") Gemma 4 12B on the same
+  # Lemonade server. Labels: custom, tool-calling (NO vision, unlike the
+  # base gemma). 131072 total ctx → reserve 16384 for the completion.
+  - model_name: gemma-4-12b-uncensored
+    litellm_params:
+      model: openai/Huihui-Gemma-4-12B-uncensored
+      api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
+      api_key: "local-no-auth"
+      timeout: 600  # cold model load on the gaming PC is slow
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      supports_vision: false
+      max_input_tokens: 114688
+      max_output_tokens: 16384
       input_cost_per_token: 0
       output_cost_per_token: 0
