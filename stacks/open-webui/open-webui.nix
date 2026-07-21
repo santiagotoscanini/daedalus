@@ -146,6 +146,15 @@ in
     environment = {
       WEBUI_URL = "https://chat.toscanini.me";
 
+      # Make env/nix the source of truth for admin config. Without this,
+      # Open WebUI's PersistentConfig reads each env-backed setting ONCE
+      # on first boot, stores it in the DB, and thereafter ignores env
+      # changes (the DB value wins) — so later nix edits silently no-op
+      # (hit with ENABLE_LOGIN_FORM). User DATA (chats, knowledge,
+      # prompts) is separate and unaffected; only admin settings that
+      # have env equivalents become env-authoritative.
+      ENABLE_PERSISTENT_CONFIG = "false";
+
       # LLM: every model registered on the gateway shows up here.
       ENABLE_OPENAI_API = "true";
       OPENAI_API_BASE_URL = "http://litellm:4000/v1";
