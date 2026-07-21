@@ -1,0 +1,20 @@
+# SearXNG config for the Open WebUI web-search backend. Internal only
+# (no ingress) — reached by Open WebUI as http://searxng:8080 over the
+# private openwebui-net bridge. The real secret_key is injected by the
+# SEARXNG_SECRET env var (machine-generated, secrets/searxng-env); the
+# value below is a non-secret placeholder so the file parses standalone.
+use_default_settings: true
+
+server:
+  secret_key: "placeholder-overridden-by-SEARXNG_SECRET"
+  # Single-user LAN tool — no bot-limiter (it needs a redis and would
+  # otherwise 429 Open WebUI's bursts).
+  limiter: false
+  image_proxy: true
+
+search:
+  # Open WebUI parses the JSON response — the default build only enables
+  # html, so json MUST be added or every search returns 403.
+  formats:
+    - html
+    - json
