@@ -26,3 +26,17 @@ model_list:
       # health checks send litellm's bundled sample audio through the
       # real /v1/audio/transcriptions path (visible in UI -> Models)
       mode: audio_transcription
+
+  # Local chat: Gemma 4 12B MTP on the Lemonade server (gaming PC).
+  # `openai/<id>` where <id> is Lemonade's model id from /api/v1/models.
+  # Lemonade loads models on demand — first call after an idle period
+  # swaps the weights in, so keep the timeout generous. MTP = the model
+  # ships a draft head for speculative decoding (faster tok/s).
+  - model_name: gemma-4-12b
+    litellm_params:
+      model: openai/Gemma-4-12B-it-MTP-GGUF
+      api_base: http://gaming-pc.local.toscanini.me:13305/api/v1
+      api_key: "local-no-auth"
+      timeout: 600  # cold model load on the gaming PC is slow
+    model_info:
+      mode: chat
