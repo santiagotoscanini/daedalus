@@ -32,6 +32,14 @@ model_list:
       # health checks send litellm's bundled sample audio through the
       # real /v1/audio/transcriptions path (visible in UI -> Models)
       mode: audio_transcription
+      # subgen transcribes locally for free, but the name `whisper-1`
+      # collides with OpenAI's whisper-1 in LiteLLM's built-in price
+      # map ($0.006/min) -- so health checks would bill phantom cost.
+      # Pin every cost axis to 0.
+      input_cost_per_second: 0
+      output_cost_per_second: 0
+      input_cost_per_token: 0
+      output_cost_per_token: 0
 
   # Local chat: Gemma 4 12B MTP on the Lemonade server (gaming PC).
   # `openai/<id>` where <id> is Lemonade's model id from /api/v1/models;
