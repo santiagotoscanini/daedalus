@@ -227,14 +227,14 @@ in
       RAG_TOP_K_RERANKER = "10"; # fetch 10 candidates, rerank down to TOP_K
 
       # Image generation → gateway chroma → Lemonade Chroma1-HD (GPU).
-      # Chroma is uncensored, NOT turbo (real CFG ~4, ~30 steps); steps/cfg
+      # Chroma is uncensored, NOT turbo (real CFG ~4, ~40 steps); steps/cfg
       # come from the per-model image_defaults on the Lemonade GPU box.
       ENABLE_IMAGE_GENERATION = "true";
       IMAGE_GENERATION_ENGINE = "openai";
       IMAGES_OPENAI_API_BASE_URL = "http://litellm:4000/v1";
       IMAGE_GENERATION_MODEL = "chroma";
       IMAGE_SIZE = "1024x1024";
-      IMAGE_STEPS = "30";
+      IMAGE_STEPS = "40";
 
       # Native OIDC SSO via Pocket ID (docs/features/.../auth/sso). The
       # client id/secret ride env.sops; issuer is the fleet SSO URL.
