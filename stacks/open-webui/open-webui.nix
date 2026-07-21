@@ -180,6 +180,8 @@ in
       };
       # No bundled Ollama — LiteLLM is the only backend.
       ENABLE_OLLAMA_API = "false";
+      # Drop the built-in "Arena Model" from the picker (model A/B eval).
+      ENABLE_EVALUATION_ARENA_MODELS = "false";
 
       # Audio in (STT) → gateway whisper-1 → Lemonade Whisper-Large-v3-Turbo
       # on the GPU (the litellm entry was repointed off CPU subgen).
