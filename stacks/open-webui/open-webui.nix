@@ -14,10 +14,10 @@
 #                     dependency on the manually-run Lemonade box.
 #   - Web search    → self-hosted SearXNG (searxng:8080), JSON API
 #
-# SSO (Pocket ID) is NOT wired yet — it needs an OIDC client created in
-# the Pocket ID admin UI (callback https://chat.toscanini.me/oauth/oidc/
-# callback), whose id/secret then land in a tracked env.sops. Until
-# then local sign-up is on and the first account becomes admin.
+# SSO: native OIDC against Pocket ID (client "Open WebUI", created via
+# the Pocket ID API; callback https://chat.toscanini.me/oauth/oidc/
+# callback). OAUTH_CLIENT_ID/SECRET ride env.sops. Local password login
+# stays as break-glass; new accounts are SSO-only, merged by email.
 #
 # Secrets:
 #   - WEBUI_SECRET_KEY / SEARXNG_SECRET → machine-generated on first
@@ -29,6 +29,7 @@
 {
   config,
   pkgs,
+  mkDotenvSecret,
   mkRootlessContainer,
   mkSecretRender,
   ...
@@ -51,6 +52,10 @@ in
     ];
     searxng = [ "openwebui" ];
   };
+
+  # OIDC client id + secret (Pocket ID client "Open WebUI", created via
+  # the Pocket ID API). Edit with `sops env.sops`.
+  sops.secrets."open-webui-env" = mkDotenvSecret ./env.sops;
 
   fleet.statePaths."${dataDir}".uid = 0; # container root → santiago:users
 
@@ -166,10 +171,20 @@ in
       # RAG/PDF: built-in local embeddings (default engine) + Chroma,
       # persisted in the data dir. No extra service needed.
 
-      # Local sign-up on until Pocket ID SSO is wired; the FIRST account
-      # is promoted to admin automatically, any later ones land in
-      # `pending` (need admin approval) rather than auto-admin.
-      ENABLE_SIGNUP = "true";
+      # Native OIDC SSO via Pocket ID (docs/features/.../auth/sso). The
+      # client id/secret ride env.sops; issuer is the fleet SSO URL.
+      # Local password login stays available as break-glass (login form
+      # not disabled), matching grafana/n8n. New accounts come via SSO
+      # only (ENABLE_SIGNUP=false); OAuth logins merge into an existing
+      # account with the same email, so the admin account already made
+      # keeps its role.
+      ENABLE_OAUTH_SIGNUP = "true";
+      OAUTH_MERGE_ACCOUNTS_BY_EMAIL = "true";
+      OAUTH_PROVIDER_NAME = "Pocket ID";
+      OAUTH_SCOPES = "openid email profile";
+      OPENID_PROVIDER_URL = "${config.fleet.sso.issuerUrl}/.well-known/openid-configuration";
+      OPENID_REDIRECT_URI = "https://chat.toscanini.me/oauth/oidc/callback";
+      ENABLE_SIGNUP = "false";
       DEFAULT_USER_ROLE = "pending";
 
       # Behind traefik — trust the forwarded proto/host.
@@ -200,6 +215,7 @@ in
       config.fleet.appDatabases.open_webui.envFile
       webuiSecretFile
       litellmKeyFile
+      config.sops.secrets."open-webui-env".path # OAUTH_CLIENT_ID/SECRET
     ];
   };
 
