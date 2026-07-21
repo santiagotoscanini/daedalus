@@ -226,15 +226,15 @@ in
       RAG_RERANKING_MODEL = "BAAI/bge-reranker-v2-m3";
       RAG_TOP_K_RERANKER = "10"; # fetch 10 candidates, rerank down to TOP_K
 
-      # Image generation → gateway z-image → Lemonade Z-Image-Turbo (GPU).
-      # Ready but won't render until the Lemonade sd-server backend is
-      # fixed (it was throwing backend_watchdog_reset at setup).
+      # Image generation → gateway chroma → Lemonade Chroma1-HD (GPU).
+      # Chroma is uncensored, NOT turbo (real CFG ~4, ~30 steps); steps/cfg
+      # come from the per-model image_defaults on the Lemonade GPU box.
       ENABLE_IMAGE_GENERATION = "true";
       IMAGE_GENERATION_ENGINE = "openai";
       IMAGES_OPENAI_API_BASE_URL = "http://litellm:4000/v1";
-      IMAGE_GENERATION_MODEL = "z-image";
+      IMAGE_GENERATION_MODEL = "chroma";
       IMAGE_SIZE = "1024x1024";
-      IMAGE_STEPS = "9";
+      IMAGE_STEPS = "30";
 
       # Native OIDC SSO via Pocket ID (docs/features/.../auth/sso). The
       # client id/secret ride env.sops; issuer is the fleet SSO URL.

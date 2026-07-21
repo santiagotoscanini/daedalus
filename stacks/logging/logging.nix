@@ -189,10 +189,50 @@ let
       }
     }
 
+    // ===== noise drop =====
+    // Two third-party emitters flood high-volume noise that cannot be
+    // silenced at the source; drop it here (after relabel, so the
+    // container label is set) before it reaches Loki. Journald still
+    // retains everything (it rotates) — this only spares Loki and keeps
+    // real logs legible. Each rule increments
+    // loki_process_dropped_lines_total{reason=...} so the drops stay
+    // observable.
+    //
+    //   - scraparr: wsgiref writes a "GET /metrics ... 200" access line
+    //     per prometheus scrape straight to stderr, bypassing its Python
+    //     logger (GENERAL_LOG_LEVEL can't reach it — see the scraparr
+    //     module header).
+    //   - seerr: an *arr call over the pasta -> gluetun-published-port
+    //     path intermittently stalls to a 10s axios timeout that seerr
+    //     surfaces as an UNHANDLED rejection; Node then dumps the whole
+    //     ~150-line error object to stderr per failure. Every dump line
+    //     is indented; real seerr logs start at column 0 (ISO
+    //     timestamp), so dropping indented lines removes the flood and
+    //     leaves the col-0 "unhandledRejection" header as a marker.
+    loki.process "drop_noise" {
+      forward_to = [loki.write.default.receiver]
+
+      stage.match {
+        selector = "{container=\"scraparr\"}"
+        stage.drop {
+          expression          = "GET /metrics HTTP"
+          drop_counter_reason = "scraparr_metrics_access"
+        }
+      }
+
+      stage.match {
+        selector = "{container=\"seerr\"}"
+        stage.drop {
+          expression          = "^\\s+"
+          drop_counter_reason = "seerr_unhandled_dump"
+        }
+      }
+    }
+
     loki.source.journal "system" {
       path          = "/var/log/journal"
       max_age       = "12h"
-      forward_to    = [loki.write.default.receiver]
+      forward_to    = [loki.process.drop_noise.receiver]
       relabel_rules = loki.relabel.journal.rules
       labels        = {
         job = "systemd-journal",

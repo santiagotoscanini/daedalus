@@ -62,6 +62,13 @@
       DB_PORT = "5432";
       DB_USER = "seerr";
       DB_NAME = "seerr";
+      # Default is debug — which logs "Starting scheduled job: <name>"
+      # every 60s (the Download Sync job among them). info drops that
+      # per-minute chatter. It does NOT quiet the unhandled-rejection
+      # dumps from the intermittently-stalling *arr calls (those are
+      # Node's native stderr, below any app log level) — a Loki drop
+      # stage in stacks/logging handles those.
+      LOG_LEVEL = "info";
     };
 
     # DB_PASS from the app-db bootstrap env file.
