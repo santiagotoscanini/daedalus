@@ -256,6 +256,10 @@ in
       RAG_EXTERNAL_RERANKER_URL = "http://litellm:4000/reranking";
       RAG_RERANKING_MODEL = "bge-reranker-v2-m3-GGUF"; # Lemonade id (sent as `model`)
       RAG_TOP_K_RERANKER = "10"; # fetch 10 candidates, rerank down to TOP_K
+      # Chunks fed to the model after reranking. Default 3 is tight for a
+      # real knowledge base; gemma-4-12b has a 245k context, so keep more
+      # of the reranked winners for better-grounded answers.
+      RAG_TOP_K = "6";
 
       # Image generation → gateway z-image → Lemonade Z-Image-Turbo (GPU).
       # z-image is turbo: few steps, fast, reliable, good prompt adherence.
