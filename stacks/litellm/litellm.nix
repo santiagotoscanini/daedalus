@@ -66,6 +66,7 @@
   fleet.bridgeMemberships.litellm = [
     "app-db"
     "traefik"
+    "websearch" # dial searxng:8080 for the search_tool + interception
   ];
 
   # Database on the shared app-db cluster: role + db + env file with

@@ -4,7 +4,8 @@
 #   - app-db-net    → dial `pg` for chats/settings
 #   - traefik-net   → traefik dials `http://open-webui:8080`, AND
 #                     open-webui dials `http://litellm:4000` (LLM + STT)
-#   - openwebui-net → private bridge to searxng (web search); mcpo later
+#   - websearch-net → shared bridge to searxng (now owned by the litellm
+#                     stack; OWU is one of its two consumers)
 #
 # Capabilities wired here:
 #   - Chat/vision   → LiteLLM `gemma-4-12b` (has vision + tool-calling)
@@ -13,7 +14,10 @@
 #                     1024-dim) + local cross-encoder reranker; vectors
 #                     stored in pgvector on the shared cluster (Open
 #                     WebUI's own tables in the open_webui db).
-#   - Web search    → self-hosted SearXNG (searxng:8080), JSON API
+#   - Web search    → SearXNG (searxng:8080, JSON API). The container
+#                     lives in the litellm stack (the gateway owns the
+#                     web-search capability); OWU dials it directly over
+#                     the shared `websearch` bridge.
 #
 # SSO: native OIDC against Pocket ID (client "Open WebUI", created via
 # the Pocket ID API; callback https://chat.toscanini.me/oauth/oidc/
@@ -21,8 +25,9 @@
 # stays as break-glass; new accounts are SSO-only, merged by email.
 #
 # Secrets:
-#   - WEBUI_SECRET_KEY / SEARXNG_SECRET → machine-generated on first
-#     boot into secrets/ (gitignored). Rotate = delete file + rebuild.
+#   - WEBUI_SECRET_KEY → machine-generated on first boot into secrets/
+#     (gitignored). Rotate = delete file + rebuild. (SEARXNG_SECRET moved
+#     to the litellm stack along with the searxng container.)
 #   - OPENAI_API_KEY (the LiteLLM master key) → rendered from
 #     litellm/env.sops via open-webui-litellm-key.service, never
 #     duplicated (single source of truth stays litellm's env.sops).
@@ -40,19 +45,15 @@ let
   dataDir = "/home/santiago/selfhost/open-webui/data";
   secretsDir = "/home/santiago/selfhost/open-webui/secrets";
   webuiSecretFile = "${secretsDir}/webui-env";
-  searxngSecretFile = "${secretsDir}/searxng-env";
   litellmKeyFile = "/run/open-webui-litellm/env";
 in
 {
-  fleet.bridgeMemberships = {
-    open-webui = [
-      "app-db"
-      "traefik"
-      "openwebui"
-      "monitoring" # push OTLP metrics to alloy:4317 (the box's collector)
-    ];
-    searxng = [ "openwebui" ];
-  };
+  fleet.bridgeMemberships.open-webui = [
+    "app-db"
+    "traefik"
+    "websearch" # dial searxng:8080 (searxng lives in the litellm stack)
+    "monitoring" # push OTLP metrics to alloy:4317 (the box's collector)
+  ];
 
   # OIDC client id + secret (Pocket ID client "Open WebUI", created via
   # the Pocket ID API). Edit with `sops env.sops`.
@@ -60,11 +61,9 @@ in
 
   fleet.statePaths."${dataDir}".uid = 0; # container root → santiago:users
 
-  # Loki stack label for both containers (alloy tags journal lines).
-  fleet.logStacks.open-webui = [
-    "open-webui"
-    "searxng"
-  ];
+  # Loki stack label (alloy tags journal lines). searxng's label moved to
+  # the litellm stack with its container.
+  fleet.logStacks.open-webui = [ "open-webui" ];
 
   # Postgres role/db `open_webui` (underscore — the bootstrap raw-
   # interpolates the name into ALTER ROLE/GRANT, so no hyphens) + env
@@ -93,15 +92,9 @@ in
   # Machine-generated secrets, born on the box on first boot. Idempotent:
   # each file is created only if missing (delete + rebuild to rotate).
   systemd.services."open-webui-secrets-bootstrap" = {
-    description = "Bootstrap open-webui: generate WEBUI_SECRET_KEY + SEARXNG_SECRET on first boot";
-    before = [
-      "podman-open-webui.service"
-      "podman-searxng.service"
-    ];
-    wantedBy = [
-      "podman-open-webui.service"
-      "podman-searxng.service"
-    ];
+    description = "Bootstrap open-webui: generate WEBUI_SECRET_KEY on first boot";
+    before = [ "podman-open-webui.service" ];
+    wantedBy = [ "podman-open-webui.service" ];
     after = [ "local-fs.target" ];
     path = [
       pkgs.openssl
@@ -119,11 +112,6 @@ in
       if [ ! -e "${webuiSecretFile}" ]; then
         install -m 0600 -o santiago -g users /dev/stdin "${webuiSecretFile}" <<EOF
       WEBUI_SECRET_KEY=$(openssl rand -hex 32)
-      EOF
-      fi
-      if [ ! -e "${searxngSecretFile}" ]; then
-        install -m 0600 -o santiago -g users /dev/stdin "${searxngSecretFile}" <<EOF
-      SEARXNG_SECRET=$(openssl rand -hex 32)
       EOF
       fi
     '';
@@ -211,8 +199,9 @@ in
       AUDIO_TTS_MODEL = "kokoro";
       AUDIO_TTS_VOICE = "af_sky";
 
-      # Web search via the private SearXNG. Both the new and legacy env
-      # names are set so the toggle appears across image versions.
+      # Web search via SearXNG (searxng:8080, in the litellm stack, over
+      # the shared websearch bridge). Both the new and legacy env names
+      # are set so the toggle appears across image versions.
       ENABLE_WEB_SEARCH = "true";
       ENABLE_RAG_WEB_SEARCH = "true";
       WEB_SEARCH_ENGINE = "searxng";
@@ -327,21 +316,5 @@ in
       litellmKeyFile
       config.sops.secrets."open-webui-env".path # OAUTH_CLIENT_ID/SECRET
     ];
-  };
-
-  virtualisation.oci-containers.containers.searxng = mkRootlessContainer {
-    image = "docker.io/searxng/searxng:latest@sha256:419d2915279be335146a440fd0ad25c657738dde7046387c0d5592cb6aa472d2";
-
-    volumes = [
-      "${./assets/searxng/settings.yml}:/etc/searxng/settings.yml:ro"
-    ];
-
-    environment = {
-      SEARXNG_BASE_URL = "http://searxng:8080/";
-    };
-
-    # SEARXNG_SECRET (machine-generated) overrides the placeholder
-    # secret_key in settings.yml.
-    environmentFiles = [ searxngSecretFile ];
   };
 }

@@ -1,0 +1,24 @@
+# SearXNG — the self-hosted metasearch engine behind the fleet's web
+# search. Lives in the litellm stack because the gateway owns the
+# capability; consumed by BOTH LiteLLM (registered as the `searxng`
+# search_tool in ../config.yaml) and Open WebUI (its in-chat RAG web
+# search), each dialing http://searxng:8080 over the private `websearch`
+# bridge. Internal only — no ingress. The real secret_key is injected by
+# the SEARXNG_SECRET env var (machine-generated, secrets/searxng-env);
+# the value below is a non-secret placeholder so the file parses
+# standalone.
+use_default_settings: true
+
+server:
+  secret_key: "placeholder-overridden-by-SEARXNG_SECRET"
+  # Single-user LAN tool — no bot-limiter (it needs a redis and would
+  # otherwise 429 the callers' bursts).
+  limiter: false
+  image_proxy: true
+
+search:
+  # Callers parse the JSON response — the default build only enables
+  # html, so json MUST be added or every search returns 403.
+  formats:
+    - html
+    - json

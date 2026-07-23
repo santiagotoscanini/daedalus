@@ -11,10 +11,34 @@ litellm_settings:
   num_retries: 1
   callbacks:
     - prometheus
+    # Web search interception: when a request to an `openai`-transport
+    # model (the gemma chat models) carries a `web_search` tool, run the
+    # search via the `searxng` search_tool below and feed results back —
+    # instead of the model trying (and failing) to search natively. It's
+    # a NO-OP for requests without a web_search tool, so Open WebUI's
+    # ordinary chat (its RAG web search is OWU-side, not a tool call) is
+    # unaffected; this only lights up tool-calling / agentic clients.
+    - websearch_interception
   success_callback:
     - prometheus
   failure_callback:
     - prometheus
+  websearch_interception_params:
+    # gemma-4-12b* are `openai/<id>` transport → provider "openai".
+    enabled_providers: ["openai"]
+    search_tool_name: searxng
+
+# Web search backend: the self-hosted SearXNG that now lives in this
+# stack (searxng.nix), reached over the `websearch` bridge. Registered
+# as a first-class LiteLLM search tool — callable directly via
+# `POST /v1/search/searxng`, and used by the websearch_interception
+# callback above. Open WebUI dials the SAME searxng directly for its own
+# in-chat search, so there's one engine with two consumers.
+search_tools:
+  - search_tool_name: searxng
+    litellm_params:
+      search_provider: searxng
+      api_base: http://searxng:8080
 
 # PG Vector store — served by the litellm-pgvector connector
 # (stacks/litellm-pgvector) over traefik-net. `pg_vector` is NOT a
