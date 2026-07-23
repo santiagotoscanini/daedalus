@@ -9,9 +9,10 @@
 # Capabilities wired here:
 #   - Chat/vision   → LiteLLM `gemma-4-12b` (has vision + tool-calling)
 #   - Audio (STT)   → LiteLLM `whisper-1` → subgen (tv stack)
-#   - PDF/RAG       → Open WebUI built-in embeddings (local sentence-
-#                     transformers) + Chroma, both in the data dir. No
-#                     dependency on the manually-run Lemonade box.
+#   - PDF/RAG       → embeddings via LiteLLM `qwen3-embed` (Lemonade,
+#                     1024-dim) + local cross-encoder reranker; vectors
+#                     stored in pgvector on the shared cluster (Open
+#                     WebUI's own tables in the open_webui db).
 #   - Web search    → self-hosted SearXNG (searxng:8080), JSON API
 #
 # SSO: native OIDC against Pocket ID (client "Open WebUI", created via
@@ -68,7 +69,12 @@ in
   # Postgres role/db `open_webui` (underscore — the bootstrap raw-
   # interpolates the name into ALTER ROLE/GRANT, so no hyphens) + env
   # file with DATABASE_URL, from app-db-open_webui-bootstrap.service.
-  fleet.appDatabases.open_webui.consumers = [ "open-webui" ];
+  # `vector` extension: RAG uses pgvector as its vector store (below),
+  # in this same db (PGVECTOR_DB_URL defaults to DATABASE_URL).
+  fleet.appDatabases.open_webui = {
+    consumers = [ "open-webui" ];
+    extensions = [ "vector" ];
+  };
 
   fleet.webApps.open-webui = {
     hostname = "chat.toscanini.me";
@@ -206,13 +212,26 @@ in
       WEB_SEARCH_CONCURRENT_REQUESTS = "10";
 
       # RAG/PDF embeddings → gateway qwen3-embed → Lemonade
-      # Qwen3-Embedding-0.6B on the GPU (1024-dim). Chroma vector store
-      # stays in the data dir. NOTE: switching the embedding model needs a
-      # knowledge-base re-index (dim mismatch) — only matters once docs
-      # are indexed.
+      # Qwen3-Embedding-0.6B on the GPU (1024-dim). NOTE: switching the
+      # embedding model needs a knowledge-base re-index (dim mismatch) —
+      # only matters once docs are indexed.
       RAG_EMBEDDING_ENGINE = "openai";
       RAG_OPENAI_API_BASE_URL = "http://litellm:4000/v1";
       RAG_EMBEDDING_MODEL = "qwen3-embed";
+
+      # Vector store: pgvector on the shared cluster (Open WebUI's own
+      # tables in the open_webui db — PGVECTOR_DB_URL defaults to
+      # DATABASE_URL), replacing the local Chroma file so RAG storage
+      # rides the cluster backup. This is Open WebUI's *own* RAG store —
+      # unrelated to the litellm-pgvector connector store (that one is
+      # for programmatic/API RAG; Open WebUI can't consume it).
+      # Pin the column dimension to qwen3-embed's 1024 (default 1536
+      # would zero-pad every vector). <2000 → plain `vector`, no halfvec.
+      # The extension is pre-created by the app-db bootstrap; Open WebUI
+      # also runs CREATE EXTENSION IF NOT EXISTS (PGVECTOR_CREATE_EXTENSION
+      # default true) — idempotent.
+      VECTOR_DB = "pgvector";
+      PGVECTOR_INITIALIZE_MAX_VECTOR_LENGTH = "1024";
 
       # RAG reranker — second-stage precision. Hybrid search retrieves a
       # wider candidate set, then a cross-encoder re-scores query+chunk
