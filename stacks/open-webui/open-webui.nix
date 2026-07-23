@@ -133,19 +133,28 @@ in
   # LLM calls and the audio-STT calls). One encrypted source of truth
   # stays litellm/env.sops — same idiom as litellm-prom-token / homepage.
   systemd.services."open-webui-litellm-key" = mkSecretRender {
-    description = "Render the LiteLLM master key as OPENAI_API_KEY for open-webui";
+    description = "Render the LiteLLM master key (OPENAI_API_KEY + MCP tool servers) for open-webui";
     gates = [ "podman-open-webui.service" ];
     dir = "/run/open-webui-litellm";
     file = litellmKeyFile;
     prep = "KEY=$(grep '^LITELLM_MASTER_KEY=' ${config.sops.secrets."litellm-env".path} | head -1 | cut -d= -f2-)";
     # One key for every door into the gateway: chat, STT, TTS, embeddings,
     # image-gen all hit litellm:4000 with the same master key.
+    #
+    # TOOL_SERVER_CONNECTIONS declares the LiteLLM MCP gateways (TickTick,
+    # Grocy) as Open WebUI tool servers DECLARATIVELY. They MUST live here,
+    # not the UI: `tool_server.connections` is an env-backed PersistentConfig,
+    # so with ENABLE_PERSISTENT_CONFIG=false a UI-added connection is wiped
+    # to `[]` on the next restart. The Bearer key is the same master key,
+    # injected here so it stays out of /nix/store. LiteLLM serves each MCP
+    # server at /<alias>/mcp (aliases in stacks/litellm/assets/config.yaml).
     content = ''
       OPENAI_API_KEY=$KEY
       AUDIO_STT_OPENAI_API_KEY=$KEY
       AUDIO_TTS_OPENAI_API_KEY=$KEY
       RAG_OPENAI_API_KEY=$KEY
       IMAGES_OPENAI_API_KEY=$KEY
+      TOOL_SERVER_CONNECTIONS=[{"type":"mcp","url":"http://litellm:4000/TickTick/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"ticktick","name":"TickTick","description":"TickTick tasks/lists/habits"}},{"type":"mcp","url":"http://litellm:4000/Grocy/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"grocy","name":"Grocy","description":"Grocy household inventory, chores, shopping lists"}}]
     '';
   };
 
