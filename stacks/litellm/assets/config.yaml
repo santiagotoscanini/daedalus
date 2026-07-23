@@ -16,6 +16,27 @@ litellm_settings:
   failure_callback:
     - prometheus
 
+# PG Vector store — served by the litellm-pgvector connector
+# (stacks/litellm-pgvector) over traefik-net. `pg_vector` is NOT a
+# direct pg connection: LiteLLM dials the connector's OpenAI-compatible
+# /v1/vector_stores API, which stores embeddings (qwen3-embed, 1024-dim)
+# in the litellm_vector db on the shared cluster.
+#
+# Stores are NOT declared here. A config-file `vector_store_registry` is
+# dropped at runtime because STORE_MODEL_IN_DB=True makes LiteLLM's DB
+# the authoritative registry (same reason models must not be UI-edited).
+# Vector-store registrations are therefore DB state (like virtual keys):
+#   1. create the store on the connector  → POST <connector>/v1/vector_stores
+#   2. register it in LiteLLM             → POST /vector_store/new
+#        {vector_store_id, custom_llm_provider: pg_vector,
+#         litellm_params: {api_base: http://litellm-pgvector:8000,
+#                          api_key: <PGVECTOR_SERVER_API_KEY>}}
+# Then search via POST /v1/vector_stores/<id>/search or attach at chat
+# time with tools:[{type:file_search, vector_store_ids:[<id>]}].
+# See stacks/litellm-pgvector for the full flow. NOTE: LiteLLM UI RAG
+# ingestion doesn't support pg_vector yet (BerriAI/litellm#26771) —
+# populate stores through the connector's REST API, not the dashboard.
+
 # Media models below all run on the Lemonade GPU box (gaming PC): STT,
 # TTS, embeddings, image-gen. Open WebUI reaches them through this
 # gateway (keys/metrics), never Lemonade directly.

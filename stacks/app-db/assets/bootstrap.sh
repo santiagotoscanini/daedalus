@@ -5,6 +5,8 @@
 #   APP_NAME       — postgres role + database name
 #   EXTRA_DBS      — space-separated additional databases owned by the
 #                    same role (may be empty; e.g. sonarr_log)
+#   EXTENSIONS     — space-separated extensions to CREATE in the app db
+#                    + extra dbs (may be empty; e.g. vector)
 #   ENV_BASE       — /etc/nixos/stacks/app-db/secrets
 #   CLUSTER_ENV    — $ENV_BASE/cluster/env  (POSTGRES_PASSWORD line)
 #   APP_ENV_FILE   — $ENV_BASE/$APP_NAME/env (per-app env we emit)
@@ -71,6 +73,19 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${db}')
 REVOKE ALL ON DATABASE ${db} FROM PUBLIC;
 GRANT  ALL ON DATABASE ${db} TO ${APP_NAME};
 SQL
+done
+
+# Extensions requested for this app (may be empty). Created as the
+# cluster superuser in the app db + every extra db. The extension's
+# .so must be present in the pg image — the cluster image ships
+# pgvector (`vector`). Names are eval-validated to a safe identifier
+# shape, but quote defensively. Idempotent.
+for db in "$APP_NAME" $EXTRA_DBS; do
+  for ext in $EXTENSIONS; do
+    PGPASSWORD="$SUPER_PWD" podman exec -i -e PGPASSWORD pg \
+      psql -X -v ON_ERROR_STOP=1 -U postgres -d "$db" \
+      -c "CREATE EXTENSION IF NOT EXISTS \"$ext\""
+  done
 done
 
 # Write env file last so a partial bootstrap doesn't leave a stale

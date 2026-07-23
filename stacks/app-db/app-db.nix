@@ -55,6 +55,7 @@
   config,
   lib,
   pkgs,
+  mkLocalImage,
   mkRootlessContainer,
   ...
 }:
@@ -77,7 +78,20 @@ let
   hostRoot = "/home/santiago/selfhost/app-db";
   dataDir = "${hostRoot}/postgres";
 
-  pgImage = "docker.io/library/postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15";
+  # Locally-built postgres image with pgvector compiled in (see
+  # assets/pg-image/Containerfile). Built FROM the same alpine base as
+  # the old plain image, so the postgres UID stays 70 — the data dir
+  # ownership (100069:100069) is unchanged and there is no migration.
+  # The tag embeds the build-context hash: editing the Containerfile
+  # rebuilds the image and restarts pg; unchanged contexts are ~instant
+  # (layer cache). Enables `CREATE EXTENSION vector` in any tenant db
+  # that requests it via `extensions` (see the submodule below).
+  pgImageBuild = mkLocalImage {
+    name = "pg-pgvector";
+    tagPrefix = "18.4";
+    contextDir = ./assets/pg-image;
+    gates = [ "podman-pg.service" ];
+  };
 
   # The bash body lives at assets/bootstrap.sh (shellcheckable
   # standalone). This wrapper exports the four parameters it reads
@@ -89,6 +103,7 @@ let
 
     export APP_NAME=${lib.escapeShellArg name}
     export EXTRA_DBS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.${name}.extraDatabases)}
+    export EXTENSIONS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.${name}.extensions)}
     export ENV_BASE=${lib.escapeShellArg envBase}
     export CLUSTER_ENV=${lib.escapeShellArg clusterEnv}
     export APP_ENV_FILE=${lib.escapeShellArg (appEnvFile name)}
@@ -112,6 +127,19 @@ in
               Additional databases owned by the same role. Used by the
               *arr apps, which keep config/history and log entries in
               two separate databases behind one login.
+            '';
+          };
+          options.extensions = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "vector" ];
+            description = ''
+              Postgres extensions to `CREATE EXTENSION IF NOT EXISTS`
+              in this app's database (and any extraDatabases), run as
+              the cluster superuser by the bootstrap oneshot. The
+              extension's `.so` must be present in the pg image — the
+              cluster image ships pgvector (`vector`). Idempotent;
+              dropping a name here does NOT drop the extension.
             '';
           };
           options.consumers = lib.mkOption {
@@ -194,6 +222,17 @@ in
             valid database name (${nameRegex}).
           '';
         }) cfg.${n}.extraDatabases
+      ) activeApps)
+      # Extension names land in `CREATE EXTENSION %I` — same narrow shape.
+      ++ (lib.concatMap (
+        n:
+        map (e: {
+          assertion = builtins.match nameRegex e != null;
+          message = ''
+            fleet.appDatabases."${n}".extensions: "${e}" is not a valid
+            extension name (${nameRegex}).
+          '';
+        }) cfg.${n}.extensions
       ) activeApps);
 
     # app-db-net: pg + every app container. pg-wire-net: private bridge
@@ -248,6 +287,9 @@ in
     # the two assignments don't conflict.
     systemd.services = lib.mkMerge [
       {
+        # Build the pgvector image before pg starts (gated in mkLocalImage).
+        pg-image-build = pgImageBuild.service;
+
         "app-db-cluster-bootstrap" = {
           description = "Bootstrap pg cluster: generate superuser POSTGRES_PASSWORD on first boot";
           before = [ "podman-pg.service" ];
@@ -355,7 +397,7 @@ in
     ];
 
     virtualisation.oci-containers.containers."pg" = mkRootlessContainer {
-      image = pgImage;
+      inherit (pgImageBuild) image;
       environmentFiles = [ clusterEnv ];
       environment = {
         # Postgres 18 default PGDATA is /var/lib/postgresql/<major>/docker
