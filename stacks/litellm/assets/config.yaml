@@ -148,3 +148,15 @@ model_list:
       mode: image_generation
       input_cost_per_token: 0
       output_cost_per_token: 0
+
+# TickTick tasks via the official remote MCP server. LiteLLM holds the
+# static personal API token (TICKTICK_MCP_TOKEN, from env.sops) and
+# injects it upstream, so any gateway client (Open WebUI) only presents
+# its LiteLLM key — no per-client OAuth.
+mcp_servers:
+  ticktick:
+    url: https://mcp.ticktick.com
+    transport: http
+    auth_type: bearer_token
+    auth_value: os.environ/TICKTICK_MCP_TOKEN
+    description: "TickTick tasks/lists/habits"
