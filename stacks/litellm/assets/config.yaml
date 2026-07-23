@@ -44,6 +44,21 @@ litellm_settings:
 # STT: `whisper-1` (kept as the gateway alias) → Lemonade
 # Whisper-Large-v3-Turbo on the GPU. (subgen still serves bazarr
 # directly on the tv stack — that path does NOT go through litellm.)
+# Reranking on the gateway: Lemonade only serves `/v1/reranking`, and every
+# LiteLLM rerank provider hard-posts to a `.../rerank` path, so a model_list
+# entry can't reach it. Bodies+responses are already Cohere-shaped, so a
+# pass-through forwards it. Exposed at `/reranking` (LiteLLM's own
+# `/v1/rerank` route is reserved for model_list models and would shadow it).
+# Model chosen via the request body; auth = master key; free/local.
+general_settings:
+  pass_through_endpoints:
+    - path: "/reranking"
+      target: "http://gaming-pc.local.toscanini.me:13305/v1/reranking"
+      auth: true
+      methods: ["POST"]
+      headers:
+        content-type: application/json
+
 model_list:
   - model_name: whisper-1
     litellm_params:
