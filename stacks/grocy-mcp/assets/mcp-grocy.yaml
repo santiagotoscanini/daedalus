@@ -1,0 +1,123 @@
+# Grocy MCP config — served over HTTP for the LiteLLM gateway.
+# Operational settings mirror the container env (belt-and-suspenders so
+# precedence never matters); GROCY_API_KEY comes from env.sops. The tools
+# block is the point of this file: a curated subset so gemma-4-12b isn't
+# handed ~55 tools. Enable more by flipping `enabled` and rebuilding.
+server:
+  enable_http_server: true
+  http_server_port: 8080
+grocy:
+  base_url: https://grocy.toscanini.me
+  enable_ssl_verify: true
+
+tools:
+  inventory_stock_get_all:
+    enabled: true
+  inventory_stock_get_volatile:
+    enabled: true
+  inventory_stock_get_by_location:
+    enabled: false
+  inventory_stock_get_by_product:
+    enabled: true
+  inventory_products_get:
+    enabled: false
+  inventory_products_get_groups:
+    enabled: false
+  inventory_products_get_price_history:
+    enabled: false
+  inventory_products_lookup:
+    enabled: true
+  inventory_products_print_label:
+    enabled: false
+  inventory_transactions_purchase:
+    enabled: true
+  inventory_transactions_consume:
+    enabled: true
+  inventory_transactions_adjust:
+    enabled: false
+  inventory_transactions_transfer:
+    enabled: false
+  inventory_transactions_open:
+    enabled: false
+  inventory_stock_entry_print_label:
+    enabled: false
+  inventory_stock_entry_consume:
+    enabled: false
+  inventory_stock_entry_open:
+    enabled: false
+  inventory_stock_entry_transfer:
+    enabled: false
+  recipes_management_get:
+    enabled: true
+  recipes_management_get_by_id:
+    enabled: false
+  recipes_management_create:
+    enabled: false
+  recipes_management_print_label:
+    enabled: false
+  recipes_fulfillment_get:
+    enabled: false
+  recipes_fulfillment_get_all:
+    enabled: true
+  recipes_cooking_consume:
+    enabled: false
+  recipes_cooking_complete:
+    enabled: false
+  recipes_shopping_add_all_products:
+    enabled: false
+  recipes_shopping_add_missing_products:
+    enabled: true
+  recipes_mealplan_get:
+    enabled: false
+  recipes_mealplan_get_sections:
+    enabled: false
+  recipes_mealplan_add_recipe:
+    enabled: false
+  recipes_mealplan_delete_entry:
+    enabled: false
+  shopping_lists_get:
+    enabled: true
+  shopping_list_get:
+    enabled: true
+  shopping_list_add_item:
+    enabled: true
+  shopping_list_update:
+    enabled: false
+  shopping_list_remove_item:
+    enabled: false
+  shopping_list_update_item:
+    enabled: false
+  shopping_locations_get:
+    enabled: false
+  shopping_list_print_thermal:
+    enabled: false
+  household_chores_get:
+    enabled: true
+  household_chores_execute:
+    enabled: true
+  household_chores_print_label:
+    enabled: false
+  household_tasks_get:
+    enabled: true
+  household_tasks_complete:
+    enabled: true
+  household_batteries_get:
+    enabled: false
+  household_batteries_charge:
+    enabled: false
+  household_batteries_print_label:
+    enabled: false
+  household_equipment_get:
+    enabled: false
+  household_actions_undo:
+    enabled: false
+  system_locations_get:
+    enabled: false
+  system_units_get:
+    enabled: false
+  system_users_get:
+    enabled: false
+  system_dev_call_api:
+    enabled: false
+  system_dev_test_request:
+    enabled: false
