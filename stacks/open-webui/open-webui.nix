@@ -154,6 +154,7 @@ in
       AUDIO_TTS_OPENAI_API_KEY=$KEY
       RAG_OPENAI_API_KEY=$KEY
       IMAGES_OPENAI_API_KEY=$KEY
+      RAG_EXTERNAL_RERANKER_API_KEY=$KEY
       TOOL_SERVER_CONNECTIONS=[{"type":"mcp","url":"http://litellm:4000/TickTick/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"ticktick","name":"TickTick","description":"TickTick tasks/lists/habits"}},{"type":"mcp","url":"http://litellm:4000/Grocy/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"grocy","name":"Grocy","description":"Grocy household inventory, chores, shopping lists"}}]
     '';
   };
@@ -244,14 +245,16 @@ in
 
       # RAG reranker — second-stage precision. Hybrid search retrieves a
       # wider candidate set, then a cross-encoder re-scores query+chunk
-      # jointly and keeps the best. Runs the reranker LOCALLY in this
-      # container (default engine = sentence-transformers CrossEncoder,
-      # downloaded to the data dir) — it's a small model and reranking a
-      # top-K set is cheap on CPU, so it's the one AI piece not on the
-      # GPU (moving it to Lemonade would need a rerank endpoint + Open
-      # WebUI's external-reranker wiring; not worth the fragility).
+      # jointly and keeps the best. Reranker runs on the Lemonade GPU
+      # (bge-reranker-v2-m3-GGUF) via LiteLLM's /reranking pass-through:
+      # OWUI's ExternalReranker POSTs {model,query,documents,top_n} and reads
+      # results[].relevance_score — an exact match for Lemonade's Cohere-shaped
+      # reply. Freeze-safe on OWUI >=0.6.42 (the blocking POST is offloaded to
+      # a thread via asyncio.to_thread; #19900). Key = master key (above).
       ENABLE_RAG_HYBRID_SEARCH = "true";
-      RAG_RERANKING_MODEL = "BAAI/bge-reranker-v2-m3";
+      RAG_RERANKING_ENGINE = "external";
+      RAG_EXTERNAL_RERANKER_URL = "http://litellm:4000/reranking";
+      RAG_RERANKING_MODEL = "bge-reranker-v2-m3-GGUF"; # Lemonade id (sent as `model`)
       RAG_TOP_K_RERANKER = "10"; # fetch 10 candidates, rerank down to TOP_K
 
       # Image generation → gateway z-image → Lemonade Z-Image-Turbo (GPU).
