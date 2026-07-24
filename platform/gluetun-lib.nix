@@ -72,6 +72,66 @@ rec {
       }
     );
 
+  # The gluetun homepage widget as a customapi over /v1/publicip/ip.
+  # The native `type=gluetun` widget prints the full country NAME, which
+  # clips in the narrow Network tiles; this keeps the live public IP +
+  # region and remaps the country to a flag emoji. `url` is the control
+  # API base (same value the native widget took); the endpoint is
+  # appended. Each instance's exit is effectively pinned by its wg
+  # config, so the table only needs the countries the box uses — any
+  # other exit falls back to a globe.
+  mkGluetunWidget =
+    { url }:
+    {
+      type = "customapi";
+      url = "${url}/v1/publicip/ip";
+      refreshInterval = 30000;
+      display = "block";
+      mappings = [
+        {
+          field = "public_ip";
+          label = "Public IP";
+        }
+        {
+          field = "region";
+          label = "Region";
+        }
+        {
+          field = "country";
+          label = "Country";
+          remap = [
+            { value = "Switzerland"; to = "🇨🇭"; }
+            { value = "United States"; to = "🇺🇸"; }
+            { value = "United Kingdom"; to = "🇬🇧"; }
+            { value = "Netherlands"; to = "🇳🇱"; }
+            { value = "Germany"; to = "🇩🇪"; }
+            { value = "France"; to = "🇫🇷"; }
+            { value = "Spain"; to = "🇪🇸"; }
+            { value = "Italy"; to = "🇮🇹"; }
+            { value = "Sweden"; to = "🇸🇪"; }
+            { value = "Norway"; to = "🇳🇴"; }
+            { value = "Finland"; to = "🇫🇮"; }
+            { value = "Denmark"; to = "🇩🇰"; }
+            { value = "Iceland"; to = "🇮🇸"; }
+            { value = "Ireland"; to = "🇮🇪"; }
+            { value = "Austria"; to = "🇦🇹"; }
+            { value = "Belgium"; to = "🇧🇪"; }
+            { value = "Poland"; to = "🇵🇱"; }
+            { value = "Romania"; to = "🇷🇴"; }
+            { value = "Portugal"; to = "🇵🇹"; }
+            { value = "Canada"; to = "🇨🇦"; }
+            { value = "Japan"; to = "🇯🇵"; }
+            { value = "Singapore"; to = "🇸🇬"; }
+            { value = "Hong Kong"; to = "🇭🇰"; }
+            { value = "Australia"; to = "🇦🇺"; }
+            { value = "Argentina"; to = "🇦🇷"; }
+            { value = "Brazil"; to = "🇧🇷"; }
+            { any = true; to = "🌐"; }
+          ];
+        }
+      ];
+    };
+
   # Everything a gluetun instance needs, as one config fragment: the
   # sops-encrypted WireGuard key + its expiry-reminder timer, the
   # kernel modules, statePaths (wireguard/ 0700, auth/ for the tracked

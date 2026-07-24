@@ -47,6 +47,7 @@ let
     })
     mkGluetunInstance
     mkNetnsTenant
+    mkGluetunWidget
     ;
 
   # The netns tenants that content stacks contribute. Sort by port so the
@@ -178,11 +179,7 @@ in
         description = "ProtonVPN WireGuard tunnel (shared netns for tv + shelfmark)";
         icon = "gluetun.png";
         siteMonitor = "http://host.containers.internal:8000/v1/publicip/ip";
-        widget = {
-          type = "gluetun";
-          url = "http://host.containers.internal:8000";
-          version = 2;
-        };
+        widget = mkGluetunWidget { url = "http://host.containers.internal:8000"; };
       };
     })
     {

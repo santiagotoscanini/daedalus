@@ -21,6 +21,13 @@
   ...
 }:
 
+let
+  # Pinned game version ofsm downloads + runs on every start. Surfaced
+  # on the homepage tile so it can be matched against the Steam client
+  # at a glance, without opening the admin UI. Bump this one place on a
+  # game update (clients on a different version can't join).
+  factorioVersion = "2.0.77";
+in
 {
   # ofsm admin credentials: sops-encrypted env.sops, decrypted to
   # /run/secrets/factorio-env at activation. Edit with `sops env.sops`.
@@ -35,7 +42,7 @@
     homepage = {
       group = "Productivity";
       name = "Factorio Admin";
-      description = "Factorio server manager";
+      description = "v${factorioVersion} · server manager";
       icon = "/icons/factorio.png";
       # Through traefik (not container DNS): OFSM answers redirects the
       # widget prober handles better on the public hostname.
@@ -61,7 +68,7 @@
     image = "docker.io/ofsm/ofsm:0.10.1@sha256:2b031bc1ec51e437a90b24266ce87f82362b4d16670e3804688610b4ac03b608";
 
     environment = {
-      FACTORIO_VERSION = "2.0.77";
+      FACTORIO_VERSION = factorioVersion;
     };
 
     environmentFiles = [ config.sops.secrets."factorio-env".path ];

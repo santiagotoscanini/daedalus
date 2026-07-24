@@ -40,6 +40,7 @@ let
         ;
     })
     mkGluetunInstance
+    mkGluetunWidget
     ;
 in
 {
@@ -79,11 +80,7 @@ in
         description = "ProtonVPN WireGuard tunnel (netns egress for ipcrawl)";
         icon = "gluetun.png";
         siteMonitor = "http://host.containers.internal:8002/v1/publicip/ip";
-        widget = {
-          type = "gluetun";
-          url = "http://host.containers.internal:8002";
-          version = 2;
-        };
+        widget = mkGluetunWidget { url = "http://host.containers.internal:8002"; };
       };
     })
     {
