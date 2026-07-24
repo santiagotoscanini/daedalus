@@ -111,13 +111,25 @@ let
       description,
       execStart,
       needsNetwork ? true,
+      needsDns ? false,
       before ? [ ],
       wantedBy ? [ "multi-user.target" ],
     }:
+    let
+      # network-online.target means the link is up, NOT that DNS answers.
+      # pi-hole is this box's only resolver and is Type=simple (its unit
+      # goes active before it serves), so work that resolves a hostname
+      # at boot must also gate on pihole-ready.service — the oneshot that
+      # blocks until FTL actually answers queries. Without it a build that
+      # pulls its FROM base races and fails with "no such host".
+      netEdges =
+        lib.optional needsNetwork "network-online.target"
+        ++ lib.optional needsDns "pihole-ready.service";
+    in
     {
       inherit description before wantedBy;
-      after = [ "linger-users.service" ] ++ lib.optional needsNetwork "network-online.target";
-      wants = [ "linger-users.service" ] ++ lib.optional needsNetwork "network-online.target";
+      after = [ "linger-users.service" ] ++ netEdges;
+      wants = [ "linger-users.service" ] ++ netEdges;
       path = [ "/run/wrappers" ];
       serviceConfig = {
         Type = "oneshot";
@@ -340,9 +352,11 @@ in
       in
       {
         inherit image;
-        # needsNetwork: a cold cache pulls the FROM base from its registry.
+        # A cold cache pulls the FROM base from its registry, so this
+        # needs real DNS (needsDns), not just network-online.
         service = mkRootlessOneshot {
           description = "Build ${image}";
+          needsDns = true;
           before = gates;
           wantedBy = gates;
           execStart = pkgs.writeShellScript "build-${name}-image" ''

@@ -250,7 +250,7 @@ groups:
         execErrState: OK
         for: 5m
         annotations:
-          description: Filesystem on {{ $labels.instance }} at {{ $labels.mountpoint }} has only {{ $values.A | humanizePercentage }} free space.
+          description: Filesystem on {{ $labels.instance }} at {{ $labels.mountpoint }} has only {{ printf "%.1f" $values.A.Value }}% free space.
           summary: Host filesystem is almost full (< 10% left)
         labels:
           severity: critical
@@ -291,7 +291,7 @@ groups:
         execErrState: OK
         for: 5m
         annotations:
-          description: Memory on {{ $labels.instance }} has only {{ $values.A | humanizePercentage }} available.
+          description: Memory on {{ $labels.instance }} has only {{ printf "%.1f" $values.A.Value }}% available.
           summary: Host memory is critically low (< 10% available)
         labels:
           severity: critical
@@ -640,7 +640,7 @@ groups:
         execErrState: OK
         for: 10m
         annotations:
-          description: CPU load on {{ $labels.instance }} is {{ $values.A | humanizePercentage }}.
+          description: CPU load on {{ $labels.instance }} is {{ printf "%.1f" $values.A.Value }}%.
           summary: Host CPU load is high (> 80%)
         labels:
           severity: warning
@@ -681,7 +681,7 @@ groups:
         execErrState: OK
         for: 10m
         annotations:
-          description: CPU iowait on {{ $labels.instance }} is {{ $values.A | humanizePercentage }}. This indicates disk I/O bottleneck.
+          description: CPU iowait on {{ $labels.instance }} is {{ printf "%.1f" $values.A.Value }}%. This indicates disk I/O bottleneck.
           summary: Host CPU iowait is high (> 10%)
         labels:
           severity: warning
@@ -722,7 +722,7 @@ groups:
         execErrState: OK
         for: 5m
         annotations:
-          description: Swap usage on {{ $labels.instance }} is {{ $values.A | humanizePercentage }}.
+          description: Swap usage on {{ $labels.instance }} is {{ printf "%.1f" $values.A.Value }}%.
           summary: Host swap usage is high (> 80%)
         labels:
           severity: warning
@@ -809,7 +809,7 @@ groups:
         execErrState: OK
         for: 5m
         annotations:
-          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has only {{ $values.A | humanizePercentage }} inodes free.
+          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has only {{ printf "%.1f" $values.A.Value }}% inodes free.
           summary: Host filesystem is running out of inodes (< 10% free)
         labels:
           severity: warning
@@ -932,7 +932,7 @@ groups:
         execErrState: OK
         for: 5m
         annotations:
-          description: Network interface {{ $labels.device }} on {{ $labels.instance }} has {{ $values.A | humanizePercentage }} receive errors.
+          description: Network interface {{ $labels.device }} on {{ $labels.instance }} has {{ printf "%.1f" $values.A.Value }}% receive errors.
           summary: Host network receive errors detected (> 1%)
         labels:
           severity: warning
@@ -973,7 +973,7 @@ groups:
         execErrState: OK
         for: 5m
         annotations:
-          description: Network interface {{ $labels.device }} on {{ $labels.instance }} has {{ $values.A | humanizePercentage }} transmit errors.
+          description: Network interface {{ $labels.device }} on {{ $labels.instance }} has {{ printf "%.1f" $values.A.Value }}% transmit errors.
           summary: Host network transmit errors detected (> 1%)
         labels:
           severity: warning
@@ -1055,7 +1055,7 @@ groups:
         execErrState: OK
         for: 30m
         annotations:
-          description: Prometheus TSDB is at {{ $values.A | humanizePercentage }} of its retention size cap. Either cardinality is growing or someone bumped retention. The size cap will start dropping old data at 100%.
+          description: Prometheus TSDB is at {{ printf "%.1f" $values.A.Value }}% of its retention size cap. Either cardinality is growing or someone bumped retention. The size cap will start dropping old data at 100%.
           summary: Prometheus TSDB > 80% of size cap
         labels:
           severity: warning

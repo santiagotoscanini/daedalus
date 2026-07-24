@@ -157,6 +157,10 @@ in
       N8N_PROTOCOL = "https";
       NODE_ENV = "production";
       WEBHOOK_URL = "https://n8n.toscanini.me";
+      # Exactly one reverse proxy (traefik) sits in front, so trust one
+      # X-Forwarded-* hop. Without this n8n leaves Express `trust proxy`
+      # off and logs a ValidationError on every X-Forwarded-For request.
+      N8N_PROXY_HOPS = "1";
       GENERIC_TIMEZONE = config.time.timeZone;
 
       # Instance SMTP (user-management emails) via the same Gmail relay.

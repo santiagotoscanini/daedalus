@@ -34,10 +34,18 @@ in
   fleet.webApps.pihole = {
     serviceUrl = "http://host.containers.internal:8080";
     # The Pocket ID gate is the only browser auth — FTL's own password
-    # is blanked (see the webserver comment below). Widget + API dial
-    # host.containers.internal:8080, bypassing traefik.
+    # is blanked (see the webserver comment below). traefik dials FTL
+    # at host.containers.internal:8080 (serviceUrl above).
     auth = "oidc";
     healthPath = "/api/info/login";
+    # The homepage Pi-hole widget rides traefik (below) to dodge FTL's
+    # keep-alive framing, which trips homepage's undici parser on the
+    # direct :8080 path. So the widget's read-only calls must skip the
+    # OIDC gate: GET stats/info (query counts — non-sensitive) plus the
+    # POST /api/auth handshake (returns a blank-password session, no
+    # state change). Control endpoints (/api/dns/blocking, config, …)
+    # stay gated.
+    authBypassRule = "(Method(`GET`) && (PathPrefix(`/api/stats`) || PathPrefix(`/api/info`))) || (Method(`POST`) && Path(`/api/auth`))";
     homepage = {
       group = "Network";
       name = "Pi-hole";
@@ -45,7 +53,7 @@ in
       icon = "pi-hole.png";
       widget = {
         type = "pihole";
-        url = "http://host.containers.internal:8080";
+        url = "https://pihole.toscanini.me";
         version = 6;
       };
     };
