@@ -51,6 +51,10 @@ in
       name = "Pi-hole";
       description = "LAN DNS, DHCP, ad-blocking";
       icon = "pi-hole.png";
+      # Probe through traefik too (not the default :8080 upstream) — a
+      # direct ping trips the same undici framing bug as the widget. The
+      # healthPath is OIDC-bypassed and returns 200.
+      siteMonitor = "https://pihole.toscanini.me/api/info/login";
       widget = {
         type = "pihole";
         url = "https://pihole.toscanini.me";
