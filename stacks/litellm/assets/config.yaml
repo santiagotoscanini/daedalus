@@ -209,6 +209,17 @@ model_list:
       input_cost_per_token: 0
       output_cost_per_token: 0
 
+  # Cloud image gen → OpenAI gpt-image-2 (real OpenAI endpoint, not
+  # Lemonade). This is the one BILLED model on the gateway: key from
+  # OPENAI_API_KEY in env.sops, and cost is left to LiteLLM's price map
+  # (do NOT pin to 0 — unlike the local models above, this spends money).
+  - model_name: gpt-image-2
+    litellm_params:
+      model: openai/gpt-image-2
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      mode: image_generation
+
 # TickTick tasks via the official remote MCP server. LiteLLM holds the
 # static personal API token (TICKTICK_MCP_TOKEN, from env.sops) and
 # injects it upstream, so any gateway client (Open WebUI) only presents
