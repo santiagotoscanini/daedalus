@@ -86,7 +86,9 @@ let
     //   - host       → hostname
     //   - level      → priority keyword (info|warning|err|...)
     //   - stack      → from fleet.logStacks; falls back to the
-    //                  container name itself (see below)
+    //                  container name itself (see below). Kernel lines
+    //                  have no unit or container, so they get
+    //                  stack=kernel.
     //
     // Everything else stays in the log line (queryable via LogQL line
     // filters), not as labels.
@@ -162,6 +164,19 @@ let
         regex         = "^(pihole-(ftl|ready)|ddclient|smartd|fail2ban)\\.service$"
         target_label  = "stack"
         replacement   = "infra"
+      }
+
+      // ===== kernel transport =====
+      // Kernel lines carry neither _SYSTEMD_UNIT nor a container name,
+      // so neither fallback below can claim them — without this rule
+      // they reach Loki with no stack label at all, and the header's
+      // promise that every line carries one would be false.
+      rule {
+        source_labels = ["stack", "__journal__transport"]
+        separator     = ";"
+        regex         = ";kernel"
+        target_label  = "stack"
+        replacement   = "kernel"
       }
 
       // Fallback: any container not claimed above gets stack = its own
