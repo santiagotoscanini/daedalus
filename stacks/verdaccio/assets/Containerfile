@@ -7,9 +7,17 @@ FROM docker.io/library/node:22-alpine AS builder
 RUN mkdir -p /verdaccio/plugins \
   && cd /verdaccio/plugins \
   && npm install --install-strategy=shallow --no-bin-links \
-     --omit=optional --omit=dev verdaccio-openid@0.18.0
+     --omit=optional --omit=dev verdaccio-openid@0.18.0 node-persist@4.0.4
 
 FROM docker.io/verdaccio/verdaccio:6.9.0@sha256:11e75353c8363650cbf43adf8594b2cd633be6f191056c6e08ba6ff4b1398f62
 COPY --chown=10001:root --from=builder \
   /verdaccio/plugins/node_modules/verdaccio-openid \
   /verdaccio/plugins/verdaccio-openid
+
+# node-persist backs `store-type: file` in config.yaml. verdaccio-openid
+# declares it as an OPTIONAL peer dep, so installing the plugin alone
+# does not bring it in, and the OIDC callback 500s at first use while
+# startup still logs a clean plugin load.
+COPY --chown=10001:root --from=builder \
+  /verdaccio/plugins/node_modules/node-persist \
+  /verdaccio/plugins/verdaccio-openid/node_modules/node-persist

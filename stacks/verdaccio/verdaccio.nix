@@ -29,7 +29,7 @@
 }:
 
 let
-  # verdaccio 6.7.4 base + verdaccio-openid plugin, built locally from
+  # verdaccio 6.9.0 base + verdaccio-openid plugin, built locally from
   # assets/Containerfile. The tag carries the build-context hash so a
   # plugin/Containerfile bump restarts the consumer.
   verdaccioImage = mkLocalImage {
