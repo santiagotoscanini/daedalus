@@ -1,4 +1,5 @@
-# Body of app-<name>-deploy.service — poll ghcr.io, redeploy on a new digest.
+# Body of app-<name>-deploy.service — poll the image registry (the box's
+# own zot by default), redeploy on a new digest.
 #
 # Nix injects APP / IMAGE / UNIT / APP_HOST / HEALTH_PATH / HEALTH_TIMEOUT /
 # AUTHFILE / LAN_IP / STATE / SETPRIV / ENV_BIN / PODMAN above this body, and
@@ -59,8 +60,9 @@ last=$(cat "$STATE" 2>/dev/null || true)
 # over a still-unhealthy app.
 #
 # A pull of an unchanged tag is one manifest request, so this is cheap to run
-# every couple of minutes. --retry rides out a sub-15s ghcr.io blip within one
-# tick; the debounce below rides out a longer WAN outage that spans ticks.
+# every couple of minutes. --retry rides out a sub-15s registry blip within one
+# tick; the debounce below rides out a longer outage that spans ticks (for a
+# ghcr-hosted override — the default registry is local and has no WAN leg).
 #
 # The nightly dynamic-IP reset (Argentine ISP, ~04:00) drops the WAN for
 # anywhere from a minute to ~10 min — long enough to blow past --retry and span
@@ -81,8 +83,10 @@ if ! podman_ pull --authfile "$AUTHFILE" --retry 3 --retry-delay 5s --quiet "$IM
   echo "$fails" > "$STATE.pull"
   if [ "$fails" -eq "$PULL_ALERT_AFTER" ]; then
     send_alert "[s2-server] DEPLOY PULL FAILED: app-$APP" <<EOF
-podman pull $IMAGE has failed $fails ticks running (past a transient WAN blip).
-Classic cause: the GHCR classic PAT in stacks/apps/ghcr-auth.json.sops expired.
+podman pull $IMAGE has failed $fails ticks running (past a transient blip).
+Local-registry image (the default): check podman-zot / registry-config-render.
+GHCR-hosted override: the classic PAT in stacks/apps/ghcr-auth.json.sops
+may have expired.
 Deploys for app-$APP are stalled until the pull succeeds; this alerts once.
 Investigate: journalctl -u app-$APP-deploy
 EOF

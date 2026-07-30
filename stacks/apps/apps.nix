@@ -14,9 +14,9 @@
 #   - Homepage tiles under a per-app section named after the app (e.g.
 #     `Anansi`): the app, Repo, Logs.
 #   - An auto-deploy timer + oneshot (`deploy.enable`, ON by default) that
-#     polls ghcr.io and redeploys the container when the image digest moves.
-#     This is the "push to main and it's live" half of the platform; see
-#     assets/deploy.sh for why an explicit pull is unavoidable.
+#     polls the image registry and redeploys the container when the digest
+#     moves. This is the "push to main and it's live" half of the platform;
+#     see assets/deploy.sh for why an explicit pull is unavoidable.
 #
 # Convention enforced: every app container LISTENS ON PORT 3000.
 # No per-app port override. The image is built by us; the rule is ours.
@@ -28,7 +28,8 @@
 # `postgres.enable`), and the canonical source-code directory at
 # /home/santiago/apps/anansi/.
 #
-# Image default: `ghcr.io/santiagotoscanini/<name>:latest`. Override
+# Image default: `registry.toscanini.me/<name>:latest` — the box's own
+# zot (stacks/registry), fed by CI on the self-hosted runners. Override
 # for forks or pinned digests.
 #
 # Database: `postgres.enable = true` materializes a role + database
@@ -89,11 +90,13 @@ let
   # Host tree backing `storage.enable`. One dir per app underneath.
   appsDataRoot = "/home/santiago/selfhost/apps";
 
-  # Classic PAT (read:packages) in podman auth.json form. Used both by the
-  # container's implicit pull and by the deploy oneshot's explicit one. GHCR
-  # private packages accept ONLY a classic PAT — fine-grained PATs and GitHub
-  # App installation tokens are still rejected. When it expires, deploys fail
-  # loudly rather than silently going stale.
+  # GHCR classic PAT (read:packages) in podman auth.json form, passed on
+  # every pull (container's implicit + the deploy oneshot's explicit).
+  # The default images live on the local registry, which the authfile
+  # doesn't cover — those pulls ride its anonymous-read policy and the
+  # file is inert. It only bites for an `image` override pointing at a
+  # private GHCR package; GHCR accepts ONLY a classic PAT there —
+  # fine-grained PATs and GitHub App installation tokens are rejected.
   ghcrAuthFile = config.sops.secrets."ghcr-auth".path;
 
   # Last deploy result per app, `<digest> ok|failed`; a sibling
@@ -390,7 +393,7 @@ let
       # to run again on every tick.
       systemd.services."app-${name}-deploy" = {
         inherit (app.deploy) enable;
-        description = "Redeploy app-${name} when a new image lands on ghcr.io";
+        description = "Redeploy app-${name} when a new image lands on the registry";
         # linger-users gates /run/user/1000 → rootless podman → newuidmap.
         after = [
           "network-online.target"
@@ -410,12 +413,12 @@ let
 
       systemd.timers."app-${name}-deploy" = {
         inherit (app.deploy) enable;
-        description = "Poll ghcr.io for a new app-${name} image";
+        description = "Poll the registry for a new app-${name} image";
         wantedBy = [ "timers.target" ];
         timerConfig = {
           OnCalendar = app.deploy.interval;
           Persistent = true; # catch up if the box was off
-          RandomizedDelaySec = 45; # don't have every app hit ghcr on the same second
+          RandomizedDelaySec = 45; # don't have every app hit the registry on the same second
         };
       };
 
@@ -491,15 +494,16 @@ in
           options = {
             image = lib.mkOption {
               type = lib.types.str;
-              default = "ghcr.io/santiagotoscanini/${name}:latest";
+              default = "registry.toscanini.me/${name}:latest";
               description = ''
-                OCI image. Default: `ghcr.io/santiagotoscanini/<name>:latest`.
-                Convention is to host each app at
-                `github.com/santiagotoscanini/<name>` and publish images to
-                the matching ghcr namespace. Override for placeholders,
-                forks, or pinned digests.
+                OCI image. Default: `registry.toscanini.me/<name>:latest` —
+                the box's own zot (stacks/registry). Convention is to host
+                each app at `github.com/santiagotoscanini/<name>`; its CI
+                builds on the self-hosted runners and pushes the matching
+                repo here. Override for placeholders, forks, or pinned
+                digests (the immutable `sha-<sha>` tags CI also pushes).
               '';
-              example = "ghcr.io/santiagotoscanini/anansi:abc123";
+              example = "registry.toscanini.me/ipcrawl:sha-89dfc4456f8b2c4531f84790cce5e179bdaeae6a";
             };
 
             cmd = lib.mkOption {
@@ -630,7 +634,7 @@ in
                 type = lib.types.bool;
                 default = true;
                 description = ''
-                  Poll ghcr.io and redeploy the container when the image digest
+                  Poll the registry and redeploy the container when the image digest
                   moves. ON by default: every app here rides a moving `:latest`
                   published by CI on push-to-main, so "new image → run it" is the
                   expected behaviour, not an opt-in.

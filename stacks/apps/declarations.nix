@@ -3,7 +3,8 @@
 # + homepage + (optionally) postgres for each.
 #
 # Defaults inferred from the entry's key:
-#   - image    = ghcr.io/santiagotoscanini/<name>:latest
+#   - image    = registry.toscanini.me/<name>:latest (the box's own zot,
+#                stacks/registry — anonymous pull)
 #   - hostname = <name>.toscanini.me
 #   - container = app-<name>
 #   - homepage section = capitalized <name>
@@ -16,14 +17,15 @@
 #   - deploy.enable = false    → freeze the app on its current image
 #
 # Workflow:
-#   1. Push the code to github.com/santiagotoscanini/<name>; CI publishes
-#      `ghcr.io/santiagotoscanini/<name>:latest`.
+#   1. Push the code to github.com/santiagotoscanini/<name>; CI on the
+#      self-hosted runners (stacks/gha-runner) builds the image and pushes
+#      `registry.toscanini.me/<name>:latest`.
 #   2. Add an entry below; `sudo nixos-rebuild switch`.
 #
 # That's the whole loop. From then on, every push to main goes live on its
-# own: `app-<name>-deploy.timer` polls ghcr.io every 2 minutes, and when the
-# digest moves it pulls, restarts the container, and health-checks it through
-# traefik. No manual pull, no rebuild. Watch a deploy with
+# own: `app-<name>-deploy.timer` polls the registry every 2 minutes, and when
+# the digest moves it pulls, restarts the container, and health-checks it
+# through traefik. No manual pull, no rebuild. Watch a deploy with
 # `journalctl -fu app-<name>-deploy.service`; a deploy that comes back
 # unhealthy leaves the unit failed (and the new image running — there is no
 # auto-rollback). See stacks/apps/apps.nix + assets/deploy.sh.
@@ -51,7 +53,7 @@
   # ipcrawl — fork of github.com/alectrocute/ipcrawl (MIT). Upstream has no
   # Dockerfile and deploys as systemd+nginx on a VPS; the fork adds the
   # Dockerfile + .github/workflows/image.yml that publishes
-  # ghcr.io/santiagotoscanini/ipcrawl:latest, so the `image` default applies
+  # registry.toscanini.me/ipcrawl:latest, so the `image` default applies
   # unchanged. Rebase the fork on upstream to pick up changes.
   fleet.apps.ipcrawl = {
     # SQLite + an fs-backed screenshot/SWR cache, no Postgres. Schema is
