@@ -1,8 +1,9 @@
 # stacks/gha-runner — self-hosted GitHub Actions runners (ephemeral).
 #
-# One EPHEMERAL runner container per repo in `repos` below, registered
-# repo-level under github.com/santiagotoscanini (a personal account —
-# org-level runners don't exist there). Each runner takes exactly ONE
+# One EPHEMERAL runner container per fleet.apps entry (the app key
+# names the repo), registered repo-level under
+# github.com/santiagotoscanini (a personal account — org-level runners
+# don't exist there). Each runner takes exactly ONE
 # job, then de-registers and exits; systemd `Restart=always` starts a
 # fresh container that re-registers via the myoung34 entrypoint
 # (ACCESS_TOKEN -> POST .../actions/runners/registration-token). Fresh
@@ -76,10 +77,13 @@
 }:
 
 let
-  repos = [
-    "anansi"
-    "ipcrawl"
-  ];
+  # The runner set IS the apps platform: one runner per fleet.apps
+  # entry (whose key names the repo, github.com/santiagotoscanini/<name>
+  # — the same convention the image default rides). Derive-don't-
+  # duplicate, like webApps -> traefik/dns. Declaring an app provisions
+  # its CI capacity; the repo-side half (workflows + REGISTRY_PASSWORD
+  # secret) is documented in stacks/apps/declarations.nix.
+  repos = lib.attrNames config.fleet.apps;
 
   # Digest of docker.io/myoung34/github-runner:ubuntu-noble (rebuilt
   # nightly upstream; the pin is what makes our build reproducible).

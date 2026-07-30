@@ -20,7 +20,12 @@
 #   1. Push the code to github.com/santiagotoscanini/<name>; CI on the
 #      self-hosted runners (stacks/gha-runner) builds the image and pushes
 #      `registry.toscanini.me/<name>:latest`.
-#   2. Add an entry below; `sudo nixos-rebuild switch`.
+#   2. Add an entry below; `sudo nixos-rebuild switch`. The entry also
+#      provisions the repo's self-hosted runner (stacks/gha-runner derives
+#      its runner set from fleet.apps).
+#   3. Repo-side, once: copy the ci/image workflows from an existing app
+#      and `gh secret set REGISTRY_PASSWORD` with the ci password from
+#      stacks/registry/env.sops.
 #
 # That's the whole loop. From then on, every push to main goes live on its
 # own: `app-<name>-deploy.timer` polls the registry every 2 minutes, and when
