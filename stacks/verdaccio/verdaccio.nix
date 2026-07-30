@@ -47,17 +47,9 @@ in
   fleet.bridgeMemberships.verdaccio = [ "traefik" ];
 
   # verdaccio-openid fetches the IdP discovery document at plugin load
-  # and does not retry on failure, leaving OIDC npm login broken until
-  # a restart. Start after traefik + pocket-id — whose ExecStartPost
-  # readiness gate holds until the IdP answers — so discovery succeeds
-  # on the first attempt.
-  systemd.services.podman-verdaccio = {
-    after = [
-      "podman-traefik.service"
-      "podman-pocket-id.service"
-    ];
-    wants = [ "podman-pocket-id.service" ];
-  };
+  # and does not retry on failure, leaving OIDC npm login broken until a
+  # restart — with no crash to make that visible.
+  fleet.sso.discoveryConsumers = [ "verdaccio" ];
 
   fleet.webApps.verdaccio = {
     serviceName = "verdaccio";

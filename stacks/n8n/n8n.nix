@@ -169,6 +169,19 @@ in
       N8N_PROXY_HOPS = "1";
       GENERIC_TIMEZONE = config.time.timeZone;
 
+      # n8n warns at every start that these three defaults shrink in a
+      # future release. Pinning them to today's values makes the limits
+      # explicit, so an image bump can't silently start timing out long
+      # tasks or rejecting large archives.
+      N8N_RUNNERS_TASK_TIMEOUT = "300";
+      N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES = "2147483648";
+      N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES = "5000";
+
+      # The image ships no Python 3, so the Python task runner fails at
+      # every start. Code nodes use JavaScript here; turn it off rather
+      # than retry something that cannot succeed.
+      N8N_PYTHON_ENABLED = "false";
+
       # Instance SMTP (user-management emails) via the same Gmail relay.
       # N8N_SMTP_PASS is injected from the rendered env file (below): n8n
       # runs as a mapped uid that can't read the santiago-owned mail secret,

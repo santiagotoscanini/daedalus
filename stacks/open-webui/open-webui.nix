@@ -157,6 +157,14 @@ in
     environment = {
       WEBUI_URL = "https://chat.toscanini.me";
 
+      # Unset, this defaults to `*` and the app warns about it at every
+      # start. Only its own origin ever calls the API.
+      CORS_ALLOW_ORIGIN = "https://chat.toscanini.me";
+
+      # langchain's fetchers warn when unset, and RAG page fetches go out
+      # with a default UA that some sites reject.
+      USER_AGENT = "s2-server-open-webui";
+
       # Make env/nix the source of truth for admin config. Without this,
       # Open WebUI's PersistentConfig reads each env-backed setting ONCE
       # on first boot, stores it in the DB, and thereafter ignores env

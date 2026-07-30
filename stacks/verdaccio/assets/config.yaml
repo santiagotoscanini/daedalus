@@ -32,6 +32,12 @@ auth:
 uplinks:
   npmjs:
     url: https://registry.npmjs.org/
+    # Package installs still proxy upstream; only SEARCH is kept local.
+    # npmjs rejects the `text=*` wildcard the homepage widget uses with a
+    # 400, which verdaccio surfaces as a recurring `uplink error` on every
+    # widget refresh — and the widget wants the count of LOCALLY published
+    # packages anyway, which is exactly what a local-only search returns.
+    search: false
 
 packages:
   '@*/*':

@@ -125,6 +125,55 @@ groups:
         labels:
           severity: warning
         isPaused: false
+      # A healthy alloy logs nothing, so its journal is useless as a
+      # liveness signal and the whole log pipeline can stop silently.
+      # scrape-target-down covers "alloy is gone"; this covers the other
+      # half — alloy up and scrapeable but no longer shipping to Loki.
+      # 15m window vs the 1m group interval: journal traffic is bursty
+      # and a genuinely quiet minute is normal.
+      - uid: log-shipping-stalled-1
+        title: Log Shipping Stalled
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: sum(rate(loki_write_sent_entries_total[15m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.001
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        # OK on NoData: alloy being absent entirely is scrape-target-down's
+        # job, and double-firing on one outage buries the distinction.
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          description: alloy has sent no entries to Loki for 15m — journal logs are not reaching the log store.
+          summary: Log shipping to Loki has stalled
+        labels:
+          severity: warning
+        isPaused: false
       # Outside-in: gatus probes every webApp's healthPath through
       # traefik. container_up alone misses the failure mode where the
       # container runs but the app serves 5xx (e.g. an aardvark-dns

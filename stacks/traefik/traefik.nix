@@ -417,7 +417,7 @@ in
       # published _acme-challenge TXT before propagation.
       "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53"
       # 90s settle delay before lego polls — keeps us off LE's rate-limit.
-      "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.delayBeforeCheck=90"
+      "--certificatesResolvers.dns-cloudflare.acme.dnsChallenge.propagation.delayBeforeChecks=90"
     ];
 
   };

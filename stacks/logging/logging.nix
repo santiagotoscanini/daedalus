@@ -314,6 +314,22 @@ in
       "alloy"
     ];
 
+    # The log pipeline is the one subsystem whose failure mode is
+    # silence, and a healthy alloy logs nothing at all — so "no output"
+    # is indistinguishable from "stopped shipping" without these.
+    # Prometheus reaches both by container DNS on monitoring-net; neither
+    # publishes a host port or a traefik route by design.
+    fleet.prometheusScrapes = [
+      {
+        job_name = "alloy";
+        static_configs = [ { targets = [ "alloy:12345" ]; } ];
+      }
+      {
+        job_name = "loki";
+        static_configs = [ { targets = [ "loki:3100" ]; } ];
+      }
+    ];
+
     # A container claimed by two stacks would get whichever rule renders
     # last (alphabetical stack order) — silent surprise; refuse instead.
     assertions =

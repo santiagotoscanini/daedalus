@@ -70,6 +70,11 @@
       # Login stays off — the Pocket ID forward-auth gate is the auth
       # layer, matching the rest of the fleet.
       SECURITY_ENABLELOGIN = "false";
+
+      # Nothing here consumes the OpenAPI spec or the Swagger console,
+      # and the app warns on every start that both are on by default.
+      SPRINGDOC_APIDOCS_ENABLED = "false";
+      SPRINGDOC_SWAGGERUI_ENABLED = "false";
     };
 
   };

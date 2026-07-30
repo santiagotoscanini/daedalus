@@ -50,16 +50,48 @@
     description = "OIDC issuer URL of the box-wide IdP (Pocket ID).";
   };
 
-  config = {
+  options.fleet.sso.discoveryConsumers = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = ''
+      Container names that fetch the OIDC discovery document while
+      starting up and cannot recover if it isn't being served yet —
+      they either panic (gatus, zot) or silently come up with OIDC
+      login broken until a restart (verdaccio, wealthfolio). Under
+      `--rm` a crash leaves the oneshot unit green with no container
+      behind it, so the failure is invisible.
+
+      Each listed container is ordered behind traefik and the IdP, and
+      blocked by a bounded probe of the real discovery URL. Ordering
+      alone is not enough: it only proves `podman run -d` returned, and
+      the request path that actually matters runs through traefik.
+
+      Registration is opt-in — an app that fetches discovery lazily
+      (shelfmark) or re-tries on its own doesn't need it.
+    '';
+    example = lib.literalExpression ''[ "gatus" "zot" ]'';
+  };
+
+  config = lib.mkMerge [
+    {
     # ENCRYPTION_KEY: sops-encrypted env.sops, decrypted to
     # /run/secrets/pocket-id-env at activation. Edit with `sops env.sops`.
     sops.secrets."pocket-id-env" = mkDotenvSecret ./env.sops;
 
+    # A consumer must never be listed as its own prerequisite, and the
+    # IdP obviously can't wait for its own discovery endpoint.
+    assertions = [
+      {
+        assertion = !(lib.elem "pocket-id" config.fleet.sso.discoveryConsumers);
+        message = "fleet.sso.discoveryConsumers must not contain \"pocket-id\" — the IdP cannot gate on itself.";
+      }
+    ];
+
     # Readiness gate, mirroring podman-pg's: "podman-pocket-id finished"
     # only means `podman run -d` returned — the IdP answers HTTP a moment
-    # later. ExecStartPost holds the unit (and every OIDC consumer ordered
-    # after it: verdaccio, wealthfolio) until the app's own healthcheck
-    # passes, so first-attempt discovery can't race a cold boot.
+    # later. ExecStartPost holds the unit (and everything ordered after
+    # it) until the app's own healthcheck passes, so first-attempt
+    # discovery can't race a cold boot.
     systemd.services.podman-pocket-id.serviceConfig.ExecStartPost =
       # 120s: generous because a mass restart (a podman.nix change touches
       # every unit) starts the whole fleet at once and the IdP competes
@@ -72,6 +104,44 @@
         echo "pocket-id did not become ready within 120s" >&2
         exit 1
       '';
+
+    # Unwedges the scheduler's expired-data cleanup, which self-blocks on
+    # a stale marker encoding — see assets/repair-cleanup-marker.sql for
+    # the mechanism. Idempotent, so it stays harmless once repaired.
+    # Ordered before pocket-id (weakly: a failed repair must not be able
+    # to take SSO down with it) and run as the tenant role that owns the
+    # table, not the cluster superuser.
+    systemd.services.pocket-id-cleanup-marker-repair = {
+      description = "Repair pocket-id's francis_metadata last-cleanup marker";
+      before = [ "podman-pocket-id.service" ];
+      wantedBy = [ "podman-pocket-id.service" ];
+      after = [
+        "podman-pg.service"
+        "app-db-pocket_id-bootstrap.service"
+      ];
+      wants = [ "podman-pg.service" ];
+      path = [
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.podman
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "santiago";
+        Environment = "XDG_RUNTIME_DIR=/run/user/1000";
+      };
+      # PGPASSWORD rides a value-less -e passthrough so the secret never
+      # sits in podman argv (/proc/<pid>/cmdline).
+      script = ''
+        set -eu
+        APP_PWD=$(grep '^POSTGRES_PASSWORD=' ${config.fleet.appDatabases.pocket_id.envFile} | head -1 | cut -d= -f2-)
+        [ -n "$APP_PWD" ] || { echo "empty POSTGRES_PASSWORD for pocket_id" >&2; exit 1; }
+        PGPASSWORD="$APP_PWD" podman exec -i -e PGPASSWORD pg \
+          psql -X -v ON_ERROR_STOP=1 -U pocket_id -d pocket_id \
+          < ${./assets/repair-cleanup-marker.sql}
+      '';
+    };
 
     fleet.bridgeMemberships.pocket-id = [
       "traefik"
@@ -131,5 +201,43 @@
       };
 
     };
-  };
+    }
+
+    # The generated gate for every fleet.sso.discoveryConsumers entry.
+    # `after` gets the IdP's own ExecStartPost readiness gate; the
+    # ExecStartPre then proves the full path the consumer actually uses
+    # (through traefik, wildcard TLS), which is what returns 502 mid-boot
+    # while the IdP itself is already healthy. Bounded at ~120s so a
+    # genuinely-down IdP fails the unit VISIBLY — container_up and
+    # scrape-target-down both fire — instead of going green-dead.
+    {
+      systemd.services = lib.listToAttrs (
+        map (
+          name:
+          lib.nameValuePair "podman-${name}" {
+            after = [
+              "podman-traefik.service"
+              "podman-pocket-id.service"
+            ];
+            wants = [
+              "podman-traefik.service"
+              "podman-pocket-id.service"
+            ];
+            # mkAfter: must run after mkRootlessContainer's own pre-start.
+            serviceConfig.ExecStartPre = lib.mkAfter [
+              "${pkgs.writeShellScript "${name}-wait-oidc" ''
+                url="${config.fleet.sso.issuerUrl}/.well-known/openid-configuration"
+                for _ in $(seq 1 60); do
+                  ${pkgs.curl}/bin/curl -fsS --max-time 5 -o /dev/null "$url" && exit 0
+                  sleep 2
+                done
+                echo "${name}: OIDC discovery ($url) not ready after ~120s" >&2
+                exit 1
+              ''}"
+            ];
+          }
+        ) config.fleet.sso.discoveryConsumers
+      );
+    }
+  ];
 }

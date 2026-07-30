@@ -79,6 +79,11 @@ in
 
   fleet.statePaths.${dataDir} = { };
 
+  # zot PANICS if OIDC discovery fails at startup, and the dead container
+  # hides behind a green oneshot unit — which silently stops the whole
+  # deploy loop, since app-*-deploy can no longer pull from here.
+  fleet.sso.discoveryConsumers = [ "zot" ];
+
   fleet.webApps.registry = {
     serviceName = "zot";
     port = 5000;

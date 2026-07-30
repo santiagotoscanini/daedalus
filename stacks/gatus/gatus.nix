@@ -104,39 +104,9 @@ in
 
   # Database on the shared app-db cluster (see stacks/app-db/).
   fleet.appDatabases.gatus.consumers = [ "gatus" ];
-  # gatus fetches the OIDC discovery document at startup and PANICS if
-  # id.toscanini.me is unreachable. after/wants order gatus behind
-  # traefik + pocket-id, but with Type=oneshot "started" only means
-  # `podman run -d` returned — not that Pocket ID is serving through
-  # traefik yet. In a fleet-wide restart both come up in the same second,
-  # gatus loses the race, gets EOF on the discovery fetch, and dies —
-  # leaving the unit "Finished" with a dead --rm'd container (the
-  # documented oneshot trap). The ExecStartPre gate blocks the start
-  # until the discovery endpoint actually answers (mirrors app-db's
-  # pg_isready gating); bounded so a genuinely-down Pocket ID fails the
-  # unit VISIBLY (container_up + scrape-down alerts) instead of going
-  # silently green-dead.
-  systemd.services.podman-gatus = {
-    after = [
-      "podman-traefik.service"
-      "podman-pocket-id.service"
-    ];
-    wants = [
-      "podman-traefik.service"
-      "podman-pocket-id.service"
-    ];
-    serviceConfig.ExecStartPre = lib.mkAfter [
-      "${pkgs.writeShellScript "gatus-wait-oidc" ''
-        url="${config.fleet.sso.issuerUrl}/.well-known/openid-configuration"
-        for _ in $(seq 1 60); do
-          ${pkgs.curl}/bin/curl -fsS --max-time 5 -o /dev/null "$url" && exit 0
-          sleep 2
-        done
-        echo "gatus: OIDC discovery ($url) not ready after ~120s" >&2
-        exit 1
-      ''}"
-    ];
-  };
+  # gatus PANICS if OIDC discovery fails at startup, taking the whole
+  # probe layer down behind a green oneshot unit.
+  fleet.sso.discoveryConsumers = [ "gatus" ];
 
   # GATUS_OIDC_CLIENT_ID + GATUS_OIDC_CLIENT_SECRET (Pocket ID SSO):
   # sops-encrypted env.sops. Edit with `sops env.sops`.

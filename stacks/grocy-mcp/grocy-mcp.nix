@@ -46,6 +46,10 @@
       ENABLE_HTTP_SERVER = "true";
       MCP_HTTP_TRANSPORT_ONLY = "true";
       HTTP_SERVER_PORT = "8080";
+      # Every line this writes goes to stderr, so journald tags its
+      # routine INFO chatter as err-priority and it shows up in any
+      # warning-level sweep. Only warnings and worse are wanted.
+      LOG_LEVEL = "WARN";
     };
 
     environmentFiles = [ config.sops.secrets."grocy-mcp-env".path ];

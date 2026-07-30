@@ -17,18 +17,9 @@
 {
   fleet.bridgeMemberships.wealthfolio = [ "traefik" ];
 
-  # OIDC discovery against id.toscanini.me runs at startup and is fatal
-  # on failure; under --rm the crash leaves the oneshot unit green with
-  # no container behind it. Start after traefik + pocket-id — whose
-  # ExecStartPost readiness gate holds until the IdP answers — so the
-  # discovery request succeeds on the first attempt.
-  systemd.services.podman-wealthfolio = {
-    after = [
-      "podman-traefik.service"
-      "podman-pocket-id.service"
-    ];
-    wants = [ "podman-pocket-id.service" ];
-  };
+  # OIDC discovery runs at startup and is fatal on failure; under --rm
+  # the crash leaves the oneshot unit green with no container behind it.
+  fleet.sso.discoveryConsumers = [ "wealthfolio" ];
 
   fleet.statePaths."/home/santiago/selfhost/wealthfolio/data".uid = 1000;
   fleet.webApps.wealthfolio = {

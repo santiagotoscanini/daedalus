@@ -116,6 +116,10 @@
   fleet.prometheusScrapes = [
     {
       job_name = "litellm";
+      # litellm serves the collector at /metrics/ and 307s the bare path,
+      # so the default /metrics costs a redirect round-trip and two access
+      # log lines on every scrape.
+      metrics_path = "/metrics/";
       authorization = {
         type = "Bearer";
         credentials_file = "/run/secrets/litellm-prom-token/token";

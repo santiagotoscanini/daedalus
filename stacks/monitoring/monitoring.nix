@@ -324,6 +324,12 @@ in
       # Image's default `nobody` (UID 65534) → host 100533, owner of
       # nothing. Override to UID 0 → host santiago, who owns the data dir.
       "--user=0:0"
+      # Prometheus flushes its TSDB head block on SIGTERM, which takes
+      # longer than podman's 10s default; the SIGKILL leaves out-of-
+      # sequence m-mapped chunks that fail to replay, and the recovery
+      # path is to DISCARD every head chunk (silently losing the samples
+      # since the last block cut) and rebuild from the WAL alone.
+      "--stop-timeout=60"
     ];
   };
 

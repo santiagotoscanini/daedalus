@@ -22,3 +22,15 @@ search:
   formats:
     - html
     - json
+
+engines:
+  # ahmia and torch are onion engines and there is no tor proxy here, so
+  # they fail to register at every start. wikidata's SPARQL endpoint 403s
+  # this host's requests, which costs a full traceback per boot. All three
+  # are dead weight in the default set — searxng has plenty of others.
+  - name: ahmia
+    disabled: true
+  - name: torch
+    disabled: true
+  - name: wikidata
+    disabled: true

@@ -105,6 +105,14 @@
       "/home/santiago/selfhost/janitorr/leaving-soon:/data/media/leaving-soon"
     ];
 
+    environment = {
+      # The AOT-cache launcher validates its classpath with
+      # -Xlog:class+path=info, which prints one line per jar — ~90% of
+      # this container's entire journal volume, all of it JVM bookkeeping
+      # rather than app output. The app's own logging is unaffected.
+      JAVA_TOOL_OPTIONS = "-Xlog:class+path=off";
+    };
+
     environmentFiles = [ config.sops.secrets."janitorr-env".path ];
 
     extraOptions = [
