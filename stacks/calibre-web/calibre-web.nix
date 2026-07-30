@@ -58,7 +58,11 @@
     # widget rides the /opds bypass through traefik on the public
     # hostname (isolated = no shared bridge with homepage).
     auth = "oidc";
-    healthPath = "/login";
+    # Probe /opds, not /login: healthPath is appended to the auth-bypass
+    # rule as Path(), which matches POST as well as GET, so aiming it at
+    # a credential-accepting route leaves the local password form
+    # reachable outside the gate. /opds is bypassed already and 401s.
+    healthPath = "/opds";
     isolated = true;
     authBypassRule = "PathPrefix(`/opds`) || PathPrefix(`/kobo`)";
     authHeaders."Remote-User" = "santi";

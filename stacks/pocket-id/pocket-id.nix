@@ -117,15 +117,17 @@
       ];
 
       environment = {
-        DB_PROVIDER = "postgres";
         APP_URL = config.fleet.sso.issuerUrl;
         ANALYTICS_DISABLED = "true";
         # Traefik fronts everything; without this the audit log records
         # the bridge IP instead of the real client.
-        TRUST_PROXY = "true";
-        # Stay signed in for 24h before a passkey is required again
-        # (default 60 min). Every app SSO within this window is silent.
-        SESSION_DURATION = "1440";
+        TRUST_PROXY = config.fleet.bridgeSubnets.traefik;
+        # Session length (24h, so every app SSO inside that window is
+        # silent) is DB state — `sessionDuration` in the pocket_id
+        # database, set through the admin UI. Pocket ID reads the
+        # UI-configurable keys from the environment only when
+        # UI_CONFIG_DISABLED=true, which we do not set, so declaring
+        # SESSION_DURATION here would be inert.
       };
 
     };

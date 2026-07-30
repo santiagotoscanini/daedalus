@@ -6,9 +6,9 @@
 #
 # Egress rides ProtonVPN: shelfmark is a tenant of the shared gluetun netns
 # (stacks/downloads), so Anna's Archive fetches exit through the VPN. It
-# reuses the flaresolverr already in that netns for Cloudflare challenges
-# (EXT_BYPASSER_URL = 127.0.0.1:8191) rather than running a second headless
-# browser. Runs as container root -> host santiago (mkNetnsTenant), which
+# runs no external bypasser (USING_EXTERNAL_BYPASSER = false), so VPN
+# egress is the only reason it shares the netns rather than sitting on
+# traefik-net. Runs as container root -> host santiago (mkNetnsTenant), which
 # owns /config and the ingest folder.
 #
 # Fast Anna's Archive downloads need a membership: add AA_DONATOR_KEY via a

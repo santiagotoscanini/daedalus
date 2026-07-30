@@ -202,12 +202,9 @@ in
       AUDIO_TTS_VOICE = "af_sky";
 
       # Web search via SearXNG (searxng:8080, in the litellm stack, over
-      # the shared websearch bridge). Both the new and legacy env names
-      # are set so the toggle appears across image versions.
+      # the shared websearch bridge).
       ENABLE_WEB_SEARCH = "true";
-      ENABLE_RAG_WEB_SEARCH = "true";
       WEB_SEARCH_ENGINE = "searxng";
-      RAG_WEB_SEARCH_ENGINE = "searxng";
       SEARXNG_QUERY_URL = "http://searxng:8080/search?q=<query>";
       WEB_SEARCH_RESULT_COUNT = "5";
       WEB_SEARCH_CONCURRENT_REQUESTS = "10";

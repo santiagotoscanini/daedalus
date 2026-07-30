@@ -20,7 +20,7 @@ let
   # external-hooks system (a single self-contained hooks.js, no npm
   # install), used stock. Pinned by commit; it hardcodes two n8n-internal
   # require() paths (@n8n/di, jwt.service.js) verified present in the
-  # 2.30.7 image — re-verify on every n8n image bump (upstream is thin,
+  # 2.33.2 image — re-verify on every n8n image bump (upstream is thin,
   # last commit 2025-12-29). The homepage tile + Pocket ID launch URL
   # deep-link straight to /auth/oidc/login, so no button-page patch is
   # needed; a direct visit to n8n just shows the hook's one-click
@@ -156,7 +156,13 @@ in
       N8N_PORT = "5678";
       N8N_PROTOCOL = "https";
       NODE_ENV = "production";
-      WEBHOOK_URL = "https://n8n.toscanini.me";
+      N8N_WEBHOOK_URL = "https://n8n.toscanini.me";
+      # The TickTick community node is unverified; the default flips to
+      # false in a future release, which would drop it from the instance.
+      N8N_UNVERIFIED_PACKAGES_ENABLED = "true";
+      # Renames .n8n/binaryData to .n8n/storage. The bind mount is the
+      # parent .n8n dir, so the rename stays inside it.
+      N8N_MIGRATE_FS_STORAGE_PATH = "true";
       # Exactly one reverse proxy (traefik) sits in front, so trust one
       # X-Forwarded-* hop. Without this n8n leaves Express `trust proxy`
       # off and logs a ValidationError on every X-Forwarded-For request.

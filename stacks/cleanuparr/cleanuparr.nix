@@ -29,8 +29,9 @@
 # host.containers.internal.
 #
 # Auth: the Pocket ID forward-auth gate at traefik is the boundary;
-# Cleanuparr's own (optional) auth is left at its default-off, open
-# behind the gate — same model as pihole/the traefik dashboard. Its
+# Cleanuparr ships its own account system (a first-run setup wizard,
+# not completed here), and its local-address bypass is off by default,
+# so the gate is the only thing standing in front of the UI. Its
 # /health route is [AllowAnonymous] (200 when healthy), so it doubles
 # as the gatus healthPath and rides the OIDC bypass.
 #
