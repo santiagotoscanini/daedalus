@@ -138,7 +138,7 @@ in
   };
 
   virtualisation.oci-containers.containers.n8n = mkRootlessContainer {
-    image = "docker.io/n8nio/n8n:2.30.7@sha256:23a26975c21aa6f7113286668b35e2831ec898d3a7fbfa1ac8ff16f1bdf88c37";
+    image = "docker.io/n8nio/n8n:2.33.2@sha256:d31ca7afc9be90449e1ecb624ed27f38dedb0fefa58aa8e559ae0d302441ff94";
 
     volumes = [
       "/home/santiago/selfhost/n8n/data:/home/node/.n8n"

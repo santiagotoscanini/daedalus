@@ -62,7 +62,7 @@ in
   ];
 
   virtualisation.oci-containers.containers.shelfmark = mkNetnsTenant "gluetun" {
-    image = "ghcr.io/calibrain/shelfmark:latest@sha256:1f0e9ecdef24a3d8f5787282eaea3859edcd3bb0c3d508382e2b2bc4bb18d7d6";
+    image = "ghcr.io/calibrain/shelfmark:latest@sha256:056f02e28d446b128d91fa10451c7cc376392f7383bbb841deec49838a419d53";
 
     volumes = [
       "/home/santiago/selfhost/shelfmark/config:/config"

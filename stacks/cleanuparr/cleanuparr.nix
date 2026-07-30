@@ -66,7 +66,7 @@
   };
 
   virtualisation.oci-containers.containers.cleanuparr = mkRootlessContainer {
-    image = "ghcr.io/cleanuparr/cleanuparr:2.3.3@sha256:d20efe405d4144e87736c25123cd22992fa4a76c9d80d7467ca5313b92107e4a";
+    image = "ghcr.io/cleanuparr/cleanuparr:2.10.1@sha256:6564af85578254728a9b06ded12836d2773e56f0da703c317cb589b176c4e215";
 
     environment = {
       PORT = "11011";

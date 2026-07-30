@@ -302,7 +302,7 @@ in
   };
 
   virtualisation.oci-containers.containers.prometheus = mkRootlessContainer {
-    image = "docker.io/prom/prometheus:v3.13.1@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893";
+    image = "docker.io/prom/prometheus:v3.13.2@sha256:508729e0e2d18e11fd742a5a5ca70e557b940a93948c3c95fd0123a6fd538b69";
 
     cmd = [
       "--config.file=/etc/prometheus/prometheus.yml"
@@ -328,7 +328,7 @@ in
   };
 
   virtualisation.oci-containers.containers.grafana = mkRootlessContainer {
-    image = "docker.io/grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63";
+    image = "docker.io/grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b";
     dependsOn = [ "prometheus" ];
 
     volumes = [

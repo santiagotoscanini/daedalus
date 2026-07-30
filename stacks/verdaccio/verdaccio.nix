@@ -34,7 +34,7 @@ let
   # plugin/Containerfile bump restarts the consumer.
   verdaccioImage = mkLocalImage {
     name = "verdaccio-openid";
-    tagPrefix = "6.7.4";
+    tagPrefix = "6.9.0";
     contextDir = ./assets;
     gates = [ "podman-verdaccio.service" ];
   };

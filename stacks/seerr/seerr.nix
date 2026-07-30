@@ -50,7 +50,7 @@
   };
 
   virtualisation.oci-containers.containers.seerr = mkRootlessContainer {
-    image = "ghcr.io/seerr-team/seerr:v3.3.0@sha256:2892b14e960d946fb91573792505dcba011075638f27104360fd21aa157fa2bc";
+    image = "ghcr.io/seerr-team/seerr:v3.4.1@sha256:f4768de5f616248d723e05891f3345a1402123775d03bf0890dbfedc0831bda1";
 
     volumes = [
       "/home/santiago/selfhost/seerr/config:/app/config"

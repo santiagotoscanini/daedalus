@@ -61,7 +61,7 @@ in
   };
 
   virtualisation.oci-containers.containers.searxng = mkRootlessContainer {
-    image = "docker.io/searxng/searxng:latest@sha256:419d2915279be335146a440fd0ad25c657738dde7046387c0d5592cb6aa472d2";
+    image = "docker.io/searxng/searxng:latest@sha256:99e3445d6af18459da4f255991cdd47551249d66e6bcc84036d15fea89229e8b";
 
     volumes = [
       "${./assets/searxng/settings.yml}:/etc/searxng/settings.yml:ro"

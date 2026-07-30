@@ -53,7 +53,7 @@
   };
 
   virtualisation.oci-containers.containers.metube = mkRootlessContainer {
-    image = "ghcr.io/alexta69/metube:2026.07.18@sha256:98e1c8f37b009954ed1a663908f9c7fb102153d98bc06b5d51926381d1a3641c";
+    image = "ghcr.io/alexta69/metube:2026.07.27@sha256:b6e945b63df6357bc16c7bfcb1b4479856b2087f6d8a5e59f0d3f4996a707e12";
 
     volumes = [
       "/s2/tv/media/videos:/downloads"

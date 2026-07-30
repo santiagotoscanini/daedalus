@@ -254,7 +254,7 @@ in
   };
 
   virtualisation.oci-containers.containers.qbittorrent = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/qbittorrent:5.2.3_v2.0.13-ls468@sha256:352371a7242e8b4aa10958ca02076d1023758070519b89a10251475fb9f1a35a";
+    image = "docker.io/linuxserver/qbittorrent:5.2.3_v2.0.13-ls469@sha256:b024436f8ca665d16d9a997d26fd27fdf867ee5566ba09f32764e7b2976d3e02";
 
     # No /downloads bind: everything lives under /data/torrents (the
     # atomic-move/hardlink layout radarr+sonarr import from). If
@@ -270,7 +270,7 @@ in
   };
 
   virtualisation.oci-containers.containers.nzbget = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/nzbget:v26.2-ls254@sha256:87eba87ec46982b003ab1f54cfabd962c5c5e95cb9eb2069cbec7b6370d0784b";
+    image = "docker.io/linuxserver/nzbget:v26.2-ls255@sha256:d79a67d21cf63431d9e08e7f10c920ef1f68f06e61c015e602c2c3f79d28a0ac";
 
     volumes = [
       "/home/santiago/selfhost/tv/nzbget:/config"
@@ -279,7 +279,7 @@ in
   };
 
   virtualisation.oci-containers.containers.prowlarr = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/prowlarr:2.4.0.5397-ls154@sha256:4fd7a166c8f46dd3370a871c250ee577d6c2ae97a0dbe0e3614b5ef736205620";
+    image = "docker.io/linuxserver/prowlarr:2.5.2.5491-ls155@sha256:2f3d31307beba3ba2dd226d191f5f5c14ee3b4d8b49277c64683f5ed97083179";
 
     volumes = [
       "/home/santiago/selfhost/tv/prowlarr:/config"
@@ -290,7 +290,7 @@ in
   # client" hardlinks across /downloads, /torrents, /media — all need
   # to be on the same filesystem under one bind mount.
   virtualisation.oci-containers.containers.radarr = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/radarr:6.3.0.10514-ls311@sha256:2b2c1c05eb3f648d2c80dfab9486147dd7bb0ad4d77fa972fc1c5de8f1da3738";
+    image = "docker.io/linuxserver/radarr:6.3.0.10514-ls312@sha256:e35056574cdc695a9ee745aa1ecda9eab3842450bf4b7b8471b023790fa3861d";
 
     volumes = [
       "/home/santiago/selfhost/tv/radarr:/config"
@@ -309,7 +309,7 @@ in
 
   # bazarr only reads what the *arrs produce, so a narrower bind.
   virtualisation.oci-containers.containers.bazarr = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/bazarr:v1.6.0-ls355@sha256:4c30dc0bb9a5d223075e7f5d12c77bd293c4b460f86d696dbe64763104c1e88c";
+    image = "docker.io/linuxserver/bazarr:v1.6.0-ls356@sha256:ab401a0f361cfad328e444838b13d5b334b189d0f556fc91a3623eb581df36df";
 
     volumes = [
       "/home/santiago/selfhost/tv/bazarr:/config"
@@ -339,7 +339,7 @@ in
   # owns the subtitle pipeline (whisper is fallback-only). faster-
   # whisper "small" on CPU; first start downloads into the cache bind.
   virtualisation.oci-containers.containers.subgen = mkNetnsTenant "gluetun" {
-    image = "docker.io/mccloud/subgen:cpu@sha256:de40992da49bad8643e0795ec41739776b1e1c16af7684d7337aea98bb11c9cd";
+    image = "docker.io/mccloud/subgen:cpu@sha256:7aa1e0dcca17cb93edb0ea00194f89c16949e4af406fc70375f7f4594dbb6627";
 
     volumes = [
       "/home/santiago/selfhost/tv/subgen:/models"
@@ -367,7 +367,7 @@ in
   # If LAN client auto-discovery is ever needed back, SSDP 1900 + 7359
   # have to land on host networking — multicast doesn't cross bridges.
   virtualisation.oci-containers.containers.jellyfin = mkRootlessContainer {
-    image = "docker.io/linuxserver/jellyfin:10.11.11ubu2404-ls41@sha256:32aa0d4565c633db95af29a58e8a5dc9becdfa58564a3aea68436623fd45f5a1";
+    image = "docker.io/linuxserver/jellyfin:10.11.11ubu2404-ls42@sha256:bb8d372e35d5c4a6cb61d830a06f5b5846528315b97cf5d38b80eea1e430efa7";
 
     volumes = [
       "/home/santiago/selfhost/tv/jellyfin:/config"

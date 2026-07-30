@@ -4,7 +4,7 @@
 # registration from runner versions older than that, and
 # DISABLE_AUTO_UPDATE in the unit env means the version only moves
 # with this pin).
-FROM docker.io/myoung34/github-runner:ubuntu-noble@sha256:881a6b81df476e9b9ce7f9451b0efbacba7496ac4483613e24849a2c9b1ffd60
+FROM docker.io/myoung34/github-runner:ubuntu-noble@sha256:9196d59b8364de0813e6453a4cd1149a9e5952e84fd4a75e66f3c7f2ce4ff1fa
 
 # - node 22 (NodeSource): actions assume a MODERN system node the way
 #   ubuntu-latest ships one — pnpm/action-setup's installer dies on the

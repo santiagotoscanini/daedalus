@@ -35,7 +35,7 @@ let
   nextcloudVersion = "34";
   # Digest of docker.io/library/nextcloud:''${nextcloudVersion} — makes
   # the custom build reproducible. Bump together with nextcloudVersion.
-  nextcloudBaseDigest = "sha256:6444fc5450302534e850b4d23c05b5f06c7b0d25bd5ece716452061454699c58";
+  nextcloudBaseDigest = "sha256:e93ccfc952c95f18175f3d297fb2f60c35070c05ca976050c250a9ddab793e75";
 
   # Official nextcloud:N doesn't ship ffmpeg, but the preview generator
   # and `recognize` ML app both want it. Build localhost/nextcloud-ffmpeg
@@ -142,7 +142,7 @@ in
   };
 
   virtualisation.oci-containers.containers.nextcloud-redis = mkRootlessContainer {
-    image = "docker.io/library/redis:alpine@sha256:9d317178eceac8454a2284a9e6df2466b93c745529947f0cd42a0fa9609d7005";
+    image = "docker.io/library/redis:alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb";
 
     volumes = [
       "/home/santiago/selfhost/nextcloud/nc_redis:/data"

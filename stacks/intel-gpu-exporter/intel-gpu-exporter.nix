@@ -40,7 +40,7 @@
   fleet.grafanaDashboardsByFolder."System".gpu = builtins.readFile ./assets/dashboard.json;
 
   virtualisation.oci-containers.containers.intel-gpu-exporter = mkRootlessContainer {
-    image = "ghcr.io/clambin/intel-gpu-exporter:0.7.0@sha256:3dd5b35e860800d39c371364841f10b35e8d9615f024a48441f7708b929f131b";
+    image = "ghcr.io/clambin/intel-gpu-exporter:0.7.1@sha256:0fb61d5266001731f8e57dc1e2ac9fc0b29788f3c33f536a7d43ba0ecdc6f20d";
 
     cmd = [
       "--interval=5s"

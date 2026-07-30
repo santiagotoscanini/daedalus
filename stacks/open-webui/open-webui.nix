@@ -150,7 +150,7 @@ in
   };
 
   virtualisation.oci-containers.containers.open-webui = mkRootlessContainer {
-    image = "ghcr.io/open-webui/open-webui:main@sha256:a26effeb220e132482bf7e0560b3404843e7bc40d23051144e062960df8df6b0";
+    image = "ghcr.io/open-webui/open-webui:main@sha256:6a773e5c3a246b65cbe74ce942b294292c0e5f81c138f703d111bc162f7d7c3d";
 
     volumes = [ "${dataDir}:/app/backend/data" ];
 

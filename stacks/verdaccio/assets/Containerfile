@@ -7,9 +7,9 @@ FROM docker.io/library/node:22-alpine AS builder
 RUN mkdir -p /verdaccio/plugins \
   && cd /verdaccio/plugins \
   && npm install --install-strategy=shallow --no-bin-links \
-     --omit=optional --omit=dev verdaccio-openid@0.17.2
+     --omit=optional --omit=dev verdaccio-openid@0.18.0
 
-FROM docker.io/verdaccio/verdaccio:6.7.4@sha256:e3ac7e335e69504cd0b09616aa52066399868282313c34762d2a77b8169a3575
+FROM docker.io/verdaccio/verdaccio:6.9.0@sha256:11e75353c8363650cbf43adf8594b2cd633be6f191056c6e08ba6ff4b1398f62
 COPY --chown=10001:root --from=builder \
   /verdaccio/plugins/node_modules/verdaccio-openid \
   /verdaccio/plugins/verdaccio-openid

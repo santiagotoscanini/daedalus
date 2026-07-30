@@ -352,7 +352,7 @@ in
     # monitoring-net to reach it.
 
     virtualisation.oci-containers.containers.loki = mkRootlessContainer {
-      image = "docker.io/grafana/loki:3.7.3@sha256:70b9f699fc9bb868b62f1cfd4f787dfa50242f1fd92e6089787d5d7daea75fe8";
+      image = "docker.io/grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc";
 
       cmd = [ "-config.file=/etc/loki/loki.yaml" ];
 
@@ -367,7 +367,7 @@ in
     };
 
     virtualisation.oci-containers.containers.alloy = mkRootlessContainer {
-      image = "docker.io/grafana/alloy:v1.17.1@sha256:4f6ddc56ffdcf8a6316748fc5162972e20cb301523cac1bb4a31957df733ae9b";
+      image = "docker.io/grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308";
       dependsOn = [ "loki" ];
 
       cmd = [

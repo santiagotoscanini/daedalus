@@ -32,7 +32,7 @@
 }:
 
 rec {
-  gluetunImage = "docker.io/qmcgaw/gluetun:latest@sha256:b0ee2135e6ba52ad3f102aae9663707cd1c9531485117067a380d3b2b6dd991d";
+  gluetunImage = "docker.io/qmcgaw/gluetun:latest@sha256:e67bd4c664b103a6112a20e44384ce1cbe9394c41eb4de918693035699509956";
 
   # One exporter shape for every instance: polls the netns owner's
   # control API (localhost:8000 inside the shared netns) and serves
