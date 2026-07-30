@@ -6,10 +6,13 @@
 # with this pin).
 FROM docker.io/myoung34/github-runner:ubuntu-noble@sha256:881a6b81df476e9b9ce7f9451b0efbacba7496ac4483613e24849a2c9b1ffd60
 
-# - npm: the base ships node but no npm/npx; installed to run
-#   playwright's own dep resolver instead of hand-maintaining ~30 libs.
-#   The version tracks ipcrawl's @playwright/test loosely — only the
-#   system-dep set matters, stable across minor versions.
+# - node 22 (NodeSource): actions assume a MODERN system node the way
+#   ubuntu-latest ships one — pnpm/action-setup's installer dies on the
+#   base's node 18 (import.meta.dirname is node >= 20.11). Replaces the
+#   distro nodejs and brings npm/npx, which also run playwright's dep
+#   resolver instead of hand-maintaining ~30 libs (version tracks
+#   ipcrawl's @playwright/test loosely — only the system-dep set
+#   matters, stable across minor versions).
 # - podman + fuse-overlayfs: NESTED image builds (release/image
 #   workflows) — jobs run `podman build/push` against a podman living
 #   entirely inside the runner container; the host's runtime is never
@@ -19,8 +22,8 @@ FROM docker.io/myoung34/github-runner:ubuntu-noble@sha256:881a6b81df476e9b9ce7f9
 #   itself as ROOTLESS even as container-root; without in-image ranges
 #   layer extraction dies on lchown (single-uid mapping).
 # - registries.conf: zot (stacks/registry) is plain HTTP, bridge-only.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends npm podman fuse-overlayfs \
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs podman fuse-overlayfs \
  && npx --yes playwright@1.61.1 install-deps chromium \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* /root/.npm \
