@@ -1,0 +1,36 @@
+# The runner image: myoung34's wrapper (registration entrypoint around
+# the official agent) on ubuntu-noble, digest-pinned — `update-images`
+# audits the pin; bump it at least every ~5 months (GitHub refuses
+# registration from runner versions older than that, and
+# DISABLE_AUTO_UPDATE in the unit env means the version only moves
+# with this pin).
+FROM docker.io/myoung34/github-runner:ubuntu-noble@sha256:881a6b81df476e9b9ce7f9451b0efbacba7496ac4483613e24849a2c9b1ffd60
+
+# - npm: the base ships node but no npm/npx; installed to run
+#   playwright's own dep resolver instead of hand-maintaining ~30 libs.
+#   The version tracks ipcrawl's @playwright/test loosely — only the
+#   system-dep set matters, stable across minor versions.
+# - podman + fuse-overlayfs: NESTED image builds (release/image
+#   workflows) — jobs run `podman build/push` against a podman living
+#   entirely inside the runner container; the host's runtime is never
+#   exposed. The unit passes --device=/dev/fuse for the overlay mount
+#   program pinned in storage.conf.
+# - subuid/subgid for root: inside the outer userns podman detects
+#   itself as ROOTLESS even as container-root; without in-image ranges
+#   layer extraction dies on lchown (single-uid mapping).
+# - registries.conf: zot (stacks/registry) is plain HTTP, bridge-only.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends npm podman fuse-overlayfs \
+ && npx --yes playwright@1.61.1 install-deps chromium \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* /root/.npm \
+ && printf '[storage]\ndriver = "overlay"\nrunroot = "/run/containers/storage"\ngraphroot = "/var/lib/containers/storage"\n[storage.options.overlay]\nmount_program = "/usr/bin/fuse-overlayfs"\n' \
+      > /etc/containers/storage.conf \
+ && printf 'root:1:65535\n' >> /etc/subuid \
+ && printf 'root:1:65535\n' >> /etc/subgid \
+ && printf '[[registry]]\nlocation = "zot:5000"\ninsecure = true\n' \
+      >> /etc/containers/registries.conf
+
+# Dockerfile RUN steps of nested builds share the build's netns — no
+# bridge or caps needed inside.
+ENV BUILDAH_ISOLATION=chroot

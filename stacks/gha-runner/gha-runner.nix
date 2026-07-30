@@ -45,15 +45,12 @@
 #     with passwordless sudo inside — same ergonomics as ubuntu-latest.
 #     --memory caps a runaway job before it squeezes jellyfin/factorio.
 #
-# Image: localhost/gha-runner via mkLocalImage — myoung34's
-# ubuntu-noble image (digest-pinned below, `update-images` audits it)
-# plus Playwright's chromium system libs so ipcrawl's e2e job doesn't
-# apt-install a browser dep tree every run. DISABLE_AUTO_UPDATE: the
-# runner binary must not self-update (the update dies with the
-# ephemeral container); GitHub blocks REGISTRATION of runners older
-# than ~5 months, so bump the digest at least that often — a stale
-# runner fails loudly at register time (restart loop -> start-limit ->
-# monitoredJobs email), it doesn't rot silently.
+# Image: localhost/gha-runner via mkLocalImage from
+# assets/image/Containerfile (base pin + nested-podman wiring + their
+# why-notes live there). DISABLE_AUTO_UPDATE: the runner binary must
+# not self-update (the update dies with the ephemeral container); a
+# stale pin fails loudly at register time (restart loop -> start-limit
+# -> monitoredJobs email), it doesn't rot silently.
 #
 # Workflows opt in with `runs-on: self-hosted` (or the extra `s2`
 # label). Registered runners are visible per repo under Settings ->
@@ -85,55 +82,18 @@ let
   # secret) is documented in stacks/apps/declarations.nix.
   repos = lib.attrNames config.fleet.apps;
 
-  # Digest of docker.io/myoung34/github-runner:ubuntu-noble (rebuilt
-  # nightly upstream; the pin is what makes our build reproducible).
-  runnerBaseDigest = "sha256:881a6b81df476e9b9ce7f9451b0efbacba7496ac4483613e24849a2c9b1ffd60";
-
-  # Tracks ipcrawl's @playwright/test — only the system-dep set matters
-  # (stable across minor versions), not an exact match with the repo.
-  playwrightVersion = "1.61.1";
-
-  # The base ships node 18 but no npm/npx; install npm just to run
-  # playwright's own dep resolver instead of hand-maintaining ~30 libs.
-  #
-  # podman + fuse-overlayfs enable NESTED image builds (release/image
-  # workflows): jobs call `podman build/push` against a podman that
-  # lives entirely inside the runner container — the host's runtime is
-  # never exposed. BUILDAH_ISOLATION=chroot makes Dockerfile RUN steps
-  # share the build's netns (no bridge/caps needed nested); the
-  # storage.conf pins fuse-overlayfs, which needs the /dev/fuse the
-  # unit passes. Inside the outer userns podman detects itself as
-  # ROOTLESS even as container-root, so root needs in-image
-  # subuid/subgid ranges or layer extraction dies on lchown. All of it
-  # is ephemeral — no layer cache between jobs.
-  runnerImageBuildDir = pkgs.writeTextDir "Containerfile" ''
-    FROM docker.io/myoung34/github-runner:ubuntu-noble@${runnerBaseDigest}
-    RUN apt-get update \
-     && apt-get install -y --no-install-recommends npm podman fuse-overlayfs \
-     && npx --yes playwright@${playwrightVersion} install-deps chromium \
-     && apt-get clean \
-     && rm -rf /var/lib/apt/lists/* /root/.npm \
-     && printf '[storage]\ndriver = "overlay"\nrunroot = "/run/containers/storage"\ngraphroot = "/var/lib/containers/storage"\n[storage.options.overlay]\nmount_program = "/usr/bin/fuse-overlayfs"\n' \
-          > /etc/containers/storage.conf \
-     && printf 'root:1:65535\n' >> /etc/subuid \
-     && printf 'root:1:65535\n' >> /etc/subgid \
-     && printf '[[registry]]\nlocation = "zot:5000"\ninsecure = true\n' \
-          >> /etc/containers/registries.conf
-    ENV BUILDAH_ISOLATION=chroot
-  '';
-
+  # Base pin, playwright deps, nested-podman wiring and their why-notes
+  # all live in the Containerfile. Its own subdir on purpose: the tag
+  # embeds the context hash, so sibling assets must not invalidate it.
   runnerImage = mkLocalImage {
     name = "gha-runner";
     tagPrefix = "noble";
-    contextDir = runnerImageBuildDir;
+    contextDir = ./assets/image;
     gates = map (repo: "gha-runner-${repo}.service") repos;
   };
 
-  # PAT -> 1-hour registration token, minted host-side per container
-  # start so the PAT itself never enters the container. Output is a
-  # podman --env-file on santiago's tmpfs (0400, rewritten each start,
-  # gone on reboot). A curl/jq failure fails ExecStartPre and rides the
-  # unit's restart loop.
+  # PAT -> 1-hour registration token per container start; see the
+  # script header for the contract.
   mintToken = pkgs.writeShellApplication {
     name = "gha-runner-mint-token";
     runtimeInputs = [
@@ -141,25 +101,14 @@ let
       pkgs.jq
     ];
     text = ''
-      repo="$1"
-      # shellcheck disable=SC1091
-      . ${config.sops.secrets."gha-runner-env".path}
-      umask 077
-      token=$(curl -fsS -X POST \
-        -H "Authorization: Bearer ''${ACCESS_TOKEN}" \
-        -H "Accept: application/vnd.github+json" \
-        -H "X-GitHub-Api-Version: 2022-11-28" \
-        "https://api.github.com/repos/santiagotoscanini/''${repo}/actions/runners/registration-token" \
-        | jq -re .token)
-      printf 'RUNNER_TOKEN=%s\n' "$token" > "/run/user/1000/gha-runner-''${repo}.env"
+      ENV_FILE=${config.sops.secrets."gha-runner-env".path}
+      ${builtins.readFile ./assets/mint-token.sh}
     '';
   };
 
-  # gha_* gauges for prometheus, via node-exporter's textfile collector
-  # (dir owned by stacks/monitoring — designed there as the extension
-  # point for exactly this kind of host-side sweep). Per-repo API
-  # failures emit gha_exporter_ok=0 and keep going; only a missing
-  # secret / unwritable dir fails the unit.
+  # gha_* gauges into node-exporter's textfile dir (owned by
+  # stacks/monitoring — designed there as the extension point for
+  # host-side sweeps like this); see the script header for semantics.
   textfileDir = "/var/lib/node-exporter/textfile";
   metricsScript = pkgs.writeShellApplication {
     name = "gha-runner-metrics";
@@ -168,68 +117,10 @@ let
       pkgs.jq
     ];
     text = ''
-      # shellcheck disable=SC1091
-      . ${config.sops.secrets."gha-runner-env".path}
-
-      api() {
-        curl -fsS --max-time 20 \
-          -H "Authorization: Bearer ''${ACCESS_TOKEN}" \
-          -H "Accept: application/vnd.github+json" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          "https://api.github.com/repos/santiagotoscanini/$1"
-      }
-
-      declare -A ok registered online busy queued inprog
-      for repo in ${lib.concatStringsSep " " repos}; do
-        ok[$repo]=0
-        if runners=$(api "$repo/actions/runners?per_page=100"); then
-          ok[$repo]=1
-          registered[$repo]=$(jq -r '.total_count' <<<"$runners")
-          online[$repo]=$(jq -r '[.runners[] | select(.status == "online")] | length' <<<"$runners")
-          busy[$repo]=$(jq -r '[.runners[] | select(.busy)] | length' <<<"$runners")
-        fi
-        # total_count is enough — per_page=1 keeps the payload tiny.
-        # These two need "Actions: read" on the PAT (403 without it).
-        if runs=$(api "$repo/actions/runs?status=queued&per_page=1" 2>/dev/null); then
-          queued[$repo]=$(jq -r '.total_count' <<<"$runs")
-        fi
-        if runs=$(api "$repo/actions/runs?status=in_progress&per_page=1" 2>/dev/null); then
-          inprog[$repo]=$(jq -r '.total_count' <<<"$runs")
-        fi
-      done
-
-      tmp="${textfileDir}/gha-runner.prom.$$"
-      {
-        echo '# HELP gha_exporter_ok GitHub runners API reachable this sweep (1) or not (0).'
-        echo '# TYPE gha_exporter_ok gauge'
-        for repo in ${lib.concatStringsSep " " repos}; do
-          echo "gha_exporter_ok{repo=\"$repo\"} ''${ok[$repo]}"
-        done
-        echo '# HELP gha_runners_registered Self-hosted runners registered on the repo.'
-        echo '# TYPE gha_runners_registered gauge'
-        echo '# HELP gha_runners_online Self-hosted runners GitHub reports online.'
-        echo '# TYPE gha_runners_online gauge'
-        echo '# HELP gha_runners_busy Self-hosted runners currently running a job.'
-        echo '# TYPE gha_runners_busy gauge'
-        for repo in ${lib.concatStringsSep " " repos}; do
-          [ -n "''${registered[$repo]:-}" ] || continue
-          echo "gha_runners_registered{repo=\"$repo\"} ''${registered[$repo]}"
-          echo "gha_runners_online{repo=\"$repo\"} ''${online[$repo]}"
-          echo "gha_runners_busy{repo=\"$repo\"} ''${busy[$repo]}"
-        done
-        echo '# HELP gha_runs_queued Workflow runs waiting for a runner.'
-        echo '# TYPE gha_runs_queued gauge'
-        echo '# HELP gha_runs_in_progress Workflow runs currently executing.'
-        echo '# TYPE gha_runs_in_progress gauge'
-        for repo in ${lib.concatStringsSep " " repos}; do
-          [ -n "''${queued[$repo]:-}" ] \
-            && echo "gha_runs_queued{repo=\"$repo\"} ''${queued[$repo]}"
-          [ -n "''${inprog[$repo]:-}" ] \
-            && echo "gha_runs_in_progress{repo=\"$repo\"} ''${inprog[$repo]}"
-        done
-        true
-      } > "$tmp"
-      mv -f "$tmp" "${textfileDir}/gha-runner.prom"
+      REPOS=${lib.escapeShellArg (toString repos)}
+      ENV_FILE=${config.sops.secrets."gha-runner-env".path}
+      TEXTFILE_DIR=${textfileDir}
+      ${builtins.readFile ./assets/metrics.sh}
     '';
   };
 
