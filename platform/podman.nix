@@ -123,8 +123,7 @@ let
       # blocks until FTL actually answers queries. Without it a build that
       # pulls its FROM base races and fails with "no such host".
       netEdges =
-        lib.optional needsNetwork "network-online.target"
-        ++ lib.optional needsDns "pihole-ready.service";
+        lib.optional needsNetwork "network-online.target" ++ lib.optional needsDns "pihole-ready.service";
     in
     {
       inherit description before wantedBy;
@@ -472,39 +471,38 @@ in
             Type = "oneshot";
             RemainAfterExit = true;
           };
-          script =
+          script = ''
+            fail=0
+            # Create missing parents santiago-owned; never re-own an
+            # existing directory ([ -d ] walk stops at the first one).
+            ensure_parents() {
+              local missing=() parent i
+              parent=$(dirname "$1")
+              while [ ! -d "$parent" ]; do
+                missing+=("$parent")
+                parent=$(dirname "$parent")
+              done
+              for ((i = ''${#missing[@]} - 1; i >= 0; i--)); do
+                install -d -o santiago -g users "''${missing[$i]}"
+              done
+            }
+          ''
+          + lib.concatMapStrings (
+            path:
+            let
+              d = cfg.statePaths.${path};
+              mapId = id: name: if id == 0 then name else toString (hostUid id);
+              owner = "${mapId d.uid "santiago"}:${mapId (if d.gid != null then d.gid else d.uid) "users"}";
+              p = lib.escapeShellArg path;
+            in
             ''
-              fail=0
-              # Create missing parents santiago-owned; never re-own an
-              # existing directory ([ -d ] walk stops at the first one).
-              ensure_parents() {
-                local missing=() parent i
-                parent=$(dirname "$1")
-                while [ ! -d "$parent" ]; do
-                  missing+=("$parent")
-                  parent=$(dirname "$parent")
-                done
-                for ((i = ''${#missing[@]} - 1; i >= 0; i--)); do
-                  install -d -o santiago -g users "''${missing[$i]}"
-                done
-              }
+              { ensure_parents ${p} \
+                && ${if d.type == "d" then "mkdir -p ${p}" else "[ -e ${p} ] || : > ${p}"} \
+                && chown ${owner} ${p} && chmod ${d.mode} ${p}; } \
+                || { echo "state-paths: failed to apply ${p}" >&2; fail=1; }
             ''
-            + lib.concatMapStrings (
-              path:
-              let
-                d = cfg.statePaths.${path};
-                mapId = id: name: if id == 0 then name else toString (hostUid id);
-                owner = "${mapId d.uid "santiago"}:${mapId (if d.gid != null then d.gid else d.uid) "users"}";
-                p = lib.escapeShellArg path;
-              in
-              ''
-                { ensure_parents ${p} \
-                  && ${if d.type == "d" then "mkdir -p ${p}" else "[ -e ${p} ] || : > ${p}"} \
-                  && chown ${owner} ${p} && chmod ${d.mode} ${p}; } \
-                  || { echo "state-paths: failed to apply ${p}" >&2; fail=1; }
-              ''
-            ) (lib.sort lib.lessThan (lib.attrNames cfg.statePaths))
-            + ''exit "$fail"'';
+          ) (lib.sort lib.lessThan (lib.attrNames cfg.statePaths))
+          + ''exit "$fail"'';
         };
       };
 

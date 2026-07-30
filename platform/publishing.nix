@@ -608,7 +608,9 @@ in
               lib.optional (w.auth == "oidc" && w.authHeaders != { }) "oidc-${n}-strip@file"
               ++ lib.optional (w.auth == "oidc") "oidc-${n}@file";
           }
-          // (if w.traefikService != null then { service = w.traefikService; } else { serviceUrl = resolveUrl w; });
+          // (
+            if w.traefikService != null then { service = w.traefikService; } else { serviceUrl = resolveUrl w; }
+          );
       in
       (lib.mapAttrs baseRoute cfg.webApps)
       // (lib.mapAttrs' (

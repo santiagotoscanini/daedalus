@@ -100,9 +100,9 @@ in
   assertions = [
     (
       let
-        clashes = lib.intersectLists (map (n: "${n}.yml") (
-          lib.attrNames config.fleet.traefikRoutes
-        )) (lib.attrNames config.fleet.traefikRawRules);
+        clashes = lib.intersectLists (map (n: "${n}.yml") (lib.attrNames config.fleet.traefikRoutes)) (
+          lib.attrNames config.fleet.traefikRawRules
+        );
       in
       {
         assertion = clashes == [ ];

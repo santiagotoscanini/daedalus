@@ -100,33 +100,114 @@ rec {
           field = "country";
           label = "Country";
           remap = [
-            { value = "Switzerland"; to = "🇨🇭"; }
-            { value = "United States"; to = "🇺🇸"; }
-            { value = "United Kingdom"; to = "🇬🇧"; }
-            { value = "Netherlands"; to = "🇳🇱"; }
-            { value = "Germany"; to = "🇩🇪"; }
-            { value = "France"; to = "🇫🇷"; }
-            { value = "Spain"; to = "🇪🇸"; }
-            { value = "Italy"; to = "🇮🇹"; }
-            { value = "Sweden"; to = "🇸🇪"; }
-            { value = "Norway"; to = "🇳🇴"; }
-            { value = "Finland"; to = "🇫🇮"; }
-            { value = "Denmark"; to = "🇩🇰"; }
-            { value = "Iceland"; to = "🇮🇸"; }
-            { value = "Ireland"; to = "🇮🇪"; }
-            { value = "Austria"; to = "🇦🇹"; }
-            { value = "Belgium"; to = "🇧🇪"; }
-            { value = "Poland"; to = "🇵🇱"; }
-            { value = "Romania"; to = "🇷🇴"; }
-            { value = "Portugal"; to = "🇵🇹"; }
-            { value = "Canada"; to = "🇨🇦"; }
-            { value = "Japan"; to = "🇯🇵"; }
-            { value = "Singapore"; to = "🇸🇬"; }
-            { value = "Hong Kong"; to = "🇭🇰"; }
-            { value = "Australia"; to = "🇦🇺"; }
-            { value = "Argentina"; to = "🇦🇷"; }
-            { value = "Brazil"; to = "🇧🇷"; }
-            { any = true; to = "🌐"; }
+            {
+              value = "Switzerland";
+              to = "🇨🇭";
+            }
+            {
+              value = "United States";
+              to = "🇺🇸";
+            }
+            {
+              value = "United Kingdom";
+              to = "🇬🇧";
+            }
+            {
+              value = "Netherlands";
+              to = "🇳🇱";
+            }
+            {
+              value = "Germany";
+              to = "🇩🇪";
+            }
+            {
+              value = "France";
+              to = "🇫🇷";
+            }
+            {
+              value = "Spain";
+              to = "🇪🇸";
+            }
+            {
+              value = "Italy";
+              to = "🇮🇹";
+            }
+            {
+              value = "Sweden";
+              to = "🇸🇪";
+            }
+            {
+              value = "Norway";
+              to = "🇳🇴";
+            }
+            {
+              value = "Finland";
+              to = "🇫🇮";
+            }
+            {
+              value = "Denmark";
+              to = "🇩🇰";
+            }
+            {
+              value = "Iceland";
+              to = "🇮🇸";
+            }
+            {
+              value = "Ireland";
+              to = "🇮🇪";
+            }
+            {
+              value = "Austria";
+              to = "🇦🇹";
+            }
+            {
+              value = "Belgium";
+              to = "🇧🇪";
+            }
+            {
+              value = "Poland";
+              to = "🇵🇱";
+            }
+            {
+              value = "Romania";
+              to = "🇷🇴";
+            }
+            {
+              value = "Portugal";
+              to = "🇵🇹";
+            }
+            {
+              value = "Canada";
+              to = "🇨🇦";
+            }
+            {
+              value = "Japan";
+              to = "🇯🇵";
+            }
+            {
+              value = "Singapore";
+              to = "🇸🇬";
+            }
+            {
+              value = "Hong Kong";
+              to = "🇭🇰";
+            }
+            {
+              value = "Australia";
+              to = "🇦🇺";
+            }
+            {
+              value = "Argentina";
+              to = "🇦🇷";
+            }
+            {
+              value = "Brazil";
+              to = "🇧🇷";
+            }
+            {
+              any = true;
+              to = "🌐";
+            }
           ];
         }
       ];

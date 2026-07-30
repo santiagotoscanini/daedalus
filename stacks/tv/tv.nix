@@ -206,11 +206,9 @@ in
 
   # Netns tenants have no bridge (`[ ]`, which still earns the Type=oneshot
   # systemd override). Jellyfin is bridge-routed (outside the VPN).
-  fleet.bridgeMemberships =
-    lib.listToAttrs (map (n: lib.nameValuePair n [ ]) tvNetnsTenants)
-    // {
-      jellyfin = [ "traefik" ];
-    };
+  fleet.bridgeMemberships = lib.listToAttrs (map (n: lib.nameValuePair n [ ]) tvNetnsTenants) // {
+    jellyfin = [ "traefik" ];
+  };
 
   # Loki stack label (stacks/logging logStacks): group the tv content
   # tenants + jellyfin. gluetun/flaresolverr live under logStacks.downloads.

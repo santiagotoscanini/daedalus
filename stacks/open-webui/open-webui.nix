@@ -125,7 +125,9 @@ in
     gates = [ "podman-open-webui.service" ];
     dir = "/run/open-webui-litellm";
     file = litellmKeyFile;
-    prep = "KEY=$(grep '^LITELLM_MASTER_KEY=' ${config.sops.secrets."litellm-env".path} | head -1 | cut -d= -f2-)";
+    prep = "KEY=$(grep '^LITELLM_MASTER_KEY=' ${
+      config.sops.secrets."litellm-env".path
+    } | head -1 | cut -d= -f2-)";
     # One key for every door into the gateway: chat, STT, TTS, embeddings,
     # image-gen all hit litellm:4000 with the same master key.
     #

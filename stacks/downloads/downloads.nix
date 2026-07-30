@@ -63,7 +63,12 @@ let
   webUis = map (
     t:
     {
-      inherit (t) name port healthPath homepage;
+      inherit (t)
+        name
+        port
+        healthPath
+        homepage
+        ;
     }
     // lib.optionalAttrs (t.authBypassRule != null) { inherit (t) authBypassRule; }
     // lib.optionalAttrs (t.healthHeaders != null) { inherit (t) healthHeaders; }
@@ -135,7 +140,7 @@ in
       ];
       reminderPrefix = "downloads";
       subject = "Downloads VPN (gluetun)";
-      webUis = webUis;
+      inherit webUis;
       runbookPath = "/etc/nixos/stacks/downloads/downloads.nix";
 
       # ALL netns tenants' ports (sorted union of the registry) plus the

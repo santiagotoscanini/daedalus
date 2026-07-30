@@ -13,7 +13,12 @@
 # disabled) so gemma-4-12b isn't swamped. Stateless — no bind mount for
 # data; the read-only config is the only volume.
 
-{ config, mkRootlessContainer, mkDotenvSecret, ... }:
+{
+  config,
+  mkRootlessContainer,
+  mkDotenvSecret,
+  ...
+}:
 {
   # Private bridge: only litellm + this server. litellm's list merges
   # with its own [ "app-db" "traefik" ] contribution.

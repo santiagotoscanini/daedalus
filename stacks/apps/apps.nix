@@ -318,7 +318,9 @@ let
       fleet.grafanaDashboardsByFolder =
         lib.optionalAttrs (app.prometheus.enable && app.prometheus.dashboard != null)
           {
-            "Apps"."${cName}" = lib.replaceStrings [ "%APP_NAME%" ] [ name ] (builtins.readFile app.prometheus.dashboard);
+            "Apps"."${cName}" = lib.replaceStrings [ "%APP_NAME%" ] [ name ] (
+              builtins.readFile app.prometheus.dashboard
+            );
           };
 
       # Homepage tile lands in the per-app section.
@@ -790,13 +792,14 @@ in
         lib.concatMap (
           f:
           lib.subtractLists registered."" (lib.attrNames f)
-          ++ lib.concatMap (
-            p: map (k: "${p}.${k}") (lib.subtractLists registered.${p} (lib.attrNames (f.${p} or { })))
-          ) [
-            "fleet"
-            "systemd"
-            "virtualisation"
-          ]
+          ++
+            lib.concatMap
+              (p: map (k: "${p}.${k}") (lib.subtractLists registered.${p} (lib.attrNames (f.${p} or { }))))
+              [
+                "fleet"
+                "systemd"
+                "virtualisation"
+              ]
         ) fragments
       );
     in
