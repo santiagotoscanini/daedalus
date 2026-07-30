@@ -65,96 +65,6 @@ let
 
   dataDir = "/home/santiago/selfhost/registry";
 
-  # Heredoc-rendered (shell vars from env.sops expand); JSON contains
-  # no `$` of its own.
-  zotConfig = ''
-    {
-      "distSpecVersion": "1.1.1",
-      "storage": {
-        "rootDirectory": "/var/lib/zot",
-        "dedupe": true,
-        "gc": true,
-        "gcDelay": "1h",
-        "gcInterval": "24h",
-        "retention": {
-          "dryRun": true,
-          "delay": "24h",
-          "policies": [
-            {
-              "repositories": ["cache/**"],
-              "deleteReferrers": true,
-              "deleteUntagged": true,
-              "keepTags": [
-                { "patterns": [".*"], "pulledWithin": "720h" },
-                { "patterns": [".*"], "pushedWithin": "720h" }
-              ]
-            },
-            {
-              "repositories": ["**"],
-              "deleteReferrers": true,
-              "deleteUntagged": true,
-              "keepTags": [
-                { "patterns": ["latest"] },
-                { "patterns": ["sha-.*"], "mostRecentlyPushedCount": 10 },
-                { "patterns": [".*"], "pushedWithin": "2160h" }
-              ]
-            }
-          ]
-        }
-      },
-      "http": {
-        "address": "0.0.0.0",
-        "port": "5000",
-        "externalUrl": "https://registry.toscanini.me",
-        "compat": ["docker2s2"],
-        "readTimeout": "600s",
-        "writeTimeout": "600s",
-        "auth": {
-          "htpasswd": { "path": "/etc/zot/htpasswd" },
-          "failDelay": 5,
-          "apikey": true,
-          "openid": {
-            "providers": {
-              "oidc": {
-                "issuer": "${config.fleet.sso.issuerUrl}",
-                "clientid": "''${OIDC_CLIENT_ID}",
-                "clientsecret": "''${OIDC_CLIENT_SECRET}",
-                "scopes": ["openid", "profile", "email"]
-              }
-            }
-          }
-        },
-        "accessControl": {
-          "metrics": {
-            "users": ["prometheus"]
-          },
-          "repositories": {
-            "**": {
-              "anonymousPolicy": ["read"],
-              "policies": [
-                { "users": ["ci"], "actions": ["read", "create", "update", "delete"] }
-              ],
-              "defaultPolicy": ["read"]
-            }
-          },
-          "adminPolicy": {
-            "users": ["santiago@toscanini.me"],
-            "actions": ["read", "create", "update", "delete"]
-          }
-        }
-      },
-      "log": { "level": "info" },
-      "extensions": {
-        "search": {
-          "enable": true,
-          "cve": { "updateInterval": "24h" }
-        },
-        "ui": { "enable": true },
-        "metrics": { "enable": true, "prometheus": { "path": "/metrics" } },
-        "scrub": { "enable": true, "interval": "168h" }
-      }
-    }
-  '';
 in
 {
   sops.secrets."registry-env" = mkDotenvSecret ./env.sops;
@@ -202,12 +112,16 @@ in
 
   fleet.logStacks.registry = [ "zot" ];
 
+  # assets/config.json is a template in the readFile'd-body house
+  # style: its ${VARS} expand in the render heredoc — OIDC_CLIENT_ID /
+  # OIDC_CLIENT_SECRET from env.sops, SSO_ISSUER injected here.
   systemd.services.registry-config-render = mkSecretRender {
     description = "Render zot config + htpasswd from registry-env";
     gates = [ "podman-zot.service" ];
     dir = "/run/registry";
     file = "/run/registry/config.json";
     prep = ''
+      SSO_ISSUER=${lib.escapeShellArg config.fleet.sso.issuerUrl}
       set -a
       . ${config.sops.secrets."registry-env".path}
       set +a
@@ -216,7 +130,7 @@ in
         ${pkgs.apacheHttpd}/bin/htpasswd -nbB prometheus "$REGISTRY_PROM_PASSWORD"
       } | install -m 0400 -o santiago -g users /dev/stdin /run/registry/htpasswd
     '';
-    content = zotConfig;
+    content = builtins.readFile ./assets/config.json;
   };
 
   # /metrics requires auth once auth is configured (zot >= 2.1.18), so
