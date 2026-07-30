@@ -294,6 +294,14 @@ in
     image = "docker.io/library/traefik:v3.7.8@sha256:4299bbed850421258fc5448c2e0e6ad350981d4d335a68de11b92448aedbefe5";
 
     ports = [
+      # Publishing these is load-bearing beyond LAN ingress: it installs
+      # the DNAT rule inside the rootless network namespace that lets
+      # CONTAINERS reach traefik at the LAN IP. Pi-hole answers every
+      # *.toscanini.me with 192.168.0.2, and under pasta that address is
+      # the namespace's own — so gatus's probes and traefik's own OIDC
+      # discovery call resolve there and depend on this rule. Handing
+      # traefik systemd-bound sockets instead (which would preserve real
+      # client IPs in the access log) removes it and breaks both.
       "80:80"
       "443:443"
       # cfweb (:8888) is deliberately NOT host-published: cloudflared
@@ -375,6 +383,23 @@ in
       # so LogQL can filter/aggregate by status, router, duration, host.
       "--accesslog=true"
       "--accesslog.format=json"
+
+      # Keep four request headers in the access log — traefik drops all
+      # headers by default, so the allowlist below is the whole story.
+      # Cf-Ipcountry is the only source of client geography anywhere on
+      # this box. Cf-Connecting-Ip and X-Forwarded-For are the CF edge's
+      # own assertion of the client IP: cfweb already resolves
+      # ClientHost from them (forwardedHeaders.trustedIPs above), so
+      # they are a cross-check rather than the only copy. User-Agent
+      # fingerprints scanners. These feed the Security dashboard (uid
+      # s2-security); LogQL sees them as request_Cf_Connecting_Ip /
+      # request_Cf_Ipcountry / request_User_Agent (| json rewrites
+      # dashes to underscores).
+      "--accesslog.fields.headers.defaultmode=drop"
+      "--accesslog.fields.headers.names.User-Agent=keep"
+      "--accesslog.fields.headers.names.Cf-Connecting-Ip=keep"
+      "--accesslog.fields.headers.names.Cf-Ipcountry=keep"
+      "--accesslog.fields.headers.names.X-Forwarded-For=keep"
 
       # File provider — shallow watch, top-level *.yml only.
       "--providers.file.directory=/rules"

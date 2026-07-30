@@ -13,6 +13,16 @@ apiVersion: 1
 # (their provisioning file predates this one); the API refuses to
 # delete file-provenance rules, so the deletion is file-provisioned too.
 deleteRules:
+  # Security rules retired 2026-07-30: the router forwards only
+  # 51820/udp + 34197/udp, so internet port scans and SSH brute force
+  # never reach this host — the panels and log labels behind these
+  # rules were removed with them.
+  - orgId: 1
+    uid: portscan-spike-1
+  - orgId: 1
+    uid: ssh-brute-burst-1
+  - orgId: 1
+    uid: fail2ban-ban-spike-1
   - orgId: 1
     uid: efal2elu6y5tse # Container High Memory Usage (docker-only metrics)
   - orgId: 1
@@ -1188,6 +1198,101 @@ groups:
         annotations:
           description: The soonest-expiring traefik TLS certificate has {{ $values.A }} days left — ACME renewal (normally at 30 days out) is not working. Check traefik logs and the Cloudflare DNS-01 credentials.
           summary: A traefik TLS certificate expires in < 14 days
+        labels:
+          severity: warning
+        isPaused: false
+
+  - orgId: 1
+    name: Security Alerts
+    folder: System
+    interval: 1m
+    rules:
+      # 5xx through the edge: either an app is failing or something is
+      # hammering one into failing. noDataState OK — no 5xx series exists
+      # until the first 5xx, and absence is the healthy state.
+      - uid: traefik-5xx-spike-1
+        title: Traefik 5xx Spike
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: sum(increase(traefik_entrypoint_requests_total{code=~"5.."}[10m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 30
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: '{{ $values.A }} server errors through traefik in 10 minutes. Check "Auth gate & server errors by router" on the Security dashboard for the failing router, then that stack''s logs.'
+          summary: Traefik is returning 5xx errors
+        labels:
+          severity: warning
+        isPaused: false
+
+      # cfweb is the only path in from the public internet. A sustained
+      # surge there is scraping, credential stuffing, or an app loop —
+      # never normal household traffic.
+      - uid: cfweb-surge-1
+        title: Remote Request Surge
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: sum(rate(traefik_entrypoint_requests_total{entrypoint="cfweb"}[10m])) * 60
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 300
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: Public traffic through the Cloudflare tunnel is running at {{ $values.A }} requests/min, sustained for 10 minutes. Check the top remote client IPs and user agents on the Security dashboard.
+          summary: Sustained surge of requests from the public internet
         labels:
           severity: warning
         isPaused: false

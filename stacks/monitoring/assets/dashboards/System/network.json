@@ -4445,6 +4445,18 @@
       "icon": "external link",
       "includeVars": false,
       "keepTime": true
+    },
+    {
+      "type": "link",
+      "title": "Security",
+      "tooltip": "Inbound traffic: who is connecting, on which ports, what is failing",
+      "url": "/d/s2-security/security",
+      "targetBlank": false,
+      "asDropdown": false,
+      "icon": "bolt",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": []
     }
   ],
   "id": null
