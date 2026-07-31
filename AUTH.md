@@ -32,6 +32,7 @@ recipe to onboard a new service or household member.
 | verdaccio | verdaccio-openid plugin baked into the custom image; web UI + `npm login --auth-type=web` | htpasswd + existing CLI tokens still work; registry API ungated so `npm install` is unaffected |
 | n8n | cweagans/n8n-oidc hook (pinned commit, bind-mounted hooks.js); SSO lands as owner | `/signin?showLogin=true`; webhooks untouched |
 | anansi | `fleet.apps.anansi.auth.mode = "native"` — Auth.js OIDC provider against Pocket ID, existing account matched by email; the platform supplies OIDC_* + OIDC_CLIENT_SECRET | own `AUTH_SECRET` sessions; DB password hashes are dormant, not a login path |
+| home-assistant | [hass-oidc-auth](https://github.com/christiaangoossens/hass-oidc-auth) vendored from a pinned tag as a read-only `custom_components` bind mount (not HACS); confidential client, Pocket ID's `admins` group maps to the HA admin role | HA's own login stays enabled — onboarding needs it and it is the break-glass. Long-lived access tokens (companion app, `/api/*`) are untouched |
 
 ## Tier 2 — forward-auth + trusted header (auto-login, no second screen)
 
@@ -92,7 +93,12 @@ restricted:
   grocy, stirling-pdf, homepage, metube, myspeed
 - **admin-only** (allow admins): grafana, prometheus, traefik-dashboard, gatus,
   healthchecks, litellm, n8n, verdaccio, wealthfolio, pihole, anansi, ipcrawl,
-  and the whole TV stack (qbittorrent, nzbget, prowlarr, radarr, sonarr, bazarr)
+  home-assistant, and the whole TV stack (qbittorrent, nzbget, prowlarr, radarr,
+  sonarr, bazarr)
+
+home-assistant is admin-only only until its phase-2 dashboards exist; widening it
+is one line (`allowedGroups` in the stack's `fleet.ssoClients` entry), and
+hass-oidc-auth then lands `family` members as ordinary (non-admin) HA users.
 
 A user not in an allowed group gets `access_denied` at the Pocket ID authorize
 step (verified with a throwaway family-only user: blocked on gatus, allowed on

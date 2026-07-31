@@ -241,3 +241,42 @@ Plan when picked up (per app, ~5 minutes each, needs a browser):
 Trigger to revisit: a restore-from-scratch drill, an Immich or
 Nextcloud OIDC problem that needs the secret touched anyway, or either
 upstream growing env-based OIDC configuration.
+
+## 11. Home Assistant: phase-2 follow-ups
+
+The stack (`stacks/home-assistant`) is up, published on LAN + tunnel,
+recorder on the shared pg cluster, Pocket ID SSO wired. Everything left
+needs a logged-in Home Assistant, so it was deliberately not half-wired
+in the module:
+
+- **Onboarding is manual and once-only**: create the owner account at
+  `https://homeassistant.toscanini.me`, then set location / elevation /
+  country / currency in the UI. Those land in `.storage/core.config`,
+  which is NOT in the rebuild trail — move them into the generated
+  `homeassistant:` block once known (`time_zone`, `internal_url` and
+  `external_url` already live there).
+- **Prometheus scrape**: the `prometheus:` integration exposes
+  `/api/prometheus` behind a long-lived access token. Mint one in the
+  HA profile page, put it in a `stacks/home-assistant/env.sops`, and add
+  a `fleet.prometheusScrapes` entry against
+  `host.containers.internal:8123` with `authorization.credentials_file`
+  (the webApps `metrics.enable` shortcut can't be used — it requires
+  `serviceName`, and this stack is host-netns).
+- **Homepage widget**: homepage's `homeassistant` widget wants the same
+  token; the tile currently ships without one.
+- **SSO-only**: once Pocket ID login is verified from both LAN and
+  tunnel, flip `features.default_redirect` to `true` in the generated
+  configuration.yaml to skip the welcome screen. HA's local login stays
+  reachable at `/?skip_oidc_redirect=true` as break-glass — do NOT
+  disable the homeassistant auth provider, it is the only lockout escape.
+- **Household access**: widen `fleet.ssoClients.home-assistant.allowedGroups`
+  to `[ "admins" "family" ]` when there is a dashboard worth sharing.
+- **HA's own backup**: ZFS snapshots cover `/config` and the pg cluster
+  covers history, but HA's built-in automatic backup (a `.storage`
+  setting, UI-only) would add a self-contained restore artifact.
+
+Known-inert by design, both logged loudly at every start and both
+expected: the `bluetooth` integration (needs NET_ADMIN/NET_RAW in the
+host netns, which rootless podman cannot grant — an ESPHome Bluetooth
+proxy is the supported answer) and `aiodhcpwatcher` (needs a raw packet
+socket, same reason). zeroconf/SSDP cover the same discovery surface.
