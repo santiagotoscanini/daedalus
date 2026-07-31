@@ -48,8 +48,26 @@
 #   - storage.enable    → bind-mounts a persistent data dir at /app/data
 #   - litellm           → injects LITELLM_BASE_URL
 #   - prometheus.enable → /metrics scrape + per-app Grafana dashboard
+#   - auth.mode         → SSO against Pocket ID, either shape (below)
 #   - …future features follow the same pattern (off by default,
 #     env injection conditional on opt-in).
+#
+# SSO — `auth.mode`, one option covering both shapes:
+#
+#   "proxy"  — traefik's forward-auth middleware gates the router; the
+#              app never learns there is an IdP. For apps with no user
+#              model of their own (ipcrawl). Zero app-side work.
+#   "native" — the app IS the OIDC client: it gets OIDC_ISSUER_URL,
+#              OIDC_CLIENT_ID, OIDC_REDIRECT_URI, OIDC_PROVIDER_ID,
+#              OIDC_SCOPES in its environment and OIDC_CLIENT_SECRET in
+#              an env file. For apps with accounts of their own
+#              (anansi), which keep per-user data isolation.
+#
+# Either way the client itself is declared, not clicked: the entry
+# materializes `fleet.ssoClients.<name>` (stacks/pocket-id/clients.nix),
+# whose oneshot creates/updates it at the IdP with the id and secret
+# this repo chose. Adding SSO to an app is one option plus one key in
+# stacks/pocket-id/clients.sops.
 #
 # Convention enforced #2: an app that needs a disk writes it to
 # /app/data. Same reasoning as the port — we build the images, so we
@@ -132,6 +150,20 @@ let
       # enforced via `assertions` below.
       egressEnabled = app.egress.container != null;
 
+      # SSO. "proxy" = traefik forward-auth in front of the router;
+      # "native" = the app is the OIDC client. Both declare the Pocket
+      # ID client itself via fleet.ssoClients.
+      proxyAuth = app.auth.mode == "proxy";
+      nativeAuth = app.auth.mode == "native";
+      # Isolation only makes sense for a bridge-routed forward-auth app
+      # (see the option's description); egress apps aren't on a bridge.
+      isolatedAuth = proxyAuth && app.auth.isolated;
+      # Where the IdP sends the browser back. The forward-auth plugin
+      # owns /oidc/callback on the app's own hostname; a native app
+      # mounts its framework's callback path.
+      oidcCallback =
+        if proxyAuth then "${publicUrl}/oidc/callback" else "${publicUrl}${app.auth.callbackPath}";
+
       tileGroup = lib.toSentenceCase name;
 
       # Pull-and-redeploy. House style (cf. cloudflared-route-sync): nix
@@ -152,7 +184,20 @@ let
           IMAGE=${lib.escapeShellArg app.image}
           UNIT=${lib.escapeShellArg "podman-${cName}.service"}
           APP_HOST=${lib.escapeShellArg hostname}
-          HEALTH_PATH=${lib.escapeShellArg app.deploy.healthPath}
+          HEALTH_PATH=${
+            lib.escapeShellArg (
+              # A gated app answers 302-to-the-IdP on "/", which passes
+              # (< 500) while certifying the middleware rather than the
+              # new image. The auth bypass path is the one URL that
+              # still reaches the real upstream, so default to it.
+              if app.deploy.healthPath != null then
+                app.deploy.healthPath
+              else if app.auth.healthPath != null then
+                app.auth.healthPath
+              else
+                "/"
+            )
+          }
           HEALTH_TIMEOUT=${toString app.deploy.healthTimeout}
           AUTHFILE=${lib.escapeShellArg ghcrAuthFile}
           LAN_IP=${lib.escapeShellArg lanIp}
@@ -256,7 +301,36 @@ let
           assertion = !(egressEnabled && app.prometheus.enable);
           message = "fleet.apps.${name}: `egress` cannot combine with `prometheus.enable` — a netns'd app isn't reachable from monitoring-net, so the scrape target would be permanently down.";
         }
+        {
+          assertion = app.auth.isolated -> (proxyAuth && !egressEnabled);
+          message = "fleet.apps.${name}: `auth.isolated` needs `auth.mode = \"proxy\"` and no `egress` — isolation puts the container on a private bridge whose only other member is traefik, which a netns'd app can't join and a native-OIDC app gains nothing from.";
+        }
+        {
+          assertion = !(app.auth.isolated && app.prometheus.enable);
+          message = "fleet.apps.${name}: `auth.isolated` cannot combine with `prometheus.enable` — prometheus dials the app over traefik-net, which isolation removes.";
+        }
+        {
+          assertion = app.auth.headers != { } -> proxyAuth;
+          message = "fleet.apps.${name}: `auth.headers` are set by the forward-auth middleware — they only exist under `auth.mode = \"proxy\"`.";
+        }
       ];
+
+      # The Pocket ID client itself — id `<name>`, secret from
+      # SSO_SECRET_<NAME> in stacks/pocket-id/clients.sops. The oneshot
+      # in stacks/pocket-id/clients.nix converges it at the IdP, and (for
+      # native mode) hands the container its OIDC_CLIENT_SECRET env file.
+      fleet.ssoClients = lib.optionalAttrs (app.auth.mode != "none") {
+        "${name}" = {
+          displayName = tileGroup;
+          description = app.homepage.description;
+          launchURL = publicUrl;
+          callbackURLs = [ oidcCallback ];
+          logoutCallbackURLs = [ oidcCallback ];
+          inherit (app.auth) allowedGroups;
+          traefikForwardAuth = proxyAuth;
+          consumers = lib.optional nativeAuth cName;
+        };
+      };
 
       # Delegate per-app Postgres entirely to stacks/app-db/. The
       # presence of the key triggers role + database creation and the
@@ -272,8 +346,13 @@ let
       # `[ ]` means pasta/netns with NO bridge (egress mode borrows gluetun's
       # netns via extraOptions, and traefik reaches it via the published host
       # port — see webApps below). Same shape as the TV stack's `sonarr = [ ]`.
+      # `auth.isolated` swaps the shared bridge for a private one; that
+      # membership comes from webApps.isolated, and listing "traefik"
+      # here as well would re-open the shared path (assertion in
+      # platform/publishing.nix).
       fleet.bridgeMemberships."${cName}" =
-        lib.optional (!egressEnabled) "traefik" ++ lib.optional postgresEnabled "app-db";
+        lib.optional (!egressEnabled && !isolatedAuth) "traefik"
+        ++ lib.optional postgresEnabled "app-db";
 
       # Web exposure — hardcoded internal port 3000. Bridge-routed by default
       # (serviceName on traefik-net). In egress mode the app can't ride
@@ -283,6 +362,16 @@ let
         inherit hostname;
         exposeRemotely = app.stage == "live";
       }
+      // (lib.optionalAttrs proxyAuth {
+        auth = "oidc";
+        isolated = isolatedAuth;
+        inherit (app.auth) authBypassRule;
+        authHeaders = app.auth.headers;
+      })
+      # gatus probes the real upstream on this path either way; under
+      # "proxy" it doubles as the middleware's bypass (publishing.nix
+      # appends it), which is what keeps the probe off the IdP.
+      // (lib.optionalAttrs (app.auth.healthPath != null) { inherit (app.auth) healthPath; })
       // (
         if egressEnabled then
           { serviceUrl = "http://host.containers.internal:${toString app.egress.hostPort}"; }
@@ -474,6 +563,18 @@ let
           // (lib.optionalAttrs app.litellm.enable {
             LITELLM_BASE_URL = "http://litellm:4000";
           })
+          # Native OIDC. The client secret is NOT here — it arrives as
+          # OIDC_CLIENT_SECRET in a rendered env file that
+          # stacks/pocket-id/clients.nix appends to this container (the
+          # `consumers` entry above), so it never sits in /nix/store.
+          // (lib.optionalAttrs nativeAuth {
+            OIDC_ISSUER_URL = config.fleet.sso.issuerUrl;
+            OIDC_CLIENT_ID = name;
+            OIDC_REDIRECT_URI = oidcCallback;
+            OIDC_PROVIDER_ID = app.auth.providerId;
+            OIDC_PROVIDER_NAME = "Pocket ID";
+            OIDC_SCOPES = app.auth.scopes;
+          })
           // app.env;
 
           extraOptions = [
@@ -614,6 +715,130 @@ in
               };
             };
 
+            # SSO against Pocket ID. Both shapes declare the client in
+            # the same place (fleet.ssoClients) — what differs is who
+            # holds the credential: traefik's middleware, or the app.
+            auth = {
+              mode = lib.mkOption {
+                type = lib.types.enum [
+                  "none"
+                  "proxy"
+                  "native"
+                ];
+                default = "none";
+                description = ''
+                  "none" — no SSO (the app's own auth, or none at all).
+
+                  "proxy" — traefik's generated `oidc-<name>`
+                  forward-auth middleware gates the router(s); the app
+                  is never reached unauthenticated and needs no code.
+                  For apps with no user model (ipcrawl). Requires
+                  `auth.healthPath` (the middleware would otherwise 302
+                  every gatus probe to the IdP).
+
+                  "native" — the app is the OIDC client itself. It
+                  receives OIDC_ISSUER_URL, OIDC_CLIENT_ID,
+                  OIDC_REDIRECT_URI, OIDC_PROVIDER_ID, OIDC_PROVIDER_NAME
+                  and OIDC_SCOPES in its environment, plus
+                  OIDC_CLIENT_SECRET from a rendered env file. Preferred
+                  whenever the app HAS accounts, since only the app can
+                  map an IdP identity onto its own per-user data
+                  (AUTH.md's order of preference).
+                '';
+              };
+              allowedGroups = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ "admins" ];
+                description = ''
+                  Pocket ID group names allowed to use this client —
+                  authorization enforced at the IdP, before the app.
+                  Admin-only by default; add "family" for shared apps.
+                  `[ ]` means any account with a passkey gets in.
+                '';
+              };
+              healthPath = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Unauthenticated path that proves the app itself is
+                  serving. Becomes the webApp's gatus probe, the
+                  forward-auth bypass (proxy mode), and the auto-deploy
+                  health check — so a redeploy is certified by the app
+                  rather than by a 302 to the IdP. Mandatory under
+                  `mode = "proxy"`.
+                '';
+                example = "/api/healthz";
+              };
+              authBypassRule = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Extra traefik rule expression whose matches skip the
+                  forward-auth middleware — for machine endpoints that
+                  carry their own auth. Proxy mode only.
+                '';
+                example = "PathPrefix(`/api`)";
+              };
+              headers = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+                description = ''
+                  Identity headers the middleware forwards upstream
+                  (name -> Go template over claims). Proxy mode only,
+                  and empty by default: an app that trusts a header
+                  blindly should also set `auth.isolated`, since any
+                  container on traefik-net could otherwise dial it
+                  directly and forge one.
+                '';
+                example = lib.literalExpression ''
+                  { "X-Forwarded-Email" = "{{ .claims.email }}"; }
+                '';
+              };
+              isolated = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  Move the container off traefik-net onto a private
+                  `iso-<name>-net` bridge whose only other member is
+                  traefik, so the forward-auth middleware is the only
+                  possible caller. The right default for any app using
+                  `auth.headers`; incompatible with `egress` and
+                  `prometheus.enable`.
+                '';
+              };
+              providerId = lib.mkOption {
+                type = lib.types.str;
+                default = "pocket-id";
+                description = ''
+                  Native mode: the provider id the app registers Pocket
+                  ID under. Frameworks derive the callback path from it
+                  (Auth.js: /api/auth/callback/<providerId>), so it has
+                  to agree with the app's code — it is half of the
+                  redirect URI registered at the IdP.
+                '';
+              };
+              callbackPath = lib.mkOption {
+                type = lib.types.str;
+                default = "/api/auth/callback/pocket-id";
+                description = ''
+                  Native mode: path (on the app's own hostname) the IdP
+                  redirects back to. The default is Auth.js's shape for
+                  `providerId = "pocket-id"`. Registered as the client's
+                  callback URL and handed to the app as
+                  OIDC_REDIRECT_URI, so the two can never disagree.
+                '';
+              };
+              scopes = lib.mkOption {
+                type = lib.types.str;
+                default = "openid profile email groups";
+                description = ''
+                  Native mode: space-separated scopes, passed as
+                  OIDC_SCOPES. `groups` is what lets an app read the
+                  user's Pocket ID groups out of the ID token.
+                '';
+              };
+            };
+
             litellm.enable = lib.mkOption {
               type = lib.types.bool;
               default = false;
@@ -656,12 +881,17 @@ in
                 '';
               };
               healthPath = lib.mkOption {
-                type = lib.types.str;
-                default = "/";
+                type = lib.types.nullOr lib.types.str;
+                default = null;
                 description = ''
                   Path fetched through traefik after the restart to decide whether
                   the new image is alive. Any status < 500 counts — an Auth.js app
                   302-ing to a login page is a working app.
+
+                  null falls back to `auth.healthPath`, else "/". That
+                  fallback is what keeps the check honest on a
+                  forward-auth'd app, where "/" is a 302 to the IdP that
+                  a dead container would answer just as well.
                 '';
               };
               healthTimeout = lib.mkOption {
@@ -775,6 +1005,7 @@ in
         fleet = [
           "appDatabases"
           "bridgeMemberships"
+          "ssoClients"
           "statePaths"
           "webApps"
           "prometheusScrapes"
@@ -827,6 +1058,10 @@ in
         bridgeMemberships = attrsOpt [
           "fleet"
           "bridgeMemberships"
+        ];
+        ssoClients = attrsOpt [
+          "fleet"
+          "ssoClients"
         ];
         statePaths = attrsOpt [
           "fleet"

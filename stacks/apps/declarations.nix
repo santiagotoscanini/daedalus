@@ -49,6 +49,15 @@
     postgres.enable = true;
     stage = "live";
 
+    # Native OIDC: anansi has its own accounts + per-user data, so only
+    # it can map a Pocket ID identity onto the right rows. The platform
+    # provides the client (id `anansi`, secret from clients.sops) and
+    # the OIDC_* env; the app repo owns the Auth.js provider.
+    auth = {
+      mode = "native";
+      healthPath = "/api/healthz";
+    };
+
     homepage = {
       description = "Anansi — task-tracking experiment";
       icon = "mdi-spider-#f59e0b";
@@ -80,6 +89,17 @@
     # publishing it on a CNAME under our own domain is a decision to make
     # deliberately, not a default.
     stage = "lab";
+
+    # Forward-auth: ipcrawl has no user model, so the gate belongs in
+    # front of it rather than inside it. No app-side change, and no
+    # identity headers — nothing downstream would read them.
+    # /favicon.ico is the bypass: harmless unauthenticated, and it comes
+    # from the app itself, so gatus and the deploy check certify the
+    # upstream instead of the middleware's 302.
+    auth = {
+      mode = "proxy";
+      healthPath = "/favicon.ico";
+    };
 
     # Runtime flags. These are podman `--env` (win over the secrets
     # `--env-file` on any name collision), and Nuxt coerces the booleans

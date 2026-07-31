@@ -31,7 +31,7 @@ recipe to onboard a new service or household member.
 | litellm | `GENERIC_*` SSO (free ≤5 users), auto-redirect to Pocket ID | API Bearer keys untouched — never forward-auth `/v1` |
 | verdaccio | verdaccio-openid plugin baked into the custom image; web UI + `npm login --auth-type=web` | htpasswd + existing CLI tokens still work; registry API ungated so `npm install` is unaffected |
 | n8n | cweagans/n8n-oidc hook (pinned commit, bind-mounted hooks.js); SSO lands as owner | `/signin?showLogin=true`; webhooks untouched |
-| anansi / ipcrawl | app-side OIDC against Pocket ID (implemented in the app repos) | own `AUTH_SECRET` sessions |
+| anansi | `fleet.apps.anansi.auth.mode = "native"` — Auth.js OIDC provider against Pocket ID, existing account matched by email; the platform supplies OIDC_* + OIDC_CLIENT_SECRET | own `AUTH_SECRET` sessions; DB password hashes are dormant, not a login path |
 
 ## Tier 2 — forward-auth + trusted header (auto-login, no second screen)
 
@@ -61,6 +61,7 @@ paths.
 | metube | none (WebSocket passthrough works through traefik defaults) |
 | myspeed | password unset (its own auth sends the password as a plaintext header — worthless) |
 | stirling-pdf | none — its native OIDC is paywalled; forward-auth is the maintainers' endorsed path |
+| ipcrawl | none — no user model at all; `fleet.apps.ipcrawl.auth.mode = "proxy"`, `/favicon.ico` bypassed so gatus and the auto-deploy check reach the app |
 
 ## Waiting on upstream
 
@@ -90,8 +91,8 @@ restricted:
 - **family apps** (allow admins + family): immich, nextcloud, calibre-web,
   grocy, stirling-pdf, homepage, metube, myspeed
 - **admin-only** (allow admins): grafana, prometheus, traefik-dashboard, gatus,
-  healthchecks, litellm, n8n, verdaccio, wealthfolio, pihole, and the whole TV
-  stack (qbittorrent, nzbget, prowlarr, radarr, sonarr, bazarr)
+  healthchecks, litellm, n8n, verdaccio, wealthfolio, pihole, anansi, ipcrawl,
+  and the whole TV stack (qbittorrent, nzbget, prowlarr, radarr, sonarr, bazarr)
 
 A user not in an allowed group gets `access_denied` at the Pocket ID authorize
 step (verified with a throwaway family-only user: blocked on gatus, allowed on
@@ -115,22 +116,30 @@ and (for nextcloud) set their `nextcloud_uid` custom claim = their NC username.
   per-client "allowed groups" = coarse authorization before any app.
 - Per-service clients: every gated app is its OWN Pocket ID client
   (consent + audit log show the service name; per-client group
-  restrictions possible). Rollout recipe per service:
-  1. `POST /api/oidc/clients` (header `X-API-KEY` = STATIC_API_KEY from
-     `stacks/pocket-id/env.sops`) with `name` = display name,
-     `description`, `launchURL` = `https://<hostname>` (My Apps page),
-     `callbackURLs` = `logoutCallbackURLs` =
-     `https://<hostname>/oidc/callback`, `pkceEnabled: true`,
-     `skipConsent: true` (own infra); then
-     `POST /api/oidc/clients/<id>/secret` and
+  restrictions possible). New clients are DECLARED, not clicked —
+  `fleet.ssoClients.<name>` in `stacks/pocket-id/clients.nix`:
+  1. Add the secret: `sops stacks/pocket-id/clients.sops`, one
+     `SSO_SECRET_<NAME>` key (>= 16 printable ASCII; name uppercased,
+     dashes to underscores). The client ID is the attr name itself.
+  2. Declare the client. For a `fleet.apps` entry that is one option —
+     `auth.mode = "proxy"` (forward-auth) or `"native"` (the app is the
+     client); anything else declares `fleet.ssoClients.<name>` directly,
+     with `traefikForwardAuth = true` for the middleware shape or
+     `consumers = [ "<container>" ]` to hand the app its
+     OIDC_CLIENT_SECRET.
+  3. Rebuild. `pocket-id-clients.service` creates or updates the client
+     at the IdP (`callbackURLs`, `allowedGroups`, secret) and the
+     renders under `/run/sso-clients/` hand the same secret to traefik
+     or to the app. Logos are still a manual
      `POST /api/oidc/clients/<id>/logo` (multipart `file`, PNG from
      cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/<app>.png —
      same art the homepage tiles use).
-  2. Append `POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET}` (name uppercased,
-     dashes to underscores) to `stacks/traefik/env.sops`.
-  3. Set `auth = "oidc"` on the webApp entry; rebuild. env.sops-only
-     changes do NOT restart traefik (same path) — `systemctl restart
-     podman-traefik` by hand.
+- The ~20 clients that predate the mechanism keep server-generated
+  creds in `stacks/traefik/env.sops` under
+  `POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET}`. Migrating one is a secret
+  rotation, so do it per app or let them age out. Note env.sops-only
+  changes do NOT restart traefik (same store path) — `systemctl restart
+  podman-traefik` by hand.
 - Lockout paths: SSH by IP always works; NixOS generation rollback;
   per-app escapes noted per row above.
 - Order per service: gate first → verify from LAN + tunnel → only then

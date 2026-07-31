@@ -328,7 +328,14 @@ in
 
     environmentFiles = [
       config.sops.secrets."traefik-env".path
-    ];
+    ]
+    # Declarative clients (fleet.ssoClients, stacks/pocket-id/clients.nix)
+    # render their POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET} pair here instead
+    # of living in env.sops. Hand-created clients keep theirs in env.sops;
+    # the two sets are disjoint, and --env-file order only matters on a
+    # name collision. null when no declarative client is forward-authed —
+    # podman would fail on a path that was never rendered.
+    ++ lib.optional (cfg.sso.clientEnvFile != null) cfg.sso.clientEnvFile;
 
     cmd = [
       "--api=true"

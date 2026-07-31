@@ -116,39 +116,7 @@ Plan when picked up:
 Trigger to revisit: the `MemcacheLegacy` check escalates from info to
 warning, or Nextcloud 35 announces removal of the `redis` key.
 
-## 7. Declarative Pocket ID OIDC clients
-
-Every gated app's OIDC client is created by hand today: the three-step
-REST recipe in `AUTH.md` (`POST /api/oidc/clients`, then `/secret`, then
-`/logo`, with `X-API-KEY` = `STATIC_API_KEY`), after which the
-*server-generated* ID and secret are pasted into `stacks/traefik/env.sops`
-as `POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET}` — currently ~20 pairs. The
-client ID was already settable on create; what was missing was the
-secret, and Pocket ID v2.12.0 added it: `POST /api/oidc/clients/{id}/secret`
-now accepts an optional `secret` (>= 16 printable ASCII). Both halves of
-every credential can now originate in our repo.
-
-Plan when picked up:
-- A `fleet.ssoClients.<name>` submodule owned by `stacks/pocket-id`
-  (`displayName`, `launchURL`, `callbackURLs`, `allowedGroups`,
-  `skipConsent`), materialized by a `pocket-id-clients.service` oneshot
-  ordered after `podman-pocket-id.service` and before
-  `podman-traefik.service` — the existing `ExecStartPost` readiness gate
-  already guarantees the API answers.
-- It POSTs each client with `id = "<name>"` (a plain nix string, no
-  longer a secret, so it leaves sops entirely) and sets the secret from
-  a per-client key in `stacks/pocket-id/env.sops`.
-- Traefik's `envPrefix` mapping is unchanged; only the *source* of the
-  values moves. Migrating an existing client is a per-app secret
-  rotation, so do it one app at a time or apply the mechanism to new
-  clients only and let the old ones age out.
-
-Trigger to revisit: the next app that needs an OIDC client, or any
-restore-from-scratch drill — this is the one hole in "the repo IS the
-system", since a fresh `pocket_id` database currently means recreating
-every client by hand before SSO works at all.
-
-## 8. Pocket ID: declare the UI-configurable settings in nix
+## 7. Pocket ID: declare the UI-configurable settings in nix
 
 Pocket ID keeps its UI-configurable settings (`sessionDuration`,
 `appName`, `allowUserSignups`, `requireUserEmail`, the SMTP block, …) in
@@ -171,7 +139,7 @@ Plan when picked up:
 Trigger to revisit: a Pocket ID DB restore, or the next time one of
 these settings needs changing.
 
-## 9. Cleanuparr: native OIDC, stats widget, and the shared pg cluster
+## 8. Cleanuparr: native OIDC, stats widget, and the shared pg cluster
 
 Cleanuparr moved a long way between 2.3.3 and 2.10.1 and we adopted none
 of it. Three separate items, in dependency order — all of them blocked on
@@ -179,9 +147,10 @@ first completing its account setup wizard, which 2.7.0 introduced and
 which is still uncompleted (`GET /api/auth/status` → `setupCompleted:false`).
 
 Plan when picked up:
-- **Native OIDC** (2.8.0). Register a Pocket ID client per the AUTH.md
-  recipe, but note the callbacks are *not* the shape that recipe
-  hardcodes: `/api/auth/oidc/callback` and
+- **Native OIDC** (2.8.0). Declare a `fleet.ssoClients.cleanuparr` entry
+  with `consumers = [ "cleanuparr" ]`, but note the callbacks are *not*
+  the shape AUTH.md's forward-auth recipe uses:
+  `/api/auth/oidc/callback` and
   `/api/account/oidc/link/callback`. Then drop `auth = "oidc"` from
   `fleet.webApps.cleanuparr`, keeping `isolated` and `healthPath`.
   Leave Exclusive Mode **off** — its documented recovery path is
@@ -210,7 +179,7 @@ Plan when picked up:
 Trigger to revisit: whenever the setup wizard is completed — that is the
 moment the free Postgres migration window closes.
 
-## 10. Shelfmark + Calibre-Web: native OIDC and per-user identity
+## 9. Shelfmark + Calibre-Web: native OIDC and per-user identity
 
 Both currently sit behind bare forward-auth, which AUTH.md ranks last
 ("native OIDC against Pocket ID > trusted-header behind forward-auth >
