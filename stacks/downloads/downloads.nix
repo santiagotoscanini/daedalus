@@ -72,6 +72,7 @@ let
     }
     // lib.optionalAttrs (t.authBypassRule != null) { inherit (t) authBypassRule; }
     // lib.optionalAttrs (t.healthHeaders != null) { inherit (t) healthHeaders; }
+    // lib.optionalAttrs (t.authGroups != null) { inherit (t) authGroups; }
   ) (lib.filter (t: t.ui) sortedTenants);
 in
 {
@@ -109,6 +110,16 @@ in
             healthHeaders = lib.mkOption {
               type = lib.types.nullOr (lib.types.attrsOf lib.types.str);
               default = null;
+            };
+            authGroups = lib.mkOption {
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
+              description = ''
+                Pocket ID groups allowed on the derived client. null
+                keeps the webApp default (admins only), which is right
+                for the whole TV stack; shelfmark is the household
+                exception.
+              '';
             };
           };
         })

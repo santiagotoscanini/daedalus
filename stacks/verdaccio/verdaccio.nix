@@ -22,7 +22,6 @@
 
 {
   config,
-  mkDotenvSecret,
   mkRootlessContainer,
   mkLocalImage,
   ...
@@ -40,16 +39,34 @@ let
   };
 in
 {
-  # VERDACCIO_OPENID_CLIENT_ID + VERDACCIO_OPENID_CLIENT_SECRET (Pocket ID
-  # SSO): sops-encrypted env.sops. Edit with `sops env.sops`.
-  sops.secrets."verdaccio-env" = mkDotenvSecret ./env.sops;
-
   fleet.bridgeMemberships.verdaccio = [ "traefik" ];
 
   # verdaccio-openid fetches the IdP discovery document at plugin load
   # and does not retry on failure, leaving OIDC npm login broken until a
   # restart — with no crash to make that visible.
   fleet.sso.discoveryConsumers = [ "verdaccio" ];
+
+  # Pocket ID client — id `verdaccio`, secret SSO_SECRET_VERDACCIO in
+  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # VERDACCIO_OPENID_CLIENT_* pair config.yaml references by name.
+  # Three callbacks: the web UI, `npm login --auth-type=web` (authn) and
+  # the CLI flow. PKCE off — the plugin doesn't send a verifier.
+  fleet.ssoClients.verdaccio = {
+    description = "Private npm registry";
+    launchURL = "https://verdaccio.toscanini.me";
+    callbackURLs = [
+      "https://verdaccio.toscanini.me/-/oauth/callback"
+      "https://verdaccio.toscanini.me/-/oauth/callback/authn"
+      "https://verdaccio.toscanini.me/-/oauth/callback/cli"
+    ];
+    logoutCallbackURLs = [ "https://verdaccio.toscanini.me" ];
+    pkce = false;
+    consumers = [ "verdaccio" ];
+    consumerEnv = {
+      id = "VERDACCIO_OPENID_CLIENT_ID";
+      secret = "VERDACCIO_OPENID_CLIENT_SECRET";
+    };
+  };
 
   fleet.webApps.verdaccio = {
     serviceName = "verdaccio";
@@ -105,9 +122,6 @@ in
       # OAuth redirects, regardless of how traefik passes Host headers.
       VERDACCIO_PUBLIC_URL = "https://verdaccio.toscanini.me";
     };
-
-    # VERDACCIO_OPENID_CLIENT_ID + _SECRET (referenced by name in config.yaml).
-    environmentFiles = [ config.sops.secrets."verdaccio-env".path ];
 
     extraOptions = [
       "--user=10001:0" # See header for UID rationale.

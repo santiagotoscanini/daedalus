@@ -332,6 +332,9 @@ rec {
             }
             // lib.optionalAttrs (u ? authBypassRule) { inherit (u) authBypassRule; }
             // lib.optionalAttrs (u ? healthHeaders) { inherit (u) healthHeaders; }
+            # Pocket ID groups allowed on the derived client. Omitted =
+            # admins only, which is right for the whole TV stack.
+            // lib.optionalAttrs (u ? authGroups) { inherit (u) authGroups; }
           )
         ) webUis
       );

@@ -51,6 +51,11 @@ in
       name = "shelfmark";
       port = 8084;
       healthPath = "/api/health";
+      # Household app: santi + sofi, not admins-only.
+      authGroups = [
+        "admins"
+        "family"
+      ];
       homepage = {
         group = "Productivity";
         name = "Shelfmark";

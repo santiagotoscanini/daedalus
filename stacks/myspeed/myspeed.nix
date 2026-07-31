@@ -45,6 +45,8 @@
     # plaintext password as a header on every request; the Pocket ID
     # gate is the real boundary. Widget dials container-direct.
     auth = "oidc";
+    # Household app: santi + sofi, not admins-only.
+    authGroups = [ "admins" "family" ];
     healthPath = "/favicon.ico";
     homepage = {
       group = "Network";

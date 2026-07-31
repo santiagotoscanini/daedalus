@@ -58,6 +58,8 @@
     # widget rides the /opds bypass through traefik on the public
     # hostname (isolated = no shared bridge with homepage).
     auth = "oidc";
+    # Household app: santi + sofi, not admins-only.
+    authGroups = [ "admins" "family" ];
     # Probe /opds, not /login: healthPath is appended to the auth-bypass
     # rule as Path(), which matches POST as well as GET, so aiming it at
     # a credential-accepting route leaves the local password form

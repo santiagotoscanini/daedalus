@@ -24,6 +24,8 @@
     # Login stays disabled (native OIDC is paywalled — AUTH.md); the
     # Pocket ID gate is the only auth. Widget dials container-direct.
     auth = "oidc";
+    # Household app: santi + sofi, not admins-only.
+    authGroups = [ "admins" "family" ];
     healthPath = "/api/v1/info/status";
     homepage = {
       group = "Productivity";

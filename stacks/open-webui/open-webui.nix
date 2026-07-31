@@ -19,10 +19,10 @@
 #                     web-search capability); OWU dials it directly over
 #                     the shared `websearch` bridge.
 #
-# SSO: native OIDC against Pocket ID (client "Open WebUI", created via
-# the Pocket ID API; callback https://chat.toscanini.me/oauth/oidc/
-# callback). OAUTH_CLIENT_ID/SECRET ride env.sops. Local password login
-# stays as break-glass; new accounts are SSO-only, merged by email.
+# SSO: native OIDC against Pocket ID. The client is declarative
+# (fleet.ssoClients.open-webui below); its creds are rendered in as
+# OAUTH_CLIENT_ID/SECRET. Local password login stays as break-glass;
+# new accounts are SSO-only, merged by email.
 #
 # Secrets:
 #   - WEBUI_SECRET_KEY → machine-generated on first boot into secrets/
@@ -35,7 +35,6 @@
 {
   config,
   pkgs,
-  mkDotenvSecret,
   mkRootlessContainer,
   mkSecretRender,
   ...
@@ -55,10 +54,6 @@ in
     "monitoring" # push OTLP metrics to alloy:4317 (the box's collector)
   ];
 
-  # OIDC client id + secret (Pocket ID client "Open WebUI", created via
-  # the Pocket ID API). Edit with `sops env.sops`.
-  sops.secrets."open-webui-env" = mkDotenvSecret ./env.sops;
-
   fleet.statePaths."${dataDir}".uid = 0; # container root → santiago:users
 
   # Loki stack label (alloy tags journal lines). searxng's label moved to
@@ -73,6 +68,25 @@ in
   fleet.appDatabases.open_webui = {
     consumers = [ "open-webui" ];
     extensions = [ "vector" ];
+  };
+
+  # Pocket ID client — id `open-webui`, secret SSO_SECRET_OPEN_WEBUI in
+  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # OAUTH_CLIENT_* pair. Deliberately NOT group-restricted: this is the
+  # one client any Pocket ID account may use (chat is the household's
+  # front door), matching what the IdP has enforced since it was made
+  # by hand. PKCE off — Open WebUI's OIDC client sends no verifier.
+  fleet.ssoClients.open-webui = {
+    displayName = "Open WebUI";
+    allowedGroups = [ ];
+    callbackURLs = [ "https://chat.toscanini.me/oauth/oidc/callback" ];
+    logoutCallbackURLs = [ "https://chat.toscanini.me" ];
+    pkce = false;
+    consumers = [ "open-webui" ];
+    consumerEnv = {
+      id = "OAUTH_CLIENT_ID";
+      secret = "OAUTH_CLIENT_SECRET";
+    };
   };
 
   fleet.webApps.open-webui = {
@@ -321,7 +335,6 @@ in
       config.fleet.appDatabases.open_webui.envFile
       webuiSecretFile
       litellmKeyFile
-      config.sops.secrets."open-webui-env".path # OAUTH_CLIENT_ID/SECRET
     ];
   };
 }

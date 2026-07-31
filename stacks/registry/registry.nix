@@ -117,18 +117,38 @@ in
 
   fleet.logStacks.registry = [ "zot" ];
 
+  # Pocket ID client — id `zot`, secret SSO_SECRET_ZOT in
+  # stacks/pocket-id/clients.sops. Not group-restricted: anonymous pull
+  # is the point, and the browser UI is the only thing OIDC covers.
+  # PKCE off — zot's generic oidc provider sends no verifier.
+  fleet.ssoClients.zot = {
+    displayName = "Zot";
+    allowedGroups = [ ];
+    callbackURLs = [ "https://${config.fleet.webApps.registry.hostname}/zot/auth/callback/oidc" ];
+    pkce = false;
+    # The creds feed the config render below, not the container's
+    # environment — but listing the consumer is still what gates the
+    # render on zot's unit and keeps the ordering honest.
+    consumers = [ "zot" ];
+    consumerEnv.id = "OIDC_CLIENT_ID";
+  };
+
   # assets/config.json is a template in the readFile'd-body house
   # style: its ${VARS} expand in the render heredoc — OIDC_CLIENT_ID /
-  # OIDC_CLIENT_SECRET from env.sops, SSO_ISSUER injected here.
+  # OIDC_CLIENT_SECRET from the declarative client's rendered env file,
+  # the rest from env.sops, SSO_ISSUER injected here.
   systemd.services.registry-config-render = mkSecretRender {
     description = "Render zot config + htpasswd from registry-env";
     gates = [ "podman-zot.service" ];
+    # Both renders gate on zot; only this edge orders them.
+    after = [ "sso-zot-env-render.service" ];
     dir = "/run/registry";
     file = "/run/registry/config.json";
     prep = ''
       SSO_ISSUER=${lib.escapeShellArg config.fleet.sso.issuerUrl}
       set -a
       . ${config.sops.secrets."registry-env".path}
+      . ${config.fleet.ssoClients.zot.envFile}
       set +a
       {
         ${pkgs.apacheHttpd}/bin/htpasswd -nbB "$REGISTRY_CI_USER" "$REGISTRY_CI_PASSWORD"

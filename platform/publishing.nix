@@ -347,6 +347,23 @@ in
                   their own auth.
                 '';
               };
+              authGroups = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ "admins" ];
+                description = ''
+                  Pocket ID group names allowed on the client this
+                  webApp auto-derives (stacks/pocket-id/clients.nix)
+                  when `auth = "oidc"` — authorization enforced at the
+                  IdP, before the middleware forwards anything.
+                  Admin-only by default; household apps add "family".
+                  `[ ]` leaves the client unrestricted, i.e. any account
+                  with a passkey gets in.
+                '';
+                example = [
+                  "admins"
+                  "family"
+                ];
+              };
               authBypassRule = lib.mkOption {
                 type = lib.types.nullOr lib.types.str;
                 default = null;

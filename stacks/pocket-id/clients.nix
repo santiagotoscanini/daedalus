@@ -18,10 +18,24 @@
 #
 #   consumers = [ "<container>" ]
 #     The app speaks OIDC itself. Each listed container gets
-#     `/run/sso-clients/<name>-env` appended to its environmentFiles
-#     (carrying OIDC_CLIENT_SECRET) by this module — consumers never
-#     read the path back out of `config`, which would recurse through
-#     stacks/apps' fragment assembly.
+#     `/run/sso-clients/<name>-env` appended to its environmentFiles by
+#     this module — consumers never read the path back out of `config`,
+#     which would recurse through stacks/apps' fragment assembly. The
+#     variable names in that file are `consumerEnv` (every image spells
+#     the pair differently: GF_AUTH_GENERIC_OAUTH_CLIENT_*,
+#     VERDACCIO_OPENID_CLIENT_*, GENERIC_CLIENT_*, …).
+#
+# Forward-auth clients are NOT written by hand: every
+# `fleet.webApps.<n>.auth = "oidc"` entry auto-derives one, since that
+# option already says "this hostname is gated by Pocket ID" and the
+# client is just its other half. Group restriction rides
+# `webApps.<n>.authGroups`. Declaring `fleet.ssoClients.<n>` by hand is
+# for native-OIDC apps and anything that isn't a webApp at all.
+#
+# Logos are convention, not configuration: drop `<name>.png` (or .svg)
+# into assets/logos/ and the sync uploads it to a client that has none.
+# Without that the "repo IS the system" claim would have a visible hole
+# — a rebuilt IdP would serve a My Apps page of blank tiles.
 #
 # The convergence oneshot is deliberately NOT ordered before traefik:
 # ingress must not wait on IdP convergence. The cost is a few seconds on
@@ -69,6 +83,8 @@ let
         id = n;
         secretKey = secretKey n;
         groups = c.allowedGroups;
+        logo = c.logo;
+        logoType = if c.logo != null && lib.hasSuffix ".svg" (toString c.logo) then "image/svg+xml" else "image/png";
         body = {
           name = c.displayName;
           inherit (c) description;
@@ -155,15 +171,19 @@ in
             };
             allowedGroups = lib.mkOption {
               type = lib.types.listOf lib.types.str;
-              default = [ ];
+              default = [ "admins" ];
               description = ''
                 Pocket ID group NAMES (`admins`, `family`) allowed to
                 use this client — coarse authorization enforced at the
-                IdP, before any app sees a request. `[ ]` leaves the
-                client unrestricted (any account with a passkey gets
-                in), which is almost never what you want here.
+                IdP, before any app sees a request. Admin-only by
+                default so a forgotten line fails closed; household
+                apps add "family". `[ ]` is the explicit opt-out: any
+                account with a passkey gets in.
               '';
-              example = [ "admins" ];
+              example = [
+                "admins"
+                "family"
+              ];
             };
             skipConsent = lib.mkOption {
               type = lib.types.bool;
@@ -190,11 +210,64 @@ in
               default = [ ];
               description = ''
                 Container names that speak OIDC themselves with this
-                client. Each gets `/run/sso-clients/<name>-env`
-                (OIDC_CLIENT_SECRET) appended to its environmentFiles
-                and is ordered after the render.
+                client. Each gets `/run/sso-clients/<name>-env` appended
+                to its environmentFiles and is ordered after the render.
               '';
               example = [ "app-anansi" ];
+            };
+            consumerEnv = {
+              id = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Variable name the client ID is written under in the
+                  consumer's env file. null omits it — for apps that
+                  already take the (non-secret) ID as a plain nix
+                  string in their `environment`.
+                '';
+                example = "GF_AUTH_GENERIC_OAUTH_CLIENT_ID";
+              };
+              secret = lib.mkOption {
+                type = lib.types.str;
+                default = "OIDC_CLIENT_SECRET";
+                description = ''
+                  Variable name the client secret is written under.
+                  Whatever the image reads — there is no convention
+                  across upstreams.
+                '';
+                example = "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET";
+              };
+            };
+            envFile = lib.mkOption {
+              type = lib.types.str;
+              readOnly = true;
+              default = "${renderDir}/${name}-env";
+              description = ''
+                Read-only: path of the rendered creds file. It is
+                appended to every `consumers` container automatically —
+                reference this only when something OTHER than a
+                container reads the creds (a config render, say), and
+                order that unit after `sso-${name}-env-render.service`.
+              '';
+            };
+            logo = lib.mkOption {
+              type = lib.types.nullOr lib.types.path;
+              default =
+                let
+                  candidates = map (ext: ./assets/logos + "/${name}.${ext}") [
+                    "png"
+                    "svg"
+                  ];
+                  found = lib.filter builtins.pathExists candidates;
+                in
+                if found == [ ] then null else lib.head found;
+              defaultText = lib.literalExpression ''./assets/logos/<name>.{png,svg}, when present'';
+              description = ''
+                Image shown on the consent screen and the My Apps page,
+                uploaded by the sync when the client has none. Defaults
+                to `assets/logos/<name>.png` (or `.svg`) if that file
+                exists, so adding a logo is dropping in a file.
+              '';
             };
           };
         }
@@ -216,6 +289,28 @@ in
   };
 
   config = lib.mkMerge [
+    # Every oidc-gated webApp IS a client — derived, not restated. The
+    # middleware traefik generates for `auth = "oidc"` is useless without
+    # a client at the IdP, so the two are one decision.
+    {
+      fleet.ssoClients = lib.mapAttrs (
+        _: w:
+        {
+          # The consent screen and the My Apps tile say the same thing
+          # the homepage tile does, or fall back to the attr name.
+          description = if w.homepage != null && w.homepage.description != null then w.homepage.description else "";
+          launchURL = "https://${w.hostname}";
+          callbackURLs = [ "https://${w.hostname}/oidc/callback" ];
+          logoutCallbackURLs = [ "https://${w.hostname}/oidc/callback" ];
+          allowedGroups = w.authGroups;
+          traefikForwardAuth = true;
+        }
+        // lib.optionalAttrs (w.homepage != null && w.homepage.name != null) {
+          displayName = w.homepage.name;
+        }
+      ) (lib.filterAttrs (_: w: w.auth == "oidc") config.fleet.webApps);
+    }
+
     {
       # One dotenv file, one key per client. Ciphertext, tracked in git.
       sops.secrets."sso-client-secrets" = mkDotenvSecret ./clients.sops;
@@ -267,17 +362,21 @@ in
       };
     })
 
-    # Per-client secret for native-OIDC consumers.
+    # Per-client creds for native-OIDC consumers, under whatever
+    # variable names that image reads.
     {
       systemd.services = lib.mapAttrs' (
         n: c:
         lib.nameValuePair "sso-${n}-env-render" (mkSecretRender {
-          description = "Render the Pocket ID client secret for ${n}";
+          description = "Render the Pocket ID client creds for ${n}";
           gates = map (unit: "podman-${unit}.service") c.consumers;
           dir = renderDir;
           file = clientEnvFile n;
           prep = extractSecret n;
-          content = "OIDC_CLIENT_SECRET=\$SECRET_${envName n}";
+          content = lib.concatStringsSep "\n" (
+            lib.optional (c.consumerEnv.id != null) "${c.consumerEnv.id}=${n}"
+            ++ [ "${c.consumerEnv.secret}=\$SECRET_${envName n}" ]
+          );
         })
       ) (lib.filterAttrs (_: c: c.consumers != [ ]) cfg);
     }

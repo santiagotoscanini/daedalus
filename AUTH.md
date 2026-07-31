@@ -134,12 +134,20 @@ and (for nextcloud) set their `nextcloud_uid` custom claim = their NC username.
      `POST /api/oidc/clients/<id>/logo` (multipart `file`, PNG from
      cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/<app>.png —
      same art the homepage tiles use).
-- The ~20 clients that predate the mechanism keep server-generated
-  creds in `stacks/traefik/env.sops` under
-  `POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET}`. Migrating one is a secret
-  rotation, so do it per app or let them age out. Note env.sops-only
-  changes do NOT restart traefik (same store path) — `systemctl restart
-  podman-traefik` by hand.
+- Forward-auth clients are not written out at all: a
+  `fleet.webApps.<n>.auth = "oidc"` entry IS the declaration, and
+  `clients.nix` derives the client from it (hostname → launch +
+  `/oidc/callback`, homepage name/description → consent screen,
+  `authGroups` → allowed groups). Only the secret is per-app work.
+- **Every client on the box is declarative except immich and
+  nextcloud**, whose OIDC config lives in their own application
+  database rather than in env (FUTURE.md #10).
+- Rotating any client secret: `sops stacks/pocket-id/clients.sops`,
+  rebuild, then `systemctl restart podman-traefik` — an env.sops-only
+  change does NOT restart traefik (same store path), so the middleware
+  keeps the old value until it is bounced by hand. Native-OIDC
+  consumers restart on their own (their rendered env file is a unit
+  dependency).
 - Lockout paths: SSH by IP always works; NixOS generation rollback;
   per-app escapes noted per row above.
 - Order per service: gate first → verify from LAN + tunnel → only then

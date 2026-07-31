@@ -21,6 +21,17 @@
   # the crash leaves the oneshot unit green with no container behind it.
   fleet.sso.discoveryConsumers = [ "wealthfolio" ];
 
+  # Pocket ID client — id `wealthfolio`, declarative like every other.
+  # No `consumers`: wealthfolio authenticates with PKCE and never sends
+  # a client secret, so nothing here consumes SSO_SECRET_WEALTHFOLIO —
+  # the key exists so a rebuilt IdP still gets a complete client.
+  fleet.ssoClients.wealthfolio = {
+    description = "Personal finance";
+    launchURL = "https://wealthfolio.toscanini.me/api/v1/auth/oidc/login";
+    callbackURLs = [ "https://wealthfolio.toscanini.me/api/v1/auth/oidc/callback" ];
+    logoutCallbackURLs = [ "https://wealthfolio.toscanini.me/api/v1/auth/oidc/callback" ];
+  };
+
   fleet.statePaths."/home/santiago/selfhost/wealthfolio/data".uid = 1000;
   fleet.webApps.wealthfolio = {
     serviceName = "wealthfolio";
@@ -57,7 +68,7 @@
       WF_DB_PATH = "/data/wealthfolio.db";
       WF_CORS_ALLOW_ORIGINS = "https://wealthfolio.toscanini.me";
       WF_OIDC_ISSUER_URL = config.fleet.sso.issuerUrl;
-      WF_OIDC_CLIENT_ID = "36e5f60b-173f-4686-8b2b-830ff5d98fd8";
+      WF_OIDC_CLIENT_ID = "wealthfolio";
       WF_OIDC_REDIRECT_URL = "https://wealthfolio.toscanini.me/api/v1/auth/oidc/callback";
       # santito's Pocket ID sub — the only allowed account.
       WF_OIDC_ALLOWED_SUBS = "1ae66034-d627-46f7-9c04-1d8c05639a1a";

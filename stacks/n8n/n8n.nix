@@ -56,6 +56,24 @@ in
   # by app-db-n8n-bootstrap.service (see stacks/app-db/).
   fleet.appDatabases.n8n.consumers = [ "n8n" ];
 
+  # Pocket ID client — id `n8n`, secret SSO_SECRET_N8N in
+  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # OIDC_CLIENT_* pair the hook reads. PKCE stays off: the hook's
+  # authorization request carries no code_challenge.
+  fleet.ssoClients.n8n = {
+    displayName = "n8n";
+    description = "Workflow automation";
+    launchURL = "https://n8n.toscanini.me/auth/oidc/login";
+    callbackURLs = [ "https://n8n.toscanini.me/auth/oidc/callback" ];
+    logoutCallbackURLs = [ "https://n8n.toscanini.me/auth/oidc/callback" ];
+    pkce = false;
+    consumers = [ "n8n" ];
+    consumerEnv = {
+      id = "OIDC_CLIENT_ID";
+      secret = "OIDC_CLIENT_SECRET";
+    };
+  };
+
   fleet.webApps.n8n = {
     serviceName = "n8n";
     port = 5678;

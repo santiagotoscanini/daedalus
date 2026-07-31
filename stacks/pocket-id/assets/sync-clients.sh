@@ -56,6 +56,7 @@ groups_json=$(cat "$RESP")
 jq -c '.[]' "$MANIFEST" | while read -r client; do
   key=$(printf '%s' "$client" | jq -r '.key')
   id=$(printf '%s' "$client" | jq -r '.id')
+  has_logo=false
 
   # GET-then-create/update: POST /api/oidc/clients is NOT idempotent —
   # a second call with the same id answers 400 "Client ID already in
@@ -69,6 +70,7 @@ jq -c '.[]' "$MANIFEST" | while read -r client; do
       echo "$key: created OIDC client '$id'"
       ;;
     200)
+      has_logo=$(jq -r '.hasLogo' < "$RESP")
       api PUT "/api/oidc/clients/$id" "$(printf '%s' "$client" | jq -c '.body')"
       [ "$API_CODE" = "200" ] || { echo "$key: update failed (HTTP $API_CODE): $(cat "$RESP")" >&2; exit 1; }
       ;;
@@ -99,5 +101,23 @@ jq -c '.[]' "$MANIFEST" | while read -r client; do
   if [ "$want" -gt 0 ]; then
     api PUT "/api/oidc/clients/$id/allowed-user-groups" "$ids"
     [ "$API_CODE" = "200" ] || { echo "$key: setting allowed groups failed (HTTP $API_CODE): $(cat "$RESP")" >&2; exit 1; }
+  fi
+
+  # Logo, only when the client hasn't got one — it is a multipart upload
+  # rather than a field on the client body, so it can't ride the PUT
+  # above, and re-sending it on every boot would be pure churn. A new
+  # client (id changed, or a rebuilt IdP database) starts blank and
+  # picks its logo back up here.
+  logo=$(printf '%s' "$client" | jq -r '.logo // empty')
+  if [ -n "$logo" ] && [ "$has_logo" != "true" ]; then
+    type=$(printf '%s' "$client" | jq -r '.logoType')
+    out=$(podman exec -i -e PID_API_KEY pocket-id \
+      curl -sS --max-time 20 -w '\n%{http_code}' -X POST \
+      -H "X-API-KEY: $PID_API_KEY" \
+      -F "file=@-;filename=logo.${logo##*.};type=$type" \
+      "http://localhost:1411/api/oidc/clients/$id/logo" < "$logo")
+    code=${out##*$'\n'}
+    [ "$code" = "204" ] || { echo "$key: logo upload failed (HTTP $code): ${out%$'\n'*}" >&2; exit 1; }
+    echo "$key: uploaded logo"
   fi
 done

@@ -259,6 +259,22 @@ in
     "node-exporter"
   ];
 
+  # Grafana's Pocket ID client. Declarative: id `grafana`, secret
+  # SSO_SECRET_GRAFANA in stacks/pocket-id/clients.sops, rendered into
+  # the container under the two names grafana reads. Prometheus is
+  # forward-auth'd, so ITS client is derived from the webApp below.
+  fleet.ssoClients.grafana = {
+    description = "Dashboards + alerting (prometheus, loki)";
+    launchURL = "https://grafana.toscanini.me";
+    callbackURLs = [ "https://grafana.toscanini.me/login/generic_oauth" ];
+    logoutCallbackURLs = [ "https://grafana.toscanini.me/login/generic_oauth" ];
+    consumers = [ "grafana" ];
+    consumerEnv = {
+      id = "GF_AUTH_GENERIC_OAUTH_CLIENT_ID";
+      secret = "GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET";
+    };
+  };
+
   fleet.webApps = {
     prometheus = {
       serviceName = "prometheus";
@@ -371,8 +387,9 @@ in
       GF_SMTP_FROM_NAME = "s2-server Grafana";
       GF_SMTP_STARTTLS_POLICY = "MandatoryStartTLS";
 
-      # Pocket ID SSO (AUTH.md). Client creds ride env.sops
-      # (GF_AUTH_GENERIC_OAUTH_CLIENT_ID/SECRET). Single-user box:
+      # Pocket ID SSO (AUTH.md). Client creds are rendered from the
+      # declarative client below, under the two GF_* names grafana
+      # reads. Single-user box:
       # every Pocket ID account maps to Grafana Admin. Basic auth stays
       # on — the homepage widget authenticates with the admin user/pass
       # against the API. Escape hatch: /login?disableAutoLogin.

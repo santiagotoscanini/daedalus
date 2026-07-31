@@ -315,11 +315,13 @@ let
         }
       ];
 
-      # The Pocket ID client itself — id `<name>`, secret from
+      # The Pocket ID client for native mode — id `<name>`, secret from
       # SSO_SECRET_<NAME> in stacks/pocket-id/clients.sops. The oneshot
-      # in stacks/pocket-id/clients.nix converges it at the IdP, and (for
-      # native mode) hands the container its OIDC_CLIENT_SECRET env file.
-      fleet.ssoClients = lib.optionalAttrs (app.auth.mode != "none") {
+      # in stacks/pocket-id/clients.nix converges it at the IdP and hands
+      # the container its OIDC_CLIENT_SECRET env file. Proxy mode
+      # declares nothing here: its client is auto-derived from the
+      # webApp's `auth = "oidc"`, like every other forward-auth'd app.
+      fleet.ssoClients = lib.optionalAttrs nativeAuth {
         "${name}" = {
           displayName = tileGroup;
           description = app.homepage.description;
@@ -327,8 +329,7 @@ let
           callbackURLs = [ oidcCallback ];
           logoutCallbackURLs = [ oidcCallback ];
           inherit (app.auth) allowedGroups;
-          traefikForwardAuth = proxyAuth;
-          consumers = lib.optional nativeAuth cName;
+          consumers = [ cName ];
         };
       };
 
@@ -367,6 +368,10 @@ let
         isolated = isolatedAuth;
         inherit (app.auth) authBypassRule;
         authHeaders = app.auth.headers;
+        # The webApp is where the derived client reads its group
+        # restriction from, so proxy mode routes `auth.allowedGroups`
+        # through it rather than declaring the client itself.
+        authGroups = app.auth.allowedGroups;
       })
       # gatus probes the real upstream on this path either way; under
       # "proxy" it doubles as the middleware's bypass (publishing.nix

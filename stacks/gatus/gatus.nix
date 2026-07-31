@@ -108,9 +108,24 @@ in
   # probe layer down behind a green oneshot unit.
   fleet.sso.discoveryConsumers = [ "gatus" ];
 
-  # GATUS_OIDC_CLIENT_ID + GATUS_OIDC_CLIENT_SECRET (Pocket ID SSO):
-  # sops-encrypted env.sops. Edit with `sops env.sops`.
   sops.secrets."gatus-env" = mkDotenvSecret ./env.sops;
+
+  # Pocket ID client — id `gatus`, secret SSO_SECRET_GATUS in
+  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # GATUS_OIDC_* pair that config.yaml interpolates. PKCE stays off:
+  # gatus's built-in OIDC client doesn't send a code verifier.
+  fleet.ssoClients.gatus = {
+    description = "Outside-in uptime + cert expiry";
+    launchURL = "https://status.toscanini.me/oidc/login";
+    callbackURLs = [ "https://status.toscanini.me/authorization-code/callback" ];
+    logoutCallbackURLs = [ "https://status.toscanini.me/authorization-code/callback" ];
+    pkce = false;
+    consumers = [ "gatus" ];
+    consumerEnv = {
+      id = "GATUS_OIDC_CLIENT_ID";
+      secret = "GATUS_OIDC_CLIENT_SECRET";
+    };
+  };
 
   fleet.webApps.gatus = {
     hostname = "status.toscanini.me";

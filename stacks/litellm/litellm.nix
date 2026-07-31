@@ -74,6 +74,24 @@
   # (see stacks/app-db/).
   fleet.appDatabases.litellm.consumers = [ "litellm" ];
 
+  # Pocket ID client — id `litellm`, secret SSO_SECRET_LITELLM in
+  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # GENERIC_* pair. PKCE stays off: litellm's GENERIC SSO sends no
+  # code_challenge, which is also what makes AUTO_REDIRECT safe.
+  fleet.ssoClients.litellm = {
+    displayName = "LiteLLM";
+    description = "OpenAI-compatible LLM gateway";
+    launchURL = "https://litellm.toscanini.me/ui";
+    callbackURLs = [ "https://litellm.toscanini.me/sso/callback" ];
+    logoutCallbackURLs = [ "https://litellm.toscanini.me/sso/callback" ];
+    pkce = false;
+    consumers = [ "litellm" ];
+    consumerEnv = {
+      id = "GENERIC_CLIENT_ID";
+      secret = "GENERIC_CLIENT_SECRET";
+    };
+  };
+
   fleet.webApps.litellm = {
     serviceName = "litellm";
     port = 4000;

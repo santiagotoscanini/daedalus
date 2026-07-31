@@ -207,36 +207,37 @@ bare forward-auth"), and neither has a row in AUTH.md at all.
 Trigger to revisit: a second person actually wanting their own reading
 state, or the next AUTH.md audit.
 
-## 10. Migrate the hand-created OIDC clients onto `fleet.ssoClients`
+## 10. Immich + Nextcloud: the last two hand-held OIDC clients
 
-The declarative client mechanism exists (`stacks/pocket-id/clients.nix`
-+ `pocket-id-clients.service`), but only **2 of the 30 clients** at the
-IdP use it — anansi and ipcrawl, via `fleet.apps.<name>.auth.mode`.
-Everything else still carries server-generated credentials that were
-created by hand: 18 forward-auth pairs as
-`POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET}` in `stacks/traefik/env.sops`,
-plus the native-OIDC stacks (grafana, immich, nextcloud, gatus, litellm,
-n8n, verdaccio, wealthfolio, open-webui, zot) holding theirs in their
-own `env.sops`.
+Every other client on the box is declarative (`fleet.ssoClients`,
+`stacks/pocket-id/clients.nix`) — 28 of 30. These two are not, and the
+reason is the same for both: their OIDC client id and secret live in
+the *application's own database*, not in env or a config file. Immich
+keeps them in its server settings (admin UI / DB); Nextcloud keeps them
+in the `user_oidc` app's provider row. Nothing in this repo can set
+them without either writing into an app database directly — which the
+box's rules forbid — or driving each admin UI.
 
-So the restore-from-scratch hole is 28/30 open: a fresh `pocket_id`
-database still means recreating almost every client through the REST
-recipe in AUTH.md before SSO works at all.
+So they are the last piece of the restore-from-scratch hole: a fresh
+`pocket_id` database re-converges 28 clients on the next boot, and
+these two need a human in two admin UIs.
 
-Plan when picked up, one app at a time (each migration IS a secret
-rotation — the client id changes from a server UUID to the attr name,
-so the app is logged out mid-flight):
-- Add `SSO_SECRET_<NAME>` to `stacks/pocket-id/clients.sops`.
-- Declare `fleet.ssoClients.<name>` with the app's real callback URLs
-  and `allowedGroups` (mirror what the live client has — read it back
-  with `GET /api/oidc/clients/<uuid>` first, `isGroupRestricted` and the
-  group list included). Set `traefikForwardAuth = true` for a
-  forward-auth app, or `consumers = [ "<container>" ]` for a native one.
-- Drop the old pair from the stack's `env.sops`, point the app at the
-  new id, rebuild, verify a real login, then delete the old client at
-  the IdP (`DELETE /api/oidc/clients/<uuid>`) so the two don't drift.
-- Logos are still manual (`POST /api/oidc/clients/<id>/logo`) — the new
-  client starts without one.
+Plan when picked up (per app, ~5 minutes each, needs a browser):
+- Add `SSO_SECRET_IMMICH` / `SSO_SECRET_NEXTCLOUD` to
+  `stacks/pocket-id/clients.sops`.
+- Declare `fleet.ssoClients.{immich,nextcloud}` with the callbacks the
+  live clients already carry — immich needs all three
+  (`app.immich:///oauth-callback` for mobile, plus `/auth/login` and
+  `/user-settings`), nextcloud both the `/apps/user_oidc/code` and
+  `/index.php/apps/user_oidc/code` shapes — `allowedGroups =
+  [ "admins" "family" ]`, and `pkce = false` for nextcloud. No
+  `consumers`: nothing on this side reads the creds.
+- Then paste the new id + secret into each app's own settings, and
+  delete the old UUID client at the IdP.
+- Immich's mobile app has to be re-logged-in afterwards; Nextcloud's
+  desktop/mobile sync clients keep working (they hold app passwords,
+  not OIDC sessions).
 
-Trigger to revisit: any restore-from-scratch drill, a client secret
-rotation that has to happen anyway, or the next AUTH.md audit.
+Trigger to revisit: a restore-from-scratch drill, an Immich or
+Nextcloud OIDC problem that needs the secret touched anyway, or either
+upstream growing env-based OIDC configuration.

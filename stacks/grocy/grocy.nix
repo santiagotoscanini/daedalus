@@ -38,6 +38,8 @@
     # working — incl. the homepage widget, which dials through traefik
     # on the public hostname (isolated = no shared bridge with homepage).
     auth = "oidc";
+    # Household app: santi + sofi, not admins-only.
+    authGroups = [ "admins" "family" ];
     healthPath = "/login";
     isolated = true;
     authBypassRule = "PathPrefix(`/api`)";
