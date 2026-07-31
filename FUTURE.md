@@ -262,8 +262,15 @@ in the module:
   `host.containers.internal:8123` with `authorization.credentials_file`
   (the webApps `metrics.enable` shortcut can't be used — it requires
   `serviceName`, and this stack is host-netns).
-- **Homepage widget**: homepage's `homeassistant` widget wants the same
-  token; the tile currently ships without one.
+- **Homepage widget**: already wired (`type: homeassistant`, dialing
+  `host.containers.internal:8123`, default fields `people_home` /
+  `lights_on` / `switches_on`). Only the token is missing —
+  `HOMEPAGE_VAR_HASS_API_KEY` is an empty slot in
+  `stacks/homepage/env.sops`. Filling it needs **no rebuild**: `sops`
+  the file, then `systemctl restart podman-homepage`. Until then the
+  tile shows an API error. Phase 2 can swap the defaults for real
+  entities via `custom` — but `custom` is ignored while `fields` is
+  set, so use one or the other.
 - **SSO-only**: once Pocket ID login is verified from both LAN and
   tunnel, flip `features.default_redirect` to `true` in the generated
   configuration.yaml to skip the welcome screen. HA's local login stays

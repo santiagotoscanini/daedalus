@@ -241,6 +241,25 @@ in
       name = "Home Assistant";
       description = "Home automation hub";
       icon = "home-assistant.png";
+      # Dials the host netns directly rather than through traefik — the
+      # widget is machine-to-machine, so it skips ingress like every
+      # other widget on the box.
+      #
+      # No `fields`/`custom`: the defaults (people_home, lights_on,
+      # switches_on) are the right three for an install with no devices
+      # yet. Phase 2 can name real entities via `custom` — but note that
+      # `custom` is ignored while `fields` is set, so use one or the other.
+      #
+      # HOMEPAGE_VAR_HASS_API_KEY is an empty slot in
+      # stacks/homepage/env.sops until Home Assistant has an owner
+      # account to mint a long-lived token from; the tile reports an API
+      # error until then. Filling it needs no rebuild — `sops` the file
+      # and `systemctl restart podman-homepage`.
+      widget = {
+        type = "homeassistant";
+        url = "http://host.containers.internal:8123";
+        key = "{{HOMEPAGE_VAR_HASS_API_KEY}}";
+      };
     };
   };
 
