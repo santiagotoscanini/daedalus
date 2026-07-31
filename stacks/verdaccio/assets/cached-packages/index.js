@@ -14,9 +14,14 @@
 // this (verdaccio discussion #706) on the grounds that scanning the whole
 // FS-backed storage per page view is expensive — hence the TTL cache below.
 //
+// Packages holding more than one version are sorted to the top of the
+// listing and labelled, since on a proxy registry those are where the disk
+// is going and where a dependency tree has drifted apart.
+//
 // It also serves GET /-/cached-packages/stats —
-// `{published, cached, total}` — for the homepage tile, which otherwise
-// has no way to tell the two apart or to count past 250.
+// `{published, cached, multiVersion, total}` — for the homepage tile,
+// which otherwise has no way to tell published from cached or to count
+// past 250.
 //
 // How it hooks in
 // ---------------
@@ -156,8 +161,23 @@ module.exports = function cachedPackagesPlugin(config, options) {
     });
   }
 
+  // How many versions are actually HELD, which is not the same as the
+  // number of versions the manifest knows about: a cached manifest carries
+  // the uplink's entire version history (chalk: 44) while only the fetched
+  // tarballs are on disk (chalk: 3). Verdaccio's own `_attachments` agrees
+  // with the disk for every package here, but `getPackage` blanks that
+  // field, so count the tarballs instead of paying for a second parse.
+  async function countHeldVersions(name) {
+    try {
+      const entries = await fsp.readdir(path.join(storageDir, name));
+      return entries.filter((entry) => entry.endsWith('.tgz')).length;
+    } catch {
+      return 0;
+    }
+  }
+
   // The UI card reads the LATEST version manifest, not the package document.
-  function toCard(manifest) {
+  function toCard(manifest, heldVersions) {
     if (!manifest || !manifest.versions) return null;
     const latest = manifest['dist-tags'] && manifest['dist-tags'].latest;
     if (!latest || !manifest.versions[latest]) return null;
@@ -167,6 +187,7 @@ module.exports = function cachedPackagesPlugin(config, options) {
     card.users = manifest.users;
     card.author = formatAuthor(card.author);
     if (useGravatar) card.author.avatar = gravatarUrl(card.author.email);
+    card.heldVersions = heldVersions;
     return card;
   }
 
@@ -194,13 +215,31 @@ module.exports = function cachedPackagesPlugin(config, options) {
       scanNames(),
       readPrivateNames(storage),
     ]);
-    const cards = (await mapPool(names, READ_CONCURRENCY, async (name) =>
-      toCard(await readManifest(storage, name, req))
-    )).filter(Boolean);
+    const cards = (await mapPool(names, READ_CONCURRENCY, async (name) => {
+      const [manifest, heldVersions] = await Promise.all([
+        readManifest(storage, name, req),
+        countHeldVersions(name),
+      ]);
+      return toCard(manifest, heldVersions);
+    })).filter(Boolean);
 
-    cards.sort((a, b) =>
-      descending ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
-    );
+    // Packages holding more than one version float to the top, most
+    // versions first — they are the ones worth looking at on a proxy
+    // registry, since they are where disk is going and where a dependency
+    // tree has drifted apart. Everything else keeps the configured
+    // alphabetical order. The UI renders this array as-is; it does no
+    // client-side sorting of its own.
+    const byName = (a, b) =>
+      descending ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name);
+    cards.sort((a, b) => {
+      const aMulti = a.heldVersions > 1;
+      const bMulti = b.heldVersions > 1;
+      if (aMulti !== bMulti) return aMulti ? -1 : 1;
+      if (aMulti && a.heldVersions !== b.heldVersions) {
+        return b.heldVersions - a.heldVersions;
+      }
+      return byName(a, b);
+    });
     cache = { at: Date.now(), cards, privateNames };
     logger.debug(
       { total: cards.length, published: privateNames.size },
@@ -251,23 +290,34 @@ module.exports = function cachedPackagesPlugin(config, options) {
     );
   }
 
+  // Applied on the way out, not baked into the cached card, so that the
+  // search box still matches against the real description.
+  function forResponse(card, req) {
+    const out = { ...card };
+    if (card.dist && card.dist.tarball) {
+      out.dist = {
+        ...card.dist,
+        tarball: localTarballUri(card.dist.tarball, card.name, req),
+      };
+    }
+    // The card component renders a fixed set of fields, and `description`
+    // is the only free-text one — so the version count rides there. A
+    // keyword chip was the alternative, but those are package metadata and
+    // the UI alphabetises them, so the count would move around.
+    if (card.heldVersions > 1) {
+      const label = `${card.heldVersions} versions cached`;
+      out.description = card.description
+        ? `${label} · ${card.description}`
+        : label;
+    }
+    return out;
+  }
+
   function respond(handler) {
     return async (req, res, next) => {
       try {
         const cards = await handler(req);
-        res.json(
-          cards.map((card) =>
-            card.dist && card.dist.tarball
-              ? {
-                  ...card,
-                  dist: {
-                    ...card.dist,
-                    tarball: localTarballUri(card.dist.tarball, card.name, req),
-                  },
-                }
-              : card
-          )
-        );
+        res.json(cards.map((card) => forResponse(card, req)));
       } catch (err) {
         // Hand the route back to verdaccio's own handler rather than 500 —
         // a degraded UI showing only published packages beats a broken one.
@@ -328,6 +378,8 @@ module.exports = function cachedPackagesPlugin(config, options) {
           res.json({
             published,
             cached: visible.length - published,
+            multiVersion: visible.filter((card) => card.heldVersions > 1)
+              .length,
             total: visible.length,
           });
         } catch (err) {
