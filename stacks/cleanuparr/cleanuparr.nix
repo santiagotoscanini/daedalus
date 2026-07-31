@@ -53,6 +53,29 @@
   # a fresh install fails on first write (holds the SQLite state).
   fleet.statePaths."/home/santiago/selfhost/cleanuparr/config".uid = 1000;
 
+  # Native OIDC, SEPARATE from the forward-auth client `webApps.auth =
+  # "oidc"` derives above. Both point at this hostname but they are
+  # different consumers with different callbacks: traefik's middleware
+  # owns /oidc/callback, while the app itself round-trips through
+  # /api/auth/oidc/callback (login) and /api/account/oidc/link/callback
+  # (linking an existing account). One client cannot hold both without
+  # the derived one overwriting the hand-written callbacks on rebuild.
+  #
+  # No `consumers`: 2.10 keeps OIDC settings in its own SQLite, with no
+  # env override, so the pair is pasted into Settings → Account once.
+  # The client is still declarative — a rebuilt IdP re-converges it.
+  # PKCE stays on: the app sends code_challenge S256.
+  fleet.ssoClients.cleanuparr-app = {
+    displayName = "Cleanuparr";
+    description = "Download-queue cleanup & malware blocking";
+    launchURL = "https://cleanuparr.toscanini.me";
+    callbackURLs = [
+      "https://cleanuparr.toscanini.me/api/auth/oidc/callback"
+      "https://cleanuparr.toscanini.me/api/account/oidc/link/callback"
+    ];
+    logoutCallbackURLs = [ "https://cleanuparr.toscanini.me" ];
+  };
+
   fleet.webApps.cleanuparr = {
     serviceName = "cleanuparr";
     port = 11011;
