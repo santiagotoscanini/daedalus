@@ -64,9 +64,19 @@
 # instead of installed through HACS — the component is pure Python and
 # all three of its requirements (aiofiles, jinja2, joserfc) are already
 # in the image, so nothing is fetched or pip-installed at runtime.
-# Home Assistant's own login stays enabled: onboarding needs it to
-# create the owner account, and it is the break-glass if Pocket ID is
-# down. See AUTH.md for the flip-to-SSO-only step.
+# Home Assistant's own login stays enabled. That is not a preference —
+# `POST /api/onboarding/users` has `vol.Required("password")`, so a
+# local owner MUST exist before any OIDC login can happen. The owner is
+# `santito`, matching the Pocket ID preferred_username; its password is
+# in owner-password.sops, read by nothing, kept only so the break-glass
+# survives a restore-from-repo.
+#
+# Going SSO-only later means `homeassistant.auth_providers: []` — which
+# works, because auth_oidc registers by mutating `hass.auth._providers`
+# directly rather than through that option. Upstream advises against it
+# and there is an unresolved report of the login flows degrading under
+# it (discussion #67), so verify against this HA version before taking
+# it. See AUTH.md for the ordering.
 #
 # Deliberately NOT in `fleet.sso.discoveryConsumers`: the component
 # fetches discovery lazily at first login, and gating a house's
@@ -159,6 +169,16 @@ let
         # break-glass. Flip to `default_redirect: true` once SSO is
         # verified from both LAN and tunnel.
         default_redirect: false
+        # TEMPORARY — turn off once santito has logged in through
+        # Pocket ID once. Onboarding must create a local owner (the
+        # onboarding API requires a password), so the owner is created
+        # as `santito`, matching the Pocket ID preferred_username;
+        # linking makes the first SSO login attach to that owner
+        # account instead of minting a second, non-owner user.
+        # While this is on, ANY Pocket ID account whose username
+        # matches an HA username takes over that account, and HA-side
+        # MFA is skipped — which is why it does not stay on.
+        automatic_user_linking: true
 
     # UI-owned, writable (pre-created by fleet.statePaths).
     automation: !include automations.yaml
