@@ -63,6 +63,13 @@ middlewares:
   # Registers /-/oauth/* routes + the web-UI SSO button (Pocket ID).
   openid:
     enabled: true
+  # Local plugin (assets/cached-packages) — makes the UI package list and
+  # search box include uplink-CACHED packages, which verdaccio otherwise
+  # hides because both read the private-publish list only. `ttl` is the
+  # storage-scan cache in seconds.
+  cached-packages:
+    enabled: true
+    ttl: 60
 
 log:
   type: stdout

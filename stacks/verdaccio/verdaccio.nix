@@ -16,6 +16,12 @@
 #     as an unprivileged UID with no sudo (vs `--user=0:0` which
 #     would land as santiago/wheel = instant root).
 #
+# Web UI shows CACHED packages, not just published ones — upstream
+# serves both index routes from the private-publish list, so a pure
+# proxy registry renders an empty page. The local
+# assets/cached-packages middleware shadows those two routes and
+# serves them from a storage scan; its header has the full rationale.
+#
 # Observability: no upstream Prometheus endpoint (upstream issue
 # #1815 stale since 2020). Dashboard derives panels from traefik
 # metrics filtered by `service=~"verdaccio.*"`.
@@ -28,9 +34,10 @@
 }:
 
 let
-  # verdaccio 6.9.0 base + verdaccio-openid plugin, built locally from
-  # assets/Containerfile. The tag carries the build-context hash so a
-  # plugin/Containerfile bump restarts the consumer.
+  # verdaccio 6.9.0 base + the verdaccio-openid and cached-packages
+  # plugins, built locally from assets/Containerfile. The tag carries
+  # the build-context hash, so editing either plugin (or the
+  # Containerfile) produces a new tag and restarts the consumer.
   verdaccioImage = mkLocalImage {
     name = "verdaccio-openid";
     tagPrefix = "6.9.0";
@@ -79,10 +86,13 @@ in
       siteMonitor = "https://verdaccio.toscanini.me/-/ping";
       widget = {
         type = "customapi";
-        # /-/v1/search?text=* → {"total": <n>, "objects": [...], "time": "..."}
-        # `total` is the count of locally-published packages (uplinks
-        # are not included), which is the stat that matters here.
-        url = "http://verdaccio:4873/-/v1/search?text=*";
+        # /-/v1/search → {"total": <n>, "objects": [...], "time": "..."}
+        # This endpoint (unlike the web UI's) enumerates the storage dir,
+        # so `total` counts cached packages too. The text filter is a
+        # literal substring test — `text=*` matches no package name and
+        # pins the tile at 0, so the term must be empty. `total` is the
+        # returned page length, hence size at the endpoint's 250 cap.
+        url = "http://verdaccio:4873/-/v1/search?text=&size=250";
         refreshInterval = 300000;
         mappings = [
           {
