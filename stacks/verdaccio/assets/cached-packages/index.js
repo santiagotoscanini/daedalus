@@ -14,6 +14,10 @@
 // this (verdaccio discussion #706) on the grounds that scanning the whole
 // FS-backed storage per page view is expensive — hence the TTL cache below.
 //
+// It also serves GET /-/cached-packages/stats —
+// `{published, cached, total}` — for the homepage tile, which otherwise
+// has no way to tell the two apart or to count past 250.
+//
 // How it hooks in
 // ---------------
 // `defineAPI` registers plugin middlewares BEFORE the built-in web router:
@@ -46,6 +50,9 @@ const crypto = require('node:crypto');
 
 const ROUTE_PACKAGES = '/-/verdaccio/data/packages';
 const ROUTE_SEARCH = '/-/verdaccio/data/search/:anything';
+// Own namespace, not `/-/verdaccio/*`: this one is additive rather than a
+// shadow of an upstream route, so it must not collide with a future one.
+const ROUTE_STATS = '/-/cached-packages/stats';
 
 const DEFAULT_TTL_SECONDS = 60;
 // Manifests are small JSON reads; this only bounds the open-file burst.
@@ -163,8 +170,30 @@ module.exports = function cachedPackagesPlugin(config, options) {
     return card;
   }
 
+  // The publish list verdaccio would have shown on its own. Packages
+  // published here also live in the storage dir, so this is what separates
+  // "ours" from "cached from an uplink" in a storage scan.
+  function readPrivateNames(storage) {
+    return new Promise((resolve) => {
+      try {
+        storage.getLocalDatabase((err, packages) =>
+          resolve(
+            err || !Array.isArray(packages)
+              ? new Set()
+              : new Set(packages.map((pkg) => pkg.name))
+          )
+        );
+      } catch {
+        resolve(new Set());
+      }
+    });
+  }
+
   async function rebuild(storage, req) {
-    const names = await scanNames();
+    const [names, privateNames] = await Promise.all([
+      scanNames(),
+      readPrivateNames(storage),
+    ]);
     const cards = (await mapPool(names, READ_CONCURRENCY, async (name) =>
       toCard(await readManifest(storage, name, req))
     )).filter(Boolean);
@@ -172,18 +201,19 @@ module.exports = function cachedPackagesPlugin(config, options) {
     cards.sort((a, b) =>
       descending ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
     );
-    cache = { at: Date.now(), cards };
+    cache = { at: Date.now(), cards, privateNames };
     logger.debug(
-      { total: cards.length },
-      'cached-packages indexed @{total} packages'
+      { total: cards.length, published: privateNames.size },
+      'cached-packages indexed @{total} packages (@{published} published here)'
     );
-    return cards;
+    return cache;
   }
 
   async function collect(storage, req) {
-    if (cache && Date.now() - cache.at < ttlMs) return cache.cards;
-    // The front page and the search box can both miss on the same tick;
-    // share one scan between them instead of walking storage twice.
+    if (cache && Date.now() - cache.at < ttlMs) return cache;
+    // The front page, the search box and the stats tile can all miss on the
+    // same tick; share one scan between them instead of walking storage
+    // once per caller.
     if (!inFlight) {
       inFlight = rebuild(storage, req).finally(() => {
         inFlight = null;
@@ -265,9 +295,10 @@ module.exports = function cachedPackagesPlugin(config, options) {
       app.get(
         ROUTE_PACKAGES,
         webToken,
-        respond(async (req) =>
-          filterAllowed(auth, await collect(storage, req), req)
-        )
+        respond(async (req) => {
+          const { cards } = await collect(storage, req);
+          return filterAllowed(auth, cards, req);
+        })
       );
 
       app.get(
@@ -275,7 +306,7 @@ module.exports = function cachedPackagesPlugin(config, options) {
         webToken,
         respond(async (req) => {
           const term = String(req.params.anything || '');
-          const cards = await collect(storage, req);
+          const { cards } = await collect(storage, req);
           return filterAllowed(
             auth,
             cards.filter((card) => matches(card, term)),
@@ -283,6 +314,30 @@ module.exports = function cachedPackagesPlugin(config, options) {
           );
         })
       );
+
+      // Counts for the homepage tile. Verdaccio's own /-/v1/search reports
+      // the returned page length, so it saturates at that endpoint's 250
+      // cap and cannot separate published from cached.
+      app.get(ROUTE_STATS, webToken, async (req, res, next) => {
+        try {
+          const { cards, privateNames } = await collect(storage, req);
+          const visible = await filterAllowed(auth, cards, req);
+          const published = visible.filter((card) =>
+            privateNames.has(card.name)
+          ).length;
+          res.json({
+            published,
+            cached: visible.length - published,
+            total: visible.length,
+          });
+        } catch (err) {
+          logger.error(
+            { err: err.message },
+            'cached-packages stats failed: @{err}'
+          );
+          next(err);
+        }
+      });
 
       logger.info(
         { storageDir },

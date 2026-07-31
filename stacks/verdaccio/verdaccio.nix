@@ -86,18 +86,22 @@ in
       siteMonitor = "https://verdaccio.toscanini.me/-/ping";
       widget = {
         type = "customapi";
-        # /-/v1/search → {"total": <n>, "objects": [...], "time": "..."}
-        # This endpoint (unlike the web UI's) enumerates the storage dir,
-        # so `total` counts cached packages too. The text filter is a
-        # literal substring test — `text=*` matches no package name and
-        # pins the tile at 0, so the term must be empty. `total` is the
-        # returned page length, hence size at the endpoint's 250 cap.
-        url = "http://verdaccio:4873/-/v1/search?text=&size=250";
+        # Served by the assets/cached-packages plugin as
+        # {"published": <n>, "cached": <n>, "total": <n>}. Verdaccio's own
+        # /-/v1/search cannot back this tile: it reports the returned page
+        # length (so it saturates at that endpoint's 250 cap) and it has no
+        # notion of which packages were published here vs pulled from npmjs.
+        url = "http://verdaccio:4873/-/cached-packages/stats";
         refreshInterval = 300000;
         mappings = [
           {
-            field = "total";
-            label = "Packages";
+            field = "published";
+            label = "Published";
+            format = "number";
+          }
+          {
+            field = "cached";
+            label = "Cached";
             format = "number";
           }
         ];
