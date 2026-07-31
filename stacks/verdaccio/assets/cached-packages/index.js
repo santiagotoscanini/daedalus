@@ -18,10 +18,9 @@
 // listing and labelled, since on a proxy registry those are where the disk
 // is going and where a dependency tree has drifted apart.
 //
-// It also serves GET /-/cached-packages/stats —
-// `{published, cached, multiVersion, total}` — for the homepage tile,
+// It also serves GET /-/cached-packages/stats for the homepage tile,
 // which otherwise has no way to tell published from cached or to count
-// past 250.
+// past 250. See the handler for what each count does and does not mean.
 //
 // How it hooks in
 // ---------------
@@ -372,14 +371,23 @@ module.exports = function cachedPackagesPlugin(config, options) {
         try {
           const { cards, privateNames } = await collect(storage, req);
           const visible = await filterAllowed(auth, cards, req);
-          const published = visible.filter((card) =>
-            privateNames.has(card.name)
-          ).length;
+          const cached = visible.filter((card) => !privateNames.has(card.name));
           res.json({
-            published,
-            cached: visible.length - published,
-            multiVersion: visible.filter((card) => card.heldVersions > 1)
+            published: visible.length - cached.length,
+            // Unique package names, which is what the UI lists. NOT the
+            // same as the number of versions held, and not even the same
+            // as the number of packages holding anything: resolving a
+            // dependency tree caches a manifest whether or not a tarball
+            // is ever pulled, so `cached` counts some packages that are
+            // metadata only. `cachedWithTarball` is the stricter reading.
+            cached: cached.length,
+            cachedVersions: cached.reduce(
+              (sum, card) => sum + (card.heldVersions || 0),
+              0
+            ),
+            cachedWithTarball: cached.filter((card) => card.heldVersions > 0)
               .length,
+            multiVersion: cached.filter((card) => card.heldVersions > 1).length,
             total: visible.length,
           });
         } catch (err) {

@@ -93,6 +93,12 @@ in
         # notion of which packages were published here vs pulled from npmjs.
         url = "http://verdaccio:4873/-/cached-packages/stats";
         refreshInterval = 300000;
+        # Cached counts unique package NAMES (what the UI lists);
+        # Versions counts the tarballs actually held across them. The two
+        # differ in both directions: a package can hold several versions,
+        # and resolving a dependency tree caches a manifest even when no
+        # tarball is ever pulled. `cachedWithTarball` in the same response
+        # is the stricter "packages we actually hold" reading.
         mappings = [
           {
             field = "published";
@@ -102,6 +108,11 @@ in
           {
             field = "cached";
             label = "Cached";
+            format = "number";
+          }
+          {
+            field = "cachedVersions";
+            label = "Versions";
             format = "number";
           }
         ];
