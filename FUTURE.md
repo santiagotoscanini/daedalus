@@ -206,3 +206,37 @@ bare forward-auth"), and neither has a row in AUTH.md at all.
 
 Trigger to revisit: a second person actually wanting their own reading
 state, or the next AUTH.md audit.
+
+## 10. Migrate the hand-created OIDC clients onto `fleet.ssoClients`
+
+The declarative client mechanism exists (`stacks/pocket-id/clients.nix`
++ `pocket-id-clients.service`), but only **2 of the 30 clients** at the
+IdP use it — anansi and ipcrawl, via `fleet.apps.<name>.auth.mode`.
+Everything else still carries server-generated credentials that were
+created by hand: 18 forward-auth pairs as
+`POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET}` in `stacks/traefik/env.sops`,
+plus the native-OIDC stacks (grafana, immich, nextcloud, gatus, litellm,
+n8n, verdaccio, wealthfolio, open-webui, zot) holding theirs in their
+own `env.sops`.
+
+So the restore-from-scratch hole is 28/30 open: a fresh `pocket_id`
+database still means recreating almost every client through the REST
+recipe in AUTH.md before SSO works at all.
+
+Plan when picked up, one app at a time (each migration IS a secret
+rotation — the client id changes from a server UUID to the attr name,
+so the app is logged out mid-flight):
+- Add `SSO_SECRET_<NAME>` to `stacks/pocket-id/clients.sops`.
+- Declare `fleet.ssoClients.<name>` with the app's real callback URLs
+  and `allowedGroups` (mirror what the live client has — read it back
+  with `GET /api/oidc/clients/<uuid>` first, `isGroupRestricted` and the
+  group list included). Set `traefikForwardAuth = true` for a
+  forward-auth app, or `consumers = [ "<container>" ]` for a native one.
+- Drop the old pair from the stack's `env.sops`, point the app at the
+  new id, rebuild, verify a real login, then delete the old client at
+  the IdP (`DELETE /api/oidc/clients/<uuid>`) so the two don't drift.
+- Logos are still manual (`POST /api/oidc/clients/<id>/logo`) — the new
+  client starts without one.
+
+Trigger to revisit: any restore-from-scratch drill, a client secret
+rotation that has to happen anyway, or the next AUTH.md audit.
