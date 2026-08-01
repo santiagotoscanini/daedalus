@@ -431,6 +431,21 @@ in
 
     extraOptions = [
       "--network=host"
+      # NOT --cap-add=NET_ADMIN/NET_RAW, though Home Assistant's repair
+      # notification asks for exactly that. Tried and reverted:
+      # --cap-add really does set the bits (CapEff 0x800405fb ->
+      # 0x800435fb, bits 12/13) and the mgmt socket then binds — but the
+      # error is unchanged, because the kernel's Bluetooth mgmt handlers
+      # test capable(CAP_NET_ADMIN) against the INITIAL user namespace,
+      # which a rootless container can never satisfy. habluetooth
+      # detects this from the MGMT reply status (0x14 permission denied),
+      # not by reading the capability bits, so setting them only adds
+      # privilege without changing behaviour.
+      #
+      # What it costs: adapter auto-recovery (resetting a wedged
+      # controller). NOT scanning and NOT connecting — both go through
+      # BlueZ's D-Bus API and demonstrably work. The repair is safe to
+      # Ignore in the UI; it is unfixable under rootless podman.
       # Home Assistant's own s6 gracetime is 240s; give it room to flush
       # the recorder queue and close its DB connections rather than
       # being SIGKILLed 10s into a reboot.
