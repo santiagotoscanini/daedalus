@@ -169,16 +169,19 @@ let
         # break-glass. Flip to `default_redirect: true` once SSO is
         # verified from both LAN and tunnel.
         default_redirect: false
-        # TEMPORARY — turn off once santito has logged in through
-        # Pocket ID once. Onboarding must create a local owner (the
-        # onboarding API requires a password), so the owner is created
-        # as `santito`, matching the Pocket ID preferred_username;
-        # linking makes the first SSO login attach to that owner
-        # account instead of minting a second, non-owner user.
-        # While this is on, ANY Pocket ID account whose username
-        # matches an HA username takes over that account, and HA-side
-        # MFA is skipped — which is why it does not stay on.
-        automatic_user_linking: true
+        # `automatic_user_linking` is deliberately absent (defaults to
+        # false). It was on for exactly one login: onboarding must
+        # create a local owner (the onboarding API requires a
+        # password), so the owner was created as `santito` to match the
+        # Pocket ID preferred_username, and linking attached the OIDC
+        # credential to that owner instead of minting a second,
+        # non-owner user. The link is stored in .storage/auth and
+        # survives — turning the feature off does NOT unlink it; it
+        # only stops NEW links being made.
+        #
+        # Do not re-enable casually: while on, any Pocket ID account
+        # whose username matches an HA username takes that account
+        # over, and HA-side MFA is skipped.
 
     # UI-owned, writable (pre-created by fleet.statePaths).
     automation: !include automations.yaml

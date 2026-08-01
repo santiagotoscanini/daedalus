@@ -271,12 +271,6 @@ in the module:
   tile shows an API error. Phase 2 can swap the defaults for real
   entities via `custom` — but `custom` is ignored while `fields` is
   set, so use one or the other.
-- **Turn `automatic_user_linking` back off** — it is on only so
-  santito's first Pocket ID login attaches to the existing owner
-  account instead of minting a second, non-owner user. While it is on,
-  any Pocket ID account whose username matches an HA username takes
-  that account over and HA-side MFA is skipped. One-line revert in the
-  generated configuration.yaml, right after the first SSO login lands.
 - **SSO-only**, in two steps of increasing commitment:
   1. Flip `features.default_redirect` to `true` — skips the welcome
      screen, local login still reachable at `/?skip_oidc_redirect=true`.
