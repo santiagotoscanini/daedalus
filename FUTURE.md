@@ -248,11 +248,15 @@ recorder on the shared pg cluster, Pocket ID SSO wired, onboarded, and
 instrumented (scrape + dashboard + alert + homepage widget all live).
 What is left:
 
-- **Location is still UI state**: latitude / longitude / elevation /
-  country / currency were skipped at onboarding and live in
-  `.storage/core.config`, which is NOT in the rebuild trail. Move them
-  into the generated `homeassistant:` block once known (`time_zone`,
-  `internal_url` and `external_url` already live there).
+- **Home name / Location / Region are now YAML-only**, by design: any
+  `homeassistant:` key makes Home Assistant refuse UI edits for *all*
+  of them (Settings → System → General says so explicitly). So that
+  whole page is edited in `assets/configuration.yaml` and applied by
+  rebuild — including the fields nobody thinks of as config, like the
+  instance name. If a field on that page ever needs to be
+  user-editable, the only way back is removing the `homeassistant:`
+  block entirely, which also gives up `time_zone` / `internal_url` /
+  `external_url`.
 - **Assist needs its conversation subentry**: the `local_openai` config
   entry exists and is loaded ("LiteLLM (s2)", pointing at
   `https://litellm.toscanini.me/v1` with a scoped LiteLLM key), but a

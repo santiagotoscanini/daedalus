@@ -15,14 +15,44 @@
 # (assets/check-config-yaml.py), so a broken edit fails `nixos-rebuild`
 # rather than crash-looping Home Assistant.
 
+# Setting ANY key here makes Home Assistant refuse UI edits for ALL of
+# them — Settings → System → General shows "You cannot change these
+# settings in the UI". That is the intent (this file is the source of
+# truth), but it means every field on that page has to be present here,
+# not just the interesting ones.
 homeassistant:
+  name: Home
+
   # Single source of truth with the host's own clock.
   time_zone: "@timeZone@"
+
   # Same name on the LAN and through the tunnel, so both resolve to the
-  # wildcard cert. Setting these here makes the UI fields read-only,
-  # which is the point.
+  # wildcard cert.
   internal_url: "@url@"
   external_url: "@url@"
+
+  # The actual house, not a city-centre approximation — so the implicit
+  # `home` zone (these coordinates, 100 m radius by default) is real and
+  # device_tracker presence detection will work as-is in phase 2. Sun
+  # elevation, sunrise/sunset and weather all read from here too.
+  #
+  # These are a home address. They are in cleartext rather than sops
+  # only because this repo is private; if it is ever made public, move
+  # them to env.sops and pull them in with `!env_var`, the way the
+  # recorder URL and OIDC secret already are.
+  latitude: -34.613082
+  longitude: -58.367166
+  # Approximate — riverside Buenos Aires is a few metres above sea
+  # level. Elevation only refines solar-position maths; being out by a
+  # few metres moves sunrise/sunset by well under a second.
+  elevation: 5
+
+  # Argentina: metric, ISO 4217 ARS, ISO 3166-1 AR. `language` is the
+  # interface language and stays English independently of the country.
+  unit_system: metric
+  currency: ARS
+  country: AR
+  language: en
 
 # The recommended meta-integration: frontend, history, logbook,
 # mobile_app, zeroconf, ssdp, backup, energy, media_source, ...
