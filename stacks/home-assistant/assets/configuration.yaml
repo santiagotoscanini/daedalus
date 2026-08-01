@@ -1,0 +1,109 @@
+# Home Assistant core configuration.
+#
+# Bind-mounted read-only at /config/configuration.yaml. The at-delimited
+# placeholders below are substituted by `pkgs.replaceVars` in
+# ../home-assistant.nix from values that already exist in nix (the
+# host's timezone, the published URL, the LAN IP, the traefik bridge
+# subnet, the IdP issuer) — so those facts are written once, in the
+# module, not restated here.
+#
+# replaceVars fails the build if any placeholder goes unsubstituted, so
+# do not write an at-delimited word here unless the module supplies it —
+# including inside a comment like this one.
+#
+# The result is parsed at build time before the container ever sees it
+# (assets/check-config-yaml.py), so a broken edit fails `nixos-rebuild`
+# rather than crash-looping Home Assistant.
+
+homeassistant:
+  # Single source of truth with the host's own clock.
+  time_zone: "@timeZone@"
+  # Same name on the LAN and through the tunnel, so both resolve to the
+  # wildcard cert. Setting these here makes the UI fields read-only,
+  # which is the point.
+  internal_url: "@url@"
+  external_url: "@url@"
+
+# The recommended meta-integration: frontend, history, logbook,
+# mobile_app, zeroconf, ssdp, backup, energy, media_source, ...
+# Kept whole rather than enumerated — upstream adds to it every release
+# and an explicit list silently rots.
+default_config:
+
+http:
+  # Traefik is the only way in; honour its forwarded client IP.
+  use_x_forwarded_for: true
+  trusted_proxies:
+    # The peer address a bridge container presents (pasta SNATs to the
+    # host's own LAN address).
+    - "@lanIp@/32"
+    # Traefik's address inside traefik-net, which is what it appends to
+    # X-Forwarded-For. Without this Home Assistant stops walking the
+    # chain at traefik and treats the PROXY as the client, so every
+    # request through the tunnel is attributed to 10.89.7.x instead of
+    # the real remote IP.
+    - "@traefikSubnet@"
+  # ip_ban is OFF, and this is not laziness — in this topology it can
+  # only ever fire on shared infrastructure. Every request reaches Home
+  # Assistant from one of two addresses: the LAN IP (anything on the box
+  # dialing host.containers.internal) or traefik's bridge IP. LAN client
+  # IPs are additionally collapsed by rootlessport before traefik ever
+  # sees them. So a ban never isolates one bad actor — it takes the
+  # whole instance offline for everyone.
+  #
+  # Demonstrated the hard way on 2026-07-31: a homepage widget
+  # configured with an empty token polled the API every few seconds,
+  # crossed the threshold, and got the LAN IP + traefik's bridge IP
+  # banned — after which Home Assistant returned 403 to LAN and tunnel
+  # alike.
+  #
+  # What actually guards this surface: Pocket ID (passkey-only) for
+  # browser logins, and long-lived bearer tokens for the API.
+  ip_ban_enabled: false
+
+recorder:
+  # Rendered by home-assistant-db-env.service from the app-db
+  # bootstrap's password — never written to the nix store.
+  db_url: !env_var HA_DB_URL
+
+# /api/prometheus, bearer-authenticated. `requires_auth: false` would be
+# simpler but publishes every entity's state to anything that can reach
+# :8123, which on a host-netns container is every process on the box —
+# the token is cheap by comparison.
+prometheus:
+
+# Pocket ID (AUTH.md tier 1). Confidential client: the secret is handed
+# over by fleet.ssoClients, PKCE stays on top of it.
+auth_oidc:
+  client_id: home-assistant
+  client_secret: !env_var HA_OIDC_CLIENT_SECRET
+  discovery_url: "@issuerUrl@/.well-known/openid-configuration"
+  display_name: "Pocket ID"
+  roles:
+    # Pocket ID's `admins` group maps to Home Assistant's admin role.
+    # Members of `family` (once the client allows them) land as
+    # ordinary users.
+    admin: admins
+  features:
+    # Left off on purpose: the welcome screen still offers the local
+    # login, which onboarding needed and which is the break-glass. Flip
+    # to `default_redirect: true` once SSO is verified from both LAN and
+    # tunnel.
+    default_redirect: false
+    # `automatic_user_linking` is deliberately absent (defaults to
+    # false). It was on for exactly one login: onboarding must create a
+    # local owner (the onboarding API requires a password), so the owner
+    # was created as `santito` to match the Pocket ID
+    # preferred_username, and linking attached the OIDC credential to
+    # that owner instead of minting a second, non-owner user. The link
+    # is stored in .storage/auth and survives — turning the feature off
+    # does NOT unlink it; it only stops NEW links being made.
+    #
+    # Do not re-enable casually: while on, any Pocket ID account whose
+    # username matches an HA username takes that account over, and
+    # HA-side MFA is skipped.
+
+# UI-owned, writable (pre-created by fleet.statePaths).
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml

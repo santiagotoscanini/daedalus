@@ -1,0 +1,26 @@
+# Home Assistant, plus the one Python dependency upstream's image omits.
+#
+# The vendored conversation component (local_openai) requires `openai`
+# and `demoji`. The base ships openai 2.21.0 — and psycopg2, aiofiles,
+# jinja2 and joserfc for recorder and auth_oidc — but not demoji.
+#
+# Home Assistant would pip-install the missing one into /config/deps at
+# startup. That is its designed mechanism, but it leaves a version-keyed
+# tree (deps/lib/python3.14/...) that drifts silently across Python
+# bumps and never appears in the rebuild trail. One RUN line keeps every
+# dependency inside the digest that already pins the rest.
+#
+# This FROM is the ONLY place the Home Assistant version is pinned —
+# `tagPrefix` in ../../home-assistant.nix is cosmetic (it just makes the
+# built tag readable). Bump both together. After bumping, re-check that
+# psycopg2 is still present: recorder depends on it transitively, not by
+# manifest.
+#
+#   podman run --rm --entrypoint /bin/sh <image> -c 'python3 -c "import psycopg2"'
+#
+# demoji is pinned exactly rather than left to the component's
+# `>=1.1.0`, so a rebuild cannot silently pull a new major. 2.0.0 keeps
+# the `replace()` API the component calls and supports Python <3.15
+# (the image is 3.14).
+FROM ghcr.io/home-assistant/home-assistant:2026.7.4@sha256:5a531753cea96444200158fc2b0ac7ccd739291ec50414877b396de6e0bb29b3
+RUN uv pip install --system demoji==2.0.0
