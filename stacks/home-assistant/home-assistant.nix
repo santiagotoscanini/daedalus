@@ -383,6 +383,12 @@ in
       "${configurationYaml}:/config/configuration.yaml:ro"
       "${oidcAuth}/custom_components/auth_oidc:/config/custom_components/auth_oidc:ro"
       "${localOpenai}/custom_components/local_openai:/config/custom_components/local_openai:ro"
+      # BlueZ lives on the D-Bus SYSTEM bus, so the Bluetooth
+      # integration needs the socket rather than a device node — there
+      # is no /dev entry to pass through. Read-only is enough: D-Bus
+      # permissions are decided by the bus policy, not by the mount.
+      # The radio itself is enabled in platform/bluetooth.nix.
+      "/run/dbus:/run/dbus:ro"
     ];
 
     # HA_DB_URL. HA_OIDC_CLIENT_SECRET is appended by
