@@ -253,6 +253,26 @@ What is left:
   `.storage/core.config`, which is NOT in the rebuild trail. Move them
   into the generated `homeassistant:` block once known (`time_zone`,
   `internal_url` and `external_url` already live there).
+- **Assist needs its conversation subentry**: the `local_openai` config
+  entry exists and is loaded ("LiteLLM (s2)", pointing at
+  `https://litellm.toscanini.me/v1` with a scoped LiteLLM key), but a
+  config entry alone creates no agent — the conversation entity is a
+  *subentry*, and its form is preference territory (system prompt,
+  temperature, whether to hand it HA's LLM API for device control), so
+  it was left rather than guessed. Settings → Devices & Services →
+  LiteLLM (s2) → Add conversation agent, with:
+  - model `gemma-4-12b` (the only chat model on the gateway; the rest
+    are STT/TTS/embeddings/image)
+  - under "Chat template options", a `chat_template_kwargs` entry of
+    `enable_thinking=false` — gemma-4-12b is a reasoning model and
+    otherwise spends its token budget thinking instead of answering
+    (same trap the n8n RSS workflow hit)
+  - `CONF_LLM_HASS_API` only once there are devices worth controlling;
+    until phase 2 it grants an agent access to an empty house.
+  Both custom components are vendored and version-pinned in nix, but
+  everything configured through a config flow lands in `.storage` —
+  this subentry included. That is the declarativeness ceiling noted
+  above, not an oversight.
 - **SSO-only**, in two steps of increasing commitment:
   1. Flip `features.default_redirect` to `true` — skips the welcome
      screen, local login still reachable at `/?skip_oidc_redirect=true`.
