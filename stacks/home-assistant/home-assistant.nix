@@ -20,11 +20,21 @@
 #   - Multicast discovery DOES need the kernel to accept inbound
 #     224.0.0.251:5353 / 239.255.255.250:1900, so those two UDP ports
 #     are opened on enp3s0 only (see the firewall block).
-#   - The `dhcp` discovery integration (part of default_config) needs a
-#     CAP_NET_RAW packet socket in the host netns, which rootless podman
-#     cannot grant. It logs a warning and stays inert; zeroconf/SSDP
-#     cover the same devices. Bluetooth is out for the same reason —
-#     an ESPHome Bluetooth proxy is the supported answer anyway.
+#   - The `dhcp` integration logs `aiodhcpwatcher: Cannot watch for dhcp
+#     packets: Operation not permitted` at every start. That is ONE of
+#     its five watchers — the passive sniffer, which needs a CAP_NET_RAW
+#     packet socket rootless podman cannot grant. DHCP discovery still
+#     works: `NetworkWatcher` uses aiodiscover, which sweeps the ARP
+#     neighbour table for MAC/IP and resolves hostnames by PTR against
+#     the box's resolver, i.e. pi-hole — which is also the LAN's DHCP
+#     server, so its leases come back as `<host>.lan`. Being in the host
+#     netns is what makes that possible; a bridge netns has no LAN ARP
+#     visibility. Losing the sniffer only costs immediacy (discovery on
+#     ARP refresh instead of the instant a lease is issued) and devices
+#     whose ARP entry has gone stale.
+#   - Bluetooth is genuinely out: `habluetooth` wants NET_ADMIN +
+#     NET_RAW for adapter management. An ESPHome Bluetooth proxy is the
+#     supported answer.
 #
 # ── Trusted proxy is the HOST address, not the bridge subnet ────────────
 # Measured, not assumed: a container on traefik-net dialing

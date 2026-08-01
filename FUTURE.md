@@ -297,8 +297,20 @@ What is left:
   covers history, but HA's built-in automatic backup (a `.storage`
   setting, UI-only) would add a self-contained restore artifact.
 
-Known-inert by design, both logged loudly at every start and both
-expected: the `bluetooth` integration (needs NET_ADMIN/NET_RAW in the
-host netns, which rootless podman cannot grant — an ESPHome Bluetooth
-proxy is the supported answer) and `aiodhcpwatcher` (needs a raw packet
-socket, same reason). zeroconf/SSDP cover the same discovery surface.
+Two errors are logged loudly at every start and both are expected:
+
+- `habluetooth` — needs NET_ADMIN/NET_RAW for adapter management, which
+  rootless podman cannot grant. Genuinely inert; an ESPHome Bluetooth
+  proxy is the supported answer.
+- `aiodhcpwatcher: Cannot watch for dhcp packets` — needs a raw packet
+  socket, same reason. **This does NOT disable DHCP discovery**, which
+  was the original claim here and is wrong. It is one of the `dhcp`
+  integration's five watchers; `NetworkWatcher` still runs aiodiscover,
+  sweeping the ARP neighbour table for MAC/IP and resolving hostnames by
+  PTR against pi-hole (which, being the LAN's DHCP server, answers with
+  the lease hostnames as `<host>.lan`). Verified: Settings → Devices →
+  DHCP lists gaming-pc / iPhone / smartvacuum, matching
+  `/etc/pihole/dhcp.leases` exactly. What the missing sniffer costs is
+  immediacy — discovery happens on ARP refresh rather than the instant a
+  lease is issued — and devices whose ARP entry has aged out (a fourth
+  lease was absent from Home Assistant for exactly that reason).
