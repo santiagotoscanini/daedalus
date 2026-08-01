@@ -47,11 +47,19 @@ homeassistant:
   # few metres moves sunrise/sunset by well under a second.
   elevation: 5
 
-  # Argentina: metric, ISO 4217 ARS, ISO 3166-1 AR. `language` is the
-  # interface language and stays English independently of the country.
+  # `metric` is the UI's "Celsius, kilograms" option — °C, km, grams,
+  # litres — as opposed to `us_customary`.
   unit_system: metric
-  currency: ARS
+
+  # USD, not ARS, and deliberately: currency is only a display unit
+  # here (energy dashboard tariffs, utility-meter cost sensors), and
+  # pricing those in pesos would need the figures re-entered every time
+  # the rate moves. Country stays AR — it drives regional defaults, not
+  # money.
+  currency: USD
   country: AR
+
+  # Interface language, independent of country.
   language: en
 
 # The recommended meta-integration: frontend, history, logbook,
