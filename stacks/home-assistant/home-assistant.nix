@@ -34,12 +34,26 @@
 # therefore name the host, and the trust boundary is "anything already
 # running on this box", which is exactly who can reach the closed port.
 #
+# ── The image is built here, not pulled ─────────────────────────────────
+# `mkLocalImage` on top of the digest-pinned upstream image, adding the
+# one Python dependency the LLM component needs that upstream omits
+# (`demoji`). Everything else it and auth_oidc want — openai, psycopg2,
+# aiofiles, jinja2, joserfc — is already in the base. The alternative is
+# letting Home Assistant pip-install into /config/deps at startup, which
+# works but leaves a version-keyed tree that drifts across Python bumps
+# and never appears in the rebuild trail.
+#
+# Trade-off accepted: the image build now gates container start. Layer
+# cache makes an unchanged rebuild ~instant, and the digest-pinned FROM
+# resolves locally once pulled, so this does not make boot depend on
+# the registry being reachable.
+#
 # ── Recorder lives on the shared Postgres cluster ───────────────────────
-# `fleet.appDatabases.home_assistant`. The official image already ships
-# psycopg2 (2.9.12), so no derived image is needed — but that dependency
-# is transitive, not declared in recorder's manifest, so a version bump
-# should re-check it (`podman run --rm --entrypoint /bin/sh <image> -c
-# 'python3 -c "import psycopg2"'`). The bootstrap's DATABASE_URL points
+# `fleet.appDatabases.home_assistant`. psycopg2 (2.9.12) comes from the
+# upstream image — but transitively, not declared in recorder's
+# manifest, so a version bump should re-check it (`podman run --rm
+# --entrypoint /bin/sh <image> -c 'python3 -c "import psycopg2"'`).
+# The bootstrap's DATABASE_URL points
 # at `pg:5432`, a bridge name this container cannot resolve, so
 # home-assistant-db-env below re-renders it against the cluster's
 # plain-TCP host port on loopback.
@@ -59,11 +73,15 @@
 # supports `!env_var`, so the recorder URL and the OIDC client secret
 # come in through environmentFiles and stay out of the store.
 #
+# ── Custom components are vendored, not installed ───────────────────────
+# Both live-mounted read-only from pinned fetchFromGitHub trees rather
+# than through HACS, which is a runtime package manager and the opposite
+# of the rest of this repo. Nothing is fetched or pip-installed at
+# runtime; their dependencies are in the image (see above).
+#   auth_oidc      — Pocket ID SSO (below)
+#   local_openai   — Assist against the LiteLLM gateway
+#
 # ── SSO ─────────────────────────────────────────────────────────────────
-# hass-oidc-auth, vendored from a pinned tag as a read-only bind mount
-# instead of installed through HACS — the component is pure Python and
-# all three of its requirements (aiofiles, jinja2, joserfc) are already
-# in the image, so nothing is fetched or pip-installed at runtime.
 # Home Assistant's own login stays enabled. That is not a preference —
 # `POST /api/onboarding/users` has `vol.Required("password")`, so a
 # local owner MUST exist before any OIDC login can happen. The owner is
@@ -86,6 +104,7 @@
   config,
   pkgs,
   mkDotenvSecret,
+  mkLocalImage,
   mkRootlessContainer,
   mkSecretRender,
   ...
@@ -97,6 +116,32 @@ let
 
   configDir = "/home/santiago/selfhost/home-assistant/config";
 
+  # Bump to track upstream. `stable` currently resolves to this exact
+  # digest. After bumping, re-check that psycopg2 is still present —
+  # recorder depends on it transitively, not by manifest (header).
+  haVersion = "2026.7.4";
+  haBaseDigest = "sha256:5a531753cea96444200158fc2b0ac7ccd739291ec50414877b396de6e0bb29b3";
+
+  # Upstream's image ships `openai` (2.21.0) but not `demoji`, and the
+  # conversation component below needs both. Home Assistant would
+  # pip-install the missing one into /config/deps at startup — its
+  # designed mechanism, but that leaves a version-keyed tree
+  # (deps/lib/python3.14/…) that drifts silently across Python bumps
+  # and is invisible to the rebuild trail. Baking it keeps every
+  # dependency in the image, where the digest already pins everything
+  # else. Layer cache makes an unchanged rebuild ~instant.
+  haImageBuildDir = pkgs.writeTextDir "Containerfile" ''
+    FROM ghcr.io/home-assistant/home-assistant:${haVersion}@${haBaseDigest}
+    RUN uv pip install --system demoji==2.0.0
+  '';
+
+  haImage = mkLocalImage {
+    name = "home-assistant-llm";
+    tagPrefix = haVersion;
+    contextDir = haImageBuildDir;
+    gates = [ "podman-home-assistant.service" ];
+  };
+
   # Pocket ID OIDC client/RP. Pinned tag; the hash covers the unpacked
   # tree, so bumping the rev without the hash fails the build.
   oidcAuth = pkgs.fetchFromGitHub {
@@ -104,6 +149,23 @@ let
     repo = "hass-oidc-auth";
     rev = "v1.1.1";
     hash = "sha256-d1nRSAR4HAoW+gpAtyb0s6bh40CcoT59dgVOkwKHavU=";
+  };
+
+  # Conversation agent against an OpenAI-compatible endpoint — here the
+  # LiteLLM gateway, so Assist rides the same cost tracking, key auth
+  # and model routing as everything else on the box. Home Assistant's
+  # BUILT-IN openai_conversation cannot do this: it has no base_url
+  # option at all (grep the component — hence upstream discussion
+  # #3398), so a third-party client is the only path to a local model
+  # through the gateway.
+  #
+  # Vendored from a pinned tag, same as auth_oidc: no HACS, nothing
+  # fetched at runtime.
+  localOpenai = pkgs.fetchFromGitHub {
+    owner = "skye-harris";
+    repo = "hass_local_openai_llm";
+    rev = "1.9.0";
+    hash = "sha256-z5O+G5OtsC82rRjf3hAbfD5MON62AajBolCKfbo31X0=";
   };
 
   # Not /run/home-assistant: systemd wipes a RuntimeDirectory named
@@ -241,10 +303,11 @@ in
   # Container runs as root (s6-overlay), so uid 0 → host santiago.
   fleet.statePaths = {
     "${configDir}" = { };
-    # Mountpoint for the vendored component below — declared so a fresh
-    # restore has it santiago-owned rather than podman-created.
+    # Mountpoints for the vendored components below — declared so a
+    # fresh restore has them santiago-owned rather than podman-created.
     "${configDir}/custom_components" = { };
     "${configDir}/custom_components/auth_oidc" = { };
+    "${configDir}/custom_components/local_openai" = { };
     # `!include` targets. Empty is valid YAML here (parses as null),
     # which is exactly what stock Home Assistant ships.
     "${configDir}/automations.yaml".type = "f";
@@ -261,6 +324,8 @@ in
   # plain-TCP host port on loopback — the same escape hatch the
   # gluetun-netns *arrs use, one hop shorter because we are already on
   # the host. Password is `openssl rand -hex 32`, so no URL-encoding.
+  systemd.services.home-assistant-image-build = haImage.service;
+
   systemd.services.home-assistant-db-env = mkSecretRender {
     description = "Render the Home Assistant recorder DB URL for the host netns";
     gates = [ "podman-home-assistant.service" ];
@@ -397,12 +462,17 @@ in
   ];
 
   virtualisation.oci-containers.containers.home-assistant = mkRootlessContainer {
-    image = "ghcr.io/home-assistant/home-assistant:2026.7.4@sha256:5a531753cea96444200158fc2b0ac7ccd739291ec50414877b396de6e0bb29b3";
+    # Built by home-assistant-image-build below; the tag carries the
+    # build-context hash, so changing the base digest or the pinned
+    # demoji version produces a new tag and restarts this container.
+    # Upstream's digest lives in haBaseDigest, not here.
+    image = haImage.image;
 
     volumes = [
       "${configDir}:/config"
       "${configurationYaml}:/config/configuration.yaml:ro"
       "${oidcAuth}/custom_components/auth_oidc:/config/custom_components/auth_oidc:ro"
+      "${localOpenai}/custom_components/local_openai:/config/custom_components/local_openai:ro"
     ];
 
     # HA_DB_URL. HA_OIDC_CLIENT_SECRET is appended by
