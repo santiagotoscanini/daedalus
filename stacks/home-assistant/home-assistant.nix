@@ -236,6 +236,14 @@ in
   # the host. Password is `openssl rand -hex 32`, so no URL-encoding.
   systemd.services.home-assistant-image-build = haImage.service;
 
+  # The Bluetooth integration probes the bus during startup; without
+  # this the relay may not be listening yet and Bluetooth comes up
+  # disabled until something restarts the container.
+  systemd.services.podman-home-assistant = {
+    after = [ "ha-dbus-relay.service" ];
+    wants = [ "ha-dbus-relay.service" ];
+  };
+
   systemd.services.home-assistant-db-env = mkSecretRender {
     description = "Render the Home Assistant recorder DB URL for the host netns";
     gates = [ "podman-home-assistant.service" ];
@@ -383,13 +391,20 @@ in
       "${configurationYaml}:/config/configuration.yaml:ro"
       "${oidcAuth}/custom_components/auth_oidc:/config/custom_components/auth_oidc:ro"
       "${localOpenai}/custom_components/local_openai:/config/custom_components/local_openai:ro"
-      # BlueZ lives on the D-Bus SYSTEM bus, so the Bluetooth
-      # integration needs the socket rather than a device node — there
-      # is no /dev entry to pass through. Read-only is enough: D-Bus
-      # permissions are decided by the bus policy, not by the mount.
-      # The radio itself is enabled in platform/bluetooth.nix.
-      "/run/dbus:/run/dbus:ro"
+      # BlueZ lives on the D-Bus SYSTEM bus, so Bluetooth needs a socket
+      # rather than a device node. NOT the real /run/dbus: this
+      # container claims uid 0 while the bus sees santiago, and D-Bus
+      # rejects that mismatch outright. ha-dbus-relay (platform/bluetooth)
+      # re-presents the bus with a matching uid. Mounted rw — connecting
+      # to a unix socket needs write permission on the socket inode.
+      "/run/ha-dbus:/run/ha-dbus"
     ];
+
+    environment = {
+      # Point every D-Bus client in the container at the uid-rewriting
+      # relay instead of the real bus (see the volume above).
+      DBUS_SYSTEM_BUS_ADDRESS = "unix:path=/run/ha-dbus/bus";
+    };
 
     # HA_DB_URL. HA_OIDC_CLIENT_SECRET is appended by
     # stacks/pocket-id/clients.nix from the `consumers` list above.

@@ -23,9 +23,9 @@
 # process allowed to talk to it can scan for and connect to nearby BLE
 # devices.
 #
-# ── KNOWN BLOCKER: Home Assistant cannot use this yet ───────────────────
-# The radio works and the socket is reachable, but HA's D-Bus client is
-# rejected:
+# ── Why the relay below exists ──────────────────────────────────────────
+# The radio works and the socket is reachable, but HA's D-Bus client was
+# rejected outright:
 #
 #   bluetooth_adapters.dbus: DBus authentication error ...
 #   authentication failed: REJECTED: ['EXTERNAL']
@@ -45,20 +45,17 @@
 # container as real root, i.e. abandoning rootless podman for the one
 # stack that most wants the host netns.
 #
-# The two real options, neither taken yet:
-#   - an xdg-dbus-proxy running as santiago, re-exposing a filtered
-#     socket (--talk=org.bluez only) that HA points at via
-#     DBUS_SYSTEM_BUS_ADDRESS. Also narrows access to just BlueZ.
-#   - ESPHome Bluetooth proxies — upstream's answer for containerised
-#     HA, and the only one that fixes RANGE: one adapter at the server
-#     cannot cover a house.
+# xdg-dbus-proxy does NOT fix this — tested before writing anything: it
+# validates SO_PEERCRED identically and rejects the container the same
+# way. Hence `ha-dbus-relay` below, which rewrites exactly one line of
+# the handshake. Full reasoning and its one limitation (no fd passing,
+# so GATT connections are out) live in dbus-uid-relay.py.
 #
 # A second, separate error (`Missing NET_ADMIN/NET_RAW ... Automatic
-# adapter recovery is unavailable`) is cosmetic by comparison — it
-# disables adapter auto-recovery, not scanning.
-#
-# bluetoothd is left enabled regardless: it costs nothing, the adapter
-# is genuinely present, and both options above build on it.
+# adapter recovery is unavailable`) remains and is cosmetic by
+# comparison — it disables adapter auto-recovery, not scanning.
+
+{ pkgs, ... }:
 
 {
   hardware.bluetooth = {
@@ -81,4 +78,33 @@
       JustWorksRepairing = "always";
     };
   };
+
+  # Runs as santiago — the same identity rootless podman gives the
+  # container — so the uid it announces upstream matches SO_PEERCRED.
+  # RuntimeDirectory gives us /run/ha-dbus owned by santiago, and
+  # systemd removes it when the relay stops, so no stale socket outlives
+  # the service.
+  systemd.services.ha-dbus-relay = {
+    description = "D-Bus system bus relay for rootless containers (uid rewrite)";
+    after = [
+      "dbus.service"
+      "bluetooth.service"
+    ];
+    wants = [ "bluetooth.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "simple";
+      User = "santiago";
+      Group = "users";
+      RuntimeDirectory = "ha-dbus";
+      RuntimeDirectoryMode = "0755";
+      ExecStart = "${pkgs.python3}/bin/python3 ${./dbus-uid-relay.py} /run/dbus/system_bus_socket /run/ha-dbus/bus";
+      Restart = "on-failure";
+      RestartSec = "5s";
+    };
+  };
+
+  # A dead relay means Home Assistant silently loses Bluetooth, which is
+  # exactly the kind of quiet degradation the job registry exists for.
+  fleet.monitoredJobs.ha-dbus-relay = { };
 }
