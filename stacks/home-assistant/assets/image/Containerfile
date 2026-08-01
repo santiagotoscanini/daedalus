@@ -23,4 +23,9 @@
 # the `replace()` API the component calls and supports Python <3.15
 # (the image is 3.14).
 FROM ghcr.io/home-assistant/home-assistant:2026.7.4@sha256:5a531753cea96444200158fc2b0ac7ccd739291ec50414877b396de6e0bb29b3
-RUN uv pip install --system demoji==2.0.0
+# demoji      — local_openai's optional emoji stripping (manifest requirement,
+#               enforced at load whether or not the feature is enabled)
+# ember_mug   — ember_mug's BLE client. The pinned beta is what the
+#               component's manifest asks for verbatim; do not "upgrade"
+#               it independently of the component.
+RUN uv pip install --system demoji==2.0.0 python-ember-mug==1.4.0b2

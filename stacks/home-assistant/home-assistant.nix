@@ -32,9 +32,11 @@
 #     visibility. Losing the sniffer only costs immediacy (discovery on
 #     ARP refresh instead of the instant a lease is issued) and devices
 #     whose ARP entry has gone stale.
-#   - Bluetooth is genuinely out: `habluetooth` wants NET_ADMIN +
-#     NET_RAW for adapter management. An ESPHome Bluetooth proxy is the
-#     supported answer.
+#   - Bluetooth WORKS, via platform/bluetooth's uid-rewriting D-Bus
+#     relay — see there for why the obvious approaches do not. The
+#     `habluetooth` NET_ADMIN/NET_RAW error still appears at startup and
+#     is cosmetic: it disables adapter auto-recovery, not scanning or
+#     connecting.
 #
 # ── Trusted proxy is the HOST address, not the bridge subnet ────────────
 # Measured, not assumed: a container on traefik-net dialing
@@ -46,9 +48,10 @@
 #
 # ── The image is built here, not pulled ─────────────────────────────────
 # `mkLocalImage` on top of the digest-pinned upstream image, adding the
-# one Python dependency the LLM component needs that upstream omits
-# (`demoji`). Everything else it and auth_oidc want — openai, psycopg2,
-# aiofiles, jinja2, joserfc — is already in the base. The alternative is
+# Python dependencies the vendored components need that upstream omits
+# (`demoji` for local_openai, `python-ember-mug` for ember_mug).
+# Everything else they and auth_oidc want — openai, psycopg2, aiofiles,
+# jinja2, joserfc — is already in the base. The alternative is
 # letting Home Assistant pip-install into /config/deps at startup, which
 # works but leaves a version-keyed tree that drifts across Python bumps
 # and never appears in the rebuild trail.
@@ -90,12 +93,14 @@
 # come in through environmentFiles and stay out of the store.
 #
 # ── Custom components are vendored, not installed ───────────────────────
-# Both live-mounted read-only from pinned fetchFromGitHub trees rather
+# All live-mounted read-only from pinned fetchFromGitHub trees rather
 # than through HACS, which is a runtime package manager and the opposite
 # of the rest of this repo. Nothing is fetched or pip-installed at
 # runtime; their dependencies are in the image (see above).
 #   auth_oidc      — Pocket ID SSO (below)
 #   local_openai   — Assist against the LiteLLM gateway
+#   ember_mug      — BLE mug; needs an ACTIVE connection, so it is the
+#                    reason the D-Bus relay forwards file descriptors
 #
 # ── SSO ─────────────────────────────────────────────────────────────────
 # Home Assistant's own login stays enabled. That is not a preference —
@@ -168,6 +173,18 @@ let
     hash = "sha256-z5O+G5OtsC82rRjf3hAbfD5MON62AajBolCKfbo31X0=";
   };
 
+  # Ember mug — a BLE device that must be CONNECTED to, not merely
+  # listened for (iot_class local_polling). It therefore depends on the
+  # fd-passing half of platform/bluetooth's relay: BlueZ hands out a
+  # descriptor for GATT notifications, and dbus-fast raises rather than
+  # falling back if that cannot be negotiated.
+  emberMug = pkgs.fetchFromGitHub {
+    owner = "sopelj";
+    repo = "hass-ember-mug-component";
+    rev = "1.5.0";
+    hash = "sha256-mLQ9rtGqO5plIZOlEJ4RlHmaMHy46Mr+l3USDB3SlNw=";
+  };
+
   # Not /run/home-assistant: systemd wipes a RuntimeDirectory named
   # after a unit when that unit stops, which would silently empty the
   # rendered file underneath the running container.
@@ -218,6 +235,7 @@ in
     "${configDir}/custom_components" = { };
     "${configDir}/custom_components/auth_oidc" = { };
     "${configDir}/custom_components/local_openai" = { };
+    "${configDir}/custom_components/ember_mug" = { };
     # `!include` targets. Empty is valid YAML here (parses as null),
     # which is exactly what stock Home Assistant ships.
     "${configDir}/automations.yaml".type = "f";
@@ -391,6 +409,7 @@ in
       "${configurationYaml}:/config/configuration.yaml:ro"
       "${oidcAuth}/custom_components/auth_oidc:/config/custom_components/auth_oidc:ro"
       "${localOpenai}/custom_components/local_openai:/config/custom_components/local_openai:ro"
+      "${emberMug}/custom_components/ember_mug:/config/custom_components/ember_mug:ro"
       # BlueZ lives on the D-Bus SYSTEM bus, so Bluetooth needs a socket
       # rather than a device node. NOT the real /run/dbus: this
       # container claims uid 0 while the bus sees santiago, and D-Bus

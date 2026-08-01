@@ -79,11 +79,18 @@
     };
   };
 
+  # NOT RuntimeDirectory=. systemd deletes and recreates a
+  # RuntimeDirectory on every restart of its unit, and the Home
+  # Assistant container bind-mounts this path — so the mount would stay
+  # pinned to the deleted inode and the container would see an empty
+  # directory forever after the first relay restart (observed: bleak
+  # failing with FileNotFoundError on a socket the host could see).
+  # Same family as the mkSecretRender trap; tmpfiles creates the
+  # directory once per boot and no unit ever removes it.
+  systemd.tmpfiles.rules = [ "d /run/ha-dbus 0755 santiago users -" ];
+
   # Runs as santiago — the same identity rootless podman gives the
   # container — so the uid it announces upstream matches SO_PEERCRED.
-  # RuntimeDirectory gives us /run/ha-dbus owned by santiago, and
-  # systemd removes it when the relay stops, so no stale socket outlives
-  # the service.
   systemd.services.ha-dbus-relay = {
     description = "D-Bus system bus relay for rootless containers (uid rewrite)";
     after = [
@@ -96,8 +103,6 @@
       Type = "simple";
       User = "santiago";
       Group = "users";
-      RuntimeDirectory = "ha-dbus";
-      RuntimeDirectoryMode = "0755";
       ExecStart = "${pkgs.python3}/bin/python3 ${./dbus-uid-relay.py} /run/dbus/system_bus_socket /run/ha-dbus/bus";
       Restart = "on-failure";
       RestartSec = "5s";

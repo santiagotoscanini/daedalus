@@ -14,105 +14,163 @@ or the permissions is wrong — only the number in the handshake.
 
 xdg-dbus-proxy does NOT solve this; it validates SO_PEERCRED the same
 way and rejects the container identically (tested). Hence this relay,
-which is deliberately tiny: it rewrites exactly one line.
+which rewrites exactly one line and is otherwise transparent.
 
-What it does
-------------
-Accepts a connection, reads the client's `AUTH EXTERNAL <hex-uid>` line,
-substitutes the uid this process actually runs as, and from then on
-forwards bytes verbatim in both directions.
+Why it forwards file descriptors
+--------------------------------
+BlueZ hands out a file descriptor for GATT characteristic notifications
+(AcquireNotify/AcquireWrite), so bleak opens its connection with
+negotiate_unix_fd=True whenever it CONNECTS to a device. A byte-only
+relay breaks that, and it breaks it badly: dbus-fast does not fall back
+if the negotiation is refused, it raises AuthError (auth.py
+_receive_line — anything other than AGREE_UNIX_FD falls through to
+`raise`). So refusing fds is not an option; they have to be passed
+through with SCM_RIGHTS.
 
-Trust model: the socket is created 0600 and owned by the same user the
-relay runs as, so the only processes that can reach it are ones already
-running as that user — i.e. ones that could talk to the system bus
-directly anyway. The relay grants no authority that was not already
-available; it only makes the handshake agree with reality.
+Without this, passive advertisement scanning works and every
+connection-based device (Ember mug, most BLE thermostats/locks) fails.
 
-Known limitation
-----------------
-This forwards bytes, not file descriptors. `bleak` sets
-negotiate_unix_fd=True when it CONNECTS to a device (backends/bluezdbus/
-client.py), so GATT connections over this relay will not work. Adapter
-enumeration and passive advertisement scanning do not negotiate fds, so
-BLE sensors that broadcast (BTHome, Xiaomi/ATC thermometers) and
-presence beacons are fine. If a device that needs an active connection
-is ever wanted, the answer is an ESPHome Bluetooth proxy, not more code
-here.
+Trust model
+-----------
+The socket is 0600 and owned by the user this relay runs as, so the only
+processes that can reach it are ones already running as that user — ones
+that could talk to the system bus directly anyway. The relay grants no
+authority that was not already available; it makes the handshake agree
+with reality and nothing else.
+
+Threads, not asyncio: ancillary data needs recvmsg/sendmsg, which
+asyncio's stream API does not expose. Two blocking threads per
+connection is simpler and the connection count here is tiny (Home
+Assistant opens a couple of bus connections, not thousands).
 """
 
-import asyncio
+import array
 import binascii
 import os
+import socket
 import sys
+import threading
 
 UPSTREAM = sys.argv[1] if len(sys.argv) > 1 else "/run/dbus/system_bus_socket"
 LISTEN = sys.argv[2] if len(sys.argv) > 2 else "/run/ha-dbus/bus"
 
-# The uid the bus will actually see for our connection.
 REAL_UID = os.getuid()
-AUTH_LINE = b"AUTH EXTERNAL " + binascii.hexlify(str(REAL_UID).encode()) + b"\r\n"
+AUTH_LINE = b"\0AUTH EXTERNAL " + binascii.hexlify(str(REAL_UID).encode()) + b"\r\n"
+
+BUF = 65536
+# D-Bus caps a message at 16 descriptors; leave headroom.
+MAX_FDS = 64
+ANC_SIZE = socket.CMSG_SPACE(MAX_FDS * array.array("i").itemsize)
 
 
-async def _pump(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    """Forward until EOF, then half-close so the peer sees it."""
-    try:
-        while chunk := await reader.read(65536):
-            writer.write(chunk)
-            await writer.drain()
-    except (ConnectionResetError, BrokenPipeError):
-        pass
-    finally:
+def _consume_client_auth(sock: socket.socket) -> bool:
+    """Read the client's opening NUL + AUTH line and throw them away.
+
+    Byte-at-a-time is fine: this is one short line, exactly once per
+    connection, before any real traffic.
+    """
+    if sock.recv(1) != b"\0":
+        return False
+    line = b""
+    while not line.endswith(b"\r\n"):
+        byte = sock.recv(1)
+        if not byte:
+            return False
+        line += byte
+    return True
+
+
+def _pump(src: socket.socket, dst: socket.socket) -> None:
+    """Forward data AND any passed file descriptors until EOF."""
+    while True:
         try:
-            writer.close()
+            data, ancdata, _flags, _addr = src.recvmsg(BUF, ANC_SIZE)
+        except OSError:
+            break
+        if not data:
+            break
+
+        fds: list[int] = []
+        for level, msg_type, cmsg in ancdata:
+            if level == socket.SOL_SOCKET and msg_type == socket.SCM_RIGHTS:
+                arr = array.array("i")
+                # Truncate to a whole number of ints; a partial trailing
+                # fd would be garbage.
+                arr.frombytes(cmsg[: len(cmsg) - (len(cmsg) % arr.itemsize)])
+                fds.extend(arr)
+
+        try:
+            if fds:
+                sent = dst.sendmsg(
+                    [data],
+                    [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", fds))],
+                )
+                # Descriptors ride with the first byte; the remainder is
+                # ordinary data.
+                if sent < len(data):
+                    dst.sendall(data[sent:])
+            else:
+                dst.sendall(data)
+        except OSError:
+            break
+        finally:
+            # We hold duplicates of every fd we received; the far side
+            # has its own copies now.
+            for fd in fds:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+
+    # Let the peer see the close rather than hanging on a half-open pair.
+    for sock in (src, dst):
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
         except OSError:
             pass
 
 
-async def handle(client_r: asyncio.StreamReader, client_w: asyncio.StreamWriter) -> None:
+def handle(client: socket.socket) -> None:
+    upstream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
-        up_r, up_w = await asyncio.open_unix_connection(UPSTREAM)
+        upstream.connect(UPSTREAM)
     except OSError as exc:
         print(f"upstream {UPSTREAM} unreachable: {exc}", flush=True)
-        client_w.close()
+        client.close()
         return
 
     try:
-        # The client opens with a NUL byte, then its AUTH line. Read and
-        # discard both; the NUL is a protocol marker, not credentials.
-        if await client_r.readexactly(1) != b"\0":
-            client_w.close()
-            up_w.close()
-            return
-        await client_r.readuntil(b"\r\n")
-
-        # Introduce ourselves upstream with a uid that matches
-        # SO_PEERCRED. Everything after this is the client's own
-        # conversation.
-        up_w.write(b"\0" + AUTH_LINE)
-        await up_w.drain()
-    except (asyncio.IncompleteReadError, ConnectionResetError, OSError):
-        client_w.close()
-        up_w.close()
+        if not _consume_client_auth(client):
+            raise OSError("client closed during auth")
+        # Introduce ourselves with a uid that matches SO_PEERCRED.
+        upstream.sendall(AUTH_LINE)
+    except OSError:
+        client.close()
+        upstream.close()
         return
 
-    await asyncio.gather(
-        _pump(up_r, client_w),
-        _pump(client_r, up_w),
-    )
+    threading.Thread(target=_pump, args=(upstream, client), daemon=True).start()
+    _pump(client, upstream)
+    client.close()
+    upstream.close()
 
 
-async def main() -> None:
+def main() -> None:
     if os.path.exists(LISTEN):
         os.unlink(LISTEN)
     os.makedirs(os.path.dirname(LISTEN), exist_ok=True)
-    # 0600 before anything can connect: the umask covers the window
-    # between bind() and chmod().
+    # 0600 from the moment it exists — the umask covers the gap between
+    # bind() and chmod().
     os.umask(0o177)
-    server = await asyncio.start_unix_server(handle, path=LISTEN)
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(LISTEN)
     os.chmod(LISTEN, 0o600)
-    print(f"relaying {LISTEN} -> {UPSTREAM} as uid {REAL_UID}", flush=True)
-    async with server:
-        await server.serve_forever()
+    server.listen(16)
+    print(f"relaying {LISTEN} -> {UPSTREAM} as uid {REAL_UID} (fd-passing)", flush=True)
+
+    while True:
+        conn, _ = server.accept()
+        threading.Thread(target=handle, args=(conn,), daemon=True).start()
 
 
-asyncio.run(main())
+main()
