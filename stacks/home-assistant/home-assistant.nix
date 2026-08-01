@@ -178,6 +178,33 @@ let
   # fd-passing half of platform/bluetooth's relay: BlueZ hands out a
   # descriptor for GATT notifications, and dbus-fast raises rather than
   # falling back if that cannot be negotiated.
+  #
+  # ── If the mug will not connect, read this before debugging ──────────
+  # Two upstream quirks, both documented in the component's README, both
+  # of which cost hours here on 2026-08-01:
+  #
+  # 1. The mug serves exactly ONE central. While a phone has it, every
+  #    connection attempt from here fails with a bare TimeoutError that
+  #    looks like a range or driver problem and is not. Turn off the
+  #    phone's Bluetooth (the README says forget the device entirely).
+  #    Note the mug still advertises as CONNECTABLE (PDU 0x0013) while
+  #    the slot is taken, so the advertising flags prove nothing.
+  #
+  # 2. Once the slot is free, the first connection still fails with
+  #    `GATT Protocol Error: Unlikely Error` (ATT 0x0e) and the mug
+  #    hanging up — `org.bluez.Reason.Remote`. The README's fix is
+  #    literal and strange: leave an IDLE `bluetoothctl` session open
+  #    while the mug is in pairing mode, type nothing, and wait. It
+  #    registers a BlueZ agent and takes the adapter out of a passive
+  #    mode the author never found a programmatic way to leave.
+  #    Piping commands into bluetoothctl does NOT work — the session
+  #    must stay open:
+  #
+  #      sleep 150 | sudo bluetoothctl
+  #
+  # After that the integration polls happily on its own. Expect to
+  # repeat step 2 if the mug is ever fully reset or re-paired to a
+  # phone.
   emberMug = pkgs.fetchFromGitHub {
     owner = "sopelj";
     repo = "hass-ember-mug-component";

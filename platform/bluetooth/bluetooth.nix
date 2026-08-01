@@ -79,6 +79,21 @@
     };
   };
 
+  # USB autosuspend is the classic cause of a Bluetooth dongle that
+  # scans perfectly but cannot establish connections: scanning keeps the
+  # device busy, so it never parks, while an idle moment before a
+  # connection attempt lets the kernel suspend it mid-handshake. The
+  # default here was `auto` with a 2 s delay, and the adapter was
+  # observed re-loading its firmware (i.e. re-enumerating) during
+  # testing.
+  #
+  # Scoped to this exact device (ASUS USB-BT500, 0b05:190e) rather than
+  # usbcore.autosuspend=-1, which would disable power management for
+  # every USB device on the box.
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="190e", TEST=="power/control", ATTR{power/control}="on"
+  '';
+
   # NOT RuntimeDirectory=. systemd deletes and recreates a
   # RuntimeDirectory on every restart of its unit, and the Home
   # Assistant container bind-mounts this path — so the mount would stay
