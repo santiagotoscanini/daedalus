@@ -243,34 +243,16 @@ Nextcloud OIDC problem that needs the secret touched anyway, or either
 upstream growing env-based OIDC configuration.
 
 ## 11. Home Assistant: phase-2 follow-ups
-
 The stack (`stacks/home-assistant`) is up, published on LAN + tunnel,
-recorder on the shared pg cluster, Pocket ID SSO wired. Everything left
-needs a logged-in Home Assistant, so it was deliberately not half-wired
-in the module:
+recorder on the shared pg cluster, Pocket ID SSO wired, onboarded, and
+instrumented (scrape + dashboard + alert + homepage widget all live).
+What is left:
 
-- **Onboarding is manual and once-only**: create the owner account at
-  `https://homeassistant.toscanini.me`, then set location / elevation /
-  country / currency in the UI. Those land in `.storage/core.config`,
-  which is NOT in the rebuild trail — move them into the generated
-  `homeassistant:` block once known (`time_zone`, `internal_url` and
-  `external_url` already live there).
-- **Prometheus scrape**: the `prometheus:` integration exposes
-  `/api/prometheus` behind a long-lived access token. Mint one in the
-  HA profile page, put it in a `stacks/home-assistant/env.sops`, and add
-  a `fleet.prometheusScrapes` entry against
-  `host.containers.internal:8123` with `authorization.credentials_file`
-  (the webApps `metrics.enable` shortcut can't be used — it requires
-  `serviceName`, and this stack is host-netns).
-- **Homepage widget**: already wired (`type: homeassistant`, dialing
-  `host.containers.internal:8123`, default fields `people_home` /
-  `lights_on` / `switches_on`). Only the token is missing —
-  `HOMEPAGE_VAR_HASS_API_KEY` is an empty slot in
-  `stacks/homepage/env.sops`. Filling it needs **no rebuild**: `sops`
-  the file, then `systemctl restart podman-homepage`. Until then the
-  tile shows an API error. Phase 2 can swap the defaults for real
-  entities via `custom` — but `custom` is ignored while `fields` is
-  set, so use one or the other.
+- **Location is still UI state**: latitude / longitude / elevation /
+  country / currency were skipped at onboarding and live in
+  `.storage/core.config`, which is NOT in the rebuild trail. Move them
+  into the generated `homeassistant:` block once known (`time_zone`,
+  `internal_url` and `external_url` already live there).
 - **SSO-only**, in two steps of increasing commitment:
   1. Flip `features.default_redirect` to `true` — skips the welcome
      screen, local login still reachable at `/?skip_oidc_redirect=true`.

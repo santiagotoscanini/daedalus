@@ -85,6 +85,7 @@
 {
   config,
   pkgs,
+  mkDotenvSecret,
   mkRootlessContainer,
   mkSecretRender,
   ...
@@ -110,6 +111,7 @@ let
   # rendered file underneath the running container.
   dbEnvDir = "/run/home-assistant-db";
   dbEnvFile = "${dbEnvDir}/env";
+  promTokenDir = "/run/home-assistant-prom-token";
 
   # Parsed at BUILD time (see the wrapper below) so a templating slip
   # fails `nixos-rebuild` instead of restarting the container into a
@@ -139,20 +141,42 @@ let
       # container's connection actually presents here — see the header.
       use_x_forwarded_for: true
       trusted_proxies:
+        # The peer address a bridge container presents (pasta SNATs to
+        # the host's own LAN address).
         - ${config.fleet.lanIp}/32
-      # Real brute-force protection for the tunnel-exposed surface,
-      # where traefik does see the true client IP. Collateral to know
-      # about: LAN requests all arrive with the same rootlessport-
-      # rewritten address, so a ban from a fumbled LAN login locks out
-      # the LAN. Clear it by deleting the entry from
-      # ${configDir}/ip_bans.yaml and restarting.
-      ip_ban_enabled: true
-      login_attempts_threshold: 10
+        # Traefik's address inside traefik-net, which is what it appends
+        # to X-Forwarded-For. Without this Home Assistant stops walking
+        # the chain at traefik and treats the PROXY as the client, so
+        # every request through the tunnel is attributed to 10.89.7.x
+        # instead of the real remote IP.
+        - ${config.fleet.bridgeSubnets.traefik}
+      # ip_ban is OFF, and this is not laziness — in this topology it can
+      # only ever fire on shared infrastructure. Every request reaches
+      # Home Assistant from one of two addresses: 192.168.0.2 (anything
+      # on the box dialing host.containers.internal) or traefik's bridge
+      # IP. LAN client IPs are additionally collapsed by rootlessport
+      # before traefik ever sees them. So a ban never isolates one bad
+      # actor — it takes the whole instance offline for everyone.
+      #
+      # Demonstrated the hard way on 2026-07-31: a homepage widget
+      # configured with an empty token polled the API every few seconds,
+      # crossed the threshold, and got 192.168.0.2 + 10.89.7.71 banned —
+      # after which Home Assistant returned 403 to LAN and tunnel alike.
+      #
+      # What actually guards this surface: Pocket ID (passkey-only) for
+      # browser logins, and long-lived bearer tokens for the API.
+      ip_ban_enabled: false
 
     recorder:
       # Rendered by home-assistant-db-env.service from the app-db
       # bootstrap's password — never written to the store.
       db_url: !env_var HA_DB_URL
+
+    # /api/prometheus, bearer-authenticated. `requires_auth: false` would
+    # be simpler but publishes every entity's state to anything that can
+    # reach :8123, which on a host-netns container is every process on
+    # the box — the token is cheap by comparison.
+    prometheus:
 
     # Pocket ID (AUTH.md tier 1). Confidential client: the secret is
     # handed over by fleet.ssoClients, PKCE stays on top of it.
@@ -252,6 +276,57 @@ in
     '';
     content = "HA_DB_URL=postgresql://home_assistant:$DB_PWD@127.0.0.1:5433/home_assistant";
   };
+
+  # HA_PROMETHEUS_TOKEN — a long-lived access token minted against the
+  # owner account. Edit with `sops env.sops`.
+  sops.secrets."home-assistant-env" = mkDotenvSecret ./env.sops;
+
+  # prometheus `credentials_file` wants a file holding ONLY the token,
+  # but env.sops is a full dotenv — same extract-at-boot idiom litellm
+  # uses for its master key.
+  systemd.services.home-assistant-prom-token = mkSecretRender {
+    description = "Render the Home Assistant long-lived token as a bare bearer token";
+    gates = [ "podman-prometheus.service" ];
+    dir = promTokenDir;
+    file = "${promTokenDir}/token";
+    prep = ''
+      TOKEN=$(grep '^HA_PROMETHEUS_TOKEN=' ${
+        config.sops.secrets."home-assistant-env".path
+      } | head -1 | cut -d= -f2-)
+    '';
+    content = "$TOKEN";
+  };
+
+  # This stack owns the token, so it contributes the mount rather than
+  # monitoring.nix reaching into another stack's /run dir. The DIR is
+  # mounted, not the file: a single-file bind pins the old inode, so a
+  # rotation would not be seen until prometheus restarted.
+  virtualisation.oci-containers.containers.prometheus.volumes = [
+    "${promTokenDir}:/run/secrets/home-assistant-prom-token:ro"
+  ];
+
+  # Not `webApps.metrics.enable` — that shortcut scrapes
+  # `<serviceName>:<port>` over traefik-net, and this stack is host-netns
+  # with no container DNS name. Prometheus reaches it the same way it
+  # reaches node-exporter.
+  fleet.prometheusScrapes = [
+    {
+      job_name = "home-assistant";
+      metrics_path = "/api/prometheus";
+      # Home Assistant re-derives every entity's metrics per scrape;
+      # 60s keeps that off the critical path (the default 15s buys
+      # nothing for state that changes on device events, not on a timer).
+      scrape_interval = "60s";
+      authorization = {
+        type = "Bearer";
+        credentials_file = "/run/secrets/home-assistant-prom-token/token";
+      };
+      static_configs = [ { targets = [ "host.containers.internal:8123" ]; } ];
+    }
+  ];
+
+  fleet.grafanaDashboardsByFolder."Services".home-assistant =
+    builtins.readFile ./assets/dashboard.json;
 
   # Pocket ID client — id `home-assistant`, secret
   # SSO_SECRET_HOME_ASSISTANT in stacks/pocket-id/clients.sops, rendered

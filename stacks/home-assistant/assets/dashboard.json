@@ -1,0 +1,379 @@
+{
+  "uid": "s2-home-assistant",
+  "title": "Home Assistant",
+  "tags": [
+    "services",
+    "home-assistant"
+  ],
+  "timezone": "browser",
+  "refresh": "60s",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "s2-server"
+      ],
+      "title": "Dashboards",
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "id": null,
+  "panels": [
+    {
+      "id": 2200,
+      "type": "row",
+      "title": "Health",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 2201,
+      "type": "stat",
+      "title": "Scrape",
+      "description": "Prometheus reaching /api/prometheus with its bearer token. Liveness itself is covered twice over by the gatus probe and container_up — this panel tells you whether the metrics below are fresh.",
+      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        { "refId": "A", "expr": "up{job=\"home-assistant\"}", "legendFormat": "" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": { "text": "UP", "color": "green" },
+                "0": { "text": "DOWN", "color": "red" }
+              }
+            }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2202,
+      "type": "stat",
+      "title": "Entities available",
+      "description": "Entities Home Assistant currently considers reachable. Zero until phase 2 adds devices.",
+      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        { "refId": "A", "expr": "sum(homeassistant_entity_available)", "legendFormat": "" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2203,
+      "type": "stat",
+      "title": "Entities unavailable",
+      "description": "Entities in the unavailable/unknown state — the single most useful smart-home signal: a device that dropped off the network. Alerted on after 15m.",
+      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(homeassistant_entity_available == 0) or vector(0)",
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2204,
+      "type": "stat",
+      "title": "Uptime",
+      "description": "Time since the Home Assistant process started. A sawtooth here means it is restarting — the podman unit is Type=oneshot, so systemd will not show that.",
+      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - process_start_time_seconds{job=\"home-assistant\"}",
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "fixed", "fixedColor": "green" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2205,
+      "type": "stat",
+      "title": "Recorder DB",
+      "description": "Size of the home_assistant database on the shared pg cluster (via app-db-exporter). Recorder purges at 10 days; long-term statistics are kept regardless, so slow growth is expected and normal.",
+      "gridPos": { "x": 16, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "pg_database_size_bytes{datname=\"home_assistant\"}",
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "fixed", "fixedColor": "purple" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2206,
+      "type": "stat",
+      "title": "State changes / min",
+      "description": "Aggregate event rate across all entities — the pulse of the house.",
+      "gridPos": { "x": 20, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(homeassistant_state_change_total[15m])) * 60 or vector(0)",
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2210,
+      "type": "row",
+      "title": "Process",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 2211,
+      "type": "timeseries",
+      "title": "Memory",
+      "description": "Resident set size. Home Assistant grows slowly with entity count; a monotonic climb between restarts is worth investigating (usually a leaky custom integration).",
+      "gridPos": { "x": 0, "y": 6, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_resident_memory_bytes{job=\"home-assistant\"}",
+          "legendFormat": "resident"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      }
+    },
+    {
+      "id": 2212,
+      "type": "timeseries",
+      "title": "CPU",
+      "description": "Cores consumed by the Home Assistant process.",
+      "gridPos": { "x": 8, "y": 6, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(process_cpu_seconds_total{job=\"home-assistant\"}[5m])",
+          "legendFormat": "cores"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      }
+    },
+    {
+      "id": 2213,
+      "type": "timeseries",
+      "title": "File descriptors",
+      "description": "Open vs. maximum. Each device connection, websocket client and DB handle costs one; approaching the max means Home Assistant starts refusing connections.",
+      "gridPos": { "x": 16, "y": 6, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_open_fds{job=\"home-assistant\"}",
+          "legendFormat": "open"
+        },
+        {
+          "refId": "B",
+          "expr": "process_max_fds{job=\"home-assistant\"}",
+          "legendFormat": "max"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 0, "lineWidth": 1, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      }
+    },
+    {
+      "id": 2220,
+      "type": "row",
+      "title": "Activity",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 2221,
+      "type": "timeseries",
+      "title": "Busiest entities",
+      "description": "Top 10 entities by state-change rate. In phase 2 this is where a chatty sensor spamming the recorder shows up — the input to a recorder `exclude:` filter.",
+      "gridPos": { "x": 0, "y": 14, "w": 16, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, rate(homeassistant_state_change_total[15m]) * 60)",
+          "legendFormat": "{{entity}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 2222,
+      "type": "timeseries",
+      "title": "Recorder DB growth",
+      "description": "The same database size over time. A step change after adding devices is expected; unbounded growth means the purge is not keeping up.",
+      "gridPos": { "x": 16, "y": 14, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "pg_database_size_bytes{datname=\"home_assistant\"}",
+          "legendFormat": "home_assistant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      }
+    }
+  ]
+}

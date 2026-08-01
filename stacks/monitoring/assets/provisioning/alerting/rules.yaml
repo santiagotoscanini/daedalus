@@ -1345,3 +1345,59 @@ groups:
         labels:
           severity: warning
         isPaused: false
+      # The one genuinely Home-Assistant-shaped alert. Liveness is
+      # already covered twice over — gatus probes the published
+      # hostname, container_up watches the container — so this instead
+      # watches the thing only HA can see: a device that stopped
+      # answering. `homeassistant_entity_available` goes to 0 for an
+      # entity in the unavailable/unknown state, which is how a flat
+      # battery, an unplugged hub or a dropped Zigbee router shows up.
+      #
+      # Inert until phase 2 puts devices on the box (the count is 0 with
+      # no entities, and `or vector(0)` keeps it a number rather than
+      # NoData). 15m so a rebooting device or a slow poll is not an
+      # email.
+      - uid: hass-entities-unavailable-1
+        title: Home Assistant Entities Unavailable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: count(homeassistant_entity_available == 0) or vector(0)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        # OK on NoData: Home Assistant being unreachable entirely is the
+        # gatus probe's and container_up's job, and double-firing on one
+        # outage buries the distinction.
+        noDataState: OK
+        execErrState: OK
+        for: 15m
+        annotations:
+          description: '{{ $values.A }} Home Assistant entities have been unavailable for 15m — a device or integration has stopped answering. Check the Home Assistant dashboard for which.'
+          summary: Home Assistant has unavailable entities
+        labels:
+          severity: warning
+        isPaused: false
