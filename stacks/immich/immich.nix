@@ -86,8 +86,8 @@ in
     port = 2283;
     exposeRemotely = true;
     homepage = {
-      group = "Cloud & AI";
-      description = "Photo + video backup (ML on iGPU via OpenVINO)";
+      group = "Cloud";
+      description = "Photo + video backup";
       icon = "immich.png";
       widget = {
         type = "immich";

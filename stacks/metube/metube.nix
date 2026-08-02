@@ -26,7 +26,7 @@
     homepage = {
       group = "Media";
       name = "MeTube";
-      description = "yt-dlp web UI (writes to /s2/tv/media/videos)";
+      description = "yt-dlp web UI";
       icon = "metube.png";
       widget = {
         type = "customapi";

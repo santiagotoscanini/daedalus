@@ -78,7 +78,7 @@ in
     serviceName = "n8n";
     port = 5678;
     homepage = {
-      group = "Productivity";
+      group = "AI & Automation";
       name = "n8n";
       # Deep-link the tile straight into the OIDC flow (silent with a live
       # Pocket ID session) — skips the hook's "Sign in with SSO" button.

@@ -39,7 +39,7 @@
     homepage = {
       group = "Network";
       name = "WireGuard";
-      description = "VPN admin (wg-easy v15+)";
+      description = "VPN admin";
       icon = "wireguard.png";
       widget = {
         type = "wgeasy";

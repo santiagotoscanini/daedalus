@@ -144,7 +144,7 @@
     environmentFiles = [ config.sops.secrets."app-ipcrawl-env".path ];
 
     homepage = {
-      description = "ipcrawl — exposed-webcam catalogue (Shodan)";
+      description = "ipcrawl — exposed-webcam catalogue";
       icon = "mdi-cctv-#38bdf8";
     };
   };

@@ -95,11 +95,70 @@ in
     port = 8080;
     healthPath = "/health"; # gatus probes the real upstream (unauthenticated 200)
     homepage = {
-      group = "Cloud & AI";
+      group = "AI & Automation";
       name = "Open WebUI";
       href = "https://chat.toscanini.me/";
-      description = "Chat with local models (Gemma/Whisper via LiteLLM)";
+      description = "Chat with local models";
       icon = "open-webui.png";
+      # `widgets` (plural) rides `extra`; the submodule declares only the
+      # singular `widget`. Auth is an Open WebUI API key (per-user, minted
+      # in Settings → Account) held in homepage's env.sops — the whole
+      # API is 401 without it, there is no useful anonymous endpoint.
+      extra.widgets = [
+        # /api/usage is the only endpoint whose numbers actually move.
+        # Both are live: `user_count` counts users whose last_active_at is
+        # within the last 3 MINUTES (hence the label), and `model_ids` is
+        # the websocket-tracked set of models mid-generation right now.
+        {
+          type = "customapi";
+          url = "http://open-webui:8080/api/usage";
+          refreshInterval = 60000;
+          headers = {
+            Authorization = "Bearer {{HOMEPAGE_VAR_OPENWEBUI_KEY}}";
+          };
+          mappings = [
+            {
+              field = "user_count";
+              label = "Active 3m";
+              format = "number";
+            }
+            {
+              field = "model_ids";
+              label = "Generating";
+              format = "size";
+            }
+          ];
+        }
+        # Update-available signal: `latest` is the newest GitHub release,
+        # so a mismatch with `current` means an upgrade is waiting.
+        #
+        # HOURLY on purpose. The handler queries api.github.com on EVERY
+        # request, and unauthenticated GitHub allows ~60/hour per IP — a
+        # 60s poll would rate-limit itself. Worse, the handler swallows
+        # any failure and returns latest = current, so a throttled check
+        # reports "up to date" rather than erroring. 24 calls/day keeps
+        # it well inside the budget and the answer trustworthy.
+        {
+          type = "customapi";
+          url = "http://open-webui:8080/api/version/updates";
+          refreshInterval = 3600000;
+          headers = {
+            Authorization = "Bearer {{HOMEPAGE_VAR_OPENWEBUI_KEY}}";
+          };
+          mappings = [
+            {
+              field = "current";
+              label = "Version";
+              format = "text";
+            }
+            {
+              field = "latest";
+              label = "Latest";
+              format = "text";
+            }
+          ];
+        }
+      ];
     };
   };
 
@@ -306,6 +365,16 @@ in
       OPENID_REDIRECT_URI = "https://chat.toscanini.me/oauth/oidc/callback";
       ENABLE_SIGNUP = "false";
       DEFAULT_USER_ROLE = "pending";
+
+      # Programmatic access (homepage's tile widget reads the admin API).
+      # Note the PLURAL name — `ENABLE_API_KEY` is a different, unrelated
+      # setting and silently does nothing here. Upstream default is
+      # "False", and the flag gates key creation for EVERY role: the
+      # permission check ORs it ahead of the admin bypass, so with it off
+      # even an admin gets 403 and the Account → API Keys section is
+      # hidden. UI-toggling it would not survive a restart under
+      # ENABLE_PERSISTENT_CONFIG=false, so it is declared here.
+      ENABLE_API_KEYS = "true";
 
       # Behind traefik — trust the forwarded proto/host.
       WEBUI_SESSION_COOKIE_SAME_SITE = "lax";

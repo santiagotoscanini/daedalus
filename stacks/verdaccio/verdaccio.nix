@@ -80,7 +80,7 @@ in
     port = 4873;
     # LAN only — off-LAN clients reach it via WireGuard.
     homepage = {
-      group = "Productivity";
+      group = "Registries";
       description = "Private npm registry (LAN-only)";
       icon = "verdaccio.png";
       siteMonitor = "https://verdaccio.toscanini.me/-/ping";

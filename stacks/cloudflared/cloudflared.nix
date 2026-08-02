@@ -117,7 +117,7 @@ in
     {
       name = "Cloudflare Tunnel";
       href = "https://dash.cloudflare.com/${accountId}/tunnels/${tunnelId}/overview";
-      description = "Outbound CF Tunnel (locally-managed ingress)";
+      description = "Outbound CF Tunnel";
       icon = "cloudflare.png";
       widget = {
         type = "cloudflared";

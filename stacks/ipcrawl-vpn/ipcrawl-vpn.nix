@@ -77,7 +77,7 @@ in
       homepage = {
         name = "Gluetun (ipcrawl)";
         href = "https://ipcrawl.toscanini.me";
-        description = "ProtonVPN WireGuard tunnel (netns egress for ipcrawl)";
+        description = "ProtonVPN WireGuard tunnel";
         icon = "gluetun.png";
         siteMonitor = "http://host.containers.internal:8002/v1/publicip/ip";
         widget = mkGluetunWidget { url = "http://host.containers.internal:8002"; };

@@ -96,37 +96,82 @@
     serviceName = "litellm";
     port = 4000;
     homepage = {
-      group = "Cloud & AI";
+      group = "AI & Automation";
       name = "LiteLLM";
       href = "https://litellm.toscanini.me/ui";
-      description = "OpenAI-compatible LLM gateway (lemonade on gaming-pc)";
+      description = "OpenAI-compatible LLM gateway";
       icon = "/icons/litellm.png";
-      widget = {
-        type = "customapi";
-        # /global/spend → {"spend": <num>, "max_budget": <num>}.
-        # Both render as $0/$0 until you wire a billed provider; the
-        # tile is also an "alive" signal — a 401/non-200 will show
-        # the API error in the widget.
-        url = "http://litellm:4000/global/spend";
-        refreshInterval = 60000;
-        headers = {
-          Authorization = "Bearer {{HOMEPAGE_VAR_LITELLM_KEY}}";
-        };
-        mappings = [
-          {
-            field = "spend";
-            label = "Spend";
-            format = "number";
-            prefix = "$";
-          }
-          {
-            field = "max_budget";
-            label = "Budget";
-            format = "number";
-            prefix = "$";
-          }
-        ];
-      };
+      # /global/spend is deliberately NOT used: every local model pins
+      # cost to 0 and no budget is set, so it can only ever render $0/$0.
+      # `widgets` (plural) rides `extra` — the submodule only declares the
+      # singular `widget`, and `extra` is the verbatim tile-field escape.
+      # Both rows read the SAME endpoint, which carries per-day `results`
+      # (newest first) and a lifetime `metadata` roll-up — so today and
+      # all-time come from one query and every number is window-labelled.
+      #
+      # The date range is pinned wide because a widget URL is static and
+      # cannot compute "today"; `metadata.*` therefore means all-time.
+      # Payload is ~150 KB and the query aggregates full history, so this
+      # polls at 5 min — the counters are cumulative, not live gauges.
+      extra.widgets = [
+        # results.0 = most recent day WITH traffic. On a zero-traffic day
+        # that is the last active day, not literally today.
+        {
+          type = "customapi";
+          url = "http://litellm:4000/user/daily/activity/aggregated?start_date=2020-01-01&end_date=2030-12-31";
+          refreshInterval = 300000;
+          headers = {
+            Authorization = "Bearer {{HOMEPAGE_VAR_LITELLM_KEY}}";
+          };
+          mappings = [
+            {
+              field = "results.0.metrics.api_requests";
+              label = "Reqs today";
+              format = "number";
+            }
+            {
+              # The actionable failure number — the all-time counter
+              # below is dominated by historical churn.
+              field = "results.0.metrics.failed_requests";
+              label = "Failed today";
+              format = "number";
+            }
+            {
+              field = "results.0.metrics.total_tokens";
+              label = "Tokens today";
+              format = "number";
+            }
+          ];
+        }
+        {
+          type = "customapi";
+          url = "http://litellm:4000/user/daily/activity/aggregated?start_date=2020-01-01&end_date=2030-12-31";
+          refreshInterval = 300000;
+          headers = {
+            Authorization = "Bearer {{HOMEPAGE_VAR_LITELLM_KEY}}";
+          };
+          mappings = [
+            {
+              field = "metadata.total_api_requests";
+              label = "Reqs all";
+              format = "number";
+            }
+            {
+              # Gateway-level errors (upstream down, model swapping,
+              # bad key). Worth a permanent slot — nothing else on the
+              # dashboard reports LiteLLM request failures.
+              field = "metadata.total_failed_requests";
+              label = "Failed all";
+              format = "number";
+            }
+            {
+              field = "metadata.total_tokens";
+              label = "Tokens all";
+              format = "number";
+            }
+          ];
+        }
+      ];
     };
   };
 
@@ -150,15 +195,135 @@
   # panels in one board (uid s2-ai), filed under the "AI" folder.
   fleet.grafanaDashboardsByFolder."AI".ai = builtins.readFile ./assets/dashboard.json;
 
-  fleet.homepageServices."Cloud & AI" = [
+  fleet.homepageServices."AI & Automation" = [
     {
       # External Windows-PC service — declared here because litellm is
       # the only nix-side piece of this dual-machine setup.
       name = "Lemonade";
       href = "http://gaming-pc.local.toscanini.me:13305/";
-      description = "Local LLM model server on the gaming PC (Vulkan/ROCm)";
+      description = "Local LLM model server on the gaming PC";
       icon = "/icons/lemonade.png";
       siteMonitor = "http://gaming-pc.local.toscanini.me:13305/";
+      # Two widgets on one tile (homepage supports a `widgets` list).
+      # No auth: LEMONADE_API_KEY is unset, so the LAN reaches the API
+      # unauthenticated — no HOMEPAGE_VAR_* needed here.
+      widgets = [
+        # Resident-model summary. Listing every model is not worth the
+        # rows: `max_models` is 1 per type and all six are pinned, so the
+        # set is effectively fixed. `model_loaded` is the part that moves
+        # — it tracks the most recently active model, so it flips to
+        # churro-3B during a transcription run.
+        {
+          type = "customapi";
+          url = "http://gaming-pc.local.toscanini.me:13305/api/v1/health";
+          refreshInterval = 30000;
+          mappings = [
+            {
+              # `size` on an array yields its length — the loaded count
+              # without enumerating names.
+              field = "all_models_loaded";
+              label = "Models";
+              format = "size";
+            }
+            {
+              field = "model_loaded";
+              label = "Hot";
+              format = "text";
+              # Raw ids ("Gemma-4-12B-it-MTP-GGUF") wrap to three lines at
+              # widget value size and blow up the tile. Unmatched values
+              # pass through untouched (component.jsx only rewrites on an
+              # exact `value` hit or an `any` catch-all), so this list only
+              # needs the models that actually reach the slot.
+              remap = [
+                {
+                  value = "Gemma-4-12B-it-MTP-GGUF";
+                  to = "Gemma";
+                }
+                {
+                  value = "Gemma-4-12B-it-GGUF";
+                  to = "Gemma";
+                }
+                {
+                  value = "Huihui-Gemma-4-12B-uncensored";
+                  to = "Gemma unc";
+                }
+                {
+                  value = "churro-3B";
+                  to = "Churro";
+                }
+                {
+                  value = "Whisper-Large-v3-Turbo";
+                  to = "Whisper";
+                }
+                {
+                  value = "kokoro-v1";
+                  to = "Kokoro";
+                }
+                {
+                  value = "Qwen3-Embedding-0.6B-GGUF";
+                  to = "Embed";
+                }
+                {
+                  value = "bge-reranker-v2-m3-GGUF";
+                  to = "Rerank";
+                }
+                {
+                  value = "Z-Image-Turbo";
+                  to = "Z-Image";
+                }
+                {
+                  value = "Chroma1-HD";
+                  to = "Chroma";
+                }
+                {
+                  value = "Flux-2-Klein-9B-GGUF";
+                  to = "Flux";
+                }
+              ];
+            }
+            {
+              field = "version";
+              label = "Ver";
+              format = "text";
+            }
+          ];
+        }
+        # Serving performance. tokens_per_second / time_to_first_token are
+        # the MOST RECENT request; the *_total fields are cumulative counters
+        # held in the server process (they reset if Lemonade restarts —
+        # unlike LiteLLM's, which are DB-backed).
+        {
+          type = "customapi";
+          url = "http://gaming-pc.local.toscanini.me:13305/api/v1/stats";
+          refreshInterval = 30000;
+          mappings = [
+            {
+              field = "tokens_per_second";
+              label = "Tok/s last";
+              format = "number";
+            }
+            {
+              # Seconds upstream; scaled to ms so a sub-second TTFT
+              # doesn't render as a bare 0.
+              field = "time_to_first_token";
+              label = "TTFT last";
+              format = "number";
+              scale = 1000;
+              suffix = " ms";
+            }
+            {
+              field = "request_count_total";
+              label = "Reqs total";
+              format = "number";
+            }
+            {
+              field = "output_tokens_total";
+              label = "Out tok total";
+              format = "number";
+            }
+          ];
+        }
+      ];
     }
   ];
 

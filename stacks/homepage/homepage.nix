@@ -119,12 +119,28 @@ in
       useEqualHeights = true;
       tab = "Home";
     };
-    "Cloud & AI" = {
+    "AI & Automation" = {
+      style = "row";
+      columns = 4;
+      icon = "mdi-robot-#94a3b8";
+      useEqualHeights = true;
+      tab = "Home";
+    };
+    Cloud = {
       style = "row";
       columns = 4;
       icon = "mdi-cloud-#94a3b8";
       useEqualHeights = true;
       tab = "Home";
+    };
+    # zot (OCI images) + verdaccio (npm) — both exist to serve the apps
+    # platform's build/deploy loop, so they live on the Apps tab.
+    Registries = {
+      style = "row";
+      columns = 4;
+      icon = "mdi-package-variant-closed-#94a3b8";
+      useEqualHeights = true;
+      tab = "Apps";
     };
     Productivity = {
       style = "row";

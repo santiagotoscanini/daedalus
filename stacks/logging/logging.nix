@@ -355,7 +355,7 @@ in
       {
         name = "Logs";
         href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore?from=now-1h&to=now&var-ds=loki-default";
-        description = "All services — journald -> Loki (Grafana Drilldown)";
+        description = "All services — journald -> Loki";
         icon = "loki.png";
         siteMonitor = "http://loki:3100/ready";
       }

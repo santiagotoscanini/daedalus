@@ -121,7 +121,7 @@ in
     port = 80;
     exposeRemotely = true;
     homepage = {
-      group = "Cloud & AI";
+      group = "Cloud";
       description = "Files, calendar, contacts — primary household sync";
       icon = "nextcloud.png";
       # Probe + widget through traefik: NC_overwriteprotocol 30x-redirects

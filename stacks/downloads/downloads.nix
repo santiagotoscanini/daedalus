@@ -192,7 +192,7 @@ in
         # The VPN has no UI of its own — link the grafana network
         # dashboard, where the gluetun/VPN panels live.
         href = "https://grafana.toscanini.me/d/s2-network";
-        description = "ProtonVPN WireGuard tunnel (shared netns for tv + shelfmark)";
+        description = "ProtonVPN WireGuard tunnel";
         icon = "gluetun.png";
         siteMonitor = "http://host.containers.internal:8000/v1/publicip/ip";
         widget = mkGluetunWidget { url = "http://host.containers.internal:8000"; };

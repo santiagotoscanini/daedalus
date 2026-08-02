@@ -304,7 +304,7 @@ in
         # chain, which homepage's proxy can't follow. /api/health is
         # auth-exempt.
         siteMonitor = "http://grafana:3000/api/health";
-        description = "Dashboards (prometheus + loki)";
+        description = "Dashboards";
         icon = "grafana.png";
         widget = {
           type = "grafana";
@@ -371,6 +371,22 @@ in
       GF_DATABASE_NAME = "grafana";
       GF_DATABASE_USER = "grafana";
       GF_DATABASE_SSL_MODE = "disable";
+
+      # Grafana preinstalls its own Drilldown apps (Logs/Metrics/Traces/
+      # Profiles) into the PERSISTED /var/lib/grafana bind mount, and
+      # auto-updates them on startup — but the stock `minor` strategy
+      # refuses to cross a major boundary. So the Logs Drilldown app sat
+      # at 1.0.37 (built for Grafana 11) while the server moved to 13,
+      # and its preloaded module failed at runtime: every Drilldown ->
+      # Logs route rendered "App not found", including the deep links
+      # from the Janitorr and per-app Logs tiles. `latest` lets the major
+      # bump through, which is what keeps plugins in step with a Grafana
+      # upgrade. Trade-off: plugin versions track upstream instead of
+      # being pinned like the container image.
+      GF_PLUGINS_UPDATE_STRATEGY = "latest";
+      # `update_strategy` alone is inert: the startup updater is gated on
+      # the `pluginsAutoUpdate` feature toggle, which defaults to false.
+      GF_FEATURE_TOGGLES_ENABLE = "pluginsAutoUpdate";
 
       GF_USERS_ALLOW_SIGN_UP = "false";
       GF_SERVER_ROOT_URL = "https://grafana.toscanini.me";

@@ -236,7 +236,7 @@ let
       logsTile = {
         name = "Logs";
         href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${name}/logs?from=now-15m&to=now&var-ds=loki-default&var-filters=service_name%7C%3D%7C${name}";
-        description = "App logs (Loki / Grafana Drilldown)";
+        description = "App logs";
         icon = "/icons/loki.png";
         widget = {
           type = "customapi";

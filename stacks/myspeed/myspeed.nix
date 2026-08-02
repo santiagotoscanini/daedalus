@@ -51,7 +51,7 @@
     homepage = {
       group = "Network";
       name = "MySpeed";
-      description = "Internet speed tracker (scheduled speedtests)";
+      description = "Internet speed tracker";
       icon = "myspeed.png";
       widget = {
         # Native homepage integration — surfaces the latest test's ping,

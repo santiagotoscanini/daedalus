@@ -319,6 +319,23 @@ h2[class*="group"] {
   opacity: 0.92;
 }
 
+/* ── Queue / activity rows ─────────────────────────────────────── */
+
+/*
+ * Rows emitted by the *arr `enableQueue` and qBittorrent
+ * `enableLeechProgress` widgets. Upstream builds the trailing
+ * "<activity> - <timeLeft>" cell as `flex justify-end overflow-hidden
+ * whitespace-nowrap` with no `shrink-0`. `overflow: hidden` resets that
+ * flex item's automatic minimum size to 0, so in a narrow tile it shrinks
+ * below its own text — and because the content is packed right, the
+ * overflow spills off the LEFT edge and is clipped there ("Downloading"
+ * renders as "wnloading"). Pin the cell to its content width; the title
+ * beside it already truncates with an ellipsis, so it absorbs the squeeze.
+ */
+.service-card div.flex.justify-end.overflow-hidden.whitespace-nowrap {
+  flex: 0 0 auto;
+}
+
 /* ── Status indicators ─────────────────────────────────────────── */
 
 .status-light,
