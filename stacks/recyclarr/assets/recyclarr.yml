@@ -1,15 +1,29 @@
 # TRaSH-strict quality profiles + custom formats for the tv stack.
 #
-# Generated from `recyclarr config create` (v8 templates) and merged into
-# one instance per service:
-#   Radarr: hd-bluray-web + uhd-bluray-web  -> profiles "HD Bluray + WEB",
-#           "UHD Bluray + WEB"
-#   Sonarr: web-1080p + web-2160p           -> profiles "WEB-1080p", "WEB-2160p"
+# ONE profile per service, spanning 2160p down to 1080p:
+#   Radarr: "Best Available"       (remux-2160p-combined, remux trimmed)
+#   Sonarr: "WEB-2160p (Combined)" (stock)
 #
-# ADDITIVE: creates the four profiles + their custom formats and raises the
+# A merged profile rather than a 4K/HD pair because the initial grab takes
+# the best AVAILABLE release from the allowed list — the cutoff only governs
+# later upgrades. So a title with no 4K source lands on 1080p instead of
+# failing the search, and nothing has to know in advance which resolutions a
+# given title exists in.
+#
+# The SQP templates are deliberately NOT used: they gate on minFormatScore
+# 1000, reachable only via the HD/UHD Bluray release-group tier custom
+# formats, so catalogue titles whose only releases come from untiered groups
+# are rejected wholesale. Both profiles here carry minFormatScore 0.
+#
+# The `qualities:`/`upgrade:` overrides sit alongside a trash_id, which keeps
+# recyclarr's automatic TRaSH custom-format group sync (Streaming Services,
+# Audio, HDR, Golden Rule, Unwanted). A hand-written profile with no trash_id
+# syncs none of them.
+#
+# ADDITIVE: creates the profiles + their custom formats and raises the
 # quality-definition max sizes to unlimited (TRaSH). It never reassigns an
-# existing movie/series to the new profiles — adopting them in Radarr/Sonarr/
-# Seerr is a deliberate manual step.
+# existing movie/series to a profile — that stays a manual step in
+# Radarr/Sonarr/Seerr.
 #
 # Reached via host.containers.internal (pasta host alias) on gluetun's
 # published *arr ports. API keys come from env.sops (RADARR/SONARR_API_KEY).
@@ -21,17 +35,31 @@ radarr:
     quality_definition:
       type: movie
     quality_profiles:
-      - trash_id: d1d67249d3890e49bc12e275d989a7e9  # HD Bluray + WEB
+      # Remux tiers are trimmed off the template: the initial grab takes the
+      # highest-ranked AVAILABLE release, so leaving Remux-2160p allowed (with
+      # quality_definition sizes unlimited) would pull 60-100 GB files. The
+      # cutoff cannot prevent that — it only governs later upgrades.
+      - trash_id: d1d310673359205736b4b84acd5ea8c8  # Remux 2160p (Combined)
+        name: Best Available
         reset_unmatched_scores:
           enabled: true
-      - trash_id: 64fb5f9858489bdac2af690e27c8f42f  # UHD Bluray + WEB
-        reset_unmatched_scores:
-          enabled: true
+        upgrade:
+          allowed: true
+          until_quality: Bluray-2160p
+          until_score: 10000
+        qualities:
+          - name: Bluray-2160p
+          - name: WEB 2160p
+            qualities: [WEBDL-2160p, WEBRip-2160p]
+          - name: Bluray-1080p
+          - name: WEB 1080p
+            qualities: [WEBDL-1080p, WEBRip-1080p]
+          - name: Bluray-720p
     custom_format_groups:
       add:
-        - trash_id: f8bf8eab4617f12dfdbd16303d8da245  # [Optional] Golden Rule HD
-          select:
-            - dc98083864ea246d05a42df0d05f81cc  # x265 (HD)
+        # Only the UHD Golden Rule applies: the merged profile is on that
+        # group's include list, not the HD one's. Its `x265 (no HDR/DV)`
+        # still covers HD x265, which carries neither HDR nor DV.
         - trash_id: ff204bbcecdd487d1cefcefdbf0c278d  # [Optional] Golden Rule UHD
           select:
             - 839bea857ed2c0a8e084f3cbdbd65ecb  # x265 (no HDR/DV)
@@ -56,10 +84,8 @@ sonarr:
     quality_definition:
       type: series
     quality_profiles:
-      - trash_id: 72dae194fc92bf828f32cde7744e51a1  # WEB-1080p
-        reset_unmatched_scores:
-          enabled: true
-      - trash_id: d1498e7d189fbe6c7110ceaabb7473e6  # WEB-2160p
+      # Already WEB-only, minFormatScore 0 — needs no overrides.
+      - trash_id: c4cadd6b35b95f62c3d47a408e53e2f7  # WEB-2160p (Combined)
         reset_unmatched_scores:
           enabled: true
       - trash_id: 20e0fc959f1f1704bed501f23bdae76f  # [Anime] Remux-1080p
@@ -67,9 +93,8 @@ sonarr:
           enabled: true
     custom_format_groups:
       add:
-        - trash_id: 158188097a58d7687dee647e04af0da3  # [Optional] Golden Rule HD
-          select:
-            - 47435ece6b99a0b477caf360e79ba0bb  # x265 (HD)
+        # See the Radarr block: only the UHD Golden Rule targets the merged
+        # profile, and its `x265 (no HDR/DV)` covers HD x265 too.
         - trash_id: e3f37512790f00d0e89e54fe5e790d1c  # [Optional] Golden Rule UHD
           select:
             - 9b64dff695c2115facf1b6ea59c9bd07  # x265 (no HDR/DV)

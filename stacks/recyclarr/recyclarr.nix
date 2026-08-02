@@ -1,12 +1,12 @@
 # recyclarr — declaratively syncs TRaSH Guides custom formats + quality
 # profiles into Radarr and Sonarr. No web UI; it is a background job.
 #
-# assets/recyclarr.yml is the single source of truth (generated from the
-# v8 `config create` templates hd-bluray-web + uhd-bluray-web for Radarr
-# and web-1080p + web-2160p for Sonarr, merged one-instance-per-service).
-# It is ADDITIVE: it creates the four profiles + their custom formats and
-# raises quality-definition max sizes to unlimited; it never reassigns
-# existing movies/series to the new profiles (that stays a manual opt-in
+# assets/recyclarr.yml is the single source of truth: one merged 2160p->
+# 1080p profile per service ("Best Available" for Radarr, "WEB-2160p
+# (Combined)" for Sonarr) — see that file's header for why merged rather
+# than a 4K/HD pair. It is ADDITIVE: it creates the profiles + their custom
+# formats and raises quality-definition max sizes to unlimited; it never
+# reassigns existing movies/series to a profile (that stays a manual opt-in
 # in Radarr/Sonarr/Seerr).
 #
 # The official image runs in cron mode (CRON_SCHEDULE) via supercronic, so
