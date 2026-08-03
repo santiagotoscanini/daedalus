@@ -241,6 +241,36 @@ let
     EMAIL_USE_TLS = "1";
     EMAIL_USE_SSL = "0";
 
+    # --- Plane AI, pointed at the litellm gateway --------------------
+    # plane/app/views/external/base.py builds `OpenAI(api_key=...)` with
+    # no base_url, and openai-python >= 1.x falls back to this env var
+    # before defaulting to api.openai.com — so this is the whole
+    # redirect. Nothing else in the codebase imports the OpenAI SDK.
+    #
+    # Reachability is incidental, not designed: plane-api and litellm
+    # both sit on app-db-net (each for its own database). If litellm
+    # ever leaves that bridge, the AI assistant starts failing with a
+    # connection error and nothing else breaks — give them a shared
+    # bridge at that point.
+    #
+    # The MODEL name is the part this env var can't fix:
+    # get_llm_config() validates the god-mode "LLM Model" field against
+    # a hardcoded allowlist (gpt-3.5-turbo, gpt-4o-mini, gpt-4o,
+    # o1-mini, o1-preview) and bails before calling out. So litellm has
+    # to answer to one of those five names.
+    #
+    # That is done with a PER-KEY alias on litellm's `plane` virtual key
+    # (`aliases: {gpt-4o-mini: gemma-4-12b}`), not a config.yaml entry —
+    # a global entry called gpt-4o-mini would show up in Open WebUI's
+    # model picker as something that looks like OpenAI and isn't. Two
+    # gotchas if it ever needs rebuilding: the key's `models` allowlist
+    # is checked against the REQUESTED name before the alias resolves,
+    # so it must list BOTH names; and the key lives in litellm's DB, so
+    # it is not in this repo — `/key/list` on the gateway is the record.
+    # The god-mode "API key" field holds that virtual key, which is
+    # itself undeclarable instance state (see the seeding note below).
+    OPENAI_BASE_URL = "http://litellm:4000/v1";
+
     # --- telemetry, redirected --------------------------------------
     OTLP_ENDPOINT = "http://plane-otel:4317";
     OTLP_METRICS_PROTOCOL = "grpc";
