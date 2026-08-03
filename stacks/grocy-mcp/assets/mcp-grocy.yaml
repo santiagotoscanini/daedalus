@@ -6,6 +6,9 @@
 server:
   enable_http_server: true
   http_server_port: 8080
+  # Duplicate structuredContent into a content text block — Open WebUI
+  # only reads content. See the env mirror in grocy-mcp.nix.
+  serialize_structured_to_content: true
 grocy:
   base_url: https://grocy.toscanini.me
   enable_ssl_verify: true

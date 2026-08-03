@@ -33,7 +33,7 @@
   sops.secrets."grocy-mcp-env" = mkDotenvSecret ./env.sops;
 
   virtualisation.oci-containers.containers.mcp-grocy = mkRootlessContainer {
-    image = "ghcr.io/miguelangel-nubla/mcp-grocy:v2.6.0@sha256:c4de8d1afcd19d4501e1fedef2321f042e0589ca305e535d8a9945ae091af969";
+    image = "ghcr.io/miguelangel-nubla/mcp-grocy:v2.7.0@sha256:e7f2ad39528aa34f76b4699b333894d80dc512acce34c1474ad443a560d7cb19";
 
     volumes = [
       "${./assets/mcp-grocy.yaml}:/app/mcp-grocy.yaml:ro"
@@ -46,6 +46,11 @@
       ENABLE_HTTP_SERVER = "true";
       MCP_HTTP_TRANSPORT_ONLY = "true";
       HTTP_SERVER_PORT = "8080";
+      # Tools put their payload in structuredContent only; the content
+      # block is a bare "Operation completed successfully". Open WebUI
+      # reads content, so without this the model sees no data. Opt-in
+      # since v2.7.0 — it duplicates the JSON into a content text block.
+      SERIALIZE_STRUCTURED_TO_CONTENT = "true";
       # Every line this writes goes to stderr, so journald tags its
       # routine INFO chatter as err-priority and it shows up in any
       # warning-level sweep. Only warnings and worse are wanted.
