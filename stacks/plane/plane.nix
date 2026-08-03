@@ -47,28 +47,54 @@
 #
 ## Auth — the Community Edition has no OIDC
 #
-# OIDC/SAML are Pro/Business features; the AGPL source ships exactly
-# four OAuth providers (google, github, gitlab, gitea) plus email
-# password and magic link. Nothing to configure natively, so the gate
-# is traefik forward-auth against Pocket ID like every other admin UI.
+# OIDC/SAML are paid features; the AGPL source ships exactly four OAuth
+# providers (google, github, gitlab, gitea) plus email password and
+# magic link. There is no OIDC code to unlock — plane/utils/
+# instance_config_variables/extended.py is an empty list, the seam the
+# closed-source Commercial build fills in.
 #
-# That leaves Plane's own login as a second prompt, and it cannot be
-# turned off: with no OAuth provider configured, disabling both
-# ENABLE_EMAIL_PASSWORD and ENABLE_MAGIC_LINK_LOGIN leaves no way in at
-# all. Mitigations, so it is one prompt per browser rather than a daily
-# tax:
-#   - SESSION_COOKIE_AGE = 1 year. The outer Pocket ID gate is the real
-#     access control (24h, passkey); Plane's cookie is the inner, weaker
-#     factor on a LAN-only host, so a long life costs little and removes
-#     the double sign-in.
-#   - magic link on (SMTP is wired below), so the second prompt is an
-#     emailed link, not a password.
-#   - ENABLE_SIGNUP=0 — nobody self-registers even past the gate.
+# **This is the one web app on the box NOT behind the Pocket ID
+# forward-auth gate, and that is deliberate.** A traefik gate in front
+# of an app that cannot consume the identity gives you two unrelated
+# identity namespaces: Pocket ID authenticates you, then Plane asks who
+# you are all over again. Every person has to be provisioned twice, and
+# their Plane identity — assignments, comments, permissions — has no
+# link to the passkey they used at the door. Two prompts bought
+# defence in depth, not identity.
 #
-# Do NOT try to point the gitlab/gitea providers at Pocket ID: both
-# hardcode provider-shaped paths (/api/v4/user, /api/v1/user +
-# /api/v1/user/emails with per-address `verified` flags) that no OIDC
-# userinfo document supplies. It needs a translating shim, not config.
+# So Plane's own magic-link login IS the authentication here. One
+# sign-in, and it is the one that actually names the user, so
+# multi-user works the way Plane intends: invite by email, real
+# per-user attribution, `ENABLE_SIGNUP=0` so nobody self-registers.
+#
+# What that costs, stated plainly: Plane's login page is reachable by
+# anything on the LAN or over WireGuard. It is not published through
+# the CF tunnel, so that is the whole exposure, and what is behind it
+# is a real auth flow (an emailed one-time link), not a bare app.
+#
+# The two knobs that follow from this, both live in `backendEnv`:
+#   - SESSION_COOKIE_AGE = 1 year. This is now the ONLY gate, not the
+#     inner one — a year is a long time for a cookie on a borrowed
+#     laptop. Shorten it if that trade stops feeling right; the cost is
+#     a trip to your inbox that often.
+#   - ENABLE_EMAIL_PASSWORD stays on as break-glass. Magic link is the
+#     intended path, but if the SMTP relay breaks it is the ONLY path,
+#     and there is no gate behind which to recover.
+#
+# Rejected alternatives, so they don't get re-litigated:
+#   - Paying: Plane One (one-time perpetual, included OIDC) sunset
+#     2026-03-14; SSO is now a quote-on-request tier AND a move to the
+#     closed-source Commercial Edition — a different codebase and
+#     images, not a config change.
+#   - Patching CE: the live community PRs (makeplane/plane#9253, #9248)
+#     are ~1000 lines across 20+ files with unsigned CLAs and no
+#     maintainer engagement. SSO is the paid differentiator, so it is a
+#     permanent private fork of Django auth code.
+#   - Pointing the gitlab/gitea providers at Pocket ID: both hardcode
+#     provider-shaped paths (/api/v4/user, /api/v1/user +
+#     /api/v1/user/emails with per-address `verified` flags) that no
+#     OIDC userinfo document supplies. Config can't do it; it needs a
+#     translating service on the auth path.
 #
 ## Instance configuration is seeded ONCE
 #
@@ -346,16 +372,16 @@ in
     serviceName = "plane-proxy";
     port = 80;
     # LAN only — no exposeRemotely.
-    auth = "oidc";
-    # Machine access: Plane's own X-Api-Key auth is the gate for
-    # anything carrying one (the header is validated against the
-    # api_tokens table), so scripts and integrations don't need a
-    # browser session at the IdP. Requests without the header still
-    # meet the forward-auth challenge.
-    authBypassRule = "HeaderRegexp(`X-Api-Key`, `.+`)";
+    #
+    # `auth = "none"` is the load-bearing line, not an omission: Plane
+    # authenticates its own users (magic link), and stacking a Pocket ID
+    # gate in front would add a second prompt that names nobody. See the
+    # auth section in the header before adding one back.
+    auth = "none";
     # Unauthenticated by design (the login screen fetches it to learn
-    # which providers are enabled), so gatus certifies the real Django
-    # app behind the whole proxy chain rather than the IdP.
+    # which providers are enabled), so the gatus probe certifies the
+    # real Django app behind the whole proxy chain rather than the
+    # landing page.
     healthPath = "/api/instances/";
     homepage = {
       group = "Home";
