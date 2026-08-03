@@ -83,22 +83,29 @@ in
   sops.secrets."homepage-env" = mkDotenvSecret ./env.sops;
 
   # homepage only substitutes {{HOMEPAGE_VAR_*}} from its own env, so
-  # the litellm master key is appended to the decrypted env at boot —
-  # rendered from litellm's sops secret, the single source of truth
-  # (no second copy to sync on rotation).
+  # keys owned by other stacks are appended to the decrypted env at
+  # boot — rendered from each stack's sops secret, the single source of
+  # truth (no second copy to sync on rotation).
+  #
+  # PLANE_API_KEY is a workspace token minted in Plane's UI, so it is
+  # empty until someone creates one; the grep still matches (the line
+  # exists in plane/env.sops) and the widgets that use it stay off
+  # until stacks/plane sets workspaceSlug.
   systemd.services.homepage-env = mkSecretRender {
-    description = "Render homepage env (sops env + litellm master key)";
+    description = "Render homepage env (sops env + per-stack API keys)";
     gates = [ "podman-homepage.service" ];
     dir = "/run/homepage-env";
     file = "/run/homepage-env/env";
     prep = ''
       LITELLM_KEY=$(grep '^LITELLM_MASTER_KEY=' ${config.sops.secrets."litellm-env".path} | cut -d= -f2-)
       POCKETID_KEY=$(grep '^STATIC_API_KEY=' ${config.sops.secrets."pocket-id-env".path} | cut -d= -f2-)
+      PLANE_KEY=$(grep '^PLANE_API_KEY=' ${config.sops.secrets."plane-env".path} | cut -d= -f2-)
     '';
     content = ''
       $(cat ${config.sops.secrets."homepage-env".path})
       HOMEPAGE_VAR_LITELLM_KEY=''${LITELLM_KEY}
       HOMEPAGE_VAR_POCKETID_KEY=''${POCKETID_KEY}
+      HOMEPAGE_VAR_PLANE_KEY=''${PLANE_KEY}
     '';
   };
   systemd.services.podman-homepage = {
