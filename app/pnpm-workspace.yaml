@@ -1,0 +1,41 @@
+# pnpm 11 reads project settings from this file, not .npmrc.
+
+# Every dependency resolves through the self-hosted Verdaccio — the dev
+# container's entrypoint reads this line rather than restating a registry, so
+# there is exactly one declaration and no per-environment drift.
+#
+# Verdaccio proxies npmjs transparently and vets nothing; a malicious package
+# passes straight through. The real defence is the lockfile — pnpm checks every
+# tarball against the integrity hash pinned there, so even a compromised proxy
+# cannot swap the contents of a locked dependency.
+#
+# Consequence to accept: Verdaccio is a hard dependency of every install here.
+# If its npmjs uplink is down it answers 500 for anything uncached and the
+# container's install step fails. That is the intended behaviour of a gate.
+registry: https://verdaccio.toscanini.me/
+
+# Supply-chain cooldown: refuse a package version published less than 7 days
+# ago, so a freshly-published (possibly compromised) release ages out before
+# anything here depends on it.
+#
+# Enforced in TWO places, and the second is easy to forget:
+#   1. at resolution — `pnpm add` / `pnpm update` refuse a young version;
+#   2. at EVERY install, including --frozen-lockfile, which re-verifies all
+#      lockfile entries against the policy. So a lockfile written with the
+#      cooldown commented out breaks the container's install step even though
+#      nothing is being resolved.
+#
+# ADDING A DEPENDENCY: comment the line out, `pnpm add`, restore it, then
+# confirm `pnpm install --frozen-lockfile` still passes — that last step is
+# what catches a too-young TRANSITIVE dependency pulled in by the new package.
+minimumReleaseAge: 10080 # 7 days in minutes; pnpm's own default is 1440
+
+# Treat package.json "engines" as a hard requirement rather than a warning.
+engineStrict: true
+
+# Postinstall scripts are blocked by default; anything not listed here stays
+# blocked, which is the point — a compromised transitive dependency cannot run
+# code at install time.
+allowBuilds:
+  esbuild: true # bundler binary behind drizzle-kit
+  lightningcss: true # Vite's CSS transformer ships a native binary
