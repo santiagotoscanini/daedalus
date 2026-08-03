@@ -80,7 +80,13 @@ let
   # duplicate, like webApps -> traefik/dns. Declaring an app provisions
   # its CI capacity; the repo-side half (workflows + REGISTRY_PASSWORD
   # secret) is documented in stacks/apps/declarations.nix.
-  repos = lib.attrNames config.fleet.apps;
+  #
+  # `source.mode = "local"` apps are excluded: their code lives in the
+  # flake repo, not in one of their own, so mint-token.sh would 404 on
+  # the registration-token endpoint, fail ExecStartPre, restart-loop to
+  # the start limit and mail an alert — for a repo that was never
+  # supposed to exist.
+  repos = lib.attrNames (lib.filterAttrs (_: app: app.source.mode == "registry") config.fleet.apps);
 
   # Base pin, playwright deps, nested-podman wiring and their why-notes
   # all live in the Containerfile. Its own subdir on purpose: the tag

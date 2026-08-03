@@ -1,0 +1,33 @@
+# Dev runtime for daedalus. Deliberately contains NO application code.
+#
+# This is the whole trick behind hot reload on this box. mkLocalImage
+# interpolates its build context into /nix/store, so anything copied in here
+# would be a frozen snapshot — editing the real file would change nothing. So
+# the image carries only the runtime, and the code arrives at RUN time as a
+# bind mount of /etc/nixos/stacks/daedalus/app at /app. The files Vite watches
+# are the files in the flake repo.
+#
+# Consequence: this context is just the two files next to it, so its store hash
+# — and therefore the image tag — only moves when the runtime changes. Editing
+# a route does not rebuild or restart anything.
+#
+# Debian slim, not alpine: lightningcss and rolldown ship glibc prebuilds, and
+# musl would drag in a source build (or fail) on every install.
+FROM docker.io/library/node:24-slim
+
+# corepack only installs shims here; the pnpm binary named by package.json's
+# `packageManager` is fetched on first invocation. COREPACK_HOME points that
+# cache into the bind mount so the download happens once ever, not once per
+# container start. entrypoint.sh sets COREPACK_NPM_REGISTRY so even that fetch
+# goes through Verdaccio rather than straight to npmjs.
+RUN corepack enable
+ENV COREPACK_HOME=/app/.corepack
+
+WORKDIR /app
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+EXPOSE 3000
+
+CMD ["/usr/local/bin/entrypoint.sh"]

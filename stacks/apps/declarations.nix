@@ -27,6 +27,11 @@
 #      and `gh secret set REGISTRY_PASSWORD` with the ci password from
 #      stacks/registry/env.sops.
 #
+# Not every app is declared here: `source.mode = "local"` apps own a stack
+# folder of their own because they carry source and a Containerfile alongside
+# the declaration. See stacks/daedalus/ — it is a fleet.apps entry like the
+# ones below, just not one that comes from a registry.
+#
 # That's the whole loop. From then on, every push to main goes live on its
 # own: `app-<name>-deploy.timer` polls the registry every 2 minutes, and when
 # the digest moves it pulls, restarts the container, and health-checks it

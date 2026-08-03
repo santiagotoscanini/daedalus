@@ -32,6 +32,21 @@
 # zot (stacks/registry), fed by CI on the self-hosted runners. Override
 # for forks or pinned digests.
 #
+# Source modes — `source.mode`, which half of the platform an app uses:
+#
+#   "registry" (default) — everything above. CI builds, zot hosts, the
+#                deploy timer pulls. Push to main and it's live.
+#   "local"    — the source lives in THIS repo at `source.path` and is
+#                bind-mounted at /app; the container runs a dev server
+#                against it, so editing a file is the whole deploy. The
+#                image built from `source.contextDir` carries only the
+#                runtime: a mkLocalImage context is interpolated into
+#                /nix/store, so code copied in would be a frozen snapshot
+#                and hot reload would be watching the wrong files.
+#                Suppresses the deploy timer (nothing to poll) and the
+#                GitHub Actions runner (stacks/gha-runner filters on this).
+#                Current user: stacks/daedalus.
+#
 # Database: `postgres.enable = true` materializes a role + database
 # on the shared `pg` cluster via stacks/app-db/. App reads
 # `DATABASE_URL` from the bootstrap-generated env file
@@ -95,6 +110,7 @@
   config,
   lib,
   pkgs,
+  mkLocalImage,
   mkRootlessContainer,
   ...
 }:
@@ -143,6 +159,25 @@ let
 
       storageEnabled = app.storage.enable;
       storageHostPath = app.storage.hostPath;
+
+      # Local-source app (stacks/daedalus): built and run from this repo
+      # instead of pulled from the registry, with the source bind-mounted so a
+      # dev server hot-reloads it. See the `source` option's description for
+      # why the code must NOT ride in the image.
+      localSource = app.source.mode == "local";
+
+      # The runtime-only dev image. mkLocalImage tags with the build context's
+      # store hash, so the tag — and therefore this container's ExecStart —
+      # moves when the Containerfile changes and stays put when app code
+      # changes. That asymmetry is the whole point: editing a route must not
+      # restart anything. Forced only under `localSource`, so `contextDir`
+      # being null in registry mode never gets interpolated.
+      devImage = mkLocalImage {
+        name = "${cName}-dev";
+        tagPrefix = "dev";
+        contextDir = app.source.contextDir;
+        gates = [ "podman-${cName}.service" ];
+      };
 
       # VPN egress: borrow a gluetun container's netns for ALL traffic
       # instead of joining traefik-net (see stacks/ipcrawl-vpn/). The
@@ -257,11 +292,25 @@ let
         };
       };
 
+      # A local-source app has no repo of its own — its code lives in the
+      # flake repo next to the module that declares it, so the tile points
+      # there instead of at a github.com/santiagotoscanini/<name> that
+      # doesn't exist.
+      repoPath =
+        if localSource then
+          "nixos-s2/tree/main/stacks/${name}/app"
+        else
+          "${name}";
+
       repoTile = {
         name = "Repo";
         weight = 20;
-        href = "https://github.com/santiagotoscanini/${name}";
-        description = "Source code (github.com/santiagotoscanini/${name})";
+        href = "https://github.com/santiagotoscanini/${repoPath}";
+        description =
+          if localSource then
+            "Source code (in this flake, stacks/${name}/app)"
+          else
+            "Source code (github.com/santiagotoscanini/${name})";
         icon = "mdi-github-#94a3b8";
       };
 
@@ -316,6 +365,18 @@ let
         {
           assertion = app.auth.headers != { } -> proxyAuth;
           message = "fleet.apps.${name}: `auth.headers` are set by the forward-auth middleware — they only exist under `auth.mode = \"proxy\"`.";
+        }
+        {
+          assertion = localSource -> (app.source.path != null && app.source.contextDir != null);
+          message = "fleet.apps.${name}: `source.mode = \"local\"` needs both `source.path` (the host dir bind-mounted at /app) and `source.contextDir` (the dir holding the dev Containerfile).";
+        }
+        {
+          assertion = !localSource -> (app.source.path == null && app.source.contextDir == null);
+          message = "fleet.apps.${name}: `source.path` / `source.contextDir` only apply to `source.mode = \"local\"` — a registry app runs a prebuilt image and mounts no source.";
+        }
+        {
+          assertion = localSource -> !egressEnabled;
+          message = "fleet.apps.${name}: `source.mode = \"local\"` cannot combine with `egress` — the dev server's install step needs the npm registry, which a VPN-only netns doesn't route to.";
         }
       ];
 
@@ -453,62 +514,88 @@ let
         }
       );
 
-      # Baseline secrets bootstrap. Generates AUTH_SECRET on first boot
-      # and writes the per-app env file. Idempotent: re-running is safe;
-      # the env file is created only if missing. Delete the file +
-      # rebuild to rotate (invalidates any sessions/JWTs signed with
-      # the old AUTH_SECRET).
-      systemd.services."app-${name}-secrets-bootstrap" = {
-        description = "Bootstrap app-${name}: generate AUTH_SECRET on first boot";
-        before = [ "podman-${cName}.service" ];
-        wantedBy = [ "podman-${cName}.service" ];
-        after = [ "local-fs.target" ];
-        path = [
-          pkgs.openssl
-          pkgs.coreutils
-        ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          Restart = "on-failure";
-          RestartSec = "5s";
+      # One attrset rather than four `systemd.services."x" = …` statements:
+      # the image-build unit must be absent (not merely disabled) for registry
+      # apps, and `lib.optionalAttrs` cannot be mixed with dotted-path
+      # definitions of the same attribute.
+      systemd.services = {
+        # Baseline secrets bootstrap. Generates AUTH_SECRET on first boot
+        # and writes the per-app env file. Idempotent: re-running is safe;
+        # the env file is created only if missing. Delete the file +
+        # rebuild to rotate (invalidates any sessions/JWTs signed with
+        # the old AUTH_SECRET).
+        "app-${name}-secrets-bootstrap" = {
+          description = "Bootstrap app-${name}: generate AUTH_SECRET on first boot";
+          before = [ "podman-${cName}.service" ];
+          wantedBy = [ "podman-${cName}.service" ];
+          after = [ "local-fs.target" ];
+          path = [
+            pkgs.openssl
+            pkgs.coreutils
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            Restart = "on-failure";
+            RestartSec = "5s";
+          };
+          script = ''
+            set -eu
+            install -d -m 0700 -o santiago -g users "${appSecretsBase}/${name}"
+            if [ ! -e "${appSecretsFile}" ]; then
+              AUTH_SECRET=$(openssl rand -hex 32)
+              install -m 0600 -o santiago -g users /dev/stdin "${appSecretsFile}" <<EOF
+            AUTH_SECRET=$AUTH_SECRET
+            EOF
+            fi
+          '';
         };
-        script = ''
-          set -eu
-          install -d -m 0700 -o santiago -g users "${appSecretsBase}/${name}"
-          if [ ! -e "${appSecretsFile}" ]; then
-            AUTH_SECRET=$(openssl rand -hex 32)
-            install -m 0600 -o santiago -g users /dev/stdin "${appSecretsFile}" <<EOF
-          AUTH_SECRET=$AUTH_SECRET
-          EOF
-          fi
-        '';
-      };
 
-      # Auto-deploy. Pulls the image; restarts the container only if the
-      # digest actually moved; then health-checks it through traefik. Runs as
-      # root (it must restart a system unit) and drops to santiago for podman.
-      #
-      # No RemainAfterExit — unlike every bootstrap oneshot here, this one has
-      # to run again on every tick.
-      systemd.services."app-${name}-deploy" = {
-        inherit (app.deploy) enable;
-        description = "Redeploy app-${name} when a new image lands on the registry";
-        # linger-users gates /run/user/1000 → rootless podman → newuidmap.
-        after = [
-          "network-online.target"
-          "linger-users.service"
-          "podman-${cName}.service"
-        ];
-        wants = [
-          "network-online.target"
-          "linger-users.service"
-        ];
-        serviceConfig = {
-          Type = "oneshot";
-          StateDirectory = "app-deploy";
-          ExecStart = "${deployScript}/bin/app-${name}-deploy";
+        # Auto-deploy. Pulls the image; restarts the container only if the
+        # digest actually moved; then health-checks it through traefik. Runs as
+        # root (it must restart a system unit) and drops to santiago for podman.
+        #
+        # No RemainAfterExit — unlike every bootstrap oneshot here, this one has
+        # to run again on every tick.
+        "app-${name}-deploy" = {
+          inherit (app.deploy) enable;
+          description = "Redeploy app-${name} when a new image lands on the registry";
+          # linger-users gates /run/user/1000 → rootless podman → newuidmap.
+          after = [
+            "network-online.target"
+            "linger-users.service"
+            "podman-${cName}.service"
+          ];
+          wants = [
+            "network-online.target"
+            "linger-users.service"
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            StateDirectory = "app-deploy";
+            ExecStart = "${deployScript}/bin/app-${name}-deploy";
+          };
         };
+
+        # Container ordering: the secrets bootstrap plus (egress mode) the
+        # netns owner. The pg + per-app-bootstrap edges are NOT repeated
+        # here — appDatabases.consumers already generates both (including
+        # the transaction-proof direct podman-pg edge). The local-source
+        # image build adds its own before=/wantedBy= edges via mkLocalImage's
+        # `gates`, so it needs no entry here either.
+        "podman-${cName}" = {
+          after = [
+            "app-${name}-secrets-bootstrap.service"
+          ]
+          ++ (lib.optional egressEnabled "podman-${app.egress.container}.service");
+          wants = [
+            "app-${name}-secrets-bootstrap.service"
+          ]
+          ++ (lib.optional egressEnabled "podman-${app.egress.container}.service");
+        };
+      }
+      // lib.optionalAttrs localSource {
+        "app-${name}-image-build" = devImage.service;
       };
 
       systemd.timers."app-${name}-deploy" = {
@@ -522,32 +609,25 @@ let
         };
       };
 
-      # Container ordering: the secrets bootstrap plus (egress mode) the
-      # netns owner. The pg + per-app-bootstrap edges are NOT repeated
-      # here — appDatabases.consumers already generates both (including
-      # the transaction-proof direct podman-pg edge).
-      systemd.services."podman-${cName}" = {
-        after = [
-          "app-${name}-secrets-bootstrap.service"
-        ]
-        ++ (lib.optional egressEnabled "podman-${app.egress.container}.service");
-        wants = [
-          "app-${name}-secrets-bootstrap.service"
-        ]
-        ++ (lib.optional egressEnabled "podman-${app.egress.container}.service");
-      };
-
       # The container itself — pure declarative, identical pattern to
       # every other stack on the box.
       virtualisation.oci-containers.containers."${cName}" = mkRootlessContainer (
         {
-          inherit (app) image;
+          image = if localSource then devImage.image else app.image;
 
           # A /s2/* hostPath additionally picks up RequiresMountsFor for
           # free — podman.nix extracts it from `volumes`, closing the
           # cold-boot race where the container starts before the ZFS
           # dataset mounts and writes into the empty underlay.
-          volumes = lib.optional storageEnabled "${storageHostPath}:/app/data";
+          #
+          # The local-source mount goes at /app, i.e. the image's WORKDIR:
+          # this is the live repo directory, not a copy, which is what lets
+          # the dev server watch files edited on the host. /app/data (storage)
+          # nests inside it when both are on; podman orders nested mounts by
+          # path depth, so the inner one still wins.
+          volumes =
+            lib.optional localSource "${app.source.path}:/app"
+            ++ lib.optional storageEnabled "${storageHostPath}:/app/data";
 
           environmentFiles = [
             appSecretsFile
@@ -602,8 +682,62 @@ in
   options.fleet.apps = lib.mkOption {
     type = lib.types.attrsOf (
       lib.types.submodule (
-        { name, ... }: {
+        { name, config, ... }: {
           options = {
+            # Where the running code comes from. "registry" is the platform's
+            # normal loop (CI builds, zot hosts, the deploy timer pulls);
+            # "local" is the escape hatch for an app whose source lives in
+            # this flake repo and is edited in place.
+            source = {
+              mode = lib.mkOption {
+                type = lib.types.enum [
+                  "registry"
+                  "local"
+                ];
+                default = "registry";
+                description = ''
+                  "registry" — the image is built by CI on the self-hosted
+                  runners, pushed to `registry.toscanini.me`, and pulled here
+                  by `app-<name>-deploy.timer`. Push to main and it's live.
+
+                  "local" — the source lives in this repo at `source.path` and
+                  is bind-mounted into the container at /app, which runs a dev
+                  server against it. Editing a file IS the deploy: no commit,
+                  no CI, no image pull, no rebuild. The image built from
+                  `source.contextDir` carries ONLY the runtime — copying the
+                  code in would defeat the whole thing, since a `mkLocalImage`
+                  context is interpolated into /nix/store and frozen there.
+
+                  Consequences of "local", all deliberate: no auto-deploy
+                  timer (nothing to poll), no GitHub Actions runner
+                  (stacks/gha-runner filters these out), and the app's
+                  availability now depends on the npm registry at container
+                  start.
+                '';
+              };
+              path = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = ''
+                  Local mode: host directory bind-mounted at /app. A plain
+                  string, NOT a nix path — a path literal would be copied into
+                  /nix/store and the container would watch the frozen copy.
+                '';
+                example = "/etc/nixos/stacks/daedalus/app";
+              };
+              contextDir = lib.mkOption {
+                type = lib.types.nullOr lib.types.path;
+                default = null;
+                description = ''
+                  Local mode: directory holding the dev runtime's
+                  `Containerfile`. Keep the app source OUT of it — the store
+                  hash of this directory is the image tag, so anything in here
+                  restarts the container when it changes.
+                '';
+                example = lib.literalExpression "./assets";
+              };
+            };
+
             image = lib.mkOption {
               type = lib.types.str;
               default = "registry.toscanini.me/${name}:latest";
@@ -614,6 +748,9 @@ in
                 builds on the self-hosted runners and pushes the matching
                 repo here. Override for placeholders, forks, or pinned
                 digests (the immutable `sha-<sha>` tags CI also pushes).
+
+                Ignored entirely when `source.mode = "local"` — that image is
+                built on the box from `source.contextDir`.
               '';
               example = "registry.toscanini.me/ipcrawl:sha-89dfc4456f8b2c4531f84790cce5e179bdaeae6a";
             };
@@ -868,12 +1005,15 @@ in
             deploy = {
               enable = lib.mkOption {
                 type = lib.types.bool;
-                default = true;
+                default = config.source.mode == "registry";
+                defaultText = lib.literalExpression ''config.source.mode == "registry"'';
                 description = ''
                   Poll the registry and redeploy the container when the image digest
-                  moves. ON by default: every app here rides a moving `:latest`
-                  published by CI on push-to-main, so "new image → run it" is the
-                  expected behaviour, not an opt-in.
+                  moves. ON by default for registry apps: every one of them rides a
+                  moving `:latest` published by CI on push-to-main, so "new image →
+                  run it" is the expected behaviour, not an opt-in. OFF by default
+                  under `source.mode = "local"`, where there is no registry to poll
+                  and the source is already live.
 
                   Turn OFF to freeze an app on whatever it's running — pair with a
                   digest- or sha-pinned `image` to hold a known-good build.
