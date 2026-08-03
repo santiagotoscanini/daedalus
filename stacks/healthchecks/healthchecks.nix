@@ -55,6 +55,7 @@
     authHeaders."X-Forwarded-Email" = "{{ .claims.email }}";
     homepage = {
       group = "Monitoring";
+      extra.weight = 50;
       description = "Cron / job dead-man's-switch";
       icon = "healthchecks.png";
       # Via traefik, not uwsgi-direct: homepage's undici client trips

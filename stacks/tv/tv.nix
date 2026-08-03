@@ -64,6 +64,7 @@ in
       healthPath = "/api/v2/app/version";
       homepage = {
         group = "Media";
+        extra.weight = 70; # qBittorrent
         name = "qBittorrent";
         description = "BitTorrent (via gluetun/ProtonVPN)";
         icon = "qbittorrent.png";
@@ -85,6 +86,7 @@ in
       healthPath = "/jsonrpc";
       homepage = {
         group = "Media";
+        extra.weight = 80; # NZBGet
         name = "NZBGet";
         description = "Usenet downloader (via gluetun)";
         icon = "nzbget.png";
@@ -106,6 +108,7 @@ in
       healthPath = "/ping";
       homepage = {
         group = "Media";
+        extra.weight = 50; # Prowlarr
         name = "Prowlarr";
         description = "Indexer aggregator";
         icon = "prowlarr.png";
@@ -123,6 +126,7 @@ in
       healthPath = "/ping";
       homepage = {
         group = "Media";
+        extra.weight = 40; # Radarr
         name = "Radarr";
         description = "Movies";
         icon = "radarr.png";
@@ -141,6 +145,7 @@ in
       healthPath = "/ping";
       homepage = {
         group = "Media";
+        extra.weight = 30; # Sonarr
         name = "Sonarr";
         description = "TV shows";
         icon = "sonarr.png";
@@ -163,6 +168,7 @@ in
       healthHeaders."X-API-KEY" = "\${BAZARR_API_KEY}";
       homepage = {
         group = "Media";
+        extra.weight = 90; # Bazarr
         name = "Bazarr";
         description = "Subtitles";
         icon = "bazarr.png";
@@ -220,6 +226,7 @@ in
     port = 8096;
     homepage = {
       group = "Media";
+      extra.weight = 20; # Jellyfin
       name = "Jellyfin";
       description = "Movies, TV, music — household media server";
       icon = "jellyfin.png";

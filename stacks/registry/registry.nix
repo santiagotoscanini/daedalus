@@ -92,7 +92,7 @@ in
     healthPath = "/v2/";
     homepage = {
       group = "Registries";
-      name = "Registry";
+      name = "zot";
       # Not in dashboard-icons; the project's own asset (version-pinned
       # docs path — mike keeps old doc versions around).
       icon = "https://zotregistry.dev/v2.1.18/assets/images/logo.svg";

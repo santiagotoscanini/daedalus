@@ -50,15 +50,28 @@ let
       i = lib.lists.findFirstIndex (t: t == tab) null tabOrder;
     in
     if i == null then 999 else i;
+  # Within a tab, groups sort by an optional `order` and then by name, so
+  # a group can be placed deliberately instead of alphabetically. `order`
+  # is OURS, not a homepage layout key — stripped before serialization.
+  groupOrder = n: config.fleet.homepageLayout.${n}.order or 500;
   sortedGroupNames = lib.sort (
     a: b:
     let
       tA = tabIdx (config.fleet.homepageLayout.${a}.tab or "");
       tB = tabIdx (config.fleet.homepageLayout.${b}.tab or "");
+      oA = groupOrder a;
+      oB = groupOrder b;
     in
-    if tA != tB then tA < tB else a < b
+    if tA != tB then
+      tA < tB
+    else if oA != oB then
+      oA < oB
+    else
+      a < b
   ) (lib.attrNames config.fleet.homepageLayout);
-  layoutList = map (n: { "${n}" = config.fleet.homepageLayout.${n}; }) sortedGroupNames;
+  layoutList = map (n: {
+    "${n}" = removeAttrs config.fleet.homepageLayout.${n} [ "order" ];
+  }) sortedGroupNames;
   settingsYaml = pkgs.writeText "settings.yaml" (
     builtins.readFile ./assets/settings.yaml + "\nlayout: " + builtins.toJSON layoutList + "\n"
   );
@@ -80,10 +93,12 @@ in
     file = "/run/homepage-env/env";
     prep = ''
       LITELLM_KEY=$(grep '^LITELLM_MASTER_KEY=' ${config.sops.secrets."litellm-env".path} | cut -d= -f2-)
+      POCKETID_KEY=$(grep '^STATIC_API_KEY=' ${config.sops.secrets."pocket-id-env".path} | cut -d= -f2-)
     '';
     content = ''
       $(cat ${config.sops.secrets."homepage-env".path})
       HOMEPAGE_VAR_LITELLM_KEY=''${LITELLM_KEY}
+      HOMEPAGE_VAR_POCKETID_KEY=''${POCKETID_KEY}
     '';
   };
   systemd.services.podman-homepage = {
@@ -118,6 +133,7 @@ in
       icon = "mdi-play-circle-#94a3b8";
       useEqualHeights = true;
       tab = "Home";
+      order = 30;
     };
     "AI & Automation" = {
       style = "row";
@@ -125,13 +141,36 @@ in
       icon = "mdi-robot-#94a3b8";
       useEqualHeights = true;
       tab = "Home";
+      order = 10;
     };
-    Cloud = {
+    # Reading stack: the library (calibre-web) + its downloader
+    # (shelfmark), split out of Media so books aren't buried under the
+    # video pipeline.
+    Books = {
       style = "row";
       columns = 4;
-      icon = "mdi-cloud-#94a3b8";
+      icon = "mdi-bookshelf-#94a3b8";
       useEqualHeights = true;
       tab = "Home";
+      order = 40;
+    };
+    # Household services — identity, files, photos, automation, the
+    # day-to-day apps. Named for what it serves, not where it runs.
+    Home = {
+      style = "row";
+      columns = 4;
+      icon = "mdi-home-heart-#94a3b8";
+      useEqualHeights = true;
+      tab = "Home";
+      order = 20;
+    };
+    Gaming = {
+      style = "row";
+      columns = 4;
+      icon = "mdi-gamepad-variant-#94a3b8";
+      useEqualHeights = true;
+      tab = "Home";
+      order = 50;
     };
     # zot (OCI images) + verdaccio (npm) — both exist to serve the apps
     # platform's build/deploy loop, so they live on the Apps tab.
@@ -141,13 +180,6 @@ in
       icon = "mdi-package-variant-closed-#94a3b8";
       useEqualHeights = true;
       tab = "Apps";
-    };
-    Productivity = {
-      style = "row";
-      columns = 4;
-      icon = "mdi-briefcase-#94a3b8";
-      useEqualHeights = true;
-      tab = "Home";
     };
     Backend = {
       style = "row";
@@ -165,7 +197,7 @@ in
     };
     Monitoring = {
       style = "row";
-      columns = 4;
+      columns = 5;
       icon = "mdi-chart-areaspline-#94a3b8";
       useEqualHeights = true;
       tab = "Infra";
@@ -177,6 +209,7 @@ in
   fleet.homepageServices."Network" = [
     {
       name = "Router";
+      weight = 80;
       href = "http://192.168.0.1/webpages/index.html?t=eb9856ea#networkMap";
       description = "LAN router admin (192.168.0.1)";
       icon = "/icons/tp-link.png";
@@ -184,18 +217,21 @@ in
     }
     {
       name = "Cloudflare DNS";
+      weight = 70;
       href = "https://dash.cloudflare.com/c08bf36c41d7bc5db11d6b35e0b4e721/toscanini.me/dns/records";
       description = "DNS records for toscanini.me";
       icon = "cloudflare.png";
     }
     {
       name = "Namecheap";
+      weight = 60;
       href = "https://ap.www.namecheap.com/Domains/DomainControlPanel/toscanini.me/advancedns";
       description = "Domain registrar — toscanini.me";
       icon = "namecheap.png";
     }
     {
       name = "ProtonVPN";
+      weight = 90;
       href = "https://account.protonvpn.com/downloads";
       description = "Re-export WireGuard config when gluetun peers fail";
       icon = "proton-vpn.png";

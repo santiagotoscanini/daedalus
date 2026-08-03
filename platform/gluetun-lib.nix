@@ -242,7 +242,11 @@ rec {
       environment ? { }, # instance-specific gluetun env (kill-switch holes, port forwarding)
       scrapeJob ? name, # prometheus job_name for the exporter
       scrapeTarget, # exporter target ("host.containers.internal:<port>")
-      homepage ? null, # tile attrset for homepageServices."Network", or null
+      homepage ? null, # tile attrset for homepageServices.<homepageGroup>, or null
+      # Homepage group the tile joins. Defaults to "Network" — right for
+      # the box-wide egress tunnel. A tunnel that exists to serve ONE app
+      # belongs alongside that app instead, so pass its per-app group.
+      homepageGroup ? "Network",
       # In-netns web UIs published on this gluetun, each
       # { name, port, healthPath, homepage, authBypassRule?, healthHeaders? }.
       # Emits the fleet.webApps entry per UI: serviceUrl dials the
@@ -319,7 +323,7 @@ rec {
         }
       ];
 
-      fleet.homepageServices."Network" = lib.optional (homepage != null) homepage;
+      fleet.homepageServices."${homepageGroup}" = lib.optional (homepage != null) homepage;
 
       fleet.webApps = lib.listToAttrs (
         map (

@@ -58,6 +58,7 @@
   fleet.homepageServices."Media" = [
     {
       name = "Janitorr";
+      weight = 110;
       href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore?from=now-7d&to=now&var-ds=loki-default&var-filters=container%7C%3D%7Cjanitorr";
       description = "Media retention (dry-run) — log review";
       icon = "/icons/janitorr.png";

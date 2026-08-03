@@ -69,7 +69,8 @@
     authBypassRule = "PathPrefix(`/opds`) || PathPrefix(`/kobo`)";
     authHeaders."Remote-User" = "santi";
     homepage = {
-      group = "Productivity";
+      group = "Books";
+      extra.weight = 10;
       name = "Calibre-Web";
       description = "Ebook library";
       icon = "calibre-web.png";

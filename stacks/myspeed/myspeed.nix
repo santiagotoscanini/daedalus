@@ -50,6 +50,7 @@
     healthPath = "/favicon.ico";
     homepage = {
       group = "Network";
+      extra.weight = 50;
       name = "MySpeed";
       description = "Internet speed tracker";
       icon = "myspeed.png";

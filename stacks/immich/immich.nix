@@ -86,7 +86,8 @@ in
     port = 2283;
     exposeRemotely = true;
     homepage = {
-      group = "Cloud";
+      group = "Home";
+      extra.weight = 20;
       description = "Photo + video backup";
       icon = "immich.png";
       widget = {

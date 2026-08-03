@@ -354,10 +354,37 @@ in
     fleet.homepageServices."Monitoring" = [
       {
         name = "Logs";
+        weight = 20;
         href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore?from=now-1h&to=now&var-ds=loki-default";
         description = "All services — journald -> Loki";
         icon = "loki.png";
         siteMonitor = "http://loki:3100/ready";
+        # Fleet-wide log volume by severity, off alloy's `level` label.
+        # One query returns all three as a vector so this stays a single
+        # row; the `k` labels are prefixed 1/2/3 because Loki sorts
+        # vector results by label and the mappings index positionally.
+        widget = {
+          type = "customapi";
+          url = "http://loki:3100/loki/api/v1/query?query=label_replace%28sum%28count_over_time%28%7Blevel%3D%7E%22.%2B%22%7D%5B1h%5D%29%29%20or%20vector%280%29%2C%20%22k%22%2C%20%221lines%22%2C%20%22%22%2C%20%22%22%29%20or%20label_replace%28sum%28count_over_time%28%7Blevel%3D%22warning%22%7D%5B1h%5D%29%29%20or%20vector%280%29%2C%20%22k%22%2C%20%222warn%22%2C%20%22%22%2C%20%22%22%29%20or%20label_replace%28sum%28count_over_time%28%7Blevel%3D%22error%22%7D%5B1h%5D%29%29%20or%20vector%280%29%2C%20%22k%22%2C%20%223err%22%2C%20%22%22%2C%20%22%22%29";
+          refreshInterval = 60000;
+          mappings = [
+            {
+              field = "data.result.0.value.1";
+              label = "Lines 1h";
+              format = "number";
+            }
+            {
+              field = "data.result.1.value.1";
+              label = "Warn 1h";
+              format = "number";
+            }
+            {
+              field = "data.result.2.value.1";
+              label = "Errors 1h";
+              format = "number";
+            }
+          ];
+        };
       }
     ];
 

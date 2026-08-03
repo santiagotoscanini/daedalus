@@ -57,7 +57,8 @@ in
         "family"
       ];
       homepage = {
-        group = "Productivity";
+        group = "Books";
+        extra.weight = 20;
         name = "Shelfmark";
         description = "Book downloader (Anna's Archive, via VPN)";
         icon = "mdi-book-arrow-down";

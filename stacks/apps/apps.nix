@@ -215,6 +215,7 @@ let
 
       homepageTile = {
         inherit name;
+        weight = 10;
         href = publicUrl;
         # traefik-net DNS by default; in egress mode the app isn't on any
         # bridge, so monitor the host port gluetun publishes instead.
@@ -235,6 +236,7 @@ let
       # stack=app-db.
       logsTile = {
         name = "Logs";
+        weight = 30;
         href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${name}/logs?from=now-15m&to=now&var-ds=loki-default&var-filters=service_name%7C%3D%7C${name}";
         description = "App logs";
         icon = "/icons/loki.png";
@@ -257,6 +259,7 @@ let
 
       repoTile = {
         name = "Repo";
+        weight = 20;
         href = "https://github.com/santiagotoscanini/${name}";
         description = "Source code (github.com/santiagotoscanini/${name})";
         icon = "mdi-github-#94a3b8";
@@ -267,6 +270,7 @@ let
       # the dashboard template variable lands pre-filtered.
       dbTile = {
         name = "DB";
+        weight = 40;
         href = "https://grafana.toscanini.me/d/pg-overview/postgres?orgId=1&var-app=${name}&refresh=30s";
         description = "Postgres metrics — ${name} DB";
         icon = "/icons/postgres.png";

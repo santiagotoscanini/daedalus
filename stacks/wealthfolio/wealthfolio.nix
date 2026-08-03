@@ -38,7 +38,8 @@
     port = 8088;
     exposeRemotely = true;
     homepage = {
-      group = "Productivity";
+      group = "Home";
+      extra.weight = 60;
       # Deep-link the SSO start — skips the login page's button click
       # (silent round-trip through Pocket ID when a session is alive).
       href = "https://wealthfolio.toscanini.me/api/v1/auth/oidc/login";

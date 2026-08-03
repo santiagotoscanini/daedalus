@@ -381,7 +381,8 @@ in
     # than "/" (which is a 200 shell regardless of app health).
     healthPath = "/manifest.json";
     homepage = {
-      group = "Smart Home";
+      group = "Home";
+      extra.weight = 40;
       name = "Home Assistant";
       description = "Home automation hub";
       icon = "home-assistant.png";
@@ -405,14 +406,6 @@ in
         key = "{{HOMEPAGE_VAR_HASS_API_KEY}}";
       };
     };
-  };
-
-  fleet.homepageLayout."Smart Home" = {
-    style = "row";
-    columns = 4;
-    icon = "mdi-home-automation-#94a3b8";
-    useEqualHeights = true;
-    tab = "Home";
   };
 
   # Multicast discovery, LAN interface only. Without these the kernel

@@ -116,6 +116,7 @@ in
   fleet.homepageServices."Network" = [
     {
       name = "Cloudflare Tunnel";
+      weight = 10;
       href = "https://dash.cloudflare.com/${accountId}/tunnels/${tunnelId}/overview";
       description = "Outbound CF Tunnel";
       icon = "cloudflare.png";

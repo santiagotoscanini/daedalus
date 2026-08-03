@@ -28,7 +28,8 @@
     authGroups = [ "admins" "family" ];
     healthPath = "/api/v1/info/status";
     homepage = {
-      group = "Productivity";
+      group = "Home";
+      extra.weight = 70;
       name = "Stirling-PDF";
       description = "PDF toolbox (split, merge, OCR)";
       icon = "stirling-pdf.png";

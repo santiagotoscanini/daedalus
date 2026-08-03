@@ -48,6 +48,7 @@ in
     authBypassRule = "(Method(`GET`) && (PathPrefix(`/api/stats`) || PathPrefix(`/api/info`))) || (Method(`POST`) && Path(`/api/auth`))";
     homepage = {
       group = "Network";
+      extra.weight = 40;
       name = "Pi-hole";
       description = "LAN DNS, DHCP, ad-blocking";
       icon = "pi-hole.png";

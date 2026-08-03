@@ -25,6 +25,7 @@
     healthPath = "/favicon.ico";
     homepage = {
       group = "Media";
+      extra.weight = 60; # MeTube
       name = "MeTube";
       description = "yt-dlp web UI";
       icon = "metube.png";

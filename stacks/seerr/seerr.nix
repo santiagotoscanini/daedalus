@@ -39,6 +39,7 @@
     port = 5055;
     homepage = {
       group = "Media";
+      extra.weight = 10; # Seerr
       description = "Media requests & discovery";
       icon = "seerr.png";
       widget = {

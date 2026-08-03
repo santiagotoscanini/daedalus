@@ -286,6 +286,7 @@ in
       healthPath = "/-/healthy";
       homepage = {
         group = "Monitoring";
+        extra.weight = 30; # Prometheus
         description = "TSDB — 30d / 100GB retention";
         icon = "prometheus.png";
         widget = {
@@ -299,6 +300,7 @@ in
       port = 3000;
       homepage = {
         group = "Monitoring";
+        extra.weight = 10; # Grafana
         href = "https://grafana.toscanini.me/dashboards";
         # Default probe (upstream /) 302s into the OAuth auto-login
         # chain, which homepage's proxy can't follow. /api/health is

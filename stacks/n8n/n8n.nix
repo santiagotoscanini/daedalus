@@ -106,7 +106,7 @@ in
         display = "dynamic-list";
         mappings = {
           items = "data";
-          limit = 5;
+          limit = 3;
           name = "status";
           label = "workflowId";
           remap = [

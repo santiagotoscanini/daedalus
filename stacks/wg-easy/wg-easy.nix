@@ -38,6 +38,7 @@
     };
     homepage = {
       group = "Network";
+      extra.weight = 30;
       name = "WireGuard";
       description = "VPN admin";
       icon = "wireguard.png";

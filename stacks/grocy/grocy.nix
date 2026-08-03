@@ -45,7 +45,8 @@
     authBypassRule = "PathPrefix(`/api`)";
     authHeaders."Remote-User" = "admin";
     homepage = {
-      group = "Productivity";
+      group = "Home";
+      extra.weight = 50;
       description = "Household inventory & chores";
       icon = "grocy.png";
       widget = {

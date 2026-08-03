@@ -137,6 +137,7 @@ in
     metrics.enable = true;
     homepage = {
       group = "Monitoring";
+      extra.weight = 40;
       # /oidc/login skips gatus's hard-coded "Login with OIDC" button
       # page — silent round-trip through Pocket ID when a session is
       # alive (no auto-redirect option upstream).

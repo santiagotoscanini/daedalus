@@ -254,6 +254,7 @@ in
     healthPath = "/api/version";
     homepage = {
       group = "Network";
+      extra.weight = 20;
       name = "Traefik";
       description = "Reverse proxy — all *.toscanini.me routes";
       icon = "traefik.png";

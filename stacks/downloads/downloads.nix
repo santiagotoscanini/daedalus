@@ -187,7 +187,15 @@ in
 
       scrapeTarget = "host.containers.internal:8001";
 
+      # Sits with the media stack: every tenant riding this netns
+      # (qbittorrent, nzbget, the *arrs) is a Media tile.
+      homepageGroup = "Media";
+
       homepage = {
+        # Just after the two downloaders whose traffic it carries. Plain
+        # `weight`, not `extra.weight`: this attrset is passed verbatim
+        # into homepageServices, it is not a webApp tile.
+        weight = 85;
         name = "Gluetun";
         # The VPN has no UI of its own — link the grafana network
         # dashboard, where the gluetun/VPN panels live.

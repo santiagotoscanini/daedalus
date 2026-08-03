@@ -159,10 +159,44 @@
       port = 1411;
       exposeRemotely = true;
       homepage = {
-        group = "Network";
+        group = "Home";
+        extra.weight = 10;
         name = "Pocket ID";
         description = "OIDC provider — passkey SSO for all web UIs";
         icon = "pocket-id.png";
+        # Auth is the STATIC_API_KEY from this stack's env.sops, rendered
+        # into homepage's env at boot (same single-source idiom as the
+        # litellm key) rather than copied into homepage's own env.sops.
+        # Counts come from each list endpoint's `pagination.totalItems`,
+        # NOT the `data` array — that only holds the first page of 20.
+        extra.widgets = [
+          {
+            type = "customapi";
+            url = "http://pocket-id:1411/api/oidc/clients";
+            refreshInterval = 300000;
+            headers."X-API-KEY" = "{{HOMEPAGE_VAR_POCKETID_KEY}}";
+            mappings = [
+              {
+                field = "pagination.totalItems";
+                label = "SSO clients";
+                format = "number";
+              }
+            ];
+          }
+          {
+            type = "customapi";
+            url = "http://pocket-id:1411/api/users";
+            refreshInterval = 300000;
+            headers."X-API-KEY" = "{{HOMEPAGE_VAR_POCKETID_KEY}}";
+            mappings = [
+              {
+                field = "pagination.totalItems";
+                label = "Users";
+                format = "number";
+              }
+            ];
+          }
+        ];
       };
     };
 

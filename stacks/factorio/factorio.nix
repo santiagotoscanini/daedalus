@@ -40,7 +40,7 @@ in
     serviceName = "factorio";
     port = 80;
     homepage = {
-      group = "Productivity";
+      group = "Gaming";
       name = "Factorio Admin";
       description = "v${factorioVersion} · server manager";
       icon = "/icons/factorio.png";
