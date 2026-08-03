@@ -252,11 +252,22 @@ let
         inherit name;
         weight = 10;
         href = publicUrl;
-        # traefik-net DNS by default; in egress mode the app isn't on any
-        # bridge, so monitor the host port gluetun publishes instead.
+        # traefik-net DNS by default. Two exceptions, both because homepage
+        # lives on traefik-net and the container does not:
+        #   egress  — borrowed netns, so monitor the host port the netns
+        #             owner publishes;
+        #   isolated — private iso-<name>-net whose only other member is
+        #             traefik, so `http://<container>:3000` doesn't even
+        #             resolve from homepage ("bad address"). Dial it through
+        #             traefik on the unauthenticated health path instead —
+        #             the same fallback platform/publishing.nix already
+        #             applies to isolated webApps. The health path is what
+        #             keeps the probe off the IdP's 302.
         siteMonitor =
           if egressEnabled then
             "http://host.containers.internal:${toString app.egress.hostPort}"
+          else if isolatedAuth then
+            "https://${hostname}${lib.optionalString (app.auth.healthPath != null) app.auth.healthPath}"
           else
             "http://${cName}:3000";
         inherit (app.homepage) icon;
