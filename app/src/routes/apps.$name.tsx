@@ -4,7 +4,15 @@ import { ApplyBar } from '../components/apply-bar'
 import { AreaChart, Bytes, Metric, Panel, Row, Segmented, StatePill, Toggle } from '../components/ui'
 import { fetchApp, saveApp } from '../server/registry'
 
+const TABS = ['overview', 'settings', 'logs'] as const
+
 export const Route = createFileRoute('/apps/$name')({
+  // The tab lives in the URL, not in component state: it survives a refresh,
+  // it is linkable ("look at ipcrawl's settings"), and it renders on the
+  // server, so the settings form is not a client-only surface.
+  validateSearch: (search: Record<string, unknown>): { tab: Tab } => ({
+    tab: TABS.includes(search.tab as Tab) ? (search.tab as Tab) : 'overview',
+  }),
   loader: async ({ params }) => {
     const data = await fetchApp({ data: params.name })
     if (!data) throw notFound()
@@ -27,7 +35,7 @@ type Tab = 'overview' | 'settings' | 'logs'
 function AppDetail() {
   const { app, drift, status, dbSize, logs, logs1h, applyStatus } = Route.useLoaderData()
   const router = useRouter()
-  const [tab, setTab] = useState<Tab>('overview')
+  const { tab } = Route.useSearch()
 
   const readOnly = app.managedInNix
   const state = status?.state ?? 'unknown'
@@ -99,18 +107,18 @@ function AppDetail() {
       )}
 
       <nav className="tabs">
-        {(['overview', 'settings', 'logs'] as const).map((t) => (
-          <button
+        {TABS.map((t) => (
+          <Link
             key={t}
-            type="button"
+            to="/apps/$name"
+            params={{ name: app.name }}
+            search={{ tab: t }}
             className={t === tab ? 'active' : ''}
-            onClick={() => {
-              setTab(t)
-            }}
+            replace
           >
             {t}
             {t === 'logs' && logs.length > 0 && <span className="tab-dot" />}
-          </button>
+          </Link>
         ))}
       </nav>
 

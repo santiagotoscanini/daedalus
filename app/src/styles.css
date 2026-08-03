@@ -490,7 +490,7 @@ h2 {
   border-bottom: 1px solid var(--border-soft);
   margin-bottom: 1.5rem;
 }
-.tabs button {
+.tabs a {
   background: none;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -504,10 +504,10 @@ h2 {
   align-items: center;
   gap: 0.4rem;
 }
-.tabs button:hover {
+.tabs a:hover {
   color: var(--text);
 }
-.tabs button.active {
+.tabs a.active {
   color: var(--text);
   border-bottom-color: var(--accent);
 }
