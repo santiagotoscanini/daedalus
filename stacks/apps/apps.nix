@@ -274,6 +274,9 @@ let
       }
       // (lib.optionalAttrs (app.homepage.description != "") {
         inherit (app.homepage) description;
+      })
+      // (lib.optionalAttrs (app.homepage.widget != null) {
+        inherit (app.homepage) widget;
       });
 
       # service_name=<name> is set by alloy for the app-<name> container
@@ -1105,6 +1108,21 @@ in
                 type = lib.types.str;
                 default = "mdi-cube-outline-#94a3b8";
                 description = "Tile icon (homepage icon syntax).";
+              };
+              widget = lib.mkOption {
+                type = lib.types.nullOr (lib.types.attrsOf lib.types.unspecified);
+                default = null;
+                description = ''
+                  Optional homepage widget block, passed through verbatim (same
+                  shape as `fleet.webApps.<n>.homepage.widget`). Null by
+                  default: an app with nothing to report should not carry an
+                  empty widget that renders a permanently blank row.
+
+                  A `customapi` widget must point at a URL homepage can
+                  actually reach — it lives on traefik-net and monitoring-net,
+                  so an `auth.isolated` app has to be dialled through traefik
+                  on a path that is on the forward-auth bypass.
+                '';
               };
             };
 

@@ -1,91 +1,53 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { createServerFn } from '@tanstack/react-start'
 import { useMemo, useState } from 'react'
-import { Sparkline, StateDot, type AppState } from '../components/status'
+import { ApplyBar } from '../components/apply-bar'
+import { Segmented, Sparkline, StateDot, type AppState } from '../components/ui'
+import { fetchApps } from '../server/registry'
 
-// The app list. Every row joins three sources:
-//   the registry (Postgres — what daedalus believes),
-//   the Nix manifest (what the box was actually built from → drift),
-//   Prometheus (what is happening right now).
-
-const getApps = createServerFn().handler(async () => {
-  const { listApps, driftOf } = await import('../lib/repo/apps')
-  const { manifestEntries } = await import('../lib/nix-manifest')
-  const { appStatuses } = await import('../lib/metrics')
-
-  const records = await listApps()
-  const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
-  // No .catch here: appStatuses runs its queries under allSettled and degrades
-  // to "unknown" per app rather than rejecting, so a prometheus outage costs
-  // the status column, not the page.
-  const statuses = await appStatuses(records.map((r) => r.name))
-
-  return records.map((r) => ({
-    name: r.name,
-    stage: r.stage,
-    managedInNix: r.managedInNix,
-    sourceMode: r.sourceMode,
-    description: r.homepageDescription,
-    hostname: `${r.name}.toscanini.me`,
-    authMode: r.authMode,
-    postgres: r.postgres,
-    drift: driftOf(r, manifest.get(r.name)),
-    status: statuses[r.name] ?? {
-      state: 'unknown' as const,
-      containerUp: null,
-      healthy: null,
-      rpm: null,
-      spark: [],
-    },
-  }))
-})
+// The app list. Every row joins three sources: the registry (Postgres — what
+// daedalus believes), the Nix manifest (what the box was actually built from,
+// hence drift), and Prometheus (what is happening right now).
 
 export const Route = createFileRoute('/apps/')({
-  loader: () => getApps(),
+  loader: () => fetchApps(),
   component: AppsList,
 })
 
-type Row = Awaited<ReturnType<typeof getApps>>[number]
+type Row = Awaited<ReturnType<typeof fetchApps>>['apps'][number]
 
-function AppsList() {
-  const rows = Route.useLoaderData()
+export function AppsList() {
+  const { apps, applyStatus } = Route.useLoaderData()
   const [search, setSearch] = useState('')
   const [state, setState] = useState<'all' | AppState>('all')
   const [exposure, setExposure] = useState<'all' | 'live' | 'lab'>('all')
 
   const counts = useMemo(
     () => ({
-      running: rows.filter((r) => r.status.state === 'running').length,
-      attention: rows.filter((r) => r.status.state === 'attention').length,
-      stopped: rows.filter((r) => r.status.state === 'stopped' || r.status.state === 'unknown')
+      running: apps.filter((r) => r.status.state === 'running').length,
+      attention: apps.filter((r) => r.status.state === 'attention').length,
+      stopped: apps.filter((r) => r.status.state === 'stopped' || r.status.state === 'unknown')
         .length,
     }),
-    [rows],
+    [apps],
   )
 
-  const visible = rows.filter(
+  const visible = apps.filter(
     (r) =>
       (state === 'all' || r.status.state === state) &&
       (exposure === 'all' || r.stage === exposure) &&
       (search === '' || `${r.name} ${r.description}`.toLowerCase().includes(search.toLowerCase())),
   )
 
-  const drifted = rows.filter((r) => r.drift.length > 0)
+  const changed = apps
+    .filter((a) => !a.managedInNix && a.drift.length > 0)
+    .map((a) => ({ name: a.name, fields: a.drift }))
 
   return (
     <>
       <header className="page-head">
         <h1>Apps</h1>
-        <span className="count-badge">{rows.length}</span>
+        <span className="count-badge">{apps.length}</span>
       </header>
-
-      {drifted.length > 0 && (
-        <div className="banner">
-          <strong>{drifted.length} app(s) changed but not applied.</strong> The registry no longer
-          matches what Nix built ({drifted.map((d) => d.name).join(', ')}). Applying is not wired up
-          yet — for now the difference is informational.
-        </div>
-      )}
 
       <div className="tallies">
         <span>
@@ -113,19 +75,19 @@ function AppsList() {
           value={state}
           onChange={setState}
           options={[
-            ['all', 'all'],
-            ['running', 'running'],
-            ['attention', 'issues'],
-            ['stopped', 'stopped'],
+            { value: 'all', label: 'all' },
+            { value: 'running', label: 'running' },
+            { value: 'attention', label: 'issues' },
+            { value: 'stopped', label: 'stopped' },
           ]}
         />
         <Segmented
           value={exposure}
           onChange={setExposure}
           options={[
-            ['all', 'all'],
-            ['live', 'external'],
-            ['lab', 'internal'],
+            { value: 'all', label: 'all' },
+            { value: 'live', label: 'external' },
+            { value: 'lab', label: 'internal' },
           ]}
         />
       </div>
@@ -136,6 +98,8 @@ function AppsList() {
         ))}
         {visible.length === 0 && <li className="empty">No apps match that filter.</li>}
       </ul>
+
+      <ApplyBar changed={changed} initialStatus={applyStatus} />
     </>
   )
 }
@@ -154,7 +118,7 @@ function AppRow({ row }: { row: Row }) {
                 nix
               </span>
             )}
-            {row.drift.length > 0 && (
+            {!row.managedInNix && row.drift.length > 0 && (
               <span className="chip chip-warn" title={`Changed: ${row.drift.join(', ')}`}>
                 unapplied
               </span>
@@ -177,32 +141,5 @@ function AppRow({ row }: { row: Row }) {
         </div>
       </Link>
     </li>
-  )
-}
-
-function Segmented<T extends string>({
-  value,
-  onChange,
-  options,
-}: {
-  value: T
-  onChange: (v: T) => void
-  options: [T, string][]
-}) {
-  return (
-    <div className="segmented">
-      {options.map(([v, label]) => (
-        <button
-          key={v}
-          type="button"
-          className={v === value ? 'active' : ''}
-          onClick={() => {
-            onChange(v)
-          }}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
   )
 }

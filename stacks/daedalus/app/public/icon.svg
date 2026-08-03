@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="daedalus">
   <!-- A square labyrinth: Daedalus built the one on Crete. Drawn as a single
        unbroken spiral so it scales down to a 16px favicon and still reads. -->
-  <rect width="32" height="32" rx="7" fill="#7c5cff"/>
+  <rect width="32" height="32" rx="7" fill="#e2795a"/>
   <path
     d="M16 16 L16 20 L12 20 L12 12 L20 12 L20 24 L8 24 L8 8 L24 8 L24 28 L4 28 L4 4 L28 4"
-    stroke="#f4f1ff"
+    stroke="#fdf3ef"
     stroke-width="1.75"
     stroke-linecap="round"
     stroke-linejoin="round"

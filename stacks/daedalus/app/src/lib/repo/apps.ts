@@ -67,6 +67,97 @@ export async function importFromNix(): Promise<{ imported: string[] }> {
   return { imported }
 }
 
+/**
+ * Fields daedalus may change today.
+ *
+ * The omissions are deliberate, not unfinished. `auth.*` cannot move without
+ * provisioning an SSO_SECRET_<NAME> into stacks/pocket-id/clients.sops —
+ * writing encrypted state is its own design problem, and a half-applied auth
+ * change locks you out of the app. `egress` needs a gluetun instance to exist
+ * first. `operatorSecrets` needs a <name>-env.sops authored by hand.
+ * `sourceMode` and `name` rewrite paths across the whole platform.
+ *
+ * Everything here, by contrast, is a pure data change that the existing
+ * modules already know how to act on.
+ */
+export const EDITABLE_FIELDS = [
+  'stage',
+  'image',
+  'homepageDescription',
+  'homepageIcon',
+  'postgres',
+  'storage',
+  'litellm',
+  'prometheus',
+] as const
+
+export type EditableField = (typeof EDITABLE_FIELDS)[number]
+export type AppPatch = Partial<Pick<typeof apps.$inferInsert, EditableField>>
+
+export async function updateApp(name: string, patch: AppPatch): Promise<void> {
+  const record = await getApp(name)
+  if (!record) throw new Error(`no app named ${name}`)
+  if (record.managedInNix) {
+    throw new Error(
+      `${name} is declared by hand in Nix and is read-only here — edit stacks/daedalus/daedalus.nix`,
+    )
+  }
+
+  // Whitelist rather than trust the caller's keys: this object is written
+  // straight into an UPDATE, and the server function boundary is the only
+  // thing between it and the request body.
+  const clean: AppPatch = {}
+  for (const k of EDITABLE_FIELDS) {
+    if (k in patch) (clean as Record<string, unknown>)[k] = patch[k]
+  }
+  if (Object.keys(clean).length === 0) return
+
+  await db
+    .update(apps)
+    .set({ ...clean, updatedAt: new Date() })
+    .where(eq(apps.name, name))
+}
+
+export async function setEnvVar(
+  name: string,
+  key: string,
+  value: string,
+  note: string | null,
+): Promise<void> {
+  const record = await getApp(name)
+  if (!record) throw new Error(`no app named ${name}`)
+  if (record.managedInNix) throw new Error(`${name} is read-only here`)
+
+  const existing = record.envVars.find((e) => e.key === key)
+  if (existing) {
+    await db
+      .update(appEnvVars)
+      .set({ value, note })
+      .where(eq(appEnvVars.id, existing.id))
+  } else {
+    await db.insert(appEnvVars).values({
+      appId: record.id,
+      key,
+      value,
+      note,
+      position: record.envVars.length,
+    })
+  }
+  await db.update(apps).set({ updatedAt: new Date() }).where(eq(apps.id, record.id))
+}
+
+export async function deleteEnvVar(name: string, key: string): Promise<void> {
+  const record = await getApp(name)
+  if (!record) throw new Error(`no app named ${name}`)
+  if (record.managedInNix) throw new Error(`${name} is read-only here`)
+
+  const existing = record.envVars.find((e) => e.key === key)
+  if (!existing) return
+
+  await db.delete(appEnvVars).where(eq(appEnvVars.id, existing.id))
+  await db.update(apps).set({ updatedAt: new Date() }).where(eq(apps.id, record.id))
+}
+
 function toRow(entry: ManifestEntry) {
   return {
     name: entry.name,

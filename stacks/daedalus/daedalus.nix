@@ -32,12 +32,41 @@
 
 {
   config,
+  lib,
   pkgs,
   mkSecretRender,
   ...
 }:
 
 let
+  # Where the container drops an apply request and reads back status. A bind
+  # mount, deliberately, rather than an API the host calls: the container has
+  # no privilege to lose, and the host agent never has to authenticate to the
+  # app or reach into Postgres. The app produces the artifact; the host moves
+  # it into the flake and rebuilds.
+  applyDir = "/home/santiago/selfhost/daedalus/apply";
+
+  applyScript = pkgs.writeShellApplication {
+    name = "daedalus-apply";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.git
+      pkgs.util-linux # setpriv
+      pkgs.coreutils
+      pkgs.nixos-rebuild
+      pkgs.openssh # git push over ssh
+    ];
+    text = ''
+      APPLY_DIR=${lib.escapeShellArg applyDir}
+      FLAKE=/etc/nixos
+      TARGET=/etc/nixos/stacks/apps/apps.json
+      HOSTNAME=${lib.escapeShellArg config.networking.hostName}
+      GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
+
+      ${builtins.readFile ./host/apply.sh}
+    '';
+  };
+
   # What Nix currently believes, handed to the container as one read-only
   # store file. Two parts, because they have different provenance:
   #
@@ -144,11 +173,47 @@ in
       # The one unauthenticated path. Backs the gatus probe, the forward-auth
       # bypass and the homepage tile's siteMonitor — see the route's header.
       healthPath = "/api/healthz";
+      # Who applied. An Apply writes a git commit, so the commit should name a
+      # person rather than "daedalus". Trusting a header requires that nothing
+      # else can dial the app and forge one — which is exactly what `isolated`
+      # above guarantees, and why the platform asserts the two go together.
+      headers = {
+        "X-Forwarded-Email" = "{{ .claims.email }}";
+      };
+      # /api/info skips the gate so the homepage tile can read it, the same
+      # way healthPath does. The route is written to deserve that: counts and
+      # app names only — no config, no env, no drift detail. A bypassed path
+      # is effectively public on the LAN, and this is the control plane.
+      authBypassRule = "Path(`/api/info`)";
     };
 
     homepage = {
       description = "S2 control plane";
-      icon = "mdi-server-network-#7c5cff";
+      icon = "mdi-server-network-#e2795a";
+      # Dialled through traefik rather than by container DNS: homepage lives
+      # on traefik-net and `isolated` deliberately keeps daedalus off it.
+      widget = {
+        type = "customapi";
+        url = "https://daedalus.toscanini.me/api/info";
+        refreshInterval = 60000;
+        mappings = [
+          {
+            field = "running";
+            label = "Running";
+            format = "number";
+          }
+          {
+            field = "attention";
+            label = "Issues";
+            format = "number";
+          }
+          {
+            field = "unapplied";
+            label = "Unapplied";
+            format = "number";
+          }
+        ];
+      };
     };
 
     env = {
@@ -157,6 +222,8 @@ in
       LOKI_URL = "http://loki:3100";
       # What Nix last built — see the nixManifest let-binding.
       NIX_MANIFEST_PATH = "/registry/manifest.json";
+      # Where apply requests are dropped for the host agent.
+      APPLY_DIR = "/apply";
     };
   };
 
@@ -165,7 +232,52 @@ in
   # than the apps platform learning about daedalus.
   virtualisation.oci-containers.containers.app-daedalus.volumes = [
     "${nixManifest}:/registry/manifest.json:ro"
+    "${applyDir}:/apply"
   ];
+
+  fleet.statePaths.${applyDir} = { };
+
+  # The apply agent. Root, because only root can `nixos-rebuild switch`.
+  #
+  # Triggered by a path unit rather than a socket or an API: the container
+  # writes request.json into the bind mount above, systemd notices, and this
+  # runs. The container therefore holds no host privilege at all — the trust
+  # boundary is "can write into that directory", and everything that can
+  # already has NOPASSWD sudo on this box.
+  #
+  # NOT a timer: an apply should start when one is requested, not up to N
+  # seconds later, and a rebuild is far too expensive to poll for.
+  systemd.services.daedalus-apply = {
+    description = "Apply the daedalus app registry: commit the export and rebuild";
+    # linger-users gates /run/user/1000; the rebuild restarts rootless units.
+    after = [
+      "network-online.target"
+      "linger-users.service"
+    ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${applyScript}/bin/daedalus-apply";
+      # A rebuild can take minutes on a cold cache; the default 90s would
+      # SIGTERM it mid-switch.
+      TimeoutStartSec = "30min";
+    };
+  };
+
+  systemd.paths.daedalus-apply = {
+    description = "Watch for a daedalus apply request";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig = {
+      # PathChanged fires on close-after-write and on rename-into-place, which
+      # is how the app publishes the file — it writes a temp and renames, so a
+      # half-written request is never observable.
+      PathChanged = "${applyDir}/request.json";
+    };
+  };
+
+  # A failed apply means the box may have been rolled back without anyone
+  # watching the UI. Mail it.
+  fleet.monitoredJobs.daedalus-apply = { };
 
   # LiteLLM master key, extracted rather than inherited. Adding
   # `config.sops.secrets."litellm-env".path` to environmentFiles would work,
