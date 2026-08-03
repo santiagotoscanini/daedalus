@@ -10,8 +10,8 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: 'daedalus' },
       { name: 'description', content: 'S2 control plane' },
-      // The app is behind a Pocket ID gate on the LAN; there is nothing here
-      // for a crawler even if one could reach it.
+      // Behind a Pocket ID gate on the LAN; there is nothing here for a
+      // crawler even if one could reach it.
       { name: 'robots', content: 'noindex, nofollow' },
     ],
     links: [
@@ -29,20 +29,35 @@ function RootDocument({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <header className="topbar">
-          <Link to="/" className="brand">
-            <img src="/icon.svg" alt="" width={22} height={22} />
-            <span>daedalus</span>
-          </Link>
-          <nav>
-            <Link to="/" activeOptions={{ exact: true }}>
-              Overview
+        <div className="shell">
+          <aside className="sidebar">
+            <Link to="/apps" className="brand">
+              <img src="/icon.svg" alt="" width={30} height={30} />
+              <span>
+                daedalus
+                <small>workshop</small>
+              </span>
             </Link>
-            <Link to="/models">Models</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        <main>{children ?? <Outlet />}</main>
+
+            <nav className="nav-primary">
+              <Link to="/apps" className="nav-item">
+                <span className="nav-icon" aria-hidden="true">
+                  ▦
+                </span>
+                Apps
+              </Link>
+            </nav>
+
+            {/* Secondary, not tabs — the gateway model list and the runtime
+                readout are diagnostics, not part of the management surface. */}
+            <nav className="nav-secondary">
+              <Link to="/models">Models</Link>
+              <Link to="/about">About</Link>
+            </nav>
+          </aside>
+
+          <main className="content">{children ?? <Outlet />}</main>
+        </div>
         <Scripts />
       </body>
     </html>

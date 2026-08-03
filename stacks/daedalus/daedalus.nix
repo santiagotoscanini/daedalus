@@ -30,9 +30,82 @@
 #   ./assets/**         → nixos-rebuild (context hash → new image tag → restart).
 #   this file           → nixos-rebuild.
 
-{ config, mkSecretRender, ... }:
+{
+  config,
+  pkgs,
+  mkSecretRender,
+  ...
+}:
+
+let
+  # What Nix currently believes, handed to the container as one read-only
+  # store file. Two parts, because they have different provenance:
+  #
+  #   registry   — stacks/apps/apps.json, the committed export of daedalus's
+  #                own `apps` table. Comparing the DB against THIS is how the
+  #                UI reports drift: it is not "what the DB says", it is what
+  #                the running system was actually built from.
+  #   nixManaged — apps declared by hand in Nix and therefore not editable
+  #                here. Only daedalus itself. Restated rather than derived
+  #                from `config.fleet.apps`: reading that attrset from the
+  #                module that also defines `fleet.apps.daedalus`, to build a
+  #                volume on the container that apps.nix generates from
+  #                `fleet.apps`, is exactly the kind of loop the apps module's
+  #                header warns about. A dozen literal lines is cheaper than
+  #                an infinite recursion at eval time.
+  #
+  # A store path, not a bind mount of /etc/nixos/stacks/apps/apps.json: the
+  # path itself changes when the content does, so the container's ExecStart
+  # changes and it restarts with the new manifest. Binding the live file
+  # instead would pin its inode and survive an Apply that rewrote it.
+  nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
+    builtins.toJSON {
+      schemaVersion = 1;
+      registry = builtins.fromJSON (builtins.readFile ../apps/apps.json);
+      nixManaged = {
+        daedalus = {
+          stage = "lab";
+          sourceMode = "local";
+          postgres = true;
+          storage = false;
+          litellm = true;
+          prometheus = false;
+          operatorSecrets = false;
+          image = null;
+          egress = null;
+          env = [ ];
+          auth = {
+            mode = "proxy";
+            isolated = true;
+            healthPath = "/api/healthz";
+          };
+          homepage = {
+            description = "S2 control plane";
+            icon = "mdi-server-network-#7c5cff";
+          };
+          notes = {
+            app = "The control plane itself. Declared by hand in stacks/daedalus/daedalus.nix rather than in the registry: an Apply that broke this entry would take down the interface you would use to undo it.";
+            source = "source.mode = \"local\" — the source lives in the flake repo at stacks/daedalus/app and is bind-mounted into the container, which runs the Vite dev server against it. Saving a file is the whole deploy.";
+          };
+        };
+      };
+    }
+  );
+in
 
 {
+  # Reach the monitoring stack: prometheus for liveness/traffic/DB size, loki
+  # for the log panels. Both live on `monitoring`. This list MERGES with the
+  # one stacks/apps/apps.nix contributes for this container (app-db, plus the
+  # iso bridge from webApps.isolated) — bridgeMemberships is the single source
+  # of membership and its lists concatenate across modules.
+  #
+  # It does cost some of what `auth.isolated` buys: daedalus can now dial
+  # prometheus and loki. That is a deliberate trade for real status instead of
+  # invented status — the isolation that matters (nothing on traefik-net can
+  # reach daedalus) is unaffected, since this only adds outbound reach.
+  fleet.bridgeMemberships."app-daedalus" = [ "monitoring" ];
+
   fleet.apps.daedalus = {
     source = {
       mode = "local";
@@ -77,7 +150,22 @@
       description = "S2 control plane";
       icon = "mdi-server-network-#7c5cff";
     };
+
+    env = {
+      # Reached over the `monitoring` bridge added above.
+      PROMETHEUS_URL = "http://prometheus:9090";
+      LOKI_URL = "http://loki:3100";
+      # What Nix last built — see the nixManifest let-binding.
+      NIX_MANIFEST_PATH = "/registry/manifest.json";
+    };
   };
+
+  # Same list-merge idiom stacks/litellm uses to add its token mount to
+  # prometheus: the stack that OWNS the file contributes the mount, rather
+  # than the apps platform learning about daedalus.
+  virtualisation.oci-containers.containers.app-daedalus.volumes = [
+    "${nixManifest}:/registry/manifest.json:ro"
+  ];
 
   # LiteLLM master key, extracted rather than inherited. Adding
   # `config.sops.secrets."litellm-env".path` to environmentFiles would work,

@@ -1,156 +1,135 @@
-# Per-app declarations. Add entries here; the apps module
-# (stacks/apps/apps.nix) composes container + traefik + observability
-# + homepage + (optionally) postgres for each.
+# Per-app declarations — READ FROM ./apps.json, not written by hand.
 #
-# Defaults inferred from the entry's key:
-#   - image    = registry.toscanini.me/<name>:latest (the box's own zot,
-#                stacks/registry — anonymous pull)
-#   - hostname = <name>.toscanini.me
-#   - container = app-<name>
-#   - homepage section = capitalized <name>
+# The authoritative copy of this data lives in daedalus's `apps` table
+# (stacks/daedalus). daedalus's Apply flow exports it to ./apps.json, commits
+# that file, and rebuilds; this module turns the JSON back into `fleet.apps`
+# entries, which the apps platform (stacks/apps/apps.nix) composes into
+# container + traefik + observability + homepage + (optionally) postgres.
 #
-# Optional opt-ins:
-#   - postgres.enable = true   → per-app postgres via stacks/app-db/
-#   - prometheus.enable = true → /metrics scrape + Grafana dashboard; flip
-#                                once the app actually ships /metrics
-#   - stage = "live"           → public CNAME via Cloudflare tunnel
-#   - deploy.enable = false    → freeze the app on its current image
+# Why a file and not a database query: nix eval is pure and a flake only sees
+# git-tracked files, so nixos-rebuild cannot reach Postgres — and must not need
+# to. A committed export keeps "the repo IS the system" true: a fresh checkout
+# rebuilds this exact box with no database in the loop. The DB is the editing
+# surface; this file is the contract.
 #
-# Workflow:
+# To change an app: use daedalus (https://daedalus.toscanini.me), then Apply.
+# Editing apps.json directly works for one rebuild but daedalus will report the
+# app as drifted, and the next Apply overwrites it.
+#
+# NOT in here: `source.mode = "local"` apps, which carry source and a
+# Containerfile alongside their declaration and so own a stack folder of their
+# own. stacks/daedalus is the only one — deliberately hand-written, so a bad
+# edit to daedalus's own entry can't take down the app you'd use to fix it.
+#
+# Defaults still inferred from the app's key by stacks/apps/apps.nix:
+#   image     = registry.toscanini.me/<name>:latest (the box's own zot)
+#   hostname  = <name>.toscanini.me
+#   container = app-<name>
+#   homepage section = capitalized <name>
+#
+# Workflow for a NEW app (unchanged — daedalus does not create repos):
 #   1. Push the code to github.com/santiagotoscanini/<name>; CI on the
 #      self-hosted runners (stacks/gha-runner) builds the image and pushes
 #      `registry.toscanini.me/<name>:latest`.
-#   2. Add an entry below; `sudo nixos-rebuild switch`. The entry also
-#      provisions the repo's self-hosted runner (stacks/gha-runner derives
-#      its runner set from fleet.apps).
+#   2. Add it in daedalus and Apply. The entry also provisions the repo's
+#      self-hosted runner (stacks/gha-runner derives its runner set from
+#      fleet.apps).
 #   3. Repo-side, once: copy the ci/image workflows from an existing app
 #      and `gh secret set REGISTRY_PASSWORD` with the ci password from
 #      stacks/registry/env.sops.
 #
-# Not every app is declared here: `source.mode = "local"` apps own a stack
-# folder of their own because they carry source and a Containerfile alongside
-# the declaration. See stacks/daedalus/ — it is a fleet.apps entry like the
-# ones below, just not one that comes from a registry.
-#
-# That's the whole loop. From then on, every push to main goes live on its
-# own: `app-<name>-deploy.timer` polls the registry every 2 minutes, and when
-# the digest moves it pulls, restarts the container, and health-checks it
-# through traefik. No manual pull, no rebuild. Watch a deploy with
-# `journalctl -fu app-<name>-deploy.service`; a deploy that comes back
+# From then on, every push to main goes live on its own: `app-<name>-deploy.timer`
+# polls the registry every 2 minutes, and when the digest moves it pulls,
+# restarts the container, and health-checks it through traefik. Watch a deploy
+# with `journalctl -fu app-<name>-deploy.service`; a deploy that comes back
 # unhealthy leaves the unit failed (and the new image running — there is no
 # auto-rollback). See stacks/apps/apps.nix + assets/deploy.sh.
 
-{ config, mkDotenvSecret, ... }:
-
 {
-  # Operator-managed secrets for ipcrawl (Shodan key + hash peppers) —
-  # sops class, tracked, editable with `sops ipcrawl-env.sops`. The
-  # machine-generated secrets/ipcrawl/env keeps only the bootstrap
-  # AUTH_SECRET (rotation: delete file + rebuild — never carries
-  # operator values).
-  sops.secrets."app-ipcrawl-env" = mkDotenvSecret ./ipcrawl-env.sops;
+  config,
+  lib,
+  mkDotenvSecret,
+  ...
+}:
 
-  fleet.apps.anansi = {
-    postgres.enable = true;
-    stage = "live";
+let
+  registry = builtins.fromJSON (builtins.readFile ./apps.json);
 
-    # Native OIDC: anansi has its own accounts + per-user data, so only
-    # it can map a Pocket ID identity onto the right rows. The platform
-    # provides the client (id `anansi`, secret from clients.sops) and
-    # the OIDC_* env; the app repo owns the Auth.js provider.
+  inherit (registry) apps;
+
+  # Operator-managed secrets are a per-app sops file at this stack's root,
+  # `<name>-env.sops` (tracked, edited with `sops <file>`). The registry
+  # carries only the boolean — the path is derived, so the two can never
+  # disagree and a future Apply that enables secrets for an app has exactly
+  # one filename to write.
+  sopsFileFor = name: ./. + "/${name}-env.sops";
+  secretName = name: "app-${name}-env";
+
+  withSecrets = lib.filterAttrs (_: a: a.operatorSecrets) apps;
+
+  # JSON → the `fleet.apps.<name>` submodule. Every field is emitted
+  # unconditionally where the option's default matches the exported value, so
+  # the mapping stays uniform; only genuinely optional shapes (image override,
+  # egress, auth paths) are conditional, because setting them to null is not
+  # the same as leaving them unset.
+  mkApp = name: a: {
+    inherit (a) stage;
+
+    postgres.enable = a.postgres;
+    storage.enable = a.storage;
+    litellm.enable = a.litellm;
+    prometheus.enable = a.prometheus;
+
     auth = {
-      mode = "native";
-      healthPath = "/api/healthz";
+      inherit (a.auth) mode;
+    }
+    // lib.optionalAttrs (a.auth.healthPath or null != null) {
+      inherit (a.auth) healthPath;
+    }
+    // lib.optionalAttrs (a.auth.allowedGroups or null != null) {
+      inherit (a.auth) allowedGroups;
+    }
+    // lib.optionalAttrs (a.auth.bypassRule or null != null) {
+      authBypassRule = a.auth.bypassRule;
+    }
+    // lib.optionalAttrs (a.auth.isolated or false) {
+      inherit (a.auth) isolated;
     };
 
     homepage = {
-      description = "Anansi — task-tracking experiment";
-      icon = "mdi-spider-#f59e0b";
+      inherit (a.homepage) description icon;
     };
-  };
 
-  # ipcrawl — fork of github.com/alectrocute/ipcrawl (MIT). Upstream has no
-  # Dockerfile and deploys as systemd+nginx on a VPS; the fork adds the
-  # Dockerfile + .github/workflows/image.yml that publishes
-  # registry.toscanini.me/ipcrawl:latest, so the `image` default applies
-  # unchanged. Rebase the fork on upstream to pick up changes.
-  fleet.apps.ipcrawl = {
-    # SQLite + an fs-backed screenshot/SWR cache, no Postgres. Schema is
-    # created in-process on boot (server/utils/exploreDb.ts ensureSchema),
-    # so there's no migration step to run — the migrations/ dir upstream is
-    # for their Cloudflare D1 path, not this one.
-    storage.enable = true;
+    # `env` is a LIST of {key, value, note} rather than an attrset: the note is
+    # the reason a flag is set the way it is, which used to live in a nix
+    # comment here and would otherwise be lost in the round-trip through the
+    # database. daedalus renders them next to the value; nix only needs the pair.
+    env = lib.listToAttrs (map (e: lib.nameValuePair e.key e.value) a.env);
 
-    # All outbound (camera live-probes + the daily Shodan pull) exits through
-    # the dedicated ProtonVPN tunnel in stacks/ipcrawl-vpn/ instead of the
-    # house WAN IP. The app leaves traefik-net and rides gluetun-ipcrawl's
-    # netns; traefik reaches the UI via the host port gluetun publishes.
+    environmentFiles = lib.optional a.operatorSecrets config.sops.secrets.${secretName name}.path;
+  }
+  // lib.optionalAttrs (a.image != null) {
+    inherit (a) image;
+  }
+  // lib.optionalAttrs (a.egress != null) {
     egress = {
-      container = "gluetun-ipcrawl";
-      hostPort = 3100;
-    };
-
-    # LAN-only. This is a catalogue of other people's exposed webcams;
-    # publishing it on a CNAME under our own domain is a decision to make
-    # deliberately, not a default.
-    stage = "lab";
-
-    # Forward-auth: ipcrawl has no user model, so the gate belongs in
-    # front of it rather than inside it. No app-side change, and no
-    # identity headers — nothing downstream would read them.
-    # /favicon.ico is the bypass: harmless unauthenticated, and it comes
-    # from the app itself, so gatus and the deploy check certify the
-    # upstream instead of the middleware's 302.
-    auth = {
-      mode = "proxy";
-      healthPath = "/favicon.ico";
-    };
-
-    # Runtime flags. These are podman `--env` (win over the secrets
-    # `--env-file` on any name collision), and Nuxt coerces the booleans
-    # with `=== 'true'`, so the literal string "true" is the only thing
-    # that enables them — "1"/"yes"/"TRUE" read as off.
-    env = {
-      # ON: probe cameras live so cards show current frames instead of the
-      # static Shodan still. This dials arbitrary exposed cameras straight
-      # from the house's IP — enabled deliberately.
-      NUXT_ENABLE_LIVE_PROBE = "true";
-
-      # Write successful live frames back into the screenshot store, so the
-      # cached still stays fresh for when probing is off/unreachable.
-      NUXT_ENABLE_LIVE_FRAME_PERSIST = "true";
-
-      # Cams pulled per Shodan query. ~1 credit / 100 results / query, so
-      # this is the main lever on credit burn. Upstream prod runs 2999.
-      NUXT_SHODAN_LIMIT_PER_QUERY = "1500";
-
-      # Maintenance brake, held off. "true" 503s the APIs and redirects
-      # HTML to /offline-for-now.
-      NUXT_OFFLINE_FOR_NOW = "false";
-
-      # OFF: the Shodan pull runs on a Nitro in-process cron (daily 00:00),
-      # not at boot. On-boot refresh only fires when the DB is empty, but
-      # keeping it off means a fresh install waits for the cron or a manual
-      # trigger rather than pulling during first boot.
-      NUXT_SHODAN_REFRESH_ON_BOOT = "false";
-
-      # The app reads its own canonical origin from this, not from the
-      # APP_PUBLIC_URL the apps module injects.
-      NUXT_PUBLIC_SITE_URL = "https://ipcrawl.toscanini.me";
-    };
-    # NUXT_SQLITE_PATH is baked into the image (=/app/data/explore.sqlite,
-    # i.e. inside the storage bind mount) — deliberately not restated here,
-    # so there's one source of truth for it.
-
-    # NUXT_SHODAN_API_KEY + NUXT_VOTER_PEPPER + NUXT_CAM_ID_PEPPER —
-    # operator secrets from ipcrawl-env.sops (see top of file). Without
-    # a Shodan key the app still boots and serves; the catalogue is
-    # just empty.
-    environmentFiles = [ config.sops.secrets."app-ipcrawl-env".path ];
-
-    homepage = {
-      description = "ipcrawl — exposed-webcam catalogue";
-      icon = "mdi-cctv-#38bdf8";
+      inherit (a.egress) container hostPort;
     };
   };
+in
+{
+  # One sops secret per app that declares operator-managed values. Same
+  # mkDotenvSecret shape as every other stack; the app's own machine-generated
+  # secrets/<name>/env (AUTH_SECRET) is separate and never carries operator
+  # values.
+  sops.secrets = lib.mapAttrs' (name: _: lib.nameValuePair (secretName name) (mkDotenvSecret (sopsFileFor name))) withSecrets;
+
+  fleet.apps = lib.mapAttrs mkApp apps;
+
+  assertions = [
+    {
+      assertion = registry.schemaVersion == 1;
+      message = "stacks/apps/apps.json declares schemaVersion ${toString registry.schemaVersion}, but declarations.nix understands 1. Regenerate the export from daedalus, or update this reader.";
+    }
+  ];
 }
