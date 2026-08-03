@@ -124,7 +124,10 @@
     };
   };
 
-  # A dead relay means Home Assistant silently loses Bluetooth, which is
-  # exactly the kind of quiet degradation the job registry exists for.
-  fleet.monitoredJobs.ha-dbus-relay = { };
+  # A dead relay means Home Assistant silently loses Bluetooth. The
+  # failure mail is off while HA itself is muted (see the HA-MUTED
+  # block in stacks/monitoring/.../rules.yaml) — the relay bounces
+  # whenever HA's Bluetooth setup is being worked on. Drop the
+  # email = false to re-arm it along with the rest of HA.
+  fleet.monitoredJobs.ha-dbus-relay = { email = false; };  # HA-MUTED
 }

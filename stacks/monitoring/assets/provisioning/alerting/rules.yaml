@@ -6,6 +6,21 @@
 # NOTE: no per-container CPU/RAM alerts exist because no rootless-visible
 # per-container metric exists — cgroup exporters can't see cgroups under
 # user.slice/user@1000.service. Liveness (container_up) is the coverage.
+#
+# HOME ASSISTANT IS MUTED. Home Assistant is a work in progress and
+# its devices/integrations fail routinely while being worked on, so
+# every alert path that can name it is switched off: its own rule is
+# paused, and the three generic rules that carry a home-assistant
+# label (Container Disappeared, Web App Probe Failing, Scrape Target
+# Down) exclude it. `grep -n HA-MUTED` here plus the email=false on
+# fleet.monitoredJobs.ha-dbus-relay in platform/bluetooth is the
+# complete set — undo those to put HA back under monitoring.
+#
+# NOT covered: Host Systemd Service Failed still fires if the HA
+# container or the dbus relay exhausts its restarts, because
+# systemd_failed_units is an unlabeled count with nothing to
+# exclude on. That is deliberate — scoping it out would blind the
+# alert to every other unit on the box.
 
 apiVersion: 1
 
@@ -94,7 +109,7 @@ groups:
               # container_up carries instance/job labels that the threshold
               # reducer collapses to {}, colliding across every series
               # ("frame cannot uniquely be identified by its labels").
-              expr: min by (name) (container_up)
+              expr: min by (name) (container_up{name!="home-assistant"})  # HA-MUTED
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -190,7 +205,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: min by (name) (gatus_results_endpoint_success)
+              expr: min by (name) (gatus_results_endpoint_success{name!="home-assistant"})  # HA-MUTED
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -1133,7 +1148,7 @@ groups:
               # the WAN blips (nightly dynamic-IP reset), which is not
               # actionable. Excluded so those blips don't page. Its speed
               # metrics still graph on the Network dashboard.
-              expr: up{job!="myspeed"}
+              expr: up{job!~"myspeed|home-assistant"}  # HA-MUTED
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -1321,7 +1336,7 @@ groups:
           summary: Home Assistant has unavailable entities
         labels:
           severity: warning
-        isPaused: false
+        isPaused: true  # HA-MUTED
   - orgId: 1
     name: Security Alerts
     folder: System
