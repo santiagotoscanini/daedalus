@@ -1270,6 +1270,14 @@ groups:
       # the intent - you are told once, not every repeat_interval
       # forever. 15m so a rebooting device or a slow poll is not an
       # email.
+      #
+      # `media_player` and `remote` are excluded outright. Those
+      # domains report unavailable whenever the device is simply
+      # POWERED OFF, which for a TV is a normal twice-daily event
+      # lasting hours — long enough to clear the 15m `for`, short
+      # enough that it never settles into the 6h floor, so every
+      # power cycle would mail. HA cannot distinguish "off" from
+      # "broken" for these, so there is no signal being dropped.
       - uid: hass-entities-unavailable-1
         title: Home Assistant Entities Unavailable
         condition: C
@@ -1280,7 +1288,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: (count(homeassistant_entity_available == 0) or vector(0)) - min_over_time((count(homeassistant_entity_available == 0) or vector(0))[6h:5m])
+              expr: (count(homeassistant_entity_available{domain!~"media_player|remote"} == 0) or vector(0)) - min_over_time((count(homeassistant_entity_available{domain!~"media_player|remote"} == 0) or vector(0))[6h:5m])
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
