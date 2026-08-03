@@ -107,7 +107,15 @@ export function AppsList() {
 function AppRow({ row }: { row: Row }) {
   return (
     <li>
-      <Link to="/apps/$name" params={{ name: row.name }} className="app-row">
+      {/* `tab` is a required search param on the detail route (it is what
+          makes the tab linkable and server-rendered), so the list has to name
+          the landing tab explicitly. */}
+      <Link
+        to="/apps/$name"
+        params={{ name: row.name }}
+        search={{ tab: 'overview' as const }}
+        className="app-row"
+      >
         <StateDot state={row.status.state} />
 
         <div className="app-id">

@@ -75,13 +75,7 @@ let
   #                UI reports drift: it is not "what the DB says", it is what
   #                the running system was actually built from.
   #   nixManaged — apps declared by hand in Nix and therefore not editable
-  #                here. Only daedalus itself. Restated rather than derived
-  #                from `config.fleet.apps`: reading that attrset from the
-  #                module that also defines `fleet.apps.daedalus`, to build a
-  #                volume on the container that apps.nix generates from
-  #                `fleet.apps`, is exactly the kind of loop the apps module's
-  #                header warns about. A dozen literal lines is cheaper than
-  #                an infinite recursion at eval time.
+  #                here. Only daedalus itself, from the `self` binding below.
   #
   # A store path, not a bind mount of /etc/nixos/stacks/apps/apps.json: the
   # path itself changes when the content does, so the container's ExecStart
@@ -91,35 +85,48 @@ let
     builtins.toJSON {
       schemaVersion = 1;
       registry = builtins.fromJSON (builtins.readFile ../apps/apps.json);
-      nixManaged = {
-        daedalus = {
-          stage = "lab";
-          sourceMode = "local";
-          postgres = true;
-          storage = false;
-          litellm = true;
-          prometheus = false;
-          operatorSecrets = false;
-          image = null;
-          egress = null;
-          env = [ ];
-          auth = {
-            mode = "proxy";
-            isolated = true;
-            healthPath = "/api/healthz";
-          };
-          homepage = {
-            description = "S2 control plane";
-            icon = "mdi-server-network-#7c5cff";
-          };
-          notes = {
-            app = "The control plane itself. Declared by hand in stacks/daedalus/daedalus.nix rather than in the registry: an Apply that broke this entry would take down the interface you would use to undo it.";
-            source = "source.mode = \"local\" — the source lives in the flake repo at stacks/daedalus/app and is bind-mounted into the container, which runs the Vite dev server against it. Saving a file is the whole deploy.";
-          };
-        };
-      };
+      nixManaged.daedalus = self;
     }
   );
+
+  # daedalus's own registry entry, in the manifest's shape.
+  #
+  # Defined ONCE and consumed twice: by `fleet.apps.daedalus` below, and by the
+  # manifest the container reads. It was briefly two literals, and the icon
+  # drifted between them within the hour — the UI reported one colour while
+  # the homepage rendered another. Restating this is exactly the class of bug
+  # daedalus exists to catch, so it does not get to have it.
+  #
+  # NOT read back out of `config.fleet.apps.daedalus`, which would be the other
+  # way to deduplicate: this value feeds a volume on the container that
+  # apps.nix generates from `fleet.apps`, and threading the read through that
+  # is the loop the apps module's header warns about. One let-binding, two
+  # consumers, no config read.
+  self = {
+    stage = "lab";
+    sourceMode = "local";
+    postgres = true;
+    storage = false;
+    litellm = true;
+    prometheus = false;
+    operatorSecrets = false;
+    image = null;
+    egress = null;
+    env = [ ];
+    auth = {
+      mode = "proxy";
+      isolated = true;
+      healthPath = "/api/healthz";
+    };
+    homepage = {
+      description = "S2 control plane";
+      icon = "mdi-server-network-#e2795a";
+    };
+    notes = {
+      app = "The control plane itself. Declared by hand in stacks/daedalus/daedalus.nix rather than in the registry: an Apply that broke this entry would take down the interface you would use to undo it.";
+      source = "source.mode = \"local\" — the source lives in the flake repo at stacks/daedalus/app and is bind-mounted into the container, which runs the Vite dev server against it. Saving a file is the whole deploy.";
+    };
+  };
 in
 
 {
@@ -149,30 +156,31 @@ in
     # REVOKE'd from PUBLIC like every other tenant. DATABASE_URL arrives via
     # the bootstrap-generated env file. Joining app-db-net for it is also how
     # the container reaches `litellm:4000`, which lives on the same bridge.
-    postgres.enable = true;
+    postgres.enable = self.postgres;
+    storage.enable = self.storage;
 
     # Sets LITELLM_BASE_URL. The key is rendered separately below — the shared
     # gateway, not a second instance, so daedalus sees every model Lemonade
     # serves without a duplicated model list to keep in sync.
-    litellm.enable = true;
+    litellm.enable = self.litellm;
+    prometheus.enable = self.prometheus;
     environmentFiles = [ "/run/daedalus-litellm/env" ];
 
     # LAN-only. A control plane for this box has no business answering on a
     # public CNAME, wildcard cert or not.
-    stage = "lab";
+    inherit (self) stage;
 
     auth = {
       # Forward-auth: daedalus has no user model of its own and only ever
       # serves one operator, so the Pocket ID gate belongs in front of it
       # rather than inside it. Zero app-side auth code.
-      mode = "proxy";
-      # Private iso-daedalus-net bridge with traefik as the only other member,
-      # so nothing else on traefik-net can dial the dev server directly and
-      # skip the gate. Costs the prometheus scrape; there are no metrics yet.
-      isolated = true;
-      # The one unauthenticated path. Backs the gatus probe, the forward-auth
-      # bypass and the homepage tile's siteMonitor — see the route's header.
-      healthPath = "/api/healthz";
+      #
+      # `isolated` puts it on a private iso-daedalus-net bridge with traefik as
+      # the only other member, so nothing on traefik-net can dial the dev
+      # server directly and skip the gate. `healthPath` is the one
+      # unauthenticated path — it backs the gatus probe, the forward-auth
+      # bypass and the homepage tile's siteMonitor.
+      inherit (self.auth) mode isolated healthPath;
       # Who applied. An Apply writes a git commit, so the commit should name a
       # person rather than "daedalus". Trusting a header requires that nothing
       # else can dial the app and forge one — which is exactly what `isolated`
@@ -188,8 +196,7 @@ in
     };
 
     homepage = {
-      description = "S2 control plane";
-      icon = "mdi-server-network-#e2795a";
+      inherit (self.homepage) description icon;
       # Dialled through traefik rather than by container DNS: homepage lives
       # on traefik-net and `isolated` deliberately keeps daedalus off it.
       widget = {
