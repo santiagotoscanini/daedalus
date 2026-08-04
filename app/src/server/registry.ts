@@ -48,8 +48,10 @@ export const fetchApps = createServerFn().handler(async () => {
 })
 
 export const fetchApp = createServerFn()
-  .inputValidator((input: { name: string; withLogs: boolean; withDeploys: boolean }) => input)
-  .handler(async ({ data: { name, withLogs, withDeploys } }) => {
+  .inputValidator(
+    (input: { name: string; withLogs: boolean; withDeploys: boolean; withEnv: boolean }) => input,
+  )
+  .handler(async ({ data: { name, withLogs, withDeploys, withEnv } }) => {
     const { getApp, driftOf } = await import('../lib/repo/apps')
     const { manifestEntries } = await import('../lib/nix-manifest')
     const { appStatuses, databaseSize, recentLogs, logVolume } = await import('../lib/metrics')
@@ -87,9 +89,30 @@ export const fetchApp = createServerFn()
         readDeployStatus(),
       ])
 
+    // Secret VALUES are deliberately NOT in this payload. Loader data is
+    // serialised into the HTML, so shipping them and masking with CSS would
+    // put every database password in view-source — theatre, not concealment.
+    // The reveal button fetches one value at a time (revealEnvVar below).
+    const { readEnvSnapshot } = await import('../lib/env-snapshot')
+    const declared = new Map(record.envVars.map((e) => [e.key, e.note]))
+    const envSnapshot = withEnv
+      ? await readEnvSnapshot(name, declared)
+      : { vars: [], takenAt: null, available: false }
+
     return {
       applyStatus,
       deployStatus,
+      env: {
+        available: envSnapshot.available,
+        takenAt: envSnapshot.takenAt,
+        vars: envSnapshot.vars.map((v) => ({
+          key: v.key,
+          origin: v.origin,
+          secret: v.secret,
+          note: v.note ?? null,
+          value: v.secret ? null : v.value,
+        })),
+      },
       // Authoritative record from the app's own deploy unit — a deploy also
       // runs from the timer and from a manual systemctl start, neither of
       // which goes through daedalus.
@@ -239,6 +262,31 @@ export const triggerDeploy = createServerFn({ method: 'POST' })
 
     const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
     return { id: await requestDeploy({ app: name, reason: 'manual redeploy', actor }) }
+  })
+
+/**
+ * One secret value, on demand.
+ *
+ * Separate from fetchApp so secrets never enter the page payload: revealing is
+ * an explicit request for a named variable, not a CSS class over data that was
+ * already shipped. Behind the Pocket ID gate like the rest of the app.
+ */
+export const revealEnvVar = createServerFn({ method: 'POST' })
+  .inputValidator((i: { name: string; key: string }) => i)
+  .handler(async ({ data }) => {
+    const { readEnvSnapshot } = await import('../lib/env-snapshot')
+    const { getApp } = await import('../lib/repo/apps')
+
+    // Confirms the app is one this instance manages, so the app name cannot be
+    // used to read an arbitrary path out of the snapshot directory.
+    const record = await getApp(data.name)
+    if (!record) throw new Error(`no app named ${data.name}`)
+
+    const snapshot = await readEnvSnapshot(data.name, new Map())
+    const found = snapshot.vars.find((v) => v.key === data.key)
+    if (!found) throw new Error(`no variable ${data.key} in ${data.name}`)
+
+    return { value: found.value }
   })
 
 export const fetchDeployStatus = createServerFn().handler(async () => {

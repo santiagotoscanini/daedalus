@@ -3,7 +3,13 @@ import { useEffect, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
 import { AreaChart, Bytes, Metric, Panel, Row, Segmented, StatePill, Toggle } from '../components/ui'
 import type { DeployStatus } from '../lib/deploy'
-import { fetchApp, fetchDeployStatus, saveApp, triggerDeploy } from '../server/registry'
+import {
+  fetchApp,
+  fetchDeployStatus,
+  revealEnvVar,
+  saveApp,
+  triggerDeploy,
+} from '../server/registry'
 
 const TABS = ['overview', 'deployments', 'settings', 'logs'] as const
 
@@ -26,6 +32,7 @@ export const Route = createFileRoute('/apps/$name')({
         // history on every tab would pay for them four times over.
         withLogs: deps.tab === 'logs',
         withDeploys: deps.tab === 'deployments',
+        withEnv: deps.tab === 'settings',
       },
     })
     if (!data) throw notFound()
@@ -58,6 +65,7 @@ function AppDetail() {
     lastDeploy,
     pullBroken,
     deployments,
+    env,
   } = Route.useLoaderData()
   const router = useRouter()
   const { tab } = Route.useSearch()
@@ -441,25 +449,35 @@ function AppDetail() {
             />
           </Panel>
 
-          <Panel title="Environment">
-            {app.envVars.length === 0 ?
-              <p className="panel-empty">No static environment variables.</p>
-            : <table className="env">
-                <tbody>
-                  {app.envVars.map((e) => (
-                    <tr key={e.key}>
-                      <th>
-                        <code>{e.key}</code>
-                      </th>
-                      <td>
-                        <code>{e.value}</code>
-                        {e.note && <p className="note">{e.note}</p>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <Panel
+            title="Environment"
+            action={
+              env.takenAt ? (
+                <span className="env-age">read from the container {fmtWhen(env.takenAt)}</span>
+              ) : null
             }
+          >
+            {!env.available ? (
+              <p className="panel-empty">
+                No snapshot yet — the container is not running, or
+                <code> daedalus-env-snapshot</code> has not run since it started (every 2 min).
+              </p>
+            ) : (
+              <>
+                <p className="env-legend">
+                  Everything the container actually has: what the platform injects, what the
+                  registry declares, and what the image bakes in. Secrets are withheld until
+                  revealed — they are not in this page&apos;s source.
+                </p>
+                <table className="env">
+                  <tbody>
+                    {env.vars.map((v) => (
+                      <EnvRow key={v.key} app={app.name} v={v} />
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </Panel>
 
           <Panel title="Not editable here">
@@ -521,6 +539,70 @@ function AppDetail() {
         initialStatus={applyStatus}
       />
     </>
+  )
+}
+
+type EnvRowData = {
+  key: string
+  origin: 'registry' | 'platform' | 'image'
+  secret: boolean
+  note: string | null
+  value: string | null
+}
+
+/**
+ * One environment variable. A secret shows dots until revealed, and the value
+ * is fetched at that moment rather than shipped with the page.
+ */
+function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
+  const [revealed, setRevealed] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const shown = v.secret ? revealed : v.value
+
+  return (
+    <tr>
+      <th>
+        <code>{v.key}</code>
+        <span className={`origin origin-${v.origin}`}>{v.origin}</span>
+      </th>
+      <td>
+        <span className="env-value">
+          {shown === null ? (
+            <code className="masked">••••••••••••</code>
+          ) : (
+            <code>{shown === '' ? <span className="muted">(empty)</span> : shown}</code>
+          )}
+
+          {v.secret && (
+            <button
+              type="button"
+              className="reveal"
+              disabled={busy}
+              title={revealed === null ? 'Reveal' : 'Hide'}
+              aria-label={revealed === null ? `Reveal ${v.key}` : `Hide ${v.key}`}
+              onClick={() => {
+                if (revealed !== null) {
+                  setRevealed(null)
+                  return
+                }
+                setBusy(true)
+                void revealEnvVar({ data: { name: app, key: v.key } })
+                  .then((r) => {
+                    setRevealed(r.value)
+                  })
+                  .finally(() => {
+                    setBusy(false)
+                  })
+              }}
+            >
+              {revealed === null ? '👁' : '🙈'}
+            </button>
+          )}
+        </span>
+        {v.note && <p className="note">{v.note}</p>}
+      </td>
+    </tr>
   )
 }
 
