@@ -1,7 +1,12 @@
 import { asc, eq } from 'drizzle-orm'
 import { db } from '../db'
 import { appEnvVars, apps } from '../schema'
-import { manifestEntries, type ManifestApp, type ManifestEntry } from '../nix-manifest'
+import {
+  manifestEntries,
+  type AppStage,
+  type ManifestApp,
+  type ManifestEntry,
+} from '../nix-manifest'
 
 // Reads and writes over the app registry, plus the drift comparison against
 // what Nix actually built.
@@ -257,7 +262,7 @@ export function toRegistryExport(records: AppRecord[]): {
         .map((r) => [
           r.name,
           {
-            stage: r.stage as 'lab' | 'live',
+            stage: r.stage as AppStage,
             postgres: r.postgres,
             storage: r.storage,
             litellm: r.litellm,

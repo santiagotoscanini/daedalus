@@ -11,10 +11,12 @@ import { readFile } from 'node:fs/promises'
 // It is a /nix/store path, so it can only change via a rebuild, and a rebuild
 // restarts this container with the new one. There is no cache to invalidate.
 
+export type AppStage = 'off' | 'lab' | 'live'
+
 export type ManifestEnvVar = { key: string; value: string; note?: string | null }
 
 export type ManifestApp = {
-  stage: 'lab' | 'live'
+  stage: AppStage
   sourceMode?: 'registry' | 'local'
   postgres: boolean
   storage: boolean
