@@ -836,6 +836,44 @@ export const TILES: TileDef[] = [
     description: 'Server manager',
     link: { app: 'factorio-admin' },
     gatus: 'factorio-admin',
+    load: async () => {
+      // The installed version is not read from the server: ofsm downloads
+      // exactly $FACTORIO_VERSION on every container start, so the pinned
+      // string IS what is running, and it arrives here from the stack that
+      // pins it (stacks/factorio) rather than being typed twice.
+      //
+      // The comparison is against factorio.com's own release feed —
+      // unauthenticated, and the only thing that knows what "current" means.
+      // Stable is the row that matters: clients on a different version cannot
+      // join at all, and Steam ships stable unless someone opted in.
+      const installed = process.env.FACTORIO_VERSION ?? ''
+      const rel = await getJson<{
+        stable?: { headless?: string }
+        experimental?: { headless?: string }
+      }>('https://factorio.com/api/latest-releases')
+
+      const stable = rel?.stable?.headless
+      const experimental = rel?.experimental?.headless
+      const behind = stable !== undefined && installed !== '' && stable !== installed
+
+      return {
+        stats: [
+          stat('Installed', text(installed)),
+          stat('Latest stable', text(stable)),
+          stat('Status', stable === undefined ? DASH : behind ? `${stable} available` : 'current'),
+        ],
+        // Deliberately the command rather than a button. Updating means
+        // bumping one string in the flake and rebuilding — the container
+        // re-downloads the headless binary on its next start. Anything this
+        // page did imperatively would be undone by the following rebuild.
+        note:
+          behind ?
+            `Bump factorioVersion in stacks/factorio/factorio.nix to ${stable}, then nixos-rebuild switch.`
+          : experimental !== undefined && experimental !== stable ?
+            `Experimental branch is on ${experimental}; this server tracks stable.`
+          : undefined,
+      }
+    },
   },
 
   // ══ Network ══════════════════════════════════════════════════════════════

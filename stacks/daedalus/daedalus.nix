@@ -358,6 +358,9 @@ in
       # than a literal per Lemonade tile.
       LEMONADE_URL = "http://gaming-pc.local.${config.fleet.baseDomain}:13305";
       ROUTER_URL = "http://192.168.0.1";
+      # Read from the stack that pins it rather than restated here, so the
+      # tile reports the version the server actually downloads on start.
+      FACTORIO_VERSION = config.fleet.factorio.version;
     };
   };
 
