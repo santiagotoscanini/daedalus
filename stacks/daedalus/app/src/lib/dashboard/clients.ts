@@ -31,10 +31,23 @@
 // is to see WHICH thing is down. Tiles render "—" for a stat they could not
 // read and keep their status dot, which comes from gatus.
 
-// Per ATTEMPT, not per call — see `getJson`. Two attempts at 3s bound a dead
-// upstream to 6s while letting the common flake cost 3s instead of 10.5s.
-const TIMEOUT = 3_000
-const ATTEMPTS = 2
+/**
+ * Per-attempt budgets, escalating — see `getJson` for what they work around.
+ *
+ * Escalating rather than flat because two different things can be slow and
+ * they want opposite treatment. A stalled CONNECTION wants to be abandoned
+ * fast, since retrying costs one round trip and succeeds; a slow RESPONSE
+ * (Open WebUI's update check reaches the internet, ~500ms) wants to be waited
+ * out, since retrying it just pays the same cost twice.
+ *
+ * Short first attempts catch the stall for a few hundred ms instead of 3s, and
+ * anything that legitimately needs longer gets it on a later attempt — by which
+ * point the socket is warm, so it is a real measurement of the service rather
+ * than of the network path. Four rungs because the stall occasionally survives
+ * two tries; the early ones are cheap enough to afford that. Worst case for a
+ * genuinely dead upstream is the sum, ~5.2s.
+ */
+const ATTEMPT_MS = [400, 800, 1_500, 2_500]
 
 /**
  * Run `jobs` with at most `limit` in flight.
@@ -80,27 +93,27 @@ export function basicAuth(user: string | undefined, pass: string | undefined): s
  * namespace occasionally hangs on the SYN and only gives up after the kernel's
  * retransmit ladder, ~10.5s. It is not load — it reproduces with a single
  * request in flight — and it is not DNS, since dialling 169.254.1.2 directly
- * does it too. Roughly one of the ~14 host-port calls a tab makes hits it,
- * always a first connection to that origin; a warm keep-alive socket never
- * does.
+ * does it too. One or two of the ~8 host-port origins a tab touches hit it,
+ * always on the first connection; a warm keep-alive socket never does. Node
+ * closes idle sockets after ~4s, so any pause between visits pays it again —
+ * which is exactly the visit a person makes.
  *
- * A second attempt succeeds essentially every time, so the cost of a flake is
- * one short timeout instead of a blanked tile and a 10s page. The retry is
- * only for a thrown request — a 4xx/5xx is the service ANSWERING, and asking
- * twice would not change its mind.
+ * Retrying on a short budget turns that from 6s of dead page into ~600ms. The
+ * retry is only for a THROWN request: a 4xx/5xx is the service answering, and
+ * asking twice would not change its mind.
  */
 export async function getJson<T>(url: string, init: RequestInit = {}): Promise<T | null> {
-  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+  for (const ms of ATTEMPT_MS) {
     try {
       const res = await fetch(url, {
-        signal: AbortSignal.timeout(TIMEOUT),
+        signal: AbortSignal.timeout(ms),
         redirect: 'manual',
         ...init,
       })
       if (!res.ok) return null
       return (await res.json()) as T
     } catch {
-      // fall through to the next attempt; the last one returns null below
+      // fall through to the next, longer attempt; the last one returns null
     }
   }
   return null
@@ -152,11 +165,11 @@ export async function lokiScalar(query: string): Promise<number | null> {
 export async function qbtCookie(base: string): Promise<string | null> {
   // Hand-rolled rather than getJson: the value is in a response HEADER, and
   // the body is empty (204). Same retry, same reason.
-  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+  for (const ms of ATTEMPT_MS) {
     try {
       const res = await fetch(`${base}/api/v2/auth/login`, {
         method: 'POST',
-        signal: AbortSignal.timeout(TIMEOUT),
+        signal: AbortSignal.timeout(ms),
         redirect: 'manual',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: base },
         body: new URLSearchParams({

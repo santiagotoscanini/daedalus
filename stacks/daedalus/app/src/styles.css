@@ -2034,3 +2034,40 @@ h2 {
   border-color: color-mix(in srgb, var(--bad) 40%, transparent);
   color: var(--text);
 }
+
+/* ── route progress ─────────────────────────────────────────────────────────
+   Two-part animation on one element: the bar sweeps in from the left while a
+   loader runs, decelerating so it never reaches the right edge — arriving
+   would be a lie, since a loader has no known duration. It simply disappears
+   when the route resolves.                                                   */
+
+.route-progress {
+  position: fixed;
+  inset: 0 auto auto 0;
+  height: 2px;
+  width: 100%;
+  z-index: 100;
+  background: linear-gradient(90deg, var(--accent), var(--accent-dim));
+  transform-origin: 0 50%;
+  animation: route-progress 8s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes route-progress {
+  0% {
+    transform: scaleX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(0.97);
+    opacity: 1;
+  }
+}
+
+/* A user who has asked for less motion still needs the signal, so the bar
+   stays — it just sits at a fixed width instead of sweeping. */
+@media (prefers-reduced-motion: reduce) {
+  .route-progress {
+    animation: none;
+    transform: scaleX(0.35);
+  }
+}
