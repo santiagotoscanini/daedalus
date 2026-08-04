@@ -3015,6 +3015,203 @@ h2 {
   font-size: 0.95rem;
 }
 
+/* A stat band nested inside a board — same cards, no outer margin, and a
+   smaller floor so three fit across half the grid. */
+.statband-inline {
+  margin-bottom: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr));
+}
+.statband-inline .bigstat {
+  padding: 0.6rem 0.7rem 0.65rem;
+}
+.statband-inline .bigstat-value {
+  font-size: 1.4rem;
+}
+
+/* ── monitoring ─────────────────────────────────────────────────────────── */
+
+.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.alerts-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  background: var(--panel-2);
+  /* The severity reads off the left edge before any text is parsed. */
+  border-left: 2px solid var(--border);
+}
+.alerts-bad {
+  border-left-color: var(--bad);
+}
+.alerts-warn {
+  border-left-color: var(--warn);
+}
+.alerts-info {
+  border-left-color: var(--accent);
+}
+.alerts-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  font-size: 0.84rem;
+}
+.alerts-head em {
+  color: var(--dim);
+  font-style: normal;
+  font-size: 0.72rem;
+  margin-left: auto;
+}
+.alerts-summary {
+  color: var(--dim);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.targets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.targets-row {
+  display: grid;
+  grid-template-columns: minmax(5rem, auto) minmax(6rem, auto) 1fr;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bad) 8%, var(--panel-2));
+  font-size: 0.78rem;
+  min-width: 0;
+}
+.targets-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+.targets-instance {
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.targets-error {
+  color: var(--dim);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.checks-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.checks-bad {
+  background: color-mix(in srgb, var(--bad) 10%, var(--panel-2));
+}
+.checks-warn {
+  background: color-mix(in srgb, var(--warn) 10%, var(--panel-2));
+}
+.checks-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.checks-when,
+.checks-due,
+.checks-pings {
+  color: var(--dim);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.checks-pings {
+  min-width: 5rem;
+  text-align: right;
+}
+
+/* ── cloudflare origin ──────────────────────────────────────────────────── */
+
+/* The one number on the Network page that cannot be read anywhere else on the
+   box, so it gets the treatment of a headline rather than a table row. */
+.origin {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 9px;
+  background: linear-gradient(150deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border-soft);
+  margin-bottom: 0.7rem;
+}
+.origin-label {
+  font-size: 0.66rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.origin-ip {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.origin-note {
+  font-size: 0.7rem;
+  color: var(--dim);
+}
+
+/* ── registries, on the apps page ───────────────────────────────────────── */
+
+.reg-repos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.7rem;
+}
+.reg-repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+}
+
 /* Everything above animates once on arrival. For a reader who has asked for
    less motion, the end state is the whole point — so they get it immediately
    and nothing moves at all, including the download sheen. */

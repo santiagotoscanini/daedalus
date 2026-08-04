@@ -15,18 +15,25 @@ export const fetchApps = createServerFn().handler(async () => {
   const { manifestEntries } = await import('../lib/nix-manifest')
   const { appStatuses } = await import('../lib/metrics')
   const { readApplyStatus } = await import('../lib/apply')
+  const { loadRegistries } = await import('../lib/registries')
+  const { webAppHosts } = await import('../lib/nix-manifest')
 
   const records = await listApps()
   const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
+  const hosts = await webAppHosts()
   // appStatuses degrades per-app rather than rejecting, so a prometheus
-  // outage costs the status column, not the page.
-  const [statuses, applyStatus] = await Promise.all([
+  // outage costs the status column, not the page. The registries are read in
+  // the same wave rather than after it — they share nothing with the app rows
+  // and are the slower half (two upstreams through traefik).
+  const [statuses, applyStatus, registries] = await Promise.all([
     appStatuses(records.map((r) => r.name)),
     readApplyStatus(),
+    loadRegistries((app) => `https://${hosts[app] ?? app}`),
   ])
 
   return {
     applyStatus,
+    registries,
     apps: records.map((r) => ({
       name: r.name,
       stage: r.stage,
@@ -58,11 +65,23 @@ export const fetchApp = createServerFn()
       withEnv: boolean
       withResources: boolean
       withAccess: boolean
+      withDatabase: boolean
+      withVpn: boolean
       accessWindow: AccessWindow
     }) => input,
   )
   .handler(async ({ data }) => {
-    const { name, withLogs, withDeploys, withEnv, withResources, withAccess, accessWindow } = data
+    const {
+      name,
+      withLogs,
+      withDeploys,
+      withEnv,
+      withResources,
+      withAccess,
+      withDatabase,
+      withVpn,
+      accessWindow,
+    } = data
     const { getApp, driftOf } = await import('../lib/repo/apps')
     const { effectiveHostname } = await import('../lib/hostname')
     const { hostnamesTakenBy } = await import('../lib/nix-manifest')
@@ -72,9 +91,13 @@ export const fetchApp = createServerFn()
       appResources,
       activityLog,
       databaseSize,
+      appDatabase,
+      appVpn,
       recentLogs,
       logVolume,
       NO_RESOURCES,
+      NO_DATABASE,
+      NO_VPN,
     } = await import('../lib/metrics')
     const { appAccess, noAccess } = await import('../lib/access')
     const { readCiSnapshot } = await import('../lib/ci')
@@ -118,6 +141,8 @@ export const fetchApp = createServerFn()
       deploy,
       pullBroken,
       deployStatus,
+      database,
+      vpn,
     ] =
       await Promise.all([
         appStatuses([name]),
@@ -149,6 +174,16 @@ export const fetchApp = createServerFn()
         lastDeploy(name),
         pullFailing(name),
         readDeployStatus(),
+        // Sixteen prometheus queries, and gated twice: on the tab AND on the
+        // app actually having a database. Without the second gate every app
+        // without postgres would pay for sixteen round trips to be told that
+        // `pg_database_size_bytes{datname="…"}` matches nothing.
+        withDatabase && record.postgres ?
+          appDatabase(name).catch(() => NO_DATABASE)
+        : Promise.resolve(NO_DATABASE),
+        withVpn && record.egressContainer !== null ?
+          appVpn(record.egressContainer).catch(() => NO_VPN)
+        : Promise.resolve(NO_VPN),
       ])
 
     // Secret VALUES are deliberately NOT in this payload. Loader data is
@@ -208,6 +243,8 @@ export const fetchApp = createServerFn()
       drift: driftOf(record, manifest),
       status: statuses[name] ?? null,
       dbSize,
+      database,
+      vpn,
       logs1h,
       logs: logs.map((l) => ({ ts: l.ts.toISOString(), level: l.level, line: l.line })),
       app: {

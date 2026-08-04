@@ -3,6 +3,7 @@ import { createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { AiView } from '../components/category/ai'
 import { HomeView } from '../components/category/home'
 import { BooksView, TvView } from '../components/category/media'
+import { MonitoringView } from '../components/category/monitoring'
 import { NetworkView } from '../components/category/network'
 import { SystemView } from '../components/category/system'
 import { CATEGORIES } from '../lib/dashboard/nav'
@@ -77,6 +78,7 @@ function CategoryPage() {
       {payload.kind === 'home' && <HomeView data={payload.data} />}
       {payload.kind === 'network' && <NetworkView data={payload.data} />}
       {payload.kind === 'system' && <SystemView data={payload.data} />}
+      {payload.kind === 'monitoring' && <MonitoringView data={payload.data} />}
 
       {meta.groups.map((g) => (
         <section key={g.name} className="tile-group">

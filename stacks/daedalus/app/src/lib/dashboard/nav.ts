@@ -55,4 +55,11 @@ export const CATEGORIES: CategorySpec[] = [
     lede: 'The machine itself, and whether anything running on it is unhappy.',
     tabs: [],
   },
+  {
+    id: 'monitoring',
+    label: 'Monitoring',
+    icon: '◎',
+    lede: 'The watchers: what is firing, what is being collected, and what has gone quiet.',
+    tabs: [],
+  },
 ]
