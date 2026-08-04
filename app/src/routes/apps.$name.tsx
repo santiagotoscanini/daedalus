@@ -464,17 +464,28 @@ function AppDetail() {
           }
         >
           {logs.length === 0 ? (
-            <p className="panel-empty">Nothing in Loki for the last 6 hours.</p>
+            <p className="panel-empty">Nothing in Loki for the last 7 days.</p>
           ) : (
-            <div className="logs">
-              {logs.map((l, i) => (
-                <div key={`${l.ts}-${String(i)}`} className={`log log-${l.level ?? 'none'}`}>
-                  <time>{l.ts.slice(11, 23)}</time>
-                  <span className="lvl">{l.level ?? ''}</span>
-                  <span className="msg">{l.line}</span>
-                </div>
-              ))}
-            </div>
+            <>
+              {isStale(logs[logs.length - 1]?.ts) && (
+                <p className="panel-note">
+                  Newest line is {fmtWhen(logs[logs.length - 1]?.ts ?? '')} — this app has been
+                  quiet since. Not a broken pipeline: several apps here only log at startup.
+                </p>
+              )}
+              <div className="logs">
+                {logs.map((l, i) => (
+                  <div key={`${l.ts}-${String(i)}`} className={`log log-${l.level ?? 'none'}`}>
+                    {/* Date included whenever the line is not from today.
+                        Time-of-day alone made three-day-old startup logs read
+                        as if they had just happened. */}
+                    <time>{fmtLogTime(l.ts)}</time>
+                    <span className="lvl">{l.level ?? ''}</span>
+                    <span className="msg">{l.line}</span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </Panel>
       )}
@@ -580,6 +591,21 @@ function TextField({
 function fmtBool(v: boolean | null | undefined): string {
   if (v === null || v === undefined) return 'no data'
   return v ? 'yes' : 'no'
+}
+
+/** Older than an hour — worth telling the reader before they misread the panel. */
+function isStale(iso: string | undefined): boolean {
+  if (!iso) return false
+  return Date.now() - new Date(iso).getTime() > 60 * 60 * 1000
+}
+
+/** "14:22:09.214" for today, "Jul 31 23:22:09" for anything older. */
+function fmtLogTime(iso: string): string {
+  const d = new Date(iso)
+  const sameDay = new Date().toISOString().slice(0, 10) === iso.slice(0, 10)
+  return sameDay
+    ? iso.slice(11, 23)
+    : `${d.toLocaleString('en-US', { month: 'short', day: '2-digit', timeZone: 'UTC' })} ${iso.slice(11, 19)}`
 }
 
 function fmtDuration(ms: number): string {
