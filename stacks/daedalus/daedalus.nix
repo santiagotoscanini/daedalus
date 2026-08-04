@@ -314,17 +314,26 @@ in
       headers = {
         "X-Forwarded-Email" = "{{ .claims.email }}";
       };
-      # One path skips the Pocket ID gate, for the same reason healthPath does
-      # — a machine has to reach it and cannot hold a passkey:
+      # Four paths skip the Pocket ID gate, for the same reason healthPath
+      # does — whatever fetches them cannot hold a passkey:
       #
       #   /api/deploy — zot's push events (stacks/registry). Carries its own
       #                 auth instead: X-Deploy-Token, checked in the route
       #                 against DEPLOY_HOOK_TOKEN below, and it can do exactly
       #                 one thing — start an existing app's deploy unit.
       #
-      # A bypassed path is effectively public on the LAN, so it is written to
-      # deserve it. Everything else on this app still needs a passkey.
-      authBypassRule = "Path(`/api/deploy`)";
+      #   the icons   — iOS fetches the apple-touch-icon when a page is added
+      #                 to the home screen, and that fetch does not carry the
+      #                 forward-auth session cookie. Gated, it is answered with
+      #                 a 302 to the IdP, iOS reads HTML where it wanted a PNG,
+      #                 and the home screen gets a generic letter tile instead.
+      #                 The other two are here so a favicon behaves the same way
+      #                 in any client that requests it outside a page load.
+      #
+      # A bypassed path is effectively public on the LAN, so each is written to
+      # deserve it: three of these are the app's own artwork and the fourth
+      # authenticates itself. Everything else on this app still needs a passkey.
+      authBypassRule = "Path(`/api/deploy`) || Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`)";
     };
 
     env = {
