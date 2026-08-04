@@ -1359,8 +1359,20 @@ h2 {
     --sidebar-w: 0px;
   }
 
+  /* Block, not a one-column grid.
+
+     As a grid it had two rows and `min-height: 100vh`, so a short page —
+     Deployments with no history — left spare height that the grid divided
+     between the rows. The bar stretched to fill its share and, being
+     `align-items: center`, floated the logo down the middle of it. The taller
+     the page, the less it happened, which is why only some tabs showed it.
+
+     Block flow also makes the bar genuinely sticky: a sticky GRID item is
+     constrained to its own grid area, so with the row sized to the element
+     there would be no room to travel and it would scroll away. As a block its
+     containing block is the page, and it stays put. */
   .shell {
-    grid-template-columns: 1fr;
+    display: block;
   }
 
   .sidebar {
