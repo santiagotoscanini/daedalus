@@ -22,9 +22,26 @@ export const Route = createRootRoute({
       // crawler even if one could reach it.
       { name: 'robots', content: 'noindex, nofollow' },
     ],
+    // Icons are plain files under public/ plus the link tags for them —
+    // TanStack Start has no file-based icon convention, so nothing is inferred
+    // from a filename and every variant is declared here.
+    //
+    //   icon.svg        the real source. Scales to any favicon size.
+    //   icon.png        512², for the browsers that still ignore SVG favicons.
+    //   apple-icon.png  180², what iOS puts on the home screen.
+    //
+    // The Apple one is a SEPARATE render, not a resize: iOS masks the icon
+    // into its own squircle, so the art has to be full-bleed. Feeding it
+    // icon.svg — which draws its own `rx="7"` rounded rect — would round the
+    // corners twice and leave four dark notches. Regenerate after an icon
+    // change by dropping that `rx` and rasterising:
+    //
+    //   nix run nixpkgs#resvg -- --width 180 --height 180 in.svg apple-icon.png
     links: [
       { rel: 'stylesheet', href: appCss },
       { rel: 'icon', href: '/icon.svg', type: 'image/svg+xml' },
+      { rel: 'icon', href: '/icon.png', type: 'image/png' },
+      { rel: 'apple-touch-icon', href: '/apple-icon.png' },
     ],
   }),
   shellComponent: RootDocument,
