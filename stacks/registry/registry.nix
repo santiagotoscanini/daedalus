@@ -109,29 +109,6 @@ in
     # Anonymous read makes /v2/ answer 200 unauthenticated — gatus
     # probes the real registry API, not just the UI shell.
     healthPath = "/v2/";
-    homepage = {
-      group = "Registries";
-      name = "zot";
-      # Not in dashboard-icons; the project's own asset (version-pinned
-      # docs path — mike keeps old doc versions around).
-      icon = "https://zotregistry.dev/v2.1.18/assets/images/logo.svg";
-      description = "OCI images";
-      # Repo count via the anonymous catalog (homepage reaches zot by
-      # container DNS on traefik-net, like verdaccio's widget). The
-      # count includes cache/* repos.
-      widget = {
-        type = "customapi";
-        url = "http://zot:5000/v2/_catalog";
-        refreshInterval = 300000;
-        mappings = [
-          {
-            field = "repositories";
-            label = "Repositories";
-            format = "size";
-          }
-        ];
-      };
-    };
   };
 
   fleet.logStacks.registry = [ "zot" ];

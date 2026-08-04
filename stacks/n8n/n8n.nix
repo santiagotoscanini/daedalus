@@ -21,9 +21,8 @@ let
   # install), used stock. Pinned by commit; it hardcodes two n8n-internal
   # require() paths (@n8n/di, jwt.service.js) verified present in the
   # 2.33.2 image — re-verify on every n8n image bump (upstream is thin,
-  # last commit 2025-12-29). The homepage tile + Pocket ID launch URL
-  # deep-link straight to /auth/oidc/login, so no button-page patch is
-  # needed; a direct visit to n8n just shows the hook's one-click
+  # last commit 2025-12-29). The Pocket ID launch URL deep-links straight
+  # to /auth/oidc/login, so no button-page patch is needed; a direct visit to n8n just shows the hook's one-click
   # "Sign in with SSO" button. Escape hatch if the hook ever breaks:
   # /signin?showLogin=true.
   n8nOidcHook = pkgs.fetchFromGitHub {
@@ -77,63 +76,6 @@ in
   fleet.webApps.n8n = {
     serviceName = "n8n";
     port = 5678;
-    homepage = {
-      group = "AI & Automation";
-      name = "n8n";
-      # Deep-link the tile straight into the OIDC flow (silent with a live
-      # Pocket ID session) — skips the hook's "Sign in with SSO" button.
-      href = "https://n8n.toscanini.me/auth/oidc/login";
-      description = "Workflow automation";
-      icon = "n8n.png";
-      widget = {
-        type = "customapi";
-        # /api/v1/executions?limit=10 → {data: [{id, workflowId, status, startedAt, ...}], nextCursor}
-        # Dynamic-list rendering: left column is the raw status
-        # (success / error / running), right column is a human name
-        # for the workflow. n8n's API does not return the workflow
-        # name on the execution row, and customapi cannot join two
-        # endpoints — so we hardcode a workflowId → name remap.
-        # `name`/`label` are reversed from the natural reading order
-        # because formatValue (and therefore `remap`) only runs on the
-        # label field, not the name. Add new workflows here as they
-        # appear; the `any` rule is a catch-all so unknown hashes
-        # never leak into the UI.
-        url = "http://n8n:5678/api/v1/executions?limit=10";
-        refreshInterval = 60000;
-        headers = {
-          "X-N8N-API-KEY" = "{{HOMEPAGE_VAR_N8N_API_KEY}}";
-        };
-        display = "dynamic-list";
-        mappings = {
-          items = "data";
-          limit = 3;
-          name = "status";
-          label = "workflowId";
-          remap = [
-            {
-              value = "AaEwerVyMkmEEYJH";
-              to = "Crypto monitor";
-            }
-            {
-              value = "PE_s7WPIw-c6U3D7JuoQ7";
-              to = "Supabase wakeup command";
-            }
-            {
-              value = "71zc3JjYq5cKBfU3Sv5MI";
-              to = "Instagram followers";
-            }
-            {
-              value = "G2cUo1VdVDf7vi3t";
-              to = "RSS Feeds";
-            }
-            {
-              any = true;
-              to = "Unknown workflow";
-            }
-          ];
-        };
-      };
-    };
   };
 
   # n8n runs as a mapped uid that can't read the santiago-owned mail secret

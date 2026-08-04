@@ -94,72 +94,6 @@ in
     serviceName = "open-webui";
     port = 8080;
     healthPath = "/health"; # gatus probes the real upstream (unauthenticated 200)
-    homepage = {
-      group = "AI & Automation";
-      name = "Open WebUI";
-      href = "https://chat.toscanini.me/";
-      description = "Chat with local models";
-      icon = "open-webui.png";
-      # `widgets` (plural) rides `extra`; the submodule declares only the
-      # singular `widget`. Auth is an Open WebUI API key (per-user, minted
-      # in Settings → Account) held in homepage's env.sops — the whole
-      # API is 401 without it, there is no useful anonymous endpoint.
-      extra.widgets = [
-        # /api/usage is the only endpoint whose numbers actually move.
-        # Both are live: `user_count` counts users whose last_active_at is
-        # within the last 3 MINUTES (hence the label), and `model_ids` is
-        # the websocket-tracked set of models mid-generation right now.
-        {
-          type = "customapi";
-          url = "http://open-webui:8080/api/usage";
-          refreshInterval = 60000;
-          headers = {
-            Authorization = "Bearer {{HOMEPAGE_VAR_OPENWEBUI_KEY}}";
-          };
-          mappings = [
-            {
-              field = "user_count";
-              label = "Active 3m";
-              format = "number";
-            }
-            {
-              field = "model_ids";
-              label = "Generating";
-              format = "size";
-            }
-          ];
-        }
-        # Update-available signal: `latest` is the newest GitHub release,
-        # so a mismatch with `current` means an upgrade is waiting.
-        #
-        # HOURLY on purpose. The handler queries api.github.com on EVERY
-        # request, and unauthenticated GitHub allows ~60/hour per IP — a
-        # 60s poll would rate-limit itself. Worse, the handler swallows
-        # any failure and returns latest = current, so a throttled check
-        # reports "up to date" rather than erroring. 24 calls/day keeps
-        # it well inside the budget and the answer trustworthy.
-        {
-          type = "customapi";
-          url = "http://open-webui:8080/api/version/updates";
-          refreshInterval = 3600000;
-          headers = {
-            Authorization = "Bearer {{HOMEPAGE_VAR_OPENWEBUI_KEY}}";
-          };
-          mappings = [
-            {
-              field = "current";
-              label = "Version";
-              format = "text";
-            }
-            {
-              field = "latest";
-              label = "Latest";
-              format = "text";
-            }
-          ];
-        }
-      ];
-    };
   };
 
   # Machine-generated secrets, born on the box on first boot. Idempotent:
@@ -192,7 +126,7 @@ in
 
   # Render the LiteLLM master key as OPENAI_API_KEY (used for both the
   # LLM calls and the audio-STT calls). One encrypted source of truth
-  # stays litellm/env.sops — same idiom as litellm-prom-token / homepage.
+  # stays litellm/env.sops — same idiom as litellm-prom-token.
   systemd.services."open-webui-litellm-key" = mkSecretRender {
     description = "Render the LiteLLM master key (OPENAI_API_KEY + MCP tool servers) for open-webui";
     gates = [ "podman-open-webui.service" ];
@@ -366,7 +300,7 @@ in
       ENABLE_SIGNUP = "false";
       DEFAULT_USER_ROLE = "pending";
 
-      # Programmatic access (homepage's tile widget reads the admin API).
+      # Programmatic access (daedalus reads the admin API).
       # Note the PLURAL name — `ENABLE_API_KEY` is a different, unrelated
       # setting and silently does nothing here. Upstream default is
       # "False", and the flag gates key creation for EVERY role: the

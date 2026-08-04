@@ -56,16 +56,13 @@ in
         "admins"
         "family"
       ];
-      homepage = {
-        group = "Books";
-        extra.weight = 20;
-        name = "Shelfmark";
-        description = "Book downloader (Anna's Archive, via VPN)";
-        icon = "mdi-book-arrow-down";
-        href = "https://shelfmark.toscanini.me";
-      };
     }
   ];
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.shelfmark = {
+    displayName = "Shelfmark";
+    description = "Book downloader (Anna’s Archive, via VPN)";
+  };
 
   virtualisation.oci-containers.containers.shelfmark = mkNetnsTenant "gluetun" {
     image = "ghcr.io/calibrain/shelfmark:latest@sha256:056f02e28d446b128d91fa10451c7cc376392f7383bbb841deec49838a419d53";

@@ -117,24 +117,6 @@ in
 
   fleet.cloudflare = { inherit accountId tunnelId; };
 
-  fleet.homepageServices."Network" = [
-    {
-      name = "Cloudflare Tunnel";
-      weight = 10;
-      href = "https://dash.cloudflare.com/${accountId}/tunnels/${tunnelId}/overview";
-      description = "Outbound CF Tunnel";
-      icon = "cloudflare.png";
-      widget = {
-        type = "cloudflared";
-        # Account/tunnel ids aren't secrets (they're in the public href
-        # above) — only the API token stays in homepage's env.sops.
-        accountid = accountId;
-        tunnelid = tunnelId;
-        key = "{{HOMEPAGE_VAR_CF_API_TOKEN}}";
-      };
-    }
-  ];
-
   virtualisation.oci-containers.containers.cloudflared = mkRootlessContainer {
     image = "docker.io/cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf";
     dependsOn = [ "traefik" ];

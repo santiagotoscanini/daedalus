@@ -66,5 +66,5 @@ src/lib/schema.ts    drizzle schema — empty until there's a domain model
 ```
 
 `/api/healthz` is load-bearing: it is the gatus probe, the forward-auth bypass
-and the homepage tile's monitor. Keep it unauthenticated and keep it meaning
-"can actually serve".
+and the deploy unit's post-restart check. Keep it unauthenticated and keep it
+meaning "can actually serve".

@@ -3,7 +3,7 @@
 # MCP servers: litellm dials http://mcp-grocy:8080/mcp over the private
 # grocy-mcp bridge (only litellm + this server are on it).
 #
-# Reaches Grocy the way the homepage widget does — through traefik at
+# Reaches Grocy through traefik at
 # https://grocy.toscanini.me/api, which is SSO-bypassed (grocy's
 # authBypassRule = PathPrefix(`/api`)) and authenticated by the
 # GROCY-API-KEY header. That key lives here in env.sops, held by the MCP

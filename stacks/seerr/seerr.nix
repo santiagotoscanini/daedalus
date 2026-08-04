@@ -37,17 +37,6 @@
   fleet.webApps.seerr = {
     serviceName = "seerr";
     port = 5055;
-    homepage = {
-      group = "Media";
-      extra.weight = 10; # Seerr
-      description = "Media requests & discovery";
-      icon = "seerr.png";
-      widget = {
-        type = "seerr";
-        url = "http://seerr:5055";
-        key = "{{HOMEPAGE_VAR_SEERR_API_KEY}}";
-      };
-    };
   };
 
   virtualisation.oci-containers.containers.seerr = mkRootlessContainer {

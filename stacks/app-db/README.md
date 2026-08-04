@@ -12,7 +12,7 @@ One attribute in `stacks/apps/declarations.nix`:
 fleet.apps.foo = {
   postgres.enable = true;
 
-  homepage = {
+  presentation = {
     description = "Foo — what this app does";
     icon        = "mdi-cube-outline-#94a3b8";
   };

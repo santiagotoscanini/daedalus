@@ -78,46 +78,6 @@ in
   fleet.webApps.verdaccio = {
     serviceName = "verdaccio";
     port = 4873;
-    # LAN only — off-LAN clients reach it via WireGuard.
-    homepage = {
-      group = "Registries";
-      description = "Private npm registry (LAN-only)";
-      icon = "verdaccio.png";
-      siteMonitor = "https://verdaccio.toscanini.me/-/ping";
-      widget = {
-        type = "customapi";
-        # Served by the assets/cached-packages plugin as
-        # {"published": <n>, "cached": <n>, "total": <n>}. Verdaccio's own
-        # /-/v1/search cannot back this tile: it reports the returned page
-        # length (so it saturates at that endpoint's 250 cap) and it has no
-        # notion of which packages were published here vs pulled from npmjs.
-        url = "http://verdaccio:4873/-/cached-packages/stats";
-        refreshInterval = 300000;
-        # Cached counts unique package NAMES (what the UI lists);
-        # Versions counts the tarballs actually held across them. The two
-        # differ in both directions: a package can hold several versions,
-        # and resolving a dependency tree caches a manifest even when no
-        # tarball is ever pulled. `cachedWithTarball` in the same response
-        # is the stricter "packages we actually hold" reading.
-        mappings = [
-          {
-            field = "published";
-            label = "Published";
-            format = "number";
-          }
-          {
-            field = "cached";
-            label = "Cached";
-            format = "number";
-          }
-          {
-            field = "cachedVersions";
-            label = "Versions";
-            format = "number";
-          }
-        ];
-      };
-    };
   };
 
   fleet.grafanaDashboardsByFolder."Services".verdaccio = builtins.readFile ./assets/dashboard.json;

@@ -11,8 +11,6 @@
 #     plus the per-app Grafana dashboard (in the "Apps" folder) when
 #     one is supplied. Postgres metrics are separate — the shared
 #     `app-db-exporter` (stacks/app-db/) covers them either way.
-#   - Homepage tiles under a per-app section named after the app (e.g.
-#     `Anansi`): the app, Repo, Logs.
 #   - An auto-deploy timer + oneshot (`deploy.enable`, ON by default) that
 #     polls the image registry and redeploys the container when the digest
 #     moves. This is the "push to main and it's live" half of the platform;
@@ -22,8 +20,8 @@
 # No per-app port override. The image is built by us; the rule is ours.
 #
 # Naming: the declaration key (e.g. `anansi`) is used verbatim for the
-# hostname `anansi.toscanini.me`, the homepage group (capitalized:
-# `Anansi`), the dashboard tag, the container name `app-anansi`, the
+# hostname `anansi.toscanini.me`, the dashboard tag, the container name
+# `app-anansi`, the
 # postgres role + database `anansi` on the shared cluster (when
 # `postgres.enable`), and the canonical source-code directory at
 # /home/santiago/apps/anansi/.
@@ -188,7 +186,7 @@ let
       devImage = mkLocalImage {
         name = "${cName}-dev";
         tagPrefix = "dev";
-        contextDir = app.source.contextDir;
+        inherit (app.source) contextDir;
         gates = [ "podman-${cName}.service" ];
       };
 
@@ -227,7 +225,7 @@ let
       oidcCallback =
         if proxyAuth then "${publicUrl}/oidc/callback" else "${publicUrl}${app.auth.callbackPath}";
 
-      tileGroup = lib.toSentenceCase name;
+      displayName = lib.toSentenceCase name;
 
       # Pull-and-redeploy. House style (cf. cloudflared-route-sync): nix
       # injects the parameters, the bash body lives in a standalone
@@ -279,111 +277,6 @@ let
         '';
       };
 
-      homepageTile = {
-        inherit name;
-        weight = 10;
-        href = publicUrl;
-        # traefik-net DNS by default. Two exceptions, both because homepage
-        # lives on traefik-net and the container does not:
-        #   egress  — borrowed netns, so monitor the host port the netns
-        #             owner publishes;
-        #   isolated — private iso-<name>-net whose only other member is
-        #             traefik, so `http://<container>:3000` doesn't even
-        #             resolve from homepage ("bad address"). Dial it through
-        #             traefik on the unauthenticated health path instead —
-        #             the same fallback platform/publishing.nix already
-        #             applies to isolated webApps. The health path is what
-        #             keeps the probe off the IdP's 302.
-        siteMonitor =
-          if egressEnabled then
-            "http://host.containers.internal:${toString app.egress.hostPort}"
-          else if isolatedAuth then
-            "https://${hostname}${lib.optionalString (app.auth.healthPath != null) app.auth.healthPath}"
-          else
-            "http://${cName}:3000";
-        inherit (app.homepage) icon;
-      }
-      // (lib.optionalAttrs (app.homepage.description != "") {
-        inherit (app.homepage) description;
-      })
-      // (lib.optionalAttrs (app.homepage.widget != null) {
-        inherit (app.homepage) widget;
-      });
-
-      # service_name=<name> is set by alloy for the app-<name> container
-      # (see stacks/logging/logging.nix), so Drilldown deep-links to this
-      # app's log stream. DB logs live on the shared cluster under
-      # stack=app-db.
-      logsTile = {
-        name = "Logs";
-        weight = 30;
-        href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${name}/logs?from=now-15m&to=now&var-ds=loki-default&var-filters=service_name%7C%3D%7C${name}";
-        description = "App logs";
-        icon = "/icons/loki.png";
-        widget = {
-          type = "customapi";
-          # sum(count_over_time({service_name="<app>"}[1h])) → vector
-          # with [ts, "<count>"] at data.result[0].value. Empty result
-          # (no log lines in the last hour) renders blank.
-          url = "http://loki:3100/loki/api/v1/query?query=sum%28count_over_time%28%7Bservice_name%3D%22${name}%22%7D%5B1h%5D%29%29%20or%20vector%280%29";
-          refreshInterval = 60000;
-          mappings = [
-            {
-              field = "data.result.0.value.1";
-              label = "Logs (1h)";
-              format = "number";
-            }
-          ];
-        };
-      };
-
-      # A local-source app has no repo of its own — its code lives in the
-      # flake repo next to the module that declares it, so the tile points
-      # there instead of at a github.com/santiagotoscanini/<name> that
-      # doesn't exist.
-      repoPath =
-        if localSource then
-          "nixos-s2/tree/main/stacks/${name}/app"
-        else
-          "${name}";
-
-      repoTile = {
-        name = "Repo";
-        weight = 20;
-        href = "https://github.com/santiagotoscanini/${repoPath}";
-        description =
-          if localSource then
-            "Source code (in this flake, stacks/${name}/app)"
-          else
-            "Source code (github.com/santiagotoscanini/${name})";
-        icon = "mdi-github-#94a3b8";
-      };
-
-      # Per-app DB metrics dashboard (only when postgres is enabled).
-      # Same shape as logsTile — direct link with `var-app=<name>` so
-      # the dashboard template variable lands pre-filtered.
-      dbTile = {
-        name = "DB";
-        weight = 40;
-        href = "https://grafana.toscanini.me/d/pg-overview/postgres?orgId=1&var-app=${name}&refresh=30s";
-        description = "Postgres metrics — ${name} DB";
-        icon = "/icons/postgres.png";
-        widget = {
-          type = "customapi";
-          # Prometheus pg_database_size_bytes scraped from app-db's
-          # postgres-exporter. Empty result (DB not yet created /
-          # exporter not scraping) renders blank, which is fine.
-          url = "http://prometheus:9090/api/v1/query?query=pg_database_size_bytes%7Bdatname%3D%22${name}%22%7D";
-          refreshInterval = 60000;
-          mappings = [
-            {
-              field = "data.result.0.value.1";
-              label = "Size";
-              format = "bytes";
-            }
-          ];
-        };
-      };
     in
     {
       assertions = [
@@ -441,23 +334,35 @@ let
         }
       ];
 
-      # The Pocket ID client for native mode — id `<name>`, secret from
-      # SSO_SECRET_<NAME> in stacks/pocket-id/clients.sops. The oneshot
-      # in stacks/pocket-id/clients.nix converges it at the IdP and hands
-      # the container its OIDC_CLIENT_SECRET env file. Proxy mode
-      # declares nothing here: its client is auto-derived from the
-      # webApp's `auth = "oidc"`, like every other forward-auth'd app.
-      fleet.ssoClients = lib.optionalAttrs nativeAuth {
-        "${name}" = {
-          displayName = tileGroup;
-          description = app.homepage.description;
-          launchURL = publicUrl;
-          callbackURLs = [ oidcCallback ];
-          logoutCallbackURLs = [ oidcCallback ];
-          inherit (app.auth) allowedGroups;
-          consumers = [ cName ];
+      # The Pocket ID client.
+      #
+      # Native mode declares the whole thing — id `<name>`, secret from
+      # SSO_SECRET_<NAME> in stacks/pocket-id/clients.sops. The oneshot in
+      # stacks/pocket-id/clients.nix converges it at the IdP and hands the
+      # container its OIDC_CLIENT_SECRET env file.
+      #
+      # Proxy mode declares only the copy: the client itself is derived from
+      # the webApp's `auth = "oidc"` like every other forward-auth'd app,
+      # but what it is CALLED has no mechanical source, so it comes from the
+      # same place the app's own row does.
+      fleet.ssoClients =
+        lib.optionalAttrs nativeAuth {
+          "${name}" = {
+            inherit displayName;
+            inherit (app.presentation) description;
+            launchURL = publicUrl;
+            callbackURLs = [ oidcCallback ];
+            logoutCallbackURLs = [ oidcCallback ];
+            inherit (app.auth) allowedGroups;
+            consumers = [ cName ];
+          };
+        }
+        // lib.optionalAttrs (proxyAuth && exposed) {
+          "${name}" = {
+            inherit displayName;
+            inherit (app.presentation) description;
+          };
         };
-      };
 
       # Delegate per-app Postgres entirely to stacks/app-db/. The
       # presence of the key triggers role + database creation and the
@@ -499,29 +404,29 @@ let
           inherit hostname;
           exposeRemotely = app.stage == "live";
         }
-      // (lib.optionalAttrs proxyAuth {
-        auth = "oidc";
-        isolated = isolatedAuth;
-        inherit (app.auth) authBypassRule;
-        authHeaders = app.auth.headers;
-        # The webApp is where the derived client reads its group
-        # restriction from, so proxy mode routes `auth.allowedGroups`
-        # through it rather than declaring the client itself.
-        authGroups = app.auth.allowedGroups;
-      })
-      # gatus probes the real upstream on this path either way; under
-      # "proxy" it doubles as the middleware's bypass (publishing.nix
-      # appends it), which is what keeps the probe off the IdP.
-      // (lib.optionalAttrs (app.auth.healthPath != null) { inherit (app.auth) healthPath; })
-      // (
-        if egressEnabled then
-          { serviceUrl = "http://host.containers.internal:${toString app.egress.hostPort}"; }
-        else
-          {
-            serviceName = cName;
-            port = 3000;
-          }
-      );
+        // (lib.optionalAttrs proxyAuth {
+          auth = "oidc";
+          isolated = isolatedAuth;
+          inherit (app.auth) authBypassRule;
+          authHeaders = app.auth.headers;
+          # The webApp is where the derived client reads its group
+          # restriction from, so proxy mode routes `auth.allowedGroups`
+          # through it rather than declaring the client itself.
+          authGroups = app.auth.allowedGroups;
+        })
+        # gatus probes the real upstream on this path either way; under
+        # "proxy" it doubles as the middleware's bypass (publishing.nix
+        # appends it), which is what keeps the probe off the IdP.
+        // (lib.optionalAttrs (app.auth.healthPath != null) { inherit (app.auth) healthPath; })
+        // (
+          if egressEnabled then
+            { serviceUrl = "http://host.containers.internal:${toString app.egress.hostPort}"; }
+          else
+            {
+              serviceName = cName;
+              port = 3000;
+            }
+        );
       };
 
       # Prometheus scrapes the app's own /metrics endpoint (when
@@ -553,27 +458,6 @@ let
               builtins.readFile app.prometheus.dashboard
             );
           };
-
-      # Homepage tile lands in the per-app section.
-      # The app's own tile is dropped when it has no ingress — its href would
-      # 404 and its siteMonitor would show a permanent red dot for something
-      # working exactly as configured. The Repo/Logs/DB tiles still apply.
-      fleet.homepageServices."${tileGroup}" = lib.optional exposed homepageTile
-      ++ [
-        repoTile
-        logsTile
-      ]
-      ++ (lib.optional postgresEnabled dbTile);
-
-      # Per-group layout for the dynamically-named app group, so the
-      # 3 or 4 tiles render in a row instead of stacking vertically.
-      fleet.homepageLayout."${tileGroup}" = {
-        style = "row";
-        columns = if postgresEnabled then 4 else 3;
-        inherit (app.homepage) icon;
-        useEqualHeights = true;
-        tab = "Apps";
-      };
 
       # Persistent data dir — the fleet-standard statePaths convention
       # (uid 0 default = container root = santiago; state-paths.service
@@ -1208,31 +1092,18 @@ in
               };
             };
 
-            homepage = {
+            # How the app is named to a person: its row in daedalus, and
+            # its entry on the Pocket ID consent screen.
+            presentation = {
               description = lib.mkOption {
                 type = lib.types.str;
                 default = "";
-                description = "Tile subtitle on the homepage dashboard.";
+                description = "One-line subtitle under the app name.";
               };
               icon = lib.mkOption {
                 type = lib.types.str;
                 default = "mdi-cube-outline-#94a3b8";
-                description = "Tile icon (homepage icon syntax).";
-              };
-              widget = lib.mkOption {
-                type = lib.types.nullOr (lib.types.attrsOf lib.types.unspecified);
-                default = null;
-                description = ''
-                  Optional homepage widget block, passed through verbatim (same
-                  shape as `fleet.webApps.<n>.homepage.widget`). Null by
-                  default: an app with nothing to report should not carry an
-                  empty widget that renders a permanently blank row.
-
-                  A `customapi` widget must point at a URL homepage can
-                  actually reach — it lives on traefik-net and monitoring-net,
-                  so an `auth.isolated` app has to be dialled through traefik
-                  on a path that is on the forward-auth bypass.
-                '';
+                description = "Icon, in Material Design Icons syntax (`mdi-<n>-<#rrggbb>`).";
               };
             };
 
@@ -1368,8 +1239,6 @@ in
           "webApps"
           "prometheusScrapes"
           "grafanaDashboardsByFolder"
-          "homepageServices"
-          "homepageLayout"
         ];
         systemd = [
           "services"
@@ -1436,14 +1305,6 @@ in
         grafanaDashboardsByFolder = attrsOpt [
           "fleet"
           "grafanaDashboardsByFolder"
-        ];
-        homepageServices = attrsOpt [
-          "fleet"
-          "homepageServices"
-        ];
-        homepageLayout = attrsOpt [
-          "fleet"
-          "homepageLayout"
         ];
       };
 

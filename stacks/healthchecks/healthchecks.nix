@@ -53,21 +53,10 @@
     # middleware removes spoofed X-Forwarded-Email on these.
     authBypassRule = "PathPrefix(`/ping`) || PathPrefix(`/api`) || PathPrefix(`/badge`)";
     authHeaders."X-Forwarded-Email" = "{{ .claims.email }}";
-    homepage = {
-      group = "Monitoring";
-      extra.weight = 50;
-      description = "Cron / job dead-man's-switch";
-      icon = "healthchecks.png";
-      # Via traefik, not uwsgi-direct: homepage's undici client trips
-      # intermittently on uwsgi keep-alive and the tile flaps red.
-      # /api/v1/status/ rides the auth bypass, so it stays probeable.
-      siteMonitor = "https://hc.toscanini.me/api/v1/status/";
-      widget = {
-        type = "healthchecks";
-        url = "https://hc.toscanini.me";
-        key = "{{HOMEPAGE_VAR_HEALTHCHECKS_API_KEY}}";
-      };
-    };
+  };
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.healthchecks = {
+    description = "Cron / job dead-man's-switch";
   };
 
   sops.secrets."healthchecks-env" = mkDotenvSecret ./env.sops;

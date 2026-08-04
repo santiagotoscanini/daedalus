@@ -14,8 +14,8 @@
 # volume.
 #
 # No auth is configured (single-user LAN + CF-tunnel-off by default).
-# If a password is set later in the UI, add `password` to the homepage
-# widget below.
+# If a password is set later in the UI, daedalus reads the numbers from
+# prometheus rather than the API, so nothing needs the credential.
 
 { mkRootlessContainer, ... }:
 
@@ -46,22 +46,16 @@
     # gate is the real boundary. Widget dials container-direct.
     auth = "oidc";
     # Household app: santi + sofi, not admins-only.
-    authGroups = [ "admins" "family" ];
+    authGroups = [
+      "admins"
+      "family"
+    ];
     healthPath = "/favicon.ico";
-    homepage = {
-      group = "Network";
-      extra.weight = 50;
-      name = "MySpeed";
-      description = "Internet speed tracker";
-      icon = "myspeed.png";
-      widget = {
-        # Native homepage integration — surfaces the latest test's ping,
-        # download and upload straight from MySpeed's API.
-        type = "myspeed";
-        url = "http://myspeed:5216";
-        # password = "{{HOMEPAGE_VAR_MYSPEED_PASSWORD}}"; # only if UI auth set
-      };
-    };
+  };
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.myspeed = {
+    displayName = "MySpeed";
+    description = "Internet speed tracker";
   };
 
   virtualisation.oci-containers.containers.myspeed = mkRootlessContainer {

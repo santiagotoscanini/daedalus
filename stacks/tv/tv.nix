@@ -62,100 +62,30 @@ in
       port = 8090;
       authBypassRule = "PathPrefix(`/api`)";
       healthPath = "/api/v2/app/version";
-      homepage = {
-        group = "Media";
-        extra.weight = 70; # qBittorrent
-        name = "qBittorrent";
-        description = "BitTorrent (via gluetun/ProtonVPN)";
-        icon = "qbittorrent.png";
-        widget = {
-          # Direct host.containers.internal:8090 returns 403 to homepage's
-          # widget (CSRF / SameSite cookie). Go through traefik.
-          type = "qbittorrent";
-          url = "https://qbittorrent.toscanini.me";
-          username = "{{HOMEPAGE_VAR_QBT_USER}}";
-          password = "{{HOMEPAGE_VAR_QBT_PASS}}";
-          enableLeechProgress = true;
-        };
-      };
     }
     {
       name = "nzbget";
       port = 6789;
       authBypassRule = "PathPrefix(`/jsonrpc`)";
       healthPath = "/jsonrpc";
-      homepage = {
-        group = "Media";
-        extra.weight = 80; # NZBGet
-        name = "NZBGet";
-        description = "Usenet downloader (via gluetun)";
-        icon = "nzbget.png";
-        # undici Connection: close bug — probe + widget through traefik.
-        siteMonitor = "https://nzbget.toscanini.me";
-        widget = {
-          type = "nzbget";
-          url = "https://nzbget.toscanini.me";
-          # No creds: nzbget auth is disabled (ControlPassword empty —
-          # AUTH.md); the API is open, LAN-closed + behind the Pocket
-          # ID gate.
-        };
-      };
     }
     {
       name = "prowlarr";
       port = 9696;
       authBypassRule = arrApiBypass;
       healthPath = "/ping";
-      homepage = {
-        group = "Media";
-        extra.weight = 50; # Prowlarr
-        name = "Prowlarr";
-        description = "Indexer aggregator";
-        icon = "prowlarr.png";
-        widget = {
-          type = "prowlarr";
-          url = "http://host.containers.internal:9696";
-          key = "{{HOMEPAGE_VAR_PROWLARR_API_KEY}}";
-        };
-      };
     }
     {
       name = "radarr";
       port = 7878;
       authBypassRule = arrApiBypass;
       healthPath = "/ping";
-      homepage = {
-        group = "Media";
-        extra.weight = 40; # Radarr
-        name = "Radarr";
-        description = "Movies";
-        icon = "radarr.png";
-        widget = {
-          type = "radarr";
-          url = "http://host.containers.internal:7878";
-          key = "{{HOMEPAGE_VAR_RADARR_API_KEY}}";
-          enableQueue = true;
-        };
-      };
     }
     {
       name = "sonarr";
       port = 8989;
       authBypassRule = arrApiBypass;
       healthPath = "/ping";
-      homepage = {
-        group = "Media";
-        extra.weight = 30; # Sonarr
-        name = "Sonarr";
-        description = "TV shows";
-        icon = "sonarr.png";
-        widget = {
-          type = "sonarr";
-          url = "http://host.containers.internal:8989";
-          key = "{{HOMEPAGE_VAR_SONARR_API_KEY}}";
-          enableQueue = true;
-        };
-      };
     }
     {
       name = "bazarr";
@@ -166,18 +96,6 @@ in
       # still passes [STATUS] < 500 — certifying traefik, not bazarr.
       # The value expands from gatus's env.sops at config load.
       healthHeaders."X-API-KEY" = "\${BAZARR_API_KEY}";
-      homepage = {
-        group = "Media";
-        extra.weight = 90; # Bazarr
-        name = "Bazarr";
-        description = "Subtitles";
-        icon = "bazarr.png";
-        widget = {
-          type = "bazarr";
-          url = "http://host.containers.internal:6767";
-          key = "{{HOMEPAGE_VAR_BAZARR_API_KEY}}";
-        };
-      };
     }
     {
       # subgen — dual API on :9000: /asr (Bazarr dials 127.0.0.1:9000
@@ -187,6 +105,22 @@ in
       ui = false;
     }
   ];
+
+  # Consent screen and Pocket ID's My Apps page, per gated UI.
+  fleet.ssoClients = {
+    qbittorrent = {
+      displayName = "qBittorrent";
+      description = "BitTorrent (via gluetun/ProtonVPN)";
+    };
+    nzbget = {
+      displayName = "NZBGet";
+      description = "Usenet downloader (via gluetun)";
+    };
+    prowlarr.description = "Indexer aggregator";
+    radarr.description = "Movies";
+    sonarr.description = "TV shows";
+    bazarr.description = "Subtitles";
+  };
 
   # *arr databases on the shared app-db cluster: one role per app, main +
   # log database each (the *arrs keep logs in a separate db). The apps
@@ -224,21 +158,6 @@ in
   fleet.webApps.jellyfin = {
     serviceName = "jellyfin";
     port = 8096;
-    homepage = {
-      group = "Media";
-      extra.weight = 20; # Jellyfin
-      name = "Jellyfin";
-      description = "Movies, TV, music — household media server";
-      icon = "jellyfin.png";
-      widget = {
-        type = "jellyfin";
-        url = "http://jellyfin:8096";
-        key = "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}";
-        enableBlocks = true;
-        enableNowPlaying = true;
-        enableUser = false;
-      };
-    };
   };
 
   fleet.statePaths = {

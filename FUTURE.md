@@ -158,13 +158,13 @@ Plan when picked up:
   no-CLI-app-state-mutation rule; the forward-auth gate already keeps
   the local password form unreachable. Add the AUTH.md row either way —
   cleanuparr is currently in no tier at all.
-- **Homepage tile** (2.7.0 added `GET /api/v2/stats`, built for
-  Homepage's `customapi`). Follow the grocy pattern: a `customapi`
-  widget against the public hostname with an `X-Api-Key` header, the key
-  in `stacks/homepage/env.sops`, plus an `authBypassRule` of
-  ``HeaderRegexp(`X-Api-Key`, `.+`)`` while `auth = "oidc"` remains.
-  Note the v1 `/api/stats` endpoint stops functioning 1 Sep 2026 — we
-  have no consumer of it, so this is a gap to fill, not breakage to fix.
+- **Read its stats properly** (2.7.0 added `GET /api/v2/stats`). Follow
+  the grocy pattern: dial the public hostname with an `X-Api-Key` header,
+  the key in `stacks/daedalus/service-keys.sops`, plus an `authBypassRule`
+  of ``HeaderRegexp(`X-Api-Key`, `.+`)`` while `auth = "oidc"` remains.
+  The dashboard currently counts these out of Loki instead. Note the v1
+  `/api/stats` endpoint stops functioning 1 Sep 2026 — we have no consumer
+  of it, so this is a gap to fill, not breakage to fix.
 - **Shared pg cluster** (2.10.0 added Postgres). `fleet.appDatabases.cleanuparr`,
   `fleet.bridgeMemberships.cleanuparr = [ "app-db" ]` (safe: the
   isolation assertion rejects only a `"traefik"` membership), and
@@ -245,7 +245,7 @@ upstream growing env-based OIDC configuration.
 ## 11. Home Assistant: phase-2 follow-ups
 The stack (`stacks/home-assistant`) is up, published on LAN + tunnel,
 recorder on the shared pg cluster, Pocket ID SSO wired, onboarded, and
-instrumented (scrape + dashboard + alert + homepage widget all live).
+instrumented (scrape + dashboard + alert all live).
 What is left:
 
 - **Home name / Location / Region are now YAML-only**, by design: any

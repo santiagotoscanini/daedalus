@@ -25,35 +25,16 @@
     # Pocket ID gate is the only auth. Widget dials container-direct.
     auth = "oidc";
     # Household app: santi + sofi, not admins-only.
-    authGroups = [ "admins" "family" ];
+    authGroups = [
+      "admins"
+      "family"
+    ];
     healthPath = "/api/v1/info/status";
-    homepage = {
-      group = "Home";
-      extra.weight = 70;
-      name = "Stirling-PDF";
-      description = "PDF toolbox (split, merge, OCR)";
-      icon = "stirling-pdf.png";
-      widget = {
-        type = "customapi";
-        # /api/v1/info/status → {"version":"2.10.1","status":"UP"}
-        # Tiny but accurate: tells us the running image version and
-        # that the Spring Boot app's liveness probe is green.
-        url = "http://stirling-pdf:8080/api/v1/info/status";
-        refreshInterval = 300000;
-        mappings = [
-          {
-            field = "status";
-            label = "Status";
-            format = "text";
-          }
-          {
-            field = "version";
-            label = "Version";
-            format = "text";
-          }
-        ];
-      };
-    };
+  };
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.stirling-pdf = {
+    displayName = "Stirling-PDF";
+    description = "PDF toolbox (split, merge, OCR)";
   };
 
   virtualisation.oci-containers.containers.stirling-pdf = mkRootlessContainer {

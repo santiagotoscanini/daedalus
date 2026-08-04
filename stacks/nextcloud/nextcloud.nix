@@ -120,26 +120,6 @@ in
     serviceName = "nextcloud-app";
     port = 80;
     exposeRemotely = true;
-    homepage = {
-      group = "Home";
-      extra.weight = 30;
-      description = "Files, calendar, contacts — primary household sync";
-      icon = "nextcloud.png";
-      # Probe + widget through traefik: NC_overwriteprotocol 30x-redirects
-      # plain HTTP, which homepage's proxy can't follow (--add-host'ed).
-      siteMonitor = "https://nextcloud.toscanini.me";
-      widget = {
-        type = "nextcloud";
-        url = "https://nextcloud.toscanini.me";
-        key = "{{HOMEPAGE_VAR_NEXTCLOUD_KEY}}";
-        fields = [
-          "freespace"
-          "activeusers"
-          "numfiles"
-          "numshares"
-        ];
-      };
-    };
   };
 
   virtualisation.oci-containers.containers.nextcloud-redis = mkRootlessContainer {

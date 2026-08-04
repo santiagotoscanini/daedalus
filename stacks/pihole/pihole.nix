@@ -38,38 +38,25 @@ in
     # at host.containers.internal:8080 (serviceUrl above).
     auth = "oidc";
     healthPath = "/api/info/login";
-    # The homepage Pi-hole widget rides traefik (below) to dodge FTL's
-    # keep-alive framing, which trips homepage's undici parser on the
-    # direct :8080 path. So the widget's read-only calls must skip the
-    # OIDC gate: GET stats/info (query counts — non-sensitive) plus the
-    # POST /api/auth handshake (returns a blank-password session, no
-    # state change). Control endpoints (/api/dns/blocking, config, …)
-    # stay gated.
+    # daedalus reads the query counts through traefik on the public
+    # hostname, so those read-only calls skip the OIDC gate: GET
+    # stats/info (non-sensitive) plus the POST /api/auth handshake
+    # (returns a blank-password session, no state change). Control
+    # endpoints (/api/dns/blocking, config, …) stay gated.
     authBypassRule = "(Method(`GET`) && (PathPrefix(`/api/stats`) || PathPrefix(`/api/info`))) || (Method(`POST`) && Path(`/api/auth`))";
-    homepage = {
-      group = "Network";
-      extra.weight = 40;
-      name = "Pi-hole";
-      description = "LAN DNS, DHCP, ad-blocking";
-      icon = "pi-hole.png";
-      # Probe through traefik too (not the default :8080 upstream) — a
-      # direct ping trips the same undici framing bug as the widget. The
-      # healthPath is OIDC-bypassed and returns 200.
-      siteMonitor = "https://pihole.toscanini.me/api/info/login";
-      widget = {
-        type = "pihole";
-        url = "https://pihole.toscanini.me";
-        version = 6;
-      };
-    };
+  };
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.pihole = {
+    displayName = "Pi-hole";
+    description = "LAN DNS, DHCP, ad-blocking";
   };
 
   services.pihole-ftl = {
     enable = true;
     openFirewallDNS = true; # 53 TCP + UDP
     openFirewallDHCP = true; # 67 UDP
-    # 8080 (admin web UI) is NOT opened to the LAN. traefik + the homepage
-    # widget reach pihole-FTL's UI via host.containers.internal, which is
+    # 8080 (admin web UI) is NOT opened to the LAN. traefik reaches
+    # pihole-FTL's UI via host.containers.internal, which is
     # 192.168.0.2 -> 192.168.0.2 (host-to-self, routed over `lo` and accepted
     # by the firewall's `-i lo` rule). LAN devices (192.168.0.x on enp3s0)
     # hitting :8080 are dropped -> admin is HTTPS-only via pihole.toscanini.me.
@@ -121,7 +108,7 @@ in
         # trade-off (2026-07-18): the API remains reachable WITHOUT
         # auth from any container on the box via
         # host.containers.internal:8080 (that's also how traefik and
-        # the homepage widget get in). FTL has no "password on the API,
+        # daedalus gets in). FTL has no "password on the API,
         # UI stays login-free" mode — the UI is an API client, so ANY
         # configured hash (app passwords included) re-enables the login
         # wall, and a second login behind SSO is explicitly not wanted.

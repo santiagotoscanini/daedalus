@@ -52,31 +52,6 @@
     '';
   };
 
-  # No web UI upstream — this tile is the face: Drilldown deep-link to
-  # its Loki stream + a counter of dry-run deletion candidates (the
-  # "Deleting ..." report lines) over the last 7 days.
-  fleet.homepageServices."Media" = [
-    {
-      name = "Janitorr";
-      weight = 110;
-      href = "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore?from=now-7d&to=now&var-ds=loki-default&var-filters=container%7C%3D%7Cjanitorr";
-      description = "Media retention (dry-run) — log review";
-      icon = "/icons/janitorr.png";
-      widget = {
-        type = "customapi";
-        url = "http://loki:3100/loki/api/v1/query?query=sum%28count_over_time%28%7Bcontainer%3D%22janitorr%22%7D%20%7C%3D%20%60Deleting%60%20%5B7d%5D%29%29%20or%20vector%280%29";
-        refreshInterval = 300000;
-        mappings = [
-          {
-            field = "data.result.0.value.1";
-            format = "number";
-            label = "Would delete (7d)";
-          }
-        ];
-      };
-    }
-  ];
-
   # RADARR/SONARR/JELLYFIN/SEERR_API_KEY for the ${...} placeholders in
   # assets/application.yml. Edit with `sops env.sops`.
   sops.secrets."janitorr-env" = mkDotenvSecret ./env.sops;

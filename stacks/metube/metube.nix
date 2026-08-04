@@ -17,48 +17,26 @@
   fleet.webApps.metube = {
     serviceName = "metube";
     port = 8081;
-    # No auth of its own (upstream: none planned). Homepage widget
-    # dials http://metube:8081 container-direct, unaffected.
+    # No auth of its own (upstream: none planned), so the Pocket ID gate
+    # is the only thing in front of it.
     auth = "oidc";
     # Household app: santi + sofi, not admins-only.
-    authGroups = [ "admins" "family" ];
+    authGroups = [
+      "admins"
+      "family"
+    ];
     healthPath = "/favicon.ico";
-    # daedalus's dashboard cannot dial metube container-direct the way
-    # homepage does — `auth.isolated` deliberately keeps it off traefik-net —
-    # so its tile goes through this hostname instead. GET only, and only the
-    # queue readout the tile shows; every mutating route (/add, /delete, the
-    # socket.io channel) still needs a passkey.
+    # daedalus cannot dial metube container-direct — `auth.isolated`
+    # deliberately keeps it off traefik-net — so it reads the queue through
+    # this hostname instead. GET only, and only that one path; every
+    # mutating route (/add, /delete, the socket.io channel) still needs a
+    # passkey.
     authBypassRule = "Method(`GET`) && Path(`/history`)";
-    homepage = {
-      group = "Media";
-      extra.weight = 60; # MeTube
-      name = "MeTube";
-      description = "yt-dlp web UI";
-      icon = "metube.png";
-      widget = {
-        type = "customapi";
-        # /history → {"done":[...], "queue":[...], "pending":[...]}
-        url = "http://metube:8081/history";
-        refreshInterval = 30000;
-        mappings = [
-          {
-            field = "queue";
-            label = "Queued";
-            format = "size";
-          }
-          {
-            field = "pending";
-            label = "Pending";
-            format = "size";
-          }
-          {
-            field = "done";
-            label = "Done";
-            format = "size";
-          }
-        ];
-      };
-    };
+  };
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.metube = {
+    displayName = "MeTube";
+    description = "yt-dlp web UI";
   };
 
   virtualisation.oci-containers.containers.metube = mkRootlessContainer {

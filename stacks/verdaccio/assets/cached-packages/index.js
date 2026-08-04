@@ -18,9 +18,8 @@
 // listing and labelled, since on a proxy registry those are where the disk
 // is going and where a dependency tree has drifted apart.
 //
-// It also serves GET /-/cached-packages/stats for the homepage tile,
-// which otherwise has no way to tell published from cached or to count
-// past 250. See the handler for what each count does and does not mean.
+// It also serves GET /-/cached-packages/stats for daedalus, which
+// otherwise has no way to tell published from cached or to count past 250. See the handler for what each count does and does not mean.
 //
 // How it hooks in
 // ---------------
@@ -364,7 +363,7 @@ module.exports = function cachedPackagesPlugin(config, options) {
         })
       );
 
-      // Counts for the homepage tile. Verdaccio's own /-/v1/search reports
+      // Counts for daedalus. Verdaccio's own /-/v1/search reports
       // the returned page length, so it saturates at that endpoint's 250
       // cap and cannot separate published from cached.
       app.get(ROUTE_STATS, webToken, async (req, res, next) => {

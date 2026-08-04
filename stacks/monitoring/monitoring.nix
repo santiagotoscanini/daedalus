@@ -377,16 +377,6 @@ in
       # the only path in from outside the bridges.
       auth = "oidc";
       healthPath = "/-/healthy";
-      homepage = {
-        group = "Monitoring";
-        extra.weight = 30; # Prometheus
-        description = "TSDB — 30d / 100GB retention";
-        icon = "prometheus.png";
-        widget = {
-          type = "prometheus";
-          url = "http://prometheus:9090";
-        };
-      };
     };
     grafana = {
       serviceName = "grafana";
@@ -394,25 +384,11 @@ in
       # Replaces the blanket `X-Frame-Options: deny` that
       # GF_SECURITY_ALLOW_EMBEDDING turns off (see the container env).
       extraMiddlewares = [ "grafana-embed@file" ];
-      homepage = {
-        group = "Monitoring";
-        extra.weight = 10; # Grafana
-        href = "https://grafana.toscanini.me/dashboards";
-        # Default probe (upstream /) 302s into the OAuth auto-login
-        # chain, which homepage's proxy can't follow. /api/health is
-        # auth-exempt.
-        siteMonitor = "http://grafana:3000/api/health";
-        description = "Dashboards";
-        icon = "grafana.png";
-        widget = {
-          type = "grafana";
-          version = 2;
-          url = "http://grafana:3000";
-          username = "{{HOMEPAGE_VAR_GRAFANA_USER}}";
-          password = "{{HOMEPAGE_VAR_GRAFANA_PASS}}";
-        };
-      };
     };
+  };
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.prometheus = {
+    description = "TSDB — 30d / 100GB retention";
   };
 
   virtualisation.oci-containers.containers.prometheus = mkRootlessContainer {
@@ -517,8 +493,8 @@ in
       # declarative client below, under the two GF_* names grafana
       # reads. Single-user box:
       # every Pocket ID account maps to Grafana Admin. Basic auth stays
-      # on — the homepage widget authenticates with the admin user/pass
-      # against the API. Escape hatch: /login?disableAutoLogin.
+      # on — daedalus authenticates with the admin user/pass against the
+      # API. Escape hatch: /login?disableAutoLogin.
       GF_AUTH_GENERIC_OAUTH_ENABLED = "true";
       GF_AUTH_GENERIC_OAUTH_NAME = "Pocket ID";
       GF_AUTH_GENERIC_OAUTH_AUTH_URL = "${config.fleet.sso.issuerUrl}/authorize";

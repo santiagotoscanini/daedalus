@@ -135,46 +135,6 @@ in
     # gatus exports results_* series (per-endpoint success, response
     # time, cert expiry).
     metrics.enable = true;
-    homepage = {
-      group = "Monitoring";
-      extra.weight = 40;
-      # /oidc/login skips gatus's hard-coded "Login with OIDC" button
-      # page — silent round-trip through Pocket ID when a session is
-      # alive (no auto-redirect option upstream).
-      href = "https://status.toscanini.me/oidc/login";
-      description = "Outside-in uptime + cert expiry";
-      icon = "gatus.png";
-      widget = {
-        # NOT type=gatus: OIDC security gates gatus's own API (no token
-        # concept), so the native widget can't authenticate. /metrics
-        # stays open — mirror the native widget's up/down/uptime trio
-        # from prometheus instead.
-        type = "prometheusmetric";
-        url = "http://prometheus:9090";
-        refreshInterval = 60000;
-        metrics = [
-          {
-            label = "Up";
-            query = "count(gatus_results_endpoint_success == 1) or vector(0)";
-          }
-          {
-            label = "Down";
-            query = "count(gatus_results_endpoint_success == 0) or vector(0)";
-          }
-          {
-            label = "Uptime (24h)";
-            query = "100 * avg(avg_over_time(gatus_results_endpoint_success[24h]))";
-            format = {
-              type = "number";
-              suffix = "%";
-              options = {
-                maximumFractionDigits = 2;
-              };
-            };
-          }
-        ];
-      };
-    };
   };
 
   virtualisation.oci-containers.containers.gatus = mkRootlessContainer {

@@ -35,57 +35,22 @@
     # grocy's existing `admin` account (single-user; grocy data is shared,
     # not per-user). GROCY-API-KEY auth is checked before the header in
     # ReverseProxyAuthMiddleware, so the /api bypass keeps API clients
-    # working — incl. the homepage widget, which dials through traefik
-    # on the public hostname (isolated = no shared bridge with homepage).
+    # working — incl. daedalus, which dials through traefik on the public
+    # hostname (isolated = it shares no bridge with anything else).
     auth = "oidc";
     # Household app: santi + sofi, not admins-only.
-    authGroups = [ "admins" "family" ];
+    authGroups = [
+      "admins"
+      "family"
+    ];
     healthPath = "/login";
     isolated = true;
     authBypassRule = "PathPrefix(`/api`)";
     authHeaders."Remote-User" = "admin";
-    homepage = {
-      group = "Home";
-      extra.weight = 50;
-      description = "Household inventory & chores";
-      icon = "grocy.png";
-      widget = {
-        type = "customapi";
-        # /api/stock/volatile?days=3 → {due_products, overdue_products,
-        # expired_products, missing_products} — each is an array. `size`
-        # counts entries, so each block is "items needing attention".
-        # `missing_products` = below min_stock_amount; `due_products` =
-        # best_before within the days window; `overdue_products` =
-        # best_before already past; `expired_products` = past use_by.
-        url = "https://grocy.toscanini.me/api/stock/volatile?days=3";
-        refreshInterval = 300000;
-        headers = {
-          "GROCY-API-KEY" = "{{HOMEPAGE_VAR_GROCY_API_KEY}}";
-        };
-        mappings = [
-          {
-            field = "missing_products";
-            label = "Missing";
-            format = "size";
-          }
-          {
-            field = "due_products";
-            label = "Due";
-            format = "size";
-          }
-          {
-            field = "overdue_products";
-            label = "Overdue";
-            format = "size";
-          }
-          {
-            field = "expired_products";
-            label = "Expired";
-            format = "size";
-          }
-        ];
-      };
-    };
+  };
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.grocy = {
+    description = "Household inventory & chores";
   };
 
   virtualisation.oci-containers.containers.grocy = mkRootlessContainer {

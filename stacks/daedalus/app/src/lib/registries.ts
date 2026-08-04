@@ -6,11 +6,11 @@
 // timer pulls; verdaccio holds the npm packages the CI builds resolve. When a
 // deploy stops moving, one of these two is usually why.
 //
-// Both are read through traefik on their published hostnames: daedalus is on a
-// private bridge (auth.isolated) and cannot dial them by container DNS the way
-// homepage does. The counts that prometheus already scrapes come from
-// prometheus, for the usual reason — it is one round trip for a number the box
-// is collecting anyway.
+// Both are read through traefik on their published hostnames: daedalus sits on
+// a private bridge (auth.isolated), so it cannot dial them by container DNS.
+// The counts that prometheus already scrapes come from prometheus, for the
+// usual reason — it is one round trip for a number the box is collecting
+// anyway.
 
 import { getJson, promBars, promScalar, promVector } from './dashboard/clients'
 

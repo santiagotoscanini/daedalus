@@ -54,12 +54,15 @@
     # (single-user library). e-reader clients (OPDS/Kobo) speak HTTP
     # Basic auth and can't follow an OIDC redirect, so bypass those
     # paths — Calibre-Web's own Basic auth guards them, and the strip
-    # middleware removes any spoofed Remote-User there. The homepage
-    # widget rides the /opds bypass through traefik on the public
-    # hostname (isolated = no shared bridge with homepage).
+    # middleware removes any spoofed Remote-User there. daedalus rides the
+    # same /opds bypass through traefik on the public hostname (isolated =
+    # it shares no bridge with anything else).
     auth = "oidc";
     # Household app: santi + sofi, not admins-only.
-    authGroups = [ "admins" "family" ];
+    authGroups = [
+      "admins"
+      "family"
+    ];
     # Probe /opds, not /login: healthPath is appended to the auth-bypass
     # rule as Path(), which matches POST as well as GET, so aiming it at
     # a credential-accepting route leaves the local password form
@@ -68,19 +71,12 @@
     isolated = true;
     authBypassRule = "PathPrefix(`/opds`) || PathPrefix(`/kobo`)";
     authHeaders."Remote-User" = "santi";
-    homepage = {
-      group = "Books";
-      extra.weight = 10;
-      name = "Calibre-Web";
-      description = "Ebook library";
-      icon = "calibre-web.png";
-      widget = {
-        type = "calibreweb";
-        url = "https://calibre.toscanini.me";
-        username = "{{HOMEPAGE_VAR_CALIBREWEB_USER}}";
-        password = "{{HOMEPAGE_VAR_CALIBREWEB_PASS}}";
-      };
-    };
+  };
+
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.calibre-web = {
+    displayName = "Calibre-Web";
+    description = "Ebook library";
   };
 
   virtualisation.oci-containers.containers.calibre-web = mkRootlessContainer {

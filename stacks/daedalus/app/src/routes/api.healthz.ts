@@ -7,7 +7,7 @@ import { sql } from '../lib/db'
 //   1. the gatus probe (stacks/gatus generates it from the webApp)
 //   2. the forward-auth BYPASS — without it every probe would be answered by a
 //      302 to Pocket ID, which a dead container would serve just as happily
-//   3. the homepage tile's siteMonitor
+//   3. the deploy unit's post-restart health check (stacks/apps/assets/deploy.sh)
 //
 // So it must stay unauthenticated and must mean "serving", not "process
 // alive". 200 = up and can reach Postgres; 503 = up but the DB roundtrip

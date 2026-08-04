@@ -4,7 +4,7 @@
 # (stacks/daedalus). daedalus's Apply flow exports it to ./apps.json, commits
 # that file, and rebuilds; this module turns the JSON back into `fleet.apps`
 # entries, which the apps platform (stacks/apps/apps.nix) composes into
-# container + traefik + observability + homepage + (optionally) postgres.
+# container + traefik + observability + (optionally) postgres.
 #
 # Why a file and not a database query: nix eval is pure and a flake only sees
 # git-tracked files, so nixos-rebuild cannot reach Postgres — and must not need
@@ -25,7 +25,6 @@
 #   image     = registry.toscanini.me/<name>:latest (the box's own zot)
 #   hostname  = <name>.toscanini.me
 #   container = app-<name>
-#   homepage section = capitalized <name>
 #
 # Workflow for a NEW app (unchanged — daedalus does not create repos):
 #   1. Push the code to github.com/santiagotoscanini/<name>; CI on the
@@ -72,69 +71,73 @@ let
   # the mapping stays uniform; only genuinely optional shapes (image override,
   # egress, auth paths) are conditional, because setting them to null is not
   # the same as leaving them unset.
-  mkApp = name: a: {
-    inherit (a) stage;
+  mkApp =
+    name: a:
+    {
+      inherit (a) stage;
 
-    postgres.enable = a.postgres;
-    storage.enable = a.storage;
-    litellm.enable = a.litellm;
-    prometheus.enable = a.prometheus;
+      postgres.enable = a.postgres;
+      storage.enable = a.storage;
+      litellm.enable = a.litellm;
+      prometheus.enable = a.prometheus;
 
-    auth = {
-      inherit (a.auth) mode;
+      auth = {
+        inherit (a.auth) mode;
+      }
+      // lib.optionalAttrs (a.auth.healthPath or null != null) {
+        inherit (a.auth) healthPath;
+      }
+      // lib.optionalAttrs (a.auth.allowedGroups or null != null) {
+        inherit (a.auth) allowedGroups;
+      }
+      // lib.optionalAttrs (a.auth.bypassRule or null != null) {
+        authBypassRule = a.auth.bypassRule;
+      }
+      // lib.optionalAttrs (a.auth.isolated or false) {
+        inherit (a.auth) isolated;
+      };
+
+      presentation = {
+        inherit (a.presentation) description icon;
+      };
+
+      # cgroup caps. Read with `or` defaults so an apps.json predating this
+      # field still evaluates — the file is under git and a revert of it alone
+      # is a legitimate recovery move.
+      resources = {
+        cpus = a.resources.cpus or null;
+        memoryMb = a.resources.memoryMb or null;
+        pids = a.resources.pids or null;
+      };
+
+      # `env` is a LIST of {key, value, note} rather than an attrset: the note is
+      # the reason a flag is set the way it is, which used to live in a nix
+      # comment here and would otherwise be lost in the round-trip through the
+      # database. daedalus renders them next to the value; nix only needs the pair.
+      env = lib.listToAttrs (map (e: lib.nameValuePair e.key e.value) a.env);
+
+      environmentFiles = lib.optional a.operatorSecrets config.sops.secrets.${secretName name}.path;
     }
-    // lib.optionalAttrs (a.auth.healthPath or null != null) {
-      inherit (a.auth) healthPath;
+    // lib.optionalAttrs (a.hostname or null != null) {
+      inherit (a) hostname;
     }
-    // lib.optionalAttrs (a.auth.allowedGroups or null != null) {
-      inherit (a.auth) allowedGroups;
+    // lib.optionalAttrs (a.image != null) {
+      inherit (a) image;
     }
-    // lib.optionalAttrs (a.auth.bypassRule or null != null) {
-      authBypassRule = a.auth.bypassRule;
-    }
-    // lib.optionalAttrs (a.auth.isolated or false) {
-      inherit (a.auth) isolated;
+    // lib.optionalAttrs (a.egress != null) {
+      egress = {
+        inherit (a.egress) container hostPort;
+      };
     };
-
-    homepage = {
-      inherit (a.homepage) description icon;
-    };
-
-    # cgroup caps. Read with `or` defaults so an apps.json predating this
-    # field still evaluates — the file is under git and a revert of it alone
-    # is a legitimate recovery move.
-    resources = {
-      cpus = a.resources.cpus or null;
-      memoryMb = a.resources.memoryMb or null;
-      pids = a.resources.pids or null;
-    };
-
-    # `env` is a LIST of {key, value, note} rather than an attrset: the note is
-    # the reason a flag is set the way it is, which used to live in a nix
-    # comment here and would otherwise be lost in the round-trip through the
-    # database. daedalus renders them next to the value; nix only needs the pair.
-    env = lib.listToAttrs (map (e: lib.nameValuePair e.key e.value) a.env);
-
-    environmentFiles = lib.optional a.operatorSecrets config.sops.secrets.${secretName name}.path;
-  }
-  // lib.optionalAttrs (a.hostname or null != null) {
-    inherit (a) hostname;
-  }
-  // lib.optionalAttrs (a.image != null) {
-    inherit (a) image;
-  }
-  // lib.optionalAttrs (a.egress != null) {
-    egress = {
-      inherit (a.egress) container hostPort;
-    };
-  };
 in
 {
   # One sops secret per app that declares operator-managed values. Same
   # mkDotenvSecret shape as every other stack; the app's own machine-generated
   # secrets/<name>/env (AUTH_SECRET) is separate and never carries operator
   # values.
-  sops.secrets = lib.mapAttrs' (name: _: lib.nameValuePair (secretName name) (mkDotenvSecret (sopsFileFor name))) withSecrets;
+  sops.secrets = lib.mapAttrs' (
+    name: _: lib.nameValuePair (secretName name) (mkDotenvSecret (sopsFileFor name))
+  ) withSecrets;
 
   fleet.apps = lib.mapAttrs mkApp apps;
 

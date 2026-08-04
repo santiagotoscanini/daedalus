@@ -1,14 +1,14 @@
-// HTTP helpers behind the Dashboard tab's tiles.
+// HTTP helpers behind the dashboard's panels and tiles.
 //
 // ── how a tile reaches its service ────────────────────────────────────────
 //
 // daedalus is deliberately NOT on traefik-net: `auth.isolated` puts it on a
 // private bridge with traefik as the only other member, which is what makes it
 // safe for the app to trust the `X-Forwarded-Email` header that names whoever
-// runs an Apply. Homepage dials `http://jellyfin:8096` because it IS on
-// traefik-net; copying that would mean joining the same bridge and handing ~50
-// containers a path to the control plane's apply endpoint. So the tiles use
-// three transports instead, in this order of preference:
+// runs an Apply. Dialling a service by container DNS would mean joining
+// traefik-net and handing ~50 containers a path to the control plane's apply
+// endpoint, so it reaches everything three other ways instead, in this order
+// of preference:
 //
 //   prometheus / loki  — already reachable over the `monitoring` bridge, and
 //                        the right answer whenever the number is scraped. Two
@@ -18,7 +18,7 @@
 //   host.containers.internal:<port>
 //                      — the must-keep host ports (CLAUDE.md): everything
 //                        sharing gluetun's netns, plus Home Assistant on the
-//                        host netns. Same URLs homepage uses.
+//                        host netns.
 //   https://<hostname> — through traefik, on the published hostname. Pi-hole's
 //                        widget already worked this way; the rest are apps
 //                        whose API path is either unauthenticated or on the

@@ -68,7 +68,7 @@ export function until(seconds: number | null | undefined): string {
   return `${String(Math.round(seconds / 86400))}d`
 }
 
-/** Country name → flag. Same remap the homepage gluetun widgets carried. */
+/** Country name → flag, for the VPN exit readouts. */
 export function flag(country: string | undefined | null): string {
   const F: Record<string, string> = {
     Switzerland: '🇨🇭',

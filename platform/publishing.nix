@@ -4,9 +4,9 @@
 # (the primary one-block interface), the lower-level traefikRoutes /
 # traefikRawRules / cloudflareRoutes / dnsHosts escape hatches, the
 # observability registries (prometheusScrapes, grafanaDashboards{,ByFolder})
-# and the homepage registries — plus the materialization that turns each
-# webApp into routes, DNS entries, tunnel CNAMEs, probes, tiles and
-# scrapes, and the assertions that keep those combinations coherent.
+# — plus the materialization that turns each webApp into routes, DNS
+# entries, tunnel CNAMEs, probes and scrapes, and the assertions that keep
+# those combinations coherent.
 #
 # The container-runtime side (bridgeMemberships, statePaths, the systemd
 # machinery, every `mk*` helper) lives in platform/podman.nix.
@@ -154,7 +154,7 @@ in
           in every dash.cloudflare.com URL — but it is an identifier
           used in more than one place, so it gets a single home. Set by
           stacks/cloudflared, read by anything that links to or queries
-          the tunnel (the homepage tile, daedalus's dashboard).
+          the tunnel (daedalus's Network page).
         '';
       };
       tunnelId = lib.mkOption {
@@ -331,8 +331,8 @@ in
                 description = ''
                   Named traefik service instead of a URL upstream — for
                   built-ins like `api@internal` (the dashboard). The full
-                  webApps surface (auth gate, healthPath probe, dnsHosts,
-                  homepage tile) applies; only the upstream shape differs.
+                  webApps surface (auth gate, healthPath probe, dnsHosts)
+                  applies; only the upstream shape differs.
                 '';
                 example = "api@internal";
               };
@@ -460,9 +460,9 @@ in
                   and forge the header; isolation makes traefik the only
                   possible caller. Requires `serviceName`. The stack's
                   own bridgeMemberships entry must NOT also list
-                  "traefik" (that would re-open the shared path).
-                  Homepage siteMonitor auto-falls back to the public
-                  hostname (homepage isn't on the private bridge).
+                  "traefik" (that would re-open the shared path). Probes reach it
+                  on the public hostname, since gatus is not on the
+                  private bridge either.
                 '';
               };
               authHeaders = lib.mkOption {
@@ -475,66 +475,6 @@ in
                   header is also STRIPPED from incoming requests by a
                   companion middleware so clients can't spoof it on
                   bypassed paths — apps trust these blindly.
-                '';
-              };
-              homepage = lib.mkOption {
-                type = lib.types.nullOr (
-                  lib.types.submodule (_: {
-                    options = {
-                      group = lib.mkOption {
-                        type = lib.types.str;
-                        description = "Homepage group the tile lands in.";
-                        example = "Media";
-                      };
-                      name = lib.mkOption {
-                        type = lib.types.nullOr lib.types.str;
-                        default = null;
-                        description = "Tile display name. Default: capitalized attr key.";
-                      };
-                      icon = lib.mkOption {
-                        type = lib.types.str;
-                        description = "Tile icon (homepage icon syntax).";
-                      };
-                      description = lib.mkOption {
-                        type = lib.types.nullOr lib.types.str;
-                        default = null;
-                        description = "Tile subtitle.";
-                      };
-                      href = lib.mkOption {
-                        type = lib.types.nullOr lib.types.str;
-                        default = null;
-                        description = "Link override. Default: https://<hostname>.";
-                      };
-                      siteMonitor = lib.mkOption {
-                        type = lib.types.nullOr lib.types.str;
-                        default = null;
-                        description = ''
-                          Liveness-probe URL override. Default: the same
-                          upstream URL traefik dials. Override for apps
-                          homepage must reach through traefik instead
-                          (redirect-happy or --add-host-listed upstreams).
-                        '';
-                      };
-                      widget = lib.mkOption {
-                        type = lib.types.nullOr (lib.types.attrsOf lib.types.unspecified);
-                        default = null;
-                        description = "Optional homepage widget block, passed through verbatim.";
-                      };
-                      extra = lib.mkOption {
-                        type = lib.types.attrsOf lib.types.unspecified;
-                        default = { };
-                        description = "Extra tile fields merged in verbatim (weight, ping, ...).";
-                      };
-                    };
-                  })
-                );
-                default = null;
-                description = ''
-                  Auto-generate this app's homepage tile: href and
-                  siteMonitor derive from the hostname/upstream so they're
-                  declared once. null = no tile. Tiles not tied to a
-                  webApp (external links, no-UI stacks) still use
-                  `fleet.homepageServices` directly.
                 '';
               };
 
@@ -596,58 +536,6 @@ in
       '';
     };
 
-    homepageServices = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.listOf (lib.types.attrsOf lib.types.unspecified));
-      default = { };
-      description = ''
-        Per-stack homepage tiles. Outer keyed by group name ("Media",
-        "Network", …); each value is a list of service entries. Each
-        entry MUST include a `name` field; remaining fields follow
-        homepage's services.yaml schema (`href`, `icon`,
-        `description`, `widget`, `siteMonitor`, …).
-
-        stacks/homepage/homepage.nix renders this to services.yaml: the
-        `name` field becomes the single-key wrapper homepage expects.
-
-        Groups merge across modules. YAML output order is alphabetical;
-        a service's `weight` field can override within-group order.
-      '';
-      example = lib.literalExpression ''
-        {
-          "Media" = [{
-            name = "Jellyfin";
-            href = "https://jellyfin.toscanini.me";
-            icon = "jellyfin.png";
-            siteMonitor = "http://host.containers.internal:8096";
-          }];
-        }
-      '';
-    };
-
-    homepageLayout = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.attrsOf lib.types.unspecified);
-      default = { };
-      description = ''
-        Per-group homepage layout, keyed by group name. Each value is
-        a homepage `layout.<group>` block (`style`, `columns`,
-        `icon`, `useEqualHeights`, etc.).
-
-        Each stack that introduces a new homepage group is responsible
-        for contributing its layout here, so the per-app generator in
-        stacks/apps/ can add new groups without anyone editing
-        settings.yaml.
-      '';
-      example = lib.literalExpression ''
-        {
-          Anansi = {
-            style = "row";
-            columns = 4;
-            icon = "mdi-spider-#f59e0b";
-            useEqualHeights = true;
-          };
-        }
-      '';
-    };
   };
 
   config = {
@@ -790,38 +678,6 @@ in
           directly.
         '';
       }) cfg.webApps);
-
-    # Default homepage tile per webApp (see the `homepage` option).
-    fleet.homepageServices =
-      let
-        mkTile =
-          n: w:
-          {
-            name = if w.homepage.name != null then w.homepage.name else lib.toSentenceCase n;
-            href = if w.homepage.href != null then w.homepage.href else "https://${w.hostname}";
-            siteMonitor =
-              if w.homepage.siteMonitor != null then
-                w.homepage.siteMonitor
-              # Isolated and named-service upstreams aren't dialable from
-              # homepage's bridges — probe through traefik instead, at the
-              # oidc-bypassed healthPath: probing / on an auth-gated app
-              # only certifies the forward-auth middleware (its 302 fires
-              # before any upstream dial), not the app.
-              else if w.isolated || w.traefikService != null then
-                "https://${w.hostname}${if w.healthPath != null then w.healthPath else "/"}"
-              else
-                resolveUrl w;
-            inherit (w.homepage) icon;
-          }
-          // lib.optionalAttrs (w.homepage.description != null) { inherit (w.homepage) description; }
-          // lib.optionalAttrs (w.homepage.widget != null) { inherit (w.homepage) widget; }
-          // w.homepage.extra;
-        entries = lib.mapAttrsToList (n: w: {
-          inherit (w.homepage) group;
-          tile = mkTile n w;
-        }) (lib.filterAttrs (_: w: w.homepage != null) cfg.webApps);
-      in
-      lib.mapAttrs (_: es: map (e: e.tile) es) (builtins.groupBy (e: e.group) entries);
 
     # Auth-less scrapes per webApp (see the `metrics` option).
     fleet.prometheusScrapes = lib.mapAttrsToList (

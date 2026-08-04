@@ -89,11 +89,10 @@ http:
   # sees them. So a ban never isolates one bad actor — it takes the
   # whole instance offline for everyone.
   #
-  # Demonstrated the hard way on 2026-07-31: a homepage widget
-  # configured with an empty token polled the API every few seconds,
-  # crossed the threshold, and got the LAN IP + traefik's bridge IP
-  # banned — after which Home Assistant returned 403 to LAN and tunnel
-  # alike.
+  # Demonstrated the hard way on 2026-07-31: a poller configured with an
+  # empty token hit the API every few seconds, crossed the threshold, and
+  # got the LAN IP + traefik's bridge IP banned — after which Home
+  # Assistant returned 403 to LAN and tunnel alike.
   #
   # What actually guards this surface: Pocket ID (passkey-only) for
   # browser logins, and long-lived bearer tokens for the API.

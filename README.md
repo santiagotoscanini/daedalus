@@ -59,10 +59,11 @@ identity: as santiago it Just Works (keys.txt); as root prefix with
 
 Special case: the LiteLLM master key has one encrypted source
 (`stacks/litellm/env.sops`); its other consumers — the prometheus
-bearer token and homepage's `HOMEPAGE_VAR_LITELLM_KEY` — are rendered
-from it at boot, so rotation touches that one file. The Cloudflare DNS
-token is the opposite: the same value lives in traefik, cloudflared and
-homepage env.sops files — rotate all three together.
+bearer token and daedalus's `LITELLM_API_KEY` — are rendered from it
+at boot, so rotation touches that one file. The Cloudflare DNS token is
+the opposite: the same value lives in traefik's and cloudflared's
+env.sops and in daedalus's service-keys.sops — rotate all three
+together.
 
 ## Adding a stack
 

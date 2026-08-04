@@ -22,9 +22,9 @@
 }:
 
 let
-  # Pinned game version ofsm downloads + runs on every start. Surfaced
-  # on the homepage tile so it can be matched against the Steam client
-  # at a glance, without opening the admin UI. Bump this one place on a
+  # Pinned game version ofsm downloads + runs on every start. Surfaced on
+  # daedalus's Gaming tile so it can be matched against the Steam client at
+  # a glance, without opening the admin UI. Bump this one place on a
   # game update (clients on a different version can't join).
   factorioVersion = "2.0.77";
 in
@@ -39,15 +39,6 @@ in
     hostname = "factorio-admin.toscanini.me";
     serviceName = "factorio";
     port = 80;
-    homepage = {
-      group = "Gaming";
-      name = "Factorio Admin";
-      description = "v${factorioVersion} · server manager";
-      icon = "/icons/factorio.png";
-      # Through traefik (not container DNS): OFSM answers redirects the
-      # widget prober handles better on the public hostname.
-      siteMonitor = "https://factorio-admin.toscanini.me";
-    };
   };
 
   # Only the game port faces the world; UI is LAN-only via Traefik.

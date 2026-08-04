@@ -74,167 +74,127 @@
 
   config = lib.mkMerge [
     {
-    # ENCRYPTION_KEY: sops-encrypted env.sops, decrypted to
-    # /run/secrets/pocket-id-env at activation. Edit with `sops env.sops`.
-    sops.secrets."pocket-id-env" = mkDotenvSecret ./env.sops;
+      # ENCRYPTION_KEY: sops-encrypted env.sops, decrypted to
+      # /run/secrets/pocket-id-env at activation. Edit with `sops env.sops`.
+      sops.secrets."pocket-id-env" = mkDotenvSecret ./env.sops;
 
-    # A consumer must never be listed as its own prerequisite, and the
-    # IdP obviously can't wait for its own discovery endpoint.
-    assertions = [
-      {
-        assertion = !(lib.elem "pocket-id" config.fleet.sso.discoveryConsumers);
-        message = "fleet.sso.discoveryConsumers must not contain \"pocket-id\" — the IdP cannot gate on itself.";
-      }
-    ];
-
-    # Readiness gate, mirroring podman-pg's: "podman-pocket-id finished"
-    # only means `podman run -d` returned — the IdP answers HTTP a moment
-    # later. ExecStartPost holds the unit (and everything ordered after
-    # it) until the app's own healthcheck passes, so first-attempt
-    # discovery can't race a cold boot.
-    systemd.services.podman-pocket-id.serviceConfig.ExecStartPost =
-      # 120s: generous because a mass restart (a podman.nix change touches
-      # every unit) starts the whole fleet at once and the IdP competes
-      # for CPU with ~50 containers.
-      pkgs.writeShellScript "wait-pocket-id-ready" ''
-        for _ in $(seq 1 120); do
-          ${pkgs.podman}/bin/podman exec pocket-id /app/pocket-id healthcheck && exit 0
-          sleep 1
-        done
-        echo "pocket-id did not become ready within 120s" >&2
-        exit 1
-      '';
-
-    # Unwedges the scheduler's expired-data cleanup, which self-blocks on
-    # a stale marker encoding — see assets/repair-cleanup-marker.sql for
-    # the mechanism. Idempotent, so it stays harmless once repaired.
-    # Ordered before pocket-id (weakly: a failed repair must not be able
-    # to take SSO down with it) and run as the tenant role that owns the
-    # table, not the cluster superuser.
-    systemd.services.pocket-id-cleanup-marker-repair = {
-      description = "Repair pocket-id's francis_metadata last-cleanup marker";
-      before = [ "podman-pocket-id.service" ];
-      wantedBy = [ "podman-pocket-id.service" ];
-      after = [
-        "podman-pg.service"
-        "app-db-pocket_id-bootstrap.service"
+      # A consumer must never be listed as its own prerequisite, and the
+      # IdP obviously can't wait for its own discovery endpoint.
+      assertions = [
+        {
+          assertion = !(lib.elem "pocket-id" config.fleet.sso.discoveryConsumers);
+          message = "fleet.sso.discoveryConsumers must not contain \"pocket-id\" — the IdP cannot gate on itself.";
+        }
       ];
-      wants = [ "podman-pg.service" ];
-      path = [
-        pkgs.coreutils
-        pkgs.gnugrep
-        pkgs.podman
-      ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        User = "santiago";
-        Environment = "XDG_RUNTIME_DIR=/run/user/1000";
-      };
-      # PGPASSWORD rides a value-less -e passthrough so the secret never
-      # sits in podman argv (/proc/<pid>/cmdline).
-      script = ''
-        set -eu
-        APP_PWD=$(grep '^POSTGRES_PASSWORD=' ${config.fleet.appDatabases.pocket_id.envFile} | head -1 | cut -d= -f2-)
-        [ -n "$APP_PWD" ] || { echo "empty POSTGRES_PASSWORD for pocket_id" >&2; exit 1; }
-        PGPASSWORD="$APP_PWD" podman exec -i -e PGPASSWORD pg \
-          psql -X -v ON_ERROR_STOP=1 -U pocket_id -d pocket_id \
-          < ${./assets/repair-cleanup-marker.sql}
-      '';
-    };
 
-    fleet.bridgeMemberships.pocket-id = [
-      "traefik"
-      "app-db"
-    ];
+      # Readiness gate, mirroring podman-pg's: "podman-pocket-id finished"
+      # only means `podman run -d` returned — the IdP answers HTTP a moment
+      # later. ExecStartPost holds the unit (and everything ordered after
+      # it) until the app's own healthcheck passes, so first-attempt
+      # discovery can't race a cold boot.
+      systemd.services.podman-pocket-id.serviceConfig.ExecStartPost =
+        # 120s: generous because a mass restart (a podman.nix change touches
+        # every unit) starts the whole fleet at once and the IdP competes
+        # for CPU with ~50 containers.
+        pkgs.writeShellScript "wait-pocket-id-ready" ''
+          for _ in $(seq 1 120); do
+            ${pkgs.podman}/bin/podman exec pocket-id /app/pocket-id healthcheck && exit 0
+            sleep 1
+          done
+          echo "pocket-id did not become ready within 120s" >&2
+          exit 1
+        '';
 
-    # Database on the shared app-db cluster (db/role `pocket_id` —
-    # hyphens aren't valid there). DB_CONNECTION_STRING rides the
-    # bootstrap env file.
-    fleet.appDatabases.pocket_id.consumers = [ "pocket-id" ];
-
-    fleet.webApps.pocket-id = {
-      hostname = "id.toscanini.me";
-      serviceName = "pocket-id";
-      port = 1411;
-      exposeRemotely = true;
-      homepage = {
-        group = "Home";
-        extra.weight = 10;
-        name = "Pocket ID";
-        description = "OIDC provider — passkey SSO for all web UIs";
-        icon = "pocket-id.png";
-        # Auth is the STATIC_API_KEY from this stack's env.sops, rendered
-        # into homepage's env at boot (same single-source idiom as the
-        # litellm key) rather than copied into homepage's own env.sops.
-        # Counts come from each list endpoint's `pagination.totalItems`,
-        # NOT the `data` array — that only holds the first page of 20.
-        extra.widgets = [
-          {
-            type = "customapi";
-            url = "http://pocket-id:1411/api/oidc/clients";
-            refreshInterval = 300000;
-            headers."X-API-KEY" = "{{HOMEPAGE_VAR_POCKETID_KEY}}";
-            mappings = [
-              {
-                field = "pagination.totalItems";
-                label = "SSO clients";
-                format = "number";
-              }
-            ];
-          }
-          {
-            type = "customapi";
-            url = "http://pocket-id:1411/api/users";
-            refreshInterval = 300000;
-            headers."X-API-KEY" = "{{HOMEPAGE_VAR_POCKETID_KEY}}";
-            mappings = [
-              {
-                field = "pagination.totalItems";
-                label = "Users";
-                format = "number";
-              }
-            ];
-          }
+      # Unwedges the scheduler's expired-data cleanup, which self-blocks on
+      # a stale marker encoding — see assets/repair-cleanup-marker.sql for
+      # the mechanism. Idempotent, so it stays harmless once repaired.
+      # Ordered before pocket-id (weakly: a failed repair must not be able
+      # to take SSO down with it) and run as the tenant role that owns the
+      # table, not the cluster superuser.
+      systemd.services.pocket-id-cleanup-marker-repair = {
+        description = "Repair pocket-id's francis_metadata last-cleanup marker";
+        before = [ "podman-pocket-id.service" ];
+        wantedBy = [ "podman-pocket-id.service" ];
+        after = [
+          "podman-pg.service"
+          "app-db-pocket_id-bootstrap.service"
         ];
+        wants = [ "podman-pg.service" ];
+        path = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.podman
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          User = "santiago";
+          Environment = "XDG_RUNTIME_DIR=/run/user/1000";
+        };
+        # PGPASSWORD rides a value-less -e passthrough so the secret never
+        # sits in podman argv (/proc/<pid>/cmdline).
+        script = ''
+          set -eu
+          APP_PWD=$(grep '^POSTGRES_PASSWORD=' ${config.fleet.appDatabases.pocket_id.envFile} | head -1 | cut -d= -f2-)
+          [ -n "$APP_PWD" ] || { echo "empty POSTGRES_PASSWORD for pocket_id" >&2; exit 1; }
+          PGPASSWORD="$APP_PWD" podman exec -i -e PGPASSWORD pg \
+            psql -X -v ON_ERROR_STOP=1 -U pocket_id -d pocket_id \
+            < ${./assets/repair-cleanup-marker.sql}
+        '';
       };
-    };
 
-    fleet.statePaths = {
-      "/home/santiago/selfhost/pocket-id" = { };
-      "/home/santiago/selfhost/pocket-id/data" = {
-        uid = 1000;
-        mode = "0700";
-      };
-    };
-
-    virtualisation.oci-containers.containers.pocket-id = mkRootlessContainer {
-      image = "ghcr.io/pocket-id/pocket-id:v2.12.0@sha256:4a277d141d6069fd9a7b321a9aca80f4b9812b8fa122ee566d2f15900e3d8448";
-
-      volumes = [
-        "/home/santiago/selfhost/pocket-id/data:/app/data"
+      fleet.bridgeMemberships.pocket-id = [
+        "traefik"
+        "app-db"
       ];
 
-      environmentFiles = [
-        config.sops.secrets."pocket-id-env".path
-        config.fleet.appDatabases.pocket_id.envFile
-      ];
+      # Database on the shared app-db cluster (db/role `pocket_id` —
+      # hyphens aren't valid there). DB_CONNECTION_STRING rides the
+      # bootstrap env file.
+      fleet.appDatabases.pocket_id.consumers = [ "pocket-id" ];
 
-      environment = {
-        APP_URL = config.fleet.sso.issuerUrl;
-        ANALYTICS_DISABLED = "true";
-        # Traefik fronts everything; without this the audit log records
-        # the bridge IP instead of the real client.
-        TRUST_PROXY = config.fleet.bridgeSubnets.traefik;
-        # Session length (24h, so every app SSO inside that window is
-        # silent) is DB state — `sessionDuration` in the pocket_id
-        # database, set through the admin UI. Pocket ID reads the
-        # UI-configurable keys from the environment only when
-        # UI_CONFIG_DISABLED=true, which we do not set, so declaring
-        # SESSION_DURATION here would be inert.
+      fleet.webApps.pocket-id = {
+        hostname = "id.toscanini.me";
+        serviceName = "pocket-id";
+        port = 1411;
+        exposeRemotely = true;
       };
 
-    };
+      fleet.statePaths = {
+        "/home/santiago/selfhost/pocket-id" = { };
+        "/home/santiago/selfhost/pocket-id/data" = {
+          uid = 1000;
+          mode = "0700";
+        };
+      };
+
+      virtualisation.oci-containers.containers.pocket-id = mkRootlessContainer {
+        image = "ghcr.io/pocket-id/pocket-id:v2.12.0@sha256:4a277d141d6069fd9a7b321a9aca80f4b9812b8fa122ee566d2f15900e3d8448";
+
+        volumes = [
+          "/home/santiago/selfhost/pocket-id/data:/app/data"
+        ];
+
+        environmentFiles = [
+          config.sops.secrets."pocket-id-env".path
+          config.fleet.appDatabases.pocket_id.envFile
+        ];
+
+        environment = {
+          APP_URL = config.fleet.sso.issuerUrl;
+          ANALYTICS_DISABLED = "true";
+          # Traefik fronts everything; without this the audit log records
+          # the bridge IP instead of the real client.
+          TRUST_PROXY = config.fleet.bridgeSubnets.traefik;
+          # Session length (24h, so every app SSO inside that window is
+          # silent) is DB state — `sessionDuration` in the pocket_id
+          # database, set through the admin UI. Pocket ID reads the
+          # UI-configurable keys from the environment only when
+          # UI_CONFIG_DISABLED=true, which we do not set, so declaring
+          # SESSION_DURATION here would be inert.
+        };
+
+      };
     }
 
     # The generated gate for every fleet.sso.discoveryConsumers entry.

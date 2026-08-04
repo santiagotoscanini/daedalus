@@ -23,9 +23,9 @@ recipe to onboard a new service or household member.
 
 | Service | Mechanism | Escape hatch / notes |
 |---|---|---|
-| immich | native OAuth; password login disabled; mobile uses the `app.immich:///oauth-callback` redirect URI | API keys / homepage widget unaffected |
+| immich | native OAuth; password login disabled; mobile uses the `app.immich:///oauth-callback` redirect URI | API keys unaffected |
 | nextcloud | official `user_oidc` app, UID-mapped `preferred_username` (existing accounts reused); sync clients via Login Flow v2 | `/login?direct=1` |
-| grafana | generic OAuth with `auto_login`; `[auth.basic]` stays enabled (homepage widget + admin API use user/pass from sops) | `/login?disableAutoLogin` |
+| grafana | generic OAuth with `auto_login`; `[auth.basic]` stays enabled (daedalus + the admin API use user/pass from sops) | `/login?disableAutoLogin` |
 | gatus | built-in `security.oidc` with `allowed-subjects` (sub UUID allow-list — without it any IdP account gets in) | — |
 | wealthfolio | native OIDC (`WF_OIDC_*`, `WF_OIDC_ALLOWED_SUBS`); OIDC-only, no password hash set | mint `WF_AUTH_PASSWORD_HASH` per the module header |
 | litellm | `GENERIC_*` SSO (free ≤5 users), auto-redirect to Pocket ID | API Bearer keys untouched — never forward-auth `/v1` |
@@ -51,7 +51,6 @@ paths.
 
 | Service | Local auth state |
 |---|---|
-| homepage | none (auth-blind by design) |
 | traefik dashboard | none — a `service = "api@internal"` webApp; bridge-only :8080, no host port |
 | prometheus | none — no host port; grafana + scrapes dial container-direct over the bridges |
 | pihole | FTL password blanked (see the module's webserver comment for the accepted trade-off) |
@@ -90,7 +89,7 @@ Every OIDC client (native-OIDC AND forward-auth — each has its own client) is
 restricted:
 
 - **family apps** (allow admins + family): immich, nextcloud, calibre-web,
-  grocy, stirling-pdf, homepage, metube, myspeed
+  grocy, stirling-pdf, metube, myspeed
 - **admin-only** (allow admins): grafana, prometheus, traefik-dashboard, gatus,
   healthchecks, litellm, n8n, verdaccio, wealthfolio, pihole, anansi, ipcrawl,
   home-assistant, and the whole TV stack (qbittorrent, nzbget, prowlarr, radarr,
@@ -138,13 +137,14 @@ and (for nextcloud) set their `nextcloud_uid` custom claim = their NC username.
      renders under `/run/sso-clients/` hand the same secret to traefik
      or to the app. Logos are still a manual
      `POST /api/oidc/clients/<id>/logo` (multipart `file`, PNG from
-     cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/<app>.png —
-     same art the homepage tiles use).
+     cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/<app>.png).
 - Forward-auth clients are not written out at all: a
   `fleet.webApps.<n>.auth = "oidc"` entry IS the declaration, and
   `clients.nix` derives the client from it (hostname → launch +
-  `/oidc/callback`, homepage name/description → consent screen,
-  `authGroups` → allowed groups). Only the secret is per-app work.
+  `/oidc/callback`, `authGroups` → allowed groups). The consent screen's
+  copy is the one thing with no mechanical source, so each stack sets
+  `displayName`/`description` on its own `fleet.ssoClients.<n>` entry.
+  Only the secret is per-app work.
 - **Every client on the box is declarative except immich and
   nextcloud**, whose OIDC config lives in their own application
   database rather than in env (FUTURE.md #10).

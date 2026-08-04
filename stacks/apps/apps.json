@@ -18,7 +18,7 @@
         "mode": "native",
         "healthPath": "/api/healthz"
       },
-      "homepage": {
+      "presentation": {
         "description": "Anansi — task-tracking experiment",
         "icon": "mdi-spider-#f59e0b"
       },
@@ -80,7 +80,7 @@
         "mode": "proxy",
         "healthPath": "/favicon.ico"
       },
-      "homepage": {
+      "presentation": {
         "description": "ipcrawl — exposed-webcam catalogue",
         "icon": "mdi-cctv-#38bdf8"
       },

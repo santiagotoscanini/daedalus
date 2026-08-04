@@ -36,21 +36,6 @@
       enable = true;
       path = "/metrics/prometheus";
     };
-    homepage = {
-      group = "Network";
-      extra.weight = 30;
-      name = "WireGuard";
-      description = "VPN admin";
-      icon = "wireguard.png";
-      widget = {
-        type = "wgeasy";
-        url = "http://wg-easy:51821";
-        version = 2;
-        username = "{{HOMEPAGE_VAR_WGEASY_USER}}";
-        password = "{{HOMEPAGE_VAR_WGEASY_PASS}}";
-        threshold = 2;
-      };
-    };
   };
 
   # tv stack's gluetun adds the same modules; NixOS merges the lists.

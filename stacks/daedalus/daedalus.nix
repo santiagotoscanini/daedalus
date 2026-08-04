@@ -34,6 +34,7 @@
   config,
   lib,
   pkgs,
+  mkDotenvSecret,
   mkSecretRender,
   ...
 }:
@@ -171,8 +172,8 @@ let
   #
   # Not every tile has an entry: the gluetun-netns services and the host-netns
   # ones are reached on `host.containers.internal:<port>` (they cannot ride
-  # traefik-net), and those ports are literals in the catalogue, exactly as they
-  # are in each stack's homepage widget.
+  # traefik-net), and those ports are literals in the catalogue — structural
+  # host ports, already restated in the stack that owns each one.
   webAppHosts = lib.mapAttrs (_: w: w.hostname) config.fleet.webApps;
 
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
@@ -205,9 +206,9 @@ let
   #
   # Defined ONCE and consumed twice: by `fleet.apps.daedalus` below, and by the
   # manifest the container reads. It was briefly two literals, and the icon
-  # drifted between them within the hour — the UI reported one colour while
-  # the homepage rendered another. Restating this is exactly the class of bug
-  # daedalus exists to catch, so it does not get to have it.
+  # drifted between them within the hour — the app list rendered one colour
+  # while the detail page reported another. Restating this is exactly the class
+  # of bug daedalus exists to catch, so it does not get to have it.
   #
   # NOT read back out of `config.fleet.apps.daedalus`, which would be the other
   # way to deduplicate: this value feeds a volume on the container that
@@ -231,7 +232,7 @@ let
       isolated = true;
       healthPath = "/api/healthz";
     };
-    homepage = {
+    presentation = {
       description = "S2 control plane";
       icon = "mdi-server-network-#e2795a";
     };
@@ -303,8 +304,8 @@ in
       # `isolated` puts it on a private iso-daedalus-net bridge with traefik as
       # the only other member, so nothing on traefik-net can dial the dev
       # server directly and skip the gate. `healthPath` is the one
-      # unauthenticated path — it backs the gatus probe, the forward-auth
-      # bypass and the homepage tile's siteMonitor.
+      # unauthenticated path — it backs the gatus probe and the forward-auth
+      # bypass.
       inherit (self.auth) mode isolated healthPath;
       # Who applied. An Apply writes a git commit, so the commit should name a
       # person rather than "daedalus". Trusting a header requires that nothing
@@ -313,46 +314,17 @@ in
       headers = {
         "X-Forwarded-Email" = "{{ .claims.email }}";
       };
-      # Two paths skip the Pocket ID gate, for the same reason healthPath
-      # does — a machine has to reach them and cannot hold a passkey:
+      # One path skips the Pocket ID gate, for the same reason healthPath does
+      # — a machine has to reach it and cannot hold a passkey:
       #
-      #   /api/info   — the homepage tile. Counts and app names only.
       #   /api/deploy — zot's push events (stacks/registry). Carries its own
       #                 auth instead: X-Deploy-Token, checked in the route
       #                 against DEPLOY_HOOK_TOKEN below, and it can do exactly
       #                 one thing — start an existing app's deploy unit.
       #
-      # A bypassed path is effectively public on the LAN, so both are written
-      # to deserve it. Everything else on this app still needs a passkey.
-      authBypassRule = "Path(`/api/info`) || Path(`/api/deploy`)";
-    };
-
-    homepage = {
-      inherit (self.homepage) description icon;
-      # Dialled through traefik rather than by container DNS: homepage lives
-      # on traefik-net and `isolated` deliberately keeps daedalus off it.
-      widget = {
-        type = "customapi";
-        url = "https://daedalus.toscanini.me/api/info";
-        refreshInterval = 60000;
-        mappings = [
-          {
-            field = "running";
-            label = "Running";
-            format = "number";
-          }
-          {
-            field = "attention";
-            label = "Issues";
-            format = "number";
-          }
-          {
-            field = "unapplied";
-            label = "Unapplied";
-            format = "number";
-          }
-        ];
-      };
+      # A bypassed path is effectively public on the LAN, so it is written to
+      # deserve it. Everything else on this app still needs a passkey.
+      authBypassRule = "Path(`/api/deploy`)";
     };
 
     env = {
@@ -519,8 +491,7 @@ in
   # `config.sops.secrets."litellm-env".path` to environmentFiles would work,
   # but that file is a full dotenv — UI credentials, the SSO client id/secret —
   # and none of it belongs in this container. Same one-source-of-truth idiom as
-  # litellm-prom-token and homepage's HOMEPAGE_VAR_LITELLM_KEY: rotation still
-  # touches only stacks/litellm/env.sops.
+  # litellm-prom-token: rotation still touches only stacks/litellm/env.sops.
   #
   # The render dir is deliberately NOT /run/app-daedalus — that is the
   # container unit's RuntimeDirectory, and systemd wipes it when the container
@@ -534,30 +505,33 @@ in
     gates = [ "podman-app-daedalus.service" ];
     dir = "/run/daedalus-deploy-hook";
     file = "/run/daedalus-deploy-hook/env";
-    prep = "TOKEN=$(grep '^DEPLOY_HOOK_TOKEN=' ${config.sops.secrets."registry-env".path} | head -1 | cut -d= -f2-)";
+    prep = "TOKEN=$(grep '^DEPLOY_HOOK_TOKEN=' ${
+      config.sops.secrets."registry-env".path
+    } | head -1 | cut -d= -f2-)";
     content = "DEPLOY_HOOK_TOKEN=$TOKEN";
   };
 
-  # Per-service API keys for the Dashboard tab.
+  # The fleet's per-service read-only API keys — the credentials daedalus reads
+  # other services' numbers with.
   #
-  # Every value here already has exactly one encrypted home — mostly
-  # stacks/homepage/env.sops, which is where the fleet's per-service read-only
-  # API keys have always lived, plus pocket-id's and plane's own env.sops for
-  # the two keys those stacks mint. This renders the subset daedalus needs under
-  # its own names; it copies no secret into a second sops file, so rotation
-  # still touches one place. (When homepage is eventually removed, env.sops is
-  # the part of that stack that has to outlive the container — it is the key
-  # store, not a homepage config file.)
+  # `service-keys.sops` is the store: one encrypted file, all the keys minted by
+  # some OTHER service and handed to the control plane to read with. Two keys
+  # are NOT in it, on purpose — pocket-id's and plane's are minted by those
+  # stacks and already have an encrypted home there, so they are read straight
+  # out of it rather than copied here. Nothing in this box's secret tree exists
+  # twice; rotation always touches exactly one file.
   #
   # `grep -m1` on each: a missing key renders empty rather than failing the
-  # unit, and the tile that needs it degrades to "no data" instead of taking
-  # the whole dashboard down. PLANE_API_KEY is empty until someone mints a
+  # unit, and the panel that needs it degrades to "no data" instead of taking
+  # the whole page down. PLANE_API_KEY is empty until someone mints a
   # workspace token in Plane's UI, so this is not hypothetical.
+  sops.secrets."daedalus-service-keys" = mkDotenvSecret ./service-keys.sops;
+
   systemd.services."daedalus-dashboard-keys" =
     let
-      hp = config.sops.secrets."homepage-env".path;
-      # HOMEPAGE_VAR_<n> in homepage's env.sops → DASH_<n> here.
-      fromHomepage = [
+      store = config.sops.secrets."daedalus-service-keys".path;
+      # <n> in the store → DASH_<n> in the container's environment.
+      serviceKeys = [
         "JELLYFIN_API_KEY"
         "SONARR_API_KEY"
         "RADARR_API_KEY"
@@ -588,14 +562,18 @@ in
       dir = "/run/daedalus-dashboard";
       file = "/run/daedalus-dashboard/env";
       prep = lib.concatStringsSep "\n" (
-        map (k: "${k}=$(grep -m1 '^HOMEPAGE_VAR_${k}=' ${hp} | cut -d= -f2- || true)") fromHomepage
+        map (k: "${k}=$(grep -m1 '^${k}=' ${store} | cut -d= -f2- || true)") serviceKeys
         ++ [
-          "POCKETID_KEY=$(grep -m1 '^STATIC_API_KEY=' ${config.sops.secrets."pocket-id-env".path} | cut -d= -f2- || true)"
-          "PLANE_KEY=$(grep -m1 '^PLANE_API_KEY=' ${config.sops.secrets."plane-env".path} | cut -d= -f2- || true)"
+          "POCKETID_KEY=$(grep -m1 '^STATIC_API_KEY=' ${
+            config.sops.secrets."pocket-id-env".path
+          } | cut -d= -f2- || true)"
+          "PLANE_KEY=$(grep -m1 '^PLANE_API_KEY=' ${
+            config.sops.secrets."plane-env".path
+          } | cut -d= -f2- || true)"
         ]
       );
       content = lib.concatStringsSep "\n" (
-        map (k: "DASH_${k}=\${${k}}") fromHomepage
+        map (k: "DASH_${k}=\${${k}}") serviceKeys
         ++ [
           "DASH_POCKETID_KEY=\${POCKETID_KEY}"
           "DASH_PLANE_KEY=\${PLANE_KEY}"
@@ -608,7 +586,9 @@ in
     gates = [ "podman-app-daedalus.service" ];
     dir = "/run/daedalus-litellm";
     file = "/run/daedalus-litellm/env";
-    prep = "KEY=$(grep '^LITELLM_MASTER_KEY=' ${config.sops.secrets."litellm-env".path} | head -1 | cut -d= -f2-)";
+    prep = "KEY=$(grep '^LITELLM_MASTER_KEY=' ${
+      config.sops.secrets."litellm-env".path
+    } | head -1 | cut -d= -f2-)";
     content = "LITELLM_API_KEY=$KEY";
   };
 }

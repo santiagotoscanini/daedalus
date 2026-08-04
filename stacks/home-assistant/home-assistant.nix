@@ -225,11 +225,11 @@ let
   # data, which this is not: it is a static document with five values
   # substituted in, each of which is already a fact nix knows.
   substitutedConfigurationYaml = pkgs.replaceVars ./assets/configuration.yaml {
-    timeZone = config.time.timeZone;
+    inherit (config.time) timeZone;
     inherit url;
-    lanIp = config.fleet.lanIp;
+    inherit (config.fleet) lanIp;
     traefikSubnet = config.fleet.bridgeSubnets.traefik;
-    issuerUrl = config.fleet.sso.issuerUrl;
+    inherit (config.fleet.sso) issuerUrl;
   };
 
   # The file the container actually mounts: byte-identical to the
@@ -297,9 +297,7 @@ in
     dir = dbEnvDir;
     file = dbEnvFile;
     prep = ''
-      DB_PWD=$(grep '^POSTGRES_PASSWORD=' ${
-        config.fleet.appDatabases.home_assistant.envFile
-      } | head -1 | cut -d= -f2-)
+      DB_PWD=$(grep '^POSTGRES_PASSWORD=' ${config.fleet.appDatabases.home_assistant.envFile} | head -1 | cut -d= -f2-)
       [ -n "$DB_PWD" ] || { echo "POSTGRES_PASSWORD missing from the app-db env file" >&2; exit 1; }
     '';
     content = "HA_DB_URL=postgresql://home_assistant:$DB_PWD@127.0.0.1:5433/home_assistant";
@@ -380,32 +378,6 @@ in
     # Static, unauthenticated, and cheap — a crisper gatus assertion
     # than "/" (which is a 200 shell regardless of app health).
     healthPath = "/manifest.json";
-    homepage = {
-      group = "Home";
-      extra.weight = 40;
-      name = "Home Assistant";
-      description = "Home automation hub";
-      icon = "home-assistant.png";
-      # Dials the host netns directly rather than through traefik — the
-      # widget is machine-to-machine, so it skips ingress like every
-      # other widget on the box.
-      #
-      # No `fields`/`custom`: the defaults (people_home, lights_on,
-      # switches_on) are the right three for an install with no devices
-      # yet. Phase 2 can name real entities via `custom` — but note that
-      # `custom` is ignored while `fields` is set, so use one or the other.
-      #
-      # HOMEPAGE_VAR_HASS_API_KEY is an empty slot in
-      # stacks/homepage/env.sops until Home Assistant has an owner
-      # account to mint a long-lived token from; the tile reports an API
-      # error until then. Filling it needs no rebuild — `sops` the file
-      # and `systemctl restart podman-homepage`.
-      widget = {
-        type = "homeassistant";
-        url = "http://host.containers.internal:8123";
-        key = "{{HOMEPAGE_VAR_HASS_API_KEY}}";
-      };
-    };
   };
 
   # Multicast discovery, LAN interface only. Without these the kernel
@@ -422,7 +394,7 @@ in
     # build-context hash, so changing the base digest or the pinned
     # demoji version produces a new tag and restarts this container.
     # Upstream's digest lives in haBaseDigest, not here.
-    image = haImage.image;
+    inherit (haImage) image;
 
     volumes = [
       "${configDir}:/config"

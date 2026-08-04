@@ -82,48 +82,10 @@
     auth = "oidc";
     healthPath = "/health"; # AllowAnonymous liveness probe → gatus + OIDC bypass
     isolated = true;
-    homepage = {
-      group = "Media";
-      extra.weight = 100; # Cleanuparr
-      description = "Download-queue cleanup & malware blocking";
-      icon = "cleanuparr.png";
-      # Counted out of Loki, the same way the Janitorr tile works.
-      # Cleanuparr's own API is unreachable here twice over: it sits on
-      # iso-cleanuparr-net (traefik is the only other member, so homepage
-      # can't dial it by container DNS), and /api/* answers 401 because
-      # its account wizard was never completed. /health is anonymous but
-      # returns the bare string "healthy", which customapi can't parse.
-      #
-      # ONE query returns all three counts as a vector, so this stays a
-      # single row. The `k` labels are prefixed 1/2/3 deliberately:
-      # Loki sorts vector results by label, and the mappings below index
-      # into that order — renaming them re-sorts the row.
-      widget = {
-        type = "customapi";
-        url = "http://loki:3100/loki/api/v1/query?query=label_replace%28sum%28count_over_time%28%7Bcontainer%3D%22cleanuparr%22%7D%20%7C%3D%20%60Removing%20item%20with%20max%20strikes%60%20%5B7d%5D%29%29%20or%20vector%280%29%2C%20%22k%22%2C%20%221removed%22%2C%20%22%22%2C%20%22%22%29%20or%20label_replace%28sum%28count_over_time%28%7Bcontainer%3D%22cleanuparr%22%7D%20%7C%3D%20%60blocked%20item%20keeps%20coming%20back%60%20%5B7d%5D%29%29%20or%20vector%280%29%2C%20%22k%22%2C%20%222blocked%22%2C%20%22%22%2C%20%22%22%29%20or%20label_replace%28sum%28count_over_time%28%7Bcontainer%3D%22cleanuparr%22%7D%20%7C%3D%20%60Replacement%20search%20triggered%60%20%5B7d%5D%29%29%20or%20vector%280%29%2C%20%22k%22%2C%20%223searches%22%2C%20%22%22%2C%20%22%22%29";
-        refreshInterval = 300000;
-        mappings = [
-          {
-            # [QueueCleaner] Removing item with max strikes | reason ...
-            field = "data.result.0.value.1";
-            label = "Removed 7d";
-            format = "number";
-          }
-          {
-            # [QueueCleaner] blocked item keeps coming back | ...
-            field = "data.result.1.value.1";
-            label = "Blocked 7d";
-            format = "number";
-          }
-          {
-            # [Seeker] Replacement search triggered ... on Sonarr/Radarr
-            field = "data.result.2.value.1";
-            label = "Searches 7d";
-            format = "number";
-          }
-        ];
-      };
-    };
+  };
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.cleanuparr = {
+    description = "Download-queue cleanup & malware blocking";
   };
 
   virtualisation.oci-containers.containers.cleanuparr = mkRootlessContainer {

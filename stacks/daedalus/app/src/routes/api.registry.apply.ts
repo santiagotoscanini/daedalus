@@ -8,7 +8,7 @@ import { createFileRoute } from '@tanstack/react-router'
 // anything having to drive a browser.
 //
 // Behind the forward-auth gate like everything except /api/healthz and
-// /api/info, so a request that reaches this from outside has passed Pocket ID.
+// /api/deploy, so a request that reaches this from outside has passed Pocket ID.
 export const Route = createFileRoute('/api/registry/apply')({
   server: {
     handlers: {

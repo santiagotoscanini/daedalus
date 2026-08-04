@@ -47,7 +47,6 @@ let
     })
     mkGluetunInstance
     mkNetnsTenant
-    mkGluetunWidget
     ;
 
   # The netns tenants that content stacks contribute. Sort by port so the
@@ -67,7 +66,6 @@ let
         name
         port
         healthPath
-        homepage
         ;
     }
     // lib.optionalAttrs (t.authBypassRule != null) { inherit (t) authBypassRule; }
@@ -97,10 +95,6 @@ in
             };
             healthPath = lib.mkOption {
               type = lib.types.nullOr lib.types.str;
-              default = null;
-            };
-            homepage = lib.mkOption {
-              type = lib.types.nullOr (lib.types.attrsOf lib.types.anything);
               default = null;
             };
             authBypassRule = lib.mkOption {
@@ -135,7 +129,7 @@ in
 
   config = lib.mkMerge [
     # The VPN netns kit — sops wg key + expiry reminder, kernel modules,
-    # gluetun + exporter containers, scrape, homepage tile — comes from
+    # gluetun + exporter containers and scrape — comes from
     # platform/gluetun-lib.nix. Ports + webApps are derived from the
     # merged tenant registry above.
     (mkGluetunInstance {
@@ -187,24 +181,6 @@ in
 
       scrapeTarget = "host.containers.internal:8001";
 
-      # Sits with the media stack: every tenant riding this netns
-      # (qbittorrent, nzbget, the *arrs) is a Media tile.
-      homepageGroup = "Media";
-
-      homepage = {
-        # Just after the two downloaders whose traffic it carries. Plain
-        # `weight`, not `extra.weight`: this attrset is passed verbatim
-        # into homepageServices, it is not a webApp tile.
-        weight = 85;
-        name = "Gluetun";
-        # The VPN has no UI of its own — link the grafana network
-        # dashboard, where the gluetun/VPN panels live.
-        href = "https://grafana.toscanini.me/d/s2-network";
-        description = "ProtonVPN WireGuard tunnel";
-        icon = "gluetun.png";
-        siteMonitor = "http://host.containers.internal:8000/v1/publicip/ip";
-        widget = mkGluetunWidget { url = "http://host.containers.internal:8000"; };
-      };
     })
     {
       # Shared Cloudflare-challenge solver in gluetun's netns. prowlarr

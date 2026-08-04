@@ -154,11 +154,10 @@ let
 
   # Set this to the workspace slug once one exists, and paste a
   # workspace API token into env.sops as PLANE_API_KEY, to light up the
-  # count widgets on the homepage tile. Both are post-setup state — a
-  # workspace only exists after someone signs in — so the default keeps
-  # the tile to the two unauthenticated version fields rather than
-  # rendering errored widgets against a slug that isn't there yet.
-  workspaceSlug = null;
+  # project and work-item counts on daedalus's Home page. Both are
+  # post-setup state — a workspace only exists after someone signs in — so
+  # the default keeps the panel to the two unauthenticated version fields
+  # rather than erroring against a slug that isn't there yet.
 
   stateRoot = "/home/santiago/selfhost/plane";
 
@@ -413,69 +412,6 @@ in
     # real Django app behind the whole proxy chain rather than the
     # landing page.
     healthPath = "/api/instances/";
-    homepage = {
-      group = "Home";
-      name = "Plane";
-      description = "Projects, cycles and work items";
-      icon = "plane.png";
-      extra.widgets = [
-        # Unauthenticated — works from first boot, before anyone has
-        # created an API key. The payload nests the row under
-        # `instance`; latest_version is refreshed from the GitHub
-        # releases API by register_instance on every api start, so the
-        # two fields differing IS the update-available signal.
-        {
-          type = "customapi";
-          url = "http://plane-proxy/api/instances/";
-          refreshInterval = 600000;
-          mappings = [
-            {
-              field = "instance.current_version";
-              label = "Version";
-            }
-            {
-              field = "instance.latest_version";
-              label = "Latest";
-            }
-          ];
-        }
-      ]
-      # The rest need a workspace API key, which only exists after
-      # someone has signed in and minted one (Workspace settings → API
-      # tokens). Until then these would render as errored tiles, so
-      # they are opt-in: paste the token into env.sops as
-      # PLANE_API_KEY, set workspaceSlug, flip this, rebuild.
-      ++ lib.optionals (workspaceSlug != null) [
-        {
-          type = "customapi";
-          url = "http://plane-proxy/api/v1/workspaces/${workspaceSlug}/projects/";
-          refreshInterval = 600000;
-          headers."X-Api-Key" = "{{HOMEPAGE_VAR_PLANE_KEY}}";
-          # The list endpoints are cursor-paginated: `results` is one
-          # page, `total_count` is the number we actually want.
-          mappings = [
-            {
-              field = "total_count";
-              label = "Projects";
-              format = "number";
-            }
-          ];
-        }
-        {
-          type = "customapi";
-          url = "http://plane-proxy/api/v1/workspaces/${workspaceSlug}/members/";
-          refreshInterval = 600000;
-          headers."X-Api-Key" = "{{HOMEPAGE_VAR_PLANE_KEY}}";
-          mappings = [
-            {
-              field = "total_count";
-              label = "Members";
-              format = "number";
-            }
-          ];
-        }
-      ];
-    };
   };
 
   fleet.prometheusScrapes = [
@@ -538,9 +474,9 @@ in
       exec podman run --rm --name=plane-migrate \
         --network=app-db-net --network=plane-net \
         ${lib.concatMapStringsSep " " (f: "--env-file=${f}") backendEnvFiles} \
-        ${lib.concatStringsSep " " (
-          lib.mapAttrsToList (k: v: "-e ${k}=${lib.escapeShellArg v}") backendEnv
-        )} \
+        ${
+          lib.concatStringsSep " " (lib.mapAttrsToList (k: v: "-e ${k}=${lib.escapeShellArg v}") backendEnv)
+        } \
         ${backendImage} \
         ./bin/docker-entrypoint-migrator.sh
     '';

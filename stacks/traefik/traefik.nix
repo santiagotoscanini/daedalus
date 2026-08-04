@@ -115,8 +115,8 @@ in
   # for DNS-01) + the POCKET_OIDC_* client creds: sops-encrypted
   # env.sops, decrypted to /run/secrets/traefik-env at activation. Edit
   # with `sops env.sops`. NOTE: the same token value also lives in
-  # stacks/cloudflared/env.sops (route-sync) and homepage's
-  # HOMEPAGE_VAR_CF_API_TOKEN — rotate all three together.
+  # stacks/cloudflared/env.sops (route-sync) and daedalus's
+  # service-keys.sops (CF_API_TOKEN) — rotate all three together.
   sops.secrets."traefik-env" = mkDotenvSecret ./env.sops;
 
   # traefik-net is the shared ingress bridge; app-db appends pg-wire
@@ -246,23 +246,17 @@ in
   # Dashboard / API — `api@internal` serves /api/* and /dashboard/*.
   # A regular webApp: Pocket ID gate, LAN DNS entry, gatus probe
   # (/api/version is the harmless-unauthenticated bypass path, so the
-  # probe certifies the dashboard, not the IdP), homepage tile.
+  # probe certifies the dashboard, not the IdP).
   fleet.webApps.traefik-dashboard = {
     hostname = "traefik.${cfg.baseDomain}";
     traefikService = "api@internal";
     auth = "oidc";
     healthPath = "/api/version";
-    homepage = {
-      group = "Network";
-      extra.weight = 20;
-      name = "Traefik";
-      description = "Reverse proxy — all *.toscanini.me routes";
-      icon = "traefik.png";
-      widget = {
-        type = "traefik";
-        url = "http://traefik:8080";
-      };
-    };
+  };
+  # Consent screen and Pocket ID's My Apps page.
+  fleet.ssoClients.traefik-dashboard = {
+    displayName = "Traefik";
+    description = "Reverse proxy — all *.toscanini.me routes";
   };
 
   # Opens TCP 80/443 — LAN HTTPS ingress.
@@ -342,9 +336,9 @@ in
       "--api=true"
       "--api.dashboard=true"
       # Serve /api on the internal :8080 entrypoint too — the public
-      # dashboard route is behind the Pocket ID gate, so the homepage
-      # widget reads it container-direct. :8080 is traefik-net-only
-      # (never host-published), same trust boundary as /metrics.
+      # dashboard route is behind the Pocket ID gate, so daedalus reads it
+      # container-direct. :8080 is traefik-net-only (never host-published),
+      # same trust boundary as /metrics.
       "--api.insecure=true"
 
       # Prometheus metrics. addRoutersLabels=true adds per-router labels

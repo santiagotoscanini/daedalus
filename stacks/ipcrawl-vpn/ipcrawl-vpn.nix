@@ -40,7 +40,6 @@ let
         ;
     })
     mkGluetunInstance
-    mkGluetunWidget
     ;
 in
 {
@@ -66,7 +65,7 @@ in
       # firewall-opened; all LAN-only via host.containers.internal.
       ports = [
         "3100:3000" # ipcrawl UI (traefik dials host.containers.internal:3100)
-        "8002:8000" # gluetun control API (homepage widget)
+        "8002:8000" # gluetun control API
         "8003:8001" # gluetun-exporter → prometheus
       ];
 
@@ -74,16 +73,6 @@ in
       # from the TV gluetun's job="gluetun" for the Grafana panels.
       scrapeTarget = "host.containers.internal:8003";
 
-      homepageGroup = "Ipcrawl";
-      homepage = {
-        name = "Gluetun (ipcrawl)";
-        weight = 50;
-        href = "https://ipcrawl.toscanini.me";
-        description = "ProtonVPN WireGuard tunnel";
-        icon = "gluetun.png";
-        siteMonitor = "http://host.containers.internal:8002/v1/publicip/ip";
-        widget = mkGluetunWidget { url = "http://host.containers.internal:8002"; };
-      };
     })
     {
       fleet.logStacks.ipcrawl-vpn = [
@@ -92,12 +81,6 @@ in
       ];
 
       fleet.statePaths."/home/santiago/selfhost/ipcrawl-vpn" = { };
-
-      # apps.nix sizes each app group to the tiles IT generates (app +
-      # repo + logs = 3 here). This stack adds a fourth, so widen the row
-      # to keep it from wrapping. mkForce because apps.nix already
-      # defines `columns` for this group.
-      fleet.homepageLayout.Ipcrawl.columns = lib.mkForce 4;
     }
   ];
 }

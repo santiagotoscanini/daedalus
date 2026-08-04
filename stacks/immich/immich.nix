@@ -85,24 +85,6 @@ in
     serviceName = "immich";
     port = 2283;
     exposeRemotely = true;
-    homepage = {
-      group = "Home";
-      extra.weight = 20;
-      description = "Photo + video backup";
-      icon = "immich.png";
-      widget = {
-        type = "immich";
-        url = "http://immich:2283";
-        key = "{{HOMEPAGE_VAR_IMMICH_API_KEY}}";
-        version = 2;
-        fields = [
-          "users"
-          "photos"
-          "videos"
-          "storage"
-        ];
-      };
-    };
   };
 
   # Bridge scrape — prometheus is on traefik-net too (see monitoring.nix).

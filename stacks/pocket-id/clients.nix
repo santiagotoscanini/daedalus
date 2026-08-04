@@ -83,13 +83,14 @@ let
         id = n;
         secretKey = secretKey n;
         groups = c.allowedGroups;
-        logo = c.logo;
-        logoType = if c.logo != null && lib.hasSuffix ".svg" (toString c.logo) then "image/svg+xml" else "image/png";
+        inherit (c) logo;
+        logoType =
+          if c.logo != null && lib.hasSuffix ".svg" (toString c.logo) then "image/svg+xml" else "image/png";
         body = {
           name = c.displayName;
           inherit (c) description;
-          callbackURLs = c.callbackURLs;
-          logoutCallbackURLs = c.logoutCallbackURLs;
+          inherit (c) callbackURLs;
+          inherit (c) logoutCallbackURLs;
           isPublic = false;
           pkceEnabled = c.pkce;
           inherit (c) skipConsent;
@@ -261,7 +262,7 @@ in
                   found = lib.filter builtins.pathExists candidates;
                 in
                 if found == [ ] then null else lib.head found;
-              defaultText = lib.literalExpression ''./assets/logos/<name>.{png,svg}, when present'';
+              defaultText = lib.literalExpression "./assets/logos/<name>.{png,svg}, when present";
               description = ''
                 Image shown on the consent screen and the My Apps page,
                 uploaded by the sync when the client has none. Defaults
@@ -293,22 +294,21 @@ in
     # middleware traefik generates for `auth = "oidc"` is useless without
     # a client at the IdP, so the two are one decision.
     {
-      fleet.ssoClients = lib.mapAttrs (
-        _: w:
-        {
-          # The consent screen and the My Apps tile say the same thing
-          # the homepage tile does, or fall back to the attr name.
-          description = if w.homepage != null && w.homepage.description != null then w.homepage.description else "";
-          launchURL = "https://${w.hostname}";
-          callbackURLs = [ "https://${w.hostname}/oidc/callback" ];
-          logoutCallbackURLs = [ "https://${w.hostname}/oidc/callback" ];
-          allowedGroups = w.authGroups;
-          traefikForwardAuth = true;
-        }
-        // lib.optionalAttrs (w.homepage != null && w.homepage.name != null) {
-          displayName = w.homepage.name;
-        }
-      ) (lib.filterAttrs (_: w: w.auth == "oidc") config.fleet.webApps);
+      # What the client IS — the URLs and the group restriction — is
+      # derived here, because all of it is already stated by the webApp.
+      # What the client is CALLED is not: `displayName` and `description`
+      # are the consent screen's copy, they have no mechanical source, and
+      # the stack that owns the service is the only thing that knows them.
+      # Each one sets them on its own `fleet.ssoClients.<n>` entry, which
+      # merges with this; the submodule's defaults (sentence-cased attr
+      # key, no subtitle) apply to anything that does not bother.
+      fleet.ssoClients = lib.mapAttrs (_: w: {
+        launchURL = "https://${w.hostname}";
+        callbackURLs = [ "https://${w.hostname}/oidc/callback" ];
+        logoutCallbackURLs = [ "https://${w.hostname}/oidc/callback" ];
+        allowedGroups = w.authGroups;
+        traefikForwardAuth = true;
+      }) (lib.filterAttrs (_: w: w.auth == "oidc") config.fleet.webApps);
     }
 
     {
