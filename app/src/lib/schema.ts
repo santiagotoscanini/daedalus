@@ -122,8 +122,60 @@ export const appEnvVars = pgTable(
   (t) => [uniqueIndex('app_env_vars_app_key_idx').on(t.appId, t.key)],
 )
 
+// Deploy history.
+//
+// The platform's own state file (/var/lib/app-deploy/<name>) holds only the
+// LATEST result, overwritten every run — so on its own there is no history at
+// all. stacks/apps/assets/deploy.sh therefore appends one JSON line per real
+// deploy to a sibling .log, and daedalus ingests those lines here.
+//
+// Recorded by deploy.sh rather than by daedalus because most deploys never
+// touch daedalus: the 2-minute timer and a manual `systemctl start` both land
+// in that script. Recording at the one place that always runs is what makes
+// this history complete rather than "the deploys daedalus happened to trigger".
+//
+// `revision` and friends are resolved from the image's OCI labels at ingest
+// time and STORED, not looked up on render: zot's retention will eventually
+// GC an old manifest, and the history should outlive the image it describes.
+export const deployments = pgTable(
+  'deployments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    appId: uuid('app_id')
+      .notNull()
+      .references(() => apps.id, { onDelete: 'cascade' }),
+
+    digest: text('digest').notNull(),
+    previousDigest: text('previous_digest'),
+
+    // "ok" | "failed" — deploy.sh's own verdict, from a real health check
+    // through traefik rather than from `systemctl` having returned 0.
+    result: text('result').notNull(),
+    httpCode: text('http_code'),
+
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }).notNull(),
+    durationMs: integer('duration_ms').notNull().default(0),
+
+    // From the image config's OCI labels, when the manifest is still in the
+    // registry at ingest time.
+    revision: text('revision'), // org.opencontainers.image.revision (git sha)
+    sourceUrl: text('source_url'), // org.opencontainers.image.source
+    imageCreatedAt: timestamp('image_created_at', { withTimezone: true }),
+  },
+  // A deploy is identified by which image landed and when it started. Makes
+  // ingest idempotent: the journal is re-read on every page load and the same
+  // line must not become a second row.
+  (t) => [uniqueIndex('deployments_app_digest_started_idx').on(t.appId, t.digest, t.startedAt)],
+)
+
 export const appsRelations = relations(apps, ({ many }) => ({
   envVars: many(appEnvVars),
+  deployments: many(deployments),
+}))
+
+export const deploymentsRelations = relations(deployments, ({ one }) => ({
+  app: one(apps, { fields: [deployments.appId], references: [apps.id] }),
 }))
 
 export const appEnvVarsRelations = relations(appEnvVars, ({ one }) => ({
@@ -132,3 +184,4 @@ export const appEnvVarsRelations = relations(appEnvVars, ({ one }) => ({
 
 export type App = typeof apps.$inferSelect
 export type AppEnvVar = typeof appEnvVars.$inferSelect
+export type Deployment = typeof deployments.$inferSelect

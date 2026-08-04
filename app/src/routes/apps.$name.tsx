@@ -5,7 +5,7 @@ import { AreaChart, Bytes, Metric, Panel, Row, Segmented, StatePill, Toggle } fr
 import type { DeployStatus } from '../lib/deploy'
 import { fetchApp, fetchDeployStatus, saveApp, triggerDeploy } from '../server/registry'
 
-const TABS = ['overview', 'settings', 'logs'] as const
+const TABS = ['overview', 'deployments', 'settings', 'logs'] as const
 
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
@@ -18,7 +18,16 @@ export const Route = createFileRoute('/apps/$name')({
   // lets the logs stay off the wire until the logs tab is actually open.
   loaderDeps: ({ search }) => ({ tab: search.tab }),
   loader: async ({ params, deps }) => {
-    const data = await fetchApp({ data: { name: params.name, withLogs: deps.tab === 'logs' } })
+    const data = await fetchApp({
+      data: {
+        name: params.name,
+        // Both are only fetched for the tab that shows them. Loader data is
+        // serialised into the HTML for hydration, so pulling logs and deploy
+        // history on every tab would pay for them four times over.
+        withLogs: deps.tab === 'logs',
+        withDeploys: deps.tab === 'deployments',
+      },
+    })
     if (!data) throw notFound()
     return data
   },
@@ -34,11 +43,22 @@ export const Route = createFileRoute('/apps/$name')({
   ),
 })
 
-type Tab = 'overview' | 'settings' | 'logs'
+type Tab = (typeof TABS)[number]
 
 function AppDetail() {
-  const { app, drift, status, dbSize, logs, logs1h, applyStatus, deployStatus, lastDeploy, pullBroken } =
-    Route.useLoaderData()
+  const {
+    app,
+    drift,
+    status,
+    dbSize,
+    logs,
+    logs1h,
+    applyStatus,
+    deployStatus,
+    lastDeploy,
+    pullBroken,
+    deployments,
+  } = Route.useLoaderData()
   const router = useRouter()
   const { tab } = Route.useSearch()
 
@@ -245,6 +265,83 @@ function AppDetail() {
                 ))}
               </dl>
             </>
+          )}
+        </>
+      )}
+
+      {tab === 'deployments' && (
+        <>
+          <p className="deploy-meta">
+            {app.sourceMode === 'local' ? (
+              <>
+                <span className="muted">⎇ stacks/{app.name}/app</span>
+                <span className="muted">source is live — nothing to deploy</span>
+              </>
+            ) : (
+              <>
+                <a
+                  href={`https://github.com/santiagotoscanini/${app.name}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  ⎇ santiagotoscanini/{app.name}
+                </a>
+                <span className="muted">builds run on self-hosted runners</span>
+                <a
+                  href={`https://github.com/santiagotoscanini/${app.name}/actions`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-ghost deploy-actions"
+                >
+                  ↗ GitHub Actions
+                </a>
+              </>
+            )}
+          </p>
+
+          {deployments.length === 0 ? (
+            <p className="lede">
+              {app.sourceMode === 'local'
+                ? 'Local-source apps have no deploy history — the running code is the working tree.'
+                : 'No deploys recorded yet. History starts from the first deploy where the image digest actually moved.'}
+            </p>
+          ) : (
+            <ol className="timeline">
+              {deployments.map((d) => (
+                <li key={d.id} className={d.isCurrent ? 'current' : d.result}>
+                  <span className={`node node-${d.isCurrent ? 'current' : d.result}`} />
+                  <div className={d.isCurrent ? 'deploy-card is-current' : 'deploy-card'}>
+                    <div className="deploy-head">
+                      <code className="deploy-rev">{d.shortRevision ?? d.digest.slice(0, 12)}</code>
+                      {d.commitUrl ? (
+                        <a href={d.commitUrl} target="_blank" rel="noreferrer">
+                          view commit
+                        </a>
+                      ) : (
+                        <span className="muted">
+                          {d.shortRevision ? 'no source link' : 'image labels unavailable'}
+                        </span>
+                      )}
+                      <span
+                        className={
+                          d.isCurrent ? 'chip chip-warn'
+                          : d.result === 'ok' ? 'chip chip-live'
+                          : 'chip chip-bad'
+                        }
+                      >
+                        {d.isCurrent ? 'current' : d.result === 'ok' ? 'success' : 'failed'}
+                      </span>
+                    </div>
+                    <div className="deploy-sub">
+                      <span>{fmtWhen(d.startedAt)}</span>
+                      <span>{fmtDuration(d.durationMs)}</span>
+                      <code>{d.digest.slice(0, 12)}</code>
+                      {d.httpCode && <span>HTTP {d.httpCode}</span>}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ol>
           )}
         </>
       )}
@@ -483,4 +580,23 @@ function TextField({
 function fmtBool(v: boolean | null | undefined): string {
   if (v === null || v === undefined) return 'no data'
   return v ? 'yes' : 'no'
+}
+
+function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${String(ms)}ms`
+  const s = Math.round(ms / 1000)
+  return s < 60 ? `${String(s)}s` : `${String(Math.floor(s / 60))}m ${String(s % 60)}s`
+}
+
+function fmtWhen(iso: string): string {
+  const then = new Date(iso)
+  const mins = Math.round((Date.now() - then.getTime()) / 60000)
+  const rel =
+    mins < 1 ? 'just now'
+    : mins < 60 ? `${String(mins)}m ago`
+    : mins < 60 * 24 ? `${String(Math.round(mins / 60))}h ago`
+    : `${String(Math.round(mins / 1440))}d ago`
+  // Absolute first, relative second: "3d ago" alone is useless when you are
+  // trying to correlate a deploy with something else that happened.
+  return `${then.toISOString().slice(0, 16).replace('T', ' ')} · ${rel}`
 }

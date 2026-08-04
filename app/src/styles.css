@@ -940,3 +940,97 @@ h2 {
 .bad-text {
   color: var(--bad);
 }
+
+/* ── deployments timeline ───────────────────────────────────────────────── */
+
+.deploy-meta {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  font-size: 0.82rem;
+  margin: 0 0 1.2rem;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.deploy-actions {
+  margin-left: auto;
+  font-family: inherit;
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1.5rem;
+  position: relative;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 12px;
+  bottom: 12px;
+  width: 1px;
+  background: var(--border);
+}
+.timeline li {
+  position: relative;
+  margin-bottom: 0.6rem;
+}
+
+.node {
+  position: absolute;
+  left: -1.5rem;
+  top: 1.15rem;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1.5px var(--dim);
+  background: var(--bg);
+}
+.node-current {
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+.node-ok {
+  box-shadow: 0 0 0 1.5px var(--ok);
+}
+.node-failed {
+  box-shadow: 0 0 0 1.5px var(--bad);
+}
+
+.deploy-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 0.8rem 1.05rem;
+}
+.deploy-card.is-current {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+}
+
+.deploy-head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+.deploy-rev {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.deploy-head .chip {
+  margin-left: auto;
+}
+.chip-bad {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+}
+
+.deploy-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
