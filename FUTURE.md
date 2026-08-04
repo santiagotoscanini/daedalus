@@ -314,3 +314,4 @@ Two errors are logged loudly at every start and both are expected:
   immediacy — discovery happens on ARP refresh rather than the instant a
   lease is issued — and devices whose ARP entry has aged out (a fourth
   lease was absent from Home Assistant for exactly that reason).
+# scratch marker 2026-08-03T23:36:23-03:00

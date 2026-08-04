@@ -78,14 +78,24 @@ install -m 0644 -o santiago -g users "$PAYLOAD" "$TARGET"
 write_status running committing ""
 setpriv --reuid=santiago --regid=users --init-groups git -C "$FLAKE" add "$TARGET"
 
-if setpriv --reuid=santiago --regid=users --init-groups git -C "$FLAKE" diff --cached --quiet; then
+# Scoped to $TARGET, both times.
+#
+# This repo's index is shared: a human at a shell, or flake-autoupgrade, can
+# have unrelated work staged when an apply fires. A bare `git commit` commits
+# the whole INDEX, so an apply would sweep that work into a commit titled
+# "apps: <some field>" and then push it — which is exactly what happened once.
+# `commit -- "$TARGET"` commits only this file and leaves everything else
+# staged and untouched; the emptiness check is scoped the same way so foreign
+# staged changes cannot make an apply look non-empty either.
+if setpriv --reuid=santiago --regid=users --init-groups \
+  git -C "$FLAKE" diff --cached --quiet -- "$TARGET"; then
   write_status "done" "no-change" ""
   exit 0
 fi
 
 setpriv --reuid=santiago --regid=users --init-groups \
   git -C "$FLAKE" -c "user.name=daedalus" -c "user.email=$GIT_EMAIL" \
-  commit -q -m "apps: $SUMMARY" -m "Applied from daedalus by $ACTOR." ||
+  commit -q -m "apps: $SUMMARY" -m "Applied from daedalus by $ACTOR." -- "$TARGET" ||
   fail committing "git commit failed"
 
 COMMIT_SHA="$(setpriv --reuid=santiago --regid=users --init-groups git -C "$FLAKE" rev-parse --short HEAD)"
