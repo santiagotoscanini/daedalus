@@ -12,6 +12,7 @@ import {
   StatBand,
   Trend,
 } from '../viz'
+import { Topology, type TopoEdge, type TopoStage } from '../topology'
 import { DASH, bytes, flag, num, rate, until } from '../../lib/dashboard/format'
 import type { BooksData, TvData } from '../../server/category'
 
@@ -68,6 +69,30 @@ export function TvView({ data }: { data: TvData }) {
       </StatBand>
 
       <BoardGrid>
+        <Board
+          title="Who does what"
+          icon="⧉"
+          span={12}
+          aside={
+            <span className="board-note">the path a file takes, and the service that owns each step</span>
+          }
+        >
+          <Topology
+            stages={tvStages(data)}
+            edges={tvEdges(data)}
+            foot={
+              <>
+                Only the middle column leaves the house, and it does so through gluetun&rsquo;s
+                network namespace rather than a route &mdash; so the two downloaders cannot reach
+                the internet at all if the tunnel drops. Cleanuparr and Janitorr are the two that
+                take things AWAY rather than add them: one clears stalled and mislabelled
+                downloads out of the queue, the other reclaims disk once nobody has watched
+                something in a while.
+              </>
+            }
+          />
+        </Board>
+
         <Board title="Pipeline" icon="⇉" span={12}>
           <Flow
             steps={[
@@ -354,4 +379,218 @@ export function BooksView({ data }: { data: BooksData }) {
       </BoardGrid>
     </>
   )
+}
+
+/**
+ * The media pipeline as services rather than as counts.
+ *
+ * Laid out as the file's journey, so each service sits at the step it owns.
+ * Two of them do not move a file forward at all and that is why they are easy
+ * to forget: Cleanuparr acts sideways on the download queue, and Janitorr acts
+ * backwards on the library. Both get a box on the path they actually touch.
+ *
+ * The downloaders are their own zone because they are the only part of this
+ * that leaves the house, and they do it through a borrowed network namespace.
+ */
+function tvStages(data: TvData): TopoStage[] {
+  const { pipeline, library, wanted, vpn, speed, cleanup } = data
+  const moving = (speed.down ?? 0) + (speed.up ?? 0) > 0
+  const vpnUp = vpn.up === true
+
+  return [
+    {
+      id: 'want',
+      title: 'Wanted',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'seerr',
+          label: 'Seerr',
+          sub: 'where a request starts',
+          icon: '✎',
+          tone: 'info',
+        },
+        {
+          id: 'radarr',
+          label: 'Radarr',
+          sub: 'films',
+          icon: '▤',
+          tone: 'accent',
+          facts: [{ k: 'missing', v: num(wanted.movies) }],
+        },
+        {
+          id: 'sonarr',
+          label: 'Sonarr',
+          sub: 'series',
+          icon: '▥',
+          tone: 'accent',
+          facts: [{ k: 'missing', v: num(wanted.episodes) }],
+        },
+      ],
+    },
+    {
+      id: 'find',
+      title: 'Searched',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'prowlarr',
+          label: 'Prowlarr',
+          sub: 'one indexer list for both *arrs',
+          icon: '◎',
+          tone: 'accent',
+          live: (pipeline.wanted ?? 0) > 0,
+          facts: [{ k: 'indexers', v: num(pipeline.indexers) }],
+        },
+      ],
+    },
+    {
+      id: 'fetch',
+      title: 'Downloaded',
+      // The one part of this that leaves the house — and it does so with no
+      // interfaces of its own, inside gluetun's namespace.
+      zone: vpnUp ? `via ProtonVPN · ${vpn.city ?? 'exit'}` : 'VPN DOWN',
+      nodes: [
+        {
+          id: 'qbt',
+          label: 'qBittorrent',
+          sub: vpn.port === null ? 'no forwarded port' : `port ${String(vpn.port)}`,
+          icon: '⇣',
+          tone: vpnUp ? 'ok' : 'bad',
+          live: moving,
+          facts: [{ k: 'active', v: num(data.transfers.length) }],
+        },
+        {
+          id: 'nzbget',
+          label: 'NZBGet',
+          sub: 'usenet',
+          icon: '⇣',
+          tone: vpnUp ? 'ok' : 'bad',
+          idle: data.usenet.length === 0,
+          live: data.usenet.length > 0,
+          facts: [{ k: 'queued', v: num(data.usenet.length) }],
+        },
+      ],
+    },
+    {
+      id: 'import',
+      title: 'Imported & tidied',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'importer',
+          label: 'Import',
+          sub: 'the *arrs hardlink into place',
+          icon: '⇥',
+          tone: 'accent',
+          live: (pipeline.importing ?? 0) > 0,
+          facts: [{ k: 'in queue', v: num(pipeline.importing) }],
+        },
+        {
+          id: 'bazarr',
+          label: 'Bazarr',
+          sub: 'subtitles, after the file lands',
+          icon: '⌸',
+          tone: 'info',
+          facts: [
+            {
+              k: 'missing',
+              v: num((wanted.subtitleEpisodes ?? 0) + (wanted.subtitleMovies ?? 0)),
+            },
+          ],
+        },
+        {
+          id: 'cleanuparr',
+          label: 'Cleanuparr',
+          sub: 'removes stalled and malware grabs',
+          icon: '⌫',
+          tone: 'warn',
+          facts: [{ k: 'removed 7d', v: num(cleanup.removed) }],
+        },
+      ],
+    },
+    {
+      id: 'lib',
+      title: 'Library',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'disk',
+          label: '/s2/tv',
+          sub: 'the mirror pair',
+          icon: '▦',
+          tone: 'info',
+          facts: [
+            { k: 'used', v: bytes(library.usedBytes) },
+            { k: 'free', v: bytes(library.freeBytes) },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'end',
+      title: 'Watched · reclaimed',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'jellyfin',
+          label: 'Jellyfin',
+          sub: 'not on the VPN — LAN streaming',
+          icon: '▶',
+          tone: data.nowPlaying.length > 0 ? 'ok' : 'muted',
+          live: data.nowPlaying.length > 0,
+          facts: [
+            { k: 'films', v: num(library.movies) },
+            { k: 'episodes', v: num(library.episodes) },
+          ],
+        },
+        {
+          id: 'janitorr',
+          label: 'Janitorr',
+          sub: 'deletes what nobody watches',
+          icon: '⌫',
+          tone: 'warn',
+          idle: true,
+          facts: [{ k: 'mode', v: 'dry run' }],
+        },
+      ],
+    },
+  ]
+}
+
+function tvEdges(data: TvData): TopoEdge[] {
+  const { pipeline, speed, vpn } = data
+  const moving = (speed.down ?? 0) + (speed.up ?? 0) > 0
+  const searching = (pipeline.wanted ?? 0) > 0
+  const importing = (pipeline.importing ?? 0) > 0
+  const vpnUp = vpn.up === true
+
+  return [
+    { from: 'seerr', to: 'prowlarr', label: 'requests', tone: 'info', dashed: true },
+    { from: 'radarr', to: 'prowlarr', label: `${num(data.wanted.movies)} wanted`, tone: 'accent', active: searching },
+    { from: 'sonarr', to: 'prowlarr', label: `${num(data.wanted.episodes)} wanted`, tone: 'accent', active: searching },
+    {
+      from: 'prowlarr',
+      to: 'qbt',
+      label: 'torrent',
+      tone: vpnUp ? 'ok' : 'bad',
+      active: moving,
+    },
+    { from: 'prowlarr', to: 'nzbget', label: 'nzb', tone: vpnUp ? 'ok' : 'bad', dashed: data.usenet.length === 0 },
+    {
+      from: 'qbt',
+      to: 'importer',
+      label: moving ? rate(speed.down) : 'on completion',
+      tone: 'accent',
+      active: importing,
+    },
+    { from: 'nzbget', to: 'importer', label: 'on completion', tone: 'info', dashed: data.usenet.length === 0 },
+    // Cleanuparr watches the same queue rather than receiving from it, which
+    // is why this edge is dashed and points sideways in meaning.
+    { from: 'qbt', to: 'cleanuparr', label: 'watches the queue', tone: 'warn', dashed: true },
+    { from: 'importer', to: 'disk', label: 'hardlink', tone: 'accent', active: importing },
+    { from: 'bazarr', to: 'disk', label: '.srt beside it', tone: 'info', dashed: true },
+    { from: 'disk', to: 'jellyfin', label: 'served on the LAN', tone: 'ok', active: data.nowPlaying.length > 0 },
+    { from: 'disk', to: 'janitorr', label: 'retention', tone: 'warn', dashed: true },
+  ]
 }

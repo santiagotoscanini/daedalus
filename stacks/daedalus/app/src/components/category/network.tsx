@@ -11,6 +11,7 @@ import {
   StatBand,
   Trend,
 } from '../viz'
+import { Topology, type TopoEdge, type TopoStage } from '../topology'
 import { DASH, bytes, flag, num, since } from '../../lib/dashboard/format'
 import type { NetworkData } from '../../server/category'
 
@@ -57,6 +58,49 @@ export function NetworkView({ data }: { data: NetworkData }) {
       </StatBand>
 
       <BoardGrid>
+        <Board
+          title="Getting in"
+          icon="⇥"
+          span={12}
+          aside={<span className="board-note">inbound · nothing here needs a forwarded TCP port</span>}
+        >
+          <Topology
+            stages={inboundStages(data)}
+            edges={inboundEdges(data)}
+            foot={
+              <>
+                Two ways in and they cross the router differently. The tunnel is an OUTBOUND
+                connection cloudflared holds open, so the edge reaches this box without the
+                router ever accepting an inbound connection — no port forward, nothing to scan.
+                WireGuard is the exception that proves it: it is the one service the router
+                forwards a port for, UDP 51820, and the only reason that is acceptable is that
+                a WireGuard socket does not answer an unauthenticated packet at all.
+              </>
+            }
+          />
+        </Board>
+
+        <Board
+          title="Getting out"
+          icon="⇤"
+          span={12}
+          aside={<span className="board-note">egress · which traffic leaves through what</span>}
+        >
+          <Topology
+            stages={egressStages(data)}
+            edges={egressEdges(data)}
+            foot={
+              <>
+                Two exits, and which one a container gets is decided by its network namespace,
+                not by routing. Everything on a bridge leaves through the house connection with
+                this address. The download stack has no interfaces of its own — it borrows
+                gluetun's namespace outright, so if that tunnel drops those containers lose the
+                network rather than falling back to the house line.
+              </>
+            }
+          />
+        </Board>
+
         <Board
           title="Internet link"
           icon="⇅"
@@ -275,4 +319,273 @@ function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
   if (code.startsWith('3')) return 'info'
   if (code.startsWith('4')) return 'warn'
   return 'bad'
+}
+
+/**
+ * Inbound: how a request from outside reaches a service on this box.
+ *
+ * Three trust zones, because that is the fact the diagram exists to carry —
+ * the internet, the house, and the box — and the interesting part is where
+ * each path crosses between them.
+ */
+function inboundStages(data: NetworkData): TopoStage[] {
+  const { tunnel, wireguard, proxy, certs } = data
+  const live = tunnel.status === 'healthy'
+  const peersUp = wireguard.connected !== null && wireguard.connected > 0
+
+  return [
+    {
+      id: 'outside',
+      title: 'Origin',
+      zone: 'the internet',
+      nodes: [
+        {
+          id: 'cf',
+          label: 'Cloudflare edge',
+          sub: tunnel.edges.map((e) => e.colo).join(' · ') || 'no edge reported',
+          icon: '☁',
+          tone: live ? 'ok' : 'bad',
+          live,
+          facts: [
+            { k: 'status', v: tunnel.status ?? DASH },
+            { k: 'conns', v: num(tunnel.connections) },
+          ],
+        },
+        {
+          id: 'wgpeer',
+          label: 'WireGuard peers',
+          sub: 'phones and laptops off-LAN',
+          icon: '⚿',
+          tone: peersUp ? 'ok' : 'muted',
+          idle: !peersUp,
+          live: peersUp,
+          facts: [{ k: 'connected', v: `${num(wireguard.connected)} of ${num(wireguard.total)}` }],
+        },
+      ],
+    },
+    {
+      id: 'house',
+      title: 'Router',
+      zone: 'this house',
+      nodes: [
+        {
+          id: 'router',
+          label: 'Router',
+          sub: '192.168.0.1',
+          icon: '⌗',
+          tone: 'info',
+          facts: [
+            // The tunnel's origin address IS the house's WAN address — the
+            // edge records where the connection came from, and nothing on
+            // this side of the NAT can see it.
+            { k: 'WAN', v: tunnel.originIp ?? DASH },
+            { k: 'forwarded', v: 'UDP only' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'ingress',
+      title: 'Ingress',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'cloudflared',
+          label: 'cloudflared',
+          sub: tunnel.clientVersion ?? 'tunnel client',
+          icon: '⇥',
+          tone: live ? 'ok' : 'bad',
+          live,
+          facts: [{ k: 'held', v: since(tunnel.heldForSeconds).replace(' ago', '') }],
+        },
+        {
+          id: 'wgeasy',
+          label: 'wg-easy',
+          sub: 'UDP 51820',
+          icon: '⚿',
+          tone: peersUp ? 'ok' : 'muted',
+          idle: !peersUp,
+        },
+      ],
+    },
+    {
+      id: 'proxy',
+      title: 'Proxy',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'traefik',
+          label: 'traefik',
+          sub: 'TLS terminates here',
+          icon: '⇄',
+          tone: 'accent',
+          live: proxy.rpm !== null && proxy.rpm > 0,
+          facts: [
+            { k: 'req/min', v: num(proxy.rpm) },
+            { k: 'cert', v: certs.soonestDays === null ? DASH : `${certs.soonestDays.toFixed(0)}d` },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'services',
+      title: 'Services',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'gate',
+          label: 'Pocket ID gate',
+          sub: 'forward-auth on the admin UIs',
+          icon: '⛨',
+          tone: 'warn',
+        },
+        {
+          id: 'apps',
+          label: `${num(proxy.routers)} routers`,
+          sub: `${num(proxy.services)} upstreams`,
+          icon: '▦',
+          tone: 'info',
+          facts: [{ k: 'open conns', v: num(proxy.openConnections) }],
+        },
+      ],
+    },
+  ]
+}
+
+function inboundEdges(data: NetworkData): TopoEdge[] {
+  const { tunnel, wireguard, proxy } = data
+  const live = tunnel.status === 'healthy'
+  const peersUp = wireguard.connected !== null && wireguard.connected > 0
+  const busy = proxy.rpm !== null && proxy.rpm > 0
+
+  return [
+    { from: 'cf', to: 'router', label: 'outbound QUIC', tone: 'ok', active: live },
+    { from: 'wgpeer', to: 'router', label: 'UDP 51820', tone: 'info', active: peersUp, dashed: !peersUp },
+    { from: 'router', to: 'cloudflared', label: 'no port forward', tone: 'ok', active: live },
+    { from: 'router', to: 'wgeasy', label: 'forwarded', tone: 'info', active: peersUp, dashed: !peersUp },
+    { from: 'cloudflared', to: 'traefik', label: 'cfweb :8888', tone: 'ok', active: live },
+    { from: 'wgeasy', to: 'traefik', label: 'as a LAN client', tone: 'info', dashed: !peersUp },
+    { from: 'traefik', to: 'gate', label: 'admin UIs', tone: 'warn', active: busy },
+    { from: 'traefik', to: 'apps', label: `${num(proxy.rpm)}/min`, tone: 'accent', active: busy },
+  ]
+}
+
+/**
+ * Egress: which exit a container's traffic leaves by.
+ *
+ * The split is a network-namespace fact, not a routing one — the download
+ * stack has no interfaces of its own, so "goes through the VPN" is structural
+ * rather than a rule that could be misconfigured.
+ */
+/**
+ * Egress: which exit a container's traffic leaves by.
+ *
+ * Two lanes that never touch, which is the point — the split is a network
+ * NAMESPACE fact, not a routing rule. A bridged container has its own
+ * interfaces and leaves by the house line; the download stack has none at all
+ * and borrows gluetun's, so "it goes through the VPN" is structural rather
+ * than something that could be misconfigured into leaking.
+ */
+function egressStages(data: NetworkData): TopoStage[] {
+  const { vpn, tunnel } = data
+  const vpnUp = vpn.up === true
+
+  return [
+    {
+      id: 'origin',
+      title: 'Traffic',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'bridged',
+          label: 'Bridged containers',
+          sub: 'traefik-net, monitoring, app-db …',
+          icon: '▦',
+          tone: 'info',
+        },
+        {
+          id: 'netns',
+          label: 'Download stack',
+          sub: 'qBittorrent, NZBGet, the *arrs',
+          icon: '⛨',
+          tone: vpnUp ? 'ok' : 'bad',
+        },
+      ],
+    },
+    {
+      id: 'stack',
+      title: 'Network namespace',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'hostns',
+          label: 'Own interfaces',
+          sub: 'one veth pair per bridge',
+          icon: '⌗',
+          tone: 'info',
+        },
+        {
+          id: 'gluetun',
+          label: 'gluetun',
+          sub: 'owns the namespace they share',
+          icon: '◈',
+          tone: vpnUp ? 'ok' : 'bad',
+          live: vpnUp,
+          facts: [{ k: 'kill switch', v: vpnUp ? 'armed' : 'TUNNEL DOWN' }],
+        },
+      ],
+    },
+    {
+      id: 'out',
+      title: 'Seen from outside as',
+      zone: 'the internet',
+      nodes: [
+        {
+          id: 'house',
+          label: 'House connection',
+          sub: 'this address is the household',
+          icon: '⌂',
+          tone: 'info',
+          facts: [{ k: 'IP', v: tunnel.originIp ?? DASH }],
+        },
+        {
+          id: 'proton',
+          label: 'ProtonVPN',
+          sub: vpn.city === null ? 'exit node' : `${flag(vpn.country)} · ${vpn.city}`,
+          icon: '◆',
+          tone: vpnUp ? 'ok' : 'bad',
+          live: vpnUp,
+          facts: [
+            { k: 'IP', v: vpn.ip ?? DASH },
+            // A tunnel that is up but lost its forwarded port looks healthy
+            // and cannot seed — worth its own slot rather than a footnote.
+            { k: 'fwd port', v: vpn.port === null ? 'none' : String(vpn.port) },
+          ],
+        },
+      ],
+    },
+  ]
+}
+
+function egressEdges(data: NetworkData): TopoEdge[] {
+  const vpnUp = data.vpn.up === true
+  return [
+    { from: 'bridged', to: 'hostns', label: 'pasta / bridge', tone: 'info', active: true },
+    {
+      from: 'netns',
+      to: 'gluetun',
+      label: '--network=container:',
+      tone: vpnUp ? 'ok' : 'bad',
+      active: vpnUp,
+    },
+    { from: 'hostns', to: 'house', label: 'NAT', tone: 'info', active: true },
+    {
+      from: 'gluetun',
+      to: 'proton',
+      label: 'WireGuard',
+      tone: vpnUp ? 'ok' : 'bad',
+      active: vpnUp,
+      dashed: !vpnUp,
+    },
+  ]
 }

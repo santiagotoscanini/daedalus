@@ -9,6 +9,7 @@ import {
   Pulse,
   StatBand,
 } from '../viz'
+import { Topology, type TopoEdge, type TopoStage } from '../topology'
 import { DASH, num } from '../../lib/dashboard/format'
 import type { AiData } from '../../server/category'
 
@@ -58,6 +59,31 @@ export function AiView({ data }: { data: AiData }) {
       </StatBand>
 
       <BoardGrid>
+      <Board
+        title="How a prompt gets answered"
+        icon="⇉"
+        span={12}
+        aside={
+          <span className="board-note">
+            {headline.inFlight !== null && headline.inFlight > 0 ?
+              `${num(headline.inFlight)} in flight`
+            : 'idle'}
+          </span>
+        }
+      >
+        <Topology
+          stages={aiStages(data)}
+          edges={aiEdges(data)}
+          foot={
+            <>
+              Nothing here holds a model. Every caller speaks the OpenAI API to LiteLLM, which is
+              the only thing that knows where the weights actually are — so swapping Lemonade for
+              something else is a gateway config change and no caller notices.
+            </>
+          }
+        />
+      </Board>
+
         <Board
           title="Gateway traffic"
           icon="◇"
@@ -210,4 +236,132 @@ function statusTone(status: string): string {
   if (status === 'success') return 'ok'
   if (status === 'running' || status === 'waiting' || status === 'new') return 'live'
   return 'bad'
+}
+
+/**
+ * The path a prompt takes: caller → gateway → whatever actually holds weights.
+ *
+ * The client column is read from the gateway's own key ledger rather than
+ * hardcoded, so a new API key shows up as a new box the first time it spends a
+ * token. `byClient` labels are key aliases, which are already the names of the
+ * things calling — n8n, open-webui, daedalus.
+ */
+function aiStages(data: AiData): TopoStage[] {
+  const clients = data.byClient.slice(0, 4)
+  const total = clients.reduce((n, c) => n + c.value, 0)
+  const embeddings = data.byModel.find((m) => /embed/i.test(m.label))
+
+  return [
+    {
+      id: 'callers',
+      title: 'Callers',
+      zone: 'this box',
+      nodes:
+        clients.length === 0 ?
+          [{ id: 'noclients', label: 'No traffic', sub: 'nothing has spent a token', idle: true }]
+        : clients.map((c) => ({
+            id: `c-${c.label}`,
+            label: c.label,
+            sub: total === 0 ? undefined : `${((c.value / total) * 100).toFixed(0)}% of tokens`,
+            icon: '◈',
+            tone: 'info' as const,
+            facts: [{ k: 'tokens', v: num(c.value) }],
+          })),
+    },
+    {
+      id: 'gateway',
+      title: 'Gateway',
+      zone: 'this box',
+      nodes: [
+        {
+          id: 'litellm',
+          label: 'LiteLLM',
+          sub: 'OpenAI-compatible front door',
+          icon: '⇄',
+          tone: 'accent',
+          live: data.headline.inFlight !== null && data.headline.inFlight > 0,
+          facts: [
+            { k: 'today', v: num(data.headline.requestsToday) },
+            { k: 'in flight', v: num(data.headline.inFlight) },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'backends',
+      title: 'Backends',
+      // Lemonade is the one thing on this page that is NOT on this box, and
+      // that is the whole reason a cold first token is slow — it is a
+      // different machine that may have swapped the model out.
+      zone: 'elsewhere',
+      nodes: [
+        {
+          id: 'lemonade',
+          label: 'Lemonade',
+          sub: 'gaming PC · llama.cpp',
+          icon: '◆',
+          tone: 'ok',
+          live: data.lemonade.tps !== null && data.lemonade.tps > 0,
+          facts: [
+            { k: 'resident', v: num(data.headline.modelsResident) },
+            { k: 'tok/s', v: num(data.lemonade.tps, 1) },
+          ],
+        },
+        {
+          id: 'searxng',
+          label: 'SearXNG',
+          sub: 'web search tool',
+          icon: '◍',
+          tone: 'info',
+          idle: true,
+        },
+        {
+          id: 'pgvector',
+          label: 'pgvector',
+          sub: 'RAG store, shared pg',
+          icon: '◱',
+          tone: 'info',
+          idle: embeddings === undefined,
+          facts:
+            embeddings === undefined ? undefined : [{ k: 'embed tok', v: num(embeddings.value) }],
+        },
+      ],
+    },
+  ]
+}
+
+function aiEdges(data: AiData): TopoEdge[] {
+  const clients = data.byClient.slice(0, 4)
+  const busy = data.headline.inFlight !== null && data.headline.inFlight > 0
+  const embeddings = data.byModel.find((m) => /embed/i.test(m.label))
+  const chat = data.byModel.filter((m) => !/embed/i.test(m.label)).reduce((n, m) => n + m.value, 0)
+
+  return [
+    ...(clients.length === 0 ?
+      [{ from: 'noclients', to: 'litellm', dashed: true }]
+    : clients.map((c) => ({
+        from: `c-${c.label}`,
+        to: 'litellm',
+        // The key's own name is on the box; the edge carries what it spent,
+        // which is the thing that differs between two identical-looking arrows.
+        label: `${num(c.value)} tok`,
+        tone: 'info' as const,
+        active: busy,
+      }))),
+    {
+      from: 'litellm',
+      to: 'lemonade',
+      label: chat > 0 ? `${num(chat)} tok` : 'chat · STT · TTS',
+      tone: 'accent',
+      active: busy,
+    },
+    { from: 'litellm', to: 'searxng', label: 'web_search', tone: 'muted', dashed: true },
+    {
+      from: 'litellm',
+      to: 'pgvector',
+      label: embeddings === undefined ? 'vector store' : `${num(embeddings.value)} tok`,
+      tone: 'info',
+      dashed: embeddings === undefined,
+    },
+  ]
 }
