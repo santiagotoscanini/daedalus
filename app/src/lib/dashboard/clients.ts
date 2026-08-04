@@ -120,6 +120,7 @@ export async function getJson<T>(url: string, init: RequestInit = {}): Promise<T
 }
 
 type VectorResult = { metric: Record<string, string>; value: [number, string] }
+type MatrixResult = { metric: Record<string, string>; values: [number, string][] }
 
 /** Full instant-query result — for queries that return a labelled series. */
 export async function promVector(query: string): Promise<VectorResult[]> {
@@ -147,6 +148,56 @@ export async function promScalars<K extends string>(
   >
 }
 
+/**
+ * Range query — the shape every chart on a category page reads.
+ *
+ * `step` is in seconds and is the real resolution knob: most series here come
+ * from a 60s exporter timer, so asking for anything finer just interpolates
+ * the same samples into more points and makes a chart look busier than the
+ * data is.
+ */
+export async function promMatrix(
+  query: string,
+  minutes: number,
+  step: number,
+): Promise<MatrixResult[]> {
+  const end = Math.floor(Date.now() / 1000)
+  const body = await getJson<{ data?: { result?: MatrixResult[] } }>(
+    `${PROM()}/api/v1/query_range?query=${encodeURIComponent(query)}` +
+      `&start=${String(end - minutes * 60)}&end=${String(end)}&step=${String(step)}`,
+  )
+  return body?.data?.result ?? []
+}
+
+/** A single series as bare numbers — for a sparkline, which has no axis. */
+export async function promSeries(query: string, minutes: number, step: number): Promise<number[]> {
+  const m = await promMatrix(query, minutes, step)
+  return m[0]?.values.map(([, v]) => Number(v)) ?? []
+}
+
+/** A single series keeping its timestamps — for charts that label an axis. */
+export async function promPoints(
+  query: string,
+  minutes: number,
+  step: number,
+): Promise<{ t: number; v: number }[]> {
+  const m = await promMatrix(query, minutes, step)
+  return m[0]?.values.map(([t, v]) => ({ t, v: Number(v) })) ?? []
+}
+
+/** Instant query → the `{label, value}` rows a bar list renders. */
+export async function promBars(
+  query: string,
+  label: string,
+  clean: (s: string) => string = (s) => s,
+): Promise<{ label: string; value: number }[]> {
+  const r = await promVector(query)
+  return r
+    .map((x) => ({ label: clean(x.metric[label] ?? '?'), value: Number(x.value[1]) }))
+    .filter((x) => Number.isFinite(x.value))
+    .sort((a, b) => b.value - a.value)
+}
+
 /** LogQL instant query — Loki's own endpoint, not Prometheus's. */
 export async function lokiScalar(query: string): Promise<number | null> {
   const body = await getJson<{ data?: { result?: VectorResult[] } }>(
@@ -154,6 +205,42 @@ export async function lokiScalar(query: string): Promise<number | null> {
   )
   const first = body?.data?.result?.[0]
   return first ? Number(first.value[1]) : null
+}
+
+/** LogQL instant query returning a labelled series, as `{label, value}` rows. */
+export async function lokiVector(
+  query: string,
+  label: string,
+): Promise<{ label: string; value: number }[]> {
+  const body = await getJson<{ data?: { result?: VectorResult[] } }>(
+    `${LOKI()}/loki/api/v1/query?query=${encodeURIComponent(query)}`,
+  )
+  return (body?.data?.result ?? [])
+    .map((r) => ({ label: r.metric[label] ?? '?', value: Number(r.value[1]) }))
+    .filter((r) => Number.isFinite(r.value))
+    .sort((a, b) => b.value - a.value)
+}
+
+/**
+ * LogQL range query as bare numbers.
+ *
+ * Note this is genuinely a range query against Loki, NOT the same shape as
+ * `promSeries` pointed at a LogQL string — prometheus cannot evaluate LogQL at
+ * all, and a query that mixes them up fails as a parse error rather than as
+ * something obviously wrong on screen.
+ */
+export async function lokiSeries(
+  query: string,
+  minutes: number,
+  step: number,
+): Promise<number[]> {
+  const end = Date.now() * 1e6
+  const start = end - minutes * 60 * 1e9
+  const body = await getJson<{ data?: { result?: MatrixResult[] } }>(
+    `${LOKI()}/loki/api/v1/query_range?query=${encodeURIComponent(query)}` +
+      `&start=${String(start)}&end=${String(end)}&step=${String(step)}`,
+  )
+  return body?.data?.result?.[0]?.values.map(([, v]) => Number(v)) ?? []
 }
 
 /**

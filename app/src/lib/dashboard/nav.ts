@@ -1,0 +1,58 @@
+// The category rail.
+//
+// Kept out of server/category.ts deliberately: the sidebar renders this on
+// every page, and importing it from the server module would drag that module
+// (and the shape of everything it imports) into the browser bundle for the
+// sake of five labels.
+
+import type { CategoryName } from './tiles'
+
+export type CategorySpec = {
+  id: CategoryName
+  label: string
+  icon: string
+  lede: string
+  /** Empty when the category has no sub-tabs. */
+  tabs: { id: string; label: string }[]
+}
+
+export const CATEGORIES: CategorySpec[] = [
+  {
+    id: 'ai',
+    label: 'AI',
+    icon: '◈',
+    lede: 'The local model server, the gateway in front of it, and what is driving traffic through it.',
+    tabs: [],
+  },
+  {
+    id: 'media',
+    label: 'Media',
+    icon: '▶',
+    lede: 'What is playing, what is downloading, and what the library has become.',
+    tabs: [
+      { id: 'tv', label: 'TV & Film' },
+      { id: 'books', label: 'Books' },
+    ],
+  },
+  {
+    id: 'home',
+    label: 'Home',
+    icon: '⌂',
+    lede: 'The household: automation, photos, files, the pantry, and who can sign in.',
+    tabs: [],
+  },
+  {
+    id: 'network',
+    label: 'Network',
+    icon: '⇄',
+    lede: 'Everything between a packet and this box — the link, the ways in, the proxy, the resolver.',
+    tabs: [],
+  },
+  {
+    id: 'system',
+    label: 'System',
+    icon: '◔',
+    lede: 'The machine itself, and whether anything running on it is unhappy.',
+    tabs: [],
+  },
+]

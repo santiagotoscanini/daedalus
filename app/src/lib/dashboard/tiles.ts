@@ -38,6 +38,7 @@ import {
   promScalars,
   qbtCookie,
 } from './clients'
+import { DASH, bytes, flag, key, num, rate, text } from './format'
 
 export type Stat = { label: string; value: string }
 
@@ -69,91 +70,34 @@ export type GroupName =
   | 'Network'
   | 'Monitoring'
 
-export type TabName = 'home' | 'infra'
+export type CategoryName = 'ai' | 'media' | 'home' | 'network' | 'system'
 
-/** Group → which tab it sits on and where, mirroring homepage's layout. */
-export const GROUPS: { name: GroupName; tab: TabName; icon: string }[] = [
-  { name: 'AI & Automation', tab: 'home', icon: '◈' },
-  { name: 'Home', tab: 'home', icon: '⌂' },
-  { name: 'Media', tab: 'home', icon: '▶' },
-  { name: 'Books', tab: 'home', icon: '❏' },
-  { name: 'Gaming', tab: 'home', icon: '⛶' },
-  { name: 'Network', tab: 'infra', icon: '⇄' },
-  { name: 'Monitoring', tab: 'infra', icon: '◔' },
+/**
+ * Group → the category page it belongs to, and (where the category has
+ * sub-tabs) which one.
+ *
+ * A group with no `tab` shows on every tab of its category. Only Media has
+ * sub-tabs today, and its two groups map one-to-one onto them.
+ */
+export const GROUPS: {
+  name: GroupName
+  category: CategoryName
+  tab?: string
+  icon: string
+}[] = [
+  { name: 'AI & Automation', category: 'ai', icon: '◈' },
+  { name: 'Home', category: 'home', icon: '⌂' },
+  { name: 'Gaming', category: 'home', icon: '⛶' },
+  { name: 'Media', category: 'media', tab: 'tv', icon: '▶' },
+  { name: 'Books', category: 'media', tab: 'books', icon: '❏' },
+  { name: 'Network', category: 'network', icon: '⇄' },
+  { name: 'Monitoring', category: 'system', icon: '◔' },
 ]
 
-// ── formatting ─────────────────────────────────────────────────────────────
-// Values are formatted here rather than in the component, because the unit is
-// part of what the source means: `myspeed_download` is Mbps and
-// `container_memory_usage_bytes` is bytes, and a component handed two bare
-// numbers cannot know that.
-
-const DASH = '—'
-
-function num(v: number | null | undefined, digits = 0): string {
-  if (v === null || v === undefined || !Number.isFinite(v)) return DASH
-  return v.toLocaleString('en-US', { maximumFractionDigits: digits })
-}
-
-function bytes(v: number | null | undefined): string {
-  if (v === null || v === undefined || !Number.isFinite(v)) return DASH
-  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-  let n = v
-  let u = 0
-  while (n >= 1024 && u < units.length - 1) {
-    n /= 1024
-    u++
-  }
-  return `${n.toFixed(n >= 10 || u === 0 ? 0 : 1)} ${units[u]}`
-}
-
-function rate(v: number | null | undefined): string {
-  return v === null || v === undefined ? DASH : `${bytes(v)}/s`
-}
-
-function text(v: string | null | undefined): string {
-  return v === null || v === undefined || v === '' ? DASH : v
-}
-
+// Value formatting is shared with the category boards — see ./format.
 function stat(label: string, value: string): Stat {
   return { label, value }
 }
-
-/** Country name → flag, the same remap homepage's gluetun tiles carry. */
-function flag(country: string | undefined): string {
-  const F: Record<string, string> = {
-    Switzerland: '🇨🇭',
-    'United States': '🇺🇸',
-    'United Kingdom': '🇬🇧',
-    Netherlands: '🇳🇱',
-    Germany: '🇩🇪',
-    France: '🇫🇷',
-    Spain: '🇪🇸',
-    Italy: '🇮🇹',
-    Sweden: '🇸🇪',
-    Norway: '🇳🇴',
-    Finland: '🇫🇮',
-    Denmark: '🇩🇰',
-    Iceland: '🇮🇸',
-    Ireland: '🇮🇪',
-    Austria: '🇦🇹',
-    Belgium: '🇧🇪',
-    Poland: '🇵🇱',
-    Romania: '🇷🇴',
-    Portugal: '🇵🇹',
-    Canada: '🇨🇦',
-    Japan: '🇯🇵',
-    Singapore: '🇸🇬',
-    'Hong Kong': '🇭🇰',
-    Australia: '🇦🇺',
-    Argentina: '🇦🇷',
-    Brazil: '🇧🇷',
-  }
-  if (country === undefined) return DASH
-  return `${F[country] ?? '🌐'} ${country}`
-}
-
-const key = (name: string) => process.env[`DASH_${name}`] ?? ''
 
 // ── shared shapes ──────────────────────────────────────────────────────────
 
