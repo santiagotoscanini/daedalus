@@ -368,6 +368,12 @@ in
     # The DIRECTORY, not the files: the snapshot rewrites each one, and a
     # single-file bind would pin the old inode.
     "${envDir}:/env-snapshot:ro"
+    # Per-repo CI state (runners, the running job and its steps, recent runs),
+    # published by gha-ci-snapshot in stacks/gha-runner. Read-only, and it is
+    # the OUTPUT rather than the credential: the GitHub PAT has
+    # Administration:write on those repos and stays host-side, exactly as it
+    # is kept out of the runner containers themselves.
+    "/run/gha-ci:/ci:ro"
   ];
 
   # Refresh the published environments. A timer rather than an on-demand

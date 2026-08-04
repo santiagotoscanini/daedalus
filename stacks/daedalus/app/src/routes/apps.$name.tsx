@@ -81,6 +81,8 @@ function AppDetail() {
     env,
     resources,
     takenHostnames,
+    ci,
+    activity,
   } = Route.useLoaderData()
   const router = useRouter()
   const { tab } = Route.useSearch()
@@ -388,6 +390,8 @@ function AppDetail() {
             )}
           </p>
 
+          {app.sourceMode !== 'local' && <Runners name={app.name} ci={ci} activity={activity} />}
+
           {deployments.length === 0 ? (
             <p className="lede">
               {app.sourceMode === 'local'
@@ -683,6 +687,162 @@ function AppDetail() {
       />
     </>
   )
+}
+
+type CiData = Awaited<ReturnType<typeof fetchApp>> extends infer T ?
+  T extends { ci: infer C } ?
+    C
+  : never
+: never
+type ActivityData = { ts: string; line: string; source: 'build' | 'deploy' }[]
+
+/**
+ * The self-hosted runner for this app, and what it is doing.
+ *
+ * One runner per app and it is EPHEMERAL — it takes a single job, de-registers
+ * and a fresh container replaces it. So the runner name changes every build,
+ * and a brief "offline" between two jobs is the design working, not a fault.
+ * That is why this says "waiting for work" rather than colouring idle red.
+ *
+ * The page re-fetches while a job is in flight. The underlying snapshot is
+ * rewritten every 30s by gha-ci-snapshot, so polling faster than that would
+ * only re-read the same file.
+ */
+function Runners({ name, ci, activity }: { name: string; ci: CiData; activity: ActivityData }) {
+  const router = useRouter()
+  const job = ci.activeJobs[0] ?? null
+  const busy = job !== null || ci.runners.some((r) => r.busy)
+
+  useEffect(() => {
+    if (!busy) return
+    const t = setInterval(() => {
+      void router.invalidate()
+    }, 15_000)
+    return () => {
+      clearInterval(t)
+    }
+  }, [busy, router])
+
+  return (
+    <Panel
+      title="Actions runners"
+      wide
+      action={
+        <a
+          className="btn btn-ghost"
+          href={`https://github.com/santiagotoscanini/${name}/actions`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          ↗ GitHub
+        </a>
+      }
+    >
+      {!ci.available ? (
+        <p className="panel-empty">
+          No CI snapshot yet — <code>gha-ci-snapshot</code> has not run since boot (every 30s).
+        </p>
+      ) : !ci.ok ? (
+        <p className="panel-note bad-text">
+          Could not reach the GitHub API on the last sweep. This is the snapshot from{' '}
+          {ci.takenAt ? fmtWhen(ci.takenAt) : 'an earlier run'} — not a statement about the runners.
+        </p>
+      ) : (
+        <>
+          <div className="runners">
+            {ci.runners.length === 0 ? (
+              <p className="panel-empty">
+                No runner registered right now. Ephemeral runners de-register between jobs, so this
+                is normal for a few seconds after a build finishes.
+              </p>
+            ) : (
+              ci.runners.map((r) => (
+                <div key={r.name} className={`runner runner-${r.busy ? 'busy' : r.status}`}>
+                  <div className="runner-head">
+                    <code>{r.name}</code>
+                    <span className={`chip ${r.busy ? 'chip-warn' : r.status === 'online' ? 'chip-live' : 'chip-off'}`}>
+                      {r.busy ? 'busy' : r.status === 'online' ? 'idle' : 'offline'}
+                    </span>
+                  </div>
+                  <div className="runner-labels">
+                    {r.labels.map((l) => (
+                      <span key={l} className="chip chip-muted">
+                        {l}
+                      </span>
+                    ))}
+                  </div>
+                  {job && job.runnerName === r.name && <JobProgress job={job} />}
+                </div>
+              ))
+            )}
+          </div>
+
+          {job && !ci.runners.some((r) => r.name === job.runnerName) && <JobProgress job={job} />}
+
+          {!busy && (
+            <p className="panel-note">
+              Waiting for work. Each runner takes one job, then a fresh container replaces it — so
+              the name above changes on every build.
+            </p>
+          )}
+        </>
+      )}
+
+      <h4 className="runners-sub">Build &amp; deploy activity</h4>
+      {activity.length === 0 ? (
+        <p className="panel-empty">Nothing in the last 6 hours.</p>
+      ) : (
+        <div className="logs logs-activity">
+          {activity.map((l, i) => (
+            <div key={`${l.ts}-${String(i)}`} className={`log log-src-${l.source}`}>
+              <time>{fmtLogTime(l.ts)}</time>
+              <span className="lvl">{l.source}</span>
+              <span className="msg">{l.line}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="panel-note">
+        The deploy half is this box — pull, restart, health-check — straight from the journal. The
+        build half is only the runner announcing a job starting and finishing: the Actions runner
+        streams step output to GitHub and never writes it to its own stdout, so the full build log
+        lives behind the link above, not here.
+      </p>
+    </Panel>
+  )
+}
+
+/** Which step of the job is executing, and how far along it is. */
+function JobProgress({ job }: { job: NonNullable<CiData['activeJobs'][number]> }) {
+  const total = job.steps.length
+  const done = job.steps.filter((s) => s.status === 'completed').length
+  const running = job.steps.find((s) => s.status === 'in_progress')
+  const pct = total > 0 ? (done / total) * 100 : 0
+
+  return (
+    <div className="job">
+      <div className="job-head">
+        <span className="job-name">⚙ {job.name}</span>
+        {job.startedAt && <span className="job-elapsed">{fmtElapsed(job.startedAt)}</span>}
+      </div>
+      <div className="job-step">
+        {job.status === 'queued' ? 'queued — no runner has picked it up yet'
+        : running ? `step ${String(done + 1)}/${String(total)} · ${running.name}`
+        : `${String(done)}/${String(total)} steps`}
+      </div>
+      {total > 0 && (
+        <div className="meter meter-cpu">
+          <span style={{ width: `${String(pct)}%` }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** "1m 12s" since an ISO timestamp. */
+function fmtElapsed(iso: string): string {
+  const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+  return s < 60 ? `${String(s)}s` : `${String(Math.floor(s / 60))}m ${String(s % 60)}s`
 }
 
 type EnvRowData = {

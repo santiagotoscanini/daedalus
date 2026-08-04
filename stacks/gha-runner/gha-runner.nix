@@ -116,6 +116,26 @@ let
   # stacks/monitoring — designed there as the extension point for
   # host-side sweeps like this); see the script header for semantics.
   textfileDir = "/var/lib/node-exporter/textfile";
+  # Consumed by stacks/daedalus as a read-only bind mount. /run, not
+  # ~/selfhost: derived state that should not survive a reboot or ride the
+  # ZFS snapshots.
+  ciSnapshotDir = "/run/gha-ci";
+
+  ciSnapshotScript = pkgs.writeShellApplication {
+    name = "gha-ci-snapshot";
+    runtimeInputs = [
+      pkgs.curl
+      pkgs.jq
+      pkgs.coreutils
+    ];
+    text = ''
+      REPOS=${lib.escapeShellArg (toString repos)}
+      ENV_FILE=${config.sops.secrets."gha-runner-env".path}
+      OUT_DIR=${ciSnapshotDir}
+      ${builtins.readFile ./assets/ci-snapshot.sh}
+    '';
+  };
+
   metricsScript = pkgs.writeShellApplication {
     name = "gha-runner-metrics";
     runtimeInputs = [
@@ -239,6 +259,35 @@ in
           ExecStart = "${metricsScript}/bin/gha-runner-metrics";
         };
       };
+
+      # Same PAT, same cadence, different consumer — see the script header
+      # for why this is not folded into the exporter above.
+      gha-ci-snapshot = {
+        description = "Publish per-repo CI state for daedalus";
+        after = [
+          "network-online.target"
+          "pihole-ready.service"
+        ];
+        wants = [
+          "network-online.target"
+          "pihole-ready.service"
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          User = "santiago";
+          Group = "users";
+          # santiago cannot mkdir in /run, so systemd owns the directory.
+          # `Preserve` is load-bearing and not a nicety: this is a oneshot, so
+          # the unit STOPS after every sweep, and without it systemd would
+          # delete the directory — and daedalus's bind mount with it — thirty
+          # seconds after creating it. (Same trap as the mkSecretRender render
+          # dirs; see stacks/nextcloud.)
+          RuntimeDirectory = "gha-ci";
+          RuntimeDirectoryMode = "0755";
+          RuntimeDirectoryPreserve = "yes";
+          ExecStart = "${ciSnapshotScript}/bin/gha-ci-snapshot";
+        };
+      };
     };
 
   systemd.timers.gha-runner-metrics = {
@@ -246,6 +295,18 @@ in
     timerConfig = {
       OnBootSec = "2min";
       OnUnitActiveSec = "1min";
+    };
+  };
+
+  # 30s rather than the exporter's minute: this one backs a live view of a
+  # build, where a minute of lag is the difference between "watching it" and
+  # "reading about it". Four API calls per repo per sweep, well inside the
+  # PAT's 5000/hour.
+  systemd.timers.gha-ci-snapshot = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "90s";
+      OnUnitActiveSec = "30s";
     };
   };
 
