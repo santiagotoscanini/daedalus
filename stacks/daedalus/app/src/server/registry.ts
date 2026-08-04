@@ -48,8 +48,8 @@ export const fetchApps = createServerFn().handler(async () => {
 })
 
 export const fetchApp = createServerFn()
-  .inputValidator((input: { name: string; withLogs: boolean }) => input)
-  .handler(async ({ data: { name, withLogs } }) => {
+  .inputValidator((input: { name: string; withLogs: boolean; withDeploys: boolean }) => input)
+  .handler(async ({ data: { name, withLogs, withDeploys } }) => {
     const { getApp, driftOf } = await import('../lib/repo/apps')
     const { manifestEntries } = await import('../lib/nix-manifest')
     const { appStatuses, databaseSize, recentLogs, logVolume } = await import('../lib/metrics')
@@ -60,6 +60,17 @@ export const fetchApp = createServerFn()
     if (!record) return null
 
     const manifest = (await manifestEntries()).find((m) => m.name === name)
+
+    // Fold deploy.sh's journal into Postgres before reading it back. Done on
+    // demand rather than on a timer: the journal is a small bounded file and
+    // this is the only place the result is consumed.
+    const { ingestDeployments, listDeployments } = await import('../lib/repo/deployments')
+    const { commitUrl } = await import('../lib/registry')
+    let deploys: Awaited<ReturnType<typeof listDeployments>> = []
+    if (withDeploys) {
+      await ingestDeployments(record.id, name)
+      deploys = await listDeployments(record.id)
+    }
 
     const [statuses, dbSize, logs, logs1h, applyStatus, deploy, pullBroken, deployStatus] =
       await Promise.all([
@@ -84,6 +95,19 @@ export const fetchApp = createServerFn()
       // which goes through daedalus.
       lastDeploy: deploy,
       pullBroken,
+      deployments: deploys.map((d) => ({
+        id: d.id,
+        digest: d.digest.replace('sha256:', ''),
+        result: d.result,
+        httpCode: d.httpCode,
+        startedAt: d.startedAt.toISOString(),
+        durationMs: d.durationMs,
+        revision: d.revision,
+        shortRevision: d.revision ? d.revision.slice(0, 8) : null,
+        commitUrl: commitUrl(d.sourceUrl, d.revision),
+        imageCreatedAt: d.imageCreatedAt ? d.imageCreatedAt.toISOString() : null,
+        isCurrent: deploy ? d.digest === deploy.digest : false,
+      })),
       drift: driftOf(record, manifest),
       status: statuses[name] ?? null,
       dbSize,

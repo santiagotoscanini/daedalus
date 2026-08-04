@@ -8,6 +8,13 @@
       "when": 1785797242995,
       "tag": "0000_married_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785809218438,
+      "tag": "0001_slim_peter_quill",
+      "breakpoints": true
     }
   ]
 }

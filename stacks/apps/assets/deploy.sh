@@ -127,6 +127,39 @@ fi
 old_id=$running
 [ "$old_id" = "none" ] && old_id=""
 
+# --- deploy journal -------------------------------------------------------
+# $STATE holds only the LATEST result, overwritten every time, so on its own
+# there is no history: daedalus could say what is running but never what ran
+# before, when, or for how long. This appends one JSON line per real deploy to
+# $STATE.log, which daedalus ingests into Postgres for its Deployments view.
+#
+# Written HERE rather than by daedalus because most deploys never touch it —
+# the 2-minute timer and a manual `systemctl start` both land in this script.
+# Recording at the one place that always runs is what makes the history
+# complete instead of "the deploys daedalus happened to trigger".
+#
+# Only real deploys are recorded. A "no change" tick returns above, so the
+# journal is not flooded with one line every two minutes per app.
+deploy_started=$(date -Is)
+deploy_started_s=$SECONDS
+prev_digest=${last%% *}
+[ "$prev_digest" = "$last" ] && prev_digest=""
+
+record_deploy() {
+  # All values are shell-generated (digests, ISO timestamps, an app name
+  # constrained by the platform, ok|failed, integers), so printf is safe here
+  # and avoids pulling jq into this unit's closure.
+  printf '{"startedAt":"%s","finishedAt":"%s","app":"%s","digest":"%s","previousDigest":"%s","result":"%s","durationMs":%s,"http":"%s"}\n' \
+    "$deploy_started" "$(date -Is)" "$APP" "$after" "$prev_digest" "$1" \
+    "$(( (SECONDS - deploy_started_s) * 1000 ))" "${2-}" >>"$STATE.log"
+
+  # Bound it. Deploys are infrequent (digest changes only), but this file is
+  # append-only on a dataset with 16K recordsize and frequent snapshots.
+  if [ "$(wc -l <"$STATE.log")" -gt 200 ]; then
+    tail -n 200 "$STATE.log" >"$STATE.log.tmp" && mv "$STATE.log.tmp" "$STATE.log"
+  fi
+}
+
 echo "new image: $running -> $new_id ($after) — restarting $UNIT"
 
 # Write the failed sentinel BEFORE the restart: if systemctl itself
@@ -159,6 +192,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
 
   if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
     echo "$after ok" > "$STATE"
+    record_deploy ok "$code"
     echo "deployed $after — healthy (HTTP $code)"
     # Recovered? Alert once on failed -> ok (not on every healthy deploy).
     case "$last" in
@@ -183,6 +217,7 @@ done
 # Deploy-and-report: the new image stays running. We don't roll back, we just
 # refuse to go quiet about it.
 echo "$after failed" > "$STATE"
+record_deploy failed "$code"
 echo "DEPLOY FAILED: app-$APP did not answer within ${HEALTH_TIMEOUT}s (last HTTP $code)"
 # Alert here, on the ok->failed transition only. The per-tick re-fail path
 # above (after == before, last == "$after failed") deliberately stays silent
