@@ -1648,3 +1648,52 @@ h2 {
 .log-src-deploy .lvl {
   color: var(--dim);
 }
+
+/* ── secrets tab ────────────────────────────────────────────────────────── */
+
+.env-group {
+  margin-bottom: 1.4rem;
+}
+.env-group:last-child {
+  margin-bottom: 0;
+}
+.env-group h4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.15rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.env-group-icon {
+  color: var(--accent);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.env-group-count {
+  font-size: 0.68rem;
+  color: var(--dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.4rem;
+}
+.env-group-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.76rem;
+  color: var(--dim);
+  max-width: 74ch;
+}
+/* Indented under its heading so the groups read as one list broken into
+   parts, rather than as separate tables that happen to be adjacent. */
+.env-group .env {
+  border-left: 1px solid var(--border-soft);
+  padding-left: 0.9rem;
+}
+
+.banner-info {
+  border-color: color-mix(in srgb, #6f9bd1 35%, transparent);
+  background: color-mix(in srgb, #6f9bd1 7%, transparent);
+  color: var(--muted);
+}

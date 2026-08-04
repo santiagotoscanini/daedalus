@@ -14,6 +14,7 @@ import {
   Toggle,
 } from '../components/ui'
 import type { DeployStatus } from '../lib/deploy'
+import { GROUP_LABELS, type EnvGroup, type EnvOrigin } from '../lib/env-snapshot'
 import { BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import {
   fetchApp,
@@ -23,7 +24,7 @@ import {
   triggerDeploy,
 } from '../server/registry'
 
-const TABS = ['overview', 'deployments', 'settings', 'logs'] as const
+const TABS = ['overview', 'deployments', 'settings', 'secrets', 'logs'] as const
 
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
@@ -44,7 +45,7 @@ export const Route = createFileRoute('/apps/$name')({
         // history on every tab would pay for them four times over.
         withLogs: deps.tab === 'logs',
         withDeploys: deps.tab === 'deployments',
-        withEnv: deps.tab === 'settings',
+        withEnv: deps.tab === 'secrets',
         withResources: deps.tab === 'overview',
       },
     })
@@ -595,38 +596,6 @@ function AppDetail() {
             />
           </Panel>
 
-          <Panel
-            title="Environment"
-            // Full width, not a grid cell: a URL or a connection string in a
-            // 21rem column wraps character-by-character into a ragged stack.
-            wide
-            action={
-              env.takenAt ? (
-                <span className="env-age">read from the container {fmtWhen(env.takenAt)}</span>
-              ) : null
-            }
-          >
-            {!env.available ? (
-              <p className="panel-empty">
-                No snapshot yet — the container is not running, or
-                <code> daedalus-env-snapshot</code> has not run since it started (every 2 min).
-              </p>
-            ) : (
-              <>
-                <p className="env-legend">
-                  Everything the container actually has: what the platform injects, what the
-                  registry declares, and what the image bakes in. Secrets are withheld until
-                  revealed — they are not in this page&apos;s source.
-                </p>
-                <div className="env">
-                  {env.vars.map((v) => (
-                    <EnvRow key={v.key} app={app.name} v={v} />
-                  ))}
-                </div>
-              </>
-            )}
-          </Panel>
-
           <Panel title="Not editable here">
             <p className="panel-empty">
               <strong>Auth mode, egress and operator secrets</strong> are read-only for now. Moving
@@ -639,6 +608,8 @@ function AppDetail() {
           </Panel>
         </div>
       )}
+
+      {tab === 'secrets' && <Secrets app={app.name} env={env} hasSecretsFile={app.operatorSecrets} />}
 
       {tab === 'logs' && (
         <Panel
@@ -845,9 +816,166 @@ function fmtElapsed(iso: string): string {
   return s < 60 ? `${String(s)}s` : `${String(Math.floor(s / 60))}m ${String(s % 60)}s`
 }
 
+type EnvData = { available: boolean; takenAt: string | null; vars: EnvRowData[] }
+
+/**
+ * Everything the container actually has, grouped by who put it there — which
+ * is the same question as who can change it.
+ *
+ * Read from the running container rather than re-derived from the registry:
+ * that is the only place the four sources are already merged, and the point of
+ * the page is to answer "what does this process actually see".
+ */
+function Secrets({
+  app,
+  env,
+  hasSecretsFile,
+}: {
+  app: string
+  env: EnvData
+  hasSecretsFile: boolean
+}) {
+  if (!env.available) {
+    return (
+      <Panel title="Environment">
+        <p className="panel-empty">
+          No snapshot yet — the container is not running, or <code>daedalus-env-snapshot</code> has
+          not run since it started (every 2 min).
+        </p>
+      </Panel>
+    )
+  }
+
+  const of = (o: EnvRowData['origin']) => env.vars.filter((v) => v.origin === o)
+  const platform = of('platform')
+  const groups = GROUP_ORDER.map((g) => ({
+    g,
+    vars: platform.filter((v) => v.group === g),
+  })).filter((x) => x.vars.length > 0)
+
+  return (
+    <>
+      <div className="banner banner-info">
+        Injected at container start, not hot-reloaded — a change takes effect on the next deploy or
+        Apply.
+      </div>
+
+      <Panel
+        title="Provided by daedalus"
+        wide
+        action={
+          env.takenAt ? (
+            <span className="env-age">read from the container {fmtWhen(env.takenAt)}</span>
+          ) : null
+        }
+      >
+        <p className="env-legend">
+          Injected by the apps platform from the toggles on Settings. Read-only here because they
+          are not values so much as consequences: turn Postgres off and the whole database block
+          goes with it. Secret values are withheld until revealed — they are never in this
+          page&apos;s source.
+        </p>
+        {groups.map(({ g, vars }) => (
+          <section key={g} className="env-group">
+            <h4>
+              <span className="env-group-icon" aria-hidden="true">
+                {GROUP_LABELS[g].icon}
+              </span>
+              {GROUP_LABELS[g].title}
+              <span className="env-group-count">{vars.length}</span>
+            </h4>
+            {GROUP_LABELS[g].hint && <p className="env-group-hint">{GROUP_LABELS[g].hint}</p>}
+            <div className="env">
+              {vars.map((v) => (
+                <EnvRow key={v.key} app={app} v={v} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </Panel>
+
+      <EnvSection
+        title="Yours"
+        wide
+        vars={[...of('registry'), ...of('secrets')]}
+        app={app}
+        empty={
+          hasSecretsFile
+            ? `Nothing beyond what the platform injects. Add values to the registry (they round-trip through Apply) or to ${app}-env.sops.`
+            : `Nothing beyond what the platform injects. Add plain values to the registry, or create ${app}-env.sops for anything secret.`
+        }
+        legend={
+          <>
+            Declared in <code>apps.json</code>, so they round-trip through Apply, or read from{' '}
+            <code>{app}-env.sops</code>. The sops ones are host-managed on purpose: writing
+            encrypted state from a web UI is its own design problem, and it is one that fails
+            closed. Edit them with <code>sops stacks/apps/{app}-env.sops</code>.
+          </>
+        }
+      />
+
+      <EnvSection
+        title="From the image"
+        wide
+        vars={of('image')}
+        app={app}
+        empty="Nothing — this image bakes in no environment of its own."
+        legend={
+          <>
+            Baked into the base image or set by podman. Not configuration: these describe the
+            runtime the app happens to be running on. Changing one means changing the image.
+          </>
+        }
+      />
+    </>
+  )
+}
+
+const GROUP_ORDER = [
+  'identity',
+  'database',
+  'auth',
+  'sso',
+  'litellm',
+  'observability',
+  'other',
+] as const
+
+function EnvSection({
+  title,
+  vars,
+  app,
+  legend,
+  empty,
+  wide,
+}: {
+  title: string
+  vars: EnvRowData[]
+  app: string
+  legend: ReactNode
+  empty: string
+  wide?: boolean
+}) {
+  return (
+    <Panel title={title} wide={wide}>
+      <p className="env-legend">{legend}</p>
+      {vars.length === 0 ? (
+        <p className="panel-empty">{empty}</p>
+      ) : (
+        <div className="env">
+          {vars.map((v) => (
+            <EnvRow key={v.key} app={app} v={v} />
+          ))}
+        </div>
+      )}
+    </Panel>
+  )
+}
+
 type EnvRowData = {
   key: string
-  origin: 'registry' | 'platform' | 'image'
+  origin: EnvOrigin
+  group: EnvGroup
   secret: boolean
   note: string | null
   value: string | null
