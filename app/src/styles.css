@@ -924,3 +924,19 @@ h2 {
 .log-info .lvl {
   color: #6f9bd1;
 }
+
+/* ── deploy ─────────────────────────────────────────────────────────────── */
+
+.redeploy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.76rem;
+}
+
+.ok-text {
+  color: var(--ok);
+}
+.bad-text {
+  color: var(--bad);
+}

@@ -1,8 +1,9 @@
 import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
 import { AreaChart, Bytes, Metric, Panel, Row, Segmented, StatePill, Toggle } from '../components/ui'
-import { fetchApp, saveApp } from '../server/registry'
+import type { DeployStatus } from '../lib/deploy'
+import { fetchApp, fetchDeployStatus, saveApp, triggerDeploy } from '../server/registry'
 
 const TABS = ['overview', 'settings', 'logs'] as const
 
@@ -13,8 +14,11 @@ export const Route = createFileRoute('/apps/$name')({
   validateSearch: (search: Record<string, unknown>): { tab: Tab } => ({
     tab: TABS.includes(search.tab as Tab) ? (search.tab as Tab) : 'overview',
   }),
-  loader: async ({ params }) => {
-    const data = await fetchApp({ data: params.name })
+  // The loader depends on the tab, so switching tabs refetches — that is what
+  // lets the logs stay off the wire until the logs tab is actually open.
+  loaderDeps: ({ search }) => ({ tab: search.tab }),
+  loader: async ({ params, deps }) => {
+    const data = await fetchApp({ data: { name: params.name, withLogs: deps.tab === 'logs' } })
     if (!data) throw notFound()
     return data
   },
@@ -33,12 +37,22 @@ export const Route = createFileRoute('/apps/$name')({
 type Tab = 'overview' | 'settings' | 'logs'
 
 function AppDetail() {
-  const { app, drift, status, dbSize, logs, logs1h, applyStatus } = Route.useLoaderData()
+  const { app, drift, status, dbSize, logs, logs1h, applyStatus, deployStatus, lastDeploy, pullBroken } =
+    Route.useLoaderData()
   const router = useRouter()
   const { tab } = Route.useSearch()
 
   const readOnly = app.managedInNix
   const state = status?.state ?? 'unknown'
+
+  // `notes` is jsonb, so the database can hand back anything — an array, a
+  // nested object, a number. Rendering an unexpected value throws
+  // "Objects are not valid as a React child" and takes down the WHOLE page,
+  // which is precisely the page you would use to fix the bad record. Coerce
+  // to string pairs and keep going; a mangled note shows as text, not a 500.
+  const notes: [string, string][] = Object.entries(
+    (app.notes ?? {}) as Record<string, unknown>,
+  ).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])
 
   // Edits go straight to Postgres — the database IS the working copy, and the
   // drift banner is what marks it as not-yet-applied. There is no separate
@@ -155,13 +169,36 @@ function AppDetail() {
           </p>
 
           <div className="panels">
-            <Panel title="Deployment">
+            <Panel
+              title="Deployment"
+              action={
+                app.sourceMode === 'local' ? null : (
+                  <RedeployButton name={app.name} initial={deployStatus} />
+                )
+              }
+            >
               <Row k="source" v={app.sourceMode === 'local' ? 'local (hot reload)' : 'registry'} />
               <Row k="image" v={app.effectiveImage} mono />
               <Row
                 k="auto-deploy"
                 v={app.sourceMode === 'local' ? 'n/a — source is live' : 'polls every 2 min'}
               />
+              {lastDeploy && (
+                <>
+                  <Row k="running digest" v={lastDeploy.digest.replace('sha256:', '').slice(0, 12)} mono />
+                  <Row
+                    k="last deploy"
+                    v={
+                      <span className={lastDeploy.result === 'ok' ? 'ok-text' : 'bad-text'}>
+                        {lastDeploy.result}
+                      </span>
+                    }
+                  />
+                </>
+              )}
+              {pullBroken && (
+                <Row k="pulls" v={<span className="bad-text">failing — check the registry token</span>} />
+              )}
               <Row k="container" v={`app-${app.name}`} mono />
               <Row k="liveness" v={fmtBool(status?.containerUp)} />
             </Panel>
@@ -196,11 +233,11 @@ function AppDetail() {
             )}
           </div>
 
-          {Object.keys(app.notes).length > 0 && (
+          {notes.length > 0 && (
             <>
               <h2>Why it is configured this way</h2>
               <dl className="notes">
-                {Object.entries(app.notes).map(([k, v]) => (
+                {notes.map(([k, v]) => (
                   <div key={k}>
                     <dt>{k}</dt>
                     <dd>{v}</dd>
@@ -350,6 +387,57 @@ function AppDetail() {
         initialStatus={applyStatus}
       />
     </>
+  )
+}
+
+/**
+ * Runs the app's deploy unit now rather than waiting for its 2-minute timer.
+ * Same unit either way, so a redeploy that finds an unchanged digest is a
+ * no-op — this is not a "restart" button.
+ */
+function RedeployButton({ name, initial }: { name: string; initial: DeployStatus }) {
+  const router = useRouter()
+  const [status, setStatus] = useState(initial)
+  const [submitting, setSubmitting] = useState(false)
+  const running = status.state === 'running' || submitting
+
+  useEffect(() => {
+    if (!running) return
+    const t = setInterval(() => {
+      void fetchDeployStatus().then((s) => {
+        setStatus(s)
+        if (s.state !== 'running') {
+          setSubmitting(false)
+          void router.invalidate()
+        }
+      })
+    }, 2000)
+    return () => {
+      clearInterval(t)
+    }
+  }, [running, router])
+
+  return (
+    <span className="redeploy">
+      {status.state === 'failed' && status.app === name && (
+        <span className="bad-text" title={status.error}>
+          last attempt failed
+        </span>
+      )}
+      <button
+        type="button"
+        className="btn btn-ghost"
+        disabled={running}
+        onClick={() => {
+          setSubmitting(true)
+          void triggerDeploy({ data: name }).catch(() => {
+            setSubmitting(false)
+          })
+        }}
+      >
+        {running ? '↻ deploying…' : '↻ Redeploy'}
+      </button>
+    </span>
   )
 }
 

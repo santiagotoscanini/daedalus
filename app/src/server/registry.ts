@@ -48,28 +48,42 @@ export const fetchApps = createServerFn().handler(async () => {
 })
 
 export const fetchApp = createServerFn()
-  .inputValidator((name: string) => name)
-  .handler(async ({ data: name }) => {
+  .inputValidator((input: { name: string; withLogs: boolean }) => input)
+  .handler(async ({ data: { name, withLogs } }) => {
     const { getApp, driftOf } = await import('../lib/repo/apps')
     const { manifestEntries } = await import('../lib/nix-manifest')
     const { appStatuses, databaseSize, recentLogs, logVolume } = await import('../lib/metrics')
     const { readApplyStatus } = await import('../lib/apply')
+    const { lastDeploy, pullFailing, readDeployStatus } = await import('../lib/deploy')
 
     const record = await getApp(name)
     if (!record) return null
 
     const manifest = (await manifestEntries()).find((m) => m.name === name)
 
-    const [statuses, dbSize, logs, logs1h, applyStatus] = await Promise.all([
-      appStatuses([name]),
-      record.postgres ? databaseSize(name) : Promise.resolve(null),
-      recentLogs(name, 60),
-      logVolume(name),
-      readApplyStatus(),
-    ])
+    const [statuses, dbSize, logs, logs1h, applyStatus, deploy, pullBroken, deployStatus] =
+      await Promise.all([
+        appStatuses([name]),
+        record.postgres ? databaseSize(name) : Promise.resolve(null),
+        // Only on the logs tab. Loader data is serialised into the HTML for
+        // hydration, so fetching 60 lines unconditionally doubled the weight
+        // of every other tab with text nobody was looking at.
+        withLogs ? recentLogs(name, 60) : Promise.resolve([]),
+        logVolume(name),
+        readApplyStatus(),
+        lastDeploy(name),
+        pullFailing(name),
+        readDeployStatus(),
+      ])
 
     return {
       applyStatus,
+      deployStatus,
+      // Authoritative record from the app's own deploy unit — a deploy also
+      // runs from the timer and from a manual systemctl start, neither of
+      // which goes through daedalus.
+      lastDeploy: deploy,
+      pullBroken,
       drift: driftOf(record, manifest),
       status: statuses[name] ?? null,
       dbSize,
@@ -172,4 +186,29 @@ export const applyRegistry = createServerFn({ method: 'POST' }).handler(async ()
 export const fetchApplyStatus = createServerFn().handler(async () => {
   const { readApplyStatus } = await import('../lib/apply')
   return readApplyStatus()
+})
+
+/**
+ * Ask the host to run this app's deploy unit now, instead of waiting up to
+ * two minutes for its timer. Same unit either way — this only removes latency.
+ */
+export const triggerDeploy = createServerFn({ method: 'POST' })
+  .inputValidator((name: string) => name)
+  .handler(async ({ data: name }) => {
+    const { requestDeploy } = await import('../lib/deploy')
+    const { getApp } = await import('../lib/repo/apps')
+
+    const record = await getApp(name)
+    if (!record) throw new Error(`no app named ${name}`)
+    if (record.sourceMode === 'local') {
+      throw new Error(`${name} builds from source in the flake repo — there is no image to pull`)
+    }
+
+    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+    return { id: await requestDeploy({ app: name, reason: 'manual redeploy', actor }) }
+  })
+
+export const fetchDeployStatus = createServerFn().handler(async () => {
+  const { readDeployStatus } = await import('../lib/deploy')
+  return readDeployStatus()
 })
