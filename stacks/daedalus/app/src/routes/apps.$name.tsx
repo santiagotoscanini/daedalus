@@ -783,6 +783,13 @@ function Access({
         {picker}
       </div>
 
+      {access.truncated && (
+        <div className="banner banner-info">
+          More requests than one query can return. The totals below are exact; the breakdowns
+          describe the most recent {access.sampled.toLocaleString()}.
+        </div>
+      )}
+
       <div className="metrics">
         <Metric label="Remote requests" value={access.total.toLocaleString()}>
           <AreaChart values={access.series} state={access.total > 0 ? 'running' : 'unknown'} />
