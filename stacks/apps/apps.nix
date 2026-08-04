@@ -144,11 +144,20 @@ let
   # than trusting DNS, so a pi-hole hiccup can't read as a dead app.
   inherit (config.fleet) lanIp;
 
+  # One DNS label, then the base domain. Dots in the domain are escaped so
+  # they cannot act as the regex any-char and quietly admit "toscaninixme".
+  hostnameRe = "[a-z0-9]([a-z0-9-]*[a-z0-9])?\\.${
+    lib.replaceStrings [ "." ] [ "\\." ] config.fleet.baseDomain
+  }";
+
   mkApp =
     name: app:
     let
       cName = "app-${name}";
-      hostname = "${name}.toscanini.me";
+      # `<name>.<baseDomain>` unless the app names its own. Overriding is a
+      # pure rename of the published address: the container, the database, the
+      # sops file and the repo all stay keyed by `name`.
+      hostname = if app.hostname != null then app.hostname else "${name}.${config.fleet.baseDomain}";
       publicUrl = "https://${hostname}";
 
       # Baseline (always-on) per-app secrets file.
@@ -421,6 +430,14 @@ let
         {
           assertion = app.prometheus.enable -> exposed;
           message = "fleet.apps.${name}: `prometheus.enable` with `stage = \"off\"` would be a permanently-down scrape target — an unexposed app leaves traefik-net, so prometheus cannot reach it.";
+        }
+        {
+          # Rejected at eval rather than left to fail at runtime, because the
+          # runtime failure is a TLS error in the browser with a valid-looking
+          # config behind it — the router works, the DNS works, and only the
+          # cert is wrong.
+          assertion = app.hostname == null || builtins.match hostnameRe app.hostname != null;
+          message = "fleet.apps.${name}: hostname \"${toString app.hostname}\" must be exactly one label under ${config.fleet.baseDomain} (e.g. \"chat.${config.fleet.baseDomain}\"). traefik serves a single wildcard cert, `sans=*.${config.fleet.baseDomain}`, which matches one label only — a deeper name would get the wrong certificate, and the CF tunnel and pi-hole make the same assumption. A second apex needs its own cert, tunnel config and DNS.";
         }
       ];
 
@@ -820,6 +837,39 @@ in
               description = ''
                 Optional cmd override (escape hatch — apps should normally
                 bake their start command into the image CMD).
+              '';
+            };
+
+            hostname = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              defaultText = lib.literalExpression ''"''${name}.''${fleet.baseDomain}"'';
+              example = "chat.toscanini.me";
+              description = ''
+                Published address. Null = `<name>.<baseDomain>`.
+
+                Must be exactly ONE label under `fleet.baseDomain` (asserted).
+                That is not stylistic — three things downstream assume it:
+
+                  * traefik's ACME cert is a single entrypoint-level wildcard,
+                    `main=<baseDomain>` + `sans=*.<baseDomain>`
+                    (stacks/traefik). A wildcard matches one label, so
+                    `a.b.toscanini.me` would serve the wrong cert and every
+                    browser would refuse it.
+                  * the Cloudflare tunnel's CNAMEs are upserted into that one
+                    zone (stacks/cloudflared).
+                  * pi-hole short-circuits `*.<baseDomain>` to the LAN IP.
+
+                A second apex would need its own cert, its own tunnel config
+                and its own DNS — hence the assertion rather than a note.
+
+                Changing this renames only the published address. The
+                container, the postgres role and database, the sops file and
+                the GitHub repo all stay keyed by the attribute name. What DOES
+                follow it: the traefik router, the pi-hole record, the gatus
+                probe, the CF route, `AUTH_URL`/`APP_PUBLIC_URL`, and the
+                Pocket ID redirect URI — so an SSO app is briefly unable to
+                complete a login between the rebuild and the IdP catching up.
               '';
             };
 

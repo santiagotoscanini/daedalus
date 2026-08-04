@@ -141,10 +141,31 @@ let
   # right at the "switching" phase, killing the very page that was showing the
   # progress bar. The registry now arrives through a stable path instead (see
   # registrySnapshot below), so applying a change no longer takes the app down.
+  # Every hostname already published on this box, apps and non-apps alike
+  # (pihole, grafana, chat, …). Handed to the container so a hostname edit can
+  # be rejected while it is being typed.
+  #
+  # The platform already refuses a collision — fleet.traefikRoutes asserts that
+  # no two routers claim the same entrypoint+host, because traefik's pick
+  # between identical rules is nondeterministic. But that assertion fires
+  # during `nixos-rebuild`, i.e. mid-Apply, after the commit; recovering means
+  # a revert. This list is what lets the same mistake be a red input box
+  # instead.
+  #
+  # Reading config.fleet.webApps here is safe despite the module header's
+  # warning about config reads: webApps is derived from fleet.apps, which is a
+  # literal, and nothing in that chain depends on the container this file
+  # feeds. (`self`, by contrast, DOES feed the container, which is why it stays
+  # a let-binding rather than a read of fleet.apps.daedalus.)
+  takenHostnames = lib.sort (a: b: a < b) (
+    lib.mapAttrsToList (_: w: w.hostname) config.fleet.webApps
+  );
+
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
     builtins.toJSON {
       schemaVersion = 1;
       nixManaged.daedalus = self;
+      inherit takenHostnames;
     }
   );
 
@@ -187,6 +208,7 @@ let
     litellm = true;
     prometheus = false;
     operatorSecrets = false;
+    hostname = null; # = daedalus.<baseDomain>
     image = null;
     egress = null;
     env = [ ];

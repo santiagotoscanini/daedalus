@@ -11,6 +11,7 @@
       "prometheus": false,
       "operatorSecrets": false,
       "image": null,
+      "hostname": null,
       "egress": null,
       "env": [],
       "auth": {
@@ -38,6 +39,7 @@
       "prometheus": false,
       "operatorSecrets": true,
       "image": null,
+      "hostname": null,
       "egress": {
         "container": "gluetun-ipcrawl",
         "hostPort": 3100

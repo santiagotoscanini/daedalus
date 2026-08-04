@@ -117,6 +117,9 @@ let
 
     environmentFiles = lib.optional a.operatorSecrets config.sops.secrets.${secretName name}.path;
   }
+  // lib.optionalAttrs (a.hostname or null != null) {
+    inherit (a) hostname;
+  }
   // lib.optionalAttrs (a.image != null) {
     inherit (a) image;
   }

@@ -58,6 +58,12 @@ export const apps = pgTable(
     // A value here is an override: a fork, a placeholder, or a pinned digest.
     image: text('image'),
 
+    // null = the platform default, <name>.<baseDomain>. Constrained to one
+    // label under the base domain — the traefik wildcard cert matches exactly
+    // one, so a deeper name serves the wrong certificate. Enforced in the UI,
+    // and again by an assertion in stacks/apps/apps.nix that fails the build.
+    hostname: text('hostname'),
+
     postgres: boolean('postgres').notNull().default(false),
     storage: boolean('storage').notNull().default(false),
     litellm: boolean('litellm').notNull().default(false),

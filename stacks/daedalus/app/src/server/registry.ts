@@ -10,6 +10,7 @@ import { getRequestHeader } from '@tanstack/react-start/server'
 
 export const fetchApps = createServerFn().handler(async () => {
   const { listApps, driftOf } = await import('../lib/repo/apps')
+  const { effectiveHostname } = await import('../lib/hostname')
   const { manifestEntries } = await import('../lib/nix-manifest')
   const { appStatuses } = await import('../lib/metrics')
   const { readApplyStatus } = await import('../lib/apply')
@@ -32,7 +33,7 @@ export const fetchApps = createServerFn().handler(async () => {
       sourceMode: r.sourceMode,
       description: r.homepageDescription,
       icon: r.homepageIcon,
-      hostname: `${r.name}.toscanini.me`,
+      hostname: effectiveHostname(r.name, r.hostname),
       authMode: r.authMode,
       postgres: r.postgres,
       drift: driftOf(r, manifest.get(r.name)),
@@ -59,6 +60,8 @@ export const fetchApp = createServerFn()
   )
   .handler(async ({ data: { name, withLogs, withDeploys, withEnv, withResources } }) => {
     const { getApp, driftOf } = await import('../lib/repo/apps')
+    const { effectiveHostname } = await import('../lib/hostname')
+    const { hostnamesTakenBy } = await import('../lib/nix-manifest')
     const { manifestEntries } = await import('../lib/nix-manifest')
     const { appStatuses, appResources, databaseSize, recentLogs, logVolume, NO_RESOURCES } =
       await import('../lib/metrics')
@@ -126,6 +129,9 @@ export const fetchApp = createServerFn()
       applyStatus,
       deployStatus,
       resources,
+      // So the hostname field can reject a collision as it is typed rather
+      // than during the rebuild it would otherwise fail.
+      takenHostnames: await hostnamesTakenBy(effectiveHostname(record.name, record.hostname)),
       env: {
         available: envSnapshot.available,
         takenAt: envSnapshot.takenAt,
@@ -167,6 +173,8 @@ export const fetchApp = createServerFn()
         sourceMode: record.sourceMode,
         image: record.image,
         effectiveImage: record.image ?? `registry.toscanini.me/${record.name}:latest`,
+        hostname: record.hostname,
+        effectiveHostname: effectiveHostname(record.name, record.hostname),
         description: record.homepageDescription,
         icon: record.homepageIcon,
         postgres: record.postgres,

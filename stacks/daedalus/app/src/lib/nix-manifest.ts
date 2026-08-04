@@ -36,6 +36,8 @@ export type ManifestApp = {
   litellm: boolean
   prometheus: boolean
   operatorSecrets: boolean
+  /** null = `<name>.<baseDomain>`. Exactly one label under it — see apps.nix. */
+  hostname?: string | null
   image: string | null
   egress: { container: string; hostPort: number } | null
   env: ManifestEnvVar[]
@@ -56,12 +58,15 @@ export type NixManifest = {
   schemaVersion: number
   registry: { schemaVersion: number; apps: Record<string, ManifestApp> }
   nixManaged: Record<string, ManifestApp>
+  /** Every hostname published on the box — apps and every other stack. */
+  takenHostnames: string[]
 }
 
 /** Every app Nix knows about, tagged with whether daedalus may edit it. */
 export type ManifestEntry = ManifestApp & { name: string; managedInNix: boolean }
 
 let cachedManaged: NixManifest['nixManaged'] | null = null
+let cachedTaken: string[] | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {
   const managedPath = process.env.NIX_MANIFEST_PATH
@@ -76,7 +81,11 @@ export async function readNixManifest(): Promise<NixManifest> {
   // The hand-written entries are a /nix/store path: immutable, and a change to
   // them restarts this container anyway, so caching for the process lifetime
   // is safe.
-  cachedManaged ??= (JSON.parse(await readFile(managedPath, 'utf8')) as NixManifest).nixManaged
+  if (cachedManaged === null || cachedTaken === null) {
+    const parsed = JSON.parse(await readFile(managedPath, 'utf8')) as NixManifest
+    cachedManaged = parsed.nixManaged
+    cachedTaken = parsed.takenHostnames
+  }
 
   // The committed registry is NOT cached. It lives at a fixed path that
   // daedalus-registry-snapshot rewrites on every rebuild — which is precisely
@@ -85,7 +94,16 @@ export async function readNixManifest(): Promise<NixManifest> {
   // against a registry that had already been applied.
   const registry = JSON.parse(await readFile(registryPath, 'utf8')) as NixManifest['registry']
 
-  return { schemaVersion: 1, registry, nixManaged: cachedManaged }
+  return { schemaVersion: 1, registry, nixManaged: cachedManaged, takenHostnames: cachedTaken }
+}
+
+/**
+ * Hostnames already published, minus the one this app currently holds — so an
+ * app does not collide with itself.
+ */
+export async function hostnamesTakenBy(others: string): Promise<string[]> {
+  const m = await readNixManifest()
+  return m.takenHostnames.filter((h) => h !== others)
 }
 
 export async function manifestEntries(): Promise<ManifestEntry[]> {

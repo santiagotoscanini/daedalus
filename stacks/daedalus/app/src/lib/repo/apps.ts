@@ -1,5 +1,6 @@
 import { asc, eq } from 'drizzle-orm'
 import { db } from '../db'
+import { BASE_DOMAIN, hostnameError } from '../hostname'
 import { appEnvVars, apps } from '../schema'
 import {
   manifestEntries,
@@ -88,6 +89,7 @@ export async function importFromNix(): Promise<{ imported: string[] }> {
 export const EDITABLE_FIELDS = [
   'stage',
   'image',
+  'hostname',
   'homepageDescription',
   'homepageIcon',
   'postgres',
@@ -119,6 +121,17 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
     if (k in patch) (clean as Record<string, unknown>)[k] = patch[k]
   }
   if (Object.keys(clean).length === 0) return
+
+  // Checked on the way in, not just in the form. The form is not a boundary,
+  // and an invalid hostname does not fail here — it fails inside
+  // `nixos-rebuild` during an Apply, after the commit, which costs a revert.
+  if (typeof clean.hostname === 'string') {
+    const { hostnamesTakenBy } = await import('../nix-manifest')
+    const own = record.hostname ?? `${name}.${BASE_DOMAIN}`
+    const err = hostnameError(clean.hostname, await hostnamesTakenBy(own))
+    if (err) throw new Error(`hostname ${err}`)
+    clean.hostname = clean.hostname.trim().toLowerCase() || null
+  }
 
   await db
     .update(apps)
@@ -173,6 +186,7 @@ function toRow(entry: ManifestEntry) {
     managedInNix: entry.managedInNix,
     sourceMode: entry.sourceMode ?? 'registry',
     image: entry.image,
+    hostname: entry.hostname ?? null,
     postgres: entry.postgres,
     storage: entry.storage,
     litellm: entry.litellm,
@@ -208,6 +222,7 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     stage: record.stage,
     sourceMode: record.sourceMode,
     image: record.image,
+    hostname: record.hostname,
     postgres: record.postgres,
     storage: record.storage,
     litellm: record.litellm,
@@ -230,6 +245,7 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     stage: manifest.stage,
     sourceMode: manifest.sourceMode ?? 'registry',
     image: manifest.image,
+    hostname: manifest.hostname ?? null,
     postgres: manifest.postgres,
     storage: manifest.storage,
     litellm: manifest.litellm,
@@ -281,6 +297,7 @@ export function toRegistryExport(records: AppRecord[]): {
             prometheus: r.prometheus,
             operatorSecrets: r.operatorSecrets,
             image: r.image,
+            hostname: r.hostname,
             egress:
               r.egressContainer && r.egressHostPort !== null
                 ? { container: r.egressContainer, hostPort: r.egressHostPort }

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ApplyBar } from '../components/apply-bar'
 import {
   AreaChart,
@@ -14,6 +14,7 @@ import {
   Toggle,
 } from '../components/ui'
 import type { DeployStatus } from '../lib/deploy'
+import { BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import {
   fetchApp,
   fetchDeployStatus,
@@ -79,6 +80,7 @@ function AppDetail() {
     deployments,
     env,
     resources,
+    takenHostnames,
   } = Route.useLoaderData()
   const router = useRouter()
   const { tab } = Route.useSearch()
@@ -124,8 +126,8 @@ function AppDetail() {
             {app.stage === 'off' ? (
               <span className="muted">⏻ not exposed</span>
             ) : (
-              <a href={`https://${app.name}.toscanini.me`} target="_blank" rel="noreferrer">
-                ↗ {app.name}.toscanini.me
+              <a href={`https://${app.effectiveHostname}`} target="_blank" rel="noreferrer">
+                ↗ {app.effectiveHostname}
               </a>
             )}
             {app.sourceMode === 'local' ? (
@@ -474,10 +476,38 @@ function AppDetail() {
             />
           </Panel>
 
-          <Panel title="Resource limits">
+          <Panel title="Routing">
+            <TextField
+              label="Hostname"
+              value={app.hostname ?? ''}
+              placeholder={`${app.name}.${BASE_DOMAIN}`}
+              disabled={readOnly}
+              validate={(v) => hostnameError(v, takenHostnames)}
+              hint={
+                <>
+                  Empty uses the default. Must be one level under{' '}
+                  <code>{BASE_DOMAIN}</code> — that is the only domain here with a wildcard
+                  certificate, a Cloudflare tunnel and DNS.
+                </>
+              }
+              onSave={(v) => {
+                patch({ hostname: v.trim() === '' ? null : v.trim().toLowerCase() })
+              }}
+            />
+            <Row k="published at" v={app.effectiveHostname} mono />
+            <p className="panel-note">
+              Renaming moves the traefik router, the pi-hole record, the gatus probe, the
+              Cloudflare route and <code>AUTH_URL</code>. The container, the database, the sops
+              file and the GitHub repo stay keyed by <code>{app.name}</code>. An SSO app cannot
+              complete a login for the moment between the rebuild and Pocket ID picking up the new
+              redirect URI.
+            </p>
+          </Panel>
+
+          <Panel title="Resource limits" wide>
             <Slider
               label="CPU"
-              hint="Cores the container may burn. A throughput ceiling, not a reservation — over it the app is throttled, not killed."
+              hint="cores the container may burn"
               value={app.limitCpus}
               min={0.25}
               max={8}
@@ -494,7 +524,7 @@ function AppDetail() {
             />
             <Slider
               label="Memory"
-              hint="Resident cap. Past it pages spill to zram; the OOM kill lands at twice this, because podman writes --memory-swap through verbatim."
+              hint="resident cap — pages spill to zram past it, OOM kill at twice it"
               value={app.limitMemoryMb}
               min={128}
               max={4096}
@@ -511,7 +541,7 @@ function AppDetail() {
             />
             <Slider
               label="Processes"
-              hint="Max processes + threads — a fork-bomb guard. Threads count, so check the Overview before choosing. Podman's own default is 2048."
+              hint="max processes + threads (fork-bomb guard)"
               value={app.limitPids}
               min={64}
               max={2048}
@@ -523,10 +553,13 @@ function AppDetail() {
               }}
             />
             <p className="panel-note">
-              Enforced by cgroup v2. These work under rootless podman only because systemd
-              delegates <code>cpu io memory pids</code> down to <code>user@1000.service</code> —
-              without that the flags would be accepted and silently ignored. Takes effect on the
-              next Apply, which restarts the container.
+              Enforced by cgroup v2, and only because systemd delegates{' '}
+              <code>cpu io memory pids</code> down to <code>user@1000.service</code> — without that
+              podman would accept the flags and the kernel would ignore them. CPU throttles rather
+              than kills. Memory is the resident cap: pages past it spill to zram and the OOM kill
+              lands at twice it, because podman writes <code>--memory-swap</code> through verbatim
+              instead of subtracting. Threads count toward the process limit, so read the Overview
+              before choosing one. Takes effect on the next Apply, which restarts the container.
             </p>
           </Panel>
 
@@ -772,29 +805,40 @@ function TextField({
   label,
   value,
   placeholder,
+  hint,
   disabled,
+  validate,
   onSave,
 }: {
   label: string
   value: string
   placeholder?: string
+  hint?: ReactNode
   disabled?: boolean
+  /** Returns an operator-facing reason, or null when the value is usable. */
+  validate?: (v: string) => string | null
   onSave: (v: string) => void
 }) {
   const [draft, setDraft] = useState(value)
+  const error = validate ? validate(draft) : null
 
   return (
-    <label className="field">
+    <label className={error === null ? 'field' : 'field field-bad'}>
       <span>{label}</span>
       <input
         type="text"
         value={draft}
         placeholder={placeholder}
         disabled={disabled}
+        aria-invalid={error !== null}
         onChange={(e) => {
           setDraft(e.target.value)
         }}
         onBlur={() => {
+          // A rejected value stays in the box rather than being saved or
+          // silently reverted — the operator can see what they typed and fix
+          // it. Escape is the way out.
+          if (error !== null) return
           if (draft !== value) onSave(draft)
         }}
         onKeyDown={(e) => {
@@ -802,6 +846,9 @@ function TextField({
           if (e.key === 'Escape') setDraft(value)
         }}
       />
+      {error !== null ?
+        <small className="field-error">{error}</small>
+      : hint !== undefined && <small className="field-hint">{hint}</small>}
     </label>
   )
 }
