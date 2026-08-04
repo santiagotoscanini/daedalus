@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
+import { CATEGORIES } from '../lib/dashboard/nav'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRoute({
@@ -47,6 +48,10 @@ function RootDocument({ children }: { children: ReactNode }) {
               </span>
             </Link>
 
+            {/* Apps is the management surface; everything below it is a
+                read-only view of one subject area. The split is by subject
+                rather than by service on purpose — "what is playing" and "what
+                is downloading" are one question and six containers. */}
             <nav className="nav-primary">
               <Link to="/apps" className="nav-item">
                 <span className="nav-icon" aria-hidden="true">
@@ -54,15 +59,26 @@ function RootDocument({ children }: { children: ReactNode }) {
                 </span>
                 Apps
               </Link>
-              {/* Everything on the box that is NOT an app. `tab` is a required
-                  search param on that route, so the rail names the landing
-                  tab explicitly — same as the apps list does. */}
-              <Link to="/dashboard" search={{ tab: 'home' as const }} className="nav-item">
-                <span className="nav-icon" aria-hidden="true">
-                  ◫
-                </span>
-                Dashboard
-              </Link>
+
+              <span className="nav-divider" aria-hidden="true" />
+
+              {CATEGORIES.map((c) => (
+                <Link
+                  key={c.id}
+                  to="/c/$category"
+                  params={{ category: c.id }}
+                  // The sub-tab is left off so the loader picks the category's
+                  // first one; naming it here would mean the rail and the
+                  // route disagreed the moment a tab was renamed.
+                  search={{}}
+                  className="nav-item"
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    {c.icon}
+                  </span>
+                  {c.label}
+                </Link>
+              ))}
             </nav>
 
             {/* Secondary, not tabs — the gateway model list and the runtime

@@ -2071,3 +2071,963 @@ h2 {
     transform: scaleX(0.35);
   }
 }
+
+/* ── category pages ─────────────────────────────────────────────────────────
+   The Dashboard tab became five subject pages (AI, Media, Home, Network,
+   System). Each opens with a band of headline numbers, then a 12-column grid
+   of boards, then the per-service tile directory that the old tab was made of.
+
+   Motion here is deliberately rationed. Bars grow and rings sweep once, on
+   load, so a page reads as its numbers arriving; after that the only thing
+   still moving is a progress bar for work that is genuinely in progress. That
+   makes movement in the corner of the eye meaningful rather than decorative. */
+
+.nav-divider {
+  height: 1px;
+  margin: 0.5rem 0.7rem;
+  background: var(--border-soft);
+}
+
+.cat-lede {
+  margin: -0.75rem 0 1.4rem;
+  max-width: 62ch;
+}
+
+/* ── headline band ──────────────────────────────────────────────────────── */
+
+.statband {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(13rem, 100%), 1fr));
+  gap: 0.7rem;
+  margin-bottom: 1.5rem;
+}
+
+.bigstat {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, var(--panel-2), var(--panel));
+  padding: 0.85rem 1rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+/* A hairline of the stat's own colour along the top edge — enough to group
+   the band by meaning without painting four large blocks of colour. */
+.bigstat::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--stat-tone);
+  opacity: 0.85;
+}
+
+.bigstat-accent { --stat-tone: var(--accent); }
+.bigstat-ok { --stat-tone: var(--ok); }
+.bigstat-warn { --stat-tone: var(--warn); }
+.bigstat-bad { --stat-tone: var(--bad); }
+.bigstat-info { --stat-tone: #5b8dd9; }
+.bigstat-muted { --stat-tone: var(--dim); }
+
+.bigstat-label {
+  color: var(--dim);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.bigstat-value {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.bigstat-value em {
+  font-style: normal;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 0.2rem;
+}
+
+.bigstat-sub {
+  color: var(--muted);
+  font-size: 0.76rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.microspark {
+  width: 100%;
+  height: 20px;
+  margin: 0.2rem 0 0.1rem;
+}
+.microspark polyline {
+  stroke: var(--stat-tone, var(--accent));
+  opacity: 0.75;
+}
+
+/* ── boards ─────────────────────────────────────────────────────────────── */
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.board {
+  grid-column: span var(--span, 6);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Boards are laid out on a 12-column grid at desktop width, collapse to two
+   half-widths on a laptop, and stack completely on a phone. The spans are
+   declared per board because a pipeline needs the full width and a set of
+   four facts does not. */
+@media (max-width: 78rem) {
+  .board {
+    grid-column: span min(12, calc(var(--span, 6) * 2));
+  }
+}
+@media (max-width: 50rem) {
+  .board {
+    grid-column: span 12;
+  }
+}
+
+.board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.7rem 0.95rem 0.55rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+.board-head h3 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.board-icon {
+  color: var(--accent-dim);
+  font-size: 0.95rem;
+}
+.board-note {
+  color: var(--dim);
+  font-size: 0.73rem;
+}
+
+.board-body {
+  padding: 0.85rem 0.95rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.board-sub {
+  margin: 0.35rem 0 -0.2rem;
+  font-size: 0.67rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.board-foot {
+  margin: 0.15rem 0 0;
+  color: var(--dim);
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+
+.viz-empty {
+  margin: 0;
+  padding: 0.9rem 0;
+  color: var(--dim);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.text-bad { color: var(--bad); }
+.text-warn { color: var(--warn); }
+
+/* ── facts ──────────────────────────────────────────────────────────────── */
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.45rem 1rem;
+  margin: 0;
+}
+.facts > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+.facts dt {
+  color: var(--dim);
+  font-size: 0.67rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.facts dd {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.metric-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+.metric-pair-3 {
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+/* ── ring ───────────────────────────────────────────────────────────────── */
+
+.ring {
+  position: relative;
+  flex: 0 0 auto;
+  aspect-ratio: 1;
+}
+.ring svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.ring-track {
+  fill: none;
+  stroke: var(--raise);
+  stroke-width: 9;
+}
+.ring-fill {
+  fill: none;
+  stroke: var(--ring-tone, var(--accent));
+  stroke-width: 9;
+  stroke-linecap: round;
+  animation: ring-sweep 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.ring-accent { --ring-tone: var(--accent); }
+.ring-ok { --ring-tone: var(--ok); }
+.ring-warn { --ring-tone: var(--warn); }
+.ring-bad { --ring-tone: var(--bad); }
+.ring-info { --ring-tone: #5b8dd9; }
+.ring-muted { --ring-tone: var(--dim); }
+
+/* Sweeps from empty to the real value once. `--ring-dash` carries the target
+   length so the keyframe does not have to know it. */
+@keyframes ring-sweep {
+  from {
+    stroke-dasharray: 0 999;
+  }
+}
+
+.ring-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  pointer-events: none;
+}
+.ring-text strong {
+  font-size: 0.95rem;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.ring-text span {
+  font-size: 0.63rem;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.library-split {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+}
+.library-split .facts {
+  flex: 1 1 auto;
+}
+@media (max-width: 30rem) {
+  .library-split {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ── bar list ───────────────────────────────────────────────────────────── */
+
+.barlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+}
+
+.barlist-row {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 8rem) 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.barlist-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barlist-track {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--raise);
+  overflow: hidden;
+  min-width: 0;
+}
+.barlist-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--bar-tone, var(--accent));
+  transform-origin: 0 50%;
+  animation: bar-grow 700ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.barlist-accent { --bar-tone: var(--accent); }
+.barlist-ok { --bar-tone: var(--ok); }
+.barlist-warn { --bar-tone: var(--warn); }
+.barlist-bad { --bar-tone: var(--bad); }
+.barlist-info { --bar-tone: #5b8dd9; }
+.barlist-muted { --bar-tone: var(--dim); }
+
+.barlist-value {
+  font-size: 0.8rem;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* ── columns ────────────────────────────────────────────────────────────── */
+
+.columns {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 100%;
+}
+.columns-col {
+  flex: 1 1 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+.columns-bar {
+  width: 100%;
+  border-radius: 2px 2px 0 0;
+  background: var(--col-tone, var(--accent));
+  opacity: 0.85;
+  transform-origin: 50% 100%;
+  animation: col-grow 550ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+.columns-col:hover .columns-bar {
+  opacity: 1;
+}
+
+.columns-accent { --col-tone: var(--accent); }
+.columns-ok { --col-tone: var(--ok); }
+.columns-warn { --col-tone: var(--warn); }
+.columns-bad { --col-tone: var(--bad); }
+.columns-info { --col-tone: #5b8dd9; }
+.columns-muted { --col-tone: var(--dim); }
+
+@keyframes col-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+/* ── trend ──────────────────────────────────────────────────────────────── */
+
+.trend {
+  width: 100%;
+  display: block;
+}
+.trend polyline {
+  stroke: var(--trend-tone, var(--accent));
+}
+.trend .trend-top {
+  stop-color: var(--trend-tone, var(--accent));
+  stop-opacity: 0.28;
+}
+.trend .trend-bottom {
+  stop-color: var(--trend-tone, var(--accent));
+  stop-opacity: 0;
+}
+
+.trend-accent { --trend-tone: var(--accent); }
+.trend-ok { --trend-tone: var(--ok); }
+.trend-warn { --trend-tone: var(--warn); }
+.trend-bad { --trend-tone: var(--bad); }
+.trend-info { --trend-tone: #5b8dd9; }
+.trend-muted { --trend-tone: var(--dim); }
+
+/* ── progress ───────────────────────────────────────────────────────────── */
+
+.progress {
+  display: block;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--raise);
+  overflow: hidden;
+}
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--prog-tone, var(--accent));
+  transition: width 400ms ease;
+}
+
+.progress-accent { --prog-tone: var(--accent); }
+.progress-ok { --prog-tone: var(--ok); }
+.progress-warn { --prog-tone: var(--warn); }
+.progress-bad { --prog-tone: var(--bad); }
+.progress-info { --prog-tone: #5b8dd9; }
+.progress-muted { --prog-tone: var(--dim); }
+
+/* The travelling sheen is the one piece of ambient motion on these pages, and
+   it is load-bearing: a paused download and a running one at the same
+   percentage are otherwise identical. */
+.progress-active .progress-fill {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, #fff 22%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 240% 100%;
+  animation: sheen 1.6s linear infinite;
+}
+
+@keyframes sheen {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -140% 0;
+  }
+}
+
+/* ── flow ───────────────────────────────────────────────────────────────── */
+
+.flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.flow-step {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.flow-node {
+  flex: 1 1 auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 0.6rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  text-align: center;
+}
+.flow-step-live .flow-node {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel-2));
+}
+.flow-node strong {
+  font-size: 1.25rem;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.flow-node span {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.flow-node em {
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-link {
+  flex: 0 0 1.6rem;
+  height: 2px;
+  background: var(--border);
+  position: relative;
+}
+/* Only animates between two stages that BOTH have work in them, which turns
+   the row into a live read of where the queue is actually sitting. */
+.flow-link-live {
+  background: linear-gradient(
+    90deg,
+    var(--accent-dim) 0 45%,
+    transparent 45% 100%
+  );
+  background-size: 14px 100%;
+  animation: flow-march 700ms linear infinite;
+}
+
+@keyframes flow-march {
+  to {
+    background-position: 14px 0;
+  }
+}
+
+@media (max-width: 48rem) {
+  .flow {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .flow-step {
+    flex: 1 1 8rem;
+  }
+  .flow-link {
+    display: none;
+  }
+}
+
+/* ── pulse + chips ──────────────────────────────────────────────────────── */
+
+.pulse {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dim);
+  display: inline-block;
+}
+.pulse-on {
+  background: var(--pulse-tone, var(--ok));
+  animation: pulse-beat 2s ease-in-out infinite;
+}
+.pulse-ok { --pulse-tone: var(--ok); }
+.pulse-accent { --pulse-tone: var(--accent); }
+.pulse-warn { --pulse-tone: var(--warn); }
+.pulse-bad { --pulse-tone: var(--bad); }
+.pulse-info { --pulse-tone: #5b8dd9; }
+.pulse-muted { --pulse-tone: var(--dim); }
+
+@keyframes pulse-beat {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--pulse-tone) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+
+.vchip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.4rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--raise);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.vchip-ok {
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  color: var(--ok);
+}
+.vchip-warn {
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--warn);
+}
+.vchip-bad {
+  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+  color: var(--bad);
+}
+.vchip-info {
+  border-color: color-mix(in srgb, #5b8dd9 40%, transparent);
+  color: #7ba5e6;
+}
+.vchip-accent {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+}
+
+/* ── lists shared by several boards ─────────────────────────────────────── */
+
+.rack,
+.runs,
+.people,
+.peers,
+.certs,
+.pools,
+.playing,
+.transfers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rack {
+  gap: 0.3rem;
+}
+.rack-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  min-width: 0;
+}
+.rack-hot {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-2));
+}
+.rack-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rack-tags {
+  display: flex;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.runs {
+  gap: 0.25rem;
+}
+.runs-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  border-left: 2px solid var(--dim);
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.runs-ok { border-left-color: var(--ok); }
+.runs-bad { border-left-color: var(--bad); }
+.runs-live { border-left-color: var(--accent); }
+.runs-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runs-status {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.runs-when {
+  color: var(--dim);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.people {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.people-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  font-size: 0.82rem;
+}
+.people-home {
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+.people-row em {
+  font-style: normal;
+  color: var(--dim);
+  font-size: 0.72rem;
+}
+
+.temps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.temps-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  background: var(--panel-2);
+  min-width: 0;
+  max-width: 11rem;
+}
+.temps-item strong {
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.temps-hot strong {
+  color: var(--warn);
+}
+.temps-item em {
+  font-style: normal;
+  font-size: 0.67rem;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.peers {
+  gap: 0.25rem;
+}
+.peers-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.peers-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.peers-when,
+.peers-bytes {
+  color: var(--dim);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.certs {
+  gap: 0.35rem;
+}
+.certs-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 12rem) 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.certs-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.certs-days {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pools {
+  gap: 0.7rem;
+}
+.pools-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.pools-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.pools-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 550;
+  font-size: 0.88rem;
+}
+.pools-meta {
+  color: var(--dim);
+  font-size: 0.73rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.playing {
+  gap: 0.8rem;
+}
+.playing-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.playing-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.playing-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 550;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.playing-title em {
+  font-style: normal;
+  color: var(--muted);
+  font-weight: 400;
+}
+.playing-tags {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.transfers {
+  gap: 0.6rem;
+}
+.transfers-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.transfers-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+  min-width: 0;
+}
+.transfers-name {
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.transfers-meta {
+  color: var(--dim);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.vpn-state {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+/* Everything above animates once on arrival. For a reader who has asked for
+   less motion, the end state is the whole point — so they get it immediately
+   and nothing moves at all, including the download sheen. */
+@media (prefers-reduced-motion: reduce) {
+  .ring-fill,
+  .barlist-fill,
+  .columns-bar,
+  .pulse-on,
+  .flow-link-live,
+  .progress-active .progress-fill {
+    animation: none;
+  }
+  .progress-fill {
+    transition: none;
+  }
+}
