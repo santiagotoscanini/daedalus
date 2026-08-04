@@ -519,13 +519,6 @@ h2 {
   color: var(--text);
   border-bottom-color: var(--accent);
 }
-.tab-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ok);
-}
-
 .metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
@@ -3212,6 +3205,57 @@ h2 {
   font-size: 0.74rem;
 }
 
+/* ── skeletons ──────────────────────────────────────────────────────────── */
+
+/* The one unconditional animation in the app. Everything else moves because
+   something is happening; this moves because nothing has yet. */
+.sk {
+  display: block;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--panel-2) 0%, var(--raise) 50%, var(--panel-2) 100%);
+  background-size: 220% 100%;
+  animation: sk-sweep 1.35s ease-in-out infinite;
+}
+
+@keyframes sk-sweep {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+/* Cards borrow the real component's box so nothing reflows when the content
+   lands — only the innards are grey. */
+.sk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  justify-content: center;
+}
+.sk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sk-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 1rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.sk-block {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--panel) 0%, var(--panel-2) 50%, var(--panel) 100%);
+  background-size: 220% 100%;
+  animation: sk-sweep 1.35s ease-in-out infinite;
+}
+
 /* Everything above animates once on arrival. For a reader who has asked for
    less motion, the end state is the whole point — so they get it immediately
    and nothing moves at all, including the download sheen. */
@@ -3226,5 +3270,11 @@ h2 {
   }
   .progress-fill {
     transition: none;
+  }
+  /* The skeleton keeps its grey but stops sweeping — the shape already says
+     "not here yet", and the motion was the part that was asked about. */
+  .sk,
+  .sk-block {
+    animation: none;
   }
 }

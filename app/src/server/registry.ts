@@ -15,25 +15,18 @@ export const fetchApps = createServerFn().handler(async () => {
   const { manifestEntries } = await import('../lib/nix-manifest')
   const { appStatuses } = await import('../lib/metrics')
   const { readApplyStatus } = await import('../lib/apply')
-  const { loadRegistries } = await import('../lib/registries')
-  const { webAppHosts } = await import('../lib/nix-manifest')
 
   const records = await listApps()
   const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
-  const hosts = await webAppHosts()
   // appStatuses degrades per-app rather than rejecting, so a prometheus
-  // outage costs the status column, not the page. The registries are read in
-  // the same wave rather than after it — they share nothing with the app rows
-  // and are the slower half (two upstreams through traefik).
-  const [statuses, applyStatus, registries] = await Promise.all([
+  // outage costs the status column, not the page.
+  const [statuses, applyStatus] = await Promise.all([
     appStatuses(records.map((r) => r.name)),
     readApplyStatus(),
-    loadRegistries((app) => `https://${hosts[app] ?? app}`),
   ])
 
   return {
     applyStatus,
-    registries,
     apps: records.map((r) => ({
       name: r.name,
       stage: r.stage,
@@ -56,59 +49,41 @@ export const fetchApps = createServerFn().handler(async () => {
   }
 })
 
+/**
+ * zot and verdaccio, separately from the app list.
+ *
+ * Its own entry point because it is the slow half of that page — two upstreams
+ * through traefik against a list that comes out of Postgres in milliseconds —
+ * and the two share nothing. The route streams this in behind a skeleton
+ * rather than holding the app rows for it.
+ */
+export const fetchRegistries = createServerFn().handler(async () => {
+  const { loadRegistries } = await import('../lib/registries')
+  const { webAppHosts } = await import('../lib/nix-manifest')
+  const hosts = await webAppHosts()
+  return loadRegistries((app) => `https://${hosts[app] ?? app}`)
+})
+
+/**
+ * The app detail page's frame: the record, whether it has drifted, and the two
+ * live signals the hero shows.
+ *
+ * Split from the per-tab payload below because the two have completely
+ * different costs. This is a Postgres read, two file reads and four prometheus
+ * queries — tens of milliseconds — and the page cannot render at all without
+ * it, since the tab bar itself depends on whether the app has a database or an
+ * egress container. The expensive part is always the tab, so the tab is what
+ * streams.
+ */
 export const fetchApp = createServerFn()
-  .inputValidator(
-    (input: {
-      name: string
-      withLogs: boolean
-      withDeploys: boolean
-      withEnv: boolean
-      withResources: boolean
-      withAccess: boolean
-      withDatabase: boolean
-      withVpn: boolean
-      accessWindow: AccessWindow
-    }) => input,
-  )
+  .inputValidator((input: { name: string }) => input)
   .handler(async ({ data }) => {
-    const {
-      name,
-      withLogs,
-      withDeploys,
-      withEnv,
-      withResources,
-      withAccess,
-      withDatabase,
-      withVpn,
-      accessWindow,
-    } = data
+    const { name } = data
     const { getApp, driftOf } = await import('../lib/repo/apps')
     const { effectiveHostname } = await import('../lib/hostname')
     const { hostnamesTakenBy } = await import('../lib/nix-manifest')
     const { manifestEntries } = await import('../lib/nix-manifest')
-    const {
-      appStatuses,
-      appResources,
-      activityLog,
-      databaseSize,
-      appDatabase,
-      appVpn,
-      recentLogs,
-      logVolume,
-      NO_RESOURCES,
-      NO_DATABASE,
-      NO_VPN,
-    } = await import('../lib/metrics')
-    const { appAccess, noAccess } = await import('../lib/access')
-    const { readCiSnapshot } = await import('../lib/ci')
-    const NO_CI = {
-      ok: false,
-      available: false,
-      takenAt: null,
-      runners: [],
-      activeJobs: [],
-      runs: [],
-    }
+    const { appStatuses } = await import('../lib/metrics')
     const { readApplyStatus } = await import('../lib/apply')
     const { lastDeploy, pullFailing, readDeployStatus } = await import('../lib/deploy')
 
@@ -117,136 +92,29 @@ export const fetchApp = createServerFn()
 
     const manifest = (await manifestEntries()).find((m) => m.name === name)
 
-    // Fold deploy.sh's journal into Postgres before reading it back. Done on
-    // demand rather than on a timer: the journal is a small bounded file and
-    // this is the only place the result is consumed.
-    const { ingestDeployments, listDeployments } = await import('../lib/repo/deployments')
-    const { commitUrl } = await import('../lib/registry')
-    let deploys: Awaited<ReturnType<typeof listDeployments>> = []
-    if (withDeploys) {
-      await ingestDeployments(record.id, name)
-      deploys = await listDeployments(record.id)
-    }
-
-    const [
-      statuses,
-      resources,
-      access,
-      ci,
-      activity,
-      dbSize,
-      logs,
-      logs1h,
-      applyStatus,
-      deploy,
-      pullBroken,
-      deployStatus,
-      database,
-      vpn,
-    ] =
+    const [statuses, applyStatus, deploy, pullBroken, deployStatus, takenHostnames] =
       await Promise.all([
         appStatuses([name]),
-        // Nine prometheus queries; only the overview renders them. Same
-        // reasoning as the logs gate below — loader data is serialised into
-        // the HTML, so paying for it on the settings tab is pure waste.
-        withResources ? appResources(name).catch(() => NO_RESOURCES) : (
-          Promise.resolve(NO_RESOURCES)
-        ),
-        // Ten Loki queries, and only the access tab reads them. Also gated on
-        // the app actually being published through the tunnel: `stage != live`
-        // means there is no cfweb traffic to find, so the queries would all be
-        // a round trip to confirm zero.
-        withAccess && record.stage === 'live' ?
-          appAccess(effectiveHostname(record.name, record.hostname), accessWindow).catch(() =>
-            noAccess(accessWindow),
-          )
-        : Promise.resolve(noAccess(accessWindow)),
-        // Deployments tab only, same gating reason as logs.
-        withDeploys ? readCiSnapshot(name) : Promise.resolve(NO_CI),
-        withDeploys ? activityLog(name, 60) : Promise.resolve([]),
-        record.postgres ? databaseSize(name) : Promise.resolve(null),
-        // Only on the logs tab. Loader data is serialised into the HTML for
-        // hydration, so fetching 60 lines unconditionally doubled the weight
-        // of every other tab with text nobody was looking at.
-        withLogs ? recentLogs(name, 60) : Promise.resolve([]),
-        logVolume(name),
         readApplyStatus(),
         lastDeploy(name),
         pullFailing(name),
         readDeployStatus(),
-        // Sixteen prometheus queries, and gated twice: on the tab AND on the
-        // app actually having a database. Without the second gate every app
-        // without postgres would pay for sixteen round trips to be told that
-        // `pg_database_size_bytes{datname="…"}` matches nothing.
-        withDatabase && record.postgres ?
-          appDatabase(name).catch(() => NO_DATABASE)
-        : Promise.resolve(NO_DATABASE),
-        withVpn && record.egressContainer !== null ?
-          appVpn(record.egressContainer).catch(() => NO_VPN)
-        : Promise.resolve(NO_VPN),
+        // So the hostname field can reject a collision as it is typed rather
+        // than during the rebuild it would otherwise fail.
+        hostnamesTakenBy(effectiveHostname(record.name, record.hostname)),
       ])
-
-    // Secret VALUES are deliberately NOT in this payload. Loader data is
-    // serialised into the HTML, so shipping them and masking with CSS would
-    // put every database password in view-source — theatre, not concealment.
-    // The reveal button fetches one value at a time (revealEnvVar below).
-    const { readEnvSnapshot } = await import('../lib/env-snapshot')
-    const declared = new Map(record.envVars.map((e) => [e.key, e.note]))
-    const envSnapshot = withEnv
-      ? await readEnvSnapshot(name, declared, record.operatorSecrets)
-      : { vars: [], takenAt: null, available: false }
 
     return {
       applyStatus,
       deployStatus,
-      resources,
-      access,
-      ci,
-      activity: activity.map((l) => ({
-        ts: l.ts.toISOString(),
-        line: l.line,
-        source: l.source,
-      })),
-      // So the hostname field can reject a collision as it is typed rather
-      // than during the rebuild it would otherwise fail.
-      takenHostnames: await hostnamesTakenBy(effectiveHostname(record.name, record.hostname)),
-      env: {
-        available: envSnapshot.available,
-        takenAt: envSnapshot.takenAt,
-        vars: envSnapshot.vars.map((v) => ({
-          key: v.key,
-          origin: v.origin,
-          group: v.group,
-          secret: v.secret,
-          note: v.note ?? null,
-          value: v.secret ? null : v.value,
-        })),
-      },
+      takenHostnames,
       // Authoritative record from the app's own deploy unit — a deploy also
       // runs from the timer and from a manual systemctl start, neither of
       // which goes through daedalus.
       lastDeploy: deploy,
       pullBroken,
-      deployments: deploys.map((d) => ({
-        id: d.id,
-        digest: d.digest.replace('sha256:', ''),
-        result: d.result,
-        httpCode: d.httpCode,
-        startedAt: d.startedAt.toISOString(),
-        durationMs: d.durationMs,
-        revision: d.revision,
-        shortRevision: d.revision ? d.revision.slice(0, 8) : null,
-        commitUrl: commitUrl(d.sourceUrl, d.revision),
-        imageCreatedAt: d.imageCreatedAt ? d.imageCreatedAt.toISOString() : null,
-        isCurrent: deploy ? d.digest === deploy.digest : false,
-      })),
       drift: driftOf(record, manifest),
       status: statuses[name] ?? null,
-      dbSize,
-      database,
-      vpn,
-      logs1h,
-      logs: logs.map((l) => ({ ts: l.ts.toISOString(), level: l.level, line: l.line })),
       app: {
         name: record.name,
         stage: record.stage,
@@ -277,6 +145,206 @@ export const fetchApp = createServerFn()
         updatedAt: record.updatedAt.toISOString(),
         envVars: record.envVars.map((e) => ({ key: e.key, value: e.value, note: e.note })),
       },
+    }
+  })
+
+/**
+ * Everything one tab of the app detail page needs, and nothing another one
+ * does.
+ *
+ * The route calls this WITHOUT awaiting it, so the frame is on screen while
+ * this runs and each tab body streams in behind a skeleton. That is what makes
+ * the expensive tabs affordable: `overview` is nine prometheus queries,
+ * `access` is ten Loki ones, `database` sixteen. None of them ever delays the
+ * page, and switching tabs re-runs exactly one of them.
+ *
+ * Discriminated by `kind` so a tab cannot read another tab's payload — the
+ * union is what stops a future edit from rendering `access` data on the logs
+ * tab and getting a runtime undefined instead of a type error.
+ */
+export type AppTabData =
+  | { kind: 'overview'; resources: AppResources; dbSize: number | null; logs1h: number | null }
+  | { kind: 'deployments'; ci: CiSnapshot; activity: ActivityRow[]; deployments: DeployRow[] }
+  | { kind: 'access'; access: AppAccess }
+  | { kind: 'secrets'; env: EnvPayload }
+  | { kind: 'logs'; logs: LogRow[] }
+  | { kind: 'database'; database: AppDatabase }
+  | { kind: 'vpn'; vpn: AppVpn }
+  | { kind: 'settings' }
+
+type AppResources = Awaited<ReturnType<typeof import('../lib/metrics')['appResources']>>
+type AppDatabase = Awaited<ReturnType<typeof import('../lib/metrics')['appDatabase']>>
+type AppVpn = Awaited<ReturnType<typeof import('../lib/metrics')['appVpn']>>
+type AppAccess = Awaited<ReturnType<typeof import('../lib/access')['appAccess']>>
+type CiSnapshot = Awaited<ReturnType<typeof import('../lib/ci')['readCiSnapshot']>>
+type ActivityRow = { ts: string; line: string; source: 'build' | 'deploy' }
+type LogRow = { ts: string; level: string | null; line: string }
+type EnvSnapshotVar = Awaited<
+  ReturnType<typeof import('../lib/env-snapshot')['readEnvSnapshot']>
+>['vars'][number]
+type EnvPayload = {
+  available: boolean
+  takenAt: string | null
+  // `origin` and `group` keep their union types rather than widening to
+  // string: the UI switches on them, and a widened string would let a typo
+  // through to a missing label at runtime.
+  vars: (Pick<EnvSnapshotVar, 'key' | 'origin' | 'group' | 'secret'> & {
+    note: string | null
+    value: string | null
+  })[]
+}
+type DeployRow = {
+  id: string
+  digest: string
+  result: string
+  httpCode: string | null
+  startedAt: string
+  durationMs: number
+  revision: string | null
+  shortRevision: string | null
+  commitUrl: string | null
+  imageCreatedAt: string | null
+  isCurrent: boolean
+}
+
+export const fetchAppTab = createServerFn()
+  .inputValidator((input: { name: string; tab: string; accessWindow: AccessWindow }) => input)
+  .handler(async ({ data }): Promise<AppTabData> => {
+    const { name, tab, accessWindow } = data
+    const { getApp } = await import('../lib/repo/apps')
+    const { effectiveHostname } = await import('../lib/hostname')
+
+    const record = await getApp(name)
+    if (!record) return { kind: 'settings' }
+
+    switch (tab) {
+      case 'overview': {
+        const { appResources, databaseSize, logVolume, NO_RESOURCES } = await import(
+          '../lib/metrics'
+        )
+        const [resources, dbSize, logs1h] = await Promise.all([
+          appResources(name).catch(() => NO_RESOURCES),
+          record.postgres ? databaseSize(name) : Promise.resolve(null),
+          logVolume(name),
+        ])
+        return { kind: 'overview', resources, dbSize, logs1h }
+      }
+
+      case 'deployments': {
+        const { activityLog } = await import('../lib/metrics')
+        const { readCiSnapshot } = await import('../lib/ci')
+        const { commitUrl } = await import('../lib/registry')
+        // Fold deploy.sh's journal into Postgres before reading it back. Done
+        // on demand rather than on a timer: the journal is a small bounded file
+        // and this is the only place the result is consumed.
+        const { ingestDeployments, listDeployments } = await import('../lib/repo/deployments')
+        await ingestDeployments(record.id, name)
+        const [deploys, ci, activity, deploy] = await Promise.all([
+          listDeployments(record.id),
+          readCiSnapshot(name),
+          activityLog(name, 60),
+          (await import('../lib/deploy')).lastDeploy(name),
+        ])
+        return {
+          kind: 'deployments',
+          ci,
+          activity: activity.map((l) => ({
+            ts: l.ts.toISOString(),
+            line: l.line,
+            source: l.source,
+          })),
+          deployments: deploys.map((d) => ({
+            id: d.id,
+            digest: d.digest.replace('sha256:', ''),
+            result: d.result,
+            httpCode: d.httpCode,
+            startedAt: d.startedAt.toISOString(),
+            durationMs: d.durationMs,
+            revision: d.revision,
+            shortRevision: d.revision ? d.revision.slice(0, 8) : null,
+            commitUrl: commitUrl(d.sourceUrl, d.revision),
+            imageCreatedAt: d.imageCreatedAt ? d.imageCreatedAt.toISOString() : null,
+            isCurrent: deploy ? d.digest === deploy.digest : false,
+          })),
+        }
+      }
+
+      case 'access': {
+        const { appAccess, noAccess } = await import('../lib/access')
+        // Gated on the app actually being published through the tunnel:
+        // `stage != live` means there is no cfweb traffic to find, so the ten
+        // queries would all be a round trip to confirm zero.
+        const access =
+          record.stage === 'live' ?
+            await appAccess(
+              effectiveHostname(record.name, record.hostname),
+              accessWindow,
+            ).catch(() => noAccess(accessWindow))
+          : noAccess(accessWindow)
+        return { kind: 'access', access }
+      }
+
+      case 'secrets': {
+        // Secret VALUES are deliberately NOT in this payload. Loader data is
+        // serialised into the HTML, so shipping them and masking with CSS
+        // would put every database password in view-source — theatre, not
+        // concealment. The reveal button fetches one value at a time.
+        const { readEnvSnapshot } = await import('../lib/env-snapshot')
+        const declared = new Map(record.envVars.map((e) => [e.key, e.note]))
+        const snapshot = await readEnvSnapshot(name, declared, record.operatorSecrets)
+        return {
+          kind: 'secrets',
+          env: {
+            available: snapshot.available,
+            takenAt: snapshot.takenAt,
+            vars: snapshot.vars.map((v) => ({
+              key: v.key,
+              origin: v.origin,
+              group: v.group,
+              secret: v.secret,
+              note: v.note ?? null,
+              value: v.secret ? null : v.value,
+            })),
+          },
+        }
+      }
+
+      case 'logs': {
+        const { recentLogs } = await import('../lib/metrics')
+        const logs = await recentLogs(name, 60)
+        return {
+          kind: 'logs',
+          logs: logs.map((l) => ({ ts: l.ts.toISOString(), level: l.level, line: l.line })),
+        }
+      }
+
+      case 'database': {
+        const { appDatabase, NO_DATABASE } = await import('../lib/metrics')
+        // Gated on the app actually having a database: without it every app
+        // without postgres would pay for sixteen round trips to be told that
+        // `pg_database_size_bytes{datname="…"}` matches nothing.
+        return {
+          kind: 'database',
+          database:
+            record.postgres ? await appDatabase(name).catch(() => NO_DATABASE) : NO_DATABASE,
+        }
+      }
+
+      case 'vpn': {
+        const { appVpn, NO_VPN } = await import('../lib/metrics')
+        return {
+          kind: 'vpn',
+          vpn:
+            record.egressContainer === null ?
+              NO_VPN
+            : await appVpn(record.egressContainer).catch(() => NO_VPN),
+        }
+      }
+
+      default:
+        // Settings edits the record the frame already carries — there is
+        // nothing further to fetch, and no request is made.
+        return { kind: 'settings' }
     }
   })
 

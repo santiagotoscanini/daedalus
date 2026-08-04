@@ -20,12 +20,13 @@ export function getRouter() {
     // does not re-run a fan-out that cannot have changed yet.
     defaultStaleTime: 15_000,
 
-    // Feedback while a loader runs is a progress bar in the shell (__root),
-    // deliberately NOT a `defaultPendingComponent`. A pending component
-    // REPLACES the route's content, so switching dashboard tabs would blank two
-    // dozen tiles and flash a spinner. Keeping the old content on screen with a
-    // bar moving above it is calmer, and more honest: those numbers really are
-    // the last ones that were read.
+    // Still no `defaultPendingComponent`. A pending component REPLACES the
+    // whole route, which is the blunt version of what the pages now do for
+    // themselves: each one returns its slow work as an unawaited promise and
+    // renders a skeleton shaped like the panel that is coming (components/
+    // skeleton.tsx). So a loader is only ever "pending" for the small awaited
+    // part — long enough for the progress bar in __root, never long enough to
+    // justify blanking a page that is already on screen.
   })
 }
 
