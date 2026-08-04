@@ -87,7 +87,6 @@ h2 {
   color: var(--dim);
   font-size: 0.8rem;
   margin: 0.9rem 0 0;
-  max-width: 66ch;
 }
 
 /* ── shell ──────────────────────────────────────────────────────────────── */
@@ -891,7 +890,6 @@ h2 {
   margin-top: 0.35rem;
   font-size: 0.76rem;
   line-height: 1.45;
-  max-width: 62ch;
 }
 .field-hint {
   color: var(--dim);
@@ -1011,7 +1009,6 @@ h2 {
   color: var(--dim);
   font-size: 0.78rem;
   margin: 0.35rem 0 0;
-  max-width: 62ch;
 }
 
 .notes div {
@@ -1026,7 +1023,6 @@ h2 {
 }
 .notes dd {
   margin: 0.25rem 0 0;
-  max-width: 82ch;
   font-size: 0.88rem;
   color: var(--muted);
 }
@@ -1245,7 +1241,6 @@ h2 {
   margin: 0 0 0.85rem;
   font-size: 0.78rem;
   color: var(--dim);
-  max-width: 70ch;
 }
 
 .env-age {
@@ -1683,7 +1678,6 @@ h2 {
   margin: 0 0 0.5rem;
   font-size: 0.76rem;
   color: var(--dim);
-  max-width: 74ch;
 }
 /* Indented under its heading so the groups read as one list broken into
    parts, rather than as separate tables that happen to be adjacent. */
