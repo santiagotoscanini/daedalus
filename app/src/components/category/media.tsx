@@ -258,8 +258,8 @@ export function TvView({ data }: { data: TvData }) {
             <BigStat label="Blocked (kept returning)" value={num(data.cleanup.blocked)} tone="bad" />
             <BigStat label="Replacement searches" value={num(data.cleanup.searches)} tone="ok" />
           </div>
-          {/* Cleanuparr publishes no metrics and 2.10.1 closed the API the old
-              homepage widget read, so these are counted out of its log lines. */}
+          {/* Cleanuparr publishes no metrics and 2.10.1 closed the API that
+              used to report this, so these are counted out of its log lines. */}
           <p className="board-foot">Counted from Cleanuparr&rsquo;s own log lines in Loki.</p>
         </Board>
       </BoardGrid>

@@ -1,20 +1,17 @@
-// The Dashboard tab's tile catalogue.
+// The service directory under every category page.
 //
-// One entry per box on the old homepage's Home and Infra tabs, carrying the
-// same numbers from the same APIs. The Apps tab is deliberately absent: those
-// services already have a richer page under /apps, and duplicating them here
-// would be two places to look at the same thing.
+// One entry per service on the box, carrying a couple of live numbers and a
+// link through to the thing itself. Apps are deliberately absent: they have a
+// richer page under /apps, and duplicating them here would be two places to
+// look at the same thing.
 //
 // ── why the catalogue lives in TypeScript ─────────────────────────────────
 //
-// Homepage's tiles are declared per-stack (`fleet.webApps.<n>.homepage.widget`)
-// because homepage is a config-driven widget ENGINE — the stack describes a
-// URL and a list of field paths, and the container does the fetching. daedalus
-// has no such engine: each of these services shapes its response differently
-// enough (a cookie login here, a session id there, a sum over an array
-// somewhere else) that "the mapping" is code, not data. Splitting the code
-// across 30 stack modules and shipping it as strings would be a worse version
-// of what is written plainly here.
+// Every one of these services shapes its response differently enough — a
+// cookie login here, a session id there, a sum over an array somewhere else —
+// that "the mapping" is code, not data. A config-driven version would mean
+// splitting that code across 30 stack modules and shipping it as strings,
+// which is a worse version of what is written plainly here.
 //
 // What DOES stay declarative is the part that moves: hostnames come from the
 // nix manifest (`webAppHosts`), so renaming a webApp moves its tile with it.
@@ -108,9 +105,9 @@ async function gluetunStats(port: number, withPort: boolean) {
   const base = `http://host.containers.internal:${String(port)}`
   const [ip, fw] = await Promise.all([
     getJson<GluetunIp>(`${base}/v1/publicip/ip`),
-    // /v1/portforward, not the /v1/openvpn/portforwarded homepage's tiles use:
-    // that path is a 301 now, and `redirect: 'manual'` (correctly) does not
-    // chase redirects, so following homepage here would silently read nothing.
+    // /v1/portforward, not /v1/openvpn/portforwarded: that path is a 301 now,
+    // and `redirect: 'manual'` (correctly) does not chase redirects, so the
+    // old path would silently read nothing.
     withPort ? getJson<{ port?: number }>(`${base}/v1/portforward`) : null,
   ])
   const stats = [
@@ -198,9 +195,9 @@ export const TILES: TileDef[] = [
           total_tokens?: number
         }
       }
-      // Two ranges, not one response read twice. Homepage's tile labels
-      // `results[0]` "today", but results[0] is the FIRST day in the range —
-      // with start_date=2020 that is the oldest day with traffic, not today.
+      // Two ranges, not one response read twice: `results[0]` is the FIRST
+      // day in the range, so with start_date=2020 it is the oldest day with
+      // traffic, not today.
       const [all, day] = await Promise.all([
         getJson<Activity>(url('2020-01-01'), h),
         getJson<Activity>(url(today), h),
@@ -227,9 +224,8 @@ export const TILES: TileDef[] = [
     load: async (ctx) => {
       const h = { headers: { 'X-N8N-API-KEY': key('N8N_API_KEY') } }
       const base = ctx.base('n8n')
-      // Workflow NAMES, resolved from the API. Homepage's tile carries a
-      // hand-written id→name remap that goes stale the moment a workflow is
-      // renamed or added; there is an endpoint for this.
+      // Workflow NAMES, resolved from the API rather than a hand-written
+      // id→name map that would go stale the moment one is renamed.
       const [runs, flows] = await Promise.all([
         getJson<{ data?: { workflowId: string; status: string; startedAt: string }[] }>(
           `${base}/api/v1/executions?limit=3`,
@@ -371,8 +367,7 @@ export const TILES: TileDef[] = [
     group: 'Home',
     description: 'Home automation hub',
     // Host netns (mDNS/SSDP discovery) — :8123 is firewall-closed but reachable
-    // from a container as host.containers.internal, which is how homepage
-    // dials it too.
+    // from a container as host.containers.internal, which is how this dials it.
     link: { app: 'home-assistant' },
     gatus: 'home-assistant',
     load: async (ctx) => {
@@ -547,7 +542,7 @@ export const TILES: TileDef[] = [
     gatus: 'sonarr',
     load: async (ctx) => {
       // gluetun owns the netns, so only gluetun publishes ports — the *arrs
-      // are reachable at the host port and nowhere else. Same URL homepage uses.
+      // are reachable at the host port and nowhere else.
       const base = `${ctx.hc}:8989/api/v3`
       const k = `apikey=${key('SONARR_API_KEY')}`
       const [wanted, queue, series] = await Promise.all([
@@ -745,7 +740,7 @@ export const TILES: TileDef[] = [
     gatus: 'cleanuparr',
     load: async () => {
       // Counted out of its own log lines: cleanuparr publishes no metrics, and
-      // 2.10.1 closed the API homepage used to read. Same LogQL as its tile.
+      // 2.10.1 closed the API that used to report this.
       const over = (needle: string) =>
         lokiScalar(
           `sum(count_over_time({container="cleanuparr"} |= \`${needle}\` [7d])) or vector(0)`,
@@ -790,7 +785,7 @@ export const TILES: TileDef[] = [
     gatus: 'calibre-web',
     load: async (ctx) => {
       // /opds is on calibre-web's forward-auth bypass and takes its own basic
-      // auth (stacks/calibre-web) — the same credentials homepage's widget uses.
+      // auth (stacks/calibre-web), so this reads it with those credentials.
       const b = await getJson<{
         books?: number
         authors?: number
@@ -1094,7 +1089,7 @@ export const TILES: TileDef[] = [
     gatus: 'gatus',
     load: async () => {
       // Gatus's own API is oidc-gated; its metrics are not, and they are the
-      // same numbers. This is also what the homepage tile read.
+      // same numbers.
       const m = await promScalars({
         up: 'count(gatus_results_endpoint_success == 1) or vector(0)',
         down: 'count(gatus_results_endpoint_success == 0) or vector(0)',

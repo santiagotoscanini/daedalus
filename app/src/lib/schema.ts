@@ -36,8 +36,8 @@ export const apps = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
 
     // The fleet.apps key. Drives hostname, container name, postgres role and
-    // database, homepage group, and the GitHub repo — so it is the one field
-    // that can never change without a migration of everything downstream.
+    // database, and the GitHub repo — so it is the one field that can never
+    // change without a migration of everything downstream.
     name: text('name').notNull(),
 
     // "lab" = LAN-only; "live" = also published through the Cloudflare tunnel.
@@ -102,8 +102,10 @@ export const apps = pgTable(
     limitMemoryMb: integer('limit_memory_mb'),
     limitPids: integer('limit_pids'),
 
-    homepageDescription: text('homepage_description').notNull().default(''),
-    homepageIcon: text('homepage_icon').notNull().default('mdi-cube-outline-#94a3b8'),
+    // How the app is named to a person: its row in the list, its detail
+    // page, and its entry on the Pocket ID consent screen.
+    description: text('description').notNull().default(''),
+    icon: text('icon').notNull().default('mdi-cube-outline-#94a3b8'),
 
     // Free-form rationale keyed by area: app, auth, storage, egress, stage,
     // secrets. jsonb rather than columns because the set of things worth

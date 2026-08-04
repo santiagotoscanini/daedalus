@@ -90,8 +90,8 @@ export const EDITABLE_FIELDS = [
   'stage',
   'image',
   'hostname',
-  'homepageDescription',
-  'homepageIcon',
+  'description',
+  'icon',
   'postgres',
   'storage',
   'litellm',
@@ -202,8 +202,8 @@ function toRow(entry: ManifestEntry) {
     limitCpus: entry.resources?.cpus ?? null,
     limitMemoryMb: entry.resources?.memoryMb ?? null,
     limitPids: entry.resources?.pids ?? null,
-    homepageDescription: entry.homepage.description,
-    homepageIcon: entry.homepage.icon,
+    description: entry.presentation.description,
+    icon: entry.presentation.icon,
     notes: entry.notes ?? {},
   }
 }
@@ -236,8 +236,8 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     limitCpus: record.limitCpus,
     limitMemoryMb: record.limitMemoryMb,
     limitPids: record.limitPids,
-    homepageDescription: record.homepageDescription,
-    homepageIcon: record.homepageIcon,
+    description: record.description,
+    icon: record.icon,
     env: record.envVars.map((e) => `${e.key}=${e.value}`).join('\n'),
   }
 
@@ -259,8 +259,8 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     limitCpus: manifest.resources?.cpus ?? null,
     limitMemoryMb: manifest.resources?.memoryMb ?? null,
     limitPids: manifest.resources?.pids ?? null,
-    homepageDescription: manifest.homepage.description,
-    homepageIcon: manifest.homepage.icon,
+    description: manifest.presentation.description,
+    icon: manifest.presentation.icon,
     env: manifest.env.map((e) => `${e.key}=${e.value}`).join('\n'),
   }
 
@@ -310,7 +310,7 @@ export function toRegistryExport(records: AppRecord[]): {
               ...(r.authAllowedGroups ? { allowedGroups: r.authAllowedGroups } : {}),
               ...(r.authBypassRule ? { bypassRule: r.authBypassRule } : {}),
             },
-            homepage: { description: r.homepageDescription, icon: r.homepageIcon },
+            presentation: { description: r.description, icon: r.icon },
             // Always emitted in full, nulls included, rather than omitted when
             // uncapped: the exported file is what a human reads to see what a
             // container is allowed to use, and an absent key reads as "nobody

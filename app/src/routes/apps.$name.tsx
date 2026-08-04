@@ -688,7 +688,7 @@ function AppDetail() {
               value={app.description}
               disabled={readOnly}
               onSave={(v) => {
-                patch({ homepageDescription: v })
+                patch({ description: v })
               }}
             />
             <TextField
@@ -696,7 +696,7 @@ function AppDetail() {
               value={app.icon}
               disabled={readOnly}
               onSave={(v) => {
-                patch({ homepageIcon: v })
+                patch({ icon: v })
               }}
             />
             <TextField

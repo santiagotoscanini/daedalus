@@ -29,6 +29,13 @@
       "when": 1785818002871,
       "tag": "0003_first_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785870000000,
+      "tag": "0004_lucky_shocker",
+      "breakpoints": true
     }
   ]
 }
