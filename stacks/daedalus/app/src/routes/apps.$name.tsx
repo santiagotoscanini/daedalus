@@ -451,6 +451,9 @@ function AppDetail() {
 
           <Panel
             title="Environment"
+            // Full width, not a grid cell: a URL or a connection string in a
+            // 21rem column wraps character-by-character into a ragged stack.
+            wide
             action={
               env.takenAt ? (
                 <span className="env-age">read from the container {fmtWhen(env.takenAt)}</span>
@@ -469,13 +472,11 @@ function AppDetail() {
                   registry declares, and what the image bakes in. Secrets are withheld until
                   revealed — they are not in this page&apos;s source.
                 </p>
-                <table className="env">
-                  <tbody>
-                    {env.vars.map((v) => (
-                      <EnvRow key={v.key} app={app.name} v={v} />
-                    ))}
-                  </tbody>
-                </table>
+                <div className="env">
+                  {env.vars.map((v) => (
+                    <EnvRow key={v.key} app={app.name} v={v} />
+                  ))}
+                </div>
               </>
             )}
           </Panel>
@@ -561,13 +562,13 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
   const shown = v.secret ? revealed : v.value
 
   return (
-    <tr>
-      <th>
+    <div className="env-row">
+      <div className="env-key">
         <code>{v.key}</code>
         <span className={`origin origin-${v.origin}`}>{v.origin}</span>
-      </th>
-      <td>
-        <span className="env-value">
+      </div>
+      <div>
+        <div className="env-value">
           {shown === null ? (
             <code className="masked">••••••••••••</code>
           ) : (
@@ -599,10 +600,10 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
               {revealed === null ? '👁' : '🙈'}
             </button>
           )}
-        </span>
+        </div>
         {v.note && <p className="note">{v.note}</p>}
-      </td>
-    </tr>
+      </div>
+    </div>
   )
 }
 

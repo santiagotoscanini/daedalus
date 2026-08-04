@@ -617,6 +617,9 @@ h2 {
   gap: 0.85rem;
   align-items: start;
 }
+.panel-wide {
+  grid-column: 1 / -1;
+}
 
 /* ── controls ───────────────────────────────────────────────────────────── */
 
@@ -845,26 +848,6 @@ h2 {
 
 /* ── tables, notes, logs ────────────────────────────────────────────────── */
 
-.env {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-.env th,
-.env td {
-  text-align: left;
-  vertical-align: top;
-  padding: 0.5rem 0.7rem 0.5rem 0;
-  border-bottom: 1px solid var(--border-soft);
-}
-.env tr:last-child th,
-.env tr:last-child td {
-  border-bottom: 0;
-}
-.env th {
-  white-space: nowrap;
-  font-weight: 500;
-}
 .env .note {
   color: var(--dim);
   font-size: 0.78rem;
@@ -1102,13 +1085,42 @@ h2 {
   letter-spacing: 0;
 }
 
-.env th {
+/* A grid, not a table: `table-layout: auto` sizes the key column to its widest
+   name and hands the leftover to the value, which is exactly backwards here —
+   names are short and bounded, values are long and variable. Fixed columns
+   instead, collapsing to stacked rows when there is no room for two. */
+.env {
+  font-size: 0.85rem;
+}
+.env-row {
+  display: grid;
+  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+  gap: 0.35rem 1.25rem;
+  align-items: baseline;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.env-row:last-child {
+  border-bottom: 0;
+}
+.env-key {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
+  min-width: 0;
+}
+.env-key code {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 60rem) {
+  .env-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .origin {
+  flex: none;
   font-size: 0.6rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1129,6 +1141,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
 }
 .env-value code {
   overflow-wrap: anywhere;
@@ -1137,6 +1150,9 @@ h2 {
 .masked {
   letter-spacing: 0.12em;
   color: var(--dim);
+  /* Never break: dots carry no information, so wrapping them just makes a
+     column of them. */
+  white-space: nowrap;
 }
 
 .reveal {
