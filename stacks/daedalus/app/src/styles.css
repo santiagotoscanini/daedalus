@@ -175,10 +175,30 @@ h2 {
   text-decoration: none;
 }
 
+/* No page-level max-width: the panels here are grids, tables and topology
+   diagrams, and every one of them uses the width it is given — capping the
+   page just moved that space to the right-hand margin.
+
+   Long-form TEXT is bounded instead, on the elements that hold it (the rule
+   below), because a 200-character line is genuinely harder to read.
+   Constraining the paragraphs rather than the page is what lets both be
+   true at once. */
 .content {
   padding: 1.9rem clamp(1rem, 3.5vw, 2.75rem) 7rem;
   min-width: 0;
-  max-width: 1180px;
+}
+
+/* One measure for every run of prose in the app. 74ch is a comfortable line
+   at this size and is deliberately wider than the 62ch a book would use —
+   these are captions under a diagram, read in one glance, not chapters. */
+.lede,
+.cat-lede,
+.footnote,
+.board-foot,
+.panel-note,
+.exposure-note,
+.alerts-summary {
+  max-width: 74ch;
 }
 
 /* ── list ───────────────────────────────────────────────────────────────── */
@@ -2083,7 +2103,6 @@ h2 {
 
 .cat-lede {
   margin: -0.75rem 0 1.4rem;
-  max-width: 62ch;
 }
 
 /* ── headline band ──────────────────────────────────────────────────────── */
