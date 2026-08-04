@@ -4,7 +4,7 @@
   "schemaVersion": 1,
   "apps": {
     "anansi": {
-      "stage": "off",
+      "stage": "live",
       "postgres": true,
       "storage": false,
       "litellm": false,
