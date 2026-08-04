@@ -1699,3 +1699,201 @@ h2 {
   flex-direction: column;
   gap: 0.85rem;
 }
+
+/* ── Access tab ────────────────────────────────────────────────────────────
+   Sections are plain siblings here (a metrics grid, a panel grid, a wide
+   panel), so the column supplies the gap between them the way .panel-stack
+   does for the secrets tab. */
+.access {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.access-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.access-head .lede {
+  margin: 0;
+  /* No cap: the sentence names a hostname and a window and belongs on one
+     line whenever the page is wide enough for it. */
+  flex: 1 1 20rem;
+}
+
+/* Window picker. Deliberately links, not buttons — the window is in the URL,
+   so a chosen range survives a refresh and can be sent to someone. */
+.range {
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.range a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+}
+.range a:hover {
+  color: var(--text);
+}
+.range a.active {
+  background: var(--raise);
+  color: var(--text);
+}
+
+/* A ranked list with a proportion bar, in place of the Grafana geomap.
+   A world map at panel width for six countries is decoration; the ranking is
+   the information, and it costs no geo asset in the bundle. */
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.bar {
+  display: grid;
+  /* The label column can shrink to nothing before the bar or the count do —
+     a truncated user-agent is readable, a 3px bar is not. */
+  grid-template-columns: minmax(0, 1fr) 5.5rem auto;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.84rem;
+}
+.bar-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-label code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--raise);
+  overflow: hidden;
+}
+.bar-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-dim);
+}
+.bars-geo .bar-track > span {
+  background: #6f9bd1;
+}
+.bars-client .bar-track > span {
+  background: #8f7ad1;
+}
+.bars-agent .bar-track > span {
+  background: #5f9e8c;
+}
+.bar-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.bar-count small {
+  color: var(--dim);
+  margin-left: 0.4rem;
+}
+.flag {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+/* Status code, coloured by class. Keyed on the first digit so a code the
+   dashboard has never seen still lands in the right bucket. */
+.status {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 5px;
+  background: var(--raise);
+  color: var(--muted);
+}
+.status-2 {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+.status-3 {
+  color: #6f9bd1;
+  background: color-mix(in srgb, #6f9bd1 14%, transparent);
+}
+.status-4 {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+.status-5 {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+}
+
+.hits {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+.hit {
+  display: grid;
+  grid-template-columns: 8.5rem 3rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.18rem 0;
+}
+.hit time {
+  color: var(--dim);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+}
+.hit-path {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+}
+.hit-method {
+  color: var(--dim);
+}
+.hit-who {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Phones: the four-column hit row has nowhere to go, so drop the timestamp
+   and let path + client share the width. */
+@media (max-width: 34rem) {
+  .hit {
+    grid-template-columns: 3rem minmax(0, 1fr);
+    row-gap: 0;
+  }
+  .hit time {
+    display: none;
+  }
+  .hit-who {
+    grid-column: 2;
+  }
+  .bar {
+    grid-template-columns: minmax(0, 1fr) 3.5rem auto;
+  }
+}
