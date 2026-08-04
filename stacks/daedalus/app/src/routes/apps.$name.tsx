@@ -133,7 +133,20 @@ function AppDetail() {
             // entirely — no traefik router, no DNS, no probe — but does NOT
             // stop the container; it keeps running and keeps deploying.
             options={[
-              { value: 'off', label: 'Off', icon: '⏻' },
+              {
+                value: 'off',
+                label: 'Off',
+                icon: '⏻',
+                // The forward-auth middleware is generated FROM the ingress,
+                // so an app gated that way has nothing left to gate once the
+                // ingress is gone. The platform asserts this; catching it here
+                // turns a failed Apply into an explanation.
+                disabled: app.authMode === 'proxy',
+                reason:
+                  app.authMode === 'proxy'
+                    ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
+                    : undefined,
+              },
               { value: 'lab', label: 'Internal', icon: '⛨' },
               { value: 'live', label: 'External', icon: '↗' },
             ]}

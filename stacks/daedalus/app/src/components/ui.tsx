@@ -163,7 +163,10 @@ export function Segmented<T extends string>({
 }: {
   value: T
   onChange: (v: T) => void
-  options: { value: T; label: string; icon?: string }[]
+  // Per-option `disabled` + `reason` exist so a choice the platform would
+  // reject can be greyed out with an explanation, instead of being accepted,
+  // written to the database and then failing at Apply with a build error.
+  options: { value: T; label: string; icon?: string; disabled?: boolean; reason?: string }[]
   disabled?: boolean
 }) {
   return (
@@ -172,7 +175,8 @@ export function Segmented<T extends string>({
         <button
           key={o.value}
           type="button"
-          disabled={disabled}
+          disabled={disabled ?? o.disabled}
+          title={o.reason}
           className={o.value === value ? 'active' : ''}
           onClick={() => {
             onChange(o.value)
