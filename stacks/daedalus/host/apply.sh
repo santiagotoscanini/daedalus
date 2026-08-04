@@ -68,8 +68,6 @@ write_status running validating ""
 SUMMARY="$(jq -r '.summary // "update app registry"' "$REQ")"
 ACTOR="$(jq -r '.actor // "daedalus"' "$REQ")"
 
-PREV_HEAD="$(setpriv --reuid=santiago --regid=users --init-groups git -C "$FLAKE" rev-parse HEAD)"
-
 # --- write ----------------------------------------------------------------
 write_status running writing ""
 install -m 0644 -o santiago -g users "$PAYLOAD" "$TARGET"
@@ -91,13 +89,29 @@ setpriv --reuid=santiago --regid=users --init-groups \
   fail committing "git commit failed"
 
 COMMIT_SHA="$(setpriv --reuid=santiago --regid=users --init-groups git -C "$FLAKE" rev-parse --short HEAD)"
+# The exact commit this apply created — what rollback() reverts. Captured
+# rather than recomputed, so a concurrent commit cannot make the rollback
+# target something this apply never wrote.
+APPLY_COMMIT="$COMMIT_SHA"
 
 # --- roll back ------------------------------------------------------------
-# Used by both failure paths below. Resets the repo to the pre-apply commit
-# and puts the running system back on it, so a bad apply leaves neither a
-# broken box nor a lying git history.
+# Undo this apply's change and put the running system back on the result.
+#
+# `git revert`, NOT `git reset --hard $PREV_HEAD`. The reset version destroyed
+# any commit made between the start of the apply and its failure — this repo is
+# shared with a human at a shell and with flake-autoupgrade, and it really did
+# eat an unrelated commit the first time a switch failed. A revert undoes
+# exactly this apply's commit and leaves everything else alone, at the cost of
+# two commits in the log instead of none. That is the right trade for a repo
+# whose whole job is to be an honest record.
 rollback() {
-  setpriv --reuid=santiago --regid=users --init-groups git -C "$FLAKE" reset --hard "$PREV_HEAD" >/dev/null 2>&1 || true
+  setpriv --reuid=santiago --regid=users --init-groups \
+    git -C "$FLAKE" -c "user.name=daedalus" -c "user.email=$GIT_EMAIL" \
+    revert --no-edit "$APPLY_COMMIT" >>"$LOGFILE" 2>&1 ||
+    # A revert can only fail if the tree moved under us in a conflicting way.
+    # Leave the repo alone in that case: a human untangling a conflict is far
+    # better than a script guessing.
+    echo "revert of $APPLY_COMMIT failed — repo left as-is, resolve by hand" >>"$LOGFILE"
   nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" >>"$LOGFILE" 2>&1 || true
   COMMIT_SHA=""
 }
@@ -115,10 +129,22 @@ if ! nixos-rebuild build --flake "$FLAKE#$HOSTNAME" >>"$LOGFILE" 2>&1; then
 fi
 
 # --- switch ---------------------------------------------------------------
+# Retried once before giving up. `switch` exits non-zero if ANY unit fails to
+# come back, and some of those failures are transient rather than caused by the
+# change: DNS is briefly unavailable while pi-hole restarts, so a unit that
+# talks to the network (cloudflared-route-sync, reconciling CF CNAMEs) can fail
+# and then succeed on its own Restart=on-failure seconds later. Rolling back on
+# that is both unnecessary and destructive — it reverts a change that was
+# perfectly good. Observed in practice; the second attempt succeeds.
 write_status running switching ""
 if ! nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" >>"$LOGFILE" 2>&1; then
-  rollback
-  fail switching "$(tail -c 1200 "$LOGFILE")"
+  echo "switch failed once — retrying in 20s before rolling back" >>"$LOGFILE"
+  sleep 20
+  if ! nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" >>"$LOGFILE" 2>&1; then
+    rollback
+    fail switching "$(tail -c 1200 "$LOGFILE")"
+  fi
+  echo "switch succeeded on retry (first failure was transient)" >>"$LOGFILE"
 fi
 
 # --- push -----------------------------------------------------------------
