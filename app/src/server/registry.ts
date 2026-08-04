@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
+import type { AccessWindow } from '../lib/access-window'
 
 // Server functions behind the Apps UI. Kept in one module so the list page,
 // the detail page and the apply bar all read the same shapes.
@@ -56,9 +57,12 @@ export const fetchApp = createServerFn()
       withDeploys: boolean
       withEnv: boolean
       withResources: boolean
+      withAccess: boolean
+      accessWindow: AccessWindow
     }) => input,
   )
-  .handler(async ({ data: { name, withLogs, withDeploys, withEnv, withResources } }) => {
+  .handler(async ({ data }) => {
+    const { name, withLogs, withDeploys, withEnv, withResources, withAccess, accessWindow } = data
     const { getApp, driftOf } = await import('../lib/repo/apps')
     const { effectiveHostname } = await import('../lib/hostname')
     const { hostnamesTakenBy } = await import('../lib/nix-manifest')
@@ -72,6 +76,7 @@ export const fetchApp = createServerFn()
       logVolume,
       NO_RESOURCES,
     } = await import('../lib/metrics')
+    const { appAccess, noAccess } = await import('../lib/access')
     const { readCiSnapshot } = await import('../lib/ci')
     const NO_CI = {
       ok: false,
@@ -103,6 +108,7 @@ export const fetchApp = createServerFn()
     const [
       statuses,
       resources,
+      access,
       ci,
       activity,
       dbSize,
@@ -121,6 +127,15 @@ export const fetchApp = createServerFn()
         withResources ? appResources(name).catch(() => NO_RESOURCES) : (
           Promise.resolve(NO_RESOURCES)
         ),
+        // Ten Loki queries, and only the access tab reads them. Also gated on
+        // the app actually being published through the tunnel: `stage != live`
+        // means there is no cfweb traffic to find, so the queries would all be
+        // a round trip to confirm zero.
+        withAccess && record.stage === 'live' ?
+          appAccess(effectiveHostname(record.name, record.hostname), accessWindow).catch(() =>
+            noAccess(accessWindow),
+          )
+        : Promise.resolve(noAccess(accessWindow)),
         // Deployments tab only, same gating reason as logs.
         withDeploys ? readCiSnapshot(name) : Promise.resolve(NO_CI),
         withDeploys ? activityLog(name, 60) : Promise.resolve([]),
@@ -150,6 +165,7 @@ export const fetchApp = createServerFn()
       applyStatus,
       deployStatus,
       resources,
+      access,
       ci,
       activity: activity.map((l) => ({
         ts: l.ts.toISOString(),

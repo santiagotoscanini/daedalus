@@ -13,6 +13,16 @@ import {
   StatePill,
   Toggle,
 } from '../components/ui'
+// ./access-window, NOT ./access — same split as env-groups below. The window
+// table is a value the picker and validateSearch both need in the browser;
+// ./access talks to Loki and must never follow it there.
+import {
+  ACCESS_WINDOWS,
+  DEFAULT_WINDOW,
+  WINDOW_SPEC,
+  isAccessWindow,
+  type AccessWindow,
+} from '../lib/access-window'
 import type { DeployStatus } from '../lib/deploy'
 // ./env-groups, NOT ./env-snapshot: this is client code, and env-snapshot
 // imports node:fs/promises. Vite externalises node builtins for the browser,
@@ -29,29 +39,36 @@ import {
   triggerDeploy,
 } from '../server/registry'
 
-const TABS = ['overview', 'deployments', 'settings', 'secrets', 'logs'] as const
+const TABS = ['overview', 'deployments', 'access', 'settings', 'secrets', 'logs'] as const
 
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
   // it is linkable ("look at ipcrawl's settings"), and it renders on the
   // server, so the settings form is not a client-only surface.
-  validateSearch: (search: Record<string, unknown>): { tab: Tab } => ({
-    tab: TABS.includes(search.tab as Tab) ? (search.tab as Tab) : 'overview',
-  }),
+  //
+  // `range` is optional rather than defaulted here on purpose: an always-present
+  // value would put `?range=7d` in every URL on the site, including the links
+  // from the apps list that have nothing to do with the access tab.
+  validateSearch: (search: Record<string, unknown>): AppSearch => {
+    const tab = TABS.includes(search.tab as Tab) ? (search.tab as Tab) : 'overview'
+    return isAccessWindow(search.range) ? { tab, range: search.range } : { tab }
+  },
   // The loader depends on the tab, so switching tabs refetches — that is what
   // lets the logs stay off the wire until the logs tab is actually open.
-  loaderDeps: ({ search }) => ({ tab: search.tab }),
+  loaderDeps: ({ search }) => ({ tab: search.tab, range: search.range ?? DEFAULT_WINDOW }),
   loader: async ({ params, deps }) => {
     const data = await fetchApp({
       data: {
         name: params.name,
-        // Both are only fetched for the tab that shows them. Loader data is
+        // Each is only fetched for the tab that shows it. Loader data is
         // serialised into the HTML for hydration, so pulling logs and deploy
-        // history on every tab would pay for them four times over.
+        // history on every tab would pay for them five times over.
         withLogs: deps.tab === 'logs',
         withDeploys: deps.tab === 'deployments',
         withEnv: deps.tab === 'secrets',
         withResources: deps.tab === 'overview',
+        withAccess: deps.tab === 'access',
+        accessWindow: deps.range,
       },
     })
     if (!data) throw notFound()
@@ -70,6 +87,7 @@ export const Route = createFileRoute('/apps/$name')({
 })
 
 type Tab = (typeof TABS)[number]
+type AppSearch = { tab: Tab; range?: AccessWindow }
 
 function AppDetail() {
   const {
@@ -89,9 +107,10 @@ function AppDetail() {
     takenHostnames,
     ci,
     activity,
+    access,
   } = Route.useLoaderData()
   const router = useRouter()
-  const { tab } = Route.useSearch()
+  const { tab, range } = Route.useSearch()
 
   const readOnly = app.managedInNix
   const state = status?.state ?? 'unknown'
@@ -203,7 +222,9 @@ function AppDetail() {
             key={t}
             to="/apps/$name"
             params={{ name: app.name }}
-            search={{ tab: t }}
+            // Carry the rest of the search forward, so switching to another tab
+            // and back does not silently reset the access window.
+            search={(prev) => ({ ...prev, tab: t })}
             className={t === tab ? 'active' : ''}
             replace
           >
@@ -445,6 +466,16 @@ function AppDetail() {
         </>
       )}
 
+      {tab === 'access' && (
+        <Access
+          name={app.name}
+          hostname={app.effectiveHostname}
+          stage={app.stage}
+          access={access}
+          range={range ?? DEFAULT_WINDOW}
+        />
+      )}
+
       {tab === 'settings' && (
         <div className="settings">
           <Panel title="Platform">
@@ -663,6 +694,304 @@ function AppDetail() {
       />
     </>
   )
+}
+
+type AccessData = Awaited<ReturnType<typeof fetchApp>> extends infer T ?
+  T extends { access: infer A } ?
+    A
+  : never
+: never
+
+/**
+ * Who is reaching this app from the internet.
+ *
+ * Only the Cloudflare tunnel can answer that. The edge forwards
+ * Cf-Connecting-Ip and Cf-Ipcountry, traefik keeps exactly those two headers,
+ * and Loki has the access log — so an app published through the tunnel has a
+ * real client identity per request. A LAN request has none: rootlessport
+ * rewrites the source address on the way in, and every device in the house
+ * arrives as the same bridge IP.
+ *
+ * So this is not "no data yet" for an internal app, it is "there is no such
+ * thing", and the empty state says which.
+ */
+function Access({
+  name,
+  hostname,
+  stage,
+  access,
+  range,
+}: {
+  name: string
+  hostname: string
+  stage: string
+  access: AccessData
+  range: AccessWindow
+}) {
+  if (stage !== 'live') {
+    return (
+      <Panel title="Access patterns" wide>
+        <p className="panel-empty">
+          {name} is {stage === 'off' ? 'not exposed' : 'internal'}, so there are no remote clients to
+          break down.
+        </p>
+        <p className="panel-note">
+          Client IP and country come from the headers Cloudflare adds at the edge, which only exist
+          on requests that arrive through the tunnel. LAN requests reach traefik through
+          rootlessport, which replaces the source address — every phone, laptop and WireGuard peer
+          in the house shows up as the same bridge IP. Set exposure to{' '}
+          <strong>External</strong> above to start collecting this.
+        </p>
+      </Panel>
+    )
+  }
+
+  const spec = WINDOW_SPEC[range]
+  const okRate = access.total > 0 ? ((access.total - access.rejected) / access.total) * 100 : null
+  const picker = (
+    <nav className="range">
+      {ACCESS_WINDOWS.map((w) => (
+        <Link
+          key={w}
+          to="/apps/$name"
+          params={{ name }}
+          search={(prev) => ({ ...prev, tab: 'access' as const, range: w })}
+          className={w === range ? 'active' : ''}
+          replace
+        >
+          {WINDOW_SPEC[w].label}
+        </Link>
+      ))}
+    </nav>
+  )
+
+  if (!access.available) {
+    return (
+      <Panel title="Access patterns" action={picker} wide>
+        <p className="panel-empty">Loki did not answer. The access log is the only source here.</p>
+      </Panel>
+    )
+  }
+
+  return (
+    <div className="access">
+      <div className="access-head">
+        <p className="lede">
+          Remote requests to <code>{hostname}</code> over {spec.prose}, from traefik&rsquo;s access
+          log.
+        </p>
+        {picker}
+      </div>
+
+      <div className="metrics">
+        <Metric label="Remote requests" value={access.total.toLocaleString()}>
+          <AreaChart values={access.series} state={access.total > 0 ? 'running' : 'unknown'} />
+        </Metric>
+        <Metric label="Unique clients" value={access.clients.toLocaleString()} unit="IPs" />
+        <Metric label="Countries" value={access.countries.toLocaleString()} />
+        <Metric
+          label="Rejected"
+          value={access.rejected.toLocaleString()}
+          unit={okRate === null ? undefined : `${okRate.toFixed(0)}% ok`}
+        />
+      </div>
+
+      {access.total === 0 ? (
+        <Panel title="Where from" wide>
+          <p className="panel-empty">
+            Nothing arrived through the tunnel in {spec.prose}. The route exists — this app is just
+            not being visited from outside.
+          </p>
+        </Panel>
+      ) : (
+        <div className="settings">
+          <Panel title="Where from">
+            <Bars
+              rows={access.byCountry.map((c) => ({
+                key: c.code,
+                label: (
+                  <>
+                    {c.flag && (
+                      <span className="flag" aria-hidden="true">
+                        {c.flag}
+                      </span>
+                    )}
+                    {c.name}
+                  </>
+                ),
+                count: c.count,
+              }))}
+              total={access.total}
+              tone="geo"
+            />
+          </Panel>
+
+          <Panel title="Top clients">
+            <Bars
+              rows={access.byClient.map((c) => ({
+                key: c.ip,
+                label: (
+                  <>
+                    <code>{c.ip}</code>
+                    {c.flag && (
+                      <span className="flag" aria-hidden="true">
+                        {c.flag}
+                      </span>
+                    )}
+                  </>
+                ),
+                count: c.count,
+              }))}
+              total={access.total}
+              tone="client"
+            />
+          </Panel>
+
+          <Panel title="Top paths">
+            <Bars
+              rows={access.byPath.map((p) => ({
+                key: `${p.path}-${p.status}`,
+                label: (
+                  <>
+                    <span className={`status status-${p.status.slice(0, 1)}`}>{p.status}</span>
+                    <code title={p.path}>{p.path}</code>
+                  </>
+                ),
+                count: p.count,
+              }))}
+              total={access.total}
+              tone="path"
+            />
+          </Panel>
+
+          <Panel title="Top user agents">
+            <Bars
+              rows={access.byAgent.map((a) => ({
+                key: a.key,
+                label: <span title={a.key}>{shortAgent(a.key)}</span>,
+                count: a.count,
+              }))}
+              total={access.total}
+              tone="agent"
+            />
+          </Panel>
+        </div>
+      )}
+
+      {access.recentRejects.length > 0 && (
+        <Panel
+          title="Recent rejected requests"
+          wide
+          action={
+              <a
+                className="btn btn-ghost"
+                href={`https://grafana.toscanini.me/d/s2-security/security?from=now-${range}&to=now`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                ↗ Grafana
+              </a>
+            }
+          >
+            <p className="panel-note">
+              4xx and 5xx from the tunnel. Most of this is background noise — the internet scans
+              every public hostname for WordPress paths within hours of the DNS record appearing,
+              and a 404 is the correct answer. What is worth reading is a <em>succeeding</em>{' '}
+              request to somewhere unexpected, not these.
+            </p>
+            <div className="hits">
+              {access.recentRejects.map((r, i) => (
+                <div key={`${r.ts}-${String(i)}`} className="hit">
+                  <time>{fmtLogTime(r.ts)}</time>
+                  <span className={`status status-${r.status.slice(0, 1)}`}>{r.status}</span>
+                  <span className="hit-path" title={`${r.method} ${r.path}`}>
+                    <span className="hit-method">{r.method}</span> {r.path}
+                  </span>
+                  <span className="hit-who" title={r.agent}>
+                    {r.flag && <span aria-hidden="true">{r.flag}</span>}
+                    <code>{r.ip}</code>
+                  </span>
+                </div>
+              ))}
+            </div>
+        </Panel>
+      )}
+
+      <p className="footnote">
+        Only tunnel traffic is counted. Loki keeps 30 days, so that is the longest window there is,
+        and the Grafana link above opens the same queries across every published host rather than
+        just this one.
+      </p>
+    </div>
+  )
+}
+
+/** A ranked list with a proportion bar. The ranking is the information. */
+function Bars({
+  rows,
+  total,
+  tone,
+}: {
+  rows: { key: string; label: ReactNode; count: number }[]
+  total: number
+  tone: string
+}) {
+  if (rows.length === 0) return <p className="panel-empty">Nothing recorded.</p>
+  // Scaled against the top row, not the grand total: with one dominant source
+  // every other bar would round to an invisible sliver, and the point of the
+  // bar is to compare the rows to each other.
+  const top = Math.max(...rows.map((r) => r.count), 1)
+  return (
+    <div className={`bars bars-${tone}`}>
+      {rows.map((r) => (
+        <div key={r.key} className="bar">
+          <span className="bar-label">{r.label}</span>
+          <span className="bar-track" aria-hidden="true">
+            <span style={{ width: `${String(Math.max(2, (r.count / top) * 100))}%` }} />
+          </span>
+          <span className="bar-count">
+            {r.count.toLocaleString()}
+            {total > 0 && <small>{((r.count / total) * 100).toFixed(0)}%</small>}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const BROWSER_NAME: Record<string, string> = { Edg: 'Edge', OPR: 'Opera' }
+const OS_NAME: Record<string, string> = {
+  'Windows NT': 'Windows',
+  Macintosh: 'macOS',
+  CrOS: 'ChromeOS',
+}
+
+/** Browser/bot out of a user-agent string. The full text is in the title. */
+function shortAgent(ua: string): string {
+  if (ua === '' || ua === '-') return 'none'
+
+  // Crawlers name themselves — Googlebot, GPTBot, bingbot, SemrushBot. Capture
+  // the whole token, not the substring "bot", so three different crawlers do
+  // not collapse into three identical rows.
+  const bot = /([A-Za-z][A-Za-z0-9_.-]*(?:bot|crawler|spider))/i.exec(ua)
+  if (bot) return bot[1] ?? 'bot'
+  const tool = /^(curl|Wget|python-requests|Go-http-client|okhttp)/i.exec(ua)
+  if (tool) return tool[1] ?? ''
+
+  // Edge and Opera both carry a Chrome token as well, and it comes first — so
+  // they have to be matched before it or every Edge visit reads as Chrome.
+  const branded = /(Firefox|Edg|OPR)\/([0-9]+)/.exec(ua) ?? /(Chrome)\/([0-9]+)/.exec(ua)
+  // Safari/604 is the WebKit build, not the browser version; Safari puts its
+  // own in Version/.
+  const safari = /Version\/([0-9]+)[^)]*Safari\//.exec(ua)
+
+  let label: string
+  if (branded) label = `${BROWSER_NAME[branded[1] ?? ''] ?? branded[1] ?? ''} ${branded[2] ?? ''}`
+  else if (safari) label = `Safari ${safari[1] ?? ''}`
+  else return ua.slice(0, 48)
+
+  const os = /(Windows NT|Macintosh|iPhone|iPad|Android|Linux|CrOS)/.exec(ua)?.[1]
+  return os === undefined ? label : `${label} · ${OS_NAME[os] ?? os}`
 }
 
 type CiData = Awaited<ReturnType<typeof fetchApp>> extends infer T ?
