@@ -100,9 +100,13 @@ function AppDetail() {
           </h1>
           <p className="lede">{app.description || 'No description.'}</p>
           <p className="hero-links">
-            <a href={`https://${app.name}.toscanini.me`} target="_blank" rel="noreferrer">
-              ↗ {app.name}.toscanini.me
-            </a>
+            {app.stage === 'off' ? (
+              <span className="muted">⏻ not exposed</span>
+            ) : (
+              <a href={`https://${app.name}.toscanini.me`} target="_blank" rel="noreferrer">
+                ↗ {app.name}.toscanini.me
+              </a>
+            )}
             {app.sourceMode === 'local' ? (
               <span className="muted">⎇ stacks/{app.name}/app</span>
             ) : (
@@ -125,11 +129,20 @@ function AppDetail() {
             onChange={(v) => {
               patch({ stage: v })
             }}
+            // Three rungs, each adding to the last. "Off" removes the ingress
+            // entirely — no traefik router, no DNS, no probe — but does NOT
+            // stop the container; it keeps running and keeps deploying.
             options={[
+              { value: 'off', label: 'Off', icon: '⏻' },
               { value: 'lab', label: 'Internal', icon: '⛨' },
               { value: 'live', label: 'External', icon: '↗' },
             ]}
           />
+          {app.stage === 'off' && (
+            <p className="exposure-note">
+              No route, DNS or probe. The container still runs.
+            </p>
+          )}
         </div>
       </section>
 

@@ -160,6 +160,10 @@ let
       storageEnabled = app.storage.enable;
       storageHostPath = app.storage.hostPath;
 
+      # `stage = "off"` means no ingress: no webApp, so no traefik router, no
+      # DNS, no gatus probe, no Cloudflare route. The container still runs.
+      exposed = app.stage != "off";
+
       # Local-source app (stacks/daedalus): built and run from this repo
       # instead of pulled from the registry, with the source bind-mounted so a
       # dev server hot-reloads it. See the `source` option's description for
@@ -234,6 +238,9 @@ let
             )
           }
           HEALTH_TIMEOUT=${toString app.deploy.healthTimeout}
+          # The health check dials the app THROUGH traefik, so `stage = "off"`
+          # leaves nothing to dial and every deploy would report failure.
+          EXPOSED=${if exposed then "1" else "0"}
           AUTHFILE=${lib.escapeShellArg ghcrAuthFile}
           LAN_IP=${lib.escapeShellArg lanIp}
           STATE=${lib.escapeShellArg "${deployStateDir}/${name}"}
@@ -392,6 +399,14 @@ let
           assertion = localSource -> !egressEnabled;
           message = "fleet.apps.${name}: `source.mode = \"local\"` cannot combine with `egress` — the dev server's install step needs the npm registry, which a VPN-only netns doesn't route to.";
         }
+        {
+          assertion = proxyAuth -> exposed;
+          message = "fleet.apps.${name}: `auth.mode = \"proxy\"` needs an ingress to gate — the forward-auth middleware is generated from the webApp, and `stage = \"off\"` emits none. Use `auth.mode = \"none\"` while it is unexposed, or expose it.";
+        }
+        {
+          assertion = app.prometheus.enable -> exposed;
+          message = "fleet.apps.${name}: `prometheus.enable` with `stage = \"off\"` would be a permanently-down scrape target — an unexposed app leaves traefik-net, so prometheus cannot reach it.";
+        }
       ];
 
       # The Pocket ID client for native mode — id `<name>`, secret from
@@ -430,18 +445,28 @@ let
       # membership comes from webApps.isolated, and listing "traefik"
       # here as well would re-open the shared path (assertion in
       # platform/publishing.nix).
+      # `exposed` gates the traefik membership too: an app with no router has
+      # no reason to sit on the shared bridge. The key itself is still emitted
+      # (possibly as `[ ]`), because that registration is what earns the
+      # mandatory Type=oneshot override.
       fleet.bridgeMemberships."${cName}" =
-        lib.optional (!egressEnabled && !isolatedAuth) "traefik"
+        lib.optional (exposed && !egressEnabled && !isolatedAuth) "traefik"
         ++ lib.optional postgresEnabled "app-db";
 
       # Web exposure — hardcoded internal port 3000. Bridge-routed by default
       # (serviceName on traefik-net). In egress mode the app can't ride
       # traefik-net, so traefik dials the host port gluetun publishes via
       # host.containers.internal — the same escape hatch the TV stack uses.
-      fleet.webApps."${name}" = {
-        inherit hostname;
-        exposeRemotely = app.stage == "live";
-      }
+      # `stage = "off"` emits NO webApp at all, which is what actually removes
+      # the ingress: traefik routers, the pi-hole DNS entry, the gatus probe
+      # and the Cloudflare route are all materialized from this one attrset
+      # (platform/publishing.nix). Dropping it is therefore a real state, not a
+      # cosmetic flag — nothing is left listening for that hostname.
+      fleet.webApps = lib.optionalAttrs exposed {
+        "${name}" = {
+          inherit hostname;
+          exposeRemotely = app.stage == "live";
+        }
       // (lib.optionalAttrs proxyAuth {
         auth = "oidc";
         isolated = isolatedAuth;
@@ -465,6 +490,7 @@ let
             port = 3000;
           }
       );
+      };
 
       # Prometheus scrapes the app's own /metrics endpoint (when
       # prometheus.enable). Postgres metrics come from the single
@@ -497,8 +523,11 @@ let
           };
 
       # Homepage tile lands in the per-app section.
-      fleet.homepageServices."${tileGroup}" = [
-        homepageTile
+      # The app's own tile is dropped when it has no ingress — its href would
+      # 404 and its siteMonitor would show a permanent red dot for something
+      # working exactly as configured. The Repo/Logs/DB tiles still apply.
+      fleet.homepageServices."${tileGroup}" = lib.optional exposed homepageTile
+      ++ [
         repoTile
         logsTile
       ]
@@ -780,15 +809,30 @@ in
 
             stage = lib.mkOption {
               type = lib.types.enum [
+                "off"
                 "lab"
                 "live"
               ];
               default = "lab";
               description = ''
-                "lab" = LAN-only (<name>.toscanini.me via pi-hole + traefik).
+                How the app is reachable — three rungs, each adding to the last.
+
+                "off"  = no ingress at all. No traefik router, no DNS entry,
+                no gatus probe, no Cloudflare route. The container still runs
+                and still deploys; nothing can reach it over HTTP. For an app
+                that is mid-migration, or one that only ever needed to talk to
+                the database. NOT the same as stopping it.
+
+                "lab"  = LAN-only (<name>.toscanini.me via pi-hole + traefik).
+
                 "live" = adds Cloudflare-tunnel exposure (public CNAME via
                 cloudflared-route-sync). The *.toscanini.me wildcard cert
                 covers both — no per-app cert work.
+
+                Consequence of "off" worth knowing: the deploy health check
+                runs THROUGH traefik, so with no ingress there is nothing to
+                check. Deploys still pull and restart, they just cannot certify
+                that the new image serves — see assets/deploy.sh.
               '';
             };
 

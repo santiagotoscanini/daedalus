@@ -172,6 +172,20 @@ echo "new image: $running -> $new_id ($after) — restarting $UNIT"
 echo "$after failed" > "$STATE"
 systemctl restart "$UNIT"
 
+# No ingress (stage = "off") means no way to ask whether the new image serves.
+# Record the deploy honestly as unverified rather than failing it: the check is
+# absent, not negative. `podman run -d` returning is the only signal available,
+# and this says so out loud instead of implying a passed health check.
+if [ "$EXPOSED" != "1" ]; then
+  echo "$after ok" > "$STATE"
+  record_deploy ok unverified
+  echo "deployed $after — NOT health-checked (stage=off: no ingress to probe)"
+  if [ -n "$old_id" ]; then
+    podman_ rmi "$old_id" >/dev/null 2>&1 || true
+  fi
+  exit 0
+fi
+
 # The container unit is Type=oneshot (see platform/podman.nix): `podman run -d`
 # returns in milliseconds, so systemd calls the restart a success even for a
 # container that dies on startup. Asking traefik is the only honest signal.

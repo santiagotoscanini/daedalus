@@ -1044,3 +1044,44 @@ h2 {
   color: var(--muted);
   font-size: 0.8rem;
 }
+
+/* ── control-plane section ──────────────────────────────────────────────── */
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  margin: 2.5rem 0 0.85rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--border-soft);
+  font-size: 0.7rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+}
+.section-head small {
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+  font-size: 0.76rem;
+}
+
+.app-list-platform .app-row {
+  background: transparent;
+  border-style: dashed;
+}
+
+.chip-off {
+  color: var(--dim);
+  border-color: var(--border);
+}
+
+.exposure-note {
+  margin: 0.45rem 0 0;
+  font-size: 0.72rem;
+  color: var(--dim);
+  max-width: 15rem;
+  text-align: right;
+  margin-left: auto;
+}
