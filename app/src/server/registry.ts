@@ -176,8 +176,17 @@ export const removeEnvVar = createServerFn({ method: 'POST' })
 export const applyRegistry = createServerFn({ method: 'POST' }).handler(async () => {
   const { listApps, toRegistryExport, driftOf } = await import('../lib/repo/apps')
   const { manifestEntries } = await import('../lib/nix-manifest')
-  const { requestApply, summarise } = await import('../lib/apply')
+  const { requestApply, summarise, readApplyStatus } = await import('../lib/apply')
   const { renderRegistryFile } = await import('../lib/registry-file')
+
+  // Refuse while one is in flight. The host script holds fleet.rebuildLock, so
+  // a second apply could not corrupt anything — it would simply queue behind
+  // it and then write a registry snapshot taken BEFORE the first one landed.
+  // Rejecting here is both faster feedback and the correct answer.
+  const inFlight = await readApplyStatus()
+  if (inFlight.state === 'running') {
+    return { ok: false as const, reason: `an apply is already running (${inFlight.phase})` }
+  }
 
   const records = await listApps()
   const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))

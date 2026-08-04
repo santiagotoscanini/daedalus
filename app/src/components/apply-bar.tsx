@@ -11,7 +11,7 @@ import type { ApplyStatus } from '../lib/apply'
 // it names what changed, it needs a click, and it reports the phase the host
 // agent is actually in rather than a spinner.
 
-const PHASES = ['validating', 'writing', 'committing', 'building', 'switching', 'pushing'] as const
+const PHASES = ['waiting', 'validating', 'writing', 'committing', 'building', 'switching', 'pushing'] as const
 
 export function ApplyBar({
   changed,

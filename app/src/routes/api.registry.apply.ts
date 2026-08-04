@@ -20,8 +20,19 @@ export const Route = createFileRoute('/api/registry/apply')({
       POST: async ({ request }) => {
         const { listApps, toRegistryExport, driftOf } = await import('../lib/repo/apps')
         const { manifestEntries } = await import('../lib/nix-manifest')
-        const { requestApply, summarise } = await import('../lib/apply')
+        const { requestApply, summarise, readApplyStatus } = await import('../lib/apply')
         const { renderRegistryFile } = await import('../lib/registry-file')
+
+        // Same guard as the UI path: the host script's flock would serialise a
+        // second apply anyway, but it would then commit a registry snapshot
+        // taken before the first one landed.
+        const inFlight = await readApplyStatus()
+        if (inFlight.state === 'running') {
+          return Response.json(
+            { status: 'busy', reason: `an apply is already running (${inFlight.phase})` },
+            { status: 409 },
+          )
+        }
 
         const records = await listApps()
         const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
