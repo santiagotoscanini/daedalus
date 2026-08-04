@@ -63,8 +63,24 @@ export const fetchApp = createServerFn()
     const { effectiveHostname } = await import('../lib/hostname')
     const { hostnamesTakenBy } = await import('../lib/nix-manifest')
     const { manifestEntries } = await import('../lib/nix-manifest')
-    const { appStatuses, appResources, databaseSize, recentLogs, logVolume, NO_RESOURCES } =
-      await import('../lib/metrics')
+    const {
+      appStatuses,
+      appResources,
+      activityLog,
+      databaseSize,
+      recentLogs,
+      logVolume,
+      NO_RESOURCES,
+    } = await import('../lib/metrics')
+    const { readCiSnapshot } = await import('../lib/ci')
+    const NO_CI = {
+      ok: false,
+      available: false,
+      takenAt: null,
+      runners: [],
+      activeJobs: [],
+      runs: [],
+    }
     const { readApplyStatus } = await import('../lib/apply')
     const { lastDeploy, pullFailing, readDeployStatus } = await import('../lib/deploy')
 
@@ -87,6 +103,8 @@ export const fetchApp = createServerFn()
     const [
       statuses,
       resources,
+      ci,
+      activity,
       dbSize,
       logs,
       logs1h,
@@ -103,6 +121,9 @@ export const fetchApp = createServerFn()
         withResources ? appResources(name).catch(() => NO_RESOURCES) : (
           Promise.resolve(NO_RESOURCES)
         ),
+        // Deployments tab only, same gating reason as logs.
+        withDeploys ? readCiSnapshot(name) : Promise.resolve(NO_CI),
+        withDeploys ? activityLog(name, 60) : Promise.resolve([]),
         record.postgres ? databaseSize(name) : Promise.resolve(null),
         // Only on the logs tab. Loader data is serialised into the HTML for
         // hydration, so fetching 60 lines unconditionally doubled the weight
@@ -129,6 +150,12 @@ export const fetchApp = createServerFn()
       applyStatus,
       deployStatus,
       resources,
+      ci,
+      activity: activity.map((l) => ({
+        ts: l.ts.toISOString(),
+        line: l.line,
+        source: l.source,
+      })),
       // So the hostname field can reject a collision as it is typed rather
       // than during the rebuild it would otherwise fail.
       takenHostnames: await hostnamesTakenBy(effectiveHostname(record.name, record.hostname)),

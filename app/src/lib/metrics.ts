@@ -265,6 +265,73 @@ export async function logVolume(name: string): Promise<number | null> {
   }
 }
 
+/**
+ * The live build-and-deploy stream for an app.
+ *
+ * Two Loki selectors merged, because the pipeline genuinely has two halves and
+ * neither alone is the story:
+ *
+ *   `unit="app-<name>-deploy.service"` — this box pulling the new image,
+ *      restarting the container and health-checking it. alloy ships the host
+ *      journal (stacks/logging), so this is complete and live.
+ *
+ *   `service_name="gha-runner-<name>"` — the runner announcing `Running job:`
+ *      and `Job … completed with result:`.
+ *
+ * What is deliberately NOT here is the build's step output. The Actions runner
+ * writes that to its _diag files and streams it straight to GitHub; the
+ * container's stdout only ever carries those two lifecycle lines. Verified
+ * against 30 days of history — everything else in that stream is runner
+ * registration. Step-level progress comes from the CI snapshot instead
+ * (lib/ci.ts), and the full text lives behind the Actions link.
+ */
+export type ActivityLine = LogLine & { source: 'build' | 'deploy' }
+
+export async function activityLog(name: string, limit = 60, hours = 6): Promise<ActivityLine[]> {
+  // Two queries, not one. LogQL's `or` combines line filters within a stream
+  // selector, not two different selectors — and these are genuinely different
+  // streams: the deploy unit is labelled `unit=`, the runner `service_name=`.
+  // Merging in TypeScript is the honest version of what a single query would
+  // only look like it was doing.
+  const [deploy, build] = await Promise.all([
+    lokiLines(`{unit="app-${name}-deploy.service"}`, limit, hours),
+    // Only the lifecycle lines. The rest of that stream is runner
+    // registration, which is noise next to a deploy.
+    lokiLines(`{service_name="gha-runner-${name}"} |~ "(?i)(running job|job .* completed)"`, limit, hours),
+  ])
+
+  return [
+    ...deploy.map((l) => ({ ...l, source: 'deploy' as const })),
+    ...build.map((l) => ({ ...l, source: 'build' as const })),
+  ]
+    .sort((a, b) => a.ts.getTime() - b.ts.getTime())
+    .slice(-limit)
+}
+
+async function lokiLines(selector: string, limit: number, hours: number): Promise<LogLine[]> {
+  const end = Date.now() * 1e6
+  const start = (Date.now() - hours * 60 * 60 * 1000) * 1e6
+  const url =
+    `${LOKI()}/loki/api/v1/query_range?query=${encodeURIComponent(selector)}` +
+    `&start=${String(start)}&end=${String(end)}&limit=${String(limit)}&direction=backward`
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) })
+    if (!res.ok) return []
+    const body = (await res.json()) as {
+      data?: { result?: { stream: Record<string, string>; values: [string, string][] }[] }
+    }
+    return (body.data?.result ?? []).flatMap((s) =>
+      s.values.map(([ns, line]) => ({
+        ts: new Date(Number(BigInt(ns) / 1_000_000n)),
+        level: s.stream.level ?? null,
+        line,
+      })),
+    )
+  } catch {
+    return []
+  }
+}
+
 function serviceToName(service: string | undefined): string {
   return (service ?? '').replace(/-svc@file$/, '')
 }

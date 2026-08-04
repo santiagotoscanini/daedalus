@@ -1552,3 +1552,99 @@ h2 {
     overflow-wrap: anywhere;
   }
 }
+
+/* ── CI runners ─────────────────────────────────────────────────────────── */
+
+.chip-muted {
+  color: var(--dim);
+  opacity: 0.8;
+}
+
+.runners {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr));
+  gap: 0.7rem;
+}
+
+.runner {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  padding: 0.8rem 0.95rem;
+}
+/* Only the busy one is highlighted. Idle is the resting state of an ephemeral
+   runner, so colouring it would make the normal case look like an event. */
+.runner-busy {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-2));
+}
+
+.runner-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.7rem;
+}
+.runner-head code {
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.runner-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.job {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.job-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.3rem 0.7rem;
+}
+.job-name {
+  font-size: 0.88rem;
+  font-weight: 550;
+}
+.job-elapsed {
+  font-size: 0.76rem;
+  color: var(--dim);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.job-step {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.runners-sub {
+  margin: 1.5rem 0 0.6rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.logs-activity {
+  max-height: 22rem;
+}
+/* The two halves of the pipeline read differently, so they look different. */
+.log-src-build .lvl {
+  color: #6f9bd1;
+}
+.log-src-deploy .lvl {
+  color: var(--dim);
+}
