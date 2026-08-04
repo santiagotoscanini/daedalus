@@ -199,6 +199,14 @@ let
       description = "S2 control plane";
       icon = "mdi-server-network-#e2795a";
     };
+    # Uncapped on purpose: this is a Vite dev server that typechecks and
+    # bundles on demand, so its working set is spiky and unlike a built app's.
+    # A cap sized from steady state would OOM it on the first cold compile.
+    resources = {
+      cpus = null;
+      memoryMb = null;
+      pids = null;
+    };
     notes = {
       app = "The control plane itself. Declared by hand in stacks/daedalus/daedalus.nix rather than in the registry: an Apply that broke this entry would take down the interface you would use to undo it.";
       source = "source.mode = \"local\" — the source lives in the flake repo at stacks/daedalus/app and is bind-mounted into the container, which runs the Vite dev server against it. Saving a file is the whole deploy.";

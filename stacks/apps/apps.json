@@ -21,6 +21,11 @@
         "description": "Anansi — task-tracking experiment",
         "icon": "mdi-spider-#f59e0b"
       },
+      "resources": {
+        "cpus": null,
+        "memoryMb": null,
+        "pids": null
+      },
       "notes": {
         "auth": "Native OIDC: anansi has its own accounts + per-user data, so only it can map a Pocket ID identity onto the right rows. The platform provides the client (id `anansi`, secret from clients.sops) and the OIDC_* env; the app repo owns the Auth.js provider."
       }
@@ -76,6 +81,11 @@
       "homepage": {
         "description": "ipcrawl — exposed-webcam catalogue",
         "icon": "mdi-cctv-#38bdf8"
+      },
+      "resources": {
+        "cpus": null,
+        "memoryMb": null,
+        "pids": null
       },
       "notes": {
         "app": "Fork of github.com/alectrocute/ipcrawl (MIT). Upstream has no Dockerfile and deploys as systemd+nginx on a VPS; the fork adds the Dockerfile + .github/workflows/image.yml that publishes registry.toscanini.me/ipcrawl:latest, so the `image` default applies unchanged. Rebase the fork on upstream to pick up changes.",

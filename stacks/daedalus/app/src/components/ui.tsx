@@ -193,6 +193,87 @@ export function Segmented<T extends string>({
   )
 }
 
+/**
+ * Usage against a ceiling. Renders nothing when there is no ceiling — a bar
+ * needs a denominator, and inventing one (host RAM, "100%") would make an
+ * uncapped container look nearly idle or nearly full depending on the choice.
+ */
+export function Meter({
+  value,
+  max,
+  tone,
+}: {
+  value: number | null
+  max: number | null
+  tone: 'cpu' | 'mem' | 'pids'
+}) {
+  if (value === null || max === null || max <= 0) return null
+  const pct = Math.min(100, (value / max) * 100)
+  return (
+    <div className={`meter meter-${tone}${pct >= 90 ? ' meter-hot' : ''}`}>
+      <span style={{ width: `${String(pct)}%` }} />
+    </div>
+  )
+}
+
+/**
+ * A resource ceiling.
+ *
+ * The minimum position means *uncapped*, not zero — a zero-core or zero-byte
+ * container is not a thing you can ask for, so the bottom of the range is free
+ * to carry the more useful meaning. `onChange` emits null there.
+ */
+export function Slider({
+  label,
+  hint,
+  value,
+  min,
+  max,
+  step,
+  format,
+  disabled,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  value: number | null
+  min: number
+  max: number
+  step: number
+  format: (v: number) => ReactNode
+  disabled?: boolean
+  onChange: (v: number | null) => void
+}) {
+  // Below `min` so the thumb parks left of every real value; the input's own
+  // min is this sentinel, which is what lets "uncapped" be a reachable
+  // position rather than a checkbox next to the slider.
+  const OFF = min - step
+  return (
+    <div className={disabled === true ? 'slider disabled' : 'slider'}>
+      <div className="slider-text">
+        {label}
+        {hint !== undefined && <small>{hint}</small>}
+      </div>
+      <input
+        type="range"
+        min={OFF}
+        max={max}
+        step={step}
+        value={value ?? OFF}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(e) => {
+          const v = Number(e.target.value)
+          onChange(v <= OFF ? null : v)
+        }}
+      />
+      <div className="slider-value">
+        {value === null ? <span className="muted">uncapped</span> : format(value)}
+      </div>
+    </div>
+  )
+}
+
 export function Toggle({
   checked,
   onChange,

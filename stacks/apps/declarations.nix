@@ -100,6 +100,15 @@ let
       inherit (a.homepage) description icon;
     };
 
+    # cgroup caps. Read with `or` defaults so an apps.json predating this
+    # field still evaluates — the file is under git and a revert of it alone
+    # is a legitimate recovery move.
+    resources = {
+      cpus = a.resources.cpus or null;
+      memoryMb = a.resources.memoryMb or null;
+      pids = a.resources.pids or null;
+    };
+
     # `env` is a LIST of {key, value, note} rather than an attrset: the note is
     # the reason a flag is set the way it is, which used to live in a nix
     # comment here and would otherwise be lost in the round-trip through the

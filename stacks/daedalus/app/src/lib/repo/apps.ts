@@ -94,6 +94,9 @@ export const EDITABLE_FIELDS = [
   'storage',
   'litellm',
   'prometheus',
+  'limitCpus',
+  'limitMemoryMb',
+  'limitPids',
 ] as const
 
 export type EditableField = (typeof EDITABLE_FIELDS)[number]
@@ -182,6 +185,9 @@ function toRow(entry: ManifestEntry) {
     authBypassRule: entry.auth.bypassRule ?? null,
     egressContainer: entry.egress?.container ?? null,
     egressHostPort: entry.egress?.hostPort ?? null,
+    limitCpus: entry.resources?.cpus ?? null,
+    limitMemoryMb: entry.resources?.memoryMb ?? null,
+    limitPids: entry.resources?.pids ?? null,
     homepageDescription: entry.homepage.description,
     homepageIcon: entry.homepage.icon,
     notes: entry.notes ?? {},
@@ -212,6 +218,9 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     authIsolated: record.authIsolated,
     egressContainer: record.egressContainer,
     egressHostPort: record.egressHostPort,
+    limitCpus: record.limitCpus,
+    limitMemoryMb: record.limitMemoryMb,
+    limitPids: record.limitPids,
     homepageDescription: record.homepageDescription,
     homepageIcon: record.homepageIcon,
     env: record.envVars.map((e) => `${e.key}=${e.value}`).join('\n'),
@@ -231,6 +240,9 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     authIsolated: manifest.auth.isolated ?? false,
     egressContainer: manifest.egress?.container ?? null,
     egressHostPort: manifest.egress?.hostPort ?? null,
+    limitCpus: manifest.resources?.cpus ?? null,
+    limitMemoryMb: manifest.resources?.memoryMb ?? null,
+    limitPids: manifest.resources?.pids ?? null,
     homepageDescription: manifest.homepage.description,
     homepageIcon: manifest.homepage.icon,
     env: manifest.env.map((e) => `${e.key}=${e.value}`).join('\n'),
@@ -282,6 +294,16 @@ export function toRegistryExport(records: AppRecord[]): {
               ...(r.authBypassRule ? { bypassRule: r.authBypassRule } : {}),
             },
             homepage: { description: r.homepageDescription, icon: r.homepageIcon },
+            // Always emitted in full, nulls included, rather than omitted when
+            // uncapped: the exported file is what a human reads to see what a
+            // container is allowed to use, and an absent key reads as "nobody
+            // considered it" where an explicit null reads as "deliberately
+            // uncapped". declarations.nix tolerates either.
+            resources: {
+              cpus: r.limitCpus,
+              memoryMb: r.limitMemoryMb,
+              pids: r.limitPids,
+            },
             notes: r.notes,
           },
         ]),

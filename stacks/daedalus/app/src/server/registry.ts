@@ -49,12 +49,19 @@ export const fetchApps = createServerFn().handler(async () => {
 
 export const fetchApp = createServerFn()
   .inputValidator(
-    (input: { name: string; withLogs: boolean; withDeploys: boolean; withEnv: boolean }) => input,
+    (input: {
+      name: string
+      withLogs: boolean
+      withDeploys: boolean
+      withEnv: boolean
+      withResources: boolean
+    }) => input,
   )
-  .handler(async ({ data: { name, withLogs, withDeploys, withEnv } }) => {
+  .handler(async ({ data: { name, withLogs, withDeploys, withEnv, withResources } }) => {
     const { getApp, driftOf } = await import('../lib/repo/apps')
     const { manifestEntries } = await import('../lib/nix-manifest')
-    const { appStatuses, databaseSize, recentLogs, logVolume } = await import('../lib/metrics')
+    const { appStatuses, appResources, databaseSize, recentLogs, logVolume, NO_RESOURCES } =
+      await import('../lib/metrics')
     const { readApplyStatus } = await import('../lib/apply')
     const { lastDeploy, pullFailing, readDeployStatus } = await import('../lib/deploy')
 
@@ -74,9 +81,25 @@ export const fetchApp = createServerFn()
       deploys = await listDeployments(record.id)
     }
 
-    const [statuses, dbSize, logs, logs1h, applyStatus, deploy, pullBroken, deployStatus] =
+    const [
+      statuses,
+      resources,
+      dbSize,
+      logs,
+      logs1h,
+      applyStatus,
+      deploy,
+      pullBroken,
+      deployStatus,
+    ] =
       await Promise.all([
         appStatuses([name]),
+        // Nine prometheus queries; only the overview renders them. Same
+        // reasoning as the logs gate below — loader data is serialised into
+        // the HTML, so paying for it on the settings tab is pure waste.
+        withResources ? appResources(name).catch(() => NO_RESOURCES) : (
+          Promise.resolve(NO_RESOURCES)
+        ),
         record.postgres ? databaseSize(name) : Promise.resolve(null),
         // Only on the logs tab. Loader data is serialised into the HTML for
         // hydration, so fetching 60 lines unconditionally doubled the weight
@@ -102,6 +125,7 @@ export const fetchApp = createServerFn()
     return {
       applyStatus,
       deployStatus,
+      resources,
       env: {
         available: envSnapshot.available,
         takenAt: envSnapshot.takenAt,
@@ -150,6 +174,9 @@ export const fetchApp = createServerFn()
         litellm: record.litellm,
         prometheus: record.prometheus,
         operatorSecrets: record.operatorSecrets,
+        limitCpus: record.limitCpus,
+        limitMemoryMb: record.limitMemoryMb,
+        limitPids: record.limitPids,
         authMode: record.authMode,
         authHealthPath: record.authHealthPath,
         authIsolated: record.authIsolated,

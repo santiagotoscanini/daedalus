@@ -1,7 +1,18 @@
 import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
-import { AreaChart, Bytes, Metric, Panel, Row, Segmented, StatePill, Toggle } from '../components/ui'
+import {
+  AreaChart,
+  Bytes,
+  Meter,
+  Metric,
+  Panel,
+  Row,
+  Segmented,
+  Slider,
+  StatePill,
+  Toggle,
+} from '../components/ui'
 import type { DeployStatus } from '../lib/deploy'
 import {
   fetchApp,
@@ -33,6 +44,7 @@ export const Route = createFileRoute('/apps/$name')({
         withLogs: deps.tab === 'logs',
         withDeploys: deps.tab === 'deployments',
         withEnv: deps.tab === 'settings',
+        withResources: deps.tab === 'overview',
       },
     })
     if (!data) throw notFound()
@@ -66,6 +78,7 @@ function AppDetail() {
     pullBroken,
     deployments,
     env,
+    resources,
   } = Route.useLoaderData()
   const router = useRouter()
   const { tab } = Route.useSearch()
@@ -201,9 +214,51 @@ function AppDetail() {
               <AreaChart values={status?.spark ?? []} state={state} />
             </Metric>
 
+            <Metric
+              label="CPU"
+              value={resources.cpu.used === null ? '—' : resources.cpu.used.toFixed(2)}
+              unit={
+                resources.cpu.limit === null ?
+                  'cores'
+                : `/ ${String(resources.cpu.limit)} cores`
+              }
+            >
+              <Meter value={resources.cpu.used} max={resources.cpu.limit} tone="cpu" />
+              <AreaChart values={resources.cpu.spark} state={state} />
+            </Metric>
+
+            <Metric
+              label="Memory"
+              value={resources.memory.used === null ? '—' : fmtMb(resources.memory.used)}
+              unit={
+                resources.memory.limit === null ?
+                  'MB'
+                : `/ ${fmtMb(resources.memory.limit)} MB`
+              }
+            >
+              <Meter value={resources.memory.used} max={resources.memory.limit} tone="mem" />
+              <AreaChart values={resources.memory.spark} state={state} />
+            </Metric>
+
             <Metric label="Health" value={fmtBool(status?.healthy)}>
               <p className="metric-note">
                 gatus probes <code>{app.authHealthPath ?? '/'}</code> from outside every 60s.
+              </p>
+            </Metric>
+
+            <Metric
+              label="Processes"
+              value={resources.pids.used === null ? '—' : String(resources.pids.used)}
+              unit={resources.pids.limit === null ? '' : `/ ${String(resources.pids.limit)}`}
+            >
+              <Meter value={resources.pids.used} max={resources.pids.limit} tone="pids" />
+              <p className="metric-note">
+                {resources.oomKills !== null && resources.oomKills > 0 ?
+                  <span className="bad-text">
+                    {resources.oomKills} OOM kill{resources.oomKills === 1 ? '' : 's'} — the memory
+                    cap is too tight.
+                  </span>
+                : 'Processes and threads. No OOM kills.'}
               </p>
             </Metric>
 
@@ -212,14 +267,12 @@ function AppDetail() {
             </Metric>
           </div>
 
-          {/* Deliberately not CPU/memory. Rootless podman puts container
-              cgroups under user@1000.service, invisible to the node exporter —
-              those series do not exist on this box, so any number here would
-              be invented. See src/lib/metrics.ts. */}
           <p className="footnote">
-            No per-container CPU or memory: rootless podman hides container cgroups from the node
-            exporter, so those series do not exist on this box. Liveness comes from{' '}
-            <code>container_up</code> and throughput from traefik.
+            CPU and memory are read from cgroup v2 by the textfile exporter in{' '}
+            <code>stacks/monitoring</code>, at 60-second resolution — cadvisor cannot see rootless
+            containers. Memory is <code>memory.current</code>, which counts page cache, so an app
+            doing file I/O sits at its limit and is fine; the signal that a cap is too tight is the
+            OOM counter moving.
           </p>
 
           <div className="panels">
@@ -419,6 +472,62 @@ function AppDetail() {
               label="Prometheus scrape"
               hint="Only turn on once the app actually serves /metrics — otherwise it is a permanently-down target."
             />
+          </Panel>
+
+          <Panel title="Resource limits">
+            <Slider
+              label="CPU"
+              hint="Cores the container may burn. A throughput ceiling, not a reservation — over it the app is throttled, not killed."
+              value={app.limitCpus}
+              min={0.25}
+              max={8}
+              step={0.25}
+              disabled={readOnly}
+              format={(v) => (
+                <>
+                  {v} <small>{v === 1 ? 'core' : 'cores'}</small>
+                </>
+              )}
+              onChange={(v) => {
+                patch({ limitCpus: v })
+              }}
+            />
+            <Slider
+              label="Memory"
+              hint="Resident cap. Past it pages spill to zram; the OOM kill lands at twice this, because podman writes --memory-swap through verbatim."
+              value={app.limitMemoryMb}
+              min={128}
+              max={4096}
+              step={128}
+              disabled={readOnly}
+              format={(v) => (
+                <>
+                  {v} <small>MB</small>
+                </>
+              )}
+              onChange={(v) => {
+                patch({ limitMemoryMb: v })
+              }}
+            />
+            <Slider
+              label="Processes"
+              hint="Max processes + threads — a fork-bomb guard. Threads count, so check the Overview before choosing. Podman's own default is 2048."
+              value={app.limitPids}
+              min={64}
+              max={2048}
+              step={64}
+              disabled={readOnly}
+              format={(v) => v}
+              onChange={(v) => {
+                patch({ limitPids: v })
+              }}
+            />
+            <p className="panel-note">
+              Enforced by cgroup v2. These work under rootless podman only because systemd
+              delegates <code>cpu io memory pids</code> down to <code>user@1000.service</code> —
+              without that the flags would be accepted and silently ignored. Takes effect on the
+              next Apply, which restarts the container.
+            </p>
           </Panel>
 
           <Panel title="Presentation">
@@ -700,6 +809,11 @@ function TextField({
 function fmtBool(v: boolean | null | undefined): string {
   if (v === null || v === undefined) return 'no data'
   return v ? 'yes' : 'no'
+}
+
+/** Bytes → whole MB. MiB, matching what --memory takes and cgroup enforces. */
+function fmtMb(bytes: number): string {
+  return Math.round(bytes / (1024 * 1024)).toLocaleString()
 }
 
 /** Older than an hour — worth telling the reader before they misread the panel. */

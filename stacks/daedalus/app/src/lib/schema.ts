@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  real,
   text,
   timestamp,
   uniqueIndex,
@@ -84,6 +85,16 @@ export const apps = pgTable(
     // columns move together — see the assertion in stacks/apps/apps.nix.
     egressContainer: text('egress_container'),
     egressHostPort: integer('egress_host_port'),
+
+    // cgroup v2 caps; null = uncapped, the platform default. Three columns
+    // rather than a jsonb blob because all three are edited, drift-compared
+    // and rendered individually — the reasons `notes` is jsonb do not apply.
+    //
+    // cpus is `real`: fractional cores are the common case (0.5, 1.5) and the
+    // value goes straight into cpu.max as a bandwidth quota.
+    limitCpus: real('limit_cpus'),
+    limitMemoryMb: integer('limit_memory_mb'),
+    limitPids: integer('limit_pids'),
 
     homepageDescription: text('homepage_description').notNull().default(''),
     homepageIcon: text('homepage_icon').notNull().default('mdi-cube-outline-#94a3b8'),

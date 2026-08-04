@@ -183,6 +183,21 @@ let
         gates = [ "podman-${cName}.service" ];
       };
 
+      # cgroup v2 caps — see the `resources` option descriptions for what each
+      # one actually enforces. Omitted entirely when null, so an app with no
+      # limits produces the same podman command line it always did.
+      #
+      # `--memory-swap` is pinned to `--memory` deliberately: podman writes it
+      # into memory.swap.max verbatim and defaults it to 2× memory when unset,
+      # so NOT passing it triples the effective ceiling.
+      resourceFlags =
+        lib.optional (app.resources.cpus != null) "--cpus=${toString app.resources.cpus}"
+        ++ lib.optionals (app.resources.memoryMb != null) [
+          "--memory=${toString app.resources.memoryMb}m"
+          "--memory-swap=${toString app.resources.memoryMb}m"
+        ]
+        ++ lib.optional (app.resources.pids != null) "--pids-limit=${toString app.resources.pids}";
+
       # VPN egress: borrow a gluetun container's netns for ALL traffic
       # instead of joining traefik-net (see stacks/ipcrawl-vpn/). The
       # incompatibilities (postgres, prometheus, missing hostPort) are
@@ -712,7 +727,8 @@ let
           extraOptions = [
             "--authfile=${ghcrAuthFile}"
           ]
-          ++ (lib.optional egressEnabled "--network=container:${app.egress.container}");
+          ++ (lib.optional egressEnabled "--network=container:${app.egress.container}")
+          ++ resourceFlags;
         }
         // (lib.optionalAttrs (app.cmd != null) { inherit (app) cmd; })
         # In egress mode podman needs the netns owner up first; dependsOn
@@ -1166,6 +1182,76 @@ in
                   actually reach — it lives on traefik-net and monitoring-net,
                   so an `auth.isolated` app has to be dialled through traefik
                   on a path that is on the forward-auth bypass.
+                '';
+              };
+            };
+
+            # cgroup v2 caps. All three are enforceable rootless on this box
+            # because systemd delegates `cpu io memory pids` down to
+            # user@1000.service (check with `cat
+            # /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/cgroup.controllers`);
+            # without that delegation podman would accept the flags and the
+            # kernel would ignore them.
+            #
+            # Null everywhere by default. An app the platform silently caps is
+            # an app that dies at 3am for a reason nobody wrote down, and the
+            # right ceiling is per-app knowledge — so opting in is explicit.
+            resources = {
+              cpus = lib.mkOption {
+                type = lib.types.nullOr lib.types.float;
+                default = null;
+                example = 1.5;
+                description = ''
+                  CPU cores, as a cgroup bandwidth cap
+                  (`cpu.max = cpus*100000 100000`). Fractional is fine.
+
+                  A ceiling on throughput, NOT a reservation and NOT pinning:
+                  the app may still be scheduled on any core, and under
+                  contention it simply gets throttled instead of preempting
+                  something else. For a latency-sensitive app, throttling is
+                  often worse than the contention it prevents — cap the noisy
+                  neighbour instead.
+                '';
+              };
+
+              memoryMb = lib.mkOption {
+                type = lib.types.nullOr lib.types.ints.positive;
+                default = null;
+                example = 512;
+                description = ''
+                  Resident memory cap in MiB (`memory.max`). Also passed as
+                  `--memory-swap`, which is the LOWEST value podman accepts
+                  (it rejects `--memory-swap` below `--memory`).
+
+                  What that actually means here, because it is not what the
+                  docker flag names suggest: podman 5.7 + crun 1.24 write
+                  `--memory-swap` into `memory.swap.max` verbatim, without
+                  subtracting `--memory` the way the docker docs describe. So
+                  the cap is `N` of RAM plus up to `N` of swap — and this box
+                  swaps to zram, so that overflow is compressed RAM, not disk.
+                  Anonymous pages past `N` get pushed to zram; the OOM kill
+                  lands at `2N`. Leaving `--memory-swap` off is worse: podman
+                  defaults it to `2*memory`, i.e. a `3N` kill point.
+
+                  Page cache counts toward `memory.max` but is reclaimed under
+                  pressure rather than triggering a kill, so an app doing heavy
+                  file I/O will sit at its limit permanently and that is
+                  normal — read `container_memory_usage_bytes` next to the
+                  kill counter, not on its own.
+                '';
+              };
+
+              pids = lib.mkOption {
+                type = lib.types.nullOr lib.types.ints.positive;
+                default = null;
+                example = 200;
+                description = ''
+                  Max processes + threads (`pids.max`). A fork-bomb guard, and
+                  the cheapest of the three to get wrong: every runtime thread
+                  counts, so a Node app with a worker pool or a JVM can sit
+                  surprisingly high. Check `container_pids` before setting it —
+                  hitting this limit surfaces as EAGAIN from fork/pthread_create,
+                  which most runtimes report as something misleading.
                 '';
               };
             };

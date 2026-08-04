@@ -41,9 +41,9 @@
 
 let
   # ── Container liveness metric ─────────────────────────
-  # No cgroup-based exporter (cadvisor-style) can see rootless-podman
-  # containers — their cgroups live under user@1000.service, invisible
-  # from a system-level mount view — and a dead container's systemd unit
+  # No PACKAGED cgroup exporter (cadvisor-style) can see rootless-podman
+  # containers — cadvisor walks the system cgroup tree and never descends into
+  # user@1000.service — and a dead container's systemd unit
   # stays `active (exited)` (Type=oneshot). This closes the gap: a 1-min
   # timer writes
   # `container_up{name=...} 0|1` for EVERY declared oci-container into
@@ -63,6 +63,13 @@ let
 
   textfileDir = "/var/lib/node-exporter/textfile";
 
+  # Where rootless podman puts every container's cgroup. Uniform for all of
+  # them (verified: 73/73 scopes sit directly here), so the path can be built
+  # from the container id instead of asking podman for it one inspect at a
+  # time. `user@1000.service` is santiago's systemd user manager; the inner
+  # `user.slice` is podman's own default parent within it.
+  cgroupRoot = "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/user.slice";
+
   livenessScript = pkgs.writeShellScript "container-up-export" ''
     set -eu
     export PATH=${
@@ -70,6 +77,7 @@ let
         pkgs.podman
         pkgs.coreutils
         pkgs.gnugrep
+        pkgs.gawk # cpu.max quota → cores, the one bit of float division here
         pkgs.systemd
       ]
     }
@@ -90,6 +98,71 @@ let
       echo "# HELP systemd_failed_units Count of systemd system units in failed state."
       echo "# TYPE systemd_failed_units gauge"
       echo "systemd_failed_units $failed"
+
+      # Per-container resource usage, straight out of cgroup v2.
+      #
+      # cadvisor can't reach these, but nothing stops us reading the files
+      # ourselves: systemd delegates `cpu io memory pids` to
+      # user@1000.service, so every container gets a real cgroup with real
+      # accounting at a uniform path, and santiago owns it.
+      #
+      # Read from the filesystem rather than from `podman stats`, which
+      # reports pre-formatted strings ("41.35MB", "0.08%") that would have to
+      # be parsed back into numbers, and whose CPU percentage with
+      # --no-stream is a whole-lifetime average — useless for a graph. Here
+      # CPU is exported as the raw counter and rate() does the work, which is
+      # what prometheus is for.
+      echo "# HELP container_cpu_usage_seconds_total Cumulative CPU time consumed by a rootless container."
+      echo "# TYPE container_cpu_usage_seconds_total counter"
+      echo "# HELP container_memory_usage_bytes Current charge against the container's memory cgroup, page cache included."
+      echo "# TYPE container_memory_usage_bytes gauge"
+      echo "# HELP container_memory_limit_bytes memory.max, emitted only when a limit is set."
+      echo "# TYPE container_memory_limit_bytes gauge"
+      echo "# HELP container_cpu_limit_cores cpu.max quota expressed in cores, emitted only when a limit is set."
+      echo "# TYPE container_cpu_limit_cores gauge"
+      echo "# HELP container_pids Processes and threads in the container."
+      echo "# TYPE container_pids gauge"
+      echo "# HELP container_pids_limit pids.max, emitted only when a limit is set."
+      echo "# TYPE container_pids_limit gauge"
+      echo "# HELP container_oom_kills_total Processes killed by the cgroup OOM killer."
+      echo "# TYPE container_oom_kills_total counter"
+
+      # id → name from the same `podman ps` above would need --no-trunc, so
+      # take a second pass with full IDs. Still one podman call: the cgroup
+      # numbers all come from the filesystem.
+      podman ps --no-trunc --format '{{.ID}} {{.Names}}' 2>/dev/null | while read -r id name; do
+        cg="${cgroupRoot}/libpod-$id.scope"
+        [ -d "$cg" ] || continue
+
+        # usage_usec is the whole subtree's CPU time in microseconds.
+        usec=$(grep -m1 '^usage_usec ' "$cg/cpu.stat" 2>/dev/null | cut -d' ' -f2) || true
+        [ -n "''${usec:-}" ] && echo "container_cpu_usage_seconds_total{name=\"$name\"} $(( usec / 1000000 )).$(printf '%06d' $(( usec % 1000000 )))"
+
+        mem=$(cat "$cg/memory.current" 2>/dev/null) || true
+        [ -n "''${mem:-}" ] && echo "container_memory_usage_bytes{name=\"$name\"} $mem"
+
+        # "max" means uncapped. Emitting nothing beats emitting +Inf or the
+        # host's RAM: absent is unambiguous, and a graph that divides by this
+        # series simply has no line rather than a wrong one.
+        memmax=$(cat "$cg/memory.max" 2>/dev/null) || true
+        [ -n "''${memmax:-}" ] && [ "$memmax" != "max" ] && echo "container_memory_limit_bytes{name=\"$name\"} $memmax"
+
+        # cpu.max is "QUOTA PERIOD", or "max PERIOD" when uncapped.
+        set -- $(cat "$cg/cpu.max" 2>/dev/null || echo "max 100000")
+        [ "$1" != "max" ] && echo "container_cpu_limit_cores{name=\"$name\"} $(awk "BEGIN{printf \"%.4f\", $1/$2}")"
+
+        pids=$(cat "$cg/pids.current" 2>/dev/null) || true
+        [ -n "''${pids:-}" ] && echo "container_pids{name=\"$name\"} $pids"
+
+        pidsmax=$(cat "$cg/pids.max" 2>/dev/null) || true
+        [ -n "''${pidsmax:-}" ] && [ "$pidsmax" != "max" ] && echo "container_pids_limit{name=\"$name\"} $pidsmax"
+
+        # The signal that a memory cap is actually too tight. Usage sitting at
+        # the limit is normal (page cache is charged there and is reclaimable);
+        # this counter moving is not.
+        oom=$(grep -m1 '^oom_kill ' "$cg/memory.events" 2>/dev/null | cut -d' ' -f2) || true
+        [ -n "''${oom:-}" ] && echo "container_oom_kills_total{name=\"$name\"} $oom"
+      done
     } > "$tmp"
     # Atomic swap — node-exporter reads whole files; a half-written file
     # would export a truncated series.
