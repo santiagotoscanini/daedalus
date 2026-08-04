@@ -1,4 +1,11 @@
-import { HeadContent, Link, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
+import {
+  HeadContent,
+  Link,
+  Outlet,
+  Scripts,
+  createRootRoute,
+  useRouterState,
+} from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import appCss from '../styles.css?url'
@@ -29,6 +36,7 @@ function RootDocument({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        <RouteProgress />
         <div className="shell">
           <aside className="sidebar">
             <Link to="/apps" className="brand">
@@ -71,4 +79,21 @@ function RootDocument({ children }: { children: ReactNode }) {
       </body>
     </html>
   )
+}
+
+/**
+ * A hairline at the top of the window while a route loader is in flight.
+ *
+ * The whole reason navigation felt broken: the router correctly keeps the
+ * previous page on screen until the next loader resolves, so a click on
+ * Dashboard changed nothing visible for the few hundred ms of its fan-out.
+ * The bar is the missing "yes, I heard you".
+ *
+ * CSS-animated rather than driven by real progress — a loader has no
+ * measurable percentage, and a fake number that stalls at 80% is worse than an
+ * honest indeterminate one.
+ */
+function RouteProgress() {
+  const loading = useRouterState({ select: (s) => s.status === 'pending' })
+  return loading ? <div className="route-progress" role="progressbar" aria-label="Loading" /> : null
 }
