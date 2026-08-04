@@ -3457,6 +3457,72 @@ h2 {
   stroke-dasharray: 2 4;
   opacity: 0.5;
 }
+/* A branch: something acting on the line above rather than a step along it.
+   The stub is short and vertical so the eye reads the main row first. */
+.topo-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+}
+.topo-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.1rem;
+}
+.topo-stub {
+  width: 2px;
+  height: 0.7rem;
+  margin-left: 1.1rem;
+  background: var(--border);
+}
+.topo-branch-accent .topo-stub {
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.topo-branch-ok .topo-stub {
+  background: color-mix(in srgb, var(--ok) 60%, transparent);
+}
+.topo-branch-warn .topo-stub {
+  background: color-mix(in srgb, var(--warn) 60%, transparent);
+}
+.topo-branch-info .topo-stub {
+  background: color-mix(in srgb, #5b8dd9 60%, transparent);
+}
+.topo-branch-label {
+  font-size: 0.56rem;
+  color: var(--dim);
+  padding-left: 0.3rem;
+  margin-bottom: 0.08rem;
+}
+/* A branch box is visibly secondary: dashed, so the solid pipeline reads as
+   the path and these read as attachments to it. */
+.topo-branch .topo-node {
+  border-style: dashed;
+  border-left-style: solid;
+  background: color-mix(in srgb, var(--panel-2) 60%, transparent);
+}
+
+.topo-node-link {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.topo-node-link:hover {
+  background: var(--raise);
+  border-color: var(--border);
+}
+.topo-node-link:hover .topo-open {
+  opacity: 1;
+}
+.topo-open {
+  font-size: 0.62rem;
+  color: var(--dim);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  flex: none;
+}
+
 /* Marching ants: the conventional read for "packets are on this link". Only
    an edge with real traffic gets it. */
 .topo-edge-live {
