@@ -1085,3 +1085,74 @@ h2 {
   text-align: right;
   margin-left: auto;
 }
+
+/* ── environment table ──────────────────────────────────────────────────── */
+
+.env-legend {
+  margin: 0 0 0.85rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+  max-width: 70ch;
+}
+
+.env-age {
+  font-size: 0.72rem;
+  color: var(--dim);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.env th {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.origin {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--dim);
+}
+.origin-registry {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.origin-image {
+  opacity: 0.55;
+}
+
+.env-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.env-value code {
+  overflow-wrap: anywhere;
+}
+
+.masked {
+  letter-spacing: 0.12em;
+  color: var(--dim);
+}
+
+.reveal {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0.22rem 0.4rem;
+  flex: none;
+}
+.reveal:hover:not(:disabled) {
+  background: var(--raise);
+}
+.reveal:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}

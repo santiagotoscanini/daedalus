@@ -93,6 +93,31 @@ let
     '';
   };
 
+  # Where the merged per-container environment is published. /run, so these
+  # secrets live on tmpfs and never enter a ZFS snapshot or the syncoid mirror.
+  envDir = "/run/daedalus-env";
+
+  envSnapshotScript = pkgs.writeShellApplication {
+    name = "daedalus-env-snapshot";
+    runtimeInputs = [
+      pkgs.podman
+      pkgs.util-linux # setpriv
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    text = ''
+      OUT_DIR=${lib.escapeShellArg envDir}
+      # The registry's apps plus daedalus itself — exactly the set with a page
+      # in the UI. Derived from apps.json, so an Apply keeps it current.
+      APPS=${lib.escapeShellArg (lib.concatStringsSep " " (deployableApps ++ [ "daedalus" ]))}
+      SETPRIV=${pkgs.util-linux}/bin/setpriv
+      ENV_BIN=${pkgs.coreutils}/bin/env
+      PODMAN=${pkgs.podman}/bin/podman
+
+      ${builtins.readFile ./host/env-snapshot.sh}
+    '';
+  };
+
   # What Nix currently believes, handed to the container as one read-only
   # store file. Two parts, because they have different provenance:
   #
@@ -310,7 +335,34 @@ in
     # (`<digest> ok|failed`). Read-only, and the DIRECTORY rather than the
     # files, so a rewritten state file is picked up without pinning an inode.
     "/var/lib/app-deploy:/deploy-state:ro"
+    # The DIRECTORY, not the files: the snapshot rewrites each one, and a
+    # single-file bind would pin the old inode.
+    "${envDir}:/env-snapshot:ro"
   ];
+
+  # Refresh the published environments. A timer rather than an on-demand
+  # request/response through the bind mount: a container's env only changes
+  # when it restarts, so a page render should read a recent snapshot rather
+  # than wait on a round trip through systemd.
+  systemd.services.daedalus-env-snapshot = {
+    description = "Publish app container environments for daedalus";
+    after = [ "linger-users.service" ];
+    wants = [ "linger-users.service" ];
+    before = [ "podman-app-daedalus.service" ];
+    wantedBy = [ "podman-app-daedalus.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${envSnapshotScript}/bin/daedalus-env-snapshot";
+    };
+  };
+
+  systemd.timers.daedalus-env-snapshot = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2min";
+      OnUnitActiveSec = "2min";
+    };
+  };
 
   fleet.statePaths.${applyDir} = { };
 
