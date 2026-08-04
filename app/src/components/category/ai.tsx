@@ -238,35 +238,92 @@ function statusTone(status: string): string {
   return 'bad'
 }
 
+
 /**
- * The path a prompt takes: caller → gateway → whatever actually holds weights.
+ * The path a prompt takes: caller → gateway → whatever holds the weights.
  *
- * The client column is read from the gateway's own key ledger rather than
- * hardcoded, so a new API key shows up as a new box the first time it spends a
- * token. `byClient` labels are key aliases, which are already the names of the
- * things calling — n8n, open-webui, daedalus.
+ * The callers are NAMED rather than derived from the key ledger. The ledger is
+ * still where the token counts come from, but a caller that has not spent a
+ * token today is not absent from the system — it is idle, and a diagram that
+ * drops it is telling you the wrong thing. Open WebUI in particular signs its
+ * traffic with a key whose alias is not "open-webui", so a ledger-driven
+ * column left the one service a person actually types into off the picture.
+ *
+ * Everything hanging under the gateway is a TOOL it can call mid-completion,
+ * not a step on the way to an answer — hence the branch row.
  */
-function aiStages(data: AiData): TopoStage[] {
-  const clients = data.byClient.slice(0, 4)
-  const total = clients.reduce((n, c) => n + c.value, 0)
+const CALLERS: { id: string; label: string; sub: string; icon: string; keys: RegExp; app?: string }[] = [
+  {
+    id: 'owu',
+    label: 'Open WebUI',
+    sub: 'the chat window',
+    icon: '◍',
+    keys: /open-?webui|owui|litellm_/i,
+    app: 'chat',
+  },
+  { id: 'n8n', label: 'n8n', sub: 'scheduled workflows', icon: '⟳', keys: /n8n/i, app: 'n8n' },
+  {
+    id: 'hass',
+    label: 'Home Assistant',
+    sub: 'voice + conversation agent',
+    icon: '⌂',
+    keys: /home-?assistant|hass/i,
+    app: 'homeassistant',
+  },
+  { id: 'plane', label: 'Plane', sub: 'project assistant', icon: '◰', keys: /plane/i, app: 'plane' },
+  {
+    id: 'daedalus',
+    label: 'daedalus',
+    sub: 'this page',
+    icon: '▦',
+    keys: /daedalus/i,
+  },
+]
+
+export function aiStages(data: AiData): TopoStage[] {
+  const total = data.byClient.reduce((n, c) => n + c.value, 0)
+  const tokensFor = (re: RegExp) =>
+    data.byClient.filter((c) => re.test(c.label)).reduce((n, c) => n + c.value, 0)
   const embeddings = data.byModel.find((m) => /embed/i.test(m.label))
+  const busy = data.headline.inFlight !== null && data.headline.inFlight > 0
 
   return [
     {
       id: 'callers',
       title: 'Callers',
       zone: 'this box',
-      nodes:
-        clients.length === 0 ?
-          [{ id: 'noclients', label: 'No traffic', sub: 'nothing has spent a token', idle: true }]
-        : clients.map((c) => ({
-            id: `c-${c.label}`,
-            label: c.label,
-            sub: total === 0 ? undefined : `${((c.value / total) * 100).toFixed(0)}% of tokens`,
-            icon: '◈',
-            tone: 'info' as const,
-            facts: [{ k: 'tokens', v: num(c.value) }],
-          })),
+      nodes: CALLERS.map((c) => {
+        const spent = tokensFor(c.keys)
+        return {
+          id: c.id,
+          label: c.label,
+          sub: c.sub,
+          icon: c.icon,
+          tone: 'info' as const,
+          idle: spent === 0,
+          href: c.app === undefined ? undefined : `https://${c.app}.toscanini.me`,
+          facts: [
+            { k: 'tokens', v: num(spent) },
+            { k: 'share', v: total === 0 ? DASH : `${((spent / total) * 100).toFixed(0)}%` },
+          ],
+        }
+      }),
+      // Open WebUI reaches SearXNG directly for its own RAG rather than
+      // through the gateway — its search emits no web_search tool call, so
+      // the gateway's interception never sees it.
+      aside: [
+        {
+          label: 'Open WebUI · its own RAG',
+          tone: 'info',
+          node: {
+            id: 'owu-search',
+            label: 'SearXNG',
+            sub: 'in-chat web search',
+            icon: '◎',
+            tone: 'info',
+          },
+        },
+      ],
     },
     {
       id: 'gateway',
@@ -276,92 +333,108 @@ function aiStages(data: AiData): TopoStage[] {
         {
           id: 'litellm',
           label: 'LiteLLM',
-          sub: 'OpenAI-compatible front door',
+          sub: 'one OpenAI API for everything',
           icon: '⇄',
           tone: 'accent',
-          live: data.headline.inFlight !== null && data.headline.inFlight > 0,
+          href: 'https://litellm.toscanini.me/ui',
+          live: busy,
           facts: [
             { k: 'today', v: num(data.headline.requestsToday) },
             { k: 'in flight', v: num(data.headline.inFlight) },
           ],
         },
       ],
+      aside: [
+        {
+          label: 'tools it can call mid-completion',
+          tone: 'accent',
+          node: {
+            id: 'mcp',
+            label: 'MCP servers',
+            sub: 'TickTick · Grocy',
+            icon: '⚿',
+            tone: 'accent',
+          },
+        },
+        {
+          label: 'retrieval',
+          tone: 'info',
+          node: {
+            id: 'pgvector',
+            label: 'pgvector',
+            sub: 'vector store on the shared pg',
+            icon: '◱',
+            tone: 'info',
+            idle: embeddings === undefined,
+            facts:
+              embeddings === undefined ? undefined : [{ k: 'embed tok', v: num(embeddings.value) }],
+          },
+        },
+      ],
     },
     {
-      id: 'backends',
-      title: 'Backends',
-      // Lemonade is the one thing on this page that is NOT on this box, and
-      // that is the whole reason a cold first token is slow — it is a
-      // different machine that may have swapped the model out.
-      zone: 'elsewhere',
+      id: 'models',
+      title: 'Model server',
+      // The one thing on this page that is not on this box, which is exactly
+      // why a cold first token is slow.
+      zone: 'the gaming PC',
       nodes: [
         {
           id: 'lemonade',
           label: 'Lemonade',
-          sub: 'gaming PC · llama.cpp',
+          sub: 'llama.cpp · chat, embeddings, STT, TTS',
           icon: '◆',
           tone: 'ok',
           live: data.lemonade.tps !== null && data.lemonade.tps > 0,
           facts: [
             { k: 'resident', v: num(data.headline.modelsResident) },
             { k: 'tok/s', v: num(data.lemonade.tps, 1) },
+            { k: 'TTFT', v: data.lemonade.ttftMs === null ? DASH : `${num(data.lemonade.ttftMs)}ms` },
           ],
         },
+      ],
+      aside: [
         {
-          id: 'searxng',
-          label: 'SearXNG',
-          sub: 'web search tool',
-          icon: '◍',
-          tone: 'info',
-          idle: true,
-        },
-        {
-          id: 'pgvector',
-          label: 'pgvector',
-          sub: 'RAG store, shared pg',
-          icon: '◱',
-          tone: 'info',
-          idle: embeddings === undefined,
-          facts:
-            embeddings === undefined ? undefined : [{ k: 'embed tok', v: num(embeddings.value) }],
+          label: 'hot right now',
+          tone: 'ok',
+          node: {
+            id: 'hot',
+            label: data.models.find((m) => m.hot)?.name ?? 'nothing loaded',
+            sub: data.models.length === 0 ? 'Lemonade did not answer' : 'most recently used',
+            icon: '▤',
+            tone: 'ok',
+            idle: data.models.length === 0,
+          },
         },
       ],
     },
   ]
 }
 
-function aiEdges(data: AiData): TopoEdge[] {
-  const clients = data.byClient.slice(0, 4)
+export function aiEdges(data: AiData): TopoEdge[] {
   const busy = data.headline.inFlight !== null && data.headline.inFlight > 0
-  const embeddings = data.byModel.find((m) => /embed/i.test(m.label))
+  const tokensFor = (re: RegExp) =>
+    data.byClient.filter((c) => re.test(c.label)).reduce((n, c) => n + c.value, 0)
   const chat = data.byModel.filter((m) => !/embed/i.test(m.label)).reduce((n, m) => n + m.value, 0)
 
   return [
-    ...(clients.length === 0 ?
-      [{ from: 'noclients', to: 'litellm', dashed: true }]
-    : clients.map((c) => ({
-        from: `c-${c.label}`,
+    ...CALLERS.map((c) => {
+      const spent = tokensFor(c.keys)
+      return {
+        from: c.id,
         to: 'litellm',
-        // The key's own name is on the box; the edge carries what it spent,
-        // which is the thing that differs between two identical-looking arrows.
-        label: `${num(c.value)} tok`,
+        label: spent === 0 ? 'idle' : `${num(spent)} tok`,
         tone: 'info' as const,
-        active: busy,
-      }))),
+        active: busy && spent > 0,
+        dashed: spent === 0,
+      }
+    }),
     {
       from: 'litellm',
       to: 'lemonade',
-      label: chat > 0 ? `${num(chat)} tok` : 'chat · STT · TTS',
+      label: chat > 0 ? `${num(chat)} tok` : 'OpenAI API',
       tone: 'accent',
       active: busy,
-    },
-    { from: 'litellm', to: 'searxng', label: 'web_search', tone: 'muted', dashed: true },
-    {
-      from: 'litellm',
-      to: 'pgvector',
-      label: embeddings === undefined ? 'vector store' : `${num(embeddings.value)} tok`,
-      tone: 'info',
-      dashed: embeddings === undefined,
     },
   ]
 }

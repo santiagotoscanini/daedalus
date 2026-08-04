@@ -46,6 +46,8 @@ import type { Tone } from './viz'
 export type TopoNode = {
   id: string
   label: string
+  /** Makes the whole box a link to the thing it represents. */
+  href?: string
   /** One line under the name — what the thing is. */
   sub?: string
   icon?: string
@@ -64,6 +66,13 @@ export type TopoStage = {
   /** Trust boundary. Consecutive stages sharing one are drawn inside it. */
   zone?: string
   nodes: TopoNode[]
+  /**
+   * Services that act ON this step without being a step of their own —
+   * Cleanuparr watching the queue, Recyclarr writing profiles in, Pocket ID
+   * being asked. Drawn on a second row below the main line and tied to it by
+   * a stub, so the eye reads the pipeline without them and then finds them.
+   */
+  aside?: { node: TopoNode; label?: string; tone?: Tone }[]
 }
 
 export type TopoEdge = {
@@ -152,15 +161,49 @@ function Stage({ stage }: { stage: TopoStage }) {
           <Node key={n.id} node={n} />
         ))}
       </div>
+      {stage.aside !== undefined && stage.aside.length > 0 && (
+        <div className="topo-aside">
+          {stage.aside.map((a) => (
+            <div key={a.node.id} className={`topo-branch topo-branch-${a.tone ?? 'muted'}`}>
+              {/* The stub is the whole point of a branch: it says "this hangs
+                  off the line above" rather than "this is the next step". */}
+              <span className="topo-stub" aria-hidden="true" />
+              {a.label !== undefined && <span className="topo-branch-label">{a.label}</span>}
+              <Node node={a.node} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 function Node({ node }: { node: TopoNode }) {
+  const cls =
+    `topo-node topo-${node.tone ?? 'muted'}` +
+    (node.idle === true ? ' topo-node-idle' : '') +
+    (node.href !== undefined ? ' topo-node-link' : '')
+
+  // A node standing for something with a UI becomes a link to it. The diagram
+  // is where you work out WHICH service is the problem; the click after that
+  // should not be a second hunt through the tile list below.
+  if (node.href !== undefined) {
+    return (
+      <a className={cls} href={node.href} target="_blank" rel="noreferrer">
+        <Body node={node} />
+      </a>
+    )
+  }
   return (
-    <article
-      className={`topo-node topo-${node.tone ?? 'muted'}${node.idle === true ? ' topo-node-idle' : ''}`}
-    >
+    <article className={cls}>
+      <Body node={node} />
+    </article>
+  )
+}
+
+function Body({ node }: { node: TopoNode }) {
+  return (
+    <>
       <header>
         {node.icon !== undefined && (
           <span className="topo-icon" aria-hidden="true">
@@ -168,6 +211,11 @@ function Node({ node }: { node: TopoNode }) {
           </span>
         )}
         <strong>{node.label}</strong>
+        {node.href !== undefined && (
+          <span className="topo-open" aria-hidden="true">
+            ↗
+          </span>
+        )}
         {node.live === true && <span className="topo-live" aria-label="active" />}
       </header>
       {node.sub !== undefined && <p className="topo-sub">{node.sub}</p>}
@@ -181,7 +229,7 @@ function Node({ node }: { node: TopoNode }) {
           ))}
         </dl>
       )}
-    </article>
+    </>
   )
 }
 

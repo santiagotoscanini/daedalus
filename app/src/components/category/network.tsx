@@ -322,21 +322,29 @@ function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
 }
 
 /**
- * Inbound: how a request from outside reaches a service on this box.
+ * Inbound: how a request reaches a service here, from wherever it started.
  *
- * Three trust zones, because that is the fact the diagram exists to carry —
- * the internet, the house, and the box — and the interesting part is where
- * each path crosses between them.
+ * Three ways in, not two, and the third is the one that is easy to forget:
+ * most requests are from a device sitting on the LAN, which never touches the
+ * router's WAN side at all. It gets here because Pi-hole answers every
+ * *.toscanini.me with 192.168.0.2 — so the resolver is genuinely upstream of
+ * traefik for the majority of traffic, and it hangs off the house zone.
+ *
+ * Authentication is drawn as ONE dependency rather than a branch of the
+ * service tree, because that is what it is. traefik's forward-auth middleware
+ * and an app's own OIDC login are two different mechanisms that both end at
+ * Pocket ID — the difference is only who performs the redirect.
  */
 function inboundStages(data: NetworkData): TopoStage[] {
-  const { tunnel, wireguard, proxy, certs } = data
+  const { tunnel, wireguard, proxy, certs, dns } = data
   const live = tunnel.status === 'healthy'
   const peersUp = wireguard.connected !== null && wireguard.connected > 0
+  const busy = proxy.rpm !== null && proxy.rpm > 0
 
   return [
     {
       id: 'outside',
-      title: 'Origin',
+      title: 'Where it starts',
       zone: 'the internet',
       nodes: [
         {
@@ -349,6 +357,7 @@ function inboundStages(data: NetworkData): TopoStage[] {
           facts: [
             { k: 'status', v: tunnel.status ?? DASH },
             { k: 'conns', v: num(tunnel.connections) },
+            { k: 'req/h', v: num(tunnel.requestsPerHour, 1) },
           ],
         },
         {
@@ -365,22 +374,50 @@ function inboundStages(data: NetworkData): TopoStage[] {
     },
     {
       id: 'house',
-      title: 'Router',
+      title: 'This house',
       zone: 'this house',
       nodes: [
         {
           id: 'router',
           label: 'Router',
-          sub: '192.168.0.1',
+          sub: '192.168.0.1 — forwards two UDP ports and nothing else',
           icon: '⌗',
           tone: 'info',
+          href: 'http://192.168.0.1',
           facts: [
-            // The tunnel's origin address IS the house's WAN address — the
-            // edge records where the connection came from, and nothing on
-            // this side of the NAT can see it.
+            // The tunnel's origin address IS this house's WAN address: the CF
+            // edge records where the connection came from, and nothing on this
+            // side of the NAT can see it.
             { k: 'WAN', v: tunnel.originIp ?? DASH },
-            { k: 'forwarded', v: 'UDP only' },
+            { k: 'forwarded', v: 'wg + factorio' },
           ],
+        },
+        {
+          id: 'lan',
+          label: 'LAN devices',
+          sub: 'laptops, phones, the TV — most of the traffic',
+          icon: '▤',
+          tone: 'accent',
+          live: busy,
+        },
+      ],
+      aside: [
+        {
+          label: 'how a LAN device finds this box at all',
+          tone: 'ok',
+          node: {
+            id: 'pihole',
+            label: 'Pi-hole',
+            sub: 'answers every *.toscanini.me with 192.168.0.2',
+            icon: '◎',
+            tone: 'ok',
+            href: 'https://pihole.toscanini.me',
+            live: dns.queries !== null && dns.queries > 0,
+            facts: [
+              { k: 'queries', v: num(dns.queries) },
+              { k: 'blocked', v: dns.blockedPct === null ? DASH : `${dns.blockedPct.toFixed(1)}%` },
+            ],
+          },
         },
       ],
     },
@@ -392,7 +429,7 @@ function inboundStages(data: NetworkData): TopoStage[] {
         {
           id: 'cloudflared',
           label: 'cloudflared',
-          sub: tunnel.clientVersion ?? 'tunnel client',
+          sub: `holds the tunnel open · ${tunnel.clientVersion ?? 'client'}`,
           icon: '⇥',
           tone: live ? 'ok' : 'bad',
           live,
@@ -401,9 +438,10 @@ function inboundStages(data: NetworkData): TopoStage[] {
         {
           id: 'wgeasy',
           label: 'wg-easy',
-          sub: 'UDP 51820',
+          sub: 'UDP 51820 — the one forwarded TCP-less way in',
           icon: '⚿',
           tone: peersUp ? 'ok' : 'muted',
+          href: 'https://wg-easy.toscanini.me',
           idle: !peersUp,
         },
       ],
@@ -416,14 +454,32 @@ function inboundStages(data: NetworkData): TopoStage[] {
         {
           id: 'traefik',
           label: 'traefik',
-          sub: 'TLS terminates here',
+          sub: 'TLS terminates here · one wildcard cert',
           icon: '⇄',
           tone: 'accent',
-          live: proxy.rpm !== null && proxy.rpm > 0,
+          href: 'https://traefik.toscanini.me',
+          live: busy,
           facts: [
             { k: 'req/min', v: num(proxy.rpm) },
+            { k: 'routers', v: num(proxy.routers) },
             { k: 'cert', v: certs.soonestDays === null ? DASH : `${certs.soonestDays.toFixed(0)}d` },
           ],
+        },
+      ],
+      aside: [
+        {
+          // Both auth paths end here. The middleware redirects for a gated
+          // app; a native-OIDC app redirects itself. Same IdP either way.
+          label: 'every login, both ways',
+          tone: 'warn',
+          node: {
+            id: 'pocketid',
+            label: 'Pocket ID',
+            sub: 'passkeys · 32 clients',
+            icon: '⛨',
+            tone: 'warn',
+            href: 'https://id.toscanini.me',
+          },
         },
       ],
     },
@@ -433,19 +489,26 @@ function inboundStages(data: NetworkData): TopoStage[] {
       zone: 'this box',
       nodes: [
         {
-          id: 'gate',
-          label: 'Pocket ID gate',
-          sub: 'forward-auth on the admin UIs',
+          id: 'gated',
+          label: 'Forward-auth apps',
+          sub: 'traefik redirects before the app is dialled',
           icon: '⛨',
           tone: 'warn',
         },
         {
-          id: 'apps',
-          label: `${num(proxy.routers)} routers`,
-          sub: `${num(proxy.services)} upstreams`,
-          icon: '▦',
+          id: 'native',
+          label: 'Native-OIDC apps',
+          sub: 'the app does its own redirect to Pocket ID',
+          icon: '◈',
           tone: 'info',
-          facts: [{ k: 'open conns', v: num(proxy.openConnections) }],
+        },
+        {
+          id: 'open',
+          label: 'Open upstreams',
+          sub: 'health paths, APIs with their own keys',
+          icon: '▦',
+          tone: 'muted',
+          facts: [{ k: 'upstreams', v: num(proxy.services) }],
         },
       ],
     },
@@ -459,24 +522,35 @@ function inboundEdges(data: NetworkData): TopoEdge[] {
   const busy = proxy.rpm !== null && proxy.rpm > 0
 
   return [
-    { from: 'cf', to: 'router', label: 'outbound QUIC', tone: 'ok', active: live },
-    { from: 'wgpeer', to: 'router', label: 'UDP 51820', tone: 'info', active: peersUp, dashed: !peersUp },
+    { from: 'cf', to: 'router', label: 'rides the open tunnel', tone: 'ok', active: live },
+    {
+      from: 'wgpeer',
+      to: 'router',
+      label: 'UDP 51820',
+      tone: 'info',
+      active: peersUp,
+      dashed: !peersUp,
+    },
     { from: 'router', to: 'cloudflared', label: 'no port forward', tone: 'ok', active: live },
-    { from: 'router', to: 'wgeasy', label: 'forwarded', tone: 'info', active: peersUp, dashed: !peersUp },
+    {
+      from: 'router',
+      to: 'wgeasy',
+      label: 'forwarded',
+      tone: 'info',
+      active: peersUp,
+      dashed: !peersUp,
+    },
+    // A LAN device never leaves the house: it resolves to 192.168.0.2 and
+    // dials traefik straight on 443.
+    { from: 'lan', to: 'cloudflared', label: '', tone: 'muted', dashed: true },
     { from: 'cloudflared', to: 'traefik', label: 'cfweb :8888', tone: 'ok', active: live },
-    { from: 'wgeasy', to: 'traefik', label: 'as a LAN client', tone: 'info', dashed: !peersUp },
-    { from: 'traefik', to: 'gate', label: 'admin UIs', tone: 'warn', active: busy },
-    { from: 'traefik', to: 'apps', label: `${num(proxy.rpm)}/min`, tone: 'accent', active: busy },
+    { from: 'wgeasy', to: 'traefik', label: 'then as a LAN client', tone: 'info', dashed: !peersUp },
+    { from: 'traefik', to: 'gated', label: 'redirected first', tone: 'warn', active: busy },
+    { from: 'traefik', to: 'native', label: 'proxied straight', tone: 'info', active: busy },
+    { from: 'traefik', to: 'open', label: `${num(proxy.rpm)}/min`, tone: 'accent', active: busy },
   ]
 }
 
-/**
- * Egress: which exit a container's traffic leaves by.
- *
- * The split is a network-namespace fact, not a routing one — the download
- * stack has no interfaces of its own, so "goes through the VPN" is structural
- * rather than a rule that could be misconfigured.
- */
 /**
  * Egress: which exit a container's traffic leaves by.
  *
@@ -487,7 +561,7 @@ function inboundEdges(data: NetworkData): TopoEdge[] {
  * than something that could be misconfigured into leaking.
  */
 function egressStages(data: NetworkData): TopoStage[] {
-  const { vpn, tunnel } = data
+  const { vpn, tunnel, dns } = data
   const vpnUp = vpn.up === true
 
   return [
@@ -506,9 +580,23 @@ function egressStages(data: NetworkData): TopoStage[] {
         {
           id: 'netns',
           label: 'Download stack',
-          sub: 'qBittorrent, NZBGet, the *arrs',
+          sub: 'qBittorrent, NZBGet, the *arrs, FlareSolverr',
           icon: '⛨',
           tone: vpnUp ? 'ok' : 'bad',
+        },
+      ],
+      aside: [
+        {
+          label: 'resolves for the whole house first',
+          tone: 'ok',
+          node: {
+            id: 'pihole-out',
+            label: 'Pi-hole',
+            sub: 'upstream to Google DNS over TLS',
+            icon: '◎',
+            tone: 'ok',
+            facts: [{ k: 'blocklist', v: num(dns.gravity) }],
+          },
         },
       ],
     },
@@ -527,7 +615,7 @@ function egressStages(data: NetworkData): TopoStage[] {
         {
           id: 'gluetun',
           label: 'gluetun',
-          sub: 'owns the namespace they share',
+          sub: 'owns the namespace they all share',
           icon: '◈',
           tone: vpnUp ? 'ok' : 'bad',
           live: vpnUp,
