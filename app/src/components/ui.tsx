@@ -129,14 +129,17 @@ export function Metric({
 export function Panel({
   title,
   action,
+  wide,
   children,
 }: {
   title: string
   action?: ReactNode
+  /** Span every column of the enclosing grid — for content that needs the width. */
+  wide?: boolean
   children: ReactNode
 }) {
   return (
-    <section className="panel">
+    <section className={wide === true ? 'panel panel-wide' : 'panel'}>
       <header>
         <h3>{title}</h3>
         {action}
