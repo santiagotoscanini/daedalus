@@ -22,6 +22,12 @@
   --bad: #e05252;
 
   --radius: 12px;
+
+  /* One definition, two consumers: the shell's first grid column and the
+     apply bar's left offset. The bar is position:fixed, so it cannot inherit
+     the sidebar's width — it used to hardcode 232px, which meant the mobile
+     breakpoint had to remember to move it too. */
+  --sidebar-w: 232px;
 }
 
 * {
@@ -88,7 +94,7 @@ h2 {
 
 .shell {
   display: grid;
-  grid-template-columns: 232px 1fr;
+  grid-template-columns: var(--sidebar-w) 1fr;
   min-height: 100vh;
 }
 
@@ -520,7 +526,7 @@ h2 {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
   gap: 0.85rem;
 }
 
@@ -586,7 +592,7 @@ h2 {
 
 .panels {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr));
   gap: 0.85rem;
   margin-top: 1.5rem;
 }
@@ -640,7 +646,7 @@ h2 {
 
 .settings {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(21rem, 100%), 1fr));
   gap: 0.85rem;
   align-items: start;
 }
@@ -942,7 +948,7 @@ h2 {
 
 .apply-bar {
   position: fixed;
-  left: 232px;
+  left: var(--sidebar-w);
   right: 0;
   bottom: 0;
   z-index: 20;
@@ -1317,4 +1323,184 @@ h2 {
 .reveal:disabled {
   opacity: 0.5;
   cursor: wait;
+}
+
+/* ── narrow viewports ───────────────────────────────────────────────────────
+   The layout above assumes a desktop: a fixed 232px rail and multi-column
+   grids. The auto-fit grids were already given `minmax(min(Xrem, 100%), 1fr)`
+   above, which is what stops a 21rem column forcing a horizontal scrollbar on
+   a 360px screen — the media queries here only handle what genuinely needs a
+   different shape rather than a narrower one.
+
+   No hamburger and no JS: the whole navigation is three links, so the rail
+   becomes a top bar and everything stays reachable.                        */
+
+@media (max-width: 52rem) {
+  :root {
+    /* Consumed by .shell's column and .apply-bar's left offset. */
+    --sidebar-w: 0px;
+  }
+
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.9rem;
+    height: auto;
+    padding: 0.6rem 1rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-soft);
+    /* Sticky at the top rather than scrolling away: on a phone the app list
+       is long and the way back is this bar. */
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .sidebar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .brand {
+    flex: none;
+    padding: 0;
+  }
+  /* "workshop" under a 30px logo costs a line of height for decoration. */
+  .brand small {
+    display: none;
+  }
+
+  .nav-primary {
+    flex-direction: row;
+    gap: 0.3rem;
+  }
+  .nav-item {
+    padding: 0.35rem 0.7rem;
+    white-space: nowrap;
+  }
+
+  .nav-secondary {
+    margin-top: 0;
+    margin-left: auto;
+    flex-direction: row;
+    gap: 0.9rem;
+    padding: 0;
+  }
+  .nav-secondary a {
+    white-space: nowrap;
+  }
+
+  .content {
+    padding-bottom: 8rem;
+  }
+
+  /* Exposure is a full-width row under the title instead of a third column —
+     at this width it was overflowing the card's right edge. */
+  .hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.9rem 1rem;
+    padding: 1.1rem;
+  }
+  .hero-exposure {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+  .hero-exposure .segmented {
+    display: flex;
+    width: 100%;
+  }
+  .hero-exposure .segmented button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .hero-icon {
+    width: 42px;
+    height: 42px;
+    font-size: 1.15rem;
+  }
+
+  /* Four tabs plus a dot do not fit; scroll them rather than wrapping into a
+     second row that pushes the content down on every page. */
+  .tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tabs a {
+    white-space: nowrap;
+  }
+
+  /* Five columns become three flowed rows: identity, host, then status. */
+  .app-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 0.75rem;
+  }
+  .app-id {
+    flex: 1 1 60%;
+    min-width: 0;
+  }
+  .app-host {
+    flex: 1 1 100%;
+    order: 3;
+    overflow-wrap: anywhere;
+  }
+  .app-spark {
+    order: 4;
+    margin-left: auto;
+  }
+
+  .apply-bar {
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 0.7rem 1rem;
+  }
+}
+
+@media (max-width: 34rem) {
+  h1 {
+    font-size: 1.3rem;
+  }
+
+  /* One per line, and never broken between the arrow and its target. */
+  .hero-links {
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .hero-links a,
+  .hero-links > span {
+    overflow-wrap: anywhere;
+  }
+
+  .metric-value {
+    font-size: 1.55rem;
+  }
+
+  .panel-body {
+    padding: 0.85rem 1rem 1rem;
+  }
+
+  /* The timestamp column was 9rem of a ~20rem screen. Level moves onto the
+     same line as the time, and the message gets the full width beneath. */
+  .log {
+    grid-template-columns: auto 1fr;
+    gap: 0.15rem 0.6rem;
+    padding: 0.35rem 1rem;
+  }
+  .log .msg {
+    grid-column: 1 / -1;
+  }
+
+  .tallies {
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
 }
