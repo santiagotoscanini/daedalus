@@ -146,6 +146,26 @@ in
       '';
     };
 
+    cloudflare = {
+      accountId = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          Cloudflare account id owning the tunnel. Not a secret — it is
+          in every dash.cloudflare.com URL — but it is an identifier
+          used in more than one place, so it gets a single home. Set by
+          stacks/cloudflared, read by anything that links to or queries
+          the tunnel (the homepage tile, daedalus's dashboard).
+        '';
+      };
+      tunnelId = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          The locally-managed tunnel's id. Same reasoning as
+          `accountId` — one binding, several consumers.
+        '';
+      };
+    };
+
     cloudflareRoutes = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule (_: {

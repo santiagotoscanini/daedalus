@@ -161,11 +161,25 @@ let
     lib.mapAttrsToList (_: w: w.hostname) config.fleet.webApps
   );
 
+  # webApp name → published hostname, for the dashboard's tile catalogue.
+  #
+  # The same list as `takenHostnames`, keyed rather than flattened, because the
+  # two answer different questions: that one is "is this name free", this one is
+  # "where do I dial `jellyfin`". Passing it means a hostname edit moves the
+  # dashboard's URL with it instead of stranding a literal in TypeScript — the
+  # tile catalogue names webApps, never FQDNs.
+  #
+  # Not every tile has an entry: the gluetun-netns services and the host-netns
+  # ones are reached on `host.containers.internal:<port>` (they cannot ride
+  # traefik-net), and those ports are literals in the catalogue, exactly as they
+  # are in each stack's homepage widget.
+  webAppHosts = lib.mapAttrs (_: w: w.hostname) config.fleet.webApps;
+
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
     builtins.toJSON {
       schemaVersion = 1;
       nixManaged.daedalus = self;
-      inherit takenHostnames;
+      inherit takenHostnames webAppHosts;
     }
   );
 
@@ -274,6 +288,7 @@ in
     environmentFiles = [
       "/run/daedalus-litellm/env"
       "/run/daedalus-deploy-hook/env"
+      "/run/daedalus-dashboard/env"
     ];
 
     # LAN-only. A control plane for this box has no business answering on a
@@ -352,6 +367,16 @@ in
       NIX_REGISTRY_PATH = "/apply/applied.json";
       # Where apply requests are dropped for the host agent.
       APPLY_DIR = "/apply";
+
+      # Dashboard: the non-secret half of what the tiles need. The keys ride
+      # the rendered env file below; these are identifiers that appear in the
+      # public dashboard URLs anyway.
+      CF_ACCOUNT_ID = config.fleet.cloudflare.accountId;
+      CF_TUNNEL_ID = config.fleet.cloudflare.tunnelId;
+      # Off-box, so it cannot come from webAppHosts. One binding here rather
+      # than a literal per Lemonade tile.
+      LEMONADE_URL = "http://gaming-pc.local.${config.fleet.baseDomain}:13305";
+      ROUTER_URL = "http://192.168.0.1";
     };
   };
 
@@ -512,6 +537,71 @@ in
     prep = "TOKEN=$(grep '^DEPLOY_HOOK_TOKEN=' ${config.sops.secrets."registry-env".path} | head -1 | cut -d= -f2-)";
     content = "DEPLOY_HOOK_TOKEN=$TOKEN";
   };
+
+  # Per-service API keys for the Dashboard tab.
+  #
+  # Every value here already has exactly one encrypted home — mostly
+  # stacks/homepage/env.sops, which is where the fleet's per-service read-only
+  # API keys have always lived, plus pocket-id's and plane's own env.sops for
+  # the two keys those stacks mint. This renders the subset daedalus needs under
+  # its own names; it copies no secret into a second sops file, so rotation
+  # still touches one place. (When homepage is eventually removed, env.sops is
+  # the part of that stack that has to outlive the container — it is the key
+  # store, not a homepage config file.)
+  #
+  # `grep -m1` on each: a missing key renders empty rather than failing the
+  # unit, and the tile that needs it degrades to "no data" instead of taking
+  # the whole dashboard down. PLANE_API_KEY is empty until someone mints a
+  # workspace token in Plane's UI, so this is not hypothetical.
+  systemd.services."daedalus-dashboard-keys" =
+    let
+      hp = config.sops.secrets."homepage-env".path;
+      # HOMEPAGE_VAR_<n> in homepage's env.sops → DASH_<n> here.
+      fromHomepage = [
+        "JELLYFIN_API_KEY"
+        "SONARR_API_KEY"
+        "RADARR_API_KEY"
+        "BAZARR_API_KEY"
+        "PROWLARR_API_KEY"
+        "SEERR_API_KEY"
+        "QBT_USER"
+        "QBT_PASS"
+        "IMMICH_API_KEY"
+        "NEXTCLOUD_KEY"
+        "HASS_API_KEY"
+        "GROCY_API_KEY"
+        "N8N_API_KEY"
+        "OPENWEBUI_KEY"
+        "CALIBREWEB_USER"
+        "CALIBREWEB_PASS"
+        "GRAFANA_USER"
+        "GRAFANA_PASS"
+        "HEALTHCHECKS_API_KEY"
+        "WGEASY_USER"
+        "WGEASY_PASS"
+        "CF_API_TOKEN"
+      ];
+    in
+    mkSecretRender {
+      description = "Render the per-service API keys daedalus's dashboard reads";
+      gates = [ "podman-app-daedalus.service" ];
+      dir = "/run/daedalus-dashboard";
+      file = "/run/daedalus-dashboard/env";
+      prep = lib.concatStringsSep "\n" (
+        map (k: "${k}=$(grep -m1 '^HOMEPAGE_VAR_${k}=' ${hp} | cut -d= -f2- || true)") fromHomepage
+        ++ [
+          "POCKETID_KEY=$(grep -m1 '^STATIC_API_KEY=' ${config.sops.secrets."pocket-id-env".path} | cut -d= -f2- || true)"
+          "PLANE_KEY=$(grep -m1 '^PLANE_API_KEY=' ${config.sops.secrets."plane-env".path} | cut -d= -f2- || true)"
+        ]
+      );
+      content = lib.concatStringsSep "\n" (
+        map (k: "DASH_${k}=\${${k}}") fromHomepage
+        ++ [
+          "DASH_POCKETID_KEY=\${POCKETID_KEY}"
+          "DASH_PLANE_KEY=\${PLANE_KEY}"
+        ]
+      );
+    };
 
   systemd.services."daedalus-litellm-key" = mkSecretRender {
     description = "Render the litellm master key as daedalus's LITELLM_API_KEY";

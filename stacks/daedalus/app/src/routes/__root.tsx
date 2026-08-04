@@ -46,6 +46,15 @@ function RootDocument({ children }: { children: ReactNode }) {
                 </span>
                 Apps
               </Link>
+              {/* Everything on the box that is NOT an app. `tab` is a required
+                  search param on that route, so the rail names the landing
+                  tab explicitly — same as the apps list does. */}
+              <Link to="/dashboard" search={{ tab: 'home' as const }} className="nav-item">
+                <span className="nav-icon" aria-hidden="true">
+                  ◫
+                </span>
+                Dashboard
+              </Link>
             </nav>
 
             {/* Secondary, not tabs — the gateway model list and the runtime

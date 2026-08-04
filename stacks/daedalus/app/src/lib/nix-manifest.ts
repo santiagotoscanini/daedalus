@@ -60,6 +60,14 @@ export type NixManifest = {
   nixManaged: Record<string, ManifestApp>
   /** Every hostname published on the box — apps and every other stack. */
   takenHostnames: string[]
+  /**
+   * webApp name → its published hostname. The same set as `takenHostnames`,
+   * keyed rather than flattened: that one answers "is this name free", this one
+   * answers "where do I dial `jellyfin`". The dashboard's tile catalogue names
+   * webApps and resolves URLs through here, so a hostname edit moves the tile
+   * with it instead of stranding a literal in TypeScript.
+   */
+  webAppHosts: Record<string, string>
 }
 
 /** Every app Nix knows about, tagged with whether daedalus may edit it. */
@@ -67,6 +75,7 @@ export type ManifestEntry = ManifestApp & { name: string; managedInNix: boolean 
 
 let cachedManaged: NixManifest['nixManaged'] | null = null
 let cachedTaken: string[] | null = null
+let cachedHosts: Record<string, string> | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {
   const managedPath = process.env.NIX_MANIFEST_PATH
@@ -81,10 +90,11 @@ export async function readNixManifest(): Promise<NixManifest> {
   // The hand-written entries are a /nix/store path: immutable, and a change to
   // them restarts this container anyway, so caching for the process lifetime
   // is safe.
-  if (cachedManaged === null || cachedTaken === null) {
+  if (cachedManaged === null || cachedTaken === null || cachedHosts === null) {
     const parsed = JSON.parse(await readFile(managedPath, 'utf8')) as NixManifest
     cachedManaged = parsed.nixManaged
     cachedTaken = parsed.takenHostnames
+    cachedHosts = parsed.webAppHosts
   }
 
   // The committed registry is NOT cached. It lives at a fixed path that
@@ -94,7 +104,18 @@ export async function readNixManifest(): Promise<NixManifest> {
   // against a registry that had already been applied.
   const registry = JSON.parse(await readFile(registryPath, 'utf8')) as NixManifest['registry']
 
-  return { schemaVersion: 1, registry, nixManaged: cachedManaged, takenHostnames: cachedTaken }
+  return {
+    schemaVersion: 1,
+    registry,
+    nixManaged: cachedManaged,
+    takenHostnames: cachedTaken,
+    webAppHosts: cachedHosts,
+  }
+}
+
+/** Published hostnames, keyed by webApp name. See `NixManifest.webAppHosts`. */
+export async function webAppHosts(): Promise<Record<string, string>> {
+  return (await readNixManifest()).webAppHosts
 }
 
 /**

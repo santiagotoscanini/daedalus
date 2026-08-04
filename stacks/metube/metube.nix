@@ -23,6 +23,12 @@
     # Household app: santi + sofi, not admins-only.
     authGroups = [ "admins" "family" ];
     healthPath = "/favicon.ico";
+    # daedalus's dashboard cannot dial metube container-direct the way
+    # homepage does — `auth.isolated` deliberately keeps it off traefik-net —
+    # so its tile goes through this hostname instead. GET only, and only the
+    # queue readout the tile shows; every mutating route (/add, /delete, the
+    # socket.io channel) still needs a passkey.
+    authBypassRule = "Method(`GET`) && Path(`/history`)";
     homepage = {
       group = "Media";
       extra.weight = 60; # MeTube

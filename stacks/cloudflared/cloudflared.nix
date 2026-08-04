@@ -36,7 +36,9 @@ let
   cfg = config.fleet;
 
   # Tunnel + account identifiers. Bound here so a tunnel rotation is
-  # a single-line change (also referenced from the homepage tile).
+  # a single-line change, and re-published as `fleet.cloudflare` below
+  # so the dashboards that link to or query the tunnel read them from
+  # the option rather than restating the literals.
   tunnelId = "f67bc172-3096-4b17-961e-3cb3d1b5b523";
   accountId = "c08bf36c41d7bc5db11d6b35e0b4e721";
 
@@ -112,6 +114,8 @@ in
       static_configs = [ { targets = [ "cloudflared:2000" ]; } ];
     }
   ];
+
+  fleet.cloudflare = { inherit accountId tunnelId; };
 
   fleet.homepageServices."Network" = [
     {

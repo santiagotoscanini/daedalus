@@ -1914,3 +1914,123 @@ h2 {
     height: 15rem;
   }
 }
+
+/* ── Dashboard tab ──────────────────────────────────────────────────────────
+   A grid of small read-only cards, one per service. Deliberately denser and
+   flatter than the app panels: this page is scanned, not worked in, and ~20
+   cards per tab only reads as a dashboard if a card costs a glance.          */
+
+.tile-group {
+  margin-top: 1.9rem;
+}
+.tile-group:first-of-type {
+  margin-top: 0.4rem;
+}
+
+.tile-group-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.85rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+}
+.tile-group-head span {
+  color: var(--accent-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(15.5rem, 100%), 1fr));
+  gap: 0.7rem;
+}
+
+.tile {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 0.75rem 0.9rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+/* Only "down" gets a colour. A tile that is up is the normal case, and
+   painting the normal case teaches nothing — the eye should land on the two
+   cards that are wrong, not swim through twenty that are right. */
+.tile-down {
+  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+  background: color-mix(in srgb, var(--bad) 5%, var(--panel));
+}
+
+.tile > header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.tile > header a {
+  color: var(--text);
+  font-weight: 560;
+  font-size: 0.93rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tile > header a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.tile-desc {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+/* Two columns of label/value. `auto-fit` rather than a fixed 2 so a tile with
+   three stats fills its row instead of leaving a hole. */
+.tile-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  gap: 0.1rem 0.7rem;
+  margin: 0.15rem 0 0;
+}
+.tile-stats > div {
+  min-width: 0;
+}
+.tile-stats dt {
+  color: var(--dim);
+  font-size: 0.67rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tile-stats dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.tile-note {
+  margin: 0.1rem 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.tile-alarm {
+  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+  color: var(--text);
+}
