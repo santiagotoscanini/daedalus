@@ -9,7 +9,7 @@ import type { SystemData } from '../lib/dashboard/categories/system'
 import { CATEGORIES } from '../lib/dashboard/nav'
 import type { CategoryName } from '../lib/dashboard/tiles'
 
-// The loader behind every category page.
+// The loaders behind every category page.
 //
 // Server-side only, and necessarily so: every per-service API key in
 // /run/daedalus-dashboard/env is read here and none of it may cross to the
@@ -20,6 +20,16 @@ import type { CategoryName } from '../lib/dashboard/tiles'
 // and let the client pick — would mean ~90 upstream calls to render a page
 // showing a fifth of them, on a box where several of those upstreams are
 // services that charge real seconds for a cold connection.
+//
+// ── two functions, not one ────────────────────────────────────────────────
+//
+// A category page is two independent fan-outs: the boards (this category's own
+// panels) and the tiles (the per-service directory beneath them). They share
+// nothing, they finish at different times, and the route streams each in
+// behind its own skeleton — so they are separate entry points rather than one
+// call the page has to wait out. The page's own frame (title, lede, sub-tabs)
+// needs neither: it comes from the static CATEGORIES table on the client and
+// is on screen before either request is answered.
 
 export type { AiData, BooksData, HomeData, MonitoringData, NetworkData, SystemData, TvData }
 
@@ -35,83 +45,52 @@ export type Tile = {
   note: string | null
 }
 
-export type CategoryMeta = {
-  category: CategoryName
-  tab: string
-  title: string
-  lede: string
-  tabs: { id: string; label: string }[]
+export type CategoryTiles = {
   groups: { name: string; icon: string; tiles: Tile[] }[]
   /** Services in this category that gatus says are not answering. */
   down: string[]
 }
 
-export type CategoryPayload =
-  | { kind: 'ai'; meta: CategoryMeta; data: AiData }
-  | { kind: 'tv'; meta: CategoryMeta; data: TvData }
-  | { kind: 'books'; meta: CategoryMeta; data: BooksData }
-  | { kind: 'home'; meta: CategoryMeta; data: HomeData }
-  | { kind: 'network'; meta: CategoryMeta; data: NetworkData }
-  | { kind: 'system'; meta: CategoryMeta; data: SystemData }
-  | { kind: 'monitoring'; meta: CategoryMeta; data: MonitoringData }
+export type CategoryPayload = Body
 
-export const fetchCategory = createServerFn()
+/** `https://<hostname>` per webApp, plus the host as containers see it. */
+async function makeCtx(): Promise<{ base: (app: string) => string; hc: string }> {
+  const { webAppHosts } = await import('../lib/nix-manifest')
+  const hosts = await webAppHosts()
+  return {
+    // A missing webApp is a catalogue bug, not a runtime condition — the
+    // manifest carries every published hostname. Falling back to the bare
+    // name yields an obviously-broken link rather than a crashed page.
+    base: (app: string) => `https://${hosts[app] ?? app}`,
+    hc: 'http://host.containers.internal',
+  }
+}
+
+/** Resolve a requested sub-tab against what the category actually declares. */
+function resolveTab(category: CategoryName, tab: string): string {
+  const spec = CATEGORIES.find((c) => c.id === category)
+  if (spec === undefined) return ''
+  return spec.tabs.some((t) => t.id === tab) ? tab : (spec.tabs[0]?.id ?? '')
+}
+
+export const fetchCategoryBoards = createServerFn()
   .inputValidator((input: { category: CategoryName; tab: string }) => input)
   .handler(async ({ data }): Promise<CategoryPayload> => {
+    return loadCategory(data.category, resolveTab(data.category, data.tab), await makeCtx())
+  })
+
+export const fetchCategoryTiles = createServerFn()
+  .inputValidator((input: { category: CategoryName; tab: string }) => input)
+  .handler(async ({ data }): Promise<CategoryTiles> => {
     const { GROUPS, TILES } = await import('../lib/dashboard/tiles')
     const { pool, promVector } = await import('../lib/dashboard/clients')
-    const { webAppHosts } = await import('../lib/nix-manifest')
-
-    const hosts = await webAppHosts()
-    const ctx = {
-      // A missing webApp is a catalogue bug, not a runtime condition — the
-      // manifest carries every published hostname. Falling back to the bare
-      // name yields an obviously-broken link rather than a crashed page.
-      base: (app: string) => `https://${hosts[app] ?? app}`,
-      hc: 'http://host.containers.internal',
-    }
-
-    const spec = CATEGORIES.find((c) => c.id === data.category) ?? CATEGORIES[0]
-    if (spec === undefined) throw new Error('no categories declared')
-    const tab = spec.tabs.some((t) => t.id === data.tab) ? data.tab : (spec.tabs[0]?.id ?? '')
-
-    // The service directory and the category's own panels are independent, so
-    // they run together rather than in sequence — the tiles are the slower half
-    // (one upstream each) and there is no reason for the boards to wait.
-    const [tiles, body] = await Promise.all([
-      loadTiles(data.category, tab, { GROUPS, TILES, pool, promVector, ctx }),
-      loadCategory(data.category, tab, ctx),
-    ])
-
-    const meta: CategoryMeta = {
-      category: data.category,
-      tab,
-      title: spec.label,
-      lede: spec.lede,
-      tabs: spec.tabs,
-      groups: tiles.groups,
-      down: tiles.down,
-    }
-
-    // Re-associated case by case rather than spread with a cast: `{...body,
-    // meta}` widens to "some kind, some data" and would happily let a future
-    // edit pair an 'ai' kind with a TvData payload.
-    switch (body.kind) {
-      case 'ai':
-        return { kind: 'ai', meta, data: body.data }
-      case 'tv':
-        return { kind: 'tv', meta, data: body.data }
-      case 'books':
-        return { kind: 'books', meta, data: body.data }
-      case 'home':
-        return { kind: 'home', meta, data: body.data }
-      case 'network':
-        return { kind: 'network', meta, data: body.data }
-      case 'system':
-        return { kind: 'system', meta, data: body.data }
-      case 'monitoring':
-        return { kind: 'monitoring', meta, data: body.data }
-    }
+    return loadTiles(data.category, resolveTab(data.category, data.tab), {
+      GROUPS,
+      TILES,
+      pool,
+      promVector,
+      ctx: await makeCtx(),
+    })
   })
 
 type Body =
@@ -170,7 +149,7 @@ async function loadTiles(
   category: CategoryName,
   tab: string,
   m: TileModules,
-): Promise<{ groups: CategoryMeta['groups']; down: string[] }> {
+): Promise<CategoryTiles> {
   const groups = m.GROUPS.filter(
     (g) => g.category === category && (g.tab === undefined || g.tab === tab),
   )

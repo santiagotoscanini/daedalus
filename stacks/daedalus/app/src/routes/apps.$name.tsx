@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
+import { Await, createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ApplyBar } from '../components/apply-bar'
 import {
@@ -14,6 +14,7 @@ import {
   Toggle,
 } from '../components/ui'
 import { BarList } from '../components/viz'
+import { BlockSkeleton, MetricsSkeleton, PanelsSkeleton } from '../components/skeleton'
 // ./access-window, NOT ./access — same split as env-groups below. The window
 // table is a value the picker and validateSearch both need in the browser;
 // ./access talks to Loki and must never follow it there.
@@ -34,10 +35,12 @@ import { GROUP_LABELS, type EnvGroup, type EnvOrigin } from '../lib/env-groups'
 import { BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import {
   fetchApp,
+  fetchAppTab,
   fetchDeployStatus,
   revealEnvVar,
   saveApp,
   triggerDeploy,
+  type AppTabData,
 } from '../server/registry'
 
 // Every tab this route can render. Two of them are conditional — `database`
@@ -72,25 +75,21 @@ export const Route = createFileRoute('/apps/$name')({
   // The loader depends on the tab, so switching tabs refetches — that is what
   // lets the logs stay off the wire until the logs tab is actually open.
   loaderDeps: ({ search }) => ({ tab: search.tab, range: search.range ?? DEFAULT_WINDOW }),
+  // The frame is awaited (it is a Postgres read, and a missing app has to be a
+  // real 404 rather than a page that renders and then apologises). The tab's
+  // own fan-out is NOT: it is returned as a promise and streamed in behind a
+  // skeleton, so opening `access` — ten Loki queries — puts the hero, the tab
+  // bar and the app's identity on screen immediately and fills the body in
+  // when it arrives.
   loader: async ({ params, deps }) => {
-    const data = await fetchApp({
-      data: {
-        name: params.name,
-        // Each is only fetched for the tab that shows it. Loader data is
-        // serialised into the HTML for hydration, so pulling logs and deploy
-        // history on every tab would pay for them five times over.
-        withLogs: deps.tab === 'logs',
-        withDeploys: deps.tab === 'deployments',
-        withEnv: deps.tab === 'secrets',
-        withResources: deps.tab === 'overview',
-        withAccess: deps.tab === 'access',
-        withDatabase: deps.tab === 'database',
-        withVpn: deps.tab === 'vpn',
-        accessWindow: deps.range,
-      },
-    })
-    if (!data) throw notFound()
-    return data
+    const shell = await fetchApp({ data: { name: params.name } })
+    if (!shell) throw notFound()
+    return {
+      ...shell,
+      tabData: fetchAppTab({
+        data: { name: params.name, tab: deps.tab, accessWindow: deps.range },
+      }),
+    }
   },
   component: AppDetail,
   notFoundComponent: () => (
@@ -112,22 +111,12 @@ function AppDetail() {
     app,
     drift,
     status,
-    dbSize,
-    logs,
-    logs1h,
     applyStatus,
     deployStatus,
     lastDeploy,
     pullBroken,
-    deployments,
-    env,
-    resources,
     takenHostnames,
-    ci,
-    activity,
-    access,
-    database,
-    vpn,
+    tabData,
   } = Route.useLoaderData()
   const router = useRouter()
   const { tab, range } = Route.useSearch()
@@ -255,12 +244,22 @@ function AppDetail() {
             replace
           >
             {t}
-            {t === 'logs' && logs.length > 0 && <span className="tab-dot" />}
           </Link>
         ))}
       </nav>
 
       {tab === 'overview' && (
+        <Await
+          promise={tabData}
+          fallback={
+            <>
+              <MetricsSkeleton count={6} />
+              <PanelsSkeleton count={3} />
+            </>
+          }
+        >
+          {(d) =>
+            d.kind !== 'overview' ? null : (
         <>
           <div className="metrics">
             <Metric
@@ -273,28 +272,28 @@ function AppDetail() {
 
             <Metric
               label="CPU"
-              value={resources.cpu.used === null ? '—' : resources.cpu.used.toFixed(2)}
+              value={d.resources.cpu.used === null ? '—' : d.resources.cpu.used.toFixed(2)}
               unit={
-                resources.cpu.limit === null ?
+                d.resources.cpu.limit === null ?
                   'cores'
-                : `/ ${String(resources.cpu.limit)} cores`
+                : `/ ${String(d.resources.cpu.limit)} cores`
               }
             >
-              <Meter value={resources.cpu.used} max={resources.cpu.limit} tone="cpu" />
-              <AreaChart values={resources.cpu.spark} state={state} />
+              <Meter value={d.resources.cpu.used} max={d.resources.cpu.limit} tone="cpu" />
+              <AreaChart values={d.resources.cpu.spark} state={state} />
             </Metric>
 
             <Metric
               label="Memory"
-              value={resources.memory.used === null ? '—' : fmtMb(resources.memory.used)}
+              value={d.resources.memory.used === null ? '—' : fmtMb(d.resources.memory.used)}
               unit={
-                resources.memory.limit === null ?
+                d.resources.memory.limit === null ?
                   'MB'
-                : `/ ${fmtMb(resources.memory.limit)} MB`
+                : `/ ${fmtMb(d.resources.memory.limit)} MB`
               }
             >
-              <Meter value={resources.memory.used} max={resources.memory.limit} tone="mem" />
-              <AreaChart values={resources.memory.spark} state={state} />
+              <Meter value={d.resources.memory.used} max={d.resources.memory.limit} tone="mem" />
+              <AreaChart values={d.resources.memory.spark} state={state} />
             </Metric>
 
             <Metric label="Health" value={fmtBool(status?.healthy)}>
@@ -305,21 +304,21 @@ function AppDetail() {
 
             <Metric
               label="Processes"
-              value={resources.pids.used === null ? '—' : String(resources.pids.used)}
-              unit={resources.pids.limit === null ? '' : `/ ${String(resources.pids.limit)}`}
+              value={d.resources.pids.used === null ? '—' : String(d.resources.pids.used)}
+              unit={d.resources.pids.limit === null ? '' : `/ ${String(d.resources.pids.limit)}`}
             >
-              <Meter value={resources.pids.used} max={resources.pids.limit} tone="pids" />
+              <Meter value={d.resources.pids.used} max={d.resources.pids.limit} tone="pids" />
               <p className="metric-note">
-                {resources.oomKills !== null && resources.oomKills > 0 ?
+                {d.resources.oomKills !== null && d.resources.oomKills > 0 ?
                   <span className="bad-text">
-                    {resources.oomKills} OOM kill{resources.oomKills === 1 ? '' : 's'} — the memory
+                    {d.resources.oomKills} OOM kill{d.resources.oomKills === 1 ? '' : 's'} — the memory
                     cap is too tight.
                   </span>
                 : 'Processes and threads. No OOM kills.'}
               </p>
             </Metric>
 
-            <Metric label="Logs / hour" value={logs1h === null ? '—' : logs1h.toLocaleString()}>
+            <Metric label="Logs / hour" value={d.logs1h === null ? '—' : d.logs1h.toLocaleString()}>
               <p className="metric-note">Lines shipped to Loki in the last hour.</p>
             </Metric>
           </div>
@@ -372,7 +371,7 @@ function AppDetail() {
                 <>
                   <Row k="cluster" v="shared pg" />
                   <Row k="database" v={app.name} mono />
-                  <Row k="size" v={<Bytes value={dbSize} />} />
+                  <Row k="size" v={<Bytes value={d.dbSize} />} />
                   <Row k="host" v="pg:5432" mono />
                 </>
               ) : (
@@ -411,9 +410,15 @@ function AppDetail() {
             </>
           )}
         </>
+            )
+          }
+        </Await>
       )}
 
       {tab === 'deployments' && (
+        <Await promise={tabData} fallback={<BlockSkeleton h={420} />}>
+          {(td) =>
+            td.kind !== 'deployments' ? null : (
         <>
           <p className="deploy-meta">
             {app.sourceMode === 'local' ? (
@@ -443,9 +448,11 @@ function AppDetail() {
             )}
           </p>
 
-          {app.sourceMode !== 'local' && <Runners name={app.name} ci={ci} activity={activity} />}
+          {app.sourceMode !== 'local' && (
+            <Runners name={app.name} ci={td.ci} activity={td.activity} />
+          )}
 
-          {deployments.length === 0 ? (
+          {td.deployments.length === 0 ? (
             <p className="lede">
               {app.sourceMode === 'local'
                 ? 'Local-source apps have no deploy history — the running code is the working tree.'
@@ -453,7 +460,7 @@ function AppDetail() {
             </p>
           ) : (
             <ol className="timeline">
-              {deployments.map((d) => (
+              {td.deployments.map((d) => (
                 <li key={d.id} className={d.isCurrent ? 'current' : d.result}>
                   <span className={`node node-${d.isCurrent ? 'current' : d.result}`} />
                   <div className={d.isCurrent ? 'deploy-card is-current' : 'deploy-card'}>
@@ -490,20 +497,61 @@ function AppDetail() {
             </ol>
           )}
         </>
+            )
+          }
+        </Await>
       )}
 
-      {tab === 'database' && <Database app={app} data={database} />}
+      {tab === 'database' && (
+        <Await
+          promise={tabData}
+          fallback={
+            <>
+              <MetricsSkeleton count={4} />
+              <PanelsSkeleton count={3} />
+            </>
+          }
+        >
+          {(td) => (td.kind !== 'database' ? null : <Database app={app} data={td.database} />)}
+        </Await>
+      )}
 
-      {tab === 'vpn' && <Vpn app={app} data={vpn} />}
+      {tab === 'vpn' && (
+        <Await
+          promise={tabData}
+          fallback={
+            <>
+              <MetricsSkeleton count={4} />
+              <PanelsSkeleton count={2} />
+            </>
+          }
+        >
+          {(td) => (td.kind !== 'vpn' ? null : <Vpn app={app} data={td.vpn} />)}
+        </Await>
+      )}
 
       {tab === 'access' && (
-        <Access
-          name={app.name}
-          hostname={app.effectiveHostname}
-          stage={app.stage}
-          access={access}
-          range={range ?? DEFAULT_WINDOW}
-        />
+        <Await
+          promise={tabData}
+          fallback={
+            <>
+              <MetricsSkeleton count={4} />
+              <BlockSkeleton h={300} />
+            </>
+          }
+        >
+          {(td) =>
+            td.kind !== 'access' ? null : (
+              <Access
+                name={app.name}
+                hostname={app.effectiveHostname}
+                stage={app.stage}
+                access={td.access}
+                range={range ?? DEFAULT_WINDOW}
+              />
+            )
+          }
+        </Await>
       )}
 
       {tab === 'settings' && (
@@ -675,15 +723,40 @@ function AppDetail() {
         </div>
       )}
 
-      {tab === 'secrets' && <Secrets app={app.name} env={env} hasSecretsFile={app.operatorSecrets} />}
+      {tab === 'secrets' && (
+        <Await promise={tabData} fallback={<BlockSkeleton h={400} />}>
+          {(td) =>
+            td.kind !== 'secrets' ? null : (
+              <Secrets app={app.name} env={td.env} hasSecretsFile={app.operatorSecrets} />
+            )
+          }
+        </Await>
+      )}
 
       {tab === 'logs' && (
+        <Await promise={tabData} fallback={<BlockSkeleton h={420} />}>
+          {(td) =>
+            td.kind !== 'logs' ? null : <LogsPanel app={app.name} logs={td.logs} />
+          }
+        </Await>
+      )}
+
+      <ApplyBar
+        changed={readOnly || drift.length === 0 ? [] : [{ name: app.name, fields: drift }]}
+        initialStatus={applyStatus}
+      />
+    </>
+  )
+}
+
+function LogsPanel({ app, logs }: { app: string; logs: { ts: string; level: string | null; line: string }[] }) {
+  return (
         <Panel
           title="Recent logs"
           action={
             <a
               className="btn btn-ghost"
-              href={`https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${app.name}/logs?from=now-15m&to=now&var-ds=loki-default`}
+              href={`https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${app}/logs?from=now-15m&to=now&var-ds=loki-default`}
               target="_blank"
               rel="noreferrer"
             >
@@ -715,25 +788,14 @@ function AppDetail() {
               </div>
             </>
           )}
-        </Panel>
-      )}
-
-      <ApplyBar
-        changed={readOnly || drift.length === 0 ? [] : [{ name: app.name, fields: drift }]}
-        initialStatus={applyStatus}
-      />
-    </>
+    </Panel>
   )
 }
 
 type LoaderData = Awaited<ReturnType<typeof fetchApp>>
 type AppRecord = NonNullable<LoaderData>['app']
 
-type AccessData = LoaderData extends infer T ?
-  T extends { access: infer A } ?
-    A
-  : never
-: never
+type AccessData = Extract<AppTabData, { kind: 'access' }>['access']
 
 /**
  * The app's database on the shared cluster.
@@ -748,7 +810,7 @@ type AccessData = LoaderData extends infer T ?
  * list would mean handing the control plane a connection to every app's data,
  * which is a real boundary traded for a nicer panel.
  */
-function Database({ app, data }: { app: AppRecord; data: NonNullable<LoaderData>['database'] }) {
+function Database({ app, data }: { app: AppRecord; data: Extract<AppTabData, { kind: 'database' }>['database'] }) {
   if (!app.postgres) {
     return (
       <p className="lede">
@@ -885,7 +947,7 @@ function Database({ app, data }: { app: AppRecord; data: NonNullable<LoaderData>
  * therefore describes that gluetun instance, scraped under a prometheus job
  * named after the container.
  */
-function Vpn({ app, data }: { app: AppRecord; data: NonNullable<LoaderData>['vpn'] }) {
+function Vpn({ app, data }: { app: AppRecord; data: Extract<AppTabData, { kind: 'vpn' }>['vpn'] }) {
   if (app.egressContainer === null) {
     return (
       <p className="lede">
@@ -1343,12 +1405,8 @@ function shortAgent(ua: string): string {
   return os === undefined ? label : `${label} · ${OS_NAME[os] ?? os}`
 }
 
-type CiData = Awaited<ReturnType<typeof fetchApp>> extends infer T ?
-  T extends { ci: infer C } ?
-    C
-  : never
-: never
-type ActivityData = { ts: string; line: string; source: 'build' | 'deploy' }[]
+type CiData = Extract<AppTabData, { kind: 'deployments' }>['ci']
+type ActivityData = Extract<AppTabData, { kind: 'deployments' }>['activity']
 
 /**
  * The self-hosted runner for this app, and what it is doing.

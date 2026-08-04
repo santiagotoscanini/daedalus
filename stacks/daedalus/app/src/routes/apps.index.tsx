@@ -1,23 +1,61 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { Await, createFileRoute, Link } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
+import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
 import { Segmented, Sparkline, StateDot, type AppState } from '../components/ui'
 import { BarList, Board, BoardGrid, Chip, Facts, Pulse } from '../components/viz'
-import { fetchApps } from '../server/registry'
+import { fetchApps, fetchRegistries } from '../server/registry'
 
 // The app list. Every row joins three sources: the registry (Postgres — what
 // daedalus believes), the Nix manifest (what the box was actually built from,
 // hence drift), and Prometheus (what is happening right now).
+//
+// Two loads, neither awaited: the rows come out of Postgres in milliseconds,
+// the registries are two upstreams through traefik. Holding the list for them
+// would mean the fast half of the page waits on the slow half for no reason.
 
 export const Route = createFileRoute('/apps/')({
-  loader: () => fetchApps(),
-  component: AppsList,
+  loader: () => ({ list: fetchApps(), registries: fetchRegistries() }),
+  component: AppsPage,
 })
 
-type Row = Awaited<ReturnType<typeof fetchApps>>['apps'][number]
+type ListData = Awaited<ReturnType<typeof fetchApps>>
+type Row = ListData['apps'][number]
 
-export function AppsList() {
-  const { apps, applyStatus, registries } = Route.useLoaderData()
+function AppsPage() {
+  const { list, registries } = Route.useLoaderData()
+
+  return (
+    <>
+      <Await promise={list} fallback={<ListSkeleton />}>
+        {(data) => <AppsList data={data} />}
+      </Await>
+
+      <h2 className="section-head">
+        Shared registries
+        <small>every app above is built out of these</small>
+      </h2>
+      <Await promise={registries} fallback={<BoardsSkeleton spans={[6, 6]} />}>
+        {(data) => <Registries data={data} />}
+      </Await>
+    </>
+  )
+}
+
+/** The header and filters are part of the shape, so they are in the skeleton. */
+function ListSkeleton() {
+  return (
+    <>
+      <header className="page-head">
+        <h1>Apps</h1>
+      </header>
+      <RowsSkeleton count={3} />
+    </>
+  )
+}
+
+export function AppsList({ data }: { data: ListData }) {
+  const { apps, applyStatus } = data
   const [search, setSearch] = useState('')
   const [state, setState] = useState<'all' | AppState>('all')
   const [exposure, setExposure] = useState<'all' | 'live' | 'lab' | 'off'>('all')
@@ -126,8 +164,6 @@ export function AppsList() {
         </>
       )}
 
-      <Registries data={registries} />
-
       <ApplyBar changed={changed} initialStatus={applyStatus} />
     </>
   )
@@ -140,16 +176,11 @@ export function AppsList() {
  * are shared plumbing for exactly the things listed above this section, and
  * when a deploy stops moving one of them is usually the reason.
  */
-function Registries({ data }: { data: Awaited<ReturnType<typeof fetchApps>>['registries'] }) {
+function Registries({ data }: { data: Awaited<ReturnType<typeof fetchRegistries>> }) {
   const { images, packages } = data
 
   return (
     <>
-      <h2 className="section-head">
-        Shared registries
-        <small>every app above is built out of these</small>
-      </h2>
-
       <BoardGrid>
         <Board
           title="Container images"

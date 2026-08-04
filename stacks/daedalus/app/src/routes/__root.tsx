@@ -100,10 +100,12 @@ function RootDocument({ children }: { children: ReactNode }) {
 /**
  * A hairline at the top of the window while a route loader is in flight.
  *
- * The whole reason navigation felt broken: the router correctly keeps the
- * previous page on screen until the next loader resolves, so a click on
- * Dashboard changed nothing visible for the few hundred ms of its fan-out.
- * The bar is the missing "yes, I heard you".
+ * Still here even though the pages now stream: the router keeps the previous
+ * page on screen until the loader resolves, and a few routes still await
+ * something before they can render at all — the app detail page has to know
+ * the record exists before it can draw a tab bar, or decide it is a 404. Those
+ * are tens of milliseconds, and the bar is what makes them feel answered
+ * rather than ignored. Everything past that point is a skeleton, not a wait.
  *
  * CSS-animated rather than driven by real progress — a loader has no
  * measurable percentage, and a fake number that stalls at 80% is worse than an
