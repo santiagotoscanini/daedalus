@@ -14,7 +14,12 @@ import {
   Toggle,
 } from '../components/ui'
 import type { DeployStatus } from '../lib/deploy'
-import { GROUP_LABELS, type EnvGroup, type EnvOrigin } from '../lib/env-snapshot'
+// ./env-groups, NOT ./env-snapshot: this is client code, and env-snapshot
+// imports node:fs/promises. Vite externalises node builtins for the browser,
+// so importing a VALUE from that module — even a lookup table — makes the
+// page throw on load. Type-only imports would be erased and safe; GROUP_LABELS
+// is not.
+import { GROUP_LABELS, type EnvGroup, type EnvOrigin } from '../lib/env-groups'
 import { BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import {
   fetchApp,
