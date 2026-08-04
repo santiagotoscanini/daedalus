@@ -106,13 +106,39 @@ let
   # path itself changes when the content does, so the container's ExecStart
   # changes and it restarts with the new manifest. Binding the live file
   # instead would pin its inode and survive an Apply that rewrote it.
+  # ONLY the hand-written entries. The committed registry deliberately does NOT
+  # ride in here.
+  #
+  # It used to, and that made every Apply restart daedalus: this is a store
+  # path bound into the container, so changing apps.json changed the path,
+  # changed the volume argument, changed the unit, and systemd restarted it —
+  # right at the "switching" phase, killing the very page that was showing the
+  # progress bar. The registry now arrives through a stable path instead (see
+  # registrySnapshot below), so applying a change no longer takes the app down.
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
     builtins.toJSON {
       schemaVersion = 1;
-      registry = builtins.fromJSON (builtins.readFile ../apps/apps.json);
       nixManaged.daedalus = self;
     }
   );
+
+  # Copies the committed registry to a FIXED path inside the bind mount, so the
+  # container can read what Nix last built without that content being part of
+  # its unit.
+  #
+  # The store-path dependency moves here, which is the point: this tiny oneshot
+  # re-runs whenever apps.json changes (its ExecStart embeds the file's store
+  # path, so the unit definition changes and systemd restarts it), while the
+  # container's definition stays put. Nothing else about the app moves.
+  registrySnapshot = pkgs.writeShellApplication {
+    name = "daedalus-registry-snapshot";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      install -d -m 0755 -o santiago -g users ${lib.escapeShellArg applyDir}
+      install -m 0644 -o santiago -g users \
+        ${../apps/apps.json} ${lib.escapeShellArg "${applyDir}/applied.json"}
+    '';
+  };
 
   # daedalus's own registry entry, in the manifest's shape.
   #
@@ -262,8 +288,12 @@ in
       # Reached over the `monitoring` bridge added above.
       PROMETHEUS_URL = "http://prometheus:9090";
       LOKI_URL = "http://loki:3100";
-      # What Nix last built — see the nixManifest let-binding.
+      # What Nix last built. Two files, because they change at different rates:
+      # the manifest is a store path (hand-written entries, rarely moves), the
+      # snapshot is a stable path refreshed by daedalus-registry-snapshot on
+      # every rebuild — so an Apply updates it WITHOUT restarting this app.
       NIX_MANIFEST_PATH = "/registry/manifest.json";
+      NIX_REGISTRY_PATH = "/apply/applied.json";
       # Where apply requests are dropped for the host agent.
       APPLY_DIR = "/apply";
     };
@@ -282,6 +312,24 @@ in
   ];
 
   fleet.statePaths.${applyDir} = { };
+
+  # Refreshes /apply/applied.json from the committed registry. Ordered before
+  # the container so the file exists on a cold boot; re-runs on any rebuild
+  # that changed apps.json, because its ExecStart embeds that file's store path.
+  systemd.services.daedalus-registry-snapshot = {
+    description = "Publish the committed app registry for daedalus to read";
+    before = [ "podman-app-daedalus.service" ];
+    wantedBy = [
+      "podman-app-daedalus.service"
+      "multi-user.target"
+    ];
+    after = [ "local-fs.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${registrySnapshot}/bin/daedalus-registry-snapshot";
+    };
+  };
 
   # The apply agent. Root, because only root can `nixos-rebuild switch`.
   #

@@ -46,24 +46,31 @@ export type NixManifest = {
 /** Every app Nix knows about, tagged with whether daedalus may edit it. */
 export type ManifestEntry = ManifestApp & { name: string; managedInNix: boolean }
 
-let cached: NixManifest | null = null
+let cachedManaged: NixManifest['nixManaged'] | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {
-  // Cached for the life of the process. Safe precisely because the path is
-  // immutable: a changed manifest means a changed store path means a new
-  // container. Under `vite dev` the module reloads on edit anyway.
-  if (cached) return cached
-
-  const path = process.env.NIX_MANIFEST_PATH
-  if (!path) {
+  const managedPath = process.env.NIX_MANIFEST_PATH
+  const registryPath = process.env.NIX_REGISTRY_PATH
+  if (!managedPath || !registryPath) {
     throw new Error(
-      'NIX_MANIFEST_PATH is not set. It is injected by stacks/daedalus/daedalus.nix — ' +
-        'check the container env.',
+      'NIX_MANIFEST_PATH / NIX_REGISTRY_PATH are not set. Both are injected by ' +
+        'stacks/daedalus/daedalus.nix — check the container env.',
     )
   }
 
-  cached = JSON.parse(await readFile(path, 'utf8')) as NixManifest
-  return cached
+  // The hand-written entries are a /nix/store path: immutable, and a change to
+  // them restarts this container anyway, so caching for the process lifetime
+  // is safe.
+  cachedManaged ??= (JSON.parse(await readFile(managedPath, 'utf8')) as NixManifest).nixManaged
+
+  // The committed registry is NOT cached. It lives at a fixed path that
+  // daedalus-registry-snapshot rewrites on every rebuild — which is precisely
+  // what lets an Apply update it without restarting this app. Caching it would
+  // reintroduce the restart by another name: the UI would keep reporting drift
+  // against a registry that had already been applied.
+  const registry = JSON.parse(await readFile(registryPath, 'utf8')) as NixManifest['registry']
+
+  return { schemaVersion: 1, registry, nixManaged: cachedManaged }
 }
 
 export async function manifestEntries(): Promise<ManifestEntry[]> {
