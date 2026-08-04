@@ -67,6 +67,31 @@ let
     '';
   };
 
+  # Apps that actually have an `app-<name>-deploy.service` to start: exactly
+  # the registry-mode entries. Read from the same JSON the manifest uses
+  # rather than from `config.fleet.apps`, so this module still makes no config
+  # read (see the note on `self` below) — and a local-source app like daedalus
+  # is excluded for free, because it has no deploy unit at all.
+  #
+  # This list is the security control on the trigger: its contents become part
+  # of a unit name that root starts.
+  deployableApps = builtins.attrNames (builtins.fromJSON (builtins.readFile ../apps/apps.json)).apps;
+
+  deployTriggerScript = pkgs.writeShellApplication {
+    name = "daedalus-deploy-trigger";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.systemd
+      pkgs.coreutils
+    ];
+    text = ''
+      APPLY_DIR=${lib.escapeShellArg applyDir}
+      DEPLOYABLE=${lib.escapeShellArg (lib.concatStringsSep " " deployableApps)}
+
+      ${builtins.readFile ./host/deploy-trigger.sh}
+    '';
+  };
+
   # What Nix currently believes, handed to the container as one read-only
   # store file. Two parts, because they have different provenance:
   #
@@ -240,6 +265,10 @@ in
   virtualisation.oci-containers.containers.app-daedalus.volumes = [
     "${nixManifest}:/registry/manifest.json:ro"
     "${applyDir}:/apply"
+    # Last deploy result per app, written by app-<name>-deploy.service
+    # (`<digest> ok|failed`). Read-only, and the DIRECTORY rather than the
+    # files, so a rewritten state file is picked up without pinning an inode.
+    "/var/lib/app-deploy:/deploy-state:ro"
   ];
 
   fleet.statePaths.${applyDir} = { };
@@ -281,6 +310,34 @@ in
       PathChanged = "${applyDir}/request.json";
     };
   };
+
+  # Redeploy trigger. Same file-drop bridge as apply, different verb: this one
+  # starts an app's EXISTING deploy unit rather than rebuilding the system.
+  #
+  # Push, not a replacement for the poll. `app-<name>-deploy.timer` still runs
+  # (see stacks/apps) and is what makes deploys self-healing: a notification
+  # that arrives while the box is off is simply lost, whereas the timer's
+  # Persistent=true catches up on boot. This only removes latency.
+  systemd.services.daedalus-deploy-trigger = {
+    description = "Start an app's deploy unit on daedalus's behalf";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${deployTriggerScript}/bin/daedalus-deploy-trigger";
+      # deploy.sh health-checks with a 90s timeout after the restart; give the
+      # whole pull-restart-verify cycle room without hanging forever.
+      TimeoutStartSec = "10min";
+    };
+  };
+
+  systemd.paths.daedalus-deploy-trigger = {
+    description = "Watch for a daedalus redeploy request";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathChanged = "${applyDir}/deploy-request.json";
+  };
+
+  fleet.monitoredJobs.daedalus-deploy-trigger = { };
 
   # A failed apply means the box may have been rolled back without anyone
   # watching the UI. Mail it.
