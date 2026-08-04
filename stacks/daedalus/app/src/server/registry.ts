@@ -143,7 +143,7 @@ export const fetchApp = createServerFn()
     const { readEnvSnapshot } = await import('../lib/env-snapshot')
     const declared = new Map(record.envVars.map((e) => [e.key, e.note]))
     const envSnapshot = withEnv
-      ? await readEnvSnapshot(name, declared)
+      ? await readEnvSnapshot(name, declared, record.operatorSecrets)
       : { vars: [], takenAt: null, available: false }
 
     return {
@@ -165,6 +165,7 @@ export const fetchApp = createServerFn()
         vars: envSnapshot.vars.map((v) => ({
           key: v.key,
           origin: v.origin,
+          group: v.group,
           secret: v.secret,
           note: v.note ?? null,
           value: v.secret ? null : v.value,
