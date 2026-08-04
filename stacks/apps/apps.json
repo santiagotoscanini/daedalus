@@ -74,7 +74,7 @@
         "healthPath": "/favicon.ico"
       },
       "homepage": {
-        "description": "ipcrawl — exposed-webcam catalogue",
+        "description": "ipcrawl — exposed-webcam catalogue.",
         "icon": "mdi-cctv-#38bdf8"
       },
       "notes": {
