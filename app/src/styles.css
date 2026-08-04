@@ -746,11 +746,15 @@ h2 {
 
 /* ── resource sliders ───────────────────────────────────────────────────── */
 
+/* Sized so the label column can never collapse to the point where the hint
+   wraps one word per line — which is what happens with a plain `1fr` when the
+   panel is a narrow grid cell. The panel is `wide`, but the floor matters
+   more than the panel: it is what keeps this readable if it is ever moved. */
 .slider {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(8rem, 1.2fr) auto;
+  grid-template-columns: minmax(15rem, 1fr) minmax(10rem, 1.5fr) 6.5rem;
   align-items: center;
-  gap: 0.5rem 1.25rem;
+  gap: 0.5rem 1.5rem;
   padding: 0.7rem 0;
   border-bottom: 1px solid var(--border-soft);
 }
@@ -828,12 +832,15 @@ h2 {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-@media (max-width: 40rem) {
+/* Below this the three columns cannot all hold their minimum, so stack:
+   label + value on one line, the track full width underneath. */
+@media (max-width: 56rem) {
   .slider {
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .slider input[type="range"] {
     grid-column: 1 / -1;
+    margin-top: 0.3rem;
   }
 }
 
@@ -864,6 +871,25 @@ h2 {
 .field input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.field-hint,
+.field-error {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+.field-hint {
+  color: var(--dim);
+}
+.field-error {
+  color: #d1594f;
+}
+.field-bad input,
+.field-bad input:focus {
+  border-color: #d1594f;
+  outline-color: #d1594f;
 }
 
 .btn {
