@@ -169,9 +169,16 @@ in
   # safe if cloudflared is already up.
   systemd.services.cloudflared-route-sync = {
     description = "Reconcile CF DNS CNAMEs for fleet.cloudflareRoutes";
+    # pihole-ftl as well as pihole-ready: the latter is RemainAfterExit, so on
+    # a rebuild it stays active and provides NO ordering barrier — only
+    # pihole-ftl actually restarts, and this unit would otherwise start
+    # alongside it with no resolver. Ordering is not sufficient on its own
+    # (started != answering queries), which is why the script also retries
+    # DNS failures; this just narrows the window.
     after = [
       "network-online.target"
       "pihole-ready.service"
+      "pihole-ftl.service"
     ];
     wants = [
       "network-online.target"

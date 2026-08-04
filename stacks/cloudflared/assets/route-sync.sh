@@ -15,11 +15,24 @@ TARGET="${TUNNEL_ID}.cfargotunnel.com"
 # the source, so an API error (expired token, 429, CF outage) aborts
 # with the CF error body instead of being misread downstream (a null
 # `result` parses as "record missing" and triggers a spurious POST).
-# --retry absorbs transient 5xx/connection blips.
+# --retry absorbs transient 5xx/connection blips — and, crucially,
+# DNS failures.
+#
+# --retry-all-errors is what makes that last part true. curl's default retry
+# set covers timeouts and 5xx but NOT a name-resolution failure (exit 6), and
+# resolution is exactly what breaks here: any rebuild that changes
+# fleet.dnsHosts restarts pihole-ftl, and this unit gets restarted in the SAME
+# switch, so it runs while the box has no resolver. Without the flag the very
+# error that actually occurs is the one error curl will not retry — the unit
+# fails, and the whole nixos-rebuild reports failure for something that fixes
+# itself a second later.
+#
+# Ordering alone cannot solve it: pihole-ftl reporting "started" is not the
+# same as FTL answering queries, so this retries rather than assuming.
 api() {
   local method="$1" path="$2" body
   shift 2
-  body=$(curl -sS --retry 3 --retry-connrefused -X "$method" \
+  body=$(curl -sS --retry 5 --retry-delay 2 --retry-all-errors --retry-connrefused -X "$method" \
     -H "Authorization: Bearer $CF_DNS_API_TOKEN" \
     -H "Content-Type: application/json" \
     "$@" \
