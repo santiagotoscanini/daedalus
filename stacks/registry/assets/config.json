@@ -81,6 +81,18 @@
     },
     "ui": { "enable": true },
     "metrics": { "enable": true, "prometheus": { "path": "/metrics" } },
-    "scrub": { "enable": true, "interval": "168h" }
+    "scrub": { "enable": true, "interval": "168h" },
+
+    "events": {
+      "enable": true,
+      "sinks": [
+        {
+          "type": "http",
+          "address": "https://daedalus.toscanini.me/api/deploy",
+          "timeout": "10s",
+          "headers": { "X-Deploy-Token": "${DEPLOY_HOOK_TOKEN}" }
+        }
+      ]
+    }
   }
 }

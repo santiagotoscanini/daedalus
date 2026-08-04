@@ -189,7 +189,10 @@ in
     # serves without a duplicated model list to keep in sync.
     litellm.enable = self.litellm;
     prometheus.enable = self.prometheus;
-    environmentFiles = [ "/run/daedalus-litellm/env" ];
+    environmentFiles = [
+      "/run/daedalus-litellm/env"
+      "/run/daedalus-deploy-hook/env"
+    ];
 
     # LAN-only. A control plane for this box has no business answering on a
     # public CNAME, wildcard cert or not.
@@ -213,11 +216,18 @@ in
       headers = {
         "X-Forwarded-Email" = "{{ .claims.email }}";
       };
-      # /api/info skips the gate so the homepage tile can read it, the same
-      # way healthPath does. The route is written to deserve that: counts and
-      # app names only — no config, no env, no drift detail. A bypassed path
-      # is effectively public on the LAN, and this is the control plane.
-      authBypassRule = "Path(`/api/info`)";
+      # Two paths skip the Pocket ID gate, for the same reason healthPath
+      # does — a machine has to reach them and cannot hold a passkey:
+      #
+      #   /api/info   — the homepage tile. Counts and app names only.
+      #   /api/deploy — zot's push events (stacks/registry). Carries its own
+      #                 auth instead: X-Deploy-Token, checked in the route
+      #                 against DEPLOY_HOOK_TOKEN below, and it can do exactly
+      #                 one thing — start an existing app's deploy unit.
+      #
+      # A bypassed path is effectively public on the LAN, so both are written
+      # to deserve it. Everything else on this app still needs a passkey.
+      authBypassRule = "Path(`/api/info`) || Path(`/api/deploy`)";
     };
 
     homepage = {
@@ -353,6 +363,19 @@ in
   # The render dir is deliberately NOT /run/app-daedalus — that is the
   # container unit's RuntimeDirectory, and systemd wipes it when the container
   # stops (the trap that produced nextcloud-redis's 500s).
+  # The shared secret zot signs its push events with. ONE encrypted source of
+  # truth — stacks/registry/env.sops, where the caller side lives — rendered
+  # here for the receiving side, so rotation touches a single file. Same idiom
+  # as the litellm master key below.
+  systemd.services."daedalus-deploy-hook-token" = mkSecretRender {
+    description = "Render the registry's deploy-hook token for daedalus to verify";
+    gates = [ "podman-app-daedalus.service" ];
+    dir = "/run/daedalus-deploy-hook";
+    file = "/run/daedalus-deploy-hook/env";
+    prep = "TOKEN=$(grep '^DEPLOY_HOOK_TOKEN=' ${config.sops.secrets."registry-env".path} | head -1 | cut -d= -f2-)";
+    content = "DEPLOY_HOOK_TOKEN=$TOKEN";
+  };
+
   systemd.services."daedalus-litellm-key" = mkSecretRender {
     description = "Render the litellm master key as daedalus's LITELLM_API_KEY";
     gates = [ "podman-app-daedalus.service" ];

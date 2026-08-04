@@ -25,6 +25,25 @@
 #   - apikey extension is on: a logged-in UI user can mint per-purpose
 #     basic-auth API keys if ever needed.
 #
+# Push events: the `events` extension POSTs every registry event to
+# daedalus (https://daedalus.toscanini.me/api/deploy), which turns an
+# image push into an immediate redeploy instead of waiting up to two
+# minutes for that app's poll timer. Authenticated with
+# DEPLOY_HOOK_TOKEN from env.sops, sent as X-Deploy-Token.
+#
+# Why through traefik rather than a shared podman bridge: the obvious
+# bridge, registry-net, also carries the gha-runner containers, and
+# putting daedalus there would hand workflow code a network path to the
+# thing that can rebuild the system. Going via traefik keeps daedalus
+# `isolated` (only traefik reaches it) and narrows the forward-auth
+# bypass to that one path — so a compromised zot gains "can trigger a
+# deploy", nothing more.
+#
+# zot has no event-type filter, so daedalus receives deletes and
+# manifest reads too and decides what to act on. Over-triggering is
+# cheap: app-<name>-deploy.service compares digests and no-ops when
+# nothing moved.
+#
 # Config is RENDERED at boot (mkSecretRender: OIDC id/secret + a
 # bcrypt htpasswd hashed from env.sops) to /run/registry/ — NOT
 # /run/zot: that's the container unit's RuntimeDirectory and systemd
