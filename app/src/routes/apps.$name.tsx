@@ -811,78 +811,82 @@ function Access({
           </p>
         </Panel>
       ) : (
-        <div className="settings">
-          <Panel title="Where from">
-            <Bars
-              rows={access.byCountry.map((c) => ({
-                key: c.code,
-                label: (
-                  <>
-                    {c.flag && (
-                      <span className="flag" aria-hidden="true">
-                        {c.flag}
-                      </span>
-                    )}
-                    {c.name}
-                  </>
-                ),
-                count: c.count,
-              }))}
-              total={access.total}
-              tone="geo"
-            />
-          </Panel>
+        <>
+          <GeoPanel hostname={hostname} range={range} />
 
-          <Panel title="Top clients">
-            <Bars
-              rows={access.byClient.map((c) => ({
-                key: c.ip,
-                label: (
-                  <>
-                    <code>{c.ip}</code>
-                    {c.flag && (
-                      <span className="flag" aria-hidden="true">
-                        {c.flag}
-                      </span>
-                    )}
-                  </>
-                ),
-                count: c.count,
-              }))}
-              total={access.total}
-              tone="client"
-            />
-          </Panel>
-
-          <Panel title="Top paths">
-            <Bars
-              rows={access.byPath.map((p) => ({
-                key: `${p.path}-${p.status}`,
-                label: (
-                  <>
-                    <span className={`status status-${p.status.slice(0, 1)}`}>{p.status}</span>
-                    <code title={p.path}>{p.path}</code>
-                  </>
-                ),
-                count: p.count,
-              }))}
-              total={access.total}
-              tone="path"
-            />
-          </Panel>
-
-          <Panel title="Top user agents">
-            <Bars
-              rows={access.byAgent.map((a) => ({
-                key: a.key,
-                label: <span title={a.key}>{shortAgent(a.key)}</span>,
-                count: a.count,
-              }))}
-              total={access.total}
-              tone="agent"
-            />
-          </Panel>
-        </div>
+          <div className="settings">
+              <Panel title="Countries">
+              <Bars
+                rows={access.byCountry.map((c) => ({
+                  key: c.code,
+                  label: (
+                    <>
+                      {c.flag && (
+                        <span className="flag" aria-hidden="true">
+                          {c.flag}
+                        </span>
+                      )}
+                      {c.name}
+                    </>
+                  ),
+                  count: c.count,
+                }))}
+                total={access.total}
+                tone="geo"
+              />
+            </Panel>
+  
+            <Panel title="Top clients">
+              <Bars
+                rows={access.byClient.map((c) => ({
+                  key: c.ip,
+                  label: (
+                    <>
+                      <code>{c.ip}</code>
+                      {c.flag && (
+                        <span className="flag" aria-hidden="true">
+                          {c.flag}
+                        </span>
+                      )}
+                    </>
+                  ),
+                  count: c.count,
+                }))}
+                total={access.total}
+                tone="client"
+              />
+            </Panel>
+  
+            <Panel title="Top paths">
+              <Bars
+                rows={access.byPath.map((p) => ({
+                  key: `${p.path}-${p.status}`,
+                  label: (
+                    <>
+                      <span className={`status status-${p.status.slice(0, 1)}`}>{p.status}</span>
+                      <code title={p.path}>{p.path}</code>
+                    </>
+                  ),
+                  count: p.count,
+                }))}
+                total={access.total}
+                tone="path"
+              />
+            </Panel>
+  
+            <Panel title="Top user agents">
+              <Bars
+                rows={access.byAgent.map((a) => ({
+                  key: a.key,
+                  label: <span title={a.key}>{shortAgent(a.key)}</span>,
+                  count: a.count,
+                }))}
+                total={access.total}
+                tone="agent"
+              />
+            </Panel>
+          </div>
+        </>
       )}
 
       {access.recentRejects.length > 0 && (
@@ -925,11 +929,67 @@ function Access({
       )}
 
       <p className="footnote">
-        Only tunnel traffic is counted. Loki keeps 30 days, so that is the longest window there is,
-        and the Grafana link above opens the same queries across every published host rather than
-        just this one.
+        Only tunnel traffic is counted. Loki keeps 30 days, so that is the longest window there is.
+        The map is a Grafana panel from the App access dashboard, filtered to this host; the link on
+        the rejected-requests panel opens the fleet-wide Security dashboard instead.
       </p>
     </div>
+  )
+}
+
+/**
+ * The Security dashboard's geomap, pinned to one host.
+ *
+ * A real Grafana panel in an iframe rather than a map rebuilt here. Grafana
+ * already owns the projection, the basemap and the ISO-code gazetteer that
+ * turns `Cf-Ipcountry` into a coordinate, and none of that is worth a second
+ * implementation. `stacks/monitoring/assets/dashboards/System/app-access.json`
+ * carries a `$host` variable for exactly this; the same dashboard opened
+ * without one is the fleet-wide view.
+ *
+ * Two things had to be true for this to work, and both live in
+ * stacks/monitoring: grafana no longer sends `X-Frame-Options: deny`
+ * (GF_SECURITY_ALLOW_EMBEDDING), and the narrower `frame-ancestors` CSP that
+ * replaced it names daedalus. daedalus and grafana are both under
+ * toscanini.me, so they are same-site and grafana's session cookie rides along
+ * with the frame load — no second sign-in, no anonymous access.
+ *
+ * The caveat is that first load. Grafana auto-logs-in through Pocket ID, and
+ * the IdP refuses to be framed, so with no live grafana session the frame
+ * comes back empty. A cross-origin frame cannot be inspected for that, so
+ * there is no detecting it and swapping in a message — hence the standing
+ * link below rather than a conditional one.
+ */
+function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }) {
+  const src =
+    `https://grafana.toscanini.me/d-solo/s2-app-access/app-access` +
+    `?panelId=1&var-host=${encodeURIComponent(hostname)}` +
+    `&from=now-${range}&to=now&theme=dark`
+
+  return (
+    <Panel
+      title="Where from"
+      wide
+      action={
+        <a
+          className="btn btn-ghost"
+          href={`https://grafana.toscanini.me/d/s2-app-access/app-access?var-host=${encodeURIComponent(hostname)}&from=now-${range}&to=now`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          ↗ Grafana
+        </a>
+      }
+    >
+      <iframe className="geopanel" src={src} title={`Remote requests to ${hostname} by country`} />
+      <p className="footnote">
+        Rendered by Grafana. A blank map means this browser has no Grafana session yet — open it{' '}
+        <a href="https://grafana.toscanini.me" target="_blank" rel="noreferrer">
+          once
+        </a>{' '}
+        and it will fill in.
+      </p>
+    </Panel>
   )
 }
 
