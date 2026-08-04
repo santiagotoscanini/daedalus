@@ -859,7 +859,9 @@ function Secrets({
   })).filter((x) => x.vars.length > 0)
 
   return (
-    <>
+    // A stack, not bare siblings: .panel carries no margin of its own because
+    // everywhere else it lives in a grid that supplies the gap.
+    <div className="panel-stack">
       <div className="banner banner-info">
         Injected at container start, not hot-reloaded — a change takes effect on the next deploy or
         Apply.
@@ -932,7 +934,7 @@ function Secrets({
           </>
         }
       />
-    </>
+    </div>
   )
 }
 
@@ -963,15 +965,19 @@ function EnvSection({
 }) {
   return (
     <Panel title={title} wide={wide}>
-      <p className="env-legend">{legend}</p>
+      {/* The empty copy already explains where these would come from, so
+          showing the legend too says the same thing twice. */}
       {vars.length === 0 ? (
         <p className="panel-empty">{empty}</p>
       ) : (
-        <div className="env">
-          {vars.map((v) => (
-            <EnvRow key={v.key} app={app} v={v} />
-          ))}
-        </div>
+        <>
+          <p className="env-legend">{legend}</p>
+          <div className="env">
+            {vars.map((v) => (
+              <EnvRow key={v.key} app={app} v={v} />
+            ))}
+          </div>
+        </>
       )}
     </Panel>
   )
