@@ -11,15 +11,42 @@
 
 {
   config,
+  lib,
   pkgs,
   ...
 }:
 
 {
-  # Dead-man's-switch ping (platform/hc-ping): weekly.
-  fleet.monitoredJobs.flake-autoupgrade.slug = "flake-autoupgrade";
+  # The one lock every rebuild takes.
+  #
+  # Declared here because this module is the OTHER rebuilder: a weekly
+  # `nix flake update --commit-lock-file` + `nixos-rebuild boot` + push, any of
+  # which can collide with daedalus applying a registry change — both building,
+  # both committing to the same repo, both pushing. Overlapping activations and
+  # interleaved commits are how the running system ends up matching neither
+  # branch.
+  #
+  # Anything that rebuilds or commits to /etc/nixos should take it, including a
+  # human:
+  #   flock /run/lock/s2-rebuild.lock sudo nixos-rebuild switch
+  # That cannot be enforced on an interactive shell — a lock nobody is obliged
+  # to take is advisory by nature — but both automated paths respect it, and
+  # those are the ones that fire unattended.
+  options.fleet.rebuildLock = lib.mkOption {
+    type = lib.types.str;
+    default = "/run/lock/s2-rebuild.lock";
+    readOnly = true;
+    description = ''
+      flock path serialising everything that rebuilds this system or commits to
+      /etc/nixos. On tmpfs, so a reboot cannot leave a stale lock behind; the
+      lock releases when the holder's fd closes, including on a crash.
+    '';
+  };
 
-  systemd.services.flake-autoupgrade = {
+  # Dead-man's-switch ping (platform/hc-ping): weekly.
+  config.fleet.monitoredJobs.flake-autoupgrade.slug = "flake-autoupgrade";
+
+  config.systemd.services.flake-autoupgrade = {
     description = "Update flake.lock, commit, stage next-boot generation, push";
     # Persistent=true replays a missed window right at boot, where the
     # flake update needs GitHub over DNS that resolves through the
@@ -51,6 +78,19 @@
         ${pkgs.util-linux}/bin/setpriv --reuid santiago --regid users --init-groups \
           ${pkgs.coreutils}/bin/env HOME=/home/santiago "$@"
       }
+
+      # Serialise against daedalus's apply (fleet.rebuildLock). Waits rather
+      # than failing: this is a weekly unattended job with no one watching, and
+      # an apply finishes in minutes. If it somehow cannot get the lock in 30
+      # minutes, skip this run entirely — the timer is Persistent and next
+      # week's run carries the update forward, which is much better than
+      # rebuilding on top of someone else's half-applied change.
+      exec 9>${lib.escapeShellArg config.fleet.rebuildLock}
+      if ! ${pkgs.util-linux}/bin/flock -w 1800 9; then
+        echo "flake-autoupgrade: another rebuild holds ${config.fleet.rebuildLock}; skipping this run"
+        exit 0
+      fi
+
       as_santiago /run/current-system/sw/bin/nix flake update --commit-lock-file
       /run/current-system/sw/bin/nixos-rebuild boot --flake /etc/nixos
 
@@ -63,7 +103,7 @@
     '';
   };
 
-  systemd.timers.flake-autoupgrade = {
+  config.systemd.timers.flake-autoupgrade = {
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "weekly";

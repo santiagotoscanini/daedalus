@@ -60,6 +60,7 @@ let
       APPLY_DIR=${lib.escapeShellArg applyDir}
       FLAKE=/etc/nixos
       TARGET=/etc/nixos/stacks/apps/apps.json
+      LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
       HOSTNAME=${lib.escapeShellArg config.networking.hostName}
       GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
 

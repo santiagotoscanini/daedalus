@@ -58,6 +58,30 @@ if [ -f "$STATUS" ] && [ "$(jq -r '.id // ""' "$STATUS")" = "$REQ_ID" ]; then
 fi
 
 COMMIT_SHA=""
+
+# --- serialise against every other rebuild --------------------------------
+# One lock for anything that rebuilds this system or commits to /etc/nixos.
+# The other holder in practice is flake-autoupgrade, which does `nix flake
+# update --commit-lock-file` AND `nixos-rebuild boot` — so it can be building,
+# committing and pushing at the same moment an apply is doing all three.
+# Overlapping activations and interleaved commits on a shared repo are exactly
+# how this ends up with a system that matches neither branch.
+#
+# A shared path, not a daedalus-private one: a lock only this script respects
+# would protect nothing. platform/autoupgrade takes the same one, and a human
+# running `nixos-rebuild` by hand can take it with
+# `flock /run/lock/s2-rebuild.lock nixos-rebuild switch`.
+#
+# WAIT rather than fail: the common case is a weekly upgrade that finishes in
+# minutes, and the UI shows the wait as its own phase. Released implicitly when
+# fd 9 closes at exit — including on failure, so a crashed apply cannot wedge
+# every future rebuild.
+exec 9>"$LOCKFILE"
+write_status running waiting ""
+if ! flock -w 1200 9; then
+  fail waiting "another rebuild held $LOCKFILE for 20 minutes (flake-autoupgrade, or a manual nixos-rebuild). Nothing was changed."
+fi
+
 write_status running validating ""
 
 # request.json is written after apps.json precisely so this cannot race, but
