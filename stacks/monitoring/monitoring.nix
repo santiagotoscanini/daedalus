@@ -311,6 +311,26 @@ in
   # Grafana's database on the shared app-db cluster (see
   # stacks/app-db/). Dashboards/datasources stay nix-provisioned; the
   # DB holds what the UI created: alert rules, users, service accounts.
+  # The narrow replacement for grafana's `X-Frame-Options: deny`.
+  #
+  # `frame-ancestors` is the modern, per-origin form of the same control,
+  # and unlike X-Frame-Options it takes a list — so grafana stays
+  # unframable by everything except itself and daedalus, which embeds
+  # /d-solo panels on each app's access tab. Browsers that understand CSP
+  # ignore X-Frame-Options entirely when frame-ancestors is present, so
+  # there is no ordering subtlety between the two.
+  #
+  # Lives here rather than in the entrypoint-default sec-headers because
+  # it grants an exception. Every other app on this box should keep the
+  # stricter posture it has by default.
+  fleet.traefikRawRules."grafana-embed.yml" = ''
+    http:
+      middlewares:
+        grafana-embed:
+          headers:
+            contentSecurityPolicy: "frame-ancestors 'self' https://daedalus.toscanini.me"
+  '';
+
   fleet.appDatabases.grafana.consumers = [ "grafana" ];
 
   fleet.bridgeMemberships = {
@@ -371,6 +391,9 @@ in
     grafana = {
       serviceName = "grafana";
       port = 3000;
+      # Replaces the blanket `X-Frame-Options: deny` that
+      # GF_SECURITY_ALLOW_EMBEDDING turns off (see the container env).
+      extraMiddlewares = [ "grafana-embed@file" ];
       homepage = {
         group = "Monitoring";
         extra.weight = 10; # Grafana
@@ -466,6 +489,18 @@ in
       GF_USERS_ALLOW_SIGN_UP = "false";
       GF_SERVER_ROOT_URL = "https://grafana.toscanini.me";
       GF_SERVER_SERVE_FROM_SUB_PATH = "false";
+
+      # Lets daedalus embed panels with /d-solo (stacks/daedalus, the app
+      # access tab). Grafana's default is to send `X-Frame-Options: deny`
+      # on every response, which is a blanket refusal with no way to name
+      # an exception — turning it off is the ONLY way to frame a panel.
+      #
+      # Off on its own would make grafana framable by any site on the
+      # internet, so the narrower policy that replaces it is the
+      # `grafana-embed` middleware below: a frame-ancestors CSP naming
+      # daedalus and nothing else. The two belong together — do not set
+      # this without it.
+      GF_SECURITY_ALLOW_EMBEDDING = "true";
 
       # SMTP alert delivery via the same Gmail relay msmtp uses. Password
       # read from the bind-mounted mail secret through Grafana's __FILE

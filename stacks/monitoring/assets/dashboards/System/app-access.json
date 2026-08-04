@@ -1,0 +1,142 @@
+{
+  "uid": "s2-app-access",
+  "title": "App access",
+  "description": "Per-app view of the same public-edge data the Security dashboard shows fleet-wide. Every panel is filtered by the $host variable, so this is also what daedalus embeds with /d-solo on each app's access tab — pass var-host=<hostname> and panelId=1.",
+  "tags": ["system", "security", "apps"],
+  "schemaVersion": 41,
+  "refresh": "30s",
+  "timezone": "browser",
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "host",
+        "label": "Host",
+        "type": "textbox",
+        "description": "Published hostname to filter by, matched as a regex. The default matches every host, which makes this dashboard the fleet-wide view; daedalus overrides it per app via var-host in the embed URL.",
+        "query": ".*",
+        "current": { "text": ".*", "value": ".*" },
+        "options": [{ "text": ".*", "value": ".*", "selected": true }],
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "geomap",
+      "title": "Remote requests by country",
+      "description": "Where public traffic to $host comes from, using the Cf-Ipcountry header the Cloudflare edge stamps on every tunnelled request. Marker size and colour scale with request count. LAN traffic carries no client geography and is not counted — rootlessport rewrites the source address before traefik sees it.",
+      "gridPos": { "x": 0, "y": 0, "w": 16, "h": 12 },
+      "datasource": { "type": "loki", "uid": "loki-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(60, sum by (request_Cf_Ipcountry) (count_over_time({container=\"traefik\"} |= `cfweb` | json | entryPointName = `cfweb` | RequestHost =~ `$host` | request_Cf_Ipcountry != `` [$__range])))",
+          "queryType": "instant",
+          "datasource": { "type": "loki", "uid": "loki-default" }
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } },
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": {} } }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "continuous-YlRd" } },
+        "overrides": []
+      },
+      "options": {
+        "view": { "id": "zero", "lat": 0, "lon": 0, "zoom": 1 },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": false,
+          "showAttribution": true,
+          "showScale": false,
+          "showMeasure": false,
+          "showDebug": false
+        },
+        "basemap": { "type": "default", "name": "Basemap", "config": {} },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Requests by country",
+            "location": {
+              "mode": "lookup",
+              "lookup": "request_Cf_Ipcountry",
+              "gazetteer": "public/gazetteer/countries.json"
+            },
+            "config": {
+              "style": {
+                "size": { "field": "Value", "fixed": 5, "min": 4, "max": 20 },
+                "color": { "field": "Value", "fixed": "dark-red" },
+                "opacity": 0.6,
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                },
+                "symbolAlign": { "horizontal": "center", "vertical": "center" },
+                "textConfig": {
+                  "fontSize": 12,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              },
+              "showLegend": true
+            },
+            "tooltip": true
+          }
+        ],
+        "tooltip": { "mode": "details" }
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Countries",
+      "description": "The same numbers the map plots, ranked. Useful when two markers overlap at map scale.",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 12 },
+      "datasource": { "type": "loki", "uid": "loki-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(25, sum by (request_Cf_Ipcountry) (count_over_time({container=\"traefik\"} |= `cfweb` | json | entryPointName = `cfweb` | RequestHost =~ `$host` | request_Cf_Ipcountry != `` [$__range])))",
+          "queryType": "instant",
+          "datasource": { "type": "loki", "uid": "loki-default" }
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } },
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": {} } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "sortBy": [{ "displayName": "Value", "desc": true }] }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Remote requests over time",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 7 },
+      "datasource": { "type": "loki", "uid": "loki-default" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (RequestHost) (count_over_time({container=\"traefik\"} |= `cfweb` | json | entryPointName = `cfweb` | RequestHost =~ `$host` [$__auto]))",
+          "datasource": { "type": "loki", "uid": "loki-default" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 12, "showPoints": "never", "lineWidth": 1 }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+    }
+  ]
+}

@@ -407,6 +407,27 @@ in
                   { "X-API-KEY" = "''${BAZARR_API_KEY}"; }
                 '';
               };
+              extraMiddlewares = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                description = ''
+                  Extra traefik middleware refs appended to this app's
+                  router(s), after the generated auth ones. For response
+                  policy an app needs and the entrypoint default does
+                  not carry — currently only grafana's `frame-ancestors`
+                  CSP, which has to be per-route because grafana is the
+                  one service here that is allowed to be framed at all.
+
+                  Applies to the websecure router AND the cfweb one when
+                  `exposeRemotely` is set: a header policy that held on
+                  the LAN but not through the tunnel would be backwards.
+
+                  Declare the middleware itself in the owning stack via
+                  `fleet.traefikRawRules`, so the policy and the reason
+                  for it live in one file.
+                '';
+                example = [ "grafana-embed@file" ];
+              };
               isolated = lib.mkOption {
                 type = lib.types.bool;
                 default = false;
@@ -623,7 +644,8 @@ in
             host = w.hostname;
             middlewares =
               lib.optional (w.auth == "oidc" && w.authHeaders != { }) "oidc-${n}-strip@file"
-              ++ lib.optional (w.auth == "oidc") "oidc-${n}@file";
+              ++ lib.optional (w.auth == "oidc") "oidc-${n}@file"
+              ++ w.extraMiddlewares;
           }
           // (
             if w.traefikService != null then { service = w.traefikService; } else { serviceUrl = resolveUrl w; }
