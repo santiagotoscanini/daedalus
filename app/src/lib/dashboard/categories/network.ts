@@ -48,7 +48,19 @@ export type NetworkData = {
     topBlocked: { label: string; value: number }[]
     topClients: { label: string; value: number }[]
   }
-  tunnel: { status: string | null; connections: number | null }
+  tunnel: {
+    status: string | null
+    connections: number | null
+    /** This house's WAN address, as Cloudflare's edge sees it arriving. */
+    originIp: string | null
+    /** Cloudflare's own name for the version cloudflared is running. */
+    clientVersion: string | null
+    /** Edge datacentres the four tunnel connections landed in. */
+    edges: { colo: string; count: number }[]
+    /** How long the oldest connection has been up — a proxy for last reconnect. */
+    heldForSeconds: number | null
+    requestsPerHour: number | null
+  }
   wireguard: {
     connected: number | null
     enabled: number | null
@@ -85,6 +97,7 @@ export async function loadNetwork(ctx: {
     vpnPort,
     vpnUp,
     certs,
+    tunnelRph,
   ] = await Promise.all([
     promScalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
     // MySpeed tests hourly, so an hourly step is the native resolution — a
@@ -109,7 +122,13 @@ export async function loadNetwork(ctx: {
     promBars('sum by (code) (rate(traefik_service_requests_total[10m]) * 60)', 'code'),
     promSeries('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
     loadPihole(ctx.base('pihole')),
-    getJson<{ result?: { status?: string; connections?: unknown[] } }>(
+    // Cloudflare's own view of the tunnel, which is the only place the origin
+    // address appears: cloudflared never learns the WAN IP it is dialling out
+    // from, and neither does anything else on this box behind NAT. The edge
+    // records the address the connection arrived from, so this is a free
+    // answer to "what is our public IP" — from outside, which is the only
+    // vantage point that can answer it truthfully.
+    getJson<{ result?: CfTunnel }>(
       `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
         process.env.CF_TUNNEL_ID ?? ''
       }`,
@@ -127,6 +146,10 @@ export async function loadNetwork(ctx: {
     getJson<{ port?: number }>(`${ctx.hc}:8000/v1/portforward`),
     promScalar('gluetun_vpn_status'),
     promVector('gatus_results_certificate_expiration_seconds'),
+    // Per HOUR over six, not per minute over ten: off-LAN traffic to this box
+    // is a couple of dozen requests a day, and a per-minute rate of that is
+    // indistinguishable from a tunnel carrying nothing at all.
+    promScalar('sum(rate(cloudflared_tunnel_total_requests[6h])) * 3600'),
   ])
 
   const expiring = certs
@@ -153,10 +176,7 @@ export async function loadNetwork(ctx: {
       spark: rpmSpark,
     },
     dns: pihole,
-    tunnel: {
-      status: tunnel?.result?.status ?? null,
-      connections: tunnel?.result?.connections?.length ?? null,
-    },
+    tunnel: summariseTunnel(tunnel?.result, tunnelRph),
     wireguard: { connected: wg.connected, enabled: wg.enabled, total: wg.total, peers },
     vpn: {
       up: vpnUp === null ? null : vpnUp === 1,
@@ -172,6 +192,50 @@ export async function loadNetwork(ctx: {
       soonestDays: expiring[0]?.days ?? null,
       expiring: expiring.slice(0, 5),
     },
+  }
+}
+
+type CfTunnel = {
+  status?: string
+  connections?: {
+    colo_name?: string
+    origin_ip?: string
+    opened_at?: string
+    client_version?: string
+  }[]
+}
+
+/**
+ * The tunnel as Cloudflare sees it.
+ *
+ * Every connection reports the same origin address and client version — they
+ * are four sessions from one cloudflared — so those are read once rather than
+ * listed four times. What genuinely varies is the edge datacentre, and the
+ * pairing (two connections into each of two colos) is the redundancy actually
+ * in place, so that gets counted per colo.
+ */
+function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null): NetworkData['tunnel'] {
+  const conns = t?.connections ?? []
+  const byColo = new Map<string, number>()
+  for (const c of conns) {
+    const colo = c.colo_name ?? '?'
+    byColo.set(colo, (byColo.get(colo) ?? 0) + 1)
+  }
+
+  const opened = conns
+    .map((c) => (c.opened_at === undefined ? NaN : Date.parse(c.opened_at)))
+    .filter((n) => Number.isFinite(n))
+
+  return {
+    status: t?.status ?? null,
+    connections: t === undefined ? null : conns.length,
+    originIp: conns[0]?.origin_ip ?? null,
+    clientVersion: conns[0]?.client_version ?? null,
+    edges: [...byColo].map(([colo, count]) => ({ colo, count })).sort((a, b) => b.count - a.count),
+    // Oldest connection: the newest one may have re-established seconds ago
+    // during a routine edge rotation, which says nothing about stability.
+    heldForSeconds: opened.length === 0 ? null : (Date.now() - Math.min(...opened)) / 1000,
+    requestsPerHour,
   }
 }
 

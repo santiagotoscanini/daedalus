@@ -50,6 +50,36 @@
 const ATTEMPT_MS = [400, 800, 1_500, 2_500]
 
 /**
+ * Loki's budget: one attempt, and a long one.
+ *
+ * The ladder above exists for a stalled CONNECTION, which is a rootless-netns
+ * problem on published host ports. Loki is reached over the `monitoring`
+ * bridge, so that failure mode does not apply to it at all — and the one it
+ * DOES have is the opposite. A LogQL aggregation over every stream is genuinely
+ * slow, Loki runs a small number of them at once, and this box asks it eight
+ * questions to render one page. Under that load an individual query blows past
+ * 400ms for no reason worth acting on.
+ *
+ * Retrying there is not neutral, it is harmful: each retry queues ANOTHER query
+ * behind the one still running, so five slow queries became twenty and the page
+ * took the full 5.2s ladder to render numbers Loki could produce in 400ms. One
+ * patient attempt is both faster and kinder to the thing being measured.
+ */
+const LOKI_ATTEMPT_MS = [10_000]
+
+/**
+ * Identical GETs in flight at the same moment, answered once.
+ *
+ * A category page and the tile catalogue underneath it legitimately want the
+ * same numbers — "errors in the last hour" belongs in the headline AND on the
+ * Logs tile — and asking twice is pure duplicate load on the slowest upstream
+ * here. Keyed by URL and cleared as soon as the request settles, so this is a
+ * request-coalescer, not a cache: nothing is ever served from a previous page
+ * load, and the dashboard's numbers stay as live as they were.
+ */
+const inFlight = new Map<string, Promise<unknown>>()
+
+/**
  * Run `jobs` with at most `limit` in flight.
  *
  * A burst cap, not a correctness fix — the connection stall `getJson` retries
@@ -102,8 +132,26 @@ export function basicAuth(user: string | undefined, pass: string | undefined): s
  * retry is only for a THROWN request: a 4xx/5xx is the service answering, and
  * asking twice would not change its mind.
  */
-export async function getJson<T>(url: string, init: RequestInit = {}): Promise<T | null> {
-  for (const ms of ATTEMPT_MS) {
+export function getJson<T>(
+  url: string,
+  init: RequestInit = {},
+  attempts: number[] = ATTEMPT_MS,
+): Promise<T | null> {
+  // Only plain GETs are shared. Anything carrying headers, a method or a body
+  // is a different request that happens to have the same URL — qBittorrent's
+  // login and pi-hole's session POST both look like that.
+  if (Object.keys(init).length > 0) return attempt<T>(url, init, attempts)
+
+  const existing = inFlight.get(url)
+  if (existing !== undefined) return existing as Promise<T | null>
+
+  const p = attempt<T>(url, init, attempts).finally(() => inFlight.delete(url))
+  inFlight.set(url, p)
+  return p
+}
+
+async function attempt<T>(url: string, init: RequestInit, attempts: number[]): Promise<T | null> {
+  for (const ms of attempts) {
     try {
       const res = await fetch(url, {
         signal: AbortSignal.timeout(ms),
@@ -202,6 +250,8 @@ export async function promBars(
 export async function lokiScalar(query: string): Promise<number | null> {
   const body = await getJson<{ data?: { result?: VectorResult[] } }>(
     `${LOKI()}/loki/api/v1/query?query=${encodeURIComponent(query)}`,
+    {},
+    LOKI_ATTEMPT_MS,
   )
   const first = body?.data?.result?.[0]
   return first ? Number(first.value[1]) : null
@@ -214,6 +264,8 @@ export async function lokiVector(
 ): Promise<{ label: string; value: number }[]> {
   const body = await getJson<{ data?: { result?: VectorResult[] } }>(
     `${LOKI()}/loki/api/v1/query?query=${encodeURIComponent(query)}`,
+    {},
+    LOKI_ATTEMPT_MS,
   )
   return (body?.data?.result ?? [])
     .map((r) => ({ label: r.metric[label] ?? '?', value: Number(r.value[1]) }))
@@ -239,6 +291,8 @@ export async function lokiSeries(
   const body = await getJson<{ data?: { result?: MatrixResult[] } }>(
     `${LOKI()}/loki/api/v1/query_range?query=${encodeURIComponent(query)}` +
       `&start=${String(start)}&end=${String(end)}&step=${String(step)}`,
+    {},
+    LOKI_ATTEMPT_MS,
   )
   return body?.data?.result?.[0]?.values.map(([, v]) => Number(v)) ?? []
 }

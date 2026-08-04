@@ -13,6 +13,7 @@ import {
   StatePill,
   Toggle,
 } from '../components/ui'
+import { BarList } from '../components/viz'
 // ./access-window, NOT ./access — same split as env-groups below. The window
 // table is a value the picker and validateSearch both need in the browser;
 // ./access talks to Loki and must never follow it there.
@@ -39,7 +40,22 @@ import {
   triggerDeploy,
 } from '../server/registry'
 
-const TABS = ['overview', 'deployments', 'access', 'settings', 'secrets', 'logs'] as const
+// Every tab this route can render. Two of them are conditional — `database`
+// only exists for an app with postgres, `vpn` only for one with an egress
+// container — but they stay in this list because it is what validateSearch
+// checks. A URL naming a tab the app does not have renders an explanation of
+// how to turn the feature on, which is strictly more useful than silently
+// bouncing to the overview.
+const TABS = [
+  'overview',
+  'deployments',
+  'database',
+  'vpn',
+  'access',
+  'settings',
+  'secrets',
+  'logs',
+] as const
 
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
@@ -68,6 +84,8 @@ export const Route = createFileRoute('/apps/$name')({
         withEnv: deps.tab === 'secrets',
         withResources: deps.tab === 'overview',
         withAccess: deps.tab === 'access',
+        withDatabase: deps.tab === 'database',
+        withVpn: deps.tab === 'vpn',
         accessWindow: deps.range,
       },
     })
@@ -108,6 +126,8 @@ function AppDetail() {
     ci,
     activity,
     access,
+    database,
+    vpn,
   } = Route.useLoaderData()
   const router = useRouter()
   const { tab, range } = Route.useSearch()
@@ -217,7 +237,13 @@ function AppDetail() {
       )}
 
       <nav className="tabs">
-        {TABS.map((t) => (
+        {/* The two feature tabs are hidden rather than disabled when the
+            feature is off: a greyed-out "vpn" on an app with no egress is a
+            question the page has already answered. */}
+        {TABS.filter(
+          (t) =>
+            (t !== 'database' || app.postgres) && (t !== 'vpn' || app.egressContainer !== null),
+        ).map((t) => (
           <Link
             key={t}
             to="/apps/$name"
@@ -466,6 +492,10 @@ function AppDetail() {
         </>
       )}
 
+      {tab === 'database' && <Database app={app} data={database} />}
+
+      {tab === 'vpn' && <Vpn app={app} data={vpn} />}
+
       {tab === 'access' && (
         <Access
           name={app.name}
@@ -696,11 +726,263 @@ function AppDetail() {
   )
 }
 
-type AccessData = Awaited<ReturnType<typeof fetchApp>> extends infer T ?
+type LoaderData = Awaited<ReturnType<typeof fetchApp>>
+type AppRecord = NonNullable<LoaderData>['app']
+
+type AccessData = LoaderData extends infer T ?
   T extends { access: infer A } ?
     A
   : never
 : never
+
+/**
+ * The app's database on the shared cluster.
+ *
+ * Read entirely from postgres_exporter, and that is a boundary rather than a
+ * shortcut: each app's role can reach its own database and nothing else, so
+ * daedalus — which holds credentials for `daedalus` — genuinely cannot connect
+ * to anything here. The exporter runs inside the cluster and publishes
+ * per-database counters for all of them.
+ *
+ * So this page shows size, traffic and pressure, and never schema. A table
+ * list would mean handing the control plane a connection to every app's data,
+ * which is a real boundary traded for a nicer panel.
+ */
+function Database({ app, data }: { app: AppRecord; data: NonNullable<LoaderData>['database'] }) {
+  if (!app.postgres) {
+    return (
+      <p className="lede">
+        This app has no database. Turning on Postgres in Settings creates a role and a database on
+        the shared cluster and injects <code>DATABASE_URL</code>; nothing else changes.
+      </p>
+    )
+  }
+
+  return (
+    <>
+      <div className="metrics">
+        <Metric label="Size on disk" value={<Bytes value={data.sizeBytes} />}>
+          <AreaChart values={data.sizeTrend} state="running" />
+          <p className="metric-note">30 days. Includes indexes and dead-tuple bloat.</p>
+        </Metric>
+
+        <Metric
+          label="Connections"
+          value={data.connections === null ? '—' : String(data.connections)}
+          unit={data.maxConnections === null ? '' : `/ ${String(data.maxConnections)} cluster-wide`}
+        >
+          <Meter value={data.connections} max={data.maxConnections} tone="cpu" />
+          <p className="metric-note">
+            {/* -1 is postgres's own encoding for "no per-database cap", which
+                is the state every app here is in. */}
+            {data.connectionLimit === null || data.connectionLimit < 0 ?
+              'No per-database cap — the cluster ceiling is the only limit.'
+            : `Capped at ${String(data.connectionLimit)} for this database.`}
+          </p>
+        </Metric>
+
+        <Metric
+          label="Cache hit"
+          value={data.cacheHitPct === null ? '—' : data.cacheHitPct.toFixed(1)}
+          unit="%"
+        >
+          <Meter value={data.cacheHitPct} max={100} tone="mem" />
+          <p className="metric-note">
+            {/* An idle database reads nothing, so there is no ratio to report
+                — which is a different statement from "0% of reads were cached". */}
+            {data.cacheHitPct === null ?
+              'No block reads in the last 10 minutes.'
+            : 'Blocks served from shared buffers rather than disk.'}
+          </p>
+        </Metric>
+
+        <Metric
+          label="Transactions"
+          value={data.commitsPerSec === null ? '—' : data.commitsPerSec.toFixed(2)}
+          unit="/s"
+        >
+          <p className="metric-note">
+            {data.rollbackPct === null ?
+              'Nothing committing or rolling back.'
+            : data.rollbackPct > 5 ?
+              <span className="bad-text">
+                {data.rollbackPct.toFixed(1)}% rolled back — the app is erroring, not the database.
+              </span>
+            : `${data.rollbackPct.toFixed(1)}% rolled back.`}
+          </p>
+        </Metric>
+      </div>
+
+      <div className="panels">
+        <Panel title="Connection">
+          <Row k="cluster" v="shared pg (stacks/app-db)" />
+          <Row k="database" v={app.name} mono />
+          <Row k="role" v={app.name} mono />
+          <Row k="host" v="pg:5432" mono />
+          <Row k="injected as" v="DATABASE_URL + POSTGRES_*" mono />
+          <p className="panel-note">
+            The password is machine-generated on the box and never enters git. Rotate it by deleting{' '}
+            <code>stacks/app-db/secrets/{app.name}/env</code> and rebuilding.
+          </p>
+        </Panel>
+
+        <Panel title="Rows per second">
+          <Row k="fetched" v={fmtRate(data.tuples.fetched)} />
+          <Row k="inserted" v={fmtRate(data.tuples.inserted)} />
+          <Row k="updated" v={fmtRate(data.tuples.updated)} />
+          <Row k="deleted" v={fmtRate(data.tuples.deleted)} />
+          <p className="panel-note">10-minute average, from the cluster’s own counters.</p>
+        </Panel>
+
+        <Panel title="Pressure">
+          <Row
+            k="deadlocks"
+            v={
+              data.deadlocks !== null && data.deadlocks > 0 ?
+                <span className="bad-text">{data.deadlocks} lifetime</span>
+              : fmtNumOrDash(data.deadlocks)
+            }
+          />
+          <Row k="temp files written" v={<Bytes value={data.tempBytes} />} />
+          <Row
+            k="rollback share"
+            v={data.rollbackPct === null ? '—' : `${data.rollbackPct.toFixed(2)}%`}
+          />
+          <p className="panel-note">
+            Temp bytes mean queries spilled past <code>work_mem</code> and sorted on disk. Both
+            counters are cumulative since the last cluster restart.
+          </p>
+        </Panel>
+      </div>
+
+      <h2>Against the rest of the cluster</h2>
+      <BarList
+        items={data.cluster.map((c) => ({
+          label: c.label,
+          value: c.value,
+          display: fmtBytes(c.value),
+          tone: c.label === app.name ? ('accent' as const) : ('muted' as const),
+        }))}
+        empty="no databases reporting"
+      />
+
+      <p className="footnote">
+        Everything here comes from <code>postgres_exporter</code> on the shared cluster. There is no
+        table list or query log because daedalus has no connection to this database — its own role
+        can only reach <code>daedalus</code>, and that separation is worth more than the panel would
+        be.
+      </p>
+    </>
+  )
+}
+
+/**
+ * The VPN this app's traffic exits through.
+ *
+ * An egress app has no network stack of its own: it borrows a gluetun
+ * container's namespace outright, which is why gluetun publishes the app's
+ * host port and why the app cannot be reached any other way. Everything below
+ * therefore describes that gluetun instance, scraped under a prometheus job
+ * named after the container.
+ */
+function Vpn({ app, data }: { app: AppRecord; data: NonNullable<LoaderData>['vpn'] }) {
+  if (app.egressContainer === null) {
+    return (
+      <p className="lede">
+        This app’s traffic leaves the house directly. Egress is set in Nix rather than here — it
+        pairs a gluetun container with a host port, and both move together.
+      </p>
+    )
+  }
+
+  return (
+    <>
+      <div className="metrics">
+        <Metric
+          label="Tunnel"
+          value={data.up === null ? 'unknown' : data.up ? 'connected' : 'down'}
+        >
+          <AreaChart values={data.history} state={data.up === true ? 'running' : 'stopped'} />
+          <p className="metric-note">
+            {data.uptime24h === null ?
+              'No history for this instance yet.'
+            : `Up ${data.uptime24h.toFixed(2)}% of the last 24 hours.`}
+          </p>
+        </Metric>
+
+        <Metric label="Exit" value={data.country ?? '—'}>
+          <p className="metric-note">{data.city ?? 'No location reported.'}</p>
+        </Metric>
+
+        <Metric label="Public IP" value={data.ip ?? '—'}>
+          <p className="metric-note">
+            What every request from this app appears to come from. Not this house’s address.
+          </p>
+        </Metric>
+
+        <Metric
+          label="Forwarded port"
+          value={data.forwardedPort === null ? '—' : String(data.forwardedPort)}
+        >
+          <p className="metric-note">
+            {/* Only ProtonVPN's port-forwarding instances get one, and the TV
+                stack is the only thing here that needs inbound. */}
+            {data.forwardedPort === null ?
+              'None — this instance does not request one, and nothing needs inbound.'
+            : 'Inbound reaches the app on this port at the exit.'}
+          </p>
+        </Metric>
+      </div>
+
+      <div className="panels">
+        <Panel title="Namespace">
+          <Row k="netns owner" v={app.egressContainer} mono />
+          <Row k="host port" v={String(app.egressHostPort)} mono />
+          <Row k="scrape job" v={app.egressContainer} mono />
+          <p className="panel-note">
+            The app runs with <code>--network=container:{app.egressContainer}</code>, so it has no
+            interfaces of its own. Only the namespace owner may publish a port, which is why the
+            app’s host port is declared on gluetun.
+          </p>
+        </Panel>
+
+        <Panel title="What this protects">
+          <Row k="all outbound" v="through the tunnel" />
+          <Row k="kill switch" v="gluetun drops traffic when the tunnel is down" />
+          <Row k="DNS" v="resolved inside the namespace" />
+          <p className="panel-note">
+            If the tunnel drops, the app loses the network rather than falling back to the house
+            connection — that is the point of borrowing the namespace instead of routing.
+          </p>
+        </Panel>
+      </div>
+
+      <p className="footnote">
+        Read from the gluetun exporter’s prometheus job rather than from gluetun’s control API, so
+        it works the same for every instance and needs no per-app port table.
+      </p>
+    </>
+  )
+}
+
+function fmtRate(v: number | null): string {
+  return v === null ? '—' : v < 1 ? v.toFixed(2) : v.toLocaleString('en-US', { maximumFractionDigits: 1 })
+}
+
+function fmtNumOrDash(v: number | null): string {
+  return v === null ? '—' : v.toLocaleString('en-US')
+}
+
+function fmtBytes(v: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let n = v
+  let u = 0
+  while (n >= 1024 && u < units.length - 1) {
+    n /= 1024
+    u++
+  }
+  return `${n.toFixed(n >= 10 || u === 0 ? 0 : 1)} ${units[u] ?? 'B'}`
+}
 
 /**
  * Who is reaching this app from the internet.

@@ -75,14 +75,41 @@ export function NetworkView({ data }: { data: NetworkData }) {
           </p>
         </Board>
 
-        <Board title="Ways in" icon="⇥" span={4}>
+        <Board
+          title="Cloudflare tunnel"
+          icon="⇥"
+          span={4}
+          aside={
+            <Chip tone={tunnel.status === 'healthy' ? 'ok' : 'bad'}>{tunnel.status ?? 'unknown'}</Chip>
+          }
+        >
+          <div className="origin">
+            <span className="origin-label">origin IP</span>
+            <strong className="origin-ip">{tunnel.originIp ?? DASH}</strong>
+            {/* The address the edge sees traffic arriving from — which is this
+                house's WAN IP, and the only place on the box it can be read.
+                Everything here is behind NAT and sees 192.168.0.2. */}
+            <span className="origin-note">this house, as Cloudflare sees it</span>
+          </div>
           <div className="vpn-state">
-            <Pulse on={tunnel.status === 'healthy'} tone={tunnel.status === 'healthy' ? 'ok' : 'bad'} />
-            <strong>Cloudflare tunnel {tunnel.status ?? DASH}</strong>
+            <Pulse
+              on={tunnel.status === 'healthy'}
+              tone={tunnel.status === 'healthy' ? 'ok' : 'bad'}
+            />
+            <strong>
+              {num(tunnel.connections)} connections{' '}
+              {tunnel.edges.length > 0 && (
+                <span className="muted">
+                  via {tunnel.edges.map((e) => `${e.colo}×${String(e.count)}`).join(' · ')}
+                </span>
+              )}
+            </strong>
           </div>
           <Facts
             rows={[
-              { k: 'Tunnel connections', v: num(tunnel.connections) },
+              { k: 'Requests', v: tunnel.requestsPerHour === null ? DASH : `${num(tunnel.requestsPerHour, 1)}/hour` },
+              { k: 'Held for', v: since(tunnel.heldForSeconds).replace(' ago', '') },
+              { k: 'cloudflared', v: <span className="mono">{tunnel.clientVersion ?? DASH}</span> },
               { k: 'WireGuard peers', v: `${num(wireguard.connected)} of ${num(wireguard.total)}` },
               {
                 k: 'Certificate',

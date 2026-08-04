@@ -206,6 +206,215 @@ export async function databaseSize(name: string): Promise<number | null> {
   }
 }
 
+/**
+ * One app's database on the shared cluster.
+ *
+ * Everything comes from postgres_exporter (`app-db-exporter`), which is the
+ * only way in: each app's role can reach its own database and nothing else, so
+ * daedalus — which holds credentials for `daedalus` alone — cannot connect to
+ * another app's database to ask. The exporter runs as a superuser inside the
+ * cluster and publishes per-database counters for all of them, which is the
+ * whole reason it exists.
+ *
+ * The consequence is that this page can show shape and traffic but never
+ * schema: no table list, no row counts, no slow queries. Those need a
+ * connection, and giving daedalus one to every app's data would trade a real
+ * boundary for a nicer panel.
+ */
+export type AppDatabase = {
+  sizeBytes: number | null
+  /** 30 days at a 12-hour step — growth is a slow signal. */
+  sizeTrend: number[]
+  connections: number | null
+  /** Cluster-wide ceiling, shared by every app. */
+  maxConnections: number | null
+  /** Per-database cap; -1 means "no limit of its own". */
+  connectionLimit: number | null
+  commitsPerSec: number | null
+  rollbacksPerSec: number | null
+  /** Share of transactions that rolled back — an application-level signal. */
+  rollbackPct: number | null
+  /** Share of block reads served from shared buffers rather than disk. */
+  cacheHitPct: number | null
+  tuples: {
+    fetched: number | null
+    inserted: number | null
+    updated: number | null
+    deleted: number | null
+  }
+  deadlocks: number | null
+  tempBytes: number | null
+  /** Every database on the cluster, so one app's size has something to mean. */
+  cluster: { label: string; value: number }[]
+}
+
+export async function appDatabase(name: string): Promise<AppDatabase> {
+  const d = `{datname="${escapeRe(name)}"}`
+
+  const [
+    size,
+    sizeTrend,
+    conns,
+    maxConns,
+    limit,
+    commits,
+    rollbacks,
+    hit,
+    read,
+    fetched,
+    inserted,
+    updated,
+    deleted,
+    deadlocks,
+    tempBytes,
+    cluster,
+  ] = await Promise.allSettled([
+    promQuery(`pg_database_size_bytes${d}`),
+    promRange(`pg_database_size_bytes${d}`, 30 * 24 * 60, 43200),
+    promQuery(`pg_stat_database_numbackends${d}`),
+    promQuery('pg_settings_max_connections'),
+    promQuery(`pg_database_connection_limit${d}`),
+    promQuery(`rate(pg_stat_database_xact_commit${d}[10m])`),
+    promQuery(`rate(pg_stat_database_xact_rollback${d}[10m])`),
+    promQuery(`rate(pg_stat_database_blks_hit${d}[10m])`),
+    promQuery(`rate(pg_stat_database_blks_read${d}[10m])`),
+    promQuery(`rate(pg_stat_database_tup_fetched${d}[10m])`),
+    promQuery(`rate(pg_stat_database_tup_inserted${d}[10m])`),
+    promQuery(`rate(pg_stat_database_tup_updated${d}[10m])`),
+    promQuery(`rate(pg_stat_database_tup_deleted${d}[10m])`),
+    promQuery(`pg_stat_database_deadlocks${d}`),
+    promQuery(`pg_stat_database_temp_bytes${d}`),
+    promQuery('topk(10, pg_database_size_bytes)'),
+  ])
+
+  const s = (r: PromiseSettledResult<VectorResult[]>): number | null =>
+    r.status === 'fulfilled' && r.value[0] ? Number(r.value[0].value[1]) : null
+
+  const commit = s(commits)
+  const rollback = s(rollbacks)
+  const hits = s(hit)
+  const reads = s(read)
+
+  return {
+    sizeBytes: s(size),
+    sizeTrend:
+      sizeTrend.status === 'fulfilled' && sizeTrend.value[0] ?
+        sizeTrend.value[0].values.map(([, v]) => Number(v))
+      : [],
+    connections: s(conns),
+    maxConnections: s(maxConns),
+    connectionLimit: s(limit),
+    commitsPerSec: commit,
+    rollbacksPerSec: rollback,
+    // Guarded rather than computed blindly: an idle database has both rates at
+    // zero, and 0/0 would render "NaN%" on the calmest possible app.
+    rollbackPct:
+      commit === null || rollback === null || commit + rollback === 0 ?
+        null
+      : (rollback / (commit + rollback)) * 100,
+    cacheHitPct:
+      hits === null || reads === null || hits + reads === 0 ? null : (hits / (hits + reads)) * 100,
+    tuples: {
+      fetched: s(fetched),
+      inserted: s(inserted),
+      updated: s(updated),
+      deleted: s(deleted),
+    },
+    deadlocks: s(deadlocks),
+    tempBytes: s(tempBytes),
+    cluster:
+      cluster.status === 'fulfilled' ?
+        cluster.value
+          .map((r) => ({ label: r.metric.datname ?? '?', value: Number(r.value[1]) }))
+          .filter((r) => Number.isFinite(r.value))
+          .sort((a, b) => b.value - a.value)
+      : [],
+  }
+}
+
+export const NO_DATABASE: AppDatabase = {
+  sizeBytes: null,
+  sizeTrend: [],
+  connections: null,
+  maxConnections: null,
+  connectionLimit: null,
+  commitsPerSec: null,
+  rollbacksPerSec: null,
+  rollbackPct: null,
+  cacheHitPct: null,
+  tuples: { fetched: null, inserted: null, updated: null, deleted: null },
+  deadlocks: null,
+  tempBytes: null,
+  cluster: [],
+}
+
+/**
+ * The VPN an app's traffic exits through.
+ *
+ * An egress app borrows a gluetun container's whole network namespace, so
+ * "the app's VPN" is really that gluetun instance — and every instance is
+ * scraped under a prometheus job named after its container
+ * (`scrapeJob ? name` in platform/gluetun-lib.nix). That naming is what lets
+ * this take the container name straight off the app record instead of keeping
+ * a second table of control-API ports.
+ */
+export type AppVpn = {
+  up: boolean | null
+  ip: string | null
+  city: string | null
+  country: string | null
+  /** Only ProtonVPN's port-forwarding instances have one. */
+  forwardedPort: number | null
+  uptime24h: number | null
+  /** 24 hours of the up/down gauge, for the strip. */
+  history: number[]
+}
+
+export async function appVpn(container: string): Promise<AppVpn> {
+  const j = `{job="${escapeRe(container)}"}`
+
+  const [status, info, port, uptime, history] = await Promise.allSettled([
+    promQuery(`gluetun_vpn_status${j}`),
+    promQuery(`gluetun_vpn_infos${j}`),
+    promQuery(`gluetun_forwarded_ports${j}`),
+    promQuery(`100 * avg_over_time(gluetun_vpn_status${j}[24h])`),
+    promRange(`gluetun_vpn_status${j}`, 24 * 60, 300),
+  ])
+
+  const first = (r: PromiseSettledResult<VectorResult[]>): VectorResult | undefined =>
+    r.status === 'fulfilled' ? r.value[0] : undefined
+
+  const up = first(status)
+  const labels = first(info)?.metric
+  // The port is a LABEL on a presence gauge, not a value — gluetun publishes
+  // `gluetun_forwarded_ports{port="44861"} 1`, and no series at all when
+  // nothing is forwarded.
+  const forwarded = first(port)?.metric.port
+
+  return {
+    up: up === undefined ? null : up.value[1] === '1',
+    ip: labels?.ip ?? null,
+    city: labels?.city ?? null,
+    country: labels?.country ?? null,
+    forwardedPort: forwarded === undefined ? null : Number(forwarded),
+    uptime24h: first(uptime) ? Number(first(uptime)?.value[1]) : null,
+    history:
+      history.status === 'fulfilled' && history.value[0] ?
+        history.value[0].values.map(([, v]) => Number(v))
+      : [],
+  }
+}
+
+export const NO_VPN: AppVpn = {
+  up: null,
+  ip: null,
+  city: null,
+  country: null,
+  forwardedPort: null,
+  uptime24h: null,
+  history: [],
+}
+
 export type LogLine = { ts: Date; level: string | null; line: string }
 
 /**

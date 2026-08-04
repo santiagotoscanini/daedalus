@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start'
 import type { AiData } from '../lib/dashboard/categories/ai'
 import type { BooksData, TvData } from '../lib/dashboard/categories/media'
 import type { HomeData } from '../lib/dashboard/categories/home'
+import type { MonitoringData } from '../lib/dashboard/categories/monitoring'
 import type { NetworkData } from '../lib/dashboard/categories/network'
 import type { SystemData } from '../lib/dashboard/categories/system'
 import { CATEGORIES } from '../lib/dashboard/nav'
@@ -20,7 +21,7 @@ import type { CategoryName } from '../lib/dashboard/tiles'
 // showing a fifth of them, on a box where several of those upstreams are
 // services that charge real seconds for a cold connection.
 
-export type { AiData, BooksData, HomeData, NetworkData, SystemData, TvData }
+export type { AiData, BooksData, HomeData, MonitoringData, NetworkData, SystemData, TvData }
 
 /** The service directory that sits under every category's own panels. */
 export type Tile = {
@@ -52,6 +53,7 @@ export type CategoryPayload =
   | { kind: 'home'; meta: CategoryMeta; data: HomeData }
   | { kind: 'network'; meta: CategoryMeta; data: NetworkData }
   | { kind: 'system'; meta: CategoryMeta; data: SystemData }
+  | { kind: 'monitoring'; meta: CategoryMeta; data: MonitoringData }
 
 export const fetchCategory = createServerFn()
   .inputValidator((input: { category: CategoryName; tab: string }) => input)
@@ -107,6 +109,8 @@ export const fetchCategory = createServerFn()
         return { kind: 'network', meta, data: body.data }
       case 'system':
         return { kind: 'system', meta, data: body.data }
+      case 'monitoring':
+        return { kind: 'monitoring', meta, data: body.data }
     }
   })
 
@@ -117,6 +121,7 @@ type Body =
   | { kind: 'home'; data: HomeData }
   | { kind: 'network'; data: NetworkData }
   | { kind: 'system'; data: SystemData }
+  | { kind: 'monitoring'; data: MonitoringData }
 
 async function loadCategory(
   category: CategoryName,
@@ -145,6 +150,10 @@ async function loadCategory(
     case 'system': {
       const { loadSystem } = await import('../lib/dashboard/categories/system')
       return { kind: 'system', data: await loadSystem(ctx) }
+    }
+    case 'monitoring': {
+      const { loadMonitoring } = await import('../lib/dashboard/categories/monitoring')
+      return { kind: 'monitoring', data: await loadMonitoring(ctx) }
     }
   }
 }

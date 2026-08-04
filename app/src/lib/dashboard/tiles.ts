@@ -70,7 +70,7 @@ export type GroupName =
   | 'Network'
   | 'Monitoring'
 
-export type CategoryName = 'ai' | 'media' | 'home' | 'network' | 'system'
+export type CategoryName = 'ai' | 'media' | 'home' | 'network' | 'system' | 'monitoring'
 
 /**
  * Group → the category page it belongs to, and (where the category has
@@ -91,7 +91,7 @@ export const GROUPS: {
   { name: 'Media', category: 'media', tab: 'tv', icon: '▶' },
   { name: 'Books', category: 'media', tab: 'books', icon: '❏' },
   { name: 'Network', category: 'network', icon: '⇄' },
-  { name: 'Monitoring', category: 'system', icon: '◔' },
+  { name: 'Monitoring', category: 'monitoring', icon: '◎' },
 ]
 
 // Value formatting is shared with the category boards — see ./format.
