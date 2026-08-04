@@ -557,6 +557,33 @@ h2 {
   color: var(--dim);
 }
 
+/* ── usage-against-a-ceiling bar ────────────────────────────────────────── */
+
+.meter {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  margin: 0.7rem 0 0.1rem;
+  overflow: hidden;
+}
+.meter span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.meter-cpu span {
+  background: #5b8dd6;
+}
+.meter-mem span {
+  background: var(--ok);
+}
+/* Only at the top of the range: a bar that is always red teaches nothing. */
+.meter-hot span {
+  background: #d1594f;
+}
+
 .panels {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
@@ -715,6 +742,99 @@ h2 {
 .toggle.disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* ── resource sliders ───────────────────────────────────────────────────── */
+
+.slider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 1.2fr) auto;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.slider:last-of-type {
+  border-bottom: 0;
+}
+.slider-text {
+  font-size: 0.9rem;
+  min-width: 0;
+}
+.slider-text small {
+  display: block;
+  color: var(--dim);
+  font-size: 0.76rem;
+  line-height: 1.4;
+  margin-top: 0.15rem;
+}
+.slider-value {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1rem;
+  color: var(--accent);
+  text-align: right;
+  white-space: nowrap;
+  min-width: 5.5rem;
+}
+.slider-value small {
+  color: var(--dim);
+  font-size: 0.72rem;
+  margin-left: 0.2rem;
+}
+.slider.disabled {
+  opacity: 0.5;
+}
+
+/* Track and thumb need explicit styling in both vendor spellings — the
+   `::-webkit-` and `::-moz-` selectors cannot be combined in one rule, since
+   a browser drops the whole rule on an unknown selector. */
+.slider input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  cursor: pointer;
+}
+.slider input[type="range"]:disabled {
+  cursor: not-allowed;
+}
+.slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.slider input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--panel);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.slider input[type="range"]::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--panel);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+@media (max-width: 40rem) {
+  .slider {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .slider input[type="range"] {
+    grid-column: 1 / -1;
+  }
 }
 
 .field {

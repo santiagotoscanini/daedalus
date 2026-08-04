@@ -15,6 +15,19 @@ export type AppStage = 'off' | 'lab' | 'live'
 
 export type ManifestEnvVar = { key: string; value: string; note?: string | null }
 
+/**
+ * cgroup v2 caps. null on any field = uncapped, which is the platform default
+ * — see the `resources` option in stacks/apps/apps.nix for what each one
+ * actually enforces and where the flag names lie about it.
+ */
+export type ManifestResources = {
+  cpus: number | null
+  memoryMb: number | null
+  pids: number | null
+}
+
+export const NO_RESOURCES: ManifestResources = { cpus: null, memoryMb: null, pids: null }
+
 export type ManifestApp = {
   stage: AppStage
   sourceMode?: 'registry' | 'local'
@@ -34,6 +47,8 @@ export type ManifestApp = {
     bypassRule?: string | null
   }
   homepage: { description: string; icon: string }
+  /** Optional so an apps.json predating the field still parses. */
+  resources?: ManifestResources
   notes?: Record<string, string>
 }
 
