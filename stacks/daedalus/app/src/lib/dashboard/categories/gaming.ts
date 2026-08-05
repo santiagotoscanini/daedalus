@@ -43,7 +43,29 @@ export type GamingData = {
   }
   /** The devs' feed — release posts and Friday Facts, newest first. */
   news: { title: string; url: string; date: string; kind: 'release' | 'fff' | 'post' }[]
+  /**
+   * Per-release notes, newest first. The releases between installed and
+   * stable when there are any; otherwise the one that is running, so the
+   * panel says what you last got rather than nothing.
+   */
+  changelog: {
+    version: string
+    date: string
+    sections: { name: string; items: string[] }[]
+    /** True when the section lists were cut — see CHANGELOG_MAX_ITEMS. */
+    truncated: boolean
+  }[]
 }
+
+/**
+ * Bullets kept per release.
+ *
+ * A Factorio point release runs to 40-odd fixes and this payload is
+ * serialised into the page's HTML for hydration. Ten is enough to answer "is
+ * there anything in here I care about", and the version heading links to the
+ * full page for when the answer is yes.
+ */
+const CHANGELOG_MAX_ITEMS = 10
 
 const PORT = 34197
 
@@ -63,13 +85,19 @@ export async function loadGaming(): Promise<GamingData> {
 
   const stable = releases?.stable?.headless ?? null
   const experimental = releases?.experimental?.headless ?? null
+  const behind = chain(graph?.['core-linux_headless64'] ?? [], installed, stable)
+
+  // Fetched only for the releases actually shown. Nothing behind means the
+  // one running, which keeps the panel useful rather than empty.
+  const wanted = behind.length > 0 ? behind : installed === null ? [] : [installed]
+  const changelog = await fetchChangelog(wanted)
 
   return {
     factorio: {
       installed,
       stable,
       experimental,
-      behind: chain(graph?.['core-linux_headless64'] ?? [], installed, stable),
+      behind,
       // NOT the admin hostname: the game speaks its own UDP protocol straight
       // to the router-forwarded port and never touches traefik. `s2` is the
       // DDNS name that tracks this house's WAN address, so it is the thing a
@@ -79,6 +107,7 @@ export async function loadGaming(): Promise<GamingData> {
       adminUp: adminUp === null ? null : adminUp === 1,
     },
     news: feed,
+    changelog,
   }
 }
 
@@ -161,4 +190,103 @@ function decode(s: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+}
+
+/**
+ * Release notes for specific versions, from the wiki.
+ *
+ * Wube keeps one page per minor series (`Version_history/2.0.0` holds every
+ * 2.0.x) and MediaWiki will hand over its source, which is far better than
+ * scraping the rendered HTML: the wikitext is a stable, tiny grammar —
+ *
+ *   == 2.0.77 ==
+ *   Date: 21.05.2026
+ *   === Bugfixes ===
+ *   * Fixed a clipping issue ... ([https://forums.factorio.com/131012 more])
+ *
+ * — so the parse is three regexes rather than a DOM walk that breaks the next
+ * time someone restyles the page.
+ *
+ * Wanted versions are grouped by series so a request that straddles a boundary
+ * (2.0.x → 2.1.x) fetches two pages instead of guessing one. Failure is empty,
+ * like everything else here: the wiki being down must not cost the page.
+ */
+async function fetchChangelog(versions: string[]): Promise<GamingData['changelog']> {
+  if (versions.length === 0) return []
+
+  // `2.0.77` → `2.0.0`, the page that holds the whole series.
+  const seriesOf = (v: string) => {
+    const [maj, min] = v.split('.')
+    return maj !== undefined && min !== undefined ? `${maj}.${min}.0` : null
+  }
+  const series = [...new Set(versions.map(seriesOf).filter((s): s is string => s !== null))]
+
+  const pages = await Promise.all(series.map(fetchSeries))
+  const found = new Map<string, GamingData['changelog'][number]>()
+  for (const page of pages) {
+    for (const entry of page) found.set(entry.version, entry)
+  }
+
+  // Newest first, and only the versions asked for — the page holds hundreds.
+  return versions
+    .map((v) => found.get(v))
+    .filter((e): e is GamingData['changelog'][number] => e !== undefined)
+    .reverse()
+}
+
+async function fetchSeries(series: string): Promise<GamingData['changelog']> {
+  const url =
+    'https://wiki.factorio.com/api.php?action=parse&format=json&formatversion=2' +
+    `&prop=wikitext&page=${encodeURIComponent(`Version_history/${series}`)}`
+
+  const body = await getJson<{ parse?: { wikitext?: string } }>(url, {}, [12_000])
+  const wikitext = body?.parse?.wikitext
+  if (typeof wikitext !== 'string') return []
+
+  const out: GamingData['changelog'] = []
+  // Split on the version headings; `==` at line start is unambiguous here
+  // because every deeper heading uses three or more.
+  const blocks = wikitext.split(/^==\s*([0-9]+\.[0-9]+\.[0-9]+)\s*==\s*$/m)
+
+  // split() with one capture group yields [preamble, ver, body, ver, body, …].
+  for (let i = 1; i < blocks.length; i += 2) {
+    const version = blocks[i]
+    const body = blocks[i + 1]
+    if (version === undefined || body === undefined) continue
+
+    const date = /^Date:\s*(.+)$/m.exec(body)?.[1]?.trim() ?? ''
+    const sections: { name: string; items: string[] }[] = []
+    let truncated = false
+
+    const parts = body.split(/^===\s*([^=\n]+?)\s*===\s*$/m)
+    for (let j = 1; j < parts.length; j += 2) {
+      const name = parts[j]
+      const chunk = parts[j + 1]
+      if (name === undefined || chunk === undefined) continue
+      const all = [...chunk.matchAll(/^\*\s+(.+)$/gm)].map((m) => clean(m[1] ?? ''))
+      if (all.length > CHANGELOG_MAX_ITEMS) truncated = true
+      sections.push({ name, items: all.slice(0, CHANGELOG_MAX_ITEMS) })
+    }
+
+    out.push({ version, date, sections, truncated })
+  }
+  return out
+}
+
+/** Wikitext → plain text. Only the markup Wube actually uses in changelogs. */
+function clean(s: string): string {
+  return s
+    // [url label] → label, and a bare [url] → nothing worth showing.
+    .replace(/\[https?:\/\/\S+\s+([^\]]*)\]/g, '$1')
+    .replace(/\[https?:\/\/\S+\]/g, '')
+    .replace(/\[\[[^|\]]*\|([^\]]*)\]\]/g, '$1')
+    .replace(/\[\[([^\]]*)\]\]/g, '$1')
+    .replace(/'''([^']*)'''/g, '$1')
+    .replace(/''([^']*)''/g, '$1')
+    // `([https://forums.factorio.com/131012 more])` becomes `(more)` once the
+    // URL is gone — a parenthesis around a word that no longer links
+    // anywhere. Drop it rather than ship dead furniture.
+    .replace(/\s*\(\s*more\s*\)\s*$/i, "")
+    .replace(/\s*\(\s*\)\s*$/, "")
+    .trim()
 }

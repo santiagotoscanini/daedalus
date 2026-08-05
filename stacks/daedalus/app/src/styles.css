@@ -3313,6 +3313,94 @@ h2 {
   white-space: nowrap;
 }
 
+/* Release notes, collapsed. `details` rather than a state hook: it works
+   before hydration, survives it, and the browser already knows how. */
+.changelog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.rel {
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.rel summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.rel summary::-webkit-details-marker {
+  display: none;
+}
+.rel summary::before {
+  content: "\25B8";
+  color: var(--dim);
+  font-size: 0.7rem;
+  transition: transform 0.12s ease;
+}
+.rel[open] summary::before {
+  transform: rotate(90deg);
+}
+.rel summary:hover {
+  background: var(--raise);
+}
+.rel-version {
+  font-size: 0.82rem;
+  color: var(--text);
+}
+.rel-date {
+  font-size: 0.7rem;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.rel-count {
+  font-size: 0.68rem;
+  color: var(--dim);
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rel-body {
+  padding: 0.1rem 0.75rem 0.6rem 1.35rem;
+  border-top: 1px solid var(--border-soft);
+}
+.rel-body h5 {
+  margin: 0.55rem 0 0.2rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.rel-body ul {
+  margin: 0;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.rel-body li {
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--muted);
+  max-width: 90ch;
+}
+.rel-more {
+  margin: 0.6rem 0 0;
+  font-size: 0.7rem;
+  color: var(--dim);
+}
+.rel-more a {
+  color: var(--accent);
+}
+
 /* ── topology ───────────────────────────────────────────────────────────── */
 
 /* Flow reads left-to-right on a wide screen and top-to-bottom on a narrow one,
