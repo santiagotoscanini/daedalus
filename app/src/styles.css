@@ -3313,6 +3313,24 @@ h2 {
   white-space: nowrap;
 }
 
+/* An embedded Grafana panel. Sized rather than aspect-ratioed: a log view
+   wants a fixed number of visible lines, not a shape. */
+.embed {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--bg);
+}
+.embed-logs {
+  height: 26rem;
+}
+ (max-width: 50rem) {
+  .embed-logs {
+    height: 18rem;
+  }
+}
+
 /* A game gets a header with its own artwork: the rail is monochrome and
    the tabs are text, so this is the one place the subject is identifiable
    at a glance. */
