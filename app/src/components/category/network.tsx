@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   BarList,
@@ -1492,7 +1492,43 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           </p>
         </Board>
 
-        <Changelog gap={d.gap} />
+        <Board
+          title="The address, over time"
+          icon="◷"
+          span={6}
+          fill
+          aside={<Countdown at={d.nextRunAt} />}
+        >
+          {d.history.length === 0 ?
+            <p className="viz-empty">no change recorded in the log window</p>
+          : <ul className="itemlist">
+              {d.history.map((h) => (
+                <li key={h.at}>
+                  <span className="item-main mono">{h.ip}</span>
+                  <span className="item-side">
+                    {h.heldDays === null ?
+                      'current'
+                    : `held ${String(h.heldDays)}d`}{' '}
+                    · {new Date(h.at).toLocaleDateString('en-CA')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          }
+          <p className="board-foot">
+            {/* The pattern is the useful part: the changes and the failures
+                are the same event seen twice, which is worth saying because
+                otherwise the failures above look random. */}
+            ddclient writes a line only when it actually <b>changes</b> the record, so this is the
+            change history exactly — nothing for the thousands of runs that found nothing to do.
+            Every one of them lands around 04:00, which is the ISP renewing the lease; the failed
+            lookups above cluster at the same hour, because the connection is down for the seconds
+            it takes. Thirty days is the whole window — that is how long Loki keeps a line, not a
+            choice made here.
+          </p>
+        </Board>
+
+        <Changelog gap={d.gap} span={6} />
 
         <Board title="Logs" icon="≡" span={12}>
           <GrafanaLogs
@@ -1510,5 +1546,52 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
         </Board>
       </BoardGrid>
     </>
+  )
+}
+
+/**
+ * A live countdown to the next run of a timer.
+ *
+ * The timer lives in systemd and this container cannot see it, so the moment
+ * is derived on the server (last run + interval) and handed over as an
+ * absolute instant. The ticking is client-side and starts only after mount:
+ * `now` is null through the server render AND the first client render, so both
+ * produce the same markup and hydration has nothing to disagree about. A
+ * countdown computed from `Date.now()` during render is the classic way to
+ * break that.
+ *
+ * mm:ss rather than one unit — a five-minute countdown reading "5 min" for
+ * two and a half minutes is not a countdown.
+ */
+function Countdown({ at }: { at: number | null }) {
+  const [now, setNow] = useState<number | null>(null)
+
+  useEffect(() => {
+    setNow(Date.now())
+    const t = setInterval(() => {
+      setNow(Date.now())
+    }, 1000)
+    return () => {
+      clearInterval(t)
+    }
+  }, [])
+
+  if (at === null) return <span className="board-note">next run unknown</span>
+
+  const left = now === null ? null : Math.max(0, Math.round((at - now) / 1000))
+  return (
+    <span className="board-note">
+      next check{' '}
+      {left === null ?
+        'soon'
+        // Overdue is a real state worth showing rather than clamping away: the
+        // timer fires a little late, and a run that is genuinely stuck reads
+        // as a countdown that sat at zero.
+      : left === 0 ? 'due now'
+      : <span className="mono">
+          {String(Math.floor(left / 60)).padStart(2, '0')}:{String(left % 60).padStart(2, '0')}
+        </span>
+      }
+    </span>
   )
 }

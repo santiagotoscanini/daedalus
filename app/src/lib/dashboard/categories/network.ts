@@ -21,6 +21,7 @@ import {
   promVector,
   lokiLatest,
   lokiScalar,
+  lokiEntries,
 } from '../clients'
 import {
   commitsSince,
@@ -114,6 +115,18 @@ type DdnsData = {
    * error anywhere.
    */
   actual: string | null
+  /** When ddclient last ran, and when the timer fires next. Epoch ms. */
+  lastRunAt: number | null
+  nextRunAt: number | null
+  /**
+   * Every address this name has been pointed at, newest first.
+   *
+   * ddclient logs a line only when it CHANGES the record, so this is exactly
+   * the change history and nothing else — no rows for the ~8,600 runs a month
+   * that found nothing to do. Bounded by Loki's retention rather than by
+   * choice: thirty days is all there is.
+   */
+  history: { at: number; ip: string; heldDays: number | null }[]
   /** ddclient runs that could not work out the address, by window. */
   lookupFailures: { day: number | null; week: number | null; month: number | null }
   /** Whether anything alerts when that happens. See fleet.monitoredJobs. */
@@ -838,23 +851,52 @@ async function loadDdns(cfP: Promise<CfTunnel | undefined>): Promise<DdnsData> {
   // unnoticed. The unit still exits 0, which is why counting the log line is
   // the only way to see it.
   const FAIL = '{unit="ddclient.service"} |= "unable to determine IP address"'
-  const [cf, resolved, day, week, month, gap] = await Promise.all([
+  const [cf, resolved, day, week, month, gap, changes, runs] = await Promise.all([
     cfP,
     resolvePublic(host),
     lokiScalar(`sum(count_over_time(${FAIL} [24h]))`),
     lokiScalar(`sum(count_over_time(${FAIL} [7d]))`),
     lokiScalar(`sum(count_over_time(${FAIL} [30d]))`),
     versionGap('ddclient/ddclient', version),
+    // `SUCCESS: [cloudflare][s2.toscanini.me]> IPv4 address set to 1.2.3.4`,
+    // logged only when the record actually changes.
+    lokiEntries('{unit="ddclient.service"} |= "IPv4 address set to"'),
+    // systemd's own line, not ddclient's: a run that changed nothing says
+    // nothing, so the service's log cannot answer "did it run". Two hours is
+    // ample at a five-minute cadence and keeps the query cheap.
+    lokiEntries('{unit="init.scope"} |= "Finished Dynamic DNS Client"', 120, 1),
   ])
+
+  const seconds = interval === undefined ? null : Number(interval)
+  const lastRunAt = runs[0]?.at ?? null
+
+  const history = changes
+    .map((e) => ({ at: e.at, ip: /set to ([0-9.]+)/.exec(e.line)?.[1] ?? '' }))
+    .filter((h) => h.ip !== '')
+    .map((h, i, all) => ({
+      ...h,
+      // How long the PREVIOUS address lasted, measured to this change. The
+      // newest row has no successor, so its span is still running and is left
+      // null rather than dated to now — "held 2 days so far" is a different
+      // claim from "held 2 days".
+      heldDays: i === 0 ? null : Math.round(((all[i - 1]?.at ?? h.at) - h.at) / 86400_000),
+    }))
 
   return {
     version,
     gap,
     host,
-    intervalSeconds: interval === undefined ? null : Number(interval),
+    intervalSeconds: seconds,
     resolved: resolved.ip,
     ttl: resolved.ttl,
     actual: cf?.connections?.[0]?.origin_ip ?? null,
+    lastRunAt,
+    // Derived rather than asked: the timer lives in systemd and this container
+    // cannot see it. `OnUnitActiveSec` restarts the clock when the last run
+    // finished, so last + interval IS the next elapse — give or take the
+    // seconds the run itself took.
+    nextRunAt: lastRunAt === null || seconds === null ? null : lastRunAt + seconds * 1000,
+    history,
     lookupFailures: { day, week, month },
     // Nothing in fleet.monitoredJobs names it, and the unit exits 0 on the
     // failure above anyway — so an OnFailure hook would not have fired either.

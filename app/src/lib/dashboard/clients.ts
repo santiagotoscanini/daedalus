@@ -366,3 +366,32 @@ export async function lokiLatest(query: string, minutes = 60 * 24 * 30): Promise
   )
   return body?.data?.result?.[0]?.values[0]?.[1] ?? null
 }
+
+/**
+ * Matching log lines with their timestamps, newest first.
+ *
+ * `lokiLatest` answers "what does it say"; this answers "when did it say it",
+ * which is a different question and the one a history needs. Used for the two
+ * things ddclient states only in its journal: every address it has published,
+ * and when it last ran at all.
+ */
+export async function lokiEntries(
+  query: string,
+  minutes = 60 * 24 * 30,
+  limit = 40,
+): Promise<{ at: number; line: string }[]> {
+  const end = Date.now() * 1e6
+  const start = end - minutes * 60 * 1e9
+  const body = await getJson<{ data?: { result?: { values: [string, string][] }[] } }>(
+    `${LOKI()}/loki/api/v1/query_range?query=${encodeURIComponent(query)}` +
+      `&start=${String(start)}&end=${String(end)}&limit=${String(limit)}&direction=backward`,
+    {},
+    LOKI_ATTEMPT_MS,
+  )
+  return (body?.data?.result ?? [])
+    .flatMap((s) => s.values)
+    // Loki's timestamps are nanoseconds as a string; milliseconds is what
+    // every consumer here wants and what survives JSON without precision loss.
+    .map(([ns, line]) => ({ at: Number(ns) / 1e6, line }))
+    .sort((a, b) => b.at - a.at)
+}
