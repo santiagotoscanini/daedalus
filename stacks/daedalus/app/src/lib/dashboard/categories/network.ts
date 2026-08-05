@@ -31,6 +31,7 @@ import {
   type CommitGap,
   type VersionGap,
 } from '../github'
+import { webAppHosts } from '../../nix-manifest'
 import { key, since } from '../format'
 
 export type NetworkTab = 'general' | 'wireguard' | 'outbound'
@@ -65,6 +66,15 @@ type WireguardData = {
   peers: Peer[]
   /** Peak simultaneous peers per day, oldest first. */
   daily: { date: string; peers: number }[]
+  /**
+   * Where wg-easy's UI lives, read from the nix manifest.
+   *
+   * Not typed out here, and the reason is that typing it out is how this page
+   * shipped a link to a hostname that does not exist. Every published name is
+   * already in `webAppHosts`, keyed by the webApp that owns it, so the page
+   * can ask rather than remember — and a rename moves the link with it.
+   */
+  url: string | null
 }
 
 /** The Cloudflare tunnel, from Cloudflare's side and cloudflared's own. */
@@ -548,17 +558,18 @@ async function cfTunnel(): Promise<CfTunnel | undefined> {
 async function loadWireguard(): Promise<WireguardData> {
   const version = process.env.WG_EASY_VERSION || null
 
-  const [counts, peers, peak] = await Promise.all([
+  const [counts, peers, peak, hosts] = await Promise.all([
     promScalars({
-      configured: 'wireguard_configured_peers',
-      enabled: 'wireguard_enabled_peers',
-      connected: 'wireguard_connected_peers',
+      configured: "wireguard_configured_peers",
+      enabled: "wireguard_enabled_peers",
+      connected: "wireguard_connected_peers",
     }),
     loadWgPeers(),
     // Peak, not average: the question a household asks of a personal VPN is
     // "did anyone use it", and a peer connected for twenty minutes averages
     // to nearly nothing over a day while being the entire answer.
     promPoints(`max_over_time(wireguard_connected_peers[1d])`, DAYS * 24 * 60, 86400),
+    webAppHosts(),
   ])
 
   return {
@@ -567,6 +578,7 @@ async function loadWireguard(): Promise<WireguardData> {
     counts,
     peers,
     daily: peak.map((p) => ({ date: localDay(p.t * 1000), peers: p.v })),
+    url: hosts["wg-easy"] === undefined ? null : `https://${hosts["wg-easy"]}`,
   }
 }
 

@@ -771,9 +771,11 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
           </>
         }
         actions={
-          <a className="btn btn-primary" href="https://wg.toscanini.me" target="_blank" rel="noreferrer">
-            Open wg-easy ↗
-          </a>
+          data.url === null ? undefined : (
+            <a className="btn btn-primary" href={data.url} target="_blank" rel="noreferrer">
+              Open wg-easy ↗
+            </a>
+          )
         }
       />
       <LinkRow
