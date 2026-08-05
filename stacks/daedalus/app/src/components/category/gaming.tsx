@@ -123,15 +123,36 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
             rows={[
               { k: 'Players connect to', v: <span className="mono">{factorio.connect}</span> },
               { k: 'Protocol', v: `UDP ${String(factorio.port)}` },
-              { k: 'Admin UI', v: 'LAN only, behind the Pocket ID gate' },
+              {
+                // The dependency that is invisible from inside the house and
+                // is the first thing to check when someone off-LAN cannot
+                // join: nothing on this box can make it true.
+                k: 'Requires',
+                v: (
+                  <>
+                    a router forward of <span className="mono">UDP {factorio.port}</span> → this
+                    box
+                  </>
+                ),
+              },
               { k: 'Manager', v: 'ofsm — saves, mods, RCON' },
             ]}
           />
-          {/* The one TCP-less exception in the router's forward list, and the
-              reason it is acceptable: a game protocol, not an admin surface. */}
+
+          <a className="cta" href={factorio.adminUrl} target="_blank" rel="noreferrer">
+            <span className="cta-main">Open the server manager</span>
+            <span className="cta-sub">ofsm · LAN only, behind the Pocket ID gate</span>
+            <span className="cta-arrow" aria-hidden="true">
+              ↗
+            </span>
+          </a>
+
+          {/* The one exception in the router's forward list, and the reason it
+              is acceptable: a game protocol, not an admin surface. */}
           <p className="board-foot">
-            The game never touches traefik — the router forwards {factorio.port} straight through.
-            The admin UI is the opposite: LAN-only, proxied, gated.
+            Only the game port is forwarded. Everything else about this server — the manager, the
+            saves, RCON — is LAN-only and never leaves the house, which is why the address above
+            works from outside and the one below does not.
           </p>
         </Board>
 
@@ -206,7 +227,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           aside={
             <a
               className="board-note"
-              href={LOGS_URL}
+              href={LOGS_FULL}
               target="_blank"
               rel="noreferrer"
             >
@@ -214,7 +235,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
             </a>
           }
         >
-          <iframe className="embed embed-logs" src={`${LOGS_URL}&kiosk`} title="Factorio logs" />
+          <iframe className="embed embed-logs" src={LOGS_EMBED} title="Factorio logs" loading="lazy" />
           <p className="board-foot">
             The real Logs Drilldown, framed. Search, filtering and live tail are Grafana’s, not a
             reimplementation — this box already grants it the frame. If it shows a login screen,
@@ -255,10 +276,25 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
   )
 }
 
-/** Loki Drilldown, filtered to the one container. */
-const LOGS_URL =
-  'https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore' +
-  '?from=now-6h&to=now&var-ds=loki-default&var-filters=container%7C%3D%7Cfactorio'
+/**
+ * Two Grafana URLs for the same logs, because they are for different jobs.
+ *
+ * `/d-solo` renders ONE PANEL and nothing else — no nav, no time picker, no
+ * label editor, no histogram. That is what belongs in a card. The Drilldown
+ * app is the opposite: it brings its whole workbench, which is right when you
+ * are investigating and absurd inside a 400px box.
+ *
+ * The panel comes from a provisioned dashboard (stacks/monitoring,
+ * container-logs.json) whose only variable is the container name, so any page
+ * here can frame the logs for any service by changing one query parameter.
+ */
+const LOGS_EMBED =
+  "https://grafana.toscanini.me/d-solo/container-logs/container-logs" +
+  "?panelId=1&var-container=factorio&from=now-3h&to=now&theme=dark&refresh=30s"
+
+const LOGS_FULL =
+  "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore" +
+  "?from=now-6h&to=now&var-ds=loki-default&var-filters=container%7C%3D%7Cfactorio"
 
 /**
  * Where a release actually lives on the wiki.

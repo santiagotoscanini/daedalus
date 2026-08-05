@@ -1,0 +1,52 @@
+{
+  "uid": "container-logs",
+  "title": "Container logs",
+  "description": "One logs panel, parameterised by container. Exists to be embedded via /d-solo — daedalus frames it wherever a page needs the log lines for one service, without the Drilldown app's label pickers, datasource selector and histogram coming along for the ride.",
+  "tags": ["logs", "embed"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "container",
+        "label": "Container",
+        "type": "textbox",
+        "query": "",
+        "current": { "text": "", "value": "" },
+        "hide": 2,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "",
+      "datasource": { "type": "loki", "uid": "loki-default" },
+      "gridPos": { "h": 22, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki-default" },
+          "expr": "{container=\"$container\"}",
+          "queryType": "range"
+        }
+      ]
+    }
+  ]
+}
