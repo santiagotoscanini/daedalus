@@ -41,9 +41,24 @@ write_status() {
 EOF
 }
 
+# Rejection vs malfunction, and they exit differently on purpose. A request
+# this agent correctly refuses — a bad name, a repo that does not exist, a
+# workflow with no dispatch trigger, GitHub throttling a burst — is reported in
+# the UI and exits 0, because the agent worked. Only the agent being unable to
+# do its job at all (no usable token, a runner that will not start) exits 1 and
+# leaves a failed unit for `systemctl --failed` and the Grafana alert.
+#
+# Otherwise every fat-fingered repo name leaves a permanently failed unit, and
+# the failed-units alert quietly becomes something you scroll past.
+reject() {
+  write_status failed "" "$1"
+  echo "ci request rejected: $1" >&2
+  exit 0
+}
+
 fail() {
   write_status failed "" "$1"
-  echo "ci request failed: $1" >&2
+  echo "ci agent failure: $1" >&2
   exit 1
 }
 
@@ -63,7 +78,7 @@ REPO="$(jq -r '.repo // ""' "$REQ")"
 WORKFLOW="$(jq -r '.workflow // ""' "$REQ")"
 
 case "$REPO" in
-*[!A-Za-z0-9._-]* | "" | -* | .*) fail "refusing repo name '$REPO'" ;;
+*[!A-Za-z0-9._-]* | "" | -* | .*) reject "refusing repo name '$REPO'" ;;
 esac
 
 write_status running "validating" ""
@@ -108,15 +123,15 @@ api_probe() {
 
 if ! api_probe "https://api.github.com/repos/$OWNER/$REPO"; then
   case "$GH_STATUS" in
-  404) fail "no repository $OWNER/$REPO" ;;
+  404) reject "no repository $OWNER/$REPO" ;;
   401) fail "GitHub rejected the token (401) — the GHCR credential may have expired" ;;
   403 | 429)
     # Secondary rate limits are not the hourly quota and do not show up in it;
     # they are earned by bursts and clear on their own in about a minute.
-    fail "GitHub refused with $GH_STATUS: $(printf '%s' "$GH_BODY" | jq -r '.message // "no message"' 2>/dev/null | head -c 200). If this was a burst of requests it clears on its own — try again shortly."
+    reject "GitHub refused with $GH_STATUS: $(printf '%s' "$GH_BODY" | jq -r '.message // "no message"' 2>/dev/null | head -c 200). If this was a burst of requests it clears on its own — try again shortly."
     ;;
-  0) fail "could not reach api.github.com (DNS or network)" ;;
-  *) fail "GitHub answered $GH_STATUS for $OWNER/$REPO: $(printf '%s' "$GH_BODY" | jq -r '.message // ""' 2>/dev/null | head -c 200)" ;;
+  0) reject "could not reach api.github.com (DNS or network)" ;;
+  *) reject "GitHub answered $GH_STATUS for $OWNER/$REPO: $(printf '%s' "$GH_BODY" | jq -r '.message // ""' 2>/dev/null | head -c 200)" ;;
   esac
 fi
 
@@ -146,9 +161,9 @@ set-secret)
 
 run-ci)
   case "$WORKFLOW" in
-  *[!A-Za-z0-9._-]* | "") fail "refusing workflow name '$WORKFLOW'" ;;
+  *[!A-Za-z0-9._-]* | "") reject "refusing workflow name '$WORKFLOW'" ;;
   *.yml | *.yaml) ;;
-  *) fail "workflow must be a .yml/.yaml filename, got '$WORKFLOW'" ;;
+  *) reject "workflow must be a .yml/.yaml filename, got '$WORKFLOW'" ;;
   esac
 
   # An app's own runner is already waiting for work, and starting a second
@@ -187,10 +202,10 @@ run-ci)
 
   case "$DISPATCH" in
   204) ;;
-  404) fail "$OWNER/$REPO has no workflow file named $WORKFLOW on $DEFAULT_BRANCH" ;;
-  422) fail "$WORKFLOW exists but has no workflow_dispatch trigger on $DEFAULT_BRANCH" ;;
-  0) fail "could not reach api.github.com to dispatch $WORKFLOW" ;;
-  *) fail "GitHub answered $DISPATCH dispatching $WORKFLOW on $DEFAULT_BRANCH" ;;
+  404) reject "$OWNER/$REPO has no workflow file named $WORKFLOW on $DEFAULT_BRANCH" ;;
+  422) reject "$WORKFLOW exists but has no workflow_dispatch trigger on $DEFAULT_BRANCH" ;;
+  0) reject "could not reach api.github.com to dispatch $WORKFLOW" ;;
+  *) reject "GitHub answered $DISPATCH dispatching $WORKFLOW on $DEFAULT_BRANCH" ;;
   esac
 
   BACKLOG=""
@@ -201,6 +216,6 @@ run-ci)
   ;;
 
 *)
-  fail "unknown action '$ACTION'"
+  reject "unknown action '$ACTION'"
   ;;
 esac

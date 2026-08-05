@@ -40,7 +40,9 @@ import {
   fetchAppTab,
   fetchCiRequestStatus,
   fetchDeployStatus,
+  fetchSsoStatus,
   revealEnvVar,
+  provisionSsoSecret,
   runCiFn,
   saveApp,
   triggerDeploy,
@@ -731,13 +733,74 @@ function AppDetail() {
             />
           </Panel>
 
+          <Panel title="Single sign-on" wide action={<SsoSecretState name={app.name} mode={app.authMode} />}>
+            <Segmented
+              value={app.authMode}
+              disabled={readOnly}
+              onChange={(v) => {
+                patch({ authMode: v })
+                // Moving to a mode that needs a client secret provisions it,
+                // rather than asserting somebody already did. Fired alongside
+                // the record write instead of after it: the two are independent
+                // — the secret is safe to exist for an app that ends up
+                // ungated, and the record is what the next Apply reads.
+                if (v !== 'none') {
+                  void provisionSsoSecret({ data: { app: app.name, action: 'provision' } })
+                }
+              }}
+              options={[
+                { value: 'none', label: 'None', icon: '○' },
+                {
+                  value: 'proxy',
+                  label: 'Forward-auth',
+                  icon: '⛨',
+                  // Both are assertions in stacks/apps/apps.nix. Greyed out with
+                  // the reason rather than accepted and failed mid-Apply.
+                  disabled: app.stage === 'off' || !app.authHealthPath,
+                  reason:
+                    app.stage === 'off' ?
+                      'Nothing to gate: the middleware is generated from the ingress, and this app is not exposed.'
+                    : !app.authHealthPath ?
+                      'Set a health path first — it is the unauthenticated path the gate lets through, so the probe tests the app instead of the login redirect.'
+                    : undefined,
+                },
+                { value: 'native', label: 'App is the client', icon: '⚿' },
+              ]}
+            />
+            <p className="panel-note">
+              {app.authMode === 'none' ?
+                'No SSO. Whatever login the app ships is the only one — for an app with its own accounts that means its own password form.'
+              : app.authMode === 'proxy' ?
+                'traefik gates the router; the app never learns there is an IdP. For apps with no user model of their own.'
+              : 'The app is the OIDC client: it gets OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_REDIRECT_URI, OIDC_PROVIDER_ID, OIDC_PROVIDER_NAME and OIDC_SCOPES, plus OIDC_CLIENT_SECRET from a rendered file. For apps with accounts of their own, which is what keeps per-user data isolated.'}
+            </p>
+            <TextField
+              label="Health path"
+              value={app.authHealthPath ?? ''}
+              placeholder="/api/healthz"
+              disabled={readOnly}
+              hint="Unauthenticated path the app itself serves. Required for forward-auth; also what gatus probes."
+              onSave={(v) => {
+                patch({ authHealthPath: v.trim() === '' ? null : v.trim() })
+              }}
+            />
+            <Row k="client id" v={app.name} mono />
+            <Row k="redirect uri" v={`https://${app.effectiveHostname}/api/auth/callback/pocket-id`} mono />
+            <p className="panel-note">
+              The client is declared, not clicked: this materializes{' '}
+              <code>fleet.ssoClients.{app.name}</code>, and a oneshot creates or updates it at the
+              IdP with the id and secret this repo chose. The secret must already exist as{' '}
+              <code>SSO_SECRET_{app.name.toUpperCase().replace(/-/g, '_')}</code> in{' '}
+              <code>stacks/pocket-id/clients.sops</code> — Nix asserts that at build time, because
+              the creds render is one unit for every client and a missing key would take the login
+              path out for all of them.
+            </p>
+          </Panel>
+
           <Panel title="Not editable here">
             <p className="panel-empty">
-              <strong>Auth mode and egress</strong> are read-only. Moving auth means provisioning an{' '}
-              <code>SSO_SECRET_{app.name.toUpperCase()}</code> into
-              <code> stacks/pocket-id/clients.sops</code> — writing encrypted state is its own
-              design problem, and a half-applied auth change locks you out of the app. Egress needs
-              a gluetun instance to exist first.
+              <strong>Egress</strong> is read-only: routing an app through a VPN needs a gluetun
+              instance to exist first, and that is a stack of its own.
             </p>
           </Panel>
 
@@ -1813,6 +1876,79 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
       >
         {running ? '↻ deploying…' : '↻ Redeploy'}
       </button>
+    </span>
+  )
+}
+
+/**
+ * What the host did with this app's client secret, and the way back out.
+ *
+ * Provisioning happens on the toggle, so most of the time this is just a
+ * receipt. Revoking is a button rather than a side effect of choosing "None":
+ * the host refuses while the applied config still gates the app, and the
+ * operator should see that refusal as an answer to something they asked for,
+ * not as a mysterious failure attached to a toggle they flipped.
+ */
+function SsoSecretState({ name, mode }: { name: string; mode: string }) {
+  const [status, setStatus] = useState<{ state: string; detail: string; error: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const run = (action: 'provision' | 'revoke') => {
+    setBusy(true)
+    setStatus(null)
+    void provisionSsoSecret({ data: { app: name, action } })
+      .then(async () => {
+        for (let i = 0; i < 40; i++) {
+          await new Promise((r) => setTimeout(r, 1500))
+          const s = await fetchSsoStatus()
+          if (s.state === 'done' || s.state === 'failed') return s
+        }
+        return { state: 'failed', detail: '', error: 'the host did not answer within a minute' }
+      })
+      .then((s) => {
+        setStatus(s)
+        setBusy(false)
+      })
+      .catch((e: unknown) => {
+        setStatus({ state: 'failed', detail: '', error: e instanceof Error ? e.message : String(e) })
+        setBusy(false)
+      })
+  }
+
+  return (
+    <span className="redeploy">
+      {status !== null && (
+        <span
+          className={status.state === 'failed' ? 'bad-text' : 'ok-text'}
+          title={status.state === 'failed' ? status.error : status.detail}
+        >
+          {status.state === 'failed' ? 'secret action failed' : status.detail || 'done'}
+        </span>
+      )}
+      <button
+        type="button"
+        className="btn btn-ghost"
+        disabled={busy}
+        title="Write a fresh client secret into clients.sops if this app has none. Idempotent."
+        onClick={() => {
+          run('provision')
+        }}
+      >
+        {busy ? '⚿ working…' : '⚿ Provision secret'}
+      </button>
+      {mode === 'none' && (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={busy}
+          title="Remove this app's client secret. Refused while the applied config still gates the app."
+          onClick={() => {
+            run('revoke')
+          }}
+        >
+          Revoke
+        </button>
+      )}
     </span>
   )
 }

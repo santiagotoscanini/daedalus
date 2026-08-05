@@ -381,6 +381,42 @@ in
       ) (lib.filterAttrs (_: c: c.consumers != [ ]) cfg);
     }
 
+    # Every declared client must already have its secret in clients.sops,
+    # checked HERE, at eval time.
+    #
+    # This is possible because sops encrypts dotenv VALUES and leaves the
+    # KEYS in plaintext, so the file can be read for key presence without
+    # any decryption — and it is worth doing because of how badly the
+    # alternative fails. The render below is one oneshot for all clients:
+    # `extractSecret` exits 1 on the first key it cannot find, so a single
+    # missing secret fails the whole unit and leaves EVERY client's creds
+    # file — including traefik's forward-auth env — unwritten or stale.
+    # One app declared carelessly would take the gate off, or the login
+    # path out from under, all of them.
+    #
+    # That failure lands at activation, where `nixos-rebuild build` cannot
+    # see it and daedalus's apply agent has already committed. Asserting at
+    # eval turns it into a build error: the Apply fails, the switch never
+    # runs, and the fleet's SSO keeps working. It is also what makes
+    # `auth.mode` safe to expose as a control in daedalus rather than
+    # something only editable by hand here.
+    {
+      assertions = map (n: {
+        assertion = builtins.match ".*(^|\n)${secretKey n}=.*" (builtins.readFile ./clients.sops) != null;
+        message = ''
+          fleet.ssoClients.${n} has no ${secretKey n} in stacks/pocket-id/clients.sops.
+
+          Add it before declaring the client:
+            sops stacks/pocket-id/clients.sops     # ${secretKey n}=<random hex>
+            git -C /etc/nixos add stacks/pocket-id/clients.sops
+
+          Without it the sso-clients render exits 1 at activation, which is
+          one unit for every client — so this would break the login path for
+          all of them, not just ${n}.
+        '';
+      }) (lib.attrNames cfg);
+    }
+
     # The env file lands on the consumer container from HERE rather than
     # from the consumer's own module: stacks/apps would have to read
     # `config.fleet.ssoClients.<name>` back while defining it, which
