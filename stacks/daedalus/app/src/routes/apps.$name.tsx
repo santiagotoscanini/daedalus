@@ -15,6 +15,7 @@ import {
 } from '../components/ui'
 import { BarList } from '../components/viz'
 import { BlockSkeleton, MetricsSkeleton, PanelsSkeleton } from '../components/skeleton'
+import { GrafanaLogs, grafanaLogsFull } from '../components/logs'
 // ./access-window, NOT ./access — same split as env-groups below. The window
 // table is a value the picker and validateSearch both need in the browser;
 // ./access talks to Loki and must never follow it there.
@@ -733,12 +734,26 @@ function AppDetail() {
         </Await>
       )}
 
+      {/* Grafana renders these. Nothing is fetched for this tab any more —
+          the frame does its own querying, so opening it costs one request to
+          Grafana rather than a Loki round trip through here AND sixty log
+          lines serialised into the page for hydration. */}
       {tab === 'logs' && (
-        <Await promise={tabData} fallback={<BlockSkeleton h={420} />}>
-          {(td) =>
-            td.kind !== 'logs' ? null : <LogsPanel app={app.name} logs={td.logs} />
+        <Panel
+          title="Logs"
+          action={
+            <a
+              className="btn btn-ghost"
+              href={grafanaLogsFull(`app-${app.name}`)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              ↗ Search in Grafana
+            </a>
           }
-        </Await>
+        >
+          <GrafanaLogs container={`app-${app.name}`} title={`${app.name} logs`} />
+        </Panel>
       )}
 
       <ApplyBar
@@ -749,48 +764,6 @@ function AppDetail() {
   )
 }
 
-function LogsPanel({ app, logs }: { app: string; logs: { ts: string; level: string | null; line: string }[] }) {
-  return (
-        <Panel
-          title="Recent logs"
-          action={
-            <a
-              className="btn btn-ghost"
-              href={`https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore/service/${app}/logs?from=now-15m&to=now&var-ds=loki-default`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              ↗ Grafana
-            </a>
-          }
-        >
-          {logs.length === 0 ? (
-            <p className="panel-empty">Nothing in Loki for the last 7 days.</p>
-          ) : (
-            <>
-              {isStale(logs[logs.length - 1]?.ts) && (
-                <p className="panel-note">
-                  Newest line is {fmtWhen(logs[logs.length - 1]?.ts ?? '')} — this app has been
-                  quiet since. Not a broken pipeline: several apps here only log at startup.
-                </p>
-              )}
-              <div className="logs">
-                {logs.map((l, i) => (
-                  <div key={`${l.ts}-${String(i)}`} className={`log log-${l.level ?? 'none'}`}>
-                    {/* Date included whenever the line is not from today.
-                        Time-of-day alone made three-day-old startup logs read
-                        as if they had just happened. */}
-                    <time>{fmtLogTime(l.ts)}</time>
-                    <span className="lvl">{l.level ?? ''}</span>
-                    <span className="msg">{l.line}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-    </Panel>
-  )
-}
 
 type LoaderData = Awaited<ReturnType<typeof fetchApp>>
 type AppRecord = NonNullable<LoaderData>['app']
@@ -1896,12 +1869,6 @@ function fmtBool(v: boolean | null | undefined): string {
 /** Bytes → whole MB. MiB, matching what --memory takes and cgroup enforces. */
 function fmtMb(bytes: number): string {
   return Math.round(bytes / (1024 * 1024)).toLocaleString()
-}
-
-/** Older than an hour — worth telling the reader before they misread the panel. */
-function isStale(iso: string | undefined): boolean {
-  if (!iso) return false
-  return Date.now() - new Date(iso).getTime() > 60 * 60 * 1000
 }
 
 /** "14:22:09.214" for today, "Jul 31 23:22:09" for anything older. */
