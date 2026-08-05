@@ -115,6 +115,10 @@ class WebSocket:
         if " 101" not in status:
             raise ConnectionError(f"upgrade refused: {status}")
         self.sock.settimeout(READ_TIMEOUT_S)
+        # Fragment assembly survives across recv() calls, because a
+        # control frame may legally arrive between two fragments.
+        self._frag = b""
+        self._frag_is_text = False
 
     def _recv_exact(self, n):
         # Only ever appends to self.buf and consumes once n bytes are
@@ -156,27 +160,34 @@ class WebSocket:
             length = struct.unpack("!Q", self._recv_exact(8))[0]
         return bool(b0 & 0x80), b0 & 0x0F, self._recv_exact(length)
 
-    def recv_text(self):
-        """Next complete text message. Control frames handled inline."""
-        data = b""
-        is_text = False
-        while True:
-            fin, opcode, payload = self._read_frame()
-            if opcode == 0x8:
-                raise ConnectionError("server sent close")
-            if opcode == 0x9:
-                self._send(0xA, payload)
-                continue
-            if opcode == 0xA:
-                continue
-            if opcode in (0x1, 0x2):
-                is_text, data = opcode == 0x1, payload
-            elif opcode == 0x0:
-                data += payload
-            if fin:
-                if is_text:
-                    return data.decode("utf-8", "replace")
-                data, is_text = b"", False
+    def recv(self):
+        """Consume exactly one frame; return a complete text message or None.
+
+        Returning None for a control frame rather than looping for the next
+        frame is load-bearing. Lemonade is idle for hours at a time, so after
+        it answers our keepalive ping there may be no further frame at all —
+        looping here would block until the read timeout and tear down a
+        healthy connection, which is exactly how this reconnected every 180s
+        (120s ping idle + 60s timeout) until it was fixed.
+        """
+        fin, opcode, payload = self._read_frame()
+        if opcode == 0x8:
+            raise ConnectionError("server sent close")
+        if opcode == 0x9:
+            self._send(0xA, payload)
+            return None
+        if opcode == 0xA:
+            return None
+        if opcode in (0x1, 0x2):
+            self._frag_is_text = opcode == 0x1
+            self._frag = payload
+        elif opcode == 0x0:
+            self._frag += payload
+        if not fin:
+            return None  # more fragments; the caller re-enters via self.buf
+        data, is_text = self._frag, self._frag_is_text
+        self._frag, self._frag_is_text = b"", False
+        return data.decode("utf-8", "replace") if is_text else None
 
 
 def read_cursor():
@@ -265,8 +276,11 @@ def session():
         # backfill drains in a tight loop instead of 2s per chunk.
         timeout = 0 if len(pending) >= BATCH else FLUSH_S
         if ws.buf or select.select([ws.sock], [], [], timeout)[0]:
-            message = json.loads(ws.recv_text())
+            raw = ws.recv()
+            # Any frame at all — pong included — proves the peer is alive,
+            # so the ping timer resets here rather than only on a message.
             last_rx = time.monotonic()
+            message = json.loads(raw) if raw is not None else {}
             kind = message.get("type")
             if kind == "logs.snapshot":
                 entries = message.get("entries") or []
