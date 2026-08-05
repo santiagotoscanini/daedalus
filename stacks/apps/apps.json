@@ -104,7 +104,7 @@
       "storage": false,
       "litellm": true,
       "prometheus": false,
-      "operatorSecrets": false,
+      "operatorSecrets": true,
       "image": null,
       "hostname": null,
       "egress": null,
