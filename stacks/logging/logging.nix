@@ -84,7 +84,9 @@ let
     //   - unit       → systemd unit (e.g. podman-jellyfin.service)
     //   - container  → podman container name (set by --log-driver=journald)
     //   - host       → hostname
-    //   - level      → priority keyword (info|warning|err|...)
+    //   - level      → severity. Journal priority for native services,
+    //                  parsed from the line for containers (see the
+    //                  level block below — podman's priority is a lie).
     //   - stack      → from fleet.logStacks; falls back to the
     //                  container name itself (see below). Kernel lines
     //                  have no unit or container, so they get
@@ -119,9 +121,23 @@ let
         source_labels = ["__journal_container_name"]
         target_label  = "container"
       }
+      // ===== level, for NATIVE services only =====
+      // A systemd service that logs through the journal chooses its own
+      // priority per line, so the keyword means what it says. A CONTAINER
+      // does not: podman's journald driver stamps priority 6 on stdout
+      // and priority 3 on stderr unconditionally, so every image that
+      // logs to stderr — factorio, seerr, healthchecks, plane, pg — had
+      // its entire output labelled `error`. The joined-labels regex fires
+      // only when the container name is empty (relabel regexes are fully
+      // anchored, so a non-empty name cannot match a pattern starting
+      // with the separator). Container lines get their level from
+      // loki.process.levels instead.
       rule {
-        source_labels = ["__journal_priority_keyword"]
+        source_labels = ["__journal_container_name", "__journal_priority_keyword"]
+        separator     = ";"
+        regex         = ";(.+)"
         target_label  = "level"
+        replacement   = "$1"
       }
 
       // ===== stack label =====
@@ -225,7 +241,7 @@ let
     //     timestamp), so dropping indented lines removes the flood and
     //     leaves the col-0 "unhandledRejection" header as a marker.
     loki.process "drop_noise" {
-      forward_to = [loki.write.default.receiver]
+      forward_to = [loki.process.levels.receiver]
 
       stage.match {
         selector = "{container=\"scraparr\"}"
@@ -240,6 +256,64 @@ let
         stage.drop {
           expression          = "^\\s+"
           drop_counter_reason = "seerr_unhandled_dump"
+        }
+      }
+    }
+
+    // ===== level, for CONTAINER lines =====
+    // Podman's journald log driver decides priority from the file
+    // DESCRIPTOR, not from the line: stdout is 6, stderr is 3, always. A
+    // dozen images here log everything to stderr, so the priority-derived
+    // label declared their entire output `error` — an "errors in the last
+    // hour" count that was really a "wrote to fd 2" count, and a log panel
+    // that was solid red while nothing was wrong.
+    //
+    // So the level is read out of the line instead, where the program
+    // actually stated it. The first severity word in the opening ~120
+    // characters wins, which is where every convention on this box puts it
+    // — `level=warn` (logfmt), `"level":"debug"` (json), `INFO` at column
+    // zero, and factorio's `Server: 0.966 Info File.cpp:245:`. It must be
+    // a whole word bounded by punctuation or space, so `error` inside
+    // `error_reporting` or a path does not count.
+    //
+    // A line stating no severity is `unknown`, NOT `info`: this pipeline
+    // does not get to invent a claim the program declined to make. Loki's
+    // own discover_log_levels reaches the same answers, but only for
+    // streams carrying no level label at all — it trusts ours when we set
+    // one, which is exactly how a wrong label survived to the panel.
+    loki.process "levels" {
+      forward_to = [loki.write.default.receiver]
+
+      stage.match {
+        selector = "{container=~\".+\"}"
+
+        // The floor. Whatever the relabel step believed is discarded here
+        // before anything is parsed, so an unmatched line cannot inherit
+        // the stderr verdict.
+        stage.static_labels {
+          values = {
+            level = "unknown",
+          }
+        }
+
+        stage.regex {
+          expression = "(?i)^.{0,120}?(?:^|[\\s\\[\\(\"'|=:,])(?P<lvl>emergency|emerg|alert|critical|crit|fatal|error|err|warning|warn|notice|info|debug|trace)(?:[\\s\\]\\)\"':|,.-]|$)"
+        }
+
+        // One template rather than a chain: lowercase, fold the synonyms
+        // onto the journald keywords the dashboards already query
+        // (error/warning/crit/emerg), and turn a miss into `unknown` —
+        // the stage runs even when the regex captured nothing, and an
+        // empty label would sort as neither present nor absent.
+        stage.template {
+          source   = "lvl"
+          template = "{{ $l := ToLower .Value }}{{ if eq $l \"\" }}unknown{{ else if or (eq $l \"err\") (eq $l \"error\") }}error{{ else if or (eq $l \"warn\") (eq $l \"warning\") }}warning{{ else if or (eq $l \"fatal\") (eq $l \"critical\") (eq $l \"crit\") }}crit{{ else if or (eq $l \"emerg\") (eq $l \"emergency\") }}emerg{{ else if eq $l \"trace\" }}debug{{ else }}{{ $l }}{{ end }}"
+        }
+
+        stage.labels {
+          values = {
+            level = "lvl",
+          }
         }
       }
     }
