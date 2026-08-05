@@ -5004,19 +5004,21 @@ h2 {
 
 /* The boundary between a page's shared half and its per-subject half: what is
    selected on the left, the switch that selects it on the right. Reads as a
-   divider rather than a panel, because everything below it is scoped by it. */
+   divider rather than a panel, because everything below it is scoped by it.
+   Given real room on both sides — it sits between the category tabs above and
+   a service header below, and pressed against either it reads as part of it. */
 .tunnel-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  margin: 1.4rem 0 0.2rem;
-  padding-bottom: 0.55rem;
+  margin: 1.75rem 0 1.5rem;
+  padding-bottom: 0.9rem;
   border-bottom: 1px solid var(--border);
 }
-/* With nothing on the left — the inbound switch carries its own labels — a
-   space-between row would park the lone child at the start. */
+/* The switch is always on the right, whether or not anything sits to its left
+   — `margin-left: auto` on the last child does both cases, where
+   space-between would park a lone child at the start. */
 .tunnel-bar > :last-child {
   margin-left: auto;
 }

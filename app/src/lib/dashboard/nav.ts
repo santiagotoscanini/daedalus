@@ -54,6 +54,18 @@ export type CategorySpec = {
      * placeholder appearing for a directory the tab does not have.
      */
     tileGroups?: number
+    /**
+     * A COMPUTED status, for a tab gatus cannot probe.
+     *
+     * `probe` covers anything that answers HTTP. A VPN egress tunnel answers
+     * nothing — it is a network namespace — so its health has to be assembled
+     * from what prometheus knows about it, and from the registry that says how
+     * many tunnels there should be. A symbol rather than a query string
+     * because that assembly needs the registry, which lives on the server;
+     * this file is imported into the browser bundle for five labels and must
+     * stay data.
+     */
+    health?: 'vpn-egress'
   }[]
   /**
    * Column spans of this page's boards, for the skeleton that stands in while
@@ -165,9 +177,17 @@ export const CATEGORIES: CategorySpec[] = [
       // itself — chosen by a switch inside the page. The probe is wg-easy's
       // because it is the only one of the three gatus can check.
       { id: 'wireguard', label: 'Coming in', probe: 'wg-easy', boardSpans: [8, 4, 12], statBand: false, tileGroups: 0 },
-      // No probe: gatus checks HTTP endpoints, and a VPN egress tunnel
-      // publishes none. Its liveness is on the page instead, per tunnel.
-      { id: 'outbound', label: 'Going out', boardSpans: [8, 4, 12], statBand: false, tileGroups: 0 },
+      // No gatus probe: it checks HTTP endpoints, and a VPN egress tunnel
+      // answers nothing — it is a network namespace. Its dot is computed from
+      // every declared tunnel's state and its containers instead.
+      {
+        id: 'outbound',
+        label: 'Going out',
+        health: 'vpn-egress',
+        boardSpans: [8, 4, 12],
+        statBand: false,
+        tileGroups: 0,
+      },
     ],
   },
   {

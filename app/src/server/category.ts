@@ -108,7 +108,12 @@ export const fetchTabStatus = createServerFn()
     if (spec === undefined) return {}
 
     const { promVector } = await import('../lib/dashboard/clients')
-    const probes = await promVector('gatus_results_endpoint_success')
+    const [probes, egress] = await Promise.all([
+      promVector('gatus_results_endpoint_success'),
+      // Only when a tab actually asks for it — this is two more prometheus
+      // queries and every category pays for this handler.
+      spec.tabs.some((t) => t.health === 'vpn-egress') ? vpnEgressHealth() : Promise.resolve(null),
+    ])
     // The `name` label, not `key` — `key` is `<group>_<name>`, so reading it
     // means knowing which group an endpoint was declared in. gatus probes the
     // published web apps AND a couple of off-box services (Lemonade), and a
@@ -116,9 +121,51 @@ export const fetchTabStatus = createServerFn()
     const health = new Map(probes.map((p) => [p.metric.name ?? '', p.value[1] === '1']))
 
     return Object.fromEntries(
-      spec.tabs.map((t) => [t.id, t.probe === undefined ? null : (health.get(t.probe) ?? null)]),
+      spec.tabs.map((t) => [
+        t.id,
+        t.health === 'vpn-egress' ? egress
+        : t.probe === undefined ? null
+        : (health.get(t.probe) ?? null),
+      ]),
     )
   })
+
+/**
+ * Are all the VPN egress tunnels working.
+ *
+ * Three conditions, and all three are needed: every declared tunnel reports
+ * itself connected, every gluetun container is up, and so is every exporter —
+ * which is the thing the first condition is READ from, so an exporter that
+ * has died leaves `gluetun_vpn_status` frozen at whatever it last said. A
+ * green dot resting on a stale metric is worse than a grey one.
+ *
+ * The container names come from `fleet.vpnEgress` rather than a name pattern,
+ * so a third tunnel called something else still counts. Null when the registry
+ * is unreadable or prometheus has no answer — "cannot tell", not "down".
+ */
+async function vpnEgressHealth(): Promise<boolean | null> {
+  const { promScalar } = await import('../lib/dashboard/clients')
+
+  let declared: { container: string; exporter: string }[] = []
+  try {
+    declared = JSON.parse(process.env.VPN_EGRESS ?? '[]') as typeof declared
+  } catch {
+    return null
+  }
+  if (declared.length === 0) return null
+
+  const names = declared.flatMap((d) => [d.container, d.exporter])
+  const [tunnels, containers] = await Promise.all([
+    // `min` over the set, and `count` beside it: min alone would report
+    // healthy if prometheus had lost a tunnel's series entirely.
+    promScalar(`min(gluetun_vpn_status)`),
+    promScalar(`min(container_up{name=~"${names.join('|')}"})`),
+  ])
+  const seen = await promScalar(`count(gluetun_vpn_status)`)
+
+  if (tunnels === null || containers === null || seen === null) return null
+  return tunnels === 1 && containers === 1 && seen >= declared.length
+}
 
 export const fetchCategoryTiles = createServerFn()
   .inputValidator((input: { category: CategoryName; tab: string }) => input)
