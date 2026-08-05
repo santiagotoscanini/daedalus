@@ -206,14 +206,6 @@ type OpenWebUiData = {
   generating: number | null
   reach: Reach[]
   counts: { models: number; tools: number; knowledge: number }
-  /**
-   * The accounts, and the one number among them that is a to-do: signups land
-   * as `pending` and stay there until an admin promotes them, with no notice
-   * anywhere that it happened.
-   */
-  people: { total: number; pending: number; admins: number; lastSeen: string }
-  /** How sign-in is configured — the answer to "why is there no login box". */
-  auth: { oidc: string | null; autoRedirect: boolean; loginForm: boolean; signup: boolean }
   /** Set when the admin API refused — everything below it is then empty. */
   note: string | null
 }
@@ -1007,27 +999,27 @@ function rank(
  * chart of the same fact with less in it.
  *
  * What is worth reading off a running instance is everything a restart could
- * silently take away — the models the picker offers, the tool servers that
- * registered, the knowledge bases that hold anything — plus the one account
- * fact nothing else on this box will tell you: somebody signed in and is
- * sitting in `pending`, waiting to be let in.
+ * silently take away: the models the picker offers, the tool servers that
+ * registered, the knowledge bases that hold anything.
+ *
+ * Nor does it report how sign-in is configured. That was four facts —
+ * identity provider, login form off, sign-up closed — every one of them
+ * declared in stacks/open-webui and none of them able to say anything the file
+ * does not. `/api/config` and `/api/v1/users/` are not fetched at all now,
+ * which is the point: a panel nobody reads still costs two requests on every
+ * page load.
  */
 async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
   const auth = { headers: { Authorization: `Bearer ${key('OPENWEBUI_KEY')}` } }
 
-  const [usage, ver, config, models, users, knowledge, tools] = await Promise.all([
+  const [usage, ver, models, knowledge, tools] = await Promise.all([
     getJson<{ model_ids?: string[] }>(`${base}/api/usage`, auth),
     // The one service here that checks its own updates, which is why it is
     // kept alongside the release gap rather than replaced by it: two
     // independent answers to "is this current", and them disagreeing is
     // itself worth seeing.
     getJson<{ current?: string; latest?: string }>(`${base}/api/version/updates`, auth),
-    getJson<{
-      oauth?: { providers?: Record<string, string>; auto_redirect?: boolean }
-      features?: { enable_login_form?: boolean; enable_signup?: boolean }
-    }>(`${base}/api/config`, auth),
     getJson<{ data?: { id?: string; name?: string }[] }>(`${base}/api/models`, auth),
-    getJson<{ users?: { role?: string; last_active_at?: number }[] }>(`${base}/api/v1/users/`, auth),
     getJson<{ items?: { name?: string; file_count?: number }[] }>(`${base}/api/v1/knowledge/`, auth),
     getJson<{ name?: string; meta?: { description?: string } }[]>(`${base}/api/v1/tools/`, auth),
   ])
@@ -1036,7 +1028,6 @@ async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
   const modelList = models?.data ?? []
   const toolList = tools ?? []
   const kbList = knowledge?.items ?? []
-  const userList = users?.users ?? []
 
   // Models first, then tools, then knowledge: the order a request uses them.
   const reach: Reach[] = [
@@ -1065,11 +1056,6 @@ async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
     }),
   ]
 
-  const seen = userList
-    .map((u) => u.last_active_at ?? 0)
-    .filter((t) => t > 0)
-    .sort((a, b) => b - a)[0]
-
   return {
     version,
     gap: await versionGap('open-webui/open-webui', version),
@@ -1077,23 +1063,12 @@ async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
     generating: usage?.model_ids?.length ?? null,
     reach,
     counts: { models: modelList.length, tools: toolList.length, knowledge: kbList.length },
-    people: {
-      total: userList.length,
-      pending: userList.filter((u) => u.role === 'pending').length,
-      admins: userList.filter((u) => u.role === 'admin').length,
-      lastSeen: seen === undefined ? DASH : since(Date.now() / 1000 - seen),
-    },
-    auth: {
-      oidc: config?.oauth?.providers?.oidc ?? null,
-      autoRedirect: config?.oauth?.auto_redirect === true,
-      loginForm: config?.features?.enable_login_form === true,
-      signup: config?.features?.enable_signup === true,
-    },
     // The admin endpoints share one key, so one refusal is the key rather than
-    // the endpoint. /api/config answers without one, which is why it is not
-    // the thing tested here.
+    // the endpoint. Tested on tools rather than models: /api/models answers
+    // for any authenticated caller, so it cannot tell an admin key from a
+    // useless one.
     note:
-      users === null || tools === null ?
+      tools === null ?
         'Open WebUI refused the admin API. It needs a key from Account → API Keys, in ' +
         'stacks/daedalus/service-keys.sops as OPENWEBUI_KEY.'
       : null,
