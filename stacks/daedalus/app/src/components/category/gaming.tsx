@@ -8,6 +8,13 @@ import type { GamingData } from '../../server/category'
 // that actually breaks things here: a client on a different build cannot join
 // at all, so "am I current" is the question, and "is it up" is the easy part
 // the status dot already answers.
+//
+// ── one fact, one place ───────────────────────────────────────────────────
+//
+// The headline band owns the version numbers. Nothing below repeats them:
+// the panels answer different questions — how do I reach it, what changed,
+// what is it saying — and a number that appears twice is a number that can
+// disagree with itself.
 
 export function GamingView({ data }: { data: GamingData }) {
   if (data.tab === 'minecraft') return <MinecraftView />
@@ -72,6 +79,8 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
         <Chip tone={current ? 'ok' : 'warn'}>{current ? 'current' : 'update available'}</Chip>
       </div>
 
+      {/* The band owns the numbers. Every panel below answers a different
+          question and repeats none of them. */}
       <StatBand>
         <BigStat
           label="Server"
@@ -92,7 +101,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           label="Running"
           value={text(factorio.installed)}
           tone="accent"
-          sub="downloaded fresh on every start"
+          sub="re-downloaded on every start"
         />
         <BigStat
           label="Stable"
@@ -104,86 +113,58 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           label="Experimental"
           value={text(factorio.experimental)}
           tone="muted"
-          sub="not tracked here"
+          sub="this server tracks stable"
         />
       </StatBand>
 
       <BoardGrid>
-        <Board
-          title="Factorio server"
-          icon="⚙"
-          span={6}
-          aside={
-            <Chip tone={current ? 'ok' : 'warn'}>{current ? 'current' : 'update available'}</Chip>
-          }
-        >
+        <Board title="Reaching it" icon="⚙" span={4}>
           <Facts
             rows={[
-              { k: 'Running', v: <span className="mono">{text(factorio.installed)}</span> },
-              { k: 'Latest stable', v: <span className="mono">{text(factorio.stable)}</span> },
-              { k: 'Experimental', v: <span className="mono">{text(factorio.experimental)}</span> },
-              { k: 'Connect', v: <span className="mono">{factorio.connect}</span> },
+              { k: 'Players connect to', v: <span className="mono">{factorio.connect}</span> },
               { k: 'Protocol', v: `UDP ${String(factorio.port)}` },
+              { k: 'Admin UI', v: 'LAN only, behind the Pocket ID gate' },
+              { k: 'Manager', v: 'ofsm — saves, mods, RCON' },
             ]}
           />
-          {/* The one port the router forwards for this box besides WireGuard,
-              and the reason it is acceptable is that it is UDP to a game
-              server rather than a TCP service with an admin surface. */}
+          {/* The one TCP-less exception in the router's forward list, and the
+              reason it is acceptable: a game protocol, not an admin surface. */}
           <p className="board-foot">
-            The game speaks its own UDP protocol and never touches traefik — the router forwards{' '}
-            {factorio.port} straight through. The admin UI is the opposite: LAN-only, behind the
-            proxy, not exposed at all.
+            The game never touches traefik — the router forwards {factorio.port} straight through.
+            The admin UI is the opposite: LAN-only, proxied, gated.
           </p>
         </Board>
 
         <Board
-          title={current ? 'Nothing to apply' : `${String(behind)} release${behind === 1 ? '' : 's'} behind`}
-          icon="⇩"
-          span={6}
-        >
-          {current ?
-            <p className="viz-empty">
-              Running the current stable build. Clients on stable can join.
-            </p>
-          : <>
-              <ol className="relchain">
-                {factorio.behind.map((v, i) => (
-                  <li key={v} className={i === factorio.behind.length - 1 ? 'relchain-last' : ''}>
-                    <span className="mono">{v}</span>
-                  </li>
-                ))}
-              </ol>
-              {/* Named as the file and the line, because that is the whole of
-                  the change — ofsm re-downloads on the next container start. */}
-              <p className="board-foot">
-                Updating is one string: <code>factorioVersion</code> in{' '}
-                <code>stacks/factorio/factorio.nix</code>, then a rebuild. The container downloads
-                the new binary the next time it starts.
-              </p>
-            </>
-          }
-        </Board>
-
-        <Board
-          title={current ? 'What this build shipped' : 'What you would get'}
+          title={current ? 'Release notes' : `${String(behind)} to apply`}
           icon="≡"
-          span={12}
+          span={8}
           aside={<span className="board-note">wiki.factorio.com</span>}
         >
+          {/* The chain lives here rather than in a panel of its own: when
+              nothing is pending that panel was an empty box next to a full
+              one, which is where the ragged column came from. */}
+          {!current && (
+            <ol className="relchain">
+              {factorio.behind.map((v, i) => (
+                <li key={v} className={i === factorio.behind.length - 1 ? 'relchain-last' : ''}>
+                  <span className="mono">{v}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+
           {data.changelog.length === 0 ?
             <p className="viz-empty">no release notes for this version</p>
           : <div className="changelog">
               {data.changelog.map((rel, i) => (
-                // Collapsed by default, except the newest when there is
-                // something to apply: that one is the whole reason you opened
-                // the page, and a panel of shut drawers answers nothing.
+                // Collapsed, except the newest when there is something to
+                // apply: that one is the reason you opened the page.
                 <details key={rel.version} open={!current && i === 0} className="rel">
                   <summary>
                     <span className="rel-version mono">{rel.version}</span>
                     <span className="rel-date">{rel.date}</span>
-                    <span className="rel-count">
-                      {rel.sections.map((s) => s.name).join(' · ')}
-                    </span>
+                    <span className="rel-count">{rel.sections.map((s) => s.name).join(' · ')}</span>
                   </summary>
                   <div className="rel-body">
                     {rel.sections.map((s) => (
@@ -207,12 +188,38 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
               ))}
             </div>
           }
-          {/* The wiki is the only per-release changelog Wube publishes in a
-              form anything can read — MediaWiki hands over the page source, so
-              this parses a stable grammar rather than scraping the layout. */}
           <p className="board-foot">
-            Parsed from the wiki&rsquo;s own page source. Long sections are shortened here; the
-            link goes to the full page.
+            {current ?
+              'What the running build shipped. '
+            : 'Everything between the running build and stable. '}
+            Parsed from the wiki’s page source; the link opens the full section.
+          </p>
+        </Board>
+
+        {/* Grafana itself rather than a log viewer of our own — see the note
+            below and stacks/monitoring, which already allows this exact
+            frame-ancestor. */}
+        <Board
+          title="Logs"
+          icon="≡"
+          span={12}
+          aside={
+            <a
+              className="board-note"
+              href={LOGS_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              open in Grafana ↗
+            </a>
+          }
+        >
+          <iframe className="embed embed-logs" src={`${LOGS_URL}&kiosk`} title="Factorio logs" />
+          <p className="board-foot">
+            The real Logs Drilldown, framed. Search, filtering and live tail are Grafana’s, not a
+            reimplementation — this box already grants it the frame. If it shows a login screen,
+            open Grafana once in a tab: the frame needs a session it cannot obtain inside itself,
+            because the IdP refuses to be framed.
           </p>
         </Board>
 
@@ -238,9 +245,6 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
               ))}
             </ul>
           }
-          {/* Wube publishes no machine-readable per-release changelog; the
-              release POSTS in this feed are the closest thing, which is why
-              they are tagged rather than mixed in with the Friday Facts. */}
           <p className="board-foot">
             Release posts are the changelog — there is no structured one. Friday Facts are what is
             coming rather than what shipped.
@@ -251,14 +255,17 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
   )
 }
 
+/** Loki Drilldown, filtered to the one container. */
+const LOGS_URL =
+  'https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore' +
+  '?from=now-6h&to=now&var-ds=loki-default&var-filters=container%7C%3D%7Cfactorio'
+
 /**
  * Where a release actually lives on the wiki.
  *
  * There is no page per release. `Version_history/2.1.12` is a red link —
  * every 2.1.x lives as a SECTION of `Version_history/2.1.0`, and the version
  * number is the heading, so the anchor is what lands you on the right one.
- * Without the fragment this opened the top of a page holding a hundred
- * releases, which is technically the right document and no use at all.
  */
 function wikiUrl(version: string): string {
   const [maj, min] = version.split('.')
