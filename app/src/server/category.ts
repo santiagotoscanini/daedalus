@@ -147,7 +147,7 @@ async function loadCategory(
     }
     case 'gaming': {
       const { loadGaming } = await import('../lib/dashboard/categories/gaming')
-      return { kind: 'gaming', data: await loadGaming(tab) }
+      return { kind: 'gaming', data: await loadGaming(tab, ctx) }
     }
   }
 }

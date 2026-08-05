@@ -46,6 +46,8 @@ type FactorioData = {
     port: number
     /** Whether the admin UI is answering, from gatus. */
     adminUp: boolean | null
+    /** Where the manager lives. LAN only — deliberately not forwarded. */
+    adminUrl: string
   }
   /** The devs' feed — release posts and Friday Facts, newest first. */
   news: { title: string; url: string; date: string; kind: 'release' | 'fff' | 'post' }[]
@@ -75,14 +77,17 @@ const CHANGELOG_MAX_ITEMS = 10
 
 const PORT = 34197
 
-export async function loadGaming(tab: string): Promise<GamingData> {
+export async function loadGaming(
+  tab: string,
+  ctx: { base: (app: string) => string },
+): Promise<GamingData> {
   // Nothing is deployed yet, so there is nothing to read — and a placeholder
   // that made a request anyway would be pretending.
   if (tab === "minecraft") return { tab: "minecraft" }
-  return { tab: "factorio", ...(await loadFactorio()) }
+  return { tab: "factorio", ...(await loadFactorio(ctx)) }
 }
 
-async function loadFactorio(): Promise<FactorioData> {
+async function loadFactorio(ctx: { base: (app: string) => string }): Promise<FactorioData> {
   const installed = process.env.FACTORIO_VERSION ?? null
 
   const [releases, graph, feed, adminUp] = await Promise.all([
@@ -118,6 +123,7 @@ async function loadFactorio(): Promise<FactorioData> {
       connect: `s2.toscanini.me:${String(PORT)}`,
       port: PORT,
       adminUp: adminUp === null ? null : adminUp === 1,
+      adminUrl: ctx.base("factorio-admin"),
     },
     news: feed,
     changelog,

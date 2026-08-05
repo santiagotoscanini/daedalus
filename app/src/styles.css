@@ -3313,6 +3313,43 @@ h2 {
   white-space: nowrap;
 }
 
+/* A call to action that reads as one. The tiles below are links styled as
+   cards; this is the opposite — a card styled as a button, for the single
+   place on a page where there is an obvious next move. */
+.cta {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 0.6rem;
+  margin-top: 0.8rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 9px;
+  text-decoration: none;
+  color: inherit;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 16%, var(--panel-2)), var(--panel-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+.cta:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.cta-main {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.cta-sub {
+  grid-column: 1;
+  font-size: 0.68rem;
+  color: var(--dim);
+}
+.cta-arrow {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
 /* An embedded Grafana panel. Sized rather than aspect-ratioed: a log view
    wants a fixed number of visible lines, not a shape. */
 .embed {
@@ -3323,7 +3360,7 @@ h2 {
   background: var(--bg);
 }
 .embed-logs {
-  height: 26rem;
+  height: 22rem;
 }
  (max-width: 50rem) {
   .embed-logs {
