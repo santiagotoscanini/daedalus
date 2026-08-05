@@ -45,12 +45,39 @@
 # log "New connection from: 192.168.0.2", so a crash-looping bridge would
 # feed its own input; the backoff caps that at one line per 5 minutes.
 
-{ pkgs, mkRootlessContainer, ... }:
+{ config, pkgs, mkRootlessContainer, ... }:
 
 {
   # Loki publishes no host port (unauthenticated by design), so the only
   # way to reach it is the bridge it lives on.
   fleet.bridgeMemberships.lemonade-logs = [ "monitoring" ];
+
+  # ── metrics, which need no bridge at all ────────────────────────────────
+  #
+  # Lemonade serves a full Prometheus endpoint — per-model throughput, time
+  # to first token, cumulative token counters, llama.cpp slot occupancy —
+  # and nothing was reading it. Its own /api/v1/stats reports only the LAST
+  # generation, so without this the only answer to "is it getting slower"
+  # was whatever number happened to be on screen.
+  #
+  # The scrape lives in this stack because this stack is the box's whole
+  # integration surface for Lemonade: it is the one place that knows the
+  # remote server exists. Prometheus dials the LAN address directly (the
+  # same one the bridge above uses) rather than through any bridge — there
+  # is no container here to reach by DNS, the server is on another machine.
+  fleet.prometheusScrapes = [
+    {
+      job_name = "lemonade";
+      # Slower than the 15s default and deliberately so: every field here is
+      # a gauge the server updates when a request finishes, not something
+      # sampled, and the box is idle most of the day. A tighter interval
+      # would multiply the series count without adding a single event.
+      scrape_interval = "60s";
+      static_configs = [
+        { targets = [ "gaming-pc.local.${config.fleet.baseDomain}:13305" ]; }
+      ];
+    }
+  ];
 
   # Resume cursor. Without it a restart re-subscribes with after_seq=null
   # and replays Lemonade's entire 5000-entry ring into Loki.

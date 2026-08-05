@@ -53,7 +53,7 @@ let
   # set. oidc-gated apps declare `healthPath` (bypassed from the auth
   # middleware) so the probe reaches the real upstream — a bare "/"
   # would be 302'd to Pocket ID and certify the IdP instead.
-  endpoints = lib.mapAttrsToList (
+  webAppEndpoints = lib.mapAttrsToList (
     name: w:
     {
       inherit name;
@@ -67,6 +67,35 @@ let
     }
     // lib.optionalAttrs (w.healthHeaders != { }) { headers = w.healthHeaders; }
   ) config.fleet.webApps;
+
+  # Services this box DEPENDS on that are not published by it, so there is no
+  # webApps entry to derive a probe from. Hand-written, and short on purpose:
+  # the generated list above is the rule and this is the documented exception.
+  #
+  # No CERTIFICATE_EXPIRATION condition — these are plain HTTP on the LAN, and
+  # gatus reports a failed condition rather than skipping an inapplicable one.
+  offBoxEndpoints = [
+    {
+      # The model server on the gaming PC (/etc/nixos/lemonade.md). Every AI
+      # workload on this box terminates here, and until now nothing watched
+      # it: LiteLLM stays green while returning errors, so a Lemonade outage
+      # surfaced as "the chat is broken" rather than as an alert. Feeds the
+      # same gatus_results_endpoint_success rule as everything else, and the
+      # dot on daedalus's AI → Lemonade tab.
+      name = "lemonade";
+      group = "off-box";
+      url = "http://gaming-pc.local.${config.fleet.baseDomain}:13305/api/v1/health";
+      interval = "60s";
+      conditions = [
+        "[STATUS] == 200"
+        # Not just "it answered": the health document reports per-model backend
+        # state, and a server whose backends have all died still returns 200.
+        "[BODY].status == ok"
+      ];
+    }
+  ];
+
+  endpoints = webAppEndpoints ++ offBoxEndpoints;
 
   # gatus reads YAML; JSON is a valid subset, so toJSON avoids quoting pain.
   gatusConfig = pkgs.writeText "gatus.yaml" (
