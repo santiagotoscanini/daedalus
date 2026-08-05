@@ -13,7 +13,7 @@ import {
   Pulse,
   StatBand,
 } from '../viz'
-import { GrafanaLogs } from '../logs'
+import { GrafanaLogs, LogDetails } from '../logs'
 import { ReleaseNotes, UpgradeChain } from '../release-notes'
 import { LinkRow, ServiceHead, type CompareRow } from '../service-head'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
@@ -241,21 +241,19 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
           {/* The bridge is diagnostics for the panel above, not a service
               anybody watches. Collapsed, so it is one click away on the day the
               logs above stop arriving and invisible on every other day. */}
-          <details className="sublog">
-            <summary>Bridge logs — the process shipping the above</summary>
-            <GrafanaLogs
-              source={{ container: 'lemonade-logs' }}
-              title="Lemonade log bridge"
-              foot={
-                <p className="board-foot">
-                  Deliberately a separate stream: this is the bridge’s own reconnects and gap
-                  warnings, and mixing them into Lemonade’s log would make the model server look
-                  like it was reporting network trouble it knows nothing about. Look here when the
-                  panel above goes quiet.
-                </p>
-              }
-            />
-          </details>
+          <LogDetails
+            summary="Bridge logs — the process shipping the above"
+            source={{ container: 'lemonade-logs' }}
+            title="Lemonade log bridge"
+            foot={
+              <p className="board-foot">
+                Deliberately a separate stream: this is the bridge’s own reconnects and gap
+                warnings, and mixing them into Lemonade’s log would make the model server look like
+                it was reporting network trouble it knows nothing about. Look here when the panel
+                above goes quiet.
+              </p>
+            }
+          />
         </Board>
       </BoardGrid>
     </>
@@ -792,11 +790,56 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
 
         <Board title="Logs" icon="≡" span={12}>
           <GrafanaLogs source={{ container: 'litellm' }} title="LiteLLM logs" />
+
+          {/* The three containers the gateway dials that are not Lemonade.
+              None of them has a tab, none of them is worth a panel of its own,
+              and every one of them is a plausible answer to "the gateway
+              returned an error and its own log only says the upstream did".
+              Folded, in the order a request would reach them. */}
+          {NEIGHBOURS.map((n) => (
+            <LogDetails
+              key={n.container}
+              summary={`${n.label} — ${n.role}`}
+              source={{ container: n.container }}
+              title={`${n.label} logs`}
+              foot={<p className="board-foot">{n.note}</p>}
+            />
+          ))}
         </Board>
       </BoardGrid>
     </>
   )
 }
+
+/**
+ * What sits behind the gateway besides the model server.
+ *
+ * These are the containers LiteLLM proxies TO — a web search tool, a tool
+ * server, a vector store — so a failure in any of them surfaces to a caller as
+ * a LiteLLM error, and LiteLLM's own log will only say that its upstream
+ * refused. Listed here rather than inline because the set is a fact about the
+ * stack, and it is the thing to extend when a fourth one is added.
+ */
+const NEIGHBOURS = [
+  {
+    container: 'searxng',
+    label: 'SearXNG',
+    role: 'the web search the gateway offers',
+    note: 'Registered as the `searxng` search tool, so a model asking to search the web is asking this. It answers on the shared websearch bridge and never talks to a caller directly.',
+  },
+  {
+    container: 'mcp-grocy',
+    label: 'Grocy MCP',
+    role: 'the local tool server it proxies',
+    note: 'The one MCP server that runs on this box — TickTick is remote and logs nothing here. Every call counted in “tools models called” above passed through this container.',
+  },
+  {
+    container: 'litellm-pgvector',
+    label: 'pgvector connector',
+    role: 'the RAG store behind /vector_store',
+    note: 'Fronts pgvector in the shared pg cluster for LiteLLM’s vector-store API. Ingest failures land here rather than in the gateway’s log, which only sees the connector’s answer.',
+  },
+] as const
 
 /** `29 req · 28k tok`, or an em dash for a day the gateway served nothing. */
 function volume(v: { requests: number; tokens: number } | null): string {

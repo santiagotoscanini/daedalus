@@ -4301,6 +4301,12 @@ h2 {
 .sublog > summary:hover {
   color: var(--accent);
 }
+/* Stacked, they are a list of sibling streams rather than a series of
+   afterthoughts — the rule between them is enough separation, and a second
+   1rem gap on each would push the last one off the fold for nothing. */
+.sublog + .sublog {
+  margin-top: 0;
+}
 /* The frame inside is laid out by the same rules as the one above it, so it
    only needs the breathing room the summary does not provide. */
 .sublog > .logs-bar {

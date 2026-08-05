@@ -223,6 +223,56 @@ function LogFrame({ src, title, settle }: { src: string; title: string; settle: 
   )
 }
 
+/**
+ * A second log stream, folded away until it is wanted.
+ *
+ * For the containers standing NEXT to a service — the bridge shipping its
+ * lines, the tool servers its gateway proxies. They belong on the page (the day
+ * the main panel goes quiet, one of these is why) and they do not belong open
+ * (on every other day they are noise under the log you came for).
+ *
+ * ── why the frame is mounted on open rather than hidden ───────────────────
+ *
+ * Because a `<details>` that is closed is `display: none`, and an iframe with
+ * no box is an iframe Grafana lays out at 0x0. Rendering it up-front meant the
+ * panel booted, queried and drew itself against nothing, and the cover in
+ * `LogFrame` — which is timed from `load` — was long spent by the time you
+ * opened the thing. So you got Grafana's whole boot sequence, uncovered, in the
+ * one place that had gone to the trouble of hiding it. Mounting on first open
+ * starts that cycle with the box at its real size, which is all `LogFrame`
+ * needed to work here the way it works everywhere else.
+ *
+ * A latch rather than the raw open state: once mounted it STAYS mounted through
+ * a close, so toggling twice does not re-run a Loki query that is already
+ * answered. Loki runs few queries at once here and these are the cheap panels
+ * on a page that has already asked it several questions.
+ */
+export function LogDetails({
+  summary,
+  source,
+  title,
+  foot,
+}: {
+  summary: ReactNode
+  source: LogSource
+  title: string
+  foot?: ReactNode
+}) {
+  const [seen, setSeen] = useState(false)
+
+  return (
+    <details
+      className="sublog"
+      onToggle={(e) => {
+        if (e.currentTarget.open) setSeen(true)
+      }}
+    >
+      <summary>{summary}</summary>
+      {seen && <GrafanaLogs source={source} title={title} foot={foot} />}
+    </details>
+  )
+}
+
 export function GrafanaLogs({
   source,
   title,
