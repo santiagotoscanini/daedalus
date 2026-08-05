@@ -3350,6 +3350,17 @@ h2 {
   color: var(--accent);
 }
 
+/* The caption under an embedded panel. Deliberately NOT `.board-foot`: that
+   one is capped at a prose measure, which is right under a paragraph and
+   wrong under a full-width frame, where it leaves the text hugging the left
+   edge of a very wide box. */
+.logs-foot {
+  margin: 0.4rem 0 0;
+  color: var(--dim);
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+
 /* The controls above an embedded panel: our own range picker, because
    d-solo deliberately ships without one. */
 .logs-bar {

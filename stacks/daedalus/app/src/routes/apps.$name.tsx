@@ -738,12 +738,10 @@ function AppDetail() {
           the frame does its own querying, so opening it costs one request to
           Grafana rather than a Loki round trip through here AND sixty log
           lines serialised into the page for hydration. */}
+      {/* No Panel around it: you are already on the Logs tab, so a box
+          captioned "Logs" inside it is a second label for the same thing. */}
       {tab === 'logs' && (
-        <Panel
-          title="Logs"
-        >
-          <GrafanaLogs container={`app-${app.name}`} title={`${app.name} logs`} />
-        </Panel>
+        <GrafanaLogs container={`app-${app.name}`} title={`${app.name} logs`} />
       )}
 
       <ApplyBar

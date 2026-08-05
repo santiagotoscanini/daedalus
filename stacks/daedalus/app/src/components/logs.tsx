@@ -114,7 +114,7 @@ export function GrafanaLogs({ container, title }: { container: string; title: st
         title={title}
         loading="lazy"
       />
-      <p className="board-foot">
+      <p className="logs-foot">
         Rendered by Grafana from <code>{container}</code>, newest first. The default is seven days
         because most services here are quiet between restarts — a short window shows nothing for a
         service that is perfectly healthy. If the frame shows a login screen, open Grafana once in
