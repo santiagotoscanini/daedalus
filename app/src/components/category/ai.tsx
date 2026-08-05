@@ -772,12 +772,25 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
 /**
  * A container standing next to the one this tab is about.
  *
- * Every service here talks to two or three others, and when one of those
- * breaks the symptom arrives as a failure in the service you were watching,
- * whose own log says only that its upstream refused. So each tab carries its
- * neighbours' logs, folded: on the day the main panel goes quiet or starts
- * erroring, the explanation is one click away instead of a Grafana search
- * away, and on every other day they are not in the way.
+ * When a service's upstream breaks, the symptom arrives as a failure in the
+ * service you were watching, whose own log says only that its upstream
+ * refused. So a tab can carry its neighbours' logs, folded: one click away on
+ * the day the main panel goes quiet, out of the way on every other day.
+ *
+ * ── the bar for being listed here ─────────────────────────────────────────
+ *
+ * A neighbour must have **nowhere else on this dashboard to be read**. Every
+ * service in this category already has its own tab with its own log panel, so
+ * listing LiteLLM under Open WebUI or n8n does not add a stream — it adds a
+ * second copy of one, two tabs away from the page that owns it. And `pg` is
+ * the whole box's database: it is behind Nextcloud, Immich, the *arrs, every
+ * app on the platform. A container that is everyone's neighbour is nobody's.
+ *
+ * What passes: searxng, mcp-grocy and litellm-pgvector under LiteLLM, and the
+ * log bridge under Lemonade. None of those has a tab, none is worth one, and
+ * each is a plausible answer to "it errored and its own log only blamed its
+ * upstream". That is the whole list — Open WebUI and n8n have no neighbour
+ * meeting it, so they carry none.
  */
 type Neighbour = {
   container: string
@@ -790,19 +803,19 @@ type Neighbour = {
 }
 
 /**
- * The logs board, identical on all four tabs: the service's own stream, then
- * its neighbours underneath it.
+ * The logs board, identical on all four tabs: the service's own stream, and
+ * its neighbours underneath it on the two tabs that have any.
  */
 function LogBoard({
   source,
   title,
   foot,
-  neighbours,
+  neighbours = [],
 }: {
   source: LogSource
   title: string
   foot?: ReactNode
-  neighbours: readonly Neighbour[]
+  neighbours?: readonly Neighbour[]
 }) {
   return (
     <Board title="Logs" icon="≡" span={12}>
@@ -853,44 +866,6 @@ const LITELLM_NEIGHBOURS: readonly Neighbour[] = [
     label: 'pgvector connector',
     role: 'the RAG store behind /vector_store',
     note: 'Fronts pgvector in the shared pg cluster for LiteLLM’s vector-store API. Ingest failures land here rather than in the gateway’s log, which only sees the connector’s answer.',
-  },
-]
-
-/** Everything the chat window dials. It originates nothing on its own. */
-const OWUI_NEIGHBOURS: readonly Neighbour[] = [
-  {
-    container: 'litellm',
-    label: 'LiteLLM',
-    role: 'the only model backend it has',
-    note: 'Chat, transcription, speech, embeddings, reranking and images all leave through the gateway on this app’s own virtual key. A model that answers with an error usually explains itself here rather than above.',
-  },
-  {
-    container: 'searxng',
-    label: 'SearXNG',
-    role: 'the in-chat web search, dialled direct',
-    note: 'The one capability that does NOT go through the gateway: Open WebUI queries searxng:8080 itself over the websearch bridge. So a chat that says it searched and found nothing is answered here, not in LiteLLM’s log.',
-  },
-  {
-    container: 'pg',
-    label: 'Postgres',
-    role: 'chats, settings and its RAG vectors',
-    note: 'The shared cluster — every app’s lines are in this stream, so filter by the open_webui database. Its knowledge bases live here too, as pgvector tables, which is why a failed upload can look like a database error.',
-  },
-]
-
-/** n8n's two dependencies: where it keeps state, and what its workflows call. */
-const N8N_NEIGHBOURS: readonly Neighbour[] = [
-  {
-    container: 'pg',
-    label: 'Postgres',
-    role: 'where every workflow and run is stored',
-    note: 'The shared cluster. n8n writes each execution as it runs, so a database that is refusing connections shows up as runs that never start rather than as runs that fail.',
-  },
-  {
-    container: 'litellm',
-    label: 'LiteLLM',
-    role: 'the gateway its AI steps call',
-    note: 'n8n is the largest caller on the gateway’s ledger. A workflow that failed on a summarisation step failed inside a request that is logged there, with the model and the error.',
   },
 ]
 
@@ -1165,11 +1140,10 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
 
         <ReleaseBoard gap={gap} />
 
-        <LogBoard
-          source={{ container: 'open-webui' }}
-          title="Open WebUI logs"
-          neighbours={OWUI_NEIGHBOURS}
-        />
+        {/* No neighbours. Everything this app dials either has its own tab
+            (LiteLLM), is already folded under that tab (searxng), or is the
+            whole box's database. See the bar on `Neighbour`. */}
+        <LogBoard source={{ container: 'open-webui' }} title="Open WebUI logs" />
       </BoardGrid>
     </>
   )
@@ -1338,7 +1312,9 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
 
         <ReleaseBoard gap={gap} />
 
-        <LogBoard source={{ container: 'n8n' }} title="n8n logs" neighbours={N8N_NEIGHBOURS} />
+        {/* No neighbours, same bar: pg is the whole box's, and the gateway
+            its AI steps call has a tab of its own. */}
+        <LogBoard source={{ container: 'n8n' }} title="n8n logs" />
       </BoardGrid>
     </>
   )
