@@ -63,9 +63,20 @@ export const CATEGORIES: CategorySpec[] = [
     label: 'AI',
     icon: '◈',
     lede: 'The local model server, the gateway in front of it, and what is driving traffic through it.',
-    boardSpans: [8, 4, 6, 6],
+    // Shaped to Lemonade, the tab that opens by default: a full-width rack,
+    // then a pair, then the release notes.
+    boardSpans: [12, 6, 6, 12],
     tileGroups: 1,
-    tabs: [],
+    // A tab per service, in the order a prompt travels: the thing that holds
+    // the weights, the gateway in front of it, then the two callers. Lemonade
+    // leads because it is the one that is off this box and the one whose state
+    // (what is resident, is the card full) actually changes hour to hour.
+    tabs: [
+      { id: 'lemonade', label: 'Lemonade', probe: 'lemonade' },
+      { id: 'litellm', label: 'LiteLLM', probe: 'litellm' },
+      { id: 'open-webui', label: 'Open WebUI', probe: 'open-webui' },
+      { id: 'n8n', label: 'n8n', probe: 'n8n' },
+    ],
   },
   {
     id: "media",

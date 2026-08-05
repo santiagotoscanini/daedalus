@@ -109,9 +109,11 @@ export const fetchTabStatus = createServerFn()
 
     const { promVector } = await import('../lib/dashboard/clients')
     const probes = await promVector('gatus_results_endpoint_success')
-    const health = new Map(
-      probes.map((p) => [(p.metric.key ?? '').replace(/^web-apps_/, ''), p.value[1] === '1']),
-    )
+    // The `name` label, not `key` — `key` is `<group>_<name>`, so reading it
+    // means knowing which group an endpoint was declared in. gatus probes the
+    // published web apps AND a couple of off-box services (Lemonade), and a
+    // tab should not have to care which list its subject is on.
+    const health = new Map(probes.map((p) => [p.metric.name ?? '', p.value[1] === '1']))
 
     return Object.fromEntries(
       spec.tabs.map((t) => [t.id, t.probe === undefined ? null : (health.get(t.probe) ?? null)]),
@@ -150,7 +152,7 @@ async function loadCategory(
   switch (category) {
     case 'ai': {
       const { loadAi } = await import('../lib/dashboard/categories/ai')
-      return { kind: 'ai', data: await loadAi(ctx) }
+      return { kind: 'ai', data: await loadAi(tab, ctx) }
     }
     case 'media': {
       const { loadBooks, loadTv } = await import('../lib/dashboard/categories/media')
