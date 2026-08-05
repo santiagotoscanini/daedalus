@@ -4668,7 +4668,8 @@ h2 {
    checklist becomes something you click past. */
 .check {
   display: grid;
-  grid-template-columns: 1.6rem 1fr;
+  grid-template-columns: 1.6rem 1fr auto;
+  align-items: center;
   gap: 0.2rem 0.6rem;
   border: 1px solid var(--border);
   border-left-width: 3px;
@@ -4715,8 +4716,13 @@ h2 {
   color: var(--dim);
   font-size: 0.82rem;
 }
-.check-ack {
-  padding: 0.2rem 0.85rem;
+/* What the host answered. On the row that asked, not in a banner. */
+.check-said {
+  font-size: 0.82rem;
+  margin-top: 0.15rem;
+}
+.check-action {
+  white-space: nowrap;
 }
 
 .wizard-actions {

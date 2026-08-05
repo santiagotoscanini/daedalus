@@ -26,23 +26,31 @@
 #   hostname  = <name>.toscanini.me
 #   container = app-<name>
 #
-# Workflow for a NEW app. Repo-side first, always — the entry is the last
-# step, because a declaration whose image doesn't exist yet builds fine and
-# then restart-loops on `podman run`:
+# Workflow for a NEW app, all of it from Apps -> Add an app in daedalus:
 #   1. Push the code to github.com/santiagotoscanini/<name>, with the ci/image
-#      workflows copied from an existing app, and `gh secret set
-#      REGISTRY_PASSWORD` with the ci password from stacks/registry/env.sops.
-#   2. Let CI run once, so `registry.toscanini.me/<name>:latest` exists.
-#   3. Add it in daedalus (Apps -> Add an app) and Apply. Declaring the app
-#      also provisions its self-hosted runner (stacks/gha-runner derives its
-#      runner set from fleet.apps; its PAT covers every repo on the account,
-#      so there is nothing to grant per-repo).
+#      workflows copied from an existing app.
+#   2. Pick the repo. The page checks it: workflows present, one of them pushes
+#      to zot:5000 and can be dispatched, no `services:`/`container:` job (our
+#      runners have no Docker API), every `secrets.*` the YAML reads exists,
+#      and whether the image is in the registry yet.
+#   3. `Set it` on REGISTRY_PASSWORD — the host writes the registry's ci
+#      password into the repo's Actions secrets; it never enters the container.
+#   4. `Run CI`. For a repo that is not an app yet this also starts a one-shot
+#      `gha-runner-bootstrap@<repo>`, because the runner set IS fleet.apps and
+#      the publishing workflow is `runs-on: self-hosted` pushing to zot over
+#      registry-net — no hosted runner can do it, so the first image can only
+#      be built by a runner this box lends the repo.
+#   5. Create the entry, then Apply.
 #
-# Steps 1-2 are what daedalus's create form checks before it will write the
-# entry: it reads the repo's workflows and secret list over the GitHub API and
-# asks zot whether the image exists. The image check is the one that blocks;
-# the rest are reported and left to judgement. Nothing in the create path
-# writes to GitHub.
+# The order is load-bearing, and the image check blocks for a reason: a
+# declaration whose image does not exist makes `podman run` fail, which makes
+# switch-to-configuration exit 4, which makes daedalus's apply revert its own
+# commit. Declaring an app that cannot start is not a slow failure, it is a
+# self-undoing one.
+#
+# Nothing in the create path writes code or workflows to GitHub. The two
+# writes it can make are a repo secret whose value this box owns, and a
+# workflow dispatch.
 #
 # Auth, operator secrets and VPN egress are NOT part of creating an app. Each
 # needs state authored in this repo first — `SSO_SECRET_<NAME>` in

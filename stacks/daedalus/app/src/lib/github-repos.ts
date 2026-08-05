@@ -176,6 +176,14 @@ export type RepoChecks = {
   checks: Check[]
   /** Workflow filenames found, for the detail lines. */
   workflows: string[]
+  /**
+   * The workflow that pushes an image, by filename — what a Run CI request
+   * dispatches. Null when no workflow pushes to the registry (nothing to run)
+   * or when it has no `workflow_dispatch` trigger (nothing that CAN be run on
+   * demand), which are different problems and reported as such.
+   */
+  publishWorkflow: string | null
+  dispatchable: boolean
 }
 
 type GhContent = { name?: string; type?: string; path?: string }
@@ -236,6 +244,17 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
     )
     const allYaml = bodies.filter((b): b is string => b !== null).join('\n')
 
+    // Which file is the publishing one, and can it be started on demand. Kept
+    // per-file rather than over the concatenation: dispatching the workflow
+    // that merely *mentions* the registry in a comment would start the wrong
+    // run, and `workflow_dispatch` has to be on the file being dispatched.
+    const publishIndex = bodies.findIndex(
+      (b) => b !== null && /zot:5000|registry\.toscanini\.me/.test(b),
+    )
+    const publishWorkflow = publishIndex === -1 ? null : (workflows[publishIndex] ?? null)
+    const dispatchable =
+      publishIndex !== -1 && (bodies[publishIndex]?.includes('workflow_dispatch') ?? false)
+
     if (dir.status === 404) {
       checks.push({
         id: 'workflows',
@@ -279,19 +298,52 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
     // no bridge — but a repo that only mentions `registry.toscanini.me` in a
     // comment is exactly the false positive worth accepting over missing the
     // in-cluster form, which is the one every current app uses.
-    const pushesImage = /zot:5000|registry\.toscanini\.me/.test(allYaml)
     checks.push({
       id: 'image-workflow',
       label: 'Publishes an image to the box’s registry',
-      state: allYaml === '' ? 'unknown' : pushesImage ? 'ok' : 'bad',
+      state:
+        allYaml === '' ? 'unknown'
+        : publishWorkflow === null ? 'bad'
+        : dispatchable ? 'ok'
+        : 'warn',
       detail:
         allYaml === '' ? 'no workflow contents could be read'
-        : pushesImage ? 'a workflow pushes to zot'
-        : 'no workflow pushes to zot:5000 — nothing would ever be deployed',
+        : publishWorkflow === null ? 'no workflow pushes to zot:5000 — nothing would ever be deployed'
+        : dispatchable ? `${publishWorkflow} pushes to zot, and can be run on demand`
+        : `${publishWorkflow} pushes to zot, but has no workflow_dispatch trigger`,
       fix:
-        pushesImage ? undefined : (
+        publishWorkflow === null ?
           'Add the release workflow that builds and pushes zot:5000/<name>:latest (copy it from an existing app).'
-        ),
+        : dispatchable ? undefined
+        : 'Add `workflow_dispatch:` to its triggers — without it the first image can only come from a push to the default branch.',
+    })
+
+    // --- will these workflows run on OUR runners at all? -------------------
+    //
+    // The runners have no podman socket, on purpose: santiago's rootless socket
+    // is root-equivalent for every stack on this box, and a supply-chain
+    // compromised marketplace action must not get it (stacks/gha-runner). The
+    // cost is that `services:` and `container:` jobs cannot work — they need a
+    // Docker API to bring the container up — and the way that surfaces is a job
+    // that dies in ten seconds at "Initialize containers", which reads like an
+    // infrastructure fault rather than a policy.
+    //
+    // Line-anchored and indented, so the word appearing in a comment or in
+    // `container: image` prose does not trip it.
+    const usesServiceContainers = /^\s{2,}(services|container):/m.test(allYaml)
+    checks.push({
+      id: 'runner-compatible',
+      label: 'Workflows run on this box’s runners',
+      state: allYaml === '' ? 'unknown' : usesServiceContainers ? 'bad' : 'ok',
+      detail:
+        allYaml === '' ? 'no workflow contents could be read'
+        : usesServiceContainers ?
+          'a job declares services:/container: — our runners have no Docker API, so it fails at "Initialize containers"'
+        : 'plain run: steps only',
+      fix:
+        usesServiceContainers ?
+          'Replace the service container with something the job starts itself, or run that job on a GitHub-hosted runner. The socket is withheld deliberately — it is root-equivalent on this box.'
+        : undefined,
     })
 
     // --- the container the platform will run -------------------------------
@@ -309,35 +361,83 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
         : 'none at the root — fine if the workflow builds from elsewhere',
     })
 
-    // --- the credential CI pushes with -------------------------------------
+    // --- the secrets these workflows read ----------------------------------
     //
-    // 403 here is the expected answer for a token without `Secrets: read`, and
-    // it is reported as unknown: the platform never reads this secret, only CI
-    // does, so daedalus not being able to see it is a gap in the CHECK, not in
-    // the setup.
-    const secret = await ghJson<unknown>(
-      `/repos/${OWNER}/${repo}/actions/secrets/REGISTRY_PASSWORD`,
+    // One listing, two questions. REGISTRY_PASSWORD gets its own row because it
+    // is the one value this box owns and can therefore set for you. Everything
+    // else the YAML reads gets a second row, informational: a workflow that
+    // needs CI_DATABASE_URL and does not have it fails on its own terms, and
+    // finding that out from a red run after an app is declared is exactly the
+    // ordering this page exists to fix.
+    //
+    // 403 is the expected answer for a token without `Secrets: read`, and it is
+    // reported as unknown rather than bad: the platform never reads these, only
+    // CI does, so not being able to see them is a gap in the CHECK.
+    const secrets = await ghJson<{ secrets?: { name?: string }[] }>(
+      `/repos/${OWNER}/${repo}/actions/secrets?per_page=100`,
     )
+    const have = new Set((secrets.body?.secrets ?? []).map((s) => s.name ?? ''))
+    const readable = secrets.body !== null
+
+    const hasRegistryPassword = have.has('REGISTRY_PASSWORD')
     checks.push({
       id: 'registry-secret',
       label: 'REGISTRY_PASSWORD repo secret',
       state:
-        secret.status === 200 ? 'ok'
-        : secret.status === 404 ? 'bad'
-        : 'unknown',
+        !readable ? 'unknown'
+        : hasRegistryPassword ? 'ok'
+        : 'bad',
       detail:
-        secret.status === 200 ? 'set'
-        : secret.status === 404 ? 'not set — the image push will 401'
-        : secret.status === 403 ? 'the token cannot read repo secrets — check by hand'
-        : 'could not be checked',
-      fix:
-        secret.status === 404 ?
-          'gh secret set REGISTRY_PASSWORD --repo ' +
-          `${OWNER}/${repo}` +
-          ' (the ci password from stacks/registry/env.sops)'
-        : undefined,
+        !readable ?
+          secrets.status === 403 ?
+            'the token cannot read repo secrets — check by hand'
+          : 'could not be checked'
+        : hasRegistryPassword ? 'set'
+        : 'not set — the image push will 401',
+      fix: readable && !hasRegistryPassword ? 'This box owns that password and can set it for you.' : undefined,
     })
 
-    return { checks, workflows }
+    // `${{ secrets.X }}`, minus the one GitHub injects itself. Uppercase-only
+    // to match the convention every one of these repos uses; a lowercase secret
+    // name would be missed, and a missed row is a check that says less rather
+    // than one that says something wrong.
+    const referenced = [
+      ...new Set([...allYaml.matchAll(/secrets\.([A-Z][A-Z0-9_]*)/g)].map((m) => m[1] ?? '')),
+    ].filter((n) => n !== 'GITHUB_TOKEN' && n !== 'REGISTRY_PASSWORD')
+    const missing = referenced.filter((n) => !have.has(n))
+
+    if (referenced.length > 0) {
+      checks.push({
+        id: 'workflow-secrets',
+        label: 'Other secrets these workflows read',
+        state:
+          !readable ? 'unknown'
+          : missing.length === 0 ? 'ok'
+          : 'bad',
+        detail:
+          !readable ? `${referenced.join(', ')} — could not be checked`
+          : missing.length === 0 ? `${referenced.join(', ')} — all set`
+          : `missing: ${missing.join(', ')}`,
+        fix:
+          readable && missing.length > 0 ?
+            'These belong to the app, not to the platform, so nothing here can supply them: gh secret set <NAME> --repo ' +
+            `${OWNER}/${repo}. The workflow will fail without them, whatever this page says about the rest.`
+          : undefined,
+      })
+    }
+
+    return { checks, workflows, publishWorkflow, dispatchable }
   })
+}
+
+/**
+ * Forget a repo's cached checks.
+ *
+ * Called right after a request that changes one of the answers — setting the
+ * secret, or a CI run landing an image. Without it the checklist would keep
+ * showing the pre-action state for up to a minute, which reads as the button
+ * having done nothing.
+ */
+export function forgetRepoChecks(repo: string): void {
+  cache.delete(`checks:${repo}`)
 }

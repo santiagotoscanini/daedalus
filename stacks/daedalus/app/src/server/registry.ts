@@ -167,7 +167,14 @@ export const fetchApp = createServerFn()
  */
 export type AppTabData =
   | { kind: 'overview'; resources: AppResources; dbSize: number | null; logs1h: number | null }
-  | { kind: 'deployments'; ci: CiSnapshot; activity: ActivityRow[]; deployments: DeployRow[] }
+  | {
+      kind: 'deployments'
+      ci: CiSnapshot
+      activity: ActivityRow[]
+      deployments: DeployRow[]
+      /** Which workflow the Run CI button dispatches, and whether it can be. */
+      publish: { workflow: string | null; dispatchable: boolean }
+    }
   | { kind: 'access'; access: AppAccess }
   | { kind: 'secrets'; env: EnvPayload }
   | { kind: "logs" }
@@ -240,16 +247,24 @@ export const fetchAppTab = createServerFn()
         // on demand rather than on a timer: the journal is a small bounded file
         // and this is the only place the result is consumed.
         const { ingestDeployments, listDeployments } = await import('../lib/repo/deployments')
+        const { repoChecks } = await import('../lib/github-repos')
         await ingestDeployments(record.id, name)
-        const [deploys, ci, activity, deploy] = await Promise.all([
+        const [deploys, ci, activity, deploy, publish] = await Promise.all([
           listDeployments(record.id),
           readCiSnapshot(name),
           activityLog(name, 60),
           (await import('../lib/deploy')).lastDeploy(name),
+          // Which workflow to dispatch. Cached for a minute in that module, and
+          // skipped entirely for a local-source app: there is no repo of its
+          // own to run anything in.
+          record.sourceMode === 'local' ?
+            Promise.resolve({ publishWorkflow: null, dispatchable: false })
+          : repoChecks(name).catch(() => ({ publishWorkflow: null, dispatchable: false })),
         ])
         return {
           kind: 'deployments',
           ci,
+          publish: { workflow: publish.publishWorkflow, dispatchable: publish.dispatchable },
           activity: activity.map((l) => ({
             ts: l.ts.toISOString(),
             line: l.line,
@@ -406,10 +421,59 @@ export const fetchAppPreflight = createServerFn()
           info.digest === null ? ('missing' as const) : ('present' as const),
         )
 
-    const { checks, workflows } = await repoChecks(data.repo)
+    const { checks, workflows, publishWorkflow, dispatchable } = await repoChecks(data.repo)
 
-    return { effectiveImage, imageState, checks, workflows }
+    return { effectiveImage, imageState, checks, workflows, publishWorkflow, dispatchable }
   })
+
+/**
+ * Authorise a repo to push to the registry: the host sets REGISTRY_PASSWORD in
+ * its Actions secrets.
+ *
+ * The password is not in this request and not in this container — the host
+ * reads it from /run/secrets. What crosses the boundary is a repo name.
+ */
+export const setRegistrySecretFn = createServerFn({ method: 'POST' })
+  .inputValidator((i: { repo: string }) => i)
+  .handler(async ({ data }) => {
+    const { requestCi } = await import('../lib/ci-request')
+    const { forgetRepoChecks } = await import('../lib/github-repos')
+    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+    const id = await requestCi({ action: 'set-secret', repo: data.repo, actor })
+    // The next preflight has to see the new answer rather than the cached one.
+    forgetRepoChecks(data.repo)
+    return { id }
+  })
+
+/**
+ * Run the repo's publishing workflow now.
+ *
+ * For an app this is "build and publish from the UI" — the same run a push to
+ * main would trigger, on the same runner, so the logs land in the CI panel on
+ * its deployments tab. For a repo that is not an app yet it is the only way to
+ * get a first image at all, and the host starts a one-shot runner to serve it
+ * (stacks/gha-runner's bootstrap unit).
+ */
+export const runCiFn = createServerFn({ method: 'POST' })
+  .inputValidator((i: { repo: string; workflow: string }) => i)
+  .handler(async ({ data }) => {
+    const { requestCi } = await import('../lib/ci-request')
+    const { forgetRepoChecks } = await import('../lib/github-repos')
+    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+    const id = await requestCi({
+      action: 'run-ci',
+      repo: data.repo,
+      workflow: data.workflow,
+      actor,
+    })
+    forgetRepoChecks(data.repo)
+    return { id }
+  })
+
+export const fetchCiRequestStatus = createServerFn().handler(async () => {
+  const { readCiRequestStatus } = await import('../lib/ci-request')
+  return readCiRequestStatus()
+})
 
 export const createAppFn = createServerFn({ method: 'POST' })
   .inputValidator((i: { app: NewApp }) => i)

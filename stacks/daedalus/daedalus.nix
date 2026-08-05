@@ -104,6 +104,36 @@ let
     '';
   };
 
+  # The repo-side half of adding an app: authorise a repo to push to the
+  # registry, and get its first image built. See host/ci.sh for why both need
+  # the host — one reads a password the container must not have, the other
+  # starts a runner.
+  #
+  # No allowlist here, unlike the deploy trigger above: the whole point is
+  # acting on a repo that is NOT an app yet, so there is no set to check
+  # against. The script validates the name's SHAPE and then confirms the
+  # repository exists under the account, which is the closest thing to an
+  # allowlist that still admits the case this exists for.
+  ciScript = pkgs.writeShellApplication {
+    name = "daedalus-ci";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.gh
+      pkgs.curl
+      pkgs.systemd
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    text = ''
+      APPLY_DIR=${lib.escapeShellArg applyDir}
+      OWNER=santiagotoscanini
+      REGISTRY_ENV=${config.sops.secrets."registry-env".path}
+      GHCR_AUTH=${config.sops.secrets."ghcr-auth".path}
+
+      ${builtins.readFile ./host/ci.sh}
+    '';
+  };
+
   # Where the merged per-container environment is published. /run, so these
   # secrets live on tmpfs and never enter a ZFS snapshot or the syncoid mirror.
   envDir = "/run/daedalus-env";
@@ -512,6 +542,32 @@ in
   };
 
   fleet.monitoredJobs.daedalus-deploy-trigger = { };
+
+  # Repo-side CI actions (set the push credential, run the workflow). Same
+  # file-drop bridge, third verb. Root because it reads a sops secret the
+  # container must not hold and starts a systemd unit.
+  systemd.services.daedalus-ci = {
+    description = "Authorise a repo for the registry, or run its CI, on daedalus's behalf";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${ciScript}/bin/daedalus-ci";
+      # Two GitHub round trips and a `systemctl start` that returns as soon as
+      # the runner is up — this never waits for a workflow to finish.
+      TimeoutStartSec = "3min";
+    };
+  };
+
+  systemd.paths.daedalus-ci = {
+    description = "Watch for a daedalus CI request";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathChanged = "${applyDir}/ci-request.json";
+  };
+
+  # Not monitoredJobs, unlike its two siblings: both verbs are synchronous
+  # requests from somebody looking at the page, and the failure is reported
+  # there with GitHub's own message. An email would arrive second, with less.
 
   # A failed apply means the box may have been rolled back without anyone
   # watching the UI. Mail it.

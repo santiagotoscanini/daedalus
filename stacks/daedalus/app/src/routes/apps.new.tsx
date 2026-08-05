@@ -4,7 +4,14 @@ import { Panel, Segmented, Toggle } from '../components/ui'
 import { RowsSkeleton } from '../components/skeleton'
 import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import type { Check, Repo } from '../lib/github-repos'
-import { createAppFn, fetchAppPreflight, fetchNewAppOptions } from '../server/registry'
+import {
+  createAppFn,
+  fetchAppPreflight,
+  fetchCiRequestStatus,
+  fetchNewAppOptions,
+  runCiFn,
+  setRegistrySecretFn,
+} from '../server/registry'
 
 // Adding an app.
 //
@@ -79,6 +86,20 @@ function Wizard({ options }: { options: Options }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Bumped after a host action, to re-run the checks it was meant to change.
+  const [recheck, setRecheck] = useState(0)
+  // The host action in flight, if any: which row it belongs to, and what came
+  // back. One at a time on purpose — both of them change what the checklist
+  // says, and two concurrent requests would race the single status file.
+  const [host, setHost] = useState<{
+    id: 'registry-secret' | 'image'
+    state: 'running' | 'done' | 'failed'
+    message: string
+  } | null>(null)
+  // True once CI has been dispatched from this page: the image will appear
+  // minutes later, so the image check starts refreshing itself.
+  const [awaitingImage, setAwaitingImage] = useState(false)
+
   // The app key IS the repo name. Not a free field: the default image is
   // `registry.toscanini.me/<name>:latest` and stacks/gha-runner derives the
   // repo it registers a runner for from the same key, so a name that differs
@@ -109,9 +130,56 @@ function Wizard({ options }: { options: Options }) {
     return () => {
       live = false
     }
-  }, [repo, name, image])
+  }, [repo, name, image, recheck])
 
+  // A dispatched build takes minutes, and the thing being waited for is one
+  // HEAD request to the registry — so the page asks again every twenty seconds
+  // instead of making you reload it. Stops the moment the image lands.
   const imageMissing = preflight?.imageState === 'missing'
+  useEffect(() => {
+    if (!awaitingImage || !imageMissing) return
+    const t = setInterval(() => {
+      setRecheck((n) => n + 1)
+    }, 20_000)
+    return () => {
+      clearInterval(t)
+    }
+  }, [awaitingImage, imageMissing])
+
+  /**
+   * Fire a host request and wait for its verdict.
+   *
+   * The server function returns as soon as the request file is written, which
+   * is before the host has done anything — so success has to come from the
+   * status file, not from the call returning.
+   */
+  const hostAction = (id: 'registry-secret' | 'image', run: () => Promise<unknown>) => {
+    setHost({ id, state: 'running', message: '' })
+    void run()
+      .then(async () => {
+        for (let i = 0; i < 40; i++) {
+          await new Promise((r) => setTimeout(r, 1500))
+          const s = await fetchCiRequestStatus()
+          if (s.state === 'done' || s.state === 'failed') {
+            setHost({
+              id,
+              state: s.state,
+              message: s.state === 'failed' ? s.error : s.detail,
+            })
+            if (s.state === 'done') {
+              if (id === 'image') setAwaitingImage(true)
+              setRecheck((n) => n + 1)
+            }
+            return
+          }
+        }
+        setHost({ id, state: 'failed', message: 'the host did not answer within a minute' })
+      })
+      .catch((e: unknown) => {
+        setHost({ id, state: 'failed', message: e instanceof Error ? e.message : String(e) })
+      })
+  }
+
   const canCreate =
     repo !== null && nameErr === null && hostErr === null && !imageMissing && !busy && !checking
 
@@ -371,9 +439,60 @@ function Wizard({ options }: { options: Options }) {
                         'Run the image workflow once. Until the image exists, the container would restart-loop from the moment this entry is applied — which is why this is the one check that blocks.'
                       : undefined,
                   }}
+                  action={
+                    preflight.imageState === 'missing' && preflight.dispatchable ?
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={host?.state === 'running'}
+                        onClick={() => {
+                          hostAction('image', () =>
+                            runCiFn({
+                              data: { repo: repo.name, workflow: preflight.publishWorkflow ?? '' },
+                            }),
+                          )
+                        }}
+                      >
+                        {host?.id === 'image' && host.state === 'running' ?
+                          'Dispatching…'
+                        : `Run ${preflight.publishWorkflow ?? 'CI'}`}
+                      </button>
+                    : undefined
+                  }
+                  note={
+                    host?.id === 'image' && host.state !== 'running' ? host : (
+                      awaitingImage ? { state: 'running' as const, message: 'building — this row refreshes itself every 20s' } : undefined
+                    )
+                  }
                 />
                 {preflight.checks.map((c) => (
-                  <CheckRow key={c.id} check={c} />
+                  <CheckRow
+                    key={c.id}
+                    check={c}
+                    action={
+                      c.id === 'registry-secret' && c.state === 'bad' ?
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={host?.state === 'running'}
+                          onClick={() => {
+                            hostAction('registry-secret', () =>
+                              setRegistrySecretFn({ data: { repo: repo.name } }),
+                            )
+                          }}
+                        >
+                          {host?.id === 'registry-secret' && host.state === 'running' ?
+                            'Setting…'
+                          : 'Set it'}
+                        </button>
+                      : undefined
+                    }
+                    note={
+                      c.id === 'registry-secret' && host?.id === 'registry-secret' && host.state !== 'running' ?
+                        host
+                      : undefined
+                    }
+                  />
                 ))}
                 <CheckRow
                   check={{
@@ -396,7 +515,7 @@ function Wizard({ options }: { options: Options }) {
               </button>
               <p className="footnote">
                 {imageMissing ?
-                  'Blocked until the image exists — everything else on this page is already saved nowhere, so come back after CI runs.'
+                  'Blocked until the image exists. Run CI above — a one-shot runner is started for the repo, since it has no runner of its own until it is an app. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
                 : 'Writes the registry row. Nothing is built, routed or started until you Apply, which commits stacks/apps/apps.json and rebuilds.'}
               </p>
             </div>
@@ -407,7 +526,22 @@ function Wizard({ options }: { options: Options }) {
   )
 }
 
-function CheckRow({ check }: { check: Check }) {
+/**
+ * One checklist row, optionally with the button that fixes it.
+ *
+ * `note` is what the host said back. It is rendered on the row the action
+ * belongs to rather than in a banner at the top, so "REGISTRY_PASSWORD set on
+ * santiagotoscanini/voyra" appears next to the line that asked for it.
+ */
+function CheckRow({
+  check,
+  action,
+  note,
+}: {
+  check: Check
+  action?: ReactNode
+  note?: { state: 'running' | 'done' | 'failed'; message: string }
+}) {
   const mark =
     check.state === 'ok' ? '✓'
     : check.state === 'bad' ? '✗'
@@ -423,7 +557,13 @@ function CheckRow({ check }: { check: Check }) {
         <b>{check.label}</b>
         <span className="check-detail">{check.detail}</span>
         {check.fix !== undefined && <span className="check-fix">{check.fix}</span>}
+        {note !== undefined && (
+          <span className={note.state === 'failed' ? 'check-said bad-text' : 'check-said ok-text'}>
+            {note.message}
+          </span>
+        )}
       </span>
+      {action !== undefined && <span className="check-action">{action}</span>}
     </li>
   )
 }

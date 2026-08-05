@@ -56,6 +56,11 @@
 # label). Registered runners are visible per repo under Settings ->
 # Actions -> Runners, or: gh api repos/santiagotoscanini/<repo>/actions/runners
 #
+# One-shot exception to "the runner set is fleet.apps":
+# `gha-runner-bootstrap@<repo>` lends a runner to a repo that is NOT an
+# app yet, so its first image can be built at all. Started on request by
+# stacks/daedalus/host/ci.sh; the reasoning is on the unit below.
+#
 # Monitoring: the gha-runner-metrics timer polls the GitHub API once a
 # minute and writes gha_* gauges to node-exporter's textfile dir
 # (runner online/busy from the runners endpoint; queued/in-progress
@@ -231,6 +236,85 @@ let
       ];
     };
   };
+  # One-shot runner for a repo that is NOT an app yet.
+  #
+  # Exists to break a genuine deadlock. The publishing workflow is
+  # `runs-on: self-hosted` and pushes to `zot:5000` over registry-net,
+  # which nothing off this box can reach — so the first image can only be
+  # built here. But the runner set above IS `fleet.apps`, so a repo has no
+  # runner until it is declared, and declaring it before an image exists
+  # makes `podman run` fail, the switch exit 4 and daedalus's apply revert
+  # its own commit. Something has to serve that first job.
+  #
+  # Started on request (daedalus's Run CI button, via
+  # stacks/daedalus/host/ci.sh — which refuses any repo that already has a
+  # runner, so this never shadows one). Not a template of convenience: the
+  # differences from the per-app units are the point.
+  #
+  #   - No `Restart`. A per-app runner is a loop — one job, exit,
+  #     re-register — because a repo that is an app should always have
+  #     capacity waiting. This one is a favour done once: it takes a job
+  #     and stays gone.
+  #   - `RuntimeMaxSec`. Nothing re-requests it and nothing notices it
+  #     idling, so a runner nobody dispatched to would sit registered
+  #     forever. The cap is well clear of a build (minutes) and still
+  #     bounded.
+  #   - 143 is success: RuntimeMaxSec and a manual stop both arrive as
+  #     SIGTERM, and neither is a fault.
+  bootstrapRunner = {
+    description = "One-shot GitHub Actions runner for %i (first-image bootstrap)";
+    after = [
+      "linger-users.service"
+      "network-online.target"
+      "pihole-ready.service"
+      "user@1000.service"
+      "podman-network-registry-net.service"
+    ];
+    wants = [
+      "linger-users.service"
+      "network-online.target"
+      "pihole-ready.service"
+      "user@1000.service"
+      "podman-network-registry-net.service"
+    ];
+    path = [ "/run/wrappers" ];
+    serviceConfig = {
+      User = "santiago";
+      Group = "users";
+      Environment = [
+        "XDG_RUNTIME_DIR=/run/user/1000"
+        "HOME=/home/santiago"
+      ];
+      RuntimeMaxSec = "45min";
+      SuccessExitStatus = [ 143 ];
+      ExecStartPre = [
+        "-${pkgs.podman}/bin/podman rm --force --ignore gha-runner-bootstrap-%i"
+        "${mintToken}/bin/gha-runner-mint-token %i"
+      ];
+      ExecStart = lib.concatStringsSep " " [
+        "${pkgs.podman}/bin/podman run"
+        "--rm"
+        "--name=gha-runner-bootstrap-%i"
+        "--log-driver=journald"
+        "--memory=16g"
+        "--device=/dev/fuse"
+        "--network=registry-net"
+        # mint-token writes per REPO, not per unit, so the filename is the
+        # same one a per-app runner would use. Harmless: this only runs
+        # when that unit does not exist.
+        "--env-file=/run/user/1000/gha-runner-%i.env"
+        "--env=RUNNER_SCOPE=repo"
+        "--env=REPO_URL=https://github.com/santiagotoscanini/%i"
+        "--env=RUNNER_NAME_PREFIX=s2-bootstrap-%i"
+        "--env=LABELS=s2"
+        "--env=EPHEMERAL=1"
+        "--env=DISABLE_AUTO_UPDATE=true"
+        "--env=UNSET_CONFIG_VARS=true"
+        "--env=DISABLE_AUTOMATIC_DEREGISTRATION=true"
+        runnerImage.image
+      ];
+    };
+  };
 in
 {
   # ACCESS_TOKEN=<fine-grained PAT>. Edit: sops stacks/gha-runner/env.sops
@@ -238,6 +322,9 @@ in
 
   systemd.services =
     lib.listToAttrs (map (repo: lib.nameValuePair "gha-runner-${repo}" (mkRunnerService repo)) repos)
+    // {
+      "gha-runner-bootstrap@" = bootstrapRunner;
+    }
     // {
       gha-runner-image-build = runnerImage.service;
       gha-runner-metrics = {
