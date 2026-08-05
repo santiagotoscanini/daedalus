@@ -98,9 +98,14 @@ function CategoryPage() {
         {(payload) => <CategoryBoards payload={payload} />}
       </Await>
 
-      <Await promise={tiles} fallback={<TilesSkeleton groups={spec.tabs.length > 0 ? 1 : 2} />}>
-        {(t) => <CategoryTilesView tiles={t} />}
-      </Await>
+      {/* A category whose boards cover everything has no tile directory, and
+          a placeholder for a section that never arrives is worse than none. */}
+      {spec.tileGroups === 0 ?
+        <Await promise={tiles}>{(t) => <CategoryTilesView tiles={t} />}</Await>
+      : <Await promise={tiles} fallback={<TilesSkeleton groups={spec.tileGroups} />}>
+          {(t) => <CategoryTilesView tiles={t} />}
+        </Await>
+      }
     </>
   )
 }

@@ -30,6 +30,17 @@ export type CategorySpec = {
    * boards — so this is not a mirror of the whole layout, just its opening.
    */
   boardSpans: number[]
+  /**
+   * How many tile groups sit under this category, for the placeholder.
+   * Zero is a real answer — Gaming and System are covered entirely by their
+   * boards — and without it the skeleton draws group headings that resolve
+   * into nothing, which flashes a section that never arrives.
+   *
+   * Restated here rather than derived from GROUPS because that lives in
+   * tiles.ts, whose imports reach the server clients; pulling it into the
+   * sidebar would drag all of that into the browser bundle.
+   */
+  tileGroups: number
 }
 
 export const CATEGORIES: CategorySpec[] = [
@@ -39,14 +50,16 @@ export const CATEGORIES: CategorySpec[] = [
     icon: '◈',
     lede: 'The local model server, the gateway in front of it, and what is driving traffic through it.',
     boardSpans: [8, 4, 6, 6],
+    tileGroups: 1,
     tabs: [],
   },
   {
-    id: 'media',
+    id: "media",
     label: 'Media',
     icon: '▶',
     lede: 'What is playing, what is downloading, and what the library has become.',
     boardSpans: [12, 8, 4, 6],
+    tileGroups: 1,
     tabs: [
       { id: 'tv', label: 'TV & Film' },
       { id: 'books', label: 'Books' },
@@ -58,14 +71,16 @@ export const CATEGORIES: CategorySpec[] = [
     icon: '⌂',
     lede: 'The household: automation, photos, files, the pantry, and who can sign in.',
     boardSpans: [8, 4, 6, 6],
+    tileGroups: 1,
     tabs: [],
   },
   {
-    id: 'gaming',
+    id: "gaming",
     label: 'Gaming',
     icon: '⛶',
     lede: "The game servers: which build each one runs, and whether the people on the sofa can still join.",
     boardSpans: [6, 6, 12, 12],
+    tileGroups: 0,
     tabs: [
       { id: "factorio", label: "Factorio" },
       { id: "minecraft", label: "Minecraft" },
@@ -77,14 +92,16 @@ export const CATEGORIES: CategorySpec[] = [
     icon: '⇄',
     lede: 'Everything between a packet and this box — the link, the ways in, the proxy, the resolver.',
     boardSpans: [8, 4, 6, 6],
+    tileGroups: 1,
     tabs: [],
   },
   {
-    id: 'system',
+    id: "system",
     label: 'System',
     icon: '◔',
     lede: 'The machine itself, and whether anything running on it is unhappy.',
     boardSpans: [6, 6, 6, 6],
+    tileGroups: 0,
     tabs: [],
   },
   {
@@ -93,6 +110,7 @@ export const CATEGORIES: CategorySpec[] = [
     icon: '◎',
     lede: 'The watchers: what is firing, what is being collected, and what has gone quiet.',
     boardSpans: [6, 6, 8, 4],
+    tileGroups: 1,
     tabs: [],
   },
 ]
