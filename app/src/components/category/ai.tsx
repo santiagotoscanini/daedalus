@@ -659,7 +659,7 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
                 (d.failed > 0 ? ` · ${num(d.failed)} failed` : ''),
               flag: d.failed > 0,
             }))}
-            height={64}
+            height={112}
             empty="the gateway’s ledger is empty"
           />
           {daily.length > 0 && (
@@ -685,50 +685,6 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
             {data.partial && ' The window has more rows than one page, so these are a lower bound.'}
           </p>
         </Board>
-
-        {/* The one axis on this page worth a panel. What a published name
-            resolves to is a fact you configured — the checkpoint is on a
-            machine in the next room and the mapping does not change on its
-            own — so the routing table that used to sit below said nothing you
-            did not already know, in nine rows, six of which were idle. Who is
-            calling cannot be known from anywhere else. */}
-        <Board
-          title="Who is calling"
-          icon="◑"
-          span={4}
-          fill
-          aside={<span className="board-note">requests, {total.days}d</span>}
-        >
-          {data.callers.length === 0 ?
-            <p className="viz-empty">no keyed traffic in the window</p>
-          : <ul className="callers">
-              {data.callers.map((c) => (
-                <CallerRow key={c.name} caller={c} max={data.callers[0]?.requests ?? 1} today={todayDate} />
-              ))}
-            </ul>
-          }
-
-          {/* Ranked by requests, not tokens, and that is the reason this box
-              exists in the shape it does: a key that is rejected returns no
-              tokens at all, so on a token ranking the eleven of them below
-              scored zero and never appeared. */}
-          {data.rejected.keys > 0 && (
-            <p className="rejected">
-              <b>{num(data.rejected.keys)}</b> keys never completed a request —{' '}
-              <b>{num(data.rejected.requests)}</b> attempts, last{' '}
-              {ago(data.rejected.last, todayDate)}.
-            </p>
-          )}
-
-          <p className="board-foot">
-            Named by their key’s alias; an unaliased key shows as its hash. A key that fails
-            authentication never reaches a model, so it has no tokens and no model to show — which
-            is what the line above is counting. The gateway is LAN-only, so those attempts came from
-            something in the house.
-          </p>
-        </Board>
-
-        <ReleaseBoard gap={gap} span={8} />
 
         <Board
           title="Tools models called"
@@ -768,6 +724,58 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
             counters were reset by a restart shows no time.
           </p>
         </Board>
+
+        {/* The one axis on this page worth a panel of this size. What a
+            published name resolves to is a fact you configured — the checkpoint
+            is on a machine in the next room and the mapping does not change on
+            its own — so the routing table this replaced said nothing you did
+            not already know, in nine rows, six of which were idle. Who is
+            calling cannot be known from anywhere else.
+
+            It also opens the second row rather than sharing the first, and that
+            is a layout decision rather than an editorial one: it runs to about
+            twice the height of the traffic panel, and the grid is
+            align-items:start, so pairing the two left a screen-height hole
+            under the shorter one. Boards here are paired by height — the two
+            tall ones together, the two short ones together — because a `fill`
+            can stretch a box but cannot invent content to put in it. */}
+        <Board
+          title="Who is calling"
+          icon="◑"
+          span={4}
+          fill
+          aside={<span className="board-note">requests, {total.days}d</span>}
+        >
+          {data.callers.length === 0 ?
+            <p className="viz-empty">no keyed traffic in the window</p>
+          : <ul className="callers">
+              {data.callers.map((c) => (
+                <CallerRow key={c.name} caller={c} max={data.callers[0]?.requests ?? 1} today={todayDate} />
+              ))}
+            </ul>
+          }
+
+          {/* Ranked by requests, not tokens, and that is the reason this box
+              exists in the shape it does: a key that is rejected returns no
+              tokens at all, so on a token ranking the eleven of them below
+              scored zero and never appeared. */}
+          {data.rejected.keys > 0 && (
+            <p className="rejected">
+              <b>{num(data.rejected.keys)}</b> keys never completed a request —{' '}
+              <b>{num(data.rejected.requests)}</b> attempts, last{' '}
+              {ago(data.rejected.last, todayDate)}.
+            </p>
+          )}
+
+          <p className="board-foot">
+            Named by their key’s alias; an unaliased key shows as its hash. A key that fails
+            authentication never reaches a model, so it has no tokens and no model to show — which
+            is what the line above is counting. The gateway is LAN-only, so those attempts came from
+            something in the house.
+          </p>
+        </Board>
+
+        <ReleaseBoard gap={gap} span={8} />
 
         <Board title="Logs" icon="≡" span={12}>
           <GrafanaLogs source={{ container: 'litellm' }} title="LiteLLM logs" />
@@ -854,13 +862,14 @@ function CallerRow({ caller, max, today }: { caller: Caller; max: number; today:
         {caller.tokens > 0 && <span>{compact(caller.tokens)} tok</span>}
         {caller.latencyMs !== null && <span>{ms(caller.latencyMs)}</span>}
         {caller.failed > 0 && <span className="bad-text">{num(caller.failed)} failed</span>}
-        {/* Truncated at two: a caller reaching one model is the norm and the
-            master key reaches seven, which is a list nobody reads in a column
-            this wide. */}
-        {caller.models.length > 0 && (
+        {/* One name and a count. A caller reaching a single model is the norm,
+            the master key reaches seven, and two full model names wrapped this
+            line onto a second row for the one caller that did — the rest is a
+            hover away. */}
+        {caller.models[0] !== undefined && (
           <span className="mono" title={caller.models.join(', ')}>
-            {caller.models.slice(0, 2).join(', ')}
-            {caller.models.length > 2 && ` +${String(caller.models.length - 2)}`}
+            {caller.models[0]}
+            {caller.models.length > 1 && ` +${String(caller.models.length - 1)}`}
           </span>
         )}
         <span>{ago(caller.last, today)}</span>
