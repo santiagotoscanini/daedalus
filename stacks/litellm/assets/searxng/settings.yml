@@ -7,7 +7,43 @@
 # the SEARXNG_SECRET env var (machine-generated, secrets/searxng-env);
 # the value below is a non-secret placeholder so the file parses
 # standalone.
-use_default_settings: true
+# `remove`, not `engines: [{disabled: true}]`. `disabled` only means "not
+# searched by default" — the engine is still REGISTERED and still runs its
+# init, so wikidata went on throwing a 403 traceback at every boot for as
+# long as it was listed that way. `remove` takes it out of the engine list
+# entirely, which is what was meant all along.
+use_default_settings:
+  engines:
+    remove:
+      # Onion engines, and there is no tor proxy here — they fail to
+      # register at every start.
+      - ahmia
+      - torch
+      # Its SPARQL endpoint 403s this host, one full traceback per boot.
+      - wikidata
+      # Both block this host outright, and have on every single day a
+      # search ran (2026-07-21, 07-23, 08-02 — three for three, over the
+      # thirty days Loki keeps): startpage answers with a CAPTCHA and is
+      # suspended for an hour, brave answers 429 and is suspended for
+      # three minutes. Neither has ever returned a result here, so this
+      # costs no coverage and removes two ~30-line tracebacks per search
+      # — which was most of what this container logged.
+      #
+      # Expected rather than mysterious: both captcha residential IPs
+      # making automated queries, and every search from this box leaves
+      # on one home address. Nothing to fix on this side; drop these two
+      # lines if the egress ever changes. wikipedia is deliberately NOT
+      # here — one timeout on 07-23 in thirty days is a transient.
+      - startpage
+      # brave.{images,videos,news} declare `network: brave`, and a network
+      # is defined by its owning engine — so removing `brave` alone takes
+      # the network with it and the three dependents die at startup with
+      # `KeyError: 'brave'`. They share the rate limit that got the parent
+      # blocked, so they were going the same way regardless.
+      - brave
+      - brave.images
+      - brave.videos
+      - brave.news
 
 server:
   secret_key: "placeholder-overridden-by-SEARXNG_SECRET"
@@ -22,15 +58,3 @@ search:
   formats:
     - html
     - json
-
-engines:
-  # ahmia and torch are onion engines and there is no tor proxy here, so
-  # they fail to register at every start. wikidata's SPARQL endpoint 403s
-  # this host's requests, which costs a full traceback per boot. All three
-  # are dead weight in the default set — searxng has plenty of others.
-  - name: ahmia
-    disabled: true
-  - name: torch
-    disabled: true
-  - name: wikidata
-    disabled: true
