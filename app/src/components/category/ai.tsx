@@ -4,7 +4,7 @@ import { useRouter } from '@tanstack/react-router'
 // No `StatBand`/`BigStat` anywhere on these four pages any more: every one of
 // them ended up saying either a number the panel below it states in context,
 // or a number that is zero almost always and means nothing when it is not.
-import { Board, BoardGrid, Chip, Columns, Facts, Measures, Pulse } from '../viz'
+import { Board, BoardGrid, Chip, Columns, Measures, Pulse } from '../viz'
 import { GrafanaLogs, LogDetails, type LogSource } from '../logs'
 import { ReleaseNotes, UpgradeChain } from '../release-notes'
 import { LinkRow, ServiceHead, type CompareRow } from '../service-head'
@@ -989,7 +989,7 @@ function volume(v: { requests: number; tokens: number } | null): string {
 // ── Open WebUI ─────────────────────────────────────────────────────────────
 
 function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> }) {
-  const { gap, auth, counts, people } = data
+  const { gap, counts } = data
   const busy = data.generating !== null && data.generating > 0
 
   return (
@@ -1095,50 +1095,12 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
           </p>
         </Board>
 
-        <Board
-          title="Who gets in"
-          icon="⚿"
-          span={6}
-          fill
-          aside={<span className="board-note">last seen {people.lastSeen}</span>}
-        >
-          <Measures
-            items={[
-              { k: 'accounts', v: String(people.total) },
-              { k: 'admins', v: String(people.admins) },
-              // The one figure here that is a to-do rather than a fact.
-              {
-                k: 'awaiting approval',
-                v: String(people.pending),
-                tone: people.pending > 0 ? 'bad' : undefined,
-              },
-            ]}
-          />
-
-          <Facts
-            rows={[
-              { k: 'Identity provider', v: auth.oidc ?? 'none configured' },
-              { k: 'Password form', v: auth.loginForm ? 'shown' : 'hidden' },
-              { k: 'Straight to the IdP', v: auth.autoRedirect ? 'yes' : 'no' },
-              { k: 'Self sign-up', v: auth.signup ? 'open' : 'closed' },
-            ]}
-          />
-
-          <p className="board-foot">
-            {people.pending > 0 ?
-              <>
-                <b>Somebody is waiting.</b> New accounts land as <code>pending</code> and can see
-                nothing until an admin promotes them in Admin → Users, and the app sends no notice
-                that it happened.{' '}
-              </>
-            : 'New accounts arrive through Pocket ID and land as pending until an admin promotes them — nothing announces that, which is why the count is here. '}
-            The password form is off, so the page redirects to the IdP rather than offering a second
-            way in; the break-glass form is still at <code>/auth?form=true</code> for the day the
-            IdP is what is down.
-          </p>
-        </Board>
-
-        <ReleaseBoard gap={gap} />
+        {/* Three panels, and the sign-in readback is deliberately not one of
+            them. It was four facts that are declared in the stack and change
+            when somebody edits nix — an identity provider, a login form that
+            is off, a sign-up that is closed — so it could only ever agree with
+            what you already wrote. */}
+        <ReleaseBoard gap={gap} span={6} />
 
         {/* No neighbours. Everything this app dials either has its own tab
             (LiteLLM), is already folded under that tab (searxng), or is the
