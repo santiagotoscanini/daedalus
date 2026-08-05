@@ -1,7 +1,7 @@
 {
   "uid": "container-logs",
   "title": "Container logs",
-  "description": "One logs panel, parameterised by container. Exists to be embedded via /d-solo — daedalus frames it wherever a page needs the log lines for one service, without the Drilldown app's label pickers, datasource selector and histogram coming along for the ride.",
+  "description": "One logs panel, parameterised by a raw Loki label matcher. Exists to be embedded via /d-solo — daedalus frames it wherever a page needs the log lines for one service, without the Drilldown app's label pickers, datasource selector and histogram coming along for the ride. The variable holds the whole matcher (container=\"factorio\", stack=\"lemonade\") rather than a container name, because the one service whose logs did not come from this box's journal — Lemonade, pushed in over the WebSocket bridge in stacks/lemonade-logs — has no container label to be selected by.",
   "tags": ["logs", "embed"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -12,8 +12,8 @@
   "templating": {
     "list": [
       {
-        "name": "container",
-        "label": "Container",
+        "name": "selector",
+        "label": "Loki selector",
         "type": "textbox",
         "query": "",
         "current": { "text": "", "value": "" },
@@ -43,7 +43,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "loki-default" },
-          "expr": "{container=\"$container\"}",
+          "expr": "{$selector}",
           "queryType": "range"
         }
       ]

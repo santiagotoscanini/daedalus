@@ -40,6 +40,16 @@
 }:
 
 let
+  # `docker.io/n8nio/n8n:2.33.2@sha256:d31c…` → `2.33.2`. See the env binding
+  # below for why this is parsed rather than restated.
+  n8nVersion =
+    let
+      m = builtins.match ".*:([0-9][^@:]*)@sha256:.*" (
+        config.virtualisation.oci-containers.containers.n8n.image
+      );
+    in
+    if m == null then "" else builtins.head m;
+
   # Where the container drops an apply request and reads back status. A bind
   # mount, deliberately, rather than an API the host calls: the container has
   # no privilege to lose, and the host agent never has to authenticate to the
@@ -361,6 +371,14 @@ in
       # Read from the stack that pins it rather than restated here, so the
       # tile reports the version the server actually downloads on start.
       FACTORIO_VERSION = config.fleet.factorio.version;
+      # Same idea, different mechanism. n8n serves no version anywhere — not
+      # on its public API, not in /rest/settings — so the tag it is pinned to
+      # IS the running version. Parsed out of the pin itself rather than
+      # retyped, because a second copy of a version string is a second copy
+      # that goes stale on the next bump. Empty if the image is ever pinned by
+      # digest alone, which the AI tab renders as "unknown" rather than as a
+      # wrong number.
+      N8N_VERSION = n8nVersion;
     };
   };
 

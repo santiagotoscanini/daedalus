@@ -57,10 +57,29 @@ type FactorioData = {
   changelog: {
     version: string
     date: string
+    /** Where the full notes live — see `wikiUrl`. */
+    url: string
     sections: { name: string; items: string[] }[]
     /** True when the section lists were cut — see CHANGELOG_MAX_ITEMS. */
     truncated: boolean
   }[]
+}
+
+/**
+ * Where a release actually lives on the wiki.
+ *
+ * There is no page per release. `Version_history/2.1.12` is a red link —
+ * every 2.1.x lives as a SECTION of `Version_history/2.1.0`, and the version
+ * number is the heading, so the anchor is what lands you on the right one.
+ *
+ * Resolved on the server so the payload carries a URL per entry, which is what
+ * lets the shared release-notes component render this and the GitHub-sourced
+ * changelogs on the AI pages without knowing where either came from.
+ */
+function wikiUrl(version: string): string {
+  const [maj, min] = version.split('.')
+  const series = maj !== undefined && min !== undefined ? `${maj}.${min}.0` : version
+  return `https://wiki.factorio.com/Version_history/${series}#${version}`
 }
 
 /**
@@ -283,7 +302,7 @@ async function fetchSeries(series: string): Promise<FactorioData['changelog']> {
       sections.push({ name, items: all.slice(0, CHANGELOG_MAX_ITEMS) })
     }
 
-    out.push({ version, date, sections, truncated })
+    out.push({ version, date, url: wikiUrl(version), sections, truncated })
   }
   return out
 }

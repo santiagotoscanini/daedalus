@@ -741,7 +741,7 @@ function AppDetail() {
       {/* No Panel around it: you are already on the Logs tab, so a box
           captioned "Logs" inside it is a second label for the same thing. */}
       {tab === 'logs' && (
-        <GrafanaLogs container={`app-${app.name}`} title={`${app.name} logs`} />
+        <GrafanaLogs source={{ container: `app-${app.name}` }} title={`${app.name} logs`} />
       )}
 
       <ApplyBar

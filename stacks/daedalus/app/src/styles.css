@@ -2808,6 +2808,176 @@ h2 {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+/* The rack is the one list on the dashboard whose rows can be acted on, so
+   `margin-left: auto` on the tags no longer holds them at the end — the
+   buttons do, and the tags pack against them. */
+.rack-tags {
+  margin-left: auto;
+}
+.rack-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+.rack-actions .btn {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+}
+.rack-actions .bad-text {
+  font-size: 0.68rem;
+}
+@media (max-width: 46rem) {
+  .rack-row {
+    flex-wrap: wrap;
+  }
+  .rack-actions {
+    margin-left: auto;
+  }
+}
+
+/* Per-TYPE residency caps. A footnote-sized row rather than four gauges: the
+   number only matters when one reads full, so that is the only state drawn in
+   a colour. */
+.slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+}
+.slot {
+  font-size: 0.68rem;
+  color: var(--dim);
+  padding: 0.12rem 0.4rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+.slot b {
+  color: var(--muted);
+  font-weight: 600;
+}
+.slot-full {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border-soft));
+  color: var(--warn);
+}
+.slot-full b {
+  color: var(--warn);
+}
+
+/* Installed inference backends. Two columns — what it is, which build — so
+   the build numbers line up and a bump is visible without reading. */
+.runtimes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+.runtimes li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  padding: 0.22rem 0.45rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+}
+.rt-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.rt-ver {
+  margin-left: auto;
+  font-size: 0.74rem;
+  color: var(--dim);
+  white-space: nowrap;
+}
+a.rt-ver {
+  text-decoration: none;
+}
+a.rt-ver:hover {
+  color: var(--accent);
+}
+
+/* The gateway's routing table: asked-for name → model actually served. */
+.routes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+.routes li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.76rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  min-width: 0;
+}
+.route-name {
+  color: var(--text);
+  flex: 0 0 auto;
+}
+.route-arrow {
+  color: var(--dim);
+  flex: 0 0 auto;
+}
+.route-target {
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.routes .vchip {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* Name on the left, identifier on the right — the models a chat window offers
+   and the workflows n8n holds are both this shape. */
+.modellist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+.modellist li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  min-width: 0;
+}
+.model-name {
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-id {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.modellist .vchip {
+  margin-left: auto;
+}
 
 .runs {
   gap: 0.25rem;
@@ -3390,90 +3560,165 @@ h2 {
 }
 
 /* An embedded Grafana panel. Sized rather than aspect-ratioed: a log view
-   wants a fixed number of visible lines, not a shape. */
-.embed {
-  display: block;
-  width: 100%;
+   wants a fixed number of visible lines, not a shape.
+
+   The WRAPPER owns the height and the border, and the iframe is absolutely
+   positioned over the skeleton inside it — so the box is the same size and
+   shape throughout, and uncovering it changes nothing but what is inside. */
+.embed-wrap {
+  position: relative;
   border: 1px solid var(--border-soft);
   border-radius: 9px;
   background: var(--bg);
+  overflow: hidden;
 }
 .embed-logs {
   height: 22rem;
 }
- (max-width: 50rem) {
+/* The `@media` here had gone missing, so this parsed as an invalid selector
+   and was dropped — the shorter phone height has never actually applied. */
+@media (max-width: 50rem) {
   .embed-logs {
     height: 18rem;
   }
 }
 
-/* A game gets a header with its own artwork: the rail is monochrome and
-   the tabs are text, so this is the one place the subject is identifiable
-   at a glance. */
-.game-head {
+.embed {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  /* Paint the embedded document's canvas dark before it has styles of its
+     own, rather than the browser's default white. */
+  color-scheme: dark;
+  /* Covered until Grafana has finished assembling itself — see LogFrame. The
+     animation is the backstop for a page whose JS never runs: zero duration
+     on a delay longer than LogFrame's own ceiling, so it only ever fires when
+     both of that component's timers failed to, and never races them. */
+  opacity: 0;
+  animation: embed-reveal 0s linear 15s forwards;
+}
+.embed.is-ready {
+  opacity: 1;
+  animation: none;
+  transition: opacity 0.2s ease;
+}
+@keyframes embed-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Log-shaped: ragged lines of the app's own grey, so the wait looks like the
+   rest of the dashboard loading rather than like Grafana loading. */
+.embed-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 1.1rem 1.2rem;
+}
+
+/* A page whose subject is one identifiable SERVICE gets a header with its own
+   artwork: the rail is monochrome and the tabs are text, so this is the one
+   place the subject is identifiable at a glance. Shared by every Gaming and
+   AI tab — see components/service-head.tsx. */
+.svc-head {
   display: flex;
   align-items: flex-start;
   gap: 0.85rem;
   margin: 0 0 1.1rem;
 }
-.game-logo {
+.svc-logo {
   width: 44px;
   height: 44px;
   object-fit: contain;
   flex: none;
 }
-.game-ident {
+.svc-ident {
   min-width: 0;
 }
-.game-head h2 {
+.svc-head h2 {
   margin: 0;
   font-size: 1.15rem;
 }
 /* The running build, under the name it is the build OF and above the sentence
    describing it. Everything else on the page is a comparison against this
    number, so it is the one that gets to sit with the title. */
-.game-version {
+.svc-version {
   margin: 0.15rem 0 0;
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-.game-version .mono {
+.svc-version .mono {
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--text);
   letter-spacing: -0.01em;
 }
-.game-version-note {
+.svc-version-note {
   font-size: 0.73rem;
   color: var(--dim);
 }
-.game-head .lede {
+/* Out of the 74ch prose measure. That cap is right for a paragraph you read
+   down a column and wrong here: this is one sentence on a line with a 44px
+   logo and a button beside it, and the cap was folding it in half while a
+   third of the header sat empty to its right. The header is the measure. */
+.svc-head .lede {
   margin: 0.3rem 0 0;
   font-size: 0.82rem;
+  max-width: none;
 }
 /* The status chip and the one action on the page, kept together at the far
    end. The action was at the bottom of a facts panel, three scrolls from the
    thing it opens. */
-.game-actions {
+.svc-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 0.6rem;
   flex: none;
 }
-.game-actions .btn {
+.svc-actions .btn {
   white-space: nowrap;
   text-decoration: none;
 }
 @media (max-width: 44rem) {
-  .game-head {
+  .svc-head {
     flex-wrap: wrap;
   }
-  .game-actions {
+  .svc-actions {
     margin-left: 0;
     width: 100%;
+  }
+}
+
+/* Reference links — vendor docs, the project's GitHub. Under the header rather
+   than in it: they are worth one click but they are not what you came for, and
+   putting them beside the primary action would make four things compete. */
+.svc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  margin: -0.55rem 0 1.1rem 3.4rem;
+  font-size: 0.74rem;
+}
+.svc-links a {
+  color: var(--dim);
+  text-decoration: none;
+}
+.svc-links a:hover {
+  color: var(--accent);
+}
+@media (max-width: 44rem) {
+  .svc-links {
+    margin-left: 0;
   }
 }
 
@@ -3586,6 +3831,19 @@ h2 {
   font-size: 0.82rem;
   color: var(--text);
 }
+/* Which of these you are actually on. Without it a list that runs from the
+   installed version upward reads as "all of this is pending", which is the
+   opposite of what the bottom entry means. */
+.rel-running {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+  border-radius: 999px;
+  padding: 0.05rem 0.35rem;
+  white-space: nowrap;
+}
 .rel-date {
   font-size: 0.7rem;
   color: var(--dim);
@@ -3631,6 +3889,44 @@ h2 {
 }
 .rel-more a {
   color: var(--accent);
+}
+
+/* A second log stream inside a Logs board, for the process that ships the
+   first one. Collapsed: it is diagnostics for the panel above rather than a
+   service anybody watches, so it should be one click away on the day the
+   panel goes quiet and invisible on every other day. */
+.sublog {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 0.7rem;
+}
+.sublog > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.74rem;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.sublog > summary::-webkit-details-marker {
+  display: none;
+}
+.sublog > summary::before {
+  content: "\25B8";
+  font-size: 0.7rem;
+  transition: transform 0.12s ease;
+}
+.sublog[open] > summary::before {
+  transform: rotate(90deg);
+}
+.sublog > summary:hover {
+  color: var(--accent);
+}
+/* The frame inside is laid out by the same rules as the one above it, so it
+   only needs the breathing room the summary does not provide. */
+.sublog > .logs-bar {
+  margin-top: 0.7rem;
 }
 
 /* ── topology ───────────────────────────────────────────────────────────── */
@@ -4104,6 +4400,13 @@ h2 {
   .sk,
   .sk-block {
     animation: none;
+  }
+  /* The embed appears instead of fading. Its `animation` is deliberately NOT
+     cleared: that one is a zero-duration opacity flip on a long timer, the
+     backstop that keeps the frame from staying hidden if JS never runs, and
+     dropping it would trade a safety net for stillness. */
+  .embed.is-ready {
+    transition: none;
   }
   .topo-edge-live,
   .topo-live {
