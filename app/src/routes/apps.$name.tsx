@@ -38,8 +38,10 @@ import {
   deleteAppFn,
   fetchApp,
   fetchAppTab,
+  fetchCiRequestStatus,
   fetchDeployStatus,
   revealEnvVar,
+  runCiFn,
   saveApp,
   triggerDeploy,
   type AppTabData,
@@ -438,14 +440,17 @@ function AppDetail() {
                   ⎇ santiagotoscanini/{app.name}
                 </a>
                 <span className="muted">builds run on self-hosted runners</span>
-                <a
-                  href={`https://github.com/santiagotoscanini/${app.name}/actions`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn btn-ghost deploy-actions"
-                >
-                  ↗ GitHub Actions
-                </a>
+                <span className="deploy-actions">
+                  <RunCiButton repo={app.name} publish={td.publish} />
+                  <a
+                    href={`https://github.com/santiagotoscanini/${app.name}/actions`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-ghost"
+                  >
+                    ↗ GitHub Actions
+                  </a>
+                </span>
               </>
             )}
           </p>
@@ -1799,7 +1804,100 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
   )
 }
 
-/** Text input that commits on blur or Enter — no per-keystroke writes. */
+/**
+ * Build and publish, from here.
+ *
+ * Dispatches the repo's publishing workflow — the same run a push to the
+ * default branch would trigger, on the same self-hosted runner, so its progress
+ * shows up in the Actions runners panel below and its image goes through the
+ * normal deploy path. It is not a second way to deploy: what it does is put a
+ * build on a runner, and everything after that is unchanged.
+ *
+ * Useful on an app that already exists (rebuild without an empty commit, and
+ * watch the job), and load-bearing on one that does not yet — see the create
+ * page, where it is the only way to get a first image.
+ */
+function RunCiButton({
+  repo,
+  publish,
+}: {
+  repo: string
+  publish: { workflow: string | null; dispatchable: boolean }
+}) {
+  const router = useRouter()
+  const [state, setState] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
+  const [message, setMessage] = useState('')
+
+  if (publish.workflow === null) {
+    return (
+      <span className="muted" title="No workflow in this repo pushes to the box's registry.">
+        no publishing workflow
+      </span>
+    )
+  }
+  if (!publish.dispatchable) {
+    return (
+      <span
+        className="muted"
+        title={`${publish.workflow} has no workflow_dispatch trigger, so it can only be started by a push.`}
+      >
+        {publish.workflow} is not dispatchable
+      </span>
+    )
+  }
+
+  return (
+    <span className="redeploy">
+      {state === 'failed' && (
+        <span className="bad-text" title={message}>
+          dispatch failed
+        </span>
+      )}
+      {state === 'done' && <span className="ok-text">dispatched</span>}
+      <button
+        type="button"
+        className="btn btn-ghost"
+        disabled={state === 'running'}
+        title={`Dispatch ${publish.workflow}`}
+        onClick={() => {
+          setState('running')
+          void runCiFn({ data: { repo, workflow: publish.workflow ?? '' } })
+            .then(() => waitForCi())
+            .then((s) => {
+              setState(s.state === 'failed' ? 'failed' : 'done')
+              setMessage(s.error || s.detail)
+              void router.invalidate()
+            })
+            .catch((e: unknown) => {
+              setState('failed')
+              setMessage(e instanceof Error ? e.message : String(e))
+            })
+        }}
+      >
+        {state === 'running' ? '⚙ dispatching…' : '⚙ Run CI'}
+      </button>
+    </span>
+  )
+}
+
+/**
+ * Poll the host's CI request status until it settles.
+ *
+ * The request is a file drop, so the server function returns as soon as it is
+ * written — before the host has done anything. Everything the operator needs to
+ * know (GitHub refused, no such repo, the runner would not start) arrives in
+ * the status file a second or two later, and reporting "dispatched" without
+ * waiting for it would mean showing success for a request that failed.
+ */
+async function waitForCi(): Promise<{ state: string; detail: string; error: string }> {
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 1500))
+    const s = await fetchCiRequestStatus()
+    if (s.state === 'done' || s.state === 'failed') return s
+  }
+  return { state: 'failed', detail: '', error: 'the host did not answer within a minute' }
+}
+
 /**
  * Remove the app from the registry.
  *
@@ -1881,6 +1979,7 @@ function RemovePanel({
   )
 }
 
+/** Text input that commits on blur or Enter — no per-keystroke writes. */
 function TextField({
   label,
   value,
