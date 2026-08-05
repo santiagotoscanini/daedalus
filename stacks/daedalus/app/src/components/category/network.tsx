@@ -693,19 +693,19 @@ function InboundView({ data }: { data: Inbound }) {
 
   return (
     <>
+      {/* Each route's health rides the button that selects it. There was a
+          second row of the same three names carrying the same three dots, and
+          a name printed twice is a name the reader has to reconcile — this
+          says it once, in the only place it can be read without selecting the
+          route it belongs to. */}
       <div className="tunnel-bar">
-        <span className="routes">
-          <RouteChip on={tunnelOk} label="tunnel" />
-          <RouteChip on={wgOk} label="wireguard" />
-          <RouteChip on={dnsOk} label="direct" />
-        </span>
         <Segmented
           value={route}
           onChange={setRoute}
           options={[
-            { value: 'tunnel', label: 'Cloudflare tunnel' },
-            { value: 'wireguard', label: 'WireGuard' },
-            { value: 'direct', label: 'Direct' },
+            { value: 'tunnel', label: 'Cloudflare tunnel', dot: tone(tunnelOk) },
+            { value: 'wireguard', label: 'WireGuard', dot: tone(wgOk) },
+            { value: 'direct', label: 'Direct', dot: tone(dnsOk) },
           ]}
         />
       </div>
@@ -719,14 +719,15 @@ function InboundView({ data }: { data: Inbound }) {
   )
 }
 
-/** One way in, as a dot and a word. Grey is "cannot tell", not "down". */
-function RouteChip({ on, label }: { on: boolean | null; label: string }) {
-  return (
-    <span className="routes-one">
-      <Pulse on={on === true} tone={on === false ? 'bad' : 'ok'} />
-      {label}
-    </span>
-  )
+/**
+ * A tri-state health as a dot tone.
+ *
+ * `null` is "could not be read", which is grey — deliberately not the same
+ * claim as down, and the state a route lands in when the thing that would
+ * answer for it is itself unreachable.
+ */
+function tone(ok: boolean | null): Tone | null {
+  return ok === null ? null : ok ? 'ok' : 'bad'
 }
 
 /**
@@ -1024,11 +1025,12 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           on the boundary rather than in the header, so it is visibly the thing
           that governs what follows it and not what precedes it. */}
       <div className="tunnel-bar">
+        {/* What the switch cannot say, and only that: where the selected
+            tunnel comes out. Its name and its health are on the button. */}
         <span className="tunnel-id">
-          <Pulse on={t.up === true} tone={t.up === true ? 'ok' : 'bad'} />
-          <b>{t.subject}</b>
           <span className="mono">{t.exit.ip ?? DASH}</span>
           <span>{flag(t.exit.country)}</span>
+          {t.portForwarding && t.port !== null && <span>port {t.port}</span>}
         </span>
         {data.tunnels.length > 1 && (
           <Segmented
@@ -1038,6 +1040,7 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
               value: x.key,
               // `gluetun` is the downloads one, historically unprefixed.
               label: x.container.replace(/^gluetun-?/, '') || 'downloads',
+              dot: tone(x.up),
             }))}
           />
         )}

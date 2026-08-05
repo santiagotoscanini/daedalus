@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 
+import { Pulse, type Tone } from './viz'
+
 export type AppState = 'running' | 'attention' | 'stopped' | 'unknown'
 
 export function StateDot({ state }: { state: AppState }) {
@@ -169,7 +171,20 @@ export function Segmented<T extends string>({
   // Per-option `disabled` + `reason` exist so a choice the platform would
   // reject can be greyed out with an explanation, instead of being accepted,
   // written to the database and then failing at Apply with a build error.
-  options: { value: T; label: string; icon?: string; disabled?: boolean; reason?: string }[]
+  //
+  // `dot` puts each option's own health on the button that selects it, which
+  // is the only place it can be read WITHOUT selecting it — the alternative
+  // was a second row of the same names carrying the same dots, and a name
+  // printed twice is a name the reader has to reconcile. `null` is "cannot
+  // tell", drawn grey, and is not the same claim as down.
+  options: {
+    value: T
+    label: string
+    icon?: string
+    dot?: Tone | null
+    disabled?: boolean
+    reason?: string
+  }[]
   disabled?: boolean
 }) {
   return (
@@ -186,6 +201,7 @@ export function Segmented<T extends string>({
           }}
         >
           {o.icon && <span aria-hidden="true">{o.icon}</span>}
+          {'dot' in o && <Pulse on={o.dot === 'ok'} tone={o.dot ?? 'muted'} />}
           {o.label}
         </button>
       ))}
