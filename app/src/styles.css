@@ -2275,6 +2275,16 @@ h2 {
   color: var(--dim);
   font-size: 0.73rem;
 }
+/* A live reading in the board's own header — the panel says what it is doing
+   right now, which is the one thing a chart of finished days cannot. */
+.board-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.73rem;
+  white-space: nowrap;
+}
 
 .board-body {
   padding: 0.85rem 0.95rem 0.95rem;
@@ -2297,6 +2307,21 @@ h2 {
   color: var(--dim);
   font-size: 0.73rem;
   line-height: 1.45;
+}
+
+/* What KIND of call, above the caption. Four short pairs on one line: it is a
+   breakdown of the chart directly above, not a ranking anyone needs bars for,
+   and at four classes a legend would be longer than the data. */
+.endpoints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 1rem;
+  margin-bottom: 0.4rem;
+}
+.endpoints b {
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .viz-empty {
@@ -2517,6 +2542,36 @@ h2 {
 }
 .columns-col:hover .columns-bar {
   opacity: 1;
+}
+/* A faulted bucket, marked under the baseline rather than inside the column.
+   Stacking failures into the bar itself would make a bad day look like a busy
+   day, which is the opposite of what it means; a rule beneath it says "look
+   here" without touching the height the chart is actually encoding. */
+.columns-col-flag {
+  position: relative;
+}
+.columns-col-flag::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -3px 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--bad);
+}
+
+/* The ends of a column chart's window. Two dates and what is being counted —
+   an axis with a tick per day would be thirteen labels nobody reads to answer
+   a question ("is this a fortnight or a week?") that two of them answer. */
+.colaxis {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  /* Pulled inside the board body's own gap: the axis belongs to the chart
+     above it, and at the standard spacing it read as the next thing down. */
+  margin: -0.35rem 0 0;
+  font-size: 0.66rem;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .columns-accent { --col-tone: var(--accent); }
@@ -2930,30 +2985,43 @@ h2 {
   opacity: 1;
 }
 
-/* What this model has done. A measure line, not cards: five small numbers
-   that are read across rather than compared against each other. */
-.mstats {
+/* A measure line, not cards: a handful of small numbers that are read across
+   rather than compared against each other. What a model has done, what the
+   gateway carried today. Shared by both, because they are the same gesture. */
+.measures {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 1.1rem;
-  margin: 0.55rem 0 0;
+  gap: 0.4rem 1.4rem;
+  margin: 0;
 }
-.mstats div {
+.mhero .measures {
+  margin-top: 0.55rem;
+}
+.measures div {
   display: flex;
   flex-direction: column;
   gap: 0.05rem;
 }
-.mstats dt {
+.measures dt {
   font-size: 0.6rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dim);
 }
-.mstats dd {
+.measures dd {
   margin: 0;
   font-size: 0.85rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+/* Reserved for the one figure in the line that can be a FAULT. If every
+   figure could take a colour the line would be decoration and the exception
+   would be invisible. */
+.measures-bad dd {
+  color: var(--bad);
+}
+.measures-warn dd {
+  color: var(--warn);
 }
 
 /* The other models of this kind — one click from the slot. */
@@ -3042,8 +3110,117 @@ h2 {
   color: var(--accent);
 }
 
-/* The gateway's routing table: asked-for name → model actually served. */
-.routes {
+/* The gateway's routing table, with what actually went through each route.
+   A grid rather than a flex row per line, because the three numeric columns
+   only mean anything if they line up — this is the one place on these pages
+   where a reader is comparing DOWN a column rather than along a row. */
+.rtable {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.rtable ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+/* Every track a fixed length or a fraction, none of them content-sized. The
+   header and each row are SEPARATE grid containers — an `auto` track would be
+   measured per container and the columns would drift row to row, which is the
+   one thing a table may not do. */
+.rtable-head,
+.rt-row {
+  display: grid;
+  grid-template-columns: 11rem 0.8rem minmax(0, 1fr) 7rem 3.5rem 4rem 4.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.rtable-head {
+  padding: 0 0.45rem 0.15rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border-soft);
+}
+/* The three figure columns are right-aligned in both rows, so the heading
+   sits over its own numbers rather than over the column before it. */
+.rtable-head > span:nth-child(n + 5) {
+  text-align: right;
+}
+.rt-row {
+  font-size: 0.76rem;
+  padding: 0.22rem 0.45rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+}
+/* Published but never called. Still listed — a route that exists and is unused
+   is a fact about the config — but dimmed, so the live ones read first. */
+.rt-idle {
+  background: transparent;
+  opacity: 0.55;
+}
+.rt-name {
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rt-arrow {
+  color: var(--dim);
+}
+.rt-target {
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Which machine answers, as a suffix on what it answers with — it is part of
+   the same sentence, and a column of its own would have said "gaming-pc" eight
+   times to make one row say something else. */
+.rt-target em {
+  font-style: normal;
+  color: var(--dim);
+  font-size: 0.68rem;
+  margin-left: 0.5rem;
+}
+.rt-n {
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 60rem) {
+  /* Name, then target, then the figures on their own line. At this width the
+     seven columns each shrink to nothing; stacking keeps every value readable
+     and keeps the figures aligned with each other, which is what the columns
+     were for. */
+  .rtable-head {
+    display: none;
+  }
+  .rt-row {
+    grid-template-columns: minmax(0, 1fr) 3.5rem 4rem 4.5rem;
+    row-gap: 0.15rem;
+    padding-block: 0.4rem;
+  }
+  .rt-arrow {
+    display: none;
+  }
+  .rt-name,
+  .rt-target {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Tools a model called back out through the gateway. */
+.mcplist {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -3051,34 +3228,27 @@ h2 {
   flex-direction: column;
   gap: 0.22rem;
 }
-.routes li {
+.mcplist li {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   padding: 0.2rem 0.45rem;
   border-radius: 7px;
   background: var(--panel-2);
   min-width: 0;
 }
-.route-name {
-  color: var(--text);
-  flex: 0 0 auto;
-}
-.route-arrow {
-  color: var(--dim);
-  flex: 0 0 auto;
-}
-.route-target {
+.mcp-tool {
   color: var(--muted);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.routes .vchip {
+.mcp-n {
   margin-left: auto;
-  flex: 0 0 auto;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Name on the left, identifier on the right — the models a chat window offers

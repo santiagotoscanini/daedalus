@@ -167,7 +167,20 @@ export function BarList({
 
 /* ── time series ──────────────────────────────────────────────────────── */
 
-export type Column = { label: string; value: number; display?: string }
+export type Column = {
+  label: string
+  value: number
+  display?: string
+  /**
+   * Mark this bucket as faulted — a hairline in the bad tone under the column.
+   *
+   * A status marker, not a second series: it says "something went wrong on this
+   * day" without competing with the height for the eye. Encoding failures as a
+   * second stacked colour would make a bad day look like a big day, which is
+   * the opposite of what it means.
+   */
+  flag?: boolean
+}
 
 /**
  * A time series as columns — for daily buckets, where the gaps between bars
@@ -193,7 +206,7 @@ export function Columns({
       {points.map((p, i) => (
         <div
           key={`${p.label}-${String(i)}`}
-          className="columns-col"
+          className={p.flag === true ? 'columns-col columns-col-flag' : 'columns-col'}
           title={`${p.label}: ${p.display ?? p.value.toLocaleString('en-US')}`}
         >
           <span
@@ -399,6 +412,37 @@ export function Board({
 
 export function BoardGrid({ children }: { children: ReactNode }) {
   return <div className="board-grid">{children}</div>
+}
+
+/**
+ * A line of small labelled figures — the horizontal counterpart to `Facts`.
+ *
+ * For a handful of numbers that are read ACROSS rather than compared against
+ * each other: what a model has done, what a gateway carried today. The reason
+ * this exists rather than four `BigStat`s is that a stat card is a claim on the
+ * reader's attention, and four of them spend a whole band of the page saying
+ * things nobody came to look at. As a measure line the same numbers cost one
+ * row inside the panel they belong to.
+ *
+ * A tone is for the one figure that can be a FAULT (failures, an expiry). Every
+ * other figure stays in text ink — colouring all of them would make the line a
+ * decoration and the exception invisible.
+ */
+export function Measures({
+  items,
+}: {
+  items: { k: string; v: ReactNode; tone?: Tone }[]
+}) {
+  return (
+    <dl className="measures">
+      {items.map((m) => (
+        <div key={m.k} className={m.tone === undefined ? undefined : `measures-${m.tone}`}>
+          <dt>{m.k}</dt>
+          <dd>{m.v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
 /** Key/value rows inside a board — denser than the app pages' `Row`. */

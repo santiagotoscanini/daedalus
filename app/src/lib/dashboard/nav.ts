@@ -32,7 +32,21 @@ export type CategorySpec = {
    * a view of one library, not two services, and would sprout two permanently
    * grey dots for nothing.
    */
-  tabs: { id: string; label: string; probe?: string }[]
+  tabs: {
+    id: string
+    label: string
+    probe?: string
+    /**
+     * This tab's own opening shape, when it differs from the category's.
+     *
+     * The category-level `boardSpans` are the DEFAULT tab's, so a sibling that
+     * opens differently reflows on arrival. `statBand: false` is the sharper
+     * case: a placeholder for four stat cards that never come is not a
+     * mis-sized skeleton, it is a promise the page then breaks.
+     */
+    boardSpans?: number[]
+    statBand?: boolean
+  }[]
   /**
    * Column spans of this page's boards, for the skeleton that stands in while
    * they load.
@@ -76,7 +90,9 @@ export const CATEGORIES: CategorySpec[] = [
     // (what is resident, is the card full) actually changes hour to hour.
     tabs: [
       { id: 'lemonade', label: 'Lemonade', probe: 'lemonade' },
-      { id: 'litellm', label: 'LiteLLM', probe: 'litellm' },
+      // The one tab here with no headline band: its numbers live inside the
+      // panel whose chart they describe.
+      { id: 'litellm', label: 'LiteLLM', probe: 'litellm', boardSpans: [8, 4, 8, 4], statBand: false },
       { id: 'open-webui', label: 'Open WebUI', probe: 'open-webui' },
       { id: 'n8n', label: 'n8n', probe: 'n8n' },
     ],
