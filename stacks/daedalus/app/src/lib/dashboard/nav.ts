@@ -92,8 +92,9 @@ export const CATEGORIES: CategorySpec[] = [
       { id: 'lemonade', label: 'Lemonade', probe: 'lemonade' },
       // The one tab here with no headline band: its numbers live inside the
       // panel whose chart they describe.
-      { id: 'litellm', label: 'LiteLLM', probe: 'litellm', boardSpans: [8, 4, 8, 4], statBand: false },
-      // Traffic + who is calling, then the changelog + the tool list.
+      // Traffic + the tool list, then who is calling + the changelog. Paired
+      // by height rather than by subject — see the note on that board.
+      { id: 'litellm', label: 'LiteLLM', probe: 'litellm', boardSpans: [8, 4, 4, 8], statBand: false },
       { id: 'open-webui', label: 'Open WebUI', probe: 'open-webui' },
       { id: 'n8n', label: 'n8n', probe: 'n8n' },
     ],

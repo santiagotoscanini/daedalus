@@ -2530,10 +2530,16 @@ h2 {
   height: 100%;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
   min-width: 0;
 }
+/* Capped and centred rather than filling its slot. A fortnight across a
+   full-width board gives each column eighty-odd pixels, and a saturated block
+   that wide reads as a filled area chart — loud, and heavier than the quantity
+   it stands for. A no-op wherever the columns are already narrower. */
 .columns-bar {
   width: 100%;
+  max-width: 2.75rem;
   border-radius: 2px 2px 0 0;
   background: var(--col-tone, var(--accent));
   opacity: 0.85;
@@ -2553,7 +2559,12 @@ h2 {
 .columns-col-flag::after {
   content: "";
   position: absolute;
-  inset: auto 0 -3px 0;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Tracks the bar, not the slot — the same cap, so the rule sits under the
+     column it belongs to rather than under the gap on either side of it. */
+  width: min(100%, 2.75rem);
   height: 2px;
   border-radius: 1px;
   background: var(--bad);
