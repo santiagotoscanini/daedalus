@@ -91,7 +91,7 @@ export const GROUPS: {
 }[] = [
   { name: 'AI & Automation', category: 'ai', icon: '◈' },
   { name: 'Home', category: 'home', icon: '⌂' },
-  { name: 'Gaming', category: 'gaming', icon: '⛶' },
+  { name: 'Gaming', category: 'gaming', tab: 'factorio', icon: '⚙' },
   { name: 'Media', category: 'media', tab: 'tv', icon: '▶' },
   { name: 'Books', category: 'media', tab: 'books', icon: '❏' },
   { name: 'Network', category: 'network', icon: '⇄' },

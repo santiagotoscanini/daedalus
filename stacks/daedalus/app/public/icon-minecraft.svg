@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Minecraft">
+  <!-- A grass block, drawn rather than borrowed: the real logo is Mojang's
+       and this only has to read at 18px in a sidebar. Isometric top plus two
+       faces, flat colours, no gradients — it survives being 18px wide, which
+       a photographic asset does not. -->
+  <!-- top -->
+  <path d="M16 3 L29 10 L16 17 L3 10 Z" fill="#6aa84f"/>
+  <path d="M16 5.4 L25.6 10 L16 14.6 L6.4 10 Z" fill="#7cbf5c"/>
+  <!-- left face: dirt under a grass lip -->
+  <path d="M3 10 L16 17 L16 29 L3 22 Z" fill="#7a5230"/>
+  <path d="M3 10 L16 17 L16 19.4 L3 12.4 Z" fill="#5f8f45"/>
+  <!-- right face, darker so the form reads without an outline -->
+  <path d="M29 10 L16 17 L16 29 L29 22 Z" fill="#61411f"/>
+  <path d="M29 10 L16 17 L16 19.4 L29 12.4 Z" fill="#4d7838"/>
+</svg>

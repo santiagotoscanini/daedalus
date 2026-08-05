@@ -3313,6 +3313,33 @@ h2 {
   white-space: nowrap;
 }
 
+/* A game gets a header with its own artwork: the rail is monochrome and
+   the tabs are text, so this is the one place the subject is identifiable
+   at a glance. */
+.game-head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin: 0 0 1.3rem;
+}
+.game-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  flex: none;
+}
+.game-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.game-head .lede {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+}
+.game-head > :last-child {
+  margin-left: auto;
+}
+
 /* Release notes, collapsed. `details` rather than a state hook: it works
    before hydration, survives it, and the browser already knows how. */
 .changelog {
