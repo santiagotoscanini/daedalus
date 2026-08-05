@@ -44,6 +44,34 @@ use_default_settings:
       - brave.images
       - brave.videos
       - brave.news
+      # DuckDuckGo's default backend rate-limits this host at a threshold
+      # below how it is actually used: measured 2026-08-05, the third
+      # search in a row gets a CAPTCHA and every one after it does too,
+      # two seconds apart or twenty. Open WebUI's in-chat web search
+      # issues several queries per turn, so in practice it captchas mid-
+      # answer and logs a ~30-line traceback each time — which is what
+      # was left in this container's log after the others were removed.
+      #
+      # `duckduckgo web` below is the SAME provider on its other backend
+      # (`engine: duckduckgo_web`), and it does not rate-limit: four for
+      # four in the same test where this one failed four for four. So
+      # this is a backend swap, not a loss of DuckDuckGo. Nothing
+      # references `network: duckduckgo`, and duckduckgo.{images,videos,
+      # news} are a different module (`duckduckgo_extra`), so they are
+      # unaffected.
+      - duckduckgo
+
+# Enabling engines the default set ships turned off. `remove` above shapes
+# WHICH engines exist; this shapes which of them a default search uses.
+engines:
+  - name: duckduckgo web
+    disabled: false
+  # A second independent index, so a general search never rests on one
+  # engine again. Measured alongside the others: 20 results on every
+  # attempt, no rate limiting. (mwmbl also passed and is a candidate if
+  # more breadth is ever wanted; its index is much smaller.)
+  - name: yep
+    disabled: false
 
 server:
   secret_key: "placeholder-overridden-by-SEARXNG_SECRET"
