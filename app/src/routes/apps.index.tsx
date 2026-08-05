@@ -93,6 +93,13 @@ export function AppsList({ data }: { data: ListData }) {
         {/* Counts what daedalus manages, not what it renders — the control
             plane below is not one of them. */}
         <span className="count-badge">{apps.filter((a) => !a.managedInNix).length}</span>
+        {/* The create flow is a page rather than a dialog: it makes a GitHub
+            round trip per repo it checks, and a checklist you can leave open
+            in a tab while you go fix a workflow is worth more than one that
+            closes when you click outside it. */}
+        <Link to="/apps/new" className="btn btn-primary page-head-action">
+          Add an app
+        </Link>
       </header>
 
       <div className="tallies">

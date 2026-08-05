@@ -1,6 +1,6 @@
 import { asc, eq } from 'drizzle-orm'
 import { db } from '../db'
-import { BASE_DOMAIN, hostnameError } from '../hostname'
+import { appNameError, BASE_DOMAIN, effectiveHostname, hostnameError } from '../hostname'
 import { appEnvVars, apps } from '../schema'
 import {
   manifestEntries,
@@ -71,6 +71,112 @@ export async function importFromNix(): Promise<{ imported: string[] }> {
   }
 
   return { imported }
+}
+
+/**
+ * What a new app is born with.
+ *
+ * Everything absent from this shape is a platform default, and every default
+ * is the conservative one: no ingress beyond the LAN, no auth, no database, no
+ * scrape, no caps. Those are all editable afterwards from the app's own page —
+ * the create form asks only for what cannot be sensibly defaulted, plus the
+ * toggles somebody adding an app already knows the answer to.
+ *
+ * `authMode`, `operatorSecrets` and `egress` are NOT here, for the same reason
+ * they are not in EDITABLE_FIELDS below: each needs encrypted state or a
+ * gluetun instance authored outside this app. A new app arrives ungated and
+ * gets its gate in a second, deliberate step.
+ */
+export type NewApp = {
+  name: string
+  description: string
+  icon: string
+  stage: 'off' | 'lab' | 'live'
+  postgres: boolean
+  storage: boolean
+  litellm: boolean
+  prometheus: boolean
+  /** null = registry.toscanini.me/<name>:latest, the platform default. */
+  image: string | null
+  /** null = <name>.toscanini.me. */
+  hostname: string | null
+}
+
+/**
+ * Create a registry entry. The row only — no repo, no image, no rebuild.
+ *
+ * This is a database write that the NEXT Apply ships, which is the whole
+ * reason the create form checks the repo first: an entry whose image does not
+ * exist yet builds fine and then restart-loops on `podman run`, and it would
+ * ride out on somebody else's unrelated Apply. The checks live in the UI (and
+ * in server/registry.ts, which cannot be bypassed by a hand-made request);
+ * what is enforced HERE is only what would corrupt the registry itself —
+ * a duplicate name, a name Nix already owns, a colliding hostname.
+ */
+export async function createApp(input: NewApp): Promise<{ name: string }> {
+  const name = input.name.trim().toLowerCase()
+
+  const { manifestEntries, hostnamesTakenBy } = await import('../nix-manifest')
+  const existing = await listApps()
+  const taken = [
+    ...existing.map((a) => a.name),
+    // Hand-written entries (daedalus itself) are not rows here but absolutely
+    // are names on the box — creating a second `daedalus` would collide on the
+    // container name and the hostname, and Nix would find out mid-Apply.
+    ...(await manifestEntries()).map((m) => m.name),
+  ]
+
+  const nameErr = appNameError(name, taken)
+  if (nameErr) throw new Error(`name ${nameErr}`)
+
+  const hostname = input.hostname?.trim().toLowerCase() || null
+  const hostErr = hostnameError(
+    hostname ?? effectiveHostname(name, null),
+    await hostnamesTakenBy(''),
+  )
+  if (hostErr) throw new Error(`hostname ${hostErr}`)
+
+  await db.insert(apps).values({
+    name,
+    stage: input.stage,
+    managedInNix: false,
+    sourceMode: 'registry',
+    image: input.image?.trim() || null,
+    hostname,
+    postgres: input.postgres,
+    storage: input.storage,
+    litellm: input.litellm,
+    prometheus: input.prometheus,
+    operatorSecrets: false,
+    authMode: 'none',
+    description: input.description.trim(),
+    icon: input.icon.trim() || 'mdi-cube-outline-#94a3b8',
+    notes: {},
+  })
+
+  return { name }
+}
+
+/**
+ * Drop a registry entry.
+ *
+ * Deliberately narrow: this removes the DECLARATION, and the next Apply
+ * removes the container, the route, the DNS record, the probe, the Cloudflare
+ * CNAME (route-sync prunes what is no longer declared) and the app's runner.
+ * It does NOT reclaim state, and nothing here pretends otherwise — the
+ * postgres role and database, /home/santiago/selfhost/apps/<name>/data, the
+ * per-app secrets dir and any <name>-env.sops all survive, because deleting
+ * data is not something a UI button should do on the strength of one click.
+ * The caller shows that list before confirming.
+ */
+export async function deleteApp(name: string): Promise<void> {
+  const record = await getApp(name)
+  if (!record) throw new Error(`no app named ${name}`)
+  if (record.managedInNix) {
+    throw new Error(`${name} is declared by hand in Nix — remove it there, not here`)
+  }
+  // Env vars and deployment history are `onDelete: cascade`.
+  await db.delete(apps).where(eq(apps.id, record.id))
 }
 
 /**

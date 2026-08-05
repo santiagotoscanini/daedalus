@@ -19,6 +19,31 @@ export const BASE_DOMAIN = 'toscanini.me'
 const LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 
 /**
+ * Is this usable as an app's key?
+ *
+ * The key is the most load-bearing string on the platform: it is the container
+ * name `app-<name>`, the default hostname, the postgres role and database, the
+ * GitHub repo, the systemd unit names, and the directory under
+ * /home/santiago/selfhost/apps. Nothing renames it — a rename is a new app
+ * plus a migration — so it is worth being strict at the one moment it is
+ * chosen.
+ *
+ * @param taken app names already in the registry or declared by hand in Nix.
+ */
+export function appNameError(name: string, taken: readonly string[] = []): string | null {
+  const n = name.trim().toLowerCase()
+  if (n === '') return 'pick a repository first.'
+  if (taken.includes(n)) return `${n} is already an app on this box.`
+  if (!LABEL.test(n)) {
+    return 'may use lowercase letters, digits and inner hyphens only — it becomes a DNS label, a container name and a postgres role.'
+  }
+  // `app-<name>` is a container name and the left label of a hostname; 63 is
+  // the DNS limit and the shorter of the two ceilings.
+  if (n.length > 59) return 'too long — `app-<name>` has to fit in a 63-character DNS label.'
+  return null
+}
+
+/**
  * @param taken hostnames already published on the box, this app's own
  *        excluded. A collision is a hard failure in Nix — fleet.traefikRoutes
  *        refuses two routers on one entrypoint+host, since traefik's pick
