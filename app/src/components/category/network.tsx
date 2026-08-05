@@ -1040,7 +1040,17 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           </p>
         </Board>
 
-        <Board title="Where it comes out" icon="◍" span={12}>
+        <Board
+          title="Where it comes out"
+          icon="◍"
+          span={12}
+          aside={
+            <span className="board-brand">
+              <img src="/icon-protonvpn.svg" alt="" width={16} height={16} />
+              {t.provider}
+            </span>
+          }
+        >
           <Facts
             rows={[
               // `flag` already emits the country name beside the emoji.

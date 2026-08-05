@@ -70,6 +70,7 @@ type Tunnel = {
   subject: string
   container: string
   exporter: string
+  provider: string
   runbook: string
   portForwarding: boolean
   up: boolean | null
@@ -519,6 +520,7 @@ type Declared = {
   job: string
   controlPort: number
   subject: string
+  provider: string
   keyExpiry: string
   runbook: string
   portForwarding: boolean
@@ -556,6 +558,7 @@ async function loadTunnel(
   return {
     key: d.container,
     subject: d.subject,
+    provider: d.provider,
     container: d.container,
     exporter: d.exporter,
     runbook: d.runbook,
