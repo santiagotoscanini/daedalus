@@ -213,6 +213,17 @@ export type GapOptions = {
    * includes every 1.123.x patch — a number that is both wrong and alarming.
    */
   sameMajor?: boolean
+  /**
+   * Show the newest releases even when what is RUNNING cannot be named.
+   *
+   * For an image that is a digest-pinned `:latest` whose software reports no
+   * version anywhere — gluetun-exporter is the case. Normally an unknown
+   * `installed` means an empty panel, which is correct (nothing can be said to
+   * be pending) and useless. This says the other true thing instead: here is
+   * what has been published, and no, we cannot tell you which of it you have.
+   * The panel is responsible for saying that second part out loud.
+   */
+  notesWhenUnknown?: boolean
 }
 
 const DEFAULT_TAG = /^v?(\d+\.\d+\.\d+)$/
@@ -273,7 +284,11 @@ export async function versionGap(
 
   // The running release is included so the panel says what you last got when
   // there is nothing pending, rather than going blank on a healthy service.
-  const wanted = new Set(installed === null ? behind : [...behind, installed])
+  const wanted = new Set(
+    installed !== null ? [...behind, installed]
+    : opts.notesWhenUnknown === true ? stable.slice(0, MAX_RELEASES).map((r) => r.version)
+    : behind,
+  )
   const releaseNotes = parsed
     .filter((r) => wanted.has(r.version))
     .slice(0, MAX_RELEASES)

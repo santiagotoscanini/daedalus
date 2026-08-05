@@ -5001,3 +5001,33 @@ h2 {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* The boundary between a page's shared half and its per-subject half: what is
+   selected on the left, the switch that selects it on the right. Reads as a
+   divider rather than a panel, because everything below it is scoped by it. */
+.tunnel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1.4rem 0 0.2rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--border);
+}
+.tunnel-id {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  font-size: 0.86rem;
+  color: var(--muted);
+  min-width: 0;
+}
+.tunnel-id b {
+  color: var(--text);
+  font-weight: 600;
+}
+.tunnel-id .mono {
+  font-size: 0.78rem;
+  color: var(--dim);
+}
