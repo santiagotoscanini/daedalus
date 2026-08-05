@@ -283,10 +283,18 @@ async function loadLemonade(): Promise<LemonadeData> {
       inputTokens: stats?.input_tokens_total ?? null,
       outputTokens: stats?.output_tokens_total ?? null,
     },
-    // gpu_percent and vram_gb come back null on this box: the vendor reads
-    // them through a Windows performance counter that the discrete card does
-    // not populate. Rendered as "not reported" rather than as zero, which
-    // would be a claim that the GPU is idle.
+    // cpuPct and memGb are real. gpuPct, vramGb and npuPct are always null on
+    // this box, and not because of the hardware: Lemonade's Windows metrics
+    // backend does not implement them. src/cpp/server/platform/
+    // metrics_windows.cpp returns -1.0 from get_gpu_usage(),
+    // get_vram_usage_gb() and get_npu_utilization() with a "not implemented
+    // for Windows" comment on each, and the server maps any negative to JSON
+    // null. The macOS and Linux backends do implement them, so this is a gap
+    // in the port rather than in the driver — checked against upstream main,
+    // 2026-08-05, running 10.8.1.
+    //
+    // Kept as null rather than coerced to zero: zero is a claim that the card
+    // is idle, which is a different and frequently false statement.
     live: {
       cpuPct: live?.cpu_percent ?? null,
       memGb: live?.memory_gb ?? null,

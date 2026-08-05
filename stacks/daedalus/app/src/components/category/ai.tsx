@@ -224,12 +224,14 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
               />
             </>
           )}
-          {/* Stated rather than left as two suspicious em dashes. */}
+          {/* Stated rather than left as two suspicious em dashes — and stated
+              accurately, which took reading the vendor's source. */}
           <p className="board-foot">
-            GPU utilisation and VRAM are absent on purpose: Lemonade reads them through a Windows
-            performance counter the discrete card does not populate, and a zero there would be a
-            claim that the card is idle. What is loaded is above; how hard it is working is in the
-            throughput number.
+            CPU and memory are the whole of what Lemonade will report about this machine. GPU
+            utilisation and VRAM are not missing because of the card: its Windows metrics backend
+            returns “not implemented” for both, where its macOS and Linux ones do not. Zero would
+            be a claim that the card is idle, so nothing is drawn. Until something else measures
+            it, how hard the GPU is working is the throughput number above.
           </p>
         </Board>
 
