@@ -109,6 +109,62 @@ export function GamingView({ data }: { data: GamingData }) {
         </Board>
 
         <Board
+          title={current ? 'What this build shipped' : 'What you would get'}
+          icon="≡"
+          span={12}
+          aside={<span className="board-note">wiki.factorio.com</span>}
+        >
+          {data.changelog.length === 0 ?
+            <p className="viz-empty">no release notes for this version</p>
+          : <div className="changelog">
+              {data.changelog.map((rel, i) => (
+                // Collapsed by default, except the newest when there is
+                // something to apply: that one is the whole reason you opened
+                // the page, and a panel of shut drawers answers nothing.
+                <details key={rel.version} open={!current && i === 0} className="rel">
+                  <summary>
+                    <span className="rel-version mono">{rel.version}</span>
+                    <span className="rel-date">{rel.date}</span>
+                    <span className="rel-count">
+                      {rel.sections.map((s) => s.name).join(' · ')}
+                    </span>
+                  </summary>
+                  <div className="rel-body">
+                    {rel.sections.map((s) => (
+                      <section key={s.name}>
+                        <h5>{s.name}</h5>
+                        <ul>
+                          {s.items.map((it, n) => (
+                            <li key={n}>{it}</li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
+                    <p className="rel-more">
+                      {rel.truncated && 'Shortened. '}
+                      <a
+                        href={`https://wiki.factorio.com/Version_history/${seriesOf(rel.version)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Full notes ↗
+                      </a>
+                    </p>
+                  </div>
+                </details>
+              ))}
+            </div>
+          }
+          {/* The wiki is the only per-release changelog Wube publishes in a
+              form anything can read — MediaWiki hands over the page source, so
+              this parses a stable grammar rather than scraping the layout. */}
+          <p className="board-foot">
+            Parsed from the wiki&rsquo;s own page source. Long sections are shortened here; the
+            link goes to the full page.
+          </p>
+        </Board>
+
+        <Board
           title="From the devs"
           icon="◫"
           span={12}
@@ -141,4 +197,10 @@ export function GamingView({ data }: { data: GamingData }) {
       </BoardGrid>
     </>
   )
+}
+
+/** `2.0.77` → `2.0.0`, the wiki page that holds the whole minor series. */
+function seriesOf(v: string): string {
+  const [maj, min] = v.split('.')
+  return maj !== undefined && min !== undefined ? `${maj}.${min}.0` : v
 }
