@@ -341,3 +341,28 @@ export async function piholeSid(base: string): Promise<string | null> {
   })
   return body?.session?.sid ?? null
 }
+
+/**
+ * The most recent log LINE matching a query, as text.
+ *
+ * For the handful of facts a service states once at startup and nowhere an API
+ * can be asked — gluetun prints the commit it was built from in its banner and
+ * serves it on no endpoint this box is allowed to call. The line is already in
+ * Loki, so reading it back is cheaper and less invasive than widening a
+ * control-server allow list (which would restart the container).
+ *
+ * Newest first and limited to one: this is "what does it say now", not a
+ * search. Null when nothing in the window matched — a container that has not
+ * restarted inside it has genuinely not said anything.
+ */
+export async function lokiLatest(query: string, minutes = 60 * 24 * 30): Promise<string | null> {
+  const end = Date.now() * 1e6
+  const start = end - minutes * 60 * 1e9
+  const body = await getJson<{ data?: { result?: { values: [string, string][] }[] } }>(
+    `${LOKI()}/loki/api/v1/query_range?query=${encodeURIComponent(query)}` +
+      `&start=${String(start)}&end=${String(end)}&limit=1&direction=backward`,
+    {},
+    LOKI_ATTEMPT_MS,
+  )
+  return body?.data?.result?.[0]?.values[0]?.[1] ?? null
+}

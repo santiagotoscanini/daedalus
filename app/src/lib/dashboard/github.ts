@@ -369,3 +369,94 @@ function clean(s: string): string {
       .trim()
   )
 }
+
+/** One commit, as an image built off a moving branch can be compared to. */
+export type Commit = { sha: string; date: string; subject: string; url: string }
+
+export type CommitGap = {
+  /** The commit the running image was built from, short. */
+  running: string | null
+  /** When that build was cut, `YYYY-MM-DD`. */
+  builtOn: string | null
+  /** Commits on the branch since it, oldest first. */
+  behind: Commit[]
+  /** Set when GitHub would not answer, or the sha is unknown to it. */
+  note: string | null
+}
+
+export const EMPTY_COMMITS: CommitGap = { running: null, builtOn: null, behind: [], note: null }
+
+const commitCache = new Map<string, { at: number; tried: number; gap: CommitGap | null }>()
+
+/**
+ * What a branch has picked up since the commit an image was built from.
+ *
+ * The counterpart to `versionGap`, for the images that track a moving branch
+ * instead of a release. gluetun is the case in point and the reason this
+ * exists: the box runs a digest-pinned `:latest`, which is master, and master
+ * has DIVERGED from the v3.41.x release line — v3.41.2 ships an acknowledged
+ * port-forwarding deadlock this box would trip. So a release list here would
+ * not merely be uninformative, it would advise a downgrade into a known bug.
+ * Commits since the build is the true answer to "what would I get if I
+ * repulled", which is the only upgrade question this image has.
+ *
+ * Same two-clock cache as `releases` for the same reason — see there.
+ */
+export async function commitsSince(
+  repo: string,
+  sha: string | null,
+  branch = 'master',
+): Promise<CommitGap> {
+  if (sha === null || sha === '') return EMPTY_COMMITS
+
+  const cacheKey = `${repo}@${sha}...${branch}`
+  const hit = commitCache.get(cacheKey)
+  const now = Date.now()
+  if (hit !== undefined) {
+    if (hit.gap !== null && now - hit.at < TTL_MS) return hit.gap
+    if (now - hit.tried < RETRY_MS) return hit.gap ?? { ...EMPTY_COMMITS, running: sha }
+  }
+
+  // Plain fetch on a six-second budget, not `getJson` — same reason
+  // `releases` does it: getJson's ladder starts at 400ms, which is tuned for a
+  // stalled rootless-netns socket on this box and is far under a round trip to
+  // github.com. Through that helper this call failed every time.
+  type Compare = {
+    commits?: { sha?: string; html_url?: string; commit?: { author?: { date?: string }; message?: string } }[]
+    base_commit?: { commit?: { author?: { date?: string } } }
+  }
+  let body: Compare | null = null
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/compare/${sha}...${branch}`, {
+      headers: auth(),
+      signal: AbortSignal.timeout(6_000),
+    })
+    if (res.ok) body = (await res.json()) as Compare
+  } catch {
+    // Falls through to the same place a non-ok status does.
+  }
+
+  if (body === null) {
+    commitCache.set(cacheKey, { at: hit?.at ?? 0, tried: now, gap: hit?.gap ?? null })
+    return (
+      hit?.gap ?? { ...EMPTY_COMMITS, running: sha, note: 'GitHub would not answer' }
+    )
+  }
+
+  const gap: CommitGap = {
+    running: sha,
+    builtOn: body.base_commit?.commit?.author?.date?.slice(0, 10) ?? null,
+    // Oldest first, matching how the release chain reads on the AI tabs.
+    behind: (body.commits ?? []).map((c) => ({
+      sha: (c.sha ?? '').slice(0, 7),
+      date: c.commit?.author?.date?.slice(0, 10) ?? '',
+      // The subject line only. A gluetun commit body is a diff summary and
+      // there are dozens of them; the subject is what a person scans.
+      subject: (c.commit?.message ?? '').split('\n')[0] ?? '',
+      url: c.html_url ?? `https://github.com/${repo}/commit/${c.sha ?? ''}`,
+    })),
+    note: null,
+  }
+  commitCache.set(cacheKey, { at: now, tried: now, gap })
+  return gap
+}

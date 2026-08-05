@@ -48,7 +48,7 @@ export function NetworkView({ data }: { data: NetworkData }) {
 }
 
 function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> }) {
-  const { wan, proxy, dns, tunnel, wireguard, vpn, certs } = data
+  const { wan, proxy, dns, tunnel, certs } = data
 
   return (
     <>
@@ -132,6 +132,7 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
           title="Internet link"
           icon="⇅"
           span={8}
+          fill
           aside={<span className="board-note">7 days, hourly test</span>}
         >
           <h4 className="board-sub">Download, Mbps</h4>
@@ -150,6 +151,7 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
           title="Cloudflare tunnel"
           icon="⇥"
           span={4}
+          fill
           aside={
             <Chip tone={tunnel.status === 'healthy' ? 'ok' : 'bad'}>{tunnel.status ?? 'unknown'}</Chip>
           }
@@ -181,7 +183,8 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
               { k: 'Requests', v: tunnel.requestsPerHour === null ? DASH : `${num(tunnel.requestsPerHour, 1)}/hour` },
               { k: 'Held for', v: since(tunnel.heldForSeconds).replace(' ago', '') },
               { k: 'cloudflared', v: <span className="mono">{tunnel.clientVersion ?? DASH}</span> },
-              { k: 'WireGuard peers', v: `${num(wireguard.connected)} of ${num(wireguard.total)}` },
+              // The WireGuard peer count used to be here, in a board about
+              // Cloudflare, because there was nowhere better. There is now.
               {
                 k: 'Certificate',
                 v:
@@ -203,6 +206,7 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
           title="Through the proxy"
           icon="⇄"
           span={6}
+          fill
           aside={<span className="board-note">requests/min, 10 min average</span>}
         >
           <BarList
@@ -237,7 +241,7 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
           </p>
         </Board>
 
-        <Board title="DNS" icon="◎" span={6}>
+        <Board title="DNS" icon="◎" span={6} fill>
           <div className="library-split">
             <Ring
               pct={dns.blockedPct}
@@ -259,61 +263,11 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
           <BarList items={dns.topClients} tone="info" empty="no clients recorded" />
         </Board>
 
-        <Board title="WireGuard" icon="⚿" span={6}>
-          {wireguard.peers.length === 0 ?
-            <p className="viz-empty">no peers configured</p>
-          : <ul className="peers">
-              {wireguard.peers.map((p) => {
-                // Under two minutes since the last handshake is the practical
-                // definition of "connected" for WireGuard — the protocol is
-                // silent otherwise, so there is nothing else to go on.
-                const live = p.handshakeAgo !== null && p.handshakeAgo < 180
-                return (
-                  <li key={p.name} className="peers-row">
-                    <span className="peers-name">
-                      <Pulse on={live} tone="ok" />
-                      {p.name}
-                    </span>
-                    <span className="peers-when">
-                      {p.handshakeAgo === null ? 'never' : since(p.handshakeAgo)}
-                    </span>
-                    <span className="peers-bytes">
-                      ↓{bytes(p.rx)} ↑{bytes(p.tx)}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          }
-          <Facts
-            rows={[
-              { k: 'Connected', v: num(wireguard.connected) },
-              { k: 'Enabled', v: num(wireguard.enabled) },
-              { k: 'Configured', v: num(wireguard.total) },
-            ]}
-          />
-        </Board>
-
-        <Board title="Download VPN" icon="⛨" span={6}>
-          <div className="vpn-state">
-            <Pulse on={vpn.up === true} tone={vpn.up === true ? 'ok' : 'bad'} />
-            <strong>{vpn.up === null ? 'unknown' : vpn.up ? 'connected' : 'down'}</strong>
-          </div>
-          <Facts
-            rows={[
-              { k: 'Exit', v: flag(vpn.country) },
-              { k: 'City', v: vpn.city ?? DASH },
-              { k: 'Public IP', v: <span className="mono">{vpn.ip ?? DASH}</span> },
-              {
-                k: 'Forwarded port',
-                v:
-                  vpn.port === null ?
-                    <span className="text-bad">not forwarded</span>
-                  : <span className="mono">{vpn.port}</span>,
-              },
-            ]}
-          />
-        </Board>
+        {/* The two tunnels used to be boards here. They are tabs now — the
+            same words meant two different things a scroll apart, and neither
+            of them fitted in a half-row. What stays on this page is the map
+            above, which is where both belong: a diagram of how traffic moves,
+            not the detail of either end. */}
 
         <Board title="Certificates" icon="⌸" span={12}>
           <ul className="certs">
@@ -767,6 +721,7 @@ function WireguardView({ data }: { data: Extract<NetworkData, { tab: 'wireguard'
           title="Peers"
           icon="⚿"
           span={8}
+          fill
           aside={
             <span className="board-live">
               <Pulse on={live} tone="ok" />
@@ -961,6 +916,12 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           title="Staying up"
           icon="⛨"
           span={8}
+          // Both halves of a pair fill, not just the shorter one. `fill` is
+          // align-self:stretch, so whichever of the two turns out to be taller
+          // sets the row height and the other grows into it — and which one
+          // that is depends on data (ten tenants here, two on the other
+          // tunnel), so it cannot be decided at write time.
+          fill
           aside={
             <span className="board-live">
               <Pulse on={t.up === true} tone={t.up === true ? 'ok' : 'bad'} />
@@ -1066,6 +1027,54 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
             answer it, because the container only ever sees a private tunnel address and the exit
             is only knowable from outside. The carrier is what an observer on the far side actually
             attributes this traffic to.
+          </p>
+        </Board>
+
+        <Board
+          title={
+            t.build.behind.length === 0 ?
+              'This build'
+            : `${String(t.build.behind.length)} commits since this build`
+          }
+          icon="≡"
+          span={12}
+          aside={
+            <span className="board-note">
+              {t.build.running === null ?
+                'gluetun master'
+              : <span className="mono">{t.build.running}</span>}
+              {t.build.builtOn !== null && ` · built ${t.build.builtOn}`}
+            </span>
+          }
+        >
+          {t.build.behind.length === 0 ?
+            <p className="viz-empty">
+              {t.build.note ?? t.build.running === null ?
+                'gluetun states its build in its startup banner; nothing matching is in the log window.'
+              : 'Nothing new on master since this image was built.'}
+            </p>
+          : <ul className="commits">
+              {t.build.behind.map((c) => (
+                <li key={c.sha}>
+                  <a className="mono" href={c.url} target="_blank" rel="noreferrer">
+                    {c.sha}
+                  </a>
+                  <span className="commit-subject">{c.subject}</span>
+                  <span className="commit-date">{c.date}</span>
+                </li>
+              ))}
+            </ul>
+          }
+          <p className="board-foot">
+            {/* Why this is not the release-notes board every other service
+                gets — and it is a correctness point, not a shortcut. */}
+            Commits, not releases, and deliberately: this image is a digest-pinned{' '}
+            <code>:latest</code>, which is master, and master has <b>diverged</b> from the v3.41.x
+            release line — v3.41.2 ships an acknowledged port-forwarding deadlock that this box
+            would trip, because it sets <code>VPN_PORT_FORWARDING_UP_COMMAND</code>. A release list
+            here would advise a downgrade into a known bug. This is what a re-pull would actually
+            bring. The build is read out of gluetun’s own startup banner in Loki, since its
+            <code>/v1/version</code> endpoint is not in this instance’s control-server allow list.
           </p>
         </Board>
 

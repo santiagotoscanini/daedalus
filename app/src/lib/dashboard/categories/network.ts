@@ -19,8 +19,9 @@ import {
   promPoints,
   promSeries,
   promVector,
+  lokiLatest,
 } from '../clients'
-import { versionGap, type VersionGap } from '../github'
+import { commitsSince, versionGap, type CommitGap, type VersionGap } from '../github'
 import { key, since } from '../format'
 
 export type NetworkTab = 'general' | 'wireguard' | 'outbound'
@@ -92,6 +93,11 @@ type Tunnel = {
   uptime7d: number | null
   /** Same, per day, oldest first — the shape a drop actually has. */
   daily: { date: string; uptime: number }[]
+  /**
+   * The gluetun build this instance is running, and what master has picked
+   * up since. Not a release list on purpose — see `commitsSince`.
+   */
+  build: CommitGap
   /** Containers sharing this netns, so they lose the network with it. */
   tenants: { name: string; up: boolean | null }[]
 }
@@ -535,7 +541,7 @@ async function loadTunnel(
   const control = `${hc}:${String(d.controlPort)}`
   const job = JSON.stringify(d.job)
 
-  const [ip, port, up, uptime7d, daily] = await Promise.all([
+  const [ip, port, up, uptime7d, daily, banner] = await Promise.all([
     // The provider's own view of where this tunnel surfaces. Nothing on this
     // box can answer it — the container sees a tun0 with a private address,
     // and the exit address is only knowable from outside.
@@ -551,9 +557,17 @@ async function loadTunnel(
     promScalar(`gluetun_vpn_status{job=${job}}`),
     promScalar(`avg_over_time(gluetun_vpn_status{job=${job}}[7d])`),
     promPoints(`avg_over_time(gluetun_vpn_status{job=${job}}[1d])`, DAYS * 24 * 60, 86400),
+    // gluetun states the commit it was built from in its startup banner and
+    // serves it on no endpoint this instance's control-server policy allows
+    // (`/v1/version` is 401 here, and widening that policy restarts the
+    // container — which, for the downloads tunnel, bounces ten others). The
+    // line is already in Loki, so it is read back from there instead.
+    lokiLatest(`{container=${JSON.stringify(d.container)}} |= "Running version"`),
   ])
 
   const expiry = Date.parse(`${d.keyExpiry}T00:00:00Z`)
+  // `Running version latest built on 2026-07-29T…Z (commit b00279b) on Linux …`
+  const commit = /\(commit ([0-9a-f]{7,40})\)/.exec(banner ?? '')?.[1] ?? null
 
   return {
     key: d.container,
@@ -580,6 +594,7 @@ async function loadTunnel(
     port: port?.port !== undefined && port.port > 0 ? port.port : null,
     uptime7d,
     daily: daily.map((p) => ({ date: localDay(p.t * 1000), uptime: p.v })),
+    build: await commitsSince('qdm12/gluetun', commit),
     // The exporter is in the list because it genuinely rides the tunnel, and
     // dropping it would misreport what a tunnel outage takes down.
     tenants: d.tenants.map((name) => ({ name, up: upOf(name) })),
