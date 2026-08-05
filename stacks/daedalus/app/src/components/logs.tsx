@@ -30,8 +30,20 @@
 
 const GRAFANA = 'https://grafana.toscanini.me'
 
-/** One panel out of the provisioned dashboard, filtered to one container. */
-export function grafanaLogsEmbed(container: string, from = 'now-3h'): string {
+/**
+ * One panel out of the provisioned dashboard, filtered to one container.
+ *
+ * The window defaults to SEVEN DAYS, and that is not laziness. Most things
+ * here are quiet: an app logs its migrations and "listening on" at start and
+ * then nothing until it is restarted, so a few hours of silence is the normal
+ * state rather than a fault. A short window renders "No data" over a service
+ * whose lines are sitting in Loki three days old — which reads as a broken
+ * log pipeline and sends you debugging the wrong thing.
+ *
+ * It costs nothing to be wide: the panel sorts newest-first, so a chatty
+ * container still opens on its most recent line.
+ */
+export function grafanaLogsEmbed(container: string, from = "now-7d"): string {
   return (
     `${GRAFANA}/d-solo/container-logs/container-logs` +
     `?panelId=1&var-container=${encodeURIComponent(container)}` +
@@ -40,7 +52,7 @@ export function grafanaLogsEmbed(container: string, from = 'now-3h'): string {
 }
 
 /** The full Drilldown, for when you need search and live tail. */
-export function grafanaLogsFull(container: string, from = 'now-6h'): string {
+export function grafanaLogsFull(container: string, from = "now-7d"): string {
   return (
     `${GRAFANA}/a/grafana-lokiexplore-app/explore` +
     `?from=${from}&to=now&var-ds=loki-default` +
@@ -58,10 +70,11 @@ export function GrafanaLogs({ container, title }: { container: string; title: st
         loading="lazy"
       />
       <p className="board-foot">
-        Rendered by Grafana from <code>{container}</code>, not by a log list of our own. Follow the
-        link above for search, filters and live tail. If the frame shows a login screen, open
-        Grafana once in a tab — it needs a session it cannot obtain inside itself, because the IdP
-        refuses to be framed.
+        Rendered by Grafana from <code>{container}</code>, newest first, over the last seven days —
+        most services here are quiet between restarts, and a short window shows nothing for a
+        service that is perfectly healthy. Follow the link above for search, filters and live
+        tail. If the frame shows a login screen, open Grafana once in a tab: it needs a session it
+        cannot obtain inside itself, because the IdP refuses to be framed.
       </p>
     </>
   )
