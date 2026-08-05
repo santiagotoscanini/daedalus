@@ -142,11 +142,7 @@ export function GamingView({ data }: { data: GamingData }) {
                     ))}
                     <p className="rel-more">
                       {rel.truncated && 'Shortened. '}
-                      <a
-                        href={`https://wiki.factorio.com/Version_history/${seriesOf(rel.version)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
+                      <a href={wikiUrl(rel.version)} target="_blank" rel="noreferrer">
                         Full notes ↗
                       </a>
                     </p>
@@ -199,8 +195,17 @@ export function GamingView({ data }: { data: GamingData }) {
   )
 }
 
-/** `2.0.77` → `2.0.0`, the wiki page that holds the whole minor series. */
-function seriesOf(v: string): string {
-  const [maj, min] = v.split('.')
-  return maj !== undefined && min !== undefined ? `${maj}.${min}.0` : v
+/**
+ * Where a release actually lives on the wiki.
+ *
+ * There is no page per release. `Version_history/2.1.12` is a red link —
+ * every 2.1.x lives as a SECTION of `Version_history/2.1.0`, and the version
+ * number is the heading, so the anchor is what lands you on the right one.
+ * Without the fragment this opened the top of a page holding a hundred
+ * releases, which is technically the right document and no use at all.
+ */
+function wikiUrl(version: string): string {
+  const [maj, min] = version.split('.')
+  const series = maj !== undefined && min !== undefined ? `${maj}.${min}.0` : version
+  return `https://wiki.factorio.com/Version_history/${series}#${version}`
 }
