@@ -28,9 +28,13 @@
 #   - WEBUI_SECRET_KEY → machine-generated on first boot into secrets/
 #     (gitignored). Rotate = delete file + rebuild. (SEARXNG_SECRET moved
 #     to the litellm stack along with the searxng container.)
-#   - OPENAI_API_KEY (the LiteLLM master key) → rendered from
-#     litellm/env.sops via open-webui-litellm-key.service, never
-#     duplicated (single source of truth stays litellm's env.sops).
+#   - OPENAI_API_KEY (and the five other names the image reads for the
+#     same credential) → its OWN virtual key at the gateway, declared as
+#     fleet.litellmKeys.open-webui and generated on the box. It used to
+#     be the LiteLLM MASTER key, which is the admin credential — a chat
+#     UI holding the thing that mints keys and reads every caller's
+#     ledger. The switch also makes this app nameable in the gateway's
+#     own ledger instead of anonymous inside `master key`.
 
 {
   config,
@@ -55,6 +59,48 @@ in
   ];
 
   fleet.statePaths."${dataDir}".uid = 0; # container root → santiago:users
+
+  # Its own virtual key at the gateway, generated on the box and
+  # converged into litellm by stacks/litellm/keys.nix. Unrestricted
+  # `models` because this consumer legitimately uses the whole gateway —
+  # chat, embeddings, reranking, transcription, speech and images are all
+  # one product here, and a list would be a list of everything.
+  #
+  # It replaces the master key, which is the ADMIN credential: a chat UI
+  # holding the thing that mints keys and reads every caller's ledger was
+  # a privilege grant nobody chose. It is also why the dashboard's caller
+  # list showed one row reaching seven models — every consumer configured
+  # with the master key is indistinguishable from every other.
+  #
+  # `models` stays unrestricted because this consumer legitimately uses
+  # the whole gateway — chat, embeddings, reranking, transcription,
+  # speech and images are all one product here, and the list would be a
+  # list of everything. The tool permissions are NOT optional: a virtual
+  # key reaches no MCP server by default, and `tools/list` answers that
+  # with an empty array rather than an error, so leaving them out
+  # produces a chat window whose tools have quietly disappeared.
+  fleet.litellmKeys.open-webui = {
+    mcpServers = [
+      "TickTick"
+      "Grocy"
+    ];
+    searchTools = [ "searxng" ];
+    # Nothing here covers RAG_EXTERNAL_RERANKER_URL below: `/reranking`
+    # is a pass-through route, and open-source LiteLLM has no way to
+    # authorise a virtual key for one. It is unauthenticated instead —
+    # the argument is in stacks/litellm/assets/config.yaml.
+    consumers = [ "open-webui" ];
+    # One credential, six doors: the image reads a separate variable for
+    # chat, transcription, speech, embeddings, images and reranking.
+    consumerEnv = [
+      "OPENAI_API_KEY"
+      "AUDIO_STT_OPENAI_API_KEY"
+      "AUDIO_TTS_OPENAI_API_KEY"
+      "RAG_OPENAI_API_KEY"
+      "IMAGES_OPENAI_API_KEY"
+      "RAG_EXTERNAL_RERANKER_API_KEY"
+    ];
+  };
 
   # Loki stack label (alloy tags journal lines). searxng's label moved to
   # the litellm stack with its container.
@@ -124,34 +170,39 @@ in
     '';
   };
 
-  # Render the LiteLLM master key as OPENAI_API_KEY (used for both the
-  # LLM calls and the audio-STT calls). One encrypted source of truth
-  # stays litellm/env.sops — same idiom as litellm-prom-token.
+  # TOOL_SERVER_CONNECTIONS, which is the one shape `consumerEnv` above
+  # cannot express: the key is embedded inside a JSON blob rather than
+  # standing alone as a variable. So it is rendered here, from the same
+  # generated key, read out of the state file the registry exposes.
+  #
+  # The six plain variables that used to live here are gone — they are
+  # `fleet.litellmKeys.open-webui.consumerEnv` now, and they carry this
+  # app's OWN key rather than the gateway's admin credential.
   systemd.services."open-webui-litellm-key" = mkSecretRender {
-    description = "Render the LiteLLM master key (OPENAI_API_KEY + MCP tool servers) for open-webui";
+    description = "Render the open-webui LiteLLM key into its MCP tool-server connections";
     gates = [ "podman-open-webui.service" ];
     dir = "/run/open-webui-litellm";
     file = litellmKeyFile;
-    prep = "KEY=$(grep '^LITELLM_MASTER_KEY=' ${
-      config.sops.secrets."litellm-env".path
-    } | head -1 | cut -d= -f2-)";
-    # One key for every door into the gateway: chat, STT, TTS, embeddings,
-    # image-gen all hit litellm:4000 with the same master key.
-    #
+    # After the generator, not after the gateway: the value exists before
+    # litellm knows about it, and waiting on convergence would make this
+    # app's start depend on the gateway being up.
+    after = [ "litellm-key-secrets.service" ];
+    wants = [ "litellm-key-secrets.service" ];
+    prep = ''
+      KEY=$(grep '^${config.fleet.litellmKeys.open-webui.envVar}=' ${
+        config.fleet.litellmKeys.open-webui.secretsFile
+      } | head -1 | cut -d= -f2-)
+      [ -n "$KEY" ] || { echo "open-webui litellm key missing" >&2; exit 1; }
+    '';
     # TOOL_SERVER_CONNECTIONS declares the LiteLLM MCP gateways (TickTick,
     # Grocy) as Open WebUI tool servers DECLARATIVELY. They MUST live here,
     # not the UI: `tool_server.connections` is an env-backed PersistentConfig,
     # so with ENABLE_PERSISTENT_CONFIG=false a UI-added connection is wiped
-    # to `[]` on the next restart. The Bearer key is the same master key,
-    # injected here so it stays out of /nix/store. LiteLLM serves each MCP
-    # server at /<alias>/mcp (aliases in stacks/litellm/assets/config.yaml).
+    # to `[]` on the next restart. The Bearer key is injected here so it
+    # stays out of /nix/store. LiteLLM serves each MCP server at
+    # /<alias>/mcp (aliases in stacks/litellm/assets/config.yaml), and the
+    # key must be permitted to reach them — see `mcpServers` above.
     content = ''
-      OPENAI_API_KEY=$KEY
-      AUDIO_STT_OPENAI_API_KEY=$KEY
-      AUDIO_TTS_OPENAI_API_KEY=$KEY
-      RAG_OPENAI_API_KEY=$KEY
-      IMAGES_OPENAI_API_KEY=$KEY
-      RAG_EXTERNAL_RERANKER_API_KEY=$KEY
       TOOL_SERVER_CONNECTIONS=[{"type":"mcp","url":"http://litellm:4000/TickTick/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"ticktick","name":"TickTick","description":"TickTick tasks/lists/habits"}},{"type":"mcp","url":"http://litellm:4000/Grocy/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"grocy","name":"Grocy","description":"Grocy household inventory, chores, shopping lists"}}]
     '';
   };

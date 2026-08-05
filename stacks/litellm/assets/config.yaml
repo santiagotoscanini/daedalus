@@ -68,17 +68,38 @@ search_tools:
 # STT: `whisper-1` (kept as the gateway alias) → Lemonade
 # Whisper-Large-v3-Turbo on the GPU. (subgen still serves bazarr
 # directly on the tv stack — that path does NOT go through litellm.)
-# Reranking on the gateway: Lemonade only serves `/v1/reranking`, and every
-# LiteLLM rerank provider hard-posts to a `.../rerank` path, so a model_list
-# entry can't reach it. Bodies+responses are already Cohere-shaped, so a
-# pass-through forwards it. Exposed at `/reranking` (LiteLLM's own
+# Reranking on the gateway: Lemonade only serves `/v1/reranking` (checked
+# again 2026-08-05 — /rerank and /api/v1/rerank both 404), and every LiteLLM
+# rerank provider hard-posts to a `.../rerank` or `.../v2/rerank` path, so a
+# model_list entry cannot reach it. Bodies+responses are already Cohere-shaped,
+# so a pass-through forwards it. Exposed at `/reranking` (LiteLLM's own
 # `/v1/rerank` route is reserved for model_list models and would shadow it).
-# Model chosen via the request body; auth = master key; free/local.
+#
+# ── why auth is off, which is not the obvious choice ───────────────────────
+#
+# On open-source LiteLLM a pass-through route is reachable by the MASTER key
+# and nothing else: authorising a virtual key for one needs
+# `allowed_passthrough_routes`, and setting that field returns "only available
+# for LiteLLM Enterprise users". So `auth: true` here means every caller that
+# reranks must hold the gateway's admin credential — which is exactly the
+# thing stacks/litellm/keys.nix exists to stop Open WebUI doing.
+#
+# The exposure this trades away is nil, and that is the whole argument rather
+# than a hopeful aside: the target is Lemonade's own reranker, which listens
+# unauthenticated on the LAN at gaming-pc:13305 already. Anything that can
+# reach litellm can reach that directly, so an open route here grants no
+# capability that was not already there. litellm itself is LAN-only (no
+# exposeRemotely, no CF tunnel).
+#
+# What it does cost is attribution: an unauthenticated call carries no key, so
+# rerank traffic stops appearing against a caller in the gateway's ledger.
+# Worth it to get the admin credential out of a chat UI, and reversible by
+# flipping this back and handing that one consumer the master key again.
 general_settings:
   pass_through_endpoints:
     - path: "/reranking"
       target: "http://gaming-pc.local.toscanini.me:13305/v1/reranking"
-      auth: true
+      auth: false
       methods: ["POST"]
       headers:
         content-type: application/json
