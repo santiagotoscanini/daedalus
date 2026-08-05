@@ -119,22 +119,22 @@ type LemonadeData = {
 type Volume = { requests: number; failed: number; tokens: number }
 
 /**
- * One published model name, with what actually went through it.
+ * One virtual key, and everything the gateway knows about what it did.
  *
- * The routing table and the traffic-by-model list and the latency-by-model list
- * were three panels keyed by the same string, so this joins them once, here,
- * where both keys are in hand: the ledger counts per model GROUP (the published
- * name) and the latency histogram carries it as `requested_model`.
+ * The caller is the interesting axis on this tab and the model is not: the
+ * models are all on one machine in the next room, and which checkpoint a
+ * published name resolves to is a fact you configured and already know. Who is
+ * hammering the gateway, how slowly it is being answered, and whether it is
+ * getting answers at all — none of that is knowable from anywhere else.
  */
-type Route = Volume & {
+type Caller = Volume & {
   name: string
-  /** The model Lemonade is asked to load — deliberately not `name`. */
-  target: string
-  /** Which machine answers. Shortened; the box's own hosts lose their domain. */
-  upstream: string
-  mode: string
-  /** Mean end to end, including the cold-load penalty. Null = never called. */
+  /** Mean end to end for this key. Null when nothing recent to measure. */
   latencyMs: number | null
+  /** Published model names this key actually reached. */
+  models: string[]
+  /** The last day it made a request, `YYYY-MM-DD`. */
+  last: string
 }
 
 type LitellmData = {
@@ -152,11 +152,20 @@ type LitellmData = {
   overheadMs: number | null
   /** What KIND of call, by endpoint — `/chat/completions` → `chat/completions`. */
   endpoints: { label: string; value: number }[]
-  /** Who asked, by virtual key. */
-  callers: { label: string; value: number }[]
-  routes: Route[]
+  /** Keys that got at least one answer, busiest first. */
+  callers: Caller[]
+  /**
+   * Keys that never got one, as a count rather than a list.
+   *
+   * A key that fails authentication is a hash of a credential nobody here
+   * holds, so naming eleven of them individually says nothing you can act on.
+   * How many, how often and how recently is the whole actionable content.
+   */
+  rejected: { keys: number; requests: number; last: string | null }
   /** Tools a model called back out through the gateway. */
-  mcp: { server: string; tool: string; calls: number }[]
+  mcp: { server: string; tool: string; calls: number; latencyMs: number | null }[]
+  /** The MCP servers those tools belong to, with their totals. */
+  mcpServers: { name: string; calls: number }[]
 }
 
 type OpenWebUiData = {
@@ -512,7 +521,12 @@ function parseGb(s: string | undefined): number | null {
 // ── LiteLLM ────────────────────────────────────────────────────────────────
 
 type DayMetrics = { api_requests?: number; total_tokens?: number; failed_requests?: number }
-type Bucket = { metrics?: DayMetrics; metadata?: { key_alias?: string | null } }
+type Bucket = {
+  metrics?: DayMetrics
+  metadata?: { key_alias?: string | null }
+  /** Only on the model-group buckets: which keys reached this model. */
+  api_key_breakdown?: Record<string, Bucket>
+}
 type Breakdown = Record<string, Bucket> | undefined
 type Day = {
   date?: string
@@ -555,35 +569,41 @@ async function loadLitellm(): Promise<LitellmData> {
   const from = dates[0] ?? ''
   const today = dates[DAYS - 1] ?? ''
 
-  const [activity, models, version, inFlight, latency, overhead] = await Promise.all([
+  const [activity, version, inFlight, latSum, latCount, toolLatency, overhead] = await Promise.all([
     getJson<DailyActivity>(
       `http://litellm:4000/user/daily/activity?start_date=${from}&end_date=${today}` +
         `&page_size=${String(PAGE_SIZE)}`,
       auth,
     ),
-    getJson<{
-      data?: {
-        model_name?: string
-        litellm_params?: { model?: string; api_base?: string }
-        model_info?: { mode?: string }
-      }[]
-    }>('http://litellm:4000/model/info', auth),
     litellmVersion(auth),
     promScalar('sum(litellm_in_flight_requests)'),
-    // Keyed by `requested_model` — the name a caller ASKED for — rather than by
-    // `model`, the checkpoint that served it. Two reasons: it is the key the
-    // routing table and the ledger are both already on, so the join is exact;
-    // and the `model` label is also where litellm files its MCP tool calls
-    // (`MCP: Grocy-…`), which would otherwise arrive as pseudo-models in a list
-    // of models. Mean from the histogram's own sum/count, which is the only
-    // honest average here — the buckets are coarse enough that a quantile over
-    // this little traffic would be quantisation noise.
+    // The histogram's own sum and count, kept APART rather than divided in
+    // PromQL. Two keys can share a display name — this box has two virtual keys
+    // both aliased `plane` — and averaging two means is not the mean of the
+    // whole; the totals have to be added before the division, which can only
+    // happen after they are grouped by the name a reader sees.
+    //
+    // Joined on `hashed_api_key` because it is the ledger's own key, literals
+    // and all (`litellm_proxy_master_key`). The `api_key_alias` label would
+    // have to be matched against a name this file invents, and reports "None"
+    // for exactly the keys whose names it invents.
     promBars(
-      `sum by (requested_model) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))` +
-        ` / sum by (requested_model) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
-      'requested_model',
+      `sum by (hashed_api_key) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))`,
+      'hashed_api_key',
     ),
-    // What the gateway costs, separated from what the model costs. Every
+    promBars(
+      `sum by (hashed_api_key) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
+      'hashed_api_key',
+    ),
+    // Tool calls are filed under the `model` label as `MCP: <server>-<tool>`,
+    // alongside the real models — which is why every other query here joins on
+    // `requested_model` instead. Here it is the label wanted.
+    promBars(
+      `sum by (model) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))` +
+        ` / sum by (model) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
+      'model',
+    ),
+    // What the gateway costs, separated from what the model costs. Every other
     // latency figure on this page is end-to-end and therefore mostly Lemonade;
     // this is the part that is actually attributable to litellm.
     promScalar(
@@ -617,11 +637,19 @@ async function loadLitellm(): Promise<LitellmData> {
     days: daily.length,
   }
 
-  // The gateway's own ledger, not its prometheus counters: those reset whenever
-  // the container restarts, which would make every "over the last N days"
-  // figure here quietly mean "since the last deploy".
-  const served = tally(days, (d) => d.breakdown?.model_groups)
-  const lat = new Map(latency.map((l) => [l.label, l.value * 1000]))
+  const { callers, rejected } = callersOf(days, latSum, latCount)
+
+  const toolMs = new Map(toolLatency.map((t) => [t.label, t.value * 1000]))
+  const mcp = rank(days, (d) => d.breakdown?.mcp_servers, requestsOf, (k) => k, 10).map((t) => {
+    const [server, ...rest] = t.label.split('/')
+    const tool = rest.join('/')
+    return {
+      server: server ?? '?',
+      tool,
+      calls: t.value,
+      latencyMs: toolMs.get(`MCP: ${server ?? ''}-${tool}`) ?? null,
+    }
+  })
 
   return {
     version,
@@ -633,27 +661,103 @@ async function loadLitellm(): Promise<LitellmData> {
     inFlight,
     overheadMs: overhead === null ? null : overhead * 1000,
     endpoints: rank(days, (d) => d.breakdown?.endpoints, requestsOf, (k) => k.replace(/^\//, '')),
-    callers: rank(days, (d) => d.breakdown?.api_keys, (m) => m.total_tokens ?? 0, callerName),
-    routes: (models?.data ?? [])
-      .map((m) => {
-        const name = m.model_name ?? '?'
-        return {
-          name,
-          target: (m.litellm_params?.model ?? '').replace(/^openai\//, ''),
-          upstream: upstreamOf(m.litellm_params?.api_base, m.litellm_params?.model),
-          mode: modeOf(m.model_info?.mode),
-          ...(served.get(name) ?? { requests: 0, failed: 0, tokens: 0 }),
-          latencyMs: lat.get(name) ?? null,
-        }
-      })
-      // Busiest first, so the routes that are actually load-bearing lead and
-      // the published-but-idle ones settle at the bottom, where they read as
-      // the inventory they are.
+    callers,
+    rejected,
+    mcp,
+    mcpServers: [...mcp.reduce((m, t) => m.set(t.server, (m.get(t.server) ?? 0) + t.calls), new Map<string, number>())]
+      .map(([name, calls]) => ({ name, calls }))
+      .sort((a, b) => b.calls - a.calls),
+  }
+}
+
+/**
+ * The caller list, split at "did this key ever get an answer".
+ *
+ * They are not the same question and a single ranked list answers neither. By
+ * tokens, a key that failed eleven times out of eleven scores zero and never
+ * appears; by requests, ten such keys crowd out every caller that works. And
+ * they want different treatment anyway: for a working caller you want to know
+ * what it costs and how slowly it is served, and for a rejected one the only
+ * facts that exist are how many attempts and how recently.
+ *
+ * Merged by DISPLAY NAME rather than by key hash, because two keys aliased the
+ * same thing are one caller as far as anyone reading this is concerned — which
+ * is also why the latency sum and count arrive separately and are divided here,
+ * after the grouping.
+ */
+function callersOf(
+  days: Day[],
+  latSum: { label: string; value: number }[],
+  latCount: { label: string; value: number }[],
+): { callers: Caller[]; rejected: LitellmData['rejected'] } {
+  const sums = new Map(latSum.map((r) => [r.label, r.value]))
+  const counts = new Map(latCount.map((r) => [r.label, r.value]))
+
+  type Acc = Volume & { latSum: number; latCount: number; models: Set<string>; last: string }
+  const byName = new Map<string, Acc>()
+  const seen = new Set<string>()
+
+  for (const d of days) {
+    const date = d.date ?? ''
+    for (const [hash, b] of Object.entries(d.breakdown?.api_keys ?? {})) {
+      const v = volumeOf(b.metrics)
+      if (v.requests === 0) continue
+      const name = callerName(hash, b)
+      const at = byName.get(name) ?? {
+        requests: 0,
+        failed: 0,
+        tokens: 0,
+        latSum: 0,
+        latCount: 0,
+        models: new Set<string>(),
+        last: date,
+      }
+      // Prometheus totals are per key, so they may only be added the first time
+      // a hash is seen — a caller active on nine days would otherwise have its
+      // latency counted nine times.
+      if (!seen.has(hash)) {
+        seen.add(hash)
+        at.latSum += sums.get(hash) ?? 0
+        at.latCount += counts.get(hash) ?? 0
+      }
+      at.requests += v.requests
+      at.failed += v.failed
+      at.tokens += v.tokens
+      // The API returns newest first, so the first date a key appears on IS its
+      // most recent — hence `>`, which does not depend on that staying true.
+      if (date > at.last) at.last = date
+      byName.set(name, at)
+    }
+    // Which models a key reached, from the other side of the ledger: the key
+    // breakdown carries no models, but every model group carries its keys.
+    for (const [group, b] of Object.entries(d.breakdown?.model_groups ?? {})) {
+      for (const [hash, kb] of Object.entries(b.api_key_breakdown ?? {})) {
+        byName.get(callerName(hash, kb))?.models.add(group)
+      }
+    }
+  }
+
+  const all = [...byName].map(([name, a]) => ({
+    name,
+    requests: a.requests,
+    failed: a.failed,
+    tokens: a.tokens,
+    latencyMs: a.latCount > 0 ? (a.latSum / a.latCount) * 1000 : null,
+    models: [...a.models].sort(),
+    last: a.last,
+  }))
+
+  const dead = all.filter((c) => c.requests === c.failed)
+
+  return {
+    callers: all
+      .filter((c) => c.requests > c.failed)
       .sort((a, b) => b.requests - a.requests || a.name.localeCompare(b.name)),
-    mcp: rank(days, (d) => d.breakdown?.mcp_servers, requestsOf, (k) => k, 8).map((t) => {
-      const [server, ...rest] = t.label.split('/')
-      return { server: server ?? '?', tool: rest.join('/'), calls: t.value }
-    }),
+    rejected: {
+      keys: dead.length,
+      requests: dead.reduce((n, c) => n + c.requests, 0),
+      last: dead.reduce<string | null>((at, c) => (at === null || c.last > at ? c.last : at), null),
+    },
   }
 }
 
@@ -686,47 +790,8 @@ function callerName(hash: string, b: Bucket): string {
   if (alias !== null && alias !== undefined && alias !== '' && alias !== 'None') return alias
   if (hash === 'litellm_proxy_master_key') return 'master key'
   if (hash === 'litellm-internal-health-check') return 'health check'
-  if (hash === '') return 'unattributed'
+  if (hash === '' || hash === 'None') return 'unattributed'
   return `key ${hash.slice(0, 8)}`
-}
-
-/**
- * What a route is FOR, in the reader's vocabulary rather than the API's.
- *
- * litellm's own strings are qualified against the OpenAI endpoint they belong
- * to (`audio_speech`, `audio_transcription`, `image_generation`), which is
- * precision this column does not need — nothing here is ambiguous once the
- * qualifier is gone, and the qualifier was the widest part of the column.
- * Anything unrecognised passes through as it came, so a mode this box has not
- * seen yet is never silently relabelled.
- */
-function modeOf(mode: string | undefined): string {
-  const SHORT: Record<string, string> = {
-    audio_speech: 'speech',
-    audio_transcription: 'transcription',
-    image_generation: 'image',
-  }
-  if (mode === undefined || mode === '') return 'chat'
-  return SHORT[mode] ?? mode
-}
-
-/**
- * Which machine answers a route.
- *
- * No `api_base` is not "unknown" — it means litellm falls through to the
- * provider's own endpoint, so the request leaves the house. That is the one
- * distinction this column exists to draw, and rendering it as an em dash beside
- * eight local routes would hide exactly the row worth noticing.
- */
-function upstreamOf(apiBase: string | undefined, model: string | undefined): string {
-  if (apiBase === undefined || apiBase === '') {
-    return model?.startsWith('openai/') === true ? 'api.openai.com' : DASH
-  }
-  try {
-    return new URL(apiBase).hostname.replace(/\.local\.toscanini\.me$/, '')
-  } catch {
-    return DASH
-  }
 }
 
 /**
@@ -781,23 +846,6 @@ function rank(
     .filter((x) => x.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, limit)
-}
-
-/** The same sum, keeping every figure rather than ranking on one of them. */
-function tally(days: Day[], pick: (d: Day) => Breakdown): Map<string, Volume> {
-  const totals = new Map<string, Volume>()
-  for (const d of days) {
-    for (const [k, b] of Object.entries(pick(d) ?? {})) {
-      const at = totals.get(k) ?? { requests: 0, failed: 0, tokens: 0 }
-      const add = volumeOf(b.metrics)
-      totals.set(k, {
-        requests: at.requests + add.requests,
-        failed: at.failed + add.failed,
-        tokens: at.tokens + add.tokens,
-      })
-    }
-  }
-  return totals
 }
 
 // ── Open WebUI ─────────────────────────────────────────────────────────────

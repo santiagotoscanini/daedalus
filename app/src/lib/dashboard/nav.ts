@@ -93,6 +93,7 @@ export const CATEGORIES: CategorySpec[] = [
       // The one tab here with no headline band: its numbers live inside the
       // panel whose chart they describe.
       { id: 'litellm', label: 'LiteLLM', probe: 'litellm', boardSpans: [8, 4, 8, 4], statBand: false },
+      // Traffic + who is calling, then the changelog + the tool list.
       { id: 'open-webui', label: 'Open WebUI', probe: 'open-webui' },
       { id: 'n8n', label: 'n8n', probe: 'n8n' },
     ],

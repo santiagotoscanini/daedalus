@@ -3110,113 +3110,107 @@ h2 {
   color: var(--accent);
 }
 
-/* The gateway's routing table, with what actually went through each route.
-   A grid rather than a flex row per line, because the three numeric columns
-   only mean anything if they line up — this is the one place on these pages
-   where a reader is comparing DOWN a column rather than along a row. */
-.rtable {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-}
-.rtable ul {
+/* Who is calling: a ranking, with the things a ranking cannot say underneath
+   each bar. Two rows of a three-column grid rather than a flex row, so the
+   counts line up down the panel while the meta line runs the full width. */
+.callers {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.1rem;
 }
-/* Every track a fixed length or a fraction, none of them content-sized. The
-   header and each row are SEPARATE grid containers — an `auto` track would be
-   measured per container and the columns would drift row to row, which is the
-   one thing a table may not do. */
-.rtable-head,
-.rt-row {
+/* Fixed name and count tracks, not `auto`. Each row is its own grid container,
+   so a content-sized column is measured per row — the bars would start at a
+   different x on every line and stop at a different one, which is the entire
+   comparison this list exists to make. */
+.caller {
   display: grid;
-  grid-template-columns: 11rem 0.8rem minmax(0, 1fr) 7rem 3.5rem 4rem 4.5rem;
+  grid-template-columns: 7.5rem minmax(2rem, 1fr) 2.6rem;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.1rem 0.55rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 7px;
   min-width: 0;
 }
-.rtable-head {
-  padding: 0 0.45rem 0.15rem;
-  font-size: 0.58rem;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--dim);
-  border-bottom: 1px solid var(--border-soft);
-}
-/* The three figure columns are right-aligned in both rows, so the heading
-   sits over its own numbers rather than over the column before it. */
-.rtable-head > span:nth-child(n + 5) {
-  text-align: right;
-}
-.rt-row {
-  font-size: 0.76rem;
-  padding: 0.22rem 0.45rem;
-  border-radius: 7px;
+.caller:hover {
   background: var(--panel-2);
 }
-/* Published but never called. Still listed — a route that exists and is unused
-   is a fact about the config — but dimmed, so the live ones read first. */
-.rt-idle {
-  background: transparent;
-  opacity: 0.55;
-}
-.rt-name {
+.caller-name {
+  font-size: 0.79rem;
   color: var(--text);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.rt-arrow {
+.caller-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--raise);
+  overflow: hidden;
+}
+.caller-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: #5b8dd9;
+  opacity: 0.85;
+  /* Same growth as every other bar on these pages — `bar-grow` scales on X
+     from the left, so the origin has to be set for it to read as filling
+     rather than as sliding in. */
+  transform-origin: 0 50%;
+  animation: bar-grow 600ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+.caller-n {
+  font-size: 0.79rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+/* Everything the bar cannot say, on its own line under it. Interpuncts are
+   generated between the items rather than typed, so a caller with no tokens
+   and no latency does not trail a separator into empty space. */
+.caller-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.4rem;
+  font-size: 0.69rem;
   color: var(--dim);
-}
-.rt-target {
-  color: var(--muted);
+  font-variant-numeric: tabular-nums;
   min-width: 0;
+}
+.caller-meta > span + span::before {
+  content: "·";
+  margin-right: 0.4rem;
+  color: var(--border);
+}
+.caller-meta .mono {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Which machine answers, as a suffix on what it answers with — it is part of
-   the same sentence, and a column of its own would have said "gaming-pc" eight
-   times to make one row say something else. */
-.rt-target em {
-  font-style: normal;
-  color: var(--dim);
-  font-size: 0.68rem;
-  margin-left: 0.5rem;
-}
-.rt-n {
-  text-align: right;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
 
-@media (max-width: 60rem) {
-  /* Name, then target, then the figures on their own line. At this width the
-     seven columns each shrink to nothing; stacking keeps every value readable
-     and keeps the figures aligned with each other, which is what the columns
-     were for. */
-  .rtable-head {
-    display: none;
-  }
-  .rt-row {
-    grid-template-columns: minmax(0, 1fr) 3.5rem 4rem 4.5rem;
-    row-gap: 0.15rem;
-    padding-block: 0.4rem;
-  }
-  .rt-arrow {
-    display: none;
-  }
-  .rt-name,
-  .rt-target {
-    grid-column: 1 / -1;
-  }
+/* The keys that never got an answer. A statement rather than a list: the rows
+   would be hashes of credentials nobody here holds. Warn rather than bad —
+   it is something to look into, not something that is currently broken. */
+.rejected {
+  margin: 0.5rem 0 0;
+  padding: 0.4rem 0.55rem;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.rejected b {
+  color: var(--warn);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Tools a model called back out through the gateway. */
@@ -3245,10 +3239,18 @@ h2 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mcp-n {
+.mcp-ms {
   margin-left: auto;
+  color: var(--dim);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mcp-n {
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  min-width: 1.4rem;
+  text-align: right;
 }
 
 /* Name on the left, identifier on the right — the models a chat window offers
