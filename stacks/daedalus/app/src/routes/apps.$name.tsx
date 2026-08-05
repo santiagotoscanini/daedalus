@@ -35,6 +35,7 @@ import type { DeployStatus } from '../lib/deploy'
 import { GROUP_LABELS, type EnvGroup, type EnvOrigin } from '../lib/env-groups'
 import { BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import {
+  deleteAppFn,
   fetchApp,
   fetchAppTab,
   fetchDeployStatus,
@@ -721,6 +722,8 @@ function AppDetail() {
               <code>{app.name}-env.sops</code> authored by hand.
             </p>
           </Panel>
+
+          {!readOnly && <RemovePanel name={app.name} postgres={app.postgres} storage={app.storage} />}
         </div>
       )}
 
@@ -1797,6 +1800,87 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
 }
 
 /** Text input that commits on blur or Enter — no per-keystroke writes. */
+/**
+ * Remove the app from the registry.
+ *
+ * Confirm-by-typing rather than a dialog: the cost of this is not the click,
+ * it is that the next Apply takes the app off the box, and typing the name is
+ * the cheapest way to make sure the app being removed is the app you are
+ * looking at.
+ *
+ * The honest part is the list of what does NOT go away. `deleteApp` removes a
+ * declaration; the postgres database, the data directory and any sops file
+ * outlive it, because a UI button should not be able to destroy data that
+ * takes a restore to get back. Reclaiming them stays a deliberate act at a
+ * shell, and the panel says so instead of leaving you to find out.
+ */
+function RemovePanel({
+  name,
+  postgres,
+  storage,
+}: {
+  name: string
+  postgres: boolean
+  storage: boolean
+}) {
+  const router = useRouter()
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const remove = () => {
+    setBusy(true)
+    setError(null)
+    void deleteAppFn({ data: { name } })
+      .then(() => router.navigate({ to: '/apps' }))
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e))
+        setBusy(false)
+      })
+  }
+
+  return (
+    <Panel title="Remove" wide>
+      <p className="panel-note">
+        Deletes the registry entry. The next Apply removes the container, the traefik router, the
+        pi-hole record, the gatus probe, the Cloudflare route and this app’s CI runner.
+      </p>
+      <p className="panel-note">
+        <b>Not removed:</b>{' '}
+        {[
+          postgres && `the ${name} database and role on the shared cluster`,
+          storage && `/home/santiago/selfhost/apps/${name}/data`,
+          `stacks/apps/secrets/${name}/`,
+          `any stacks/apps/${name}-env.sops`,
+          'the GitHub repo and its published images',
+        ]
+          .filter((s): s is string => typeof s === 'string')
+          .join(', ')}
+        . Those are data, and removing them is a separate, deliberate act.
+      </p>
+      <label className="field">
+        <span>Type “{name}” to confirm</span>
+        <input
+          type="text"
+          value={confirm}
+          onChange={(e) => {
+            setConfirm(e.target.value)
+          }}
+        />
+      </label>
+      {error !== null && <p className="banner">{error}</p>}
+      <button
+        type="button"
+        className="btn btn-danger"
+        disabled={confirm !== name || busy}
+        onClick={remove}
+      >
+        {busy ? 'Removing…' : 'Remove from registry'}
+      </button>
+    </Panel>
+  )
+}
+
 function TextField({
   label,
   value,

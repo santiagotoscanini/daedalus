@@ -4588,6 +4588,158 @@ h2 {
   animation: sk-sweep 1.35s ease-in-out infinite;
 }
 
+/* ── add-an-app wizard ──────────────────────────────────────────────────── */
+
+/* Right-aligned in the page head, which is a baseline-aligned flex row. */
+.page-head-action {
+  margin-left: auto;
+  text-decoration: none;
+}
+
+.wizard-step {
+  margin-bottom: 2.2rem;
+}
+
+.repo-list {
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+/* A button, not a link: picking a repo changes the form below rather than
+   navigating, and the checklist that follows is the point of staying put. */
+.repo-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 14rem) 1fr auto;
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+}
+.repo-row:hover:not(:disabled) {
+  background: var(--raise);
+}
+.repo-row:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.repo-row.is-picked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.repo-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+.repo-desc {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.repo-meta {
+  color: var(--dim);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.checklist {
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
+}
+
+/* Four states, four colours, and `unknown` is grey rather than red on
+   purpose: two of these checks can only be answered by a credential daedalus
+   deliberately does not hold, and painting those as failures is how a
+   checklist becomes something you click past. */
+.check {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr;
+  gap: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 0.6rem 0.85rem;
+}
+.check-ok {
+  border-left-color: var(--ok);
+}
+.check-warn {
+  border-left-color: var(--warn);
+}
+.check-bad {
+  border-left-color: var(--bad);
+}
+.check-unknown {
+  border-left-color: var(--dim);
+}
+.check-mark {
+  font-weight: 700;
+}
+.check-ok .check-mark {
+  color: var(--ok);
+}
+.check-warn .check-mark {
+  color: var(--warn);
+}
+.check-bad .check-mark {
+  color: var(--bad);
+}
+.check-unknown .check-mark {
+  color: var(--dim);
+}
+.check-body {
+  display: grid;
+  gap: 0.15rem;
+}
+.check-detail {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.check-fix {
+  color: var(--dim);
+  font-size: 0.82rem;
+}
+.check-ack {
+  padding: 0.2rem 0.85rem;
+}
+
+.wizard-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.wizard-actions .footnote {
+  margin: 0;
+  max-width: 46rem;
+}
+
+/* Destructive, and coloured like it — but only on hover, so the panel does
+   not read as an alarm just for existing. */
+.btn-danger {
+  border-color: color-mix(in srgb, var(--bad) 50%, var(--border));
+  color: var(--bad);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
 /* Everything above animates once on arrival. For a reader who has asked for
    less motion, the end state is the whole point — so they get it immediately
    and nothing moves at all, including the download sheen. */

@@ -1,6 +1,9 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
 import type { AccessWindow } from '../lib/access-window'
+// Type-only, so the database module it lives next to is not pulled in here —
+// every value import in this file is dynamic for exactly that reason.
+import type { NewApp } from '../lib/repo/apps'
 
 // Server functions behind the Apps UI. Kept in one module so the list page,
 // the detail page and the apply bar all read the same shapes.
@@ -342,6 +345,85 @@ export const fetchAppTab = createServerFn()
         // nothing further to fetch, and no request is made.
         return { kind: 'settings' }
     }
+  })
+
+/**
+ * What the create form needs before it can ask anything: the repositories to
+ * pick from, and the names already spoken for.
+ *
+ * The repo list is the slow half (a GitHub round trip) and the taken names are
+ * two file reads plus a query, but they are fetched together — the form cannot
+ * usefully render half of itself, since picking a repo is what every later
+ * step keys off.
+ */
+export const fetchNewAppOptions = createServerFn().handler(async () => {
+  const { listRepos, OWNER } = await import('../lib/github-repos')
+  const { listApps } = await import('../lib/repo/apps')
+  const { manifestEntries } = await import('../lib/nix-manifest')
+
+  const [repos, records, manifest] = await Promise.all([
+    listRepos(),
+    listApps(),
+    manifestEntries(),
+  ])
+
+  // A name is taken if EITHER source knows it: the database holds what
+  // daedalus manages, the manifest additionally holds the hand-written
+  // entries. The picker greys those repos out rather than letting the create
+  // fail at the last step.
+  const taken = [...new Set([...records.map((r) => r.name), ...manifest.map((m) => m.name)])]
+
+  return { owner: OWNER, taken, ...repos }
+})
+
+/**
+ * Everything that has to be true before this repo can become an app.
+ *
+ * Two of the answers come from GitHub (workflows, repo secret) and one from
+ * the box's own registry (has CI ever published an image?). The last one is
+ * the only hard gate: a declaration whose image does not exist produces a
+ * container that cannot start, on a timer, until somebody notices.
+ */
+export const fetchAppPreflight = createServerFn()
+  .inputValidator((i: { repo: string; name: string; image: string | null }) => i)
+  .handler(async ({ data }) => {
+    const { repoChecks } = await import('../lib/github-repos')
+    const { imageInfo } = await import('../lib/registry')
+
+    const effectiveImage = data.image?.trim() || `registry.toscanini.me/${data.name}:latest`
+
+    // Only images on the box's own zot can be verified from here — an override
+    // pointing at GHCR or docker.io is reported as unverified rather than
+    // guessed at, because a wrong "missing" would block a legitimate fork.
+    // `<repo>` then an optional `:tag` or `@digest`; the leading separator is
+    // dropped either way, since the manifest endpoint takes both as a bare
+    // reference.
+    const local = /^registry\.toscanini\.me\/(?<repo>[^:@]+)(?<ref>[:@].+)?$/.exec(effectiveImage)
+    const imageState =
+      local?.groups?.repo === undefined ?
+        ('unverifiable' as const)
+      : await imageInfo(local.groups.repo, (local.groups.ref ?? ':latest').slice(1)).then((info) =>
+          info.digest === null ? ('missing' as const) : ('present' as const),
+        )
+
+    const { checks, workflows } = await repoChecks(data.repo)
+
+    return { effectiveImage, imageState, checks, workflows }
+  })
+
+export const createAppFn = createServerFn({ method: 'POST' })
+  .inputValidator((i: { app: NewApp }) => i)
+  .handler(async ({ data }) => {
+    const { createApp } = await import('../lib/repo/apps')
+    return createApp(data.app)
+  })
+
+export const deleteAppFn = createServerFn({ method: 'POST' })
+  .inputValidator((i: { name: string }) => i)
+  .handler(async ({ data }) => {
+    const { deleteApp } = await import('../lib/repo/apps')
+    await deleteApp(data.name)
+    return { ok: true }
   })
 
 export const saveApp = createServerFn({ method: 'POST' })

@@ -26,16 +26,31 @@
 #   hostname  = <name>.toscanini.me
 #   container = app-<name>
 #
-# Workflow for a NEW app (unchanged — daedalus does not create repos):
-#   1. Push the code to github.com/santiagotoscanini/<name>; CI on the
-#      self-hosted runners (stacks/gha-runner) builds the image and pushes
-#      `registry.toscanini.me/<name>:latest`.
-#   2. Add it in daedalus and Apply. The entry also provisions the repo's
-#      self-hosted runner (stacks/gha-runner derives its runner set from
-#      fleet.apps).
-#   3. Repo-side, once: copy the ci/image workflows from an existing app
-#      and `gh secret set REGISTRY_PASSWORD` with the ci password from
-#      stacks/registry/env.sops.
+# Workflow for a NEW app. Repo-side first, always — the entry is the last
+# step, because a declaration whose image doesn't exist yet builds fine and
+# then restart-loops on `podman run`:
+#   1. Push the code to github.com/santiagotoscanini/<name>, with the ci/image
+#      workflows copied from an existing app, and `gh secret set
+#      REGISTRY_PASSWORD` with the ci password from stacks/registry/env.sops.
+#   2. Add the repo to the gha-runner PAT's selected repositories
+#      (github.com/settings/personal-access-tokens). Fine-grained PAT repo
+#      selection is a UI-only setting, so nothing here can do it — and without
+#      it the app's runner unit fails ExecStartPre on every start.
+#   3. Let CI run once, so `registry.toscanini.me/<name>:latest` exists.
+#   4. Add it in daedalus (Apps -> Add an app) and Apply. Declaring the app
+#      also provisions its self-hosted runner (stacks/gha-runner derives its
+#      runner set from fleet.apps).
+#
+# Steps 1-3 are what daedalus's create form checks before it will write the
+# entry: it reads the repo's workflows and secret list with a read-only PAT and
+# asks zot whether the image exists. The image check is the one that blocks;
+# the rest are reported and left to judgement. Nothing in the create path
+# writes to GitHub.
+#
+# Auth, operator secrets and VPN egress are NOT part of creating an app. Each
+# needs state authored in this repo first — `SSO_SECRET_<NAME>` in
+# stacks/pocket-id/clients.sops, a tracked <name>-env.sops, or a gluetun
+# instance — after which the flag is editable like any other.
 #
 # From then on, every push to main goes live on its own: `app-<name>-deploy.timer`
 # polls the registry every 2 minutes, and when the digest moves it pulls,

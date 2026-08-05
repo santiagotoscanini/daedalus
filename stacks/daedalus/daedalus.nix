@@ -584,6 +584,14 @@ in
         "WGEASY_USER"
         "WGEASY_PASS"
         "CF_API_TOKEN"
+        # Read-only GitHub PAT for the add-an-app repo picker: Contents: read
+        # (list repos, read .github/workflows) and optionally Secrets: read
+        # (answer the REGISTRY_PASSWORD check). NOT the GHCR credential below
+        # — that one carries read:packages and cannot see a private repo, and
+        # NOT the gha-runner PAT, which carries Administration:write and stays
+        # host-side by design (stacks/gha-runner). Absent is supported: the
+        # picker falls back to the account's public repos and says so.
+        "GITHUB_REPO_TOKEN"
       ];
     in
     mkSecretRender {
