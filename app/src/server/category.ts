@@ -166,7 +166,7 @@ async function loadCategory(
     }
     case 'network': {
       const { loadNetwork } = await import('../lib/dashboard/categories/network')
-      return { kind: 'network', data: await loadNetwork(ctx) }
+      return { kind: 'network', data: await loadNetwork(tab, ctx) }
     }
     case 'system': {
       const { loadSystem } = await import('../lib/dashboard/categories/system')

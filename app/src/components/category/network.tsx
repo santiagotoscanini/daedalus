@@ -1,26 +1,53 @@
+import { useState } from 'react'
+
 import {
   BarList,
   Board,
   BoardGrid,
   BigStat,
   Chip,
+  Columns,
   Facts,
+  Measures,
   Progress,
   Pulse,
   Ring,
   StatBand,
   Trend,
 } from '../viz'
+import { GrafanaLogs, LogDetails } from '../logs'
+import { ReleaseNotes, UpgradeChain } from '../release-notes'
+import { LinkRow, ServiceHead } from '../service-head'
+import { Segmented } from '../ui'
 import { Topology, type TopoEdge, type TopoStage } from '../topology'
-import { DASH, bytes, flag, num, since } from '../../lib/dashboard/format'
+import { DASH, bytes, flag, num, pct, since, until } from '../../lib/dashboard/format'
+import type { VersionGap } from '../../lib/dashboard/github'
 import type { NetworkData } from '../../server/category'
+import type { Tone } from '../viz'
 
-// The Network page, ordered the way traffic arrives: the WAN link, the two
-// ways in (Cloudflare tunnel from outside, WireGuard for us), the proxy that
-// terminates everything, the resolver every device depends on, and the VPN
-// the download stack exits through.
+// The Network category, split by DIRECTION.
+//
+// General is the box's own plumbing — the WAN link, the proxy that terminates
+// everything, the resolver every device depends on, and the certificates. The
+// other two tabs are the two tunnels, and they are separate tabs because they
+// are opposites that share a vocabulary: both are WireGuard, both are called
+// "the VPN" in conversation, and one of them exists to let a phone reach this
+// house while the other exists to stop this house being recognised. On one
+// page the words "VPN", "WireGuard" and "tunnel" each meant two things a
+// scroll apart.
 
 export function NetworkView({ data }: { data: NetworkData }) {
+  switch (data.tab) {
+    case 'wireguard':
+      return <WireguardView data={data} />
+    case 'outbound':
+      return <OutboundView data={data} />
+    default:
+      return <GeneralView data={data} />
+  }
+}
+
+function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> }) {
   const { wan, proxy, dns, tunnel, wireguard, vpn, certs } = data
 
   return (
@@ -335,7 +362,7 @@ function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
  * and an app's own OIDC login are two different mechanisms that both end at
  * Pocket ID — the difference is only who performs the redirect.
  */
-function inboundStages(data: NetworkData): TopoStage[] {
+function inboundStages(data: General): TopoStage[] {
   const { tunnel, wireguard, proxy, certs, dns } = data
   const live = tunnel.status === 'healthy'
   const peersUp = wireguard.connected !== null && wireguard.connected > 0
@@ -515,7 +542,7 @@ function inboundStages(data: NetworkData): TopoStage[] {
   ]
 }
 
-function inboundEdges(data: NetworkData): TopoEdge[] {
+function inboundEdges(data: General): TopoEdge[] {
   const { tunnel, wireguard, proxy } = data
   const live = tunnel.status === 'healthy'
   const peersUp = wireguard.connected !== null && wireguard.connected > 0
@@ -560,7 +587,7 @@ function inboundEdges(data: NetworkData): TopoEdge[] {
  * and borrows gluetun's, so "it goes through the VPN" is structural rather
  * than something that could be misconfigured into leaking.
  */
-function egressStages(data: NetworkData): TopoStage[] {
+function egressStages(data: General): TopoStage[] {
   const { vpn, tunnel, dns } = data
   const vpnUp = vpn.up === true
 
@@ -655,7 +682,7 @@ function egressStages(data: NetworkData): TopoStage[] {
   ]
 }
 
-function egressEdges(data: NetworkData): TopoEdge[] {
+function egressEdges(data: General): TopoEdge[] {
   const vpnUp = data.vpn.up === true
   return [
     { from: 'bridged', to: 'hostns', label: 'pasta / bridge', tone: 'info', active: true },
@@ -676,4 +703,404 @@ function egressEdges(data: NetworkData): TopoEdge[] {
       dashed: !vpnUp,
     },
   ]
+}
+
+type General = Extract<NetworkData, { tab: 'general' }>
+
+// ── Coming in: WireGuard ───────────────────────────────────────────────────
+
+/**
+ * The way back into the house.
+ *
+ * One question, really: can I get in, and is anything configured that should
+ * not be. So the peer list is the page — every peer, whether or not it has
+ * ever connected, with the handshake that is the only liveness WireGuard has.
+ * A peer that exists and has never handshaken is a credential somebody was
+ * issued and never used, which is worth seeing on a list of two.
+ */
+function WireguardView({ data }: { data: Extract<NetworkData, { tab: 'wireguard' }> }) {
+  const { gap, counts, peers, daily } = data
+  const live = counts.connected !== null && counts.connected > 0
+  const max = Math.max(...peers.map((p) => p.rx + p.tx), 1)
+
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-wireguard.svg"
+        name="WireGuard"
+        version={data.version}
+        versionNote="wg-easy, pinned in the flake"
+        verdict={verdictOf(gap)}
+        compare={[
+          {
+            k: 'Latest',
+            v: gap.latest,
+            note:
+              gap.latest === null ? 'GitHub did not answer'
+              : gap.behind.length === 0 ? 'this is what is running'
+              : `${String(gap.behind.length)} release${gap.behind.length === 1 ? '' : 's'} between them`,
+          },
+          { k: 'Pinned by', v: null, note: 'an exact tag in stacks/wg-easy' },
+        ]}
+        lede={
+          <>
+            The one service the router forwards a port for, and the only way back into this house
+            from outside it. UDP 51820, and a WireGuard socket does not answer an unauthenticated
+            packet at all — which is the entire reason a forwarded port is acceptable here.
+          </>
+        }
+        actions={
+          <a className="btn btn-primary" href="https://wg.toscanini.me" target="_blank" rel="noreferrer">
+            Open wg-easy ↗
+          </a>
+        }
+      />
+      <LinkRow
+        links={[
+          { label: 'WireGuard', href: 'https://www.wireguard.com/' },
+          { label: 'wg-easy', href: 'https://github.com/wg-easy/wg-easy' },
+        ]}
+      />
+
+      <BoardGrid>
+        <Board
+          title="Peers"
+          icon="⚿"
+          span={8}
+          aside={
+            <span className="board-live">
+              <Pulse on={live} tone="ok" />
+              {live ? `${num(counts.connected)} connected` : 'nobody dialled in'}
+            </span>
+          }
+        >
+          <Measures
+            items={[
+              { k: 'configured', v: num(counts.configured) },
+              { k: 'enabled', v: num(counts.enabled) },
+              { k: 'connected now', v: num(counts.connected) },
+            ]}
+          />
+
+          {peers.length === 0 ?
+            <p className="viz-empty">no peers configured</p>
+          : <ul className="ranks">
+              {peers.map((p) => (
+                <li className="rank" key={p.name}>
+                  <span className="rank-name">
+                    <span title={p.name}>{p.name}</span>
+                    {!p.enabled && <em className="is-muted">disabled</em>}
+                    {p.handshakeAgo === null && <em>never used</em>}
+                  </span>
+                  <span className="rank-track">
+                    <span
+                      className="rank-fill"
+                      style={{ width: `${String(Math.max(1.5, ((p.rx + p.tx) / max) * 100))}%` }}
+                    />
+                  </span>
+                  <span className="rank-n">{bytes(p.rx + p.tx)}</span>
+                  <span className="rank-meta">
+                    {p.ipv4 !== null && <span className="mono">{p.ipv4}</span>}
+                    {/* Named rather than arrowed. An arrow on a VPN row is
+                        ambiguous by construction — the same byte is the
+                        peer's upload and the server's download — so these say
+                        which end they are counted at. */}
+                    <span>{bytes(p.rx)} from it</span>
+                    <span>{bytes(p.tx)} to it</span>
+                    <span>{p.ago}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          }
+
+          <p className="board-foot">
+            {/* The distinction that trips people up: WireGuard is
+                connectionless, so there is no session to be in or out of. */}
+            Ranked by total traffic. WireGuard has no connections to count — a peer is
+            &ldquo;connected&rdquo; exactly in the sense that it exchanged a handshake recently, so
+            a phone that is asleep reads as absent and is not. The byte counters are cumulative and
+            reset when wg-easy restarts, which is why they are a ranking here rather than a rate.
+          </p>
+        </Board>
+
+        <Board
+          title="Anyone home"
+          icon="◷"
+          span={4}
+          fill
+          aside={<span className="board-note">peak per day, 14d</span>}
+        >
+          <Columns
+            points={daily.map((d) => ({
+              label: d.date.slice(5),
+              value: d.peers,
+              display: `${num(d.peers)} peer${d.peers === 1 ? '' : 's'} at peak`,
+            }))}
+            tone="ok"
+            height={112}
+            empty="no history yet"
+          />
+          {daily.length > 0 && (
+            <p className="colaxis">
+              <span>{daily[0]?.date.slice(5)}</span>
+              <span>peers at peak</span>
+              <span>{daily[daily.length - 1]?.date.slice(5)}</span>
+            </p>
+          )}
+          <p className="board-foot">
+            Peak rather than average, because the question is whether the tunnel got used at all
+            and a twenty-minute session averages to nearly nothing over a day. An empty column is a
+            day nobody was away from the house — not a fault.
+          </p>
+        </Board>
+
+        <Board
+          title={gap.behind.length === 0 ? 'Release notes' : `${String(gap.behind.length)} to apply`}
+          icon="≡"
+          span={12}
+          aside={<span className="board-note">github releases</span>}
+        >
+          <UpgradeChain behind={gap.behind} />
+          <ReleaseNotes
+            releases={gap.releases}
+            running={gap.installed}
+            empty={gap.note ?? 'no published notes for this version'}
+          />
+        </Board>
+
+        {/* No neighbours: wg-easy runs the tunnel, the web UI and the exporter
+            in one container, and nothing else on the box is part of it. */}
+        <Board title="Logs" icon="≡" span={12}>
+          <GrafanaLogs source={{ container: 'wg-easy' }} title="wg-easy logs" />
+        </Board>
+      </BoardGrid>
+    </>
+  )
+}
+
+// ── Going out: the egress tunnels ──────────────────────────────────────────
+
+/**
+ * Every VPN this box exits through, one at a time.
+ *
+ * A selector rather than a board per tunnel, and that is the whole design
+ * decision here: there are two today and the shape of the page must not
+ * depend on that. Each is the same set of questions — where does it come out,
+ * has it stayed up, when does its key die, what loses the network with it —
+ * so they get one page and a switch, and a third tunnel appears in the switch
+ * by being declared. The list comes from `fleet.vpnEgress`, which
+ * `mkGluetunInstance` writes itself.
+ */
+function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }> }) {
+  const [selected, setSelected] = useState(data.tunnels[0]?.key ?? '')
+  const t = data.tunnels.find((x) => x.key === selected) ?? data.tunnels[0]
+
+  if (t === undefined) {
+    return (
+      <BoardGrid>
+        <Board title="Going out" icon="⇤" span={12}>
+          <p className="viz-empty">{data.note ?? 'no VPN egress declared'}</p>
+        </Board>
+      </BoardGrid>
+    )
+  }
+
+  const expiryTone: Tone | undefined =
+    t.expiryDays < 0 ? 'bad'
+    : t.expiryDays < 30 ? 'warn'
+    : undefined
+
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-gluetun.svg"
+        name={t.subject}
+        // The exit address, not the version — there is no version to show
+        // (gluetun's /v1/version is not in this instance's control-API allow
+        // list) and the address is the more identifying fact anyway: it is
+        // what the far side of every connection sees instead of this house.
+        version={t.exit.ip}
+        versionNote={`${flag(t.exit.country)} — where it comes out today`}
+        verdict={
+          t.up === null ? { label: 'unknown', tone: 'muted' }
+          : t.up ? { label: 'up', tone: 'ok' }
+          : { label: 'down', tone: 'bad' }
+        }
+        compare={[
+          { k: 'Exit address', v: t.exit.ip, note: 'what the far side sees instead of this house' },
+          { k: 'Carrier', v: t.exit.org, note: 'the provider’s own network, not ours' },
+        ]}
+        lede={
+          <>
+            gluetun holds a ProtonVPN WireGuard tunnel and owns a network namespace;{' '}
+            <b>{t.tenants.length}</b> containers borrow it outright rather than having interfaces of
+            their own. It is fail-closed, so a tunnel that drops takes their internet with it —
+            which is the point, and the reason this page exists.
+          </>
+        }
+        actions={
+          data.tunnels.length > 1 ?
+            <Segmented
+              value={t.key}
+              onChange={setSelected}
+              options={data.tunnels.map((x) => ({ value: x.key, label: x.container.replace(/^gluetun-?/, '') || 'downloads' }))}
+            />
+          : undefined
+        }
+      />
+      <LinkRow
+        links={[
+          { label: 'gluetun', href: 'https://github.com/qdm12/gluetun' },
+          { label: 'ProtonVPN account', href: 'https://account.protonvpn.com/downloads' },
+        ]}
+      />
+
+      <BoardGrid>
+        <Board
+          title="Staying up"
+          icon="⛨"
+          span={8}
+          aside={
+            <span className="board-live">
+              <Pulse on={t.up === true} tone={t.up === true ? 'ok' : 'bad'} />
+              {t.up === null ? 'unknown'
+              : t.up ? 'tunnel up'
+              : 'tunnel down'}
+            </span>
+          }
+        >
+          <Measures
+            items={[
+              { k: '7 days', v: t.uptime7d === null ? DASH : pct(t.uptime7d * 100, 2) },
+              {
+                k: 'key expires',
+                v: t.expiryDays < 0 ? `${String(-t.expiryDays)}d ago` : until(t.expiryDays * 86400),
+                tone: expiryTone,
+              },
+              ...(t.portForwarding ?
+                [{ k: 'forwarded port', v: t.port === null ? 'none yet' : String(t.port) }]
+              : []),
+            ]}
+          />
+
+          <Columns
+            points={t.daily.map((d) => ({
+              label: d.date.slice(5),
+              value: d.uptime,
+              display: `${pct(d.uptime * 100, 2)} up`,
+              flag: d.uptime < 0.999,
+            }))}
+            tone="ok"
+            height={112}
+            empty="no history yet"
+          />
+          {t.daily.length > 0 && (
+            <p className="colaxis">
+              <span>{t.daily[0]?.date.slice(5)}</span>
+              <span>share of the day connected</span>
+              <span>{t.daily[t.daily.length - 1]?.date.slice(5)}</span>
+            </p>
+          )}
+
+          <p className="board-foot">
+            {/* A near-full column is the normal state, so the axis starting at
+                zero is the honest choice AND the useless one — the flag is what
+                carries a bad day. */}
+            gluetun reports its own tunnel state every 30 seconds; this is the share of each day it
+            said it was connected. Columns are near-full by design — a day that dropped at all is
+            underlined in red rather than left to a difference of a pixel. The WireGuard key
+            expires <b>{t.keyExpiry}</b>, reminder mail goes out 30 and 7 days ahead, and the
+            renewal runbook is the header of <code>{t.runbook}</code>.
+          </p>
+        </Board>
+
+        <Board
+          title="What rides it"
+          icon="◫"
+          span={4}
+          fill
+          aside={<span className="board-note">{t.tenants.length} containers</span>}
+        >
+          <ul className="itemlist">
+            {t.tenants.map((c) => (
+              <li key={c.name}>
+                <Chip tone={c.up === null ? 'muted' : c.up ? 'ok' : 'bad'}>
+                  {c.up === null ? '?' : c.up ? 'up' : 'down'}
+                </Chip>
+                <span className="item-main mono">{c.name}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="board-foot">
+            Read from each container’s own <code>--network=container:{t.container}</code>, so this
+            is the set that actually shares the namespace rather than a list kept beside it. They
+            publish no ports of their own — only a namespace’s owner can — which is why every one
+            of their UIs is published on the gluetun container instead.
+          </p>
+        </Board>
+
+        <Board title="Where it comes out" icon="◍" span={12}>
+          <Facts
+            rows={[
+              // `flag` already emits the country name beside the emoji.
+              { k: 'Country', v: flag(t.exit.country) },
+              { k: 'City', v: place(t.exit.city, t.exit.region) },
+              { k: 'Address', v: <span className="mono">{t.exit.ip ?? DASH}</span> },
+              { k: 'Carrier', v: t.exit.org ?? DASH },
+              { k: 'Timezone', v: t.exit.timezone ?? DASH },
+            ]}
+          />
+          <p className="board-foot">
+            Asked of gluetun’s control API, which asks the provider — nothing on this box can
+            answer it, because the container only ever sees a private tunnel address and the exit
+            is only knowable from outside. The carrier is what an observer on the far side actually
+            attributes this traffic to.
+          </p>
+        </Board>
+
+        <Board title="Logs" icon="≡" span={12}>
+          <GrafanaLogs source={{ container: t.container }} title={`${t.container} logs`} />
+          {/* The one container genuinely tied to this tunnel and nothing else:
+              it exists solely to poll this gluetun's control API, it shares
+              its namespace, and it is where "the VPN alerts went quiet"
+              is answered. */}
+          <LogDetails
+            summary="Exporter — the process the VPN alerts read"
+            source={{ container: t.exporter }}
+            title={`${t.exporter} logs`}
+            foot={
+              <p className="board-foot">
+                Polls this tunnel’s control API every 30 seconds and serves the{' '}
+                <code>gluetun_vpn_status</code> and forwarded-port metrics behind the chart above
+                and the VPN-down alert. If those go stale while the tunnel is fine, the answer is
+                here.
+              </p>
+            }
+          />
+        </Board>
+      </BoardGrid>
+    </>
+  )
+}
+
+/** Same three answers the AI tabs give, for the same reason — see ai.tsx. */
+function verdictOf(gap: VersionGap): { label: string; tone: Tone } {
+  if (gap.installed === null || gap.latest === null) return { label: 'unknown', tone: 'muted' }
+  if (gap.behind.length === 0) return { label: 'current', tone: 'ok' }
+  return { label: `${String(gap.behind.length)} behind`, tone: 'warn' }
+}
+
+/**
+ * "Miami, Florida" — but not "Zürich, Zurich".
+ *
+ * A city-state's region is its city under a different spelling, and the
+ * provider reports both. Compared with diacritics stripped, because that IS
+ * the difference in the case that matters.
+ */
+function place(city: string | null, region: string | null): string {
+  const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  if (city === null || city === '') return region ?? DASH
+  if (region === null || region === '' || fold(region) === fold(city)) return city
+  return `${city}, ${region}`
 }

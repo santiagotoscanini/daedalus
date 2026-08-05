@@ -46,6 +46,14 @@ export type CategorySpec = {
      */
     boardSpans?: number[]
     statBand?: boolean
+    /**
+     * How many tile groups this tab shows, when it differs from the category's.
+     *
+     * A tile GROUP is scoped to a tab in `tiles.ts`; this is the skeleton's
+     * copy of that fact, and `0` is the one that matters — it stops a
+     * placeholder appearing for a directory the tab does not have.
+     */
+    tileGroups?: number
   }[]
   /**
    * Column spans of this page's boards, for the skeleton that stands in while
@@ -143,9 +151,21 @@ export const CATEGORIES: CategorySpec[] = [
     label: 'Network',
     icon: '⇄',
     lede: 'Everything between a packet and this box — the link, the ways in, the proxy, the resolver.',
-    boardSpans: [8, 4, 6, 6],
+    boardSpans: [12, 12, 8, 4],
     tileGroups: 1,
-    tabs: [],
+    // Split by DIRECTION, because that is the only axis on which these two
+    // are alike: both are WireGuard, both are tunnels, and everything else
+    // about them is opposite. One lets a phone reach the house from a hotel;
+    // the other stops the house being recognised from outside. Keeping them
+    // as two boards on one page meant the words "VPN", "WireGuard" and
+    // "tunnel" each meant two things a scroll apart.
+    tabs: [
+      { id: 'general', label: 'General' },
+      { id: 'wireguard', label: 'Coming in', probe: 'wg-easy', boardSpans: [8, 4, 12], statBand: false, tileGroups: 0 },
+      // No probe: gatus checks HTTP endpoints, and a VPN egress tunnel
+      // publishes none. Its liveness is on the page instead, per tunnel.
+      { id: 'outbound', label: 'Going out', boardSpans: [8, 4, 12], statBand: false, tileGroups: 0 },
+    ],
   },
   {
     id: "system",
