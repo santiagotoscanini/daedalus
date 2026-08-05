@@ -86,9 +86,42 @@ api() {
     "$@"
 }
 
-DEFAULT_BRANCH="$(api "https://api.github.com/repos/$OWNER/$REPO" | jq -r '.default_branch // ""')" ||
-  fail "no repository $OWNER/$REPO (or GitHub refused)"
-[ -n "$DEFAULT_BRANCH" ] || fail "no repository $OWNER/$REPO"
+# Status code and body, separately, because the difference between them is the
+# whole message. `curl -f` alone collapses every non-2xx into one exit code, and
+# the operator-facing sentence that came out of that said the repository does not
+# exist — which is what a 404 means and is a lie for the 403 that a burst of
+# requests actually earns. A wrong diagnosis on a red row is worse than none:
+# it sends you to look at the repo instead of waiting a minute.
+GH_BODY=""
+GH_STATUS=0
+api_probe() {
+  local out
+  out="$(curl -sS -w '\n%{http_code}' \
+    -H "Authorization: Bearer $GH_TOKEN" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "$1" 2>/dev/null)" || { GH_STATUS=0; GH_BODY=""; return 1; }
+  GH_STATUS="${out##*$'\n'}"
+  GH_BODY="${out%$'\n'*}"
+  [ "$GH_STATUS" = "200" ]
+}
+
+if ! api_probe "https://api.github.com/repos/$OWNER/$REPO"; then
+  case "$GH_STATUS" in
+  404) fail "no repository $OWNER/$REPO" ;;
+  401) fail "GitHub rejected the token (401) — the GHCR credential may have expired" ;;
+  403 | 429)
+    # Secondary rate limits are not the hourly quota and do not show up in it;
+    # they are earned by bursts and clear on their own in about a minute.
+    fail "GitHub refused with $GH_STATUS: $(printf '%s' "$GH_BODY" | jq -r '.message // "no message"' 2>/dev/null | head -c 200). If this was a burst of requests it clears on its own — try again shortly."
+    ;;
+  0) fail "could not reach api.github.com (DNS or network)" ;;
+  *) fail "GitHub answered $GH_STATUS for $OWNER/$REPO: $(printf '%s' "$GH_BODY" | jq -r '.message // ""' 2>/dev/null | head -c 200)" ;;
+  esac
+fi
+
+DEFAULT_BRANCH="$(printf '%s' "$GH_BODY" | jq -r '.default_branch // ""')"
+[ -n "$DEFAULT_BRANCH" ] || fail "$OWNER/$REPO reports no default branch"
 
 case "$ACTION" in
 set-secret)
@@ -131,16 +164,40 @@ run-ci)
     RUNNER="a one-shot bootstrap runner was started"
   fi
 
+  # Runs already waiting. Reported because a runner takes the OLDEST queued run
+  # first and an ephemeral one takes exactly one job: with a backlog, the runner
+  # started above serves somebody else's run and this dispatch stays queued —
+  # which looks like the button did nothing. Counting is not fixing it, but a
+  # number on screen is the difference between "broken" and "queued behind 4".
+  QUEUED=0
+  if api_probe "https://api.github.com/repos/$OWNER/$REPO/actions/runs?status=queued&per_page=100"; then
+    QUEUED="$(printf '%s' "$GH_BODY" | jq -r '.workflow_runs | length' 2>/dev/null || echo 0)"
+  fi
+
   # Dispatched AFTER the runner is up: a queued job with nothing to take it
   # just sits there, and the point of the ordering is that the run starts
   # while somebody is watching the page.
   write_status running "dispatching $WORKFLOW" ""
-  api -X POST \
+  DISPATCH="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+    -H "Authorization: Bearer $GH_TOKEN" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/$OWNER/$REPO/actions/workflows/$WORKFLOW/dispatches" \
-    -d "{\"ref\":\"$DEFAULT_BRANCH\"}" ||
-    fail "GitHub refused to dispatch $WORKFLOW on $DEFAULT_BRANCH"
+    -d "{\"ref\":\"$DEFAULT_BRANCH\"}" 2>/dev/null)" || DISPATCH=0
 
-  write_status "done" "$WORKFLOW dispatched on $DEFAULT_BRANCH — $RUNNER" ""
+  case "$DISPATCH" in
+  204) ;;
+  404) fail "$OWNER/$REPO has no workflow file named $WORKFLOW on $DEFAULT_BRANCH" ;;
+  422) fail "$WORKFLOW exists but has no workflow_dispatch trigger on $DEFAULT_BRANCH" ;;
+  0) fail "could not reach api.github.com to dispatch $WORKFLOW" ;;
+  *) fail "GitHub answered $DISPATCH dispatching $WORKFLOW on $DEFAULT_BRANCH" ;;
+  esac
+
+  BACKLOG=""
+  [ "$QUEUED" -gt 0 ] 2>/dev/null &&
+    BACKLOG=" — note: $QUEUED run(s) were already queued, and a runner takes the oldest first"
+
+  write_status "done" "$WORKFLOW dispatched on $DEFAULT_BRANCH — $RUNNER$BACKLOG" ""
   ;;
 
 *)

@@ -253,14 +253,25 @@ let
   #
   #   - No `Restart`. A per-app runner is a loop — one job, exit,
   #     re-register — because a repo that is an app should always have
-  #     capacity waiting. This one is a favour done once: it takes a job
-  #     and stays gone.
-  #   - `RuntimeMaxSec`. Nothing re-requests it and nothing notices it
-  #     idling, so a runner nobody dispatched to would sit registered
-  #     forever. The cap is well clear of a build (minutes) and still
-  #     bounded.
+  #     capacity waiting. This one is a favour, granted once and for a
+  #     bounded window.
+  #   - **Not EPHEMERAL**, which is the one place this diverges from the
+  #     per-app units, and not a shortcut. The workflow it exists to serve
+  #     has two jobs — `validate`, then `build-and-push` gated on it — and
+  #     an ephemeral runner takes exactly one before exiting, which would
+  #     leave the build queued with nothing to run it and no image at the
+  #     end. So it stays registered and serves jobs until its window
+  #     closes. What it gives up is workspace freshness between those two
+  #     jobs, for one repo's own run; what it keeps is the property that
+  #     actually matters here, no podman socket in the container.
+  #   - `RuntimeMaxSec`. With no ephemeral exit and nothing watching it,
+  #     this is what ends the window — well clear of a build (minutes) and
+  #     still bounded.
   #   - 143 is success: RuntimeMaxSec and a manual stop both arrive as
-  #     SIGTERM, and neither is a fault.
+  #     SIGTERM, and neither is a fault. Consequence, since the
+  #     deregister trap has no usable credential (see the header): the
+  #     repo keeps an offline runner entry until GitHub ages it out after
+  #     a day. Cosmetic, and the alternative is putting the PAT inside.
   bootstrapRunner = {
     description = "One-shot GitHub Actions runner for %i (first-image bootstrap)";
     after = [
@@ -307,7 +318,6 @@ let
         "--env=REPO_URL=https://github.com/santiagotoscanini/%i"
         "--env=RUNNER_NAME_PREFIX=s2-bootstrap-%i"
         "--env=LABELS=s2"
-        "--env=EPHEMERAL=1"
         "--env=DISABLE_AUTO_UPDATE=true"
         "--env=UNSET_CONFIG_VARS=true"
         "--env=DISABLE_AUTOMATIC_DEREGISTRATION=true"
