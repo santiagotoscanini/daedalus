@@ -182,11 +182,22 @@ export async function deleteApp(name: string): Promise<void> {
 /**
  * Fields daedalus may change today.
  *
- * The omissions are deliberate, not unfinished. `auth.*` cannot move without
- * provisioning an SSO_SECRET_<NAME> into stacks/pocket-id/clients.sops —
- * writing encrypted state is its own design problem, and a half-applied auth
- * change locks you out of the app. `egress` needs a gluetun instance to exist
- * first. `sourceMode` and `name` rewrite paths across the whole platform.
+ * The omissions are deliberate, not unfinished. `egress` needs a gluetun
+ * instance to exist first. `sourceMode` and `name` rewrite paths across the
+ * whole platform.
+ *
+ * `authMode` is here, with the same prerequisite-outside-daedalus shape as
+ * `operatorSecrets`: an `SSO_SECRET_<NAME>` in stacks/pocket-id/clients.sops.
+ * What makes it safe to expose is the assertion in stacks/pocket-id/clients.nix
+ * — sops leaves dotenv KEYS in plaintext, so Nix can check the key exists
+ * without decrypting anything, and a client declared without one fails
+ * evaluation. That matters more here than anywhere else: the creds render is a
+ * single unit for every client, so one missing secret would otherwise fail at
+ * activation and take the login path out for ALL of them.
+ *
+ * The hole the assertion cannot close is a key present with an EMPTY value;
+ * the value is encrypted, so eval cannot see it. That case is still caught at
+ * activation by the render's own `[ -n ]` check, which fails loudly.
  *
  * `operatorSecrets` IS here, and it is the one field whose prerequisite lives
  * outside this app: a tracked `stacks/apps/<name>-env.sops`, authored with
@@ -211,6 +222,8 @@ export const EDITABLE_FIELDS = [
   'litellm',
   'prometheus',
   'operatorSecrets',
+  'authMode',
+  'authHealthPath',
   'limitCpus',
   'limitMemoryMb',
   'limitPids',
@@ -246,6 +259,32 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
     const err = hostnameError(clean.hostname, await hostnamesTakenBy(own))
     if (err) throw new Error(`hostname ${err}`)
     clean.hostname = clean.hostname.trim().toLowerCase() || null
+  }
+
+  if (typeof clean.authHealthPath === 'string') {
+    const p = clean.authHealthPath.trim()
+    if (p !== '' && !p.startsWith('/')) throw new Error('health path must start with /')
+    clean.authHealthPath = p || null
+  }
+
+  // The same two rules stacks/apps/apps.nix asserts, checked before the write
+  // rather than during the rebuild an Apply has already committed.
+  //
+  // `proxy` gates the router with the generated forward-auth middleware, and
+  // the health path is what that middleware is told to let through — without
+  // one, gatus and the deploy check would both be answered by a 302 to the IdP
+  // and would certify the gate instead of the app. `proxy` also needs an
+  // ingress at all, which `stage = "off"` does not emit.
+  const mode = clean.authMode ?? record.authMode
+  const health = 'authHealthPath' in clean ? clean.authHealthPath : record.authHealthPath
+  const stage = clean.stage ?? record.stage
+  if (mode === 'proxy' && !health) {
+    throw new Error(
+      'forward-auth (proxy) needs a health path — an unauthenticated path the app itself serves, so the probe and the deploy check test the app rather than the login redirect',
+    )
+  }
+  if (mode === 'proxy' && stage === 'off') {
+    throw new Error('forward-auth (proxy) needs an ingress to gate; this app is not exposed')
   }
 
   await db

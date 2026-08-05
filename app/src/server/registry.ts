@@ -475,6 +475,34 @@ export const fetchCiRequestStatus = createServerFn().handler(async () => {
   return readCiRequestStatus()
 })
 
+/**
+ * Turn an app's SSO on or off for real, rather than checking whether somebody
+ * did the encrypted half by hand.
+ *
+ * `provision` is called when the mode moves to proxy or native, and it is safe
+ * in any order: adding a key to clients.sops cannot break a client that does
+ * not reference it, and the operation is idempotent.
+ *
+ * `revoke` is NOT called from the toggle, and that asymmetry is the point. The
+ * creds render is one unit for every client, so removing a secret the APPLIED
+ * config still requires fails it at the next boot and takes the login path out
+ * fleet-wide — for apps that had nothing to do with this change. The host agent
+ * refuses on exactly that condition, reading the committed apps.json rather
+ * than the database, which may be ahead of what is running.
+ */
+export const provisionSsoSecret = createServerFn({ method: 'POST' })
+  .inputValidator((i: { app: string; action: 'provision' | 'revoke' }) => i)
+  .handler(async ({ data }) => {
+    const { requestSso } = await import('../lib/ci-request')
+    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+    return { id: await requestSso({ action: data.action, app: data.app, actor }) }
+  })
+
+export const fetchSsoStatus = createServerFn().handler(async () => {
+  const { readSsoStatus } = await import('../lib/ci-request')
+  return readSsoStatus()
+})
+
 export const createAppFn = createServerFn({ method: 'POST' })
   .inputValidator((i: { app: NewApp }) => i)
   .handler(async ({ data }) => {

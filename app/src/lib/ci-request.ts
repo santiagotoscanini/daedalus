@@ -26,6 +26,68 @@ const STATUS = join(APPLY_DIR, 'ci-status.json')
 export type CiAction = 'set-secret' | 'run-ci'
 export type CiRequestState = 'idle' | 'running' | 'done' | 'failed'
 
+/**
+ * The SSO half, on its own request file and its own host agent.
+ *
+ * Separate from the CI verbs above because the privileged thing it needs is
+ * different in kind: those two hold a GitHub token, this one decrypts
+ * clients.sops with the host key and commits to the flake. Keeping the agents
+ * one-job-each is what lets each of them be read in a sitting.
+ */
+export type SsoAction = 'provision' | 'revoke'
+
+export type SsoStatus = {
+  id: string | null
+  action: SsoAction | null
+  app: string | null
+  state: CiRequestState
+  detail: string
+  error: string
+  finishedAt: string | null
+}
+
+const SSO_REQUEST = join(APPLY_DIR, 'sso-request.json')
+const SSO_STATUS = join(APPLY_DIR, 'sso-status.json')
+
+const SSO_IDLE: SsoStatus = {
+  id: null,
+  action: null,
+  app: null,
+  state: 'idle',
+  detail: '',
+  error: '',
+  finishedAt: null,
+}
+
+export async function readSsoStatus(): Promise<SsoStatus> {
+  try {
+    return { ...SSO_IDLE, ...(JSON.parse(await readFile(SSO_STATUS, 'utf8')) as Partial<SsoStatus>) }
+  } catch {
+    return SSO_IDLE
+  }
+}
+
+export async function requestSso(input: {
+  action: SsoAction
+  app: string
+  actor: string
+}): Promise<string> {
+  const id = randomUUID()
+  await mkdir(APPLY_DIR, { recursive: true })
+  const tmp = `${SSO_REQUEST}.tmp`
+  await writeFile(
+    tmp,
+    `${JSON.stringify(
+      { id, action: input.action, app: input.app, actor: input.actor, requestedAt: new Date().toISOString() },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  )
+  await rename(tmp, SSO_REQUEST)
+  return id
+}
+
 export type CiRequestStatus = {
   id: string | null
   action: CiAction | null
