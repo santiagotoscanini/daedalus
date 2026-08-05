@@ -584,13 +584,10 @@ in
         "WGEASY_USER"
         "WGEASY_PASS"
         "CF_API_TOKEN"
-        # Read-only GitHub PAT for the add-an-app repo picker: Contents: read
-        # (list repos, read .github/workflows) and optionally Secrets: read
-        # (answer the REGISTRY_PASSWORD check). NOT the GHCR credential below
-        # — that one carries read:packages and cannot see a private repo, and
-        # NOT the gha-runner PAT, which carries Administration:write and stays
-        # host-side by design (stacks/gha-runner). Absent is supported: the
-        # picker falls back to the account's public repos and says so.
+        # Optional override for the GitHub reads (the add-an-app repo picker
+        # and the release-notes panels): a narrow read-only PAT, taking
+        # precedence over GHTOKEN below. Empty by default, and the reason to
+        # fill it is scope rather than capability — see the note on GHTOKEN.
         "GITHUB_REPO_TOKEN"
       ];
     in
@@ -609,17 +606,24 @@ in
             config.sops.secrets."plane-env".path
           } | cut -d= -f2- || true)"
           # The GHCR pull credential, reused to authenticate the dashboard's
-          # GitHub API reads. Unauthenticated that API allows 60 requests an
-          # hour per IP, which the release-notes panels on the AI pages share
-          # with anything else on this box that talks to GitHub; authenticated
-          # it is 5000. Everything read is PUBLIC — four projects' release
-          # notes — so this buys headroom, not access, and whatever package
-          # scopes the credential carries are irrelevant to it.
+          # GitHub API reads. Two consumers: the release-notes panels, which
+          # only want rate-limit headroom (60 requests an hour per IP
+          # unauthenticated, 5000 authenticated), and the add-an-app repo
+          # picker, which genuinely needs to SEE this account's private repos
+          # and read their .github/workflows.
           #
-          # No new secret, and nothing new to rotate: it expires and rotates
+          # Know what is in the container here: it is a CLASSIC PAT carrying
+          # `gist, read:org, read:packages, repo`, and `repo` is read-WRITE on
+          # every repository on the account. Daedalus only ever issues GETs
+          # with it, but the credential itself is not read-only. Narrowing that
+          # is what GITHUB_REPO_TOKEN above is for: a fine-grained read-only
+          # PAT there takes precedence and this value stops being read from the
+          # container at all (podman's own pulls, host-side, keep using it).
+          #
+          # No new secret to rotate as things stand: it expires and rotates
           # with the deploys it already gates. If it ever does expire, deploys
-          # fail loudly and the release panels quietly fall back to the
-          # unauthenticated budget — which is what they used to run on.
+          # fail loudly, the release panels fall back to the unauthenticated
+          # budget, and the repo picker falls back to public repos and says so.
           #
           # podman's auth.json is `{"auths":{"ghcr.io":{"auth":"<b64 user:token>"}}}`.
           # grep + cut + base64 rather than jq: mkSecretRender's PATH is

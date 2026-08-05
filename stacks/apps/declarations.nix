@@ -32,17 +32,14 @@
 #   1. Push the code to github.com/santiagotoscanini/<name>, with the ci/image
 #      workflows copied from an existing app, and `gh secret set
 #      REGISTRY_PASSWORD` with the ci password from stacks/registry/env.sops.
-#   2. Add the repo to the gha-runner PAT's selected repositories
-#      (github.com/settings/personal-access-tokens). Fine-grained PAT repo
-#      selection is a UI-only setting, so nothing here can do it — and without
-#      it the app's runner unit fails ExecStartPre on every start.
-#   3. Let CI run once, so `registry.toscanini.me/<name>:latest` exists.
-#   4. Add it in daedalus (Apps -> Add an app) and Apply. Declaring the app
+#   2. Let CI run once, so `registry.toscanini.me/<name>:latest` exists.
+#   3. Add it in daedalus (Apps -> Add an app) and Apply. Declaring the app
 #      also provisions its self-hosted runner (stacks/gha-runner derives its
-#      runner set from fleet.apps).
+#      runner set from fleet.apps; its PAT covers every repo on the account,
+#      so there is nothing to grant per-repo).
 #
-# Steps 1-3 are what daedalus's create form checks before it will write the
-# entry: it reads the repo's workflows and secret list with a read-only PAT and
+# Steps 1-2 are what daedalus's create form checks before it will write the
+# entry: it reads the repo's workflows and secret list over the GitHub API and
 # asks zot whether the image exists. The image check is the one that blocks;
 # the rest are reported and left to judgement. Nothing in the create path
 # writes to GitHub.
