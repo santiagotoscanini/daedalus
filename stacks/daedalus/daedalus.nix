@@ -600,6 +600,25 @@ in
           "PLANE_KEY=$(grep -m1 '^PLANE_API_KEY=' ${
             config.sops.secrets."plane-env".path
           } | cut -d= -f2- || true)"
+          # The GHCR pull credential, reused to authenticate the dashboard's
+          # GitHub API reads. Unauthenticated that API allows 60 requests an
+          # hour per IP, which the release-notes panels on the AI pages share
+          # with anything else on this box that talks to GitHub; authenticated
+          # it is 5000. Everything read is PUBLIC — four projects' release
+          # notes — so this buys headroom, not access, and whatever package
+          # scopes the credential carries are irrelevant to it.
+          #
+          # No new secret, and nothing new to rotate: it expires and rotates
+          # with the deploys it already gates. If it ever does expire, deploys
+          # fail loudly and the release panels quietly fall back to the
+          # unauthenticated budget — which is what they used to run on.
+          #
+          # podman's auth.json is `{"auths":{"ghcr.io":{"auth":"<b64 user:token>"}}}`.
+          # grep + cut + base64 rather than jq: mkSecretRender's PATH is
+          # coreutils and gnugrep, and this is not worth widening it for.
+          "GHTOKEN=$(grep -o '\"auth\"[[:space:]]*:[[:space:]]*\"[^\"]*\"' ${
+            config.sops.secrets."ghcr-auth".path
+          } | head -1 | cut -d'\"' -f4 | base64 -d 2>/dev/null | cut -d: -f2- || true)"
         ]
       );
       content = lib.concatStringsSep "\n" (
@@ -607,6 +626,7 @@ in
         ++ [
           "DASH_POCKETID_KEY=\${POCKETID_KEY}"
           "DASH_PLANE_KEY=\${PLANE_KEY}"
+          "DASH_GITHUB_TOKEN=\${GHTOKEN}"
         ]
       );
     };
