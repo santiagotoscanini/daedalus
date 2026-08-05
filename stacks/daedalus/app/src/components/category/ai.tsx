@@ -763,15 +763,22 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
             <p className="rejected">
               <b>{num(data.rejected.keys)}</b> keys never completed a request —{' '}
               <b>{num(data.rejected.requests)}</b> attempts, last{' '}
-              {ago(data.rejected.last, todayDate)}.
+              {ago(data.rejected.last, todayDate)}.{' '}
+              {data.rejected.live === 0 ?
+                'None of them exists on the gateway today.'
+              : <>
+                  <b>{num(data.rejected.live)}</b> of them still exists on the gateway, which is a
+                  fault rather than a stale credential.
+                </>
+              }
             </p>
           )}
 
           <p className="board-foot">
-            Named by their key’s alias; an unaliased key shows as its hash. A key that fails
-            authentication never reaches a model, so it has no tokens and no model to show — which
-            is what the line above is counting. The gateway is LAN-only, so those attempts came from
-            something in the house.
+            Named by their key’s alias; a key with none shows as its hash, and one the gateway no
+            longer holds is marked <b>revoked</b> — hover any name for what it is. A key that fails
+            authentication never reaches a model, so it has no tokens and no model against it. The
+            gateway is LAN-only, so every attempt above came from something in the house.
           </p>
         </Board>
 
@@ -848,8 +855,13 @@ type Caller = Extract<AiData, { tab: 'litellm' }>['callers'][number]
 function CallerRow({ caller, max, today }: { caller: Caller; max: number; today: string }) {
   return (
     <li className="caller">
-      <span className="caller-name" title={caller.name}>
-        {caller.name}
+      {/* The note is the answer to "what IS this row" — a bare hash, or a name
+          that turns out to be six services sharing one credential — so it is
+          on the name itself rather than in the caption, where it would have to
+          be written once per case and read every time. */}
+      <span className={caller.note === null ? 'caller-name' : 'caller-name caller-noted'}>
+        <span title={caller.note ?? caller.name}>{caller.name}</span>
+        {!caller.live && <em title={caller.note ?? undefined}>revoked</em>}
       </span>
       <span className="caller-track">
         <span
