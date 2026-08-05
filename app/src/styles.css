@@ -3138,7 +3138,7 @@ h2 {
    comparison this list exists to make. */
 .caller {
   display: grid;
-  grid-template-columns: 7.5rem minmax(2rem, 1fr) 2.6rem;
+  grid-template-columns: 9.5rem minmax(2rem, 1fr) 2.6rem;
   align-items: center;
   gap: 0.1rem 0.55rem;
   padding: 0.3rem 0.45rem;
@@ -3152,9 +3152,34 @@ h2 {
   font-size: 0.79rem;
   color: var(--text);
   min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+.caller-name > span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* A name that cannot be read at face value — an internal credential, or a
+   hash — carries its explanation on a hover, and says so with the same dotted
+   underline the host strip uses for the same promise. */
+.caller-noted > span:first-child {
+  border-bottom: 1px dotted var(--border);
+  cursor: help;
+}
+/* The key is gone from the gateway, which is the reason the row exists at all
+   when it is also failing. Warn, not bad: a revoked key is history, not a
+   fault. */
+.caller-name em {
+  font-style: normal;
+  font-size: 0.6rem;
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  border-radius: 999px;
+  padding: 0.02rem 0.35rem;
+  flex: none;
 }
 .caller-track {
   height: 5px;

@@ -135,6 +135,17 @@ type Caller = Volume & {
   models: string[]
   /** The last day it made a request, `YYYY-MM-DD`. */
   last: string
+  /**
+   * Whether a key by this name still exists on the gateway.
+   *
+   * The ledger is a record of what happened, and keys get rotated and deleted
+   * — so a hash in it may name a credential that has since been revoked. That
+   * is usually the whole explanation for a caller that starts succeeding and
+   * then fails forever, and without this the row is an unanswerable hash.
+   */
+  live: boolean
+  /** What this caller IS, for a hover. Null for an ordinary named key. */
+  note: string | null
 }
 
 type LitellmData = {
@@ -161,7 +172,7 @@ type LitellmData = {
    * holds, so naming eleven of them individually says nothing you can act on.
    * How many, how often and how recently is the whole actionable content.
    */
-  rejected: { keys: number; requests: number; last: string | null }
+  rejected: { keys: number; requests: number; last: string | null; live: number }
   /** Tools a model called back out through the gateway. */
   mcp: { server: string; tool: string; calls: number; latencyMs: number | null }[]
   /** The MCP servers those tools belong to, with their totals. */
@@ -569,10 +580,18 @@ async function loadLitellm(): Promise<LitellmData> {
   const from = dates[0] ?? ''
   const today = dates[DAYS - 1] ?? ''
 
-  const [activity, version, inFlight, latSum, latCount, toolLatency, overhead] = await Promise.all([
+  const [activity, keys, version, inFlight, latSum, latCount, toolLatency, overhead] =
+    await Promise.all([
     getJson<DailyActivity>(
       `http://litellm:4000/user/daily/activity?start_date=${from}&end_date=${today}` +
         `&page_size=${String(PAGE_SIZE)}`,
+      auth,
+    ),
+    // Which keys still EXIST, as opposed to which ones have called. The ledger
+    // is history and keys get rotated out of it, so the difference between the
+    // two lists is what turns an unanswerable hash into "this was revoked".
+    getJson<{ keys?: { token?: string }[] }>(
+      'http://litellm:4000/key/list?return_full_object=true&size=100',
       auth,
     ),
     litellmVersion(auth),
@@ -637,7 +656,12 @@ async function loadLitellm(): Promise<LitellmData> {
     days: daily.length,
   }
 
-  const { callers, rejected } = callersOf(days, latSum, latCount)
+  const { callers, rejected } = callersOf(
+    days,
+    latSum,
+    latCount,
+    new Set((keys?.keys ?? []).map((k) => k.token ?? '')),
+  )
 
   const toolMs = new Map(toolLatency.map((t) => [t.label, t.value * 1000]))
   const mcp = rank(days, (d) => d.breakdown?.mcp_servers, requestsOf, (k) => k, 10).map((t) => {
@@ -689,11 +713,18 @@ function callersOf(
   days: Day[],
   latSum: { label: string; value: number }[],
   latCount: { label: string; value: number }[],
+  liveKeys: Set<string>,
 ): { callers: Caller[]; rejected: LitellmData['rejected'] } {
   const sums = new Map(latSum.map((r) => [r.label, r.value]))
   const counts = new Map(latCount.map((r) => [r.label, r.value]))
 
-  type Acc = Volume & { latSum: number; latCount: number; models: Set<string>; last: string }
+  type Acc = Volume & {
+    latSum: number
+    latCount: number
+    models: Set<string>
+    last: string
+    live: boolean
+  }
   const byName = new Map<string, Acc>()
   const seen = new Set<string>()
 
@@ -711,7 +742,13 @@ function callersOf(
         latCount: 0,
         models: new Set<string>(),
         last: date,
+        // The two literals are litellm's own credentials rather than rows in
+        // its key table, so they are never "missing" from it.
+        live: hash === 'litellm_proxy_master_key' || hash === 'litellm-internal-health-check',
       }
+      // One live hash is enough: a rotated key keeps its alias, so `plane`
+      // legitimately covers one current key and one that was replaced.
+      if (liveKeys.has(hash)) at.live = true
       // Prometheus totals are per key, so they may only be added the first time
       // a hash is seen — a caller active on nine days would otherwise have its
       // latency counted nine times.
@@ -745,6 +782,8 @@ function callersOf(
     latencyMs: a.latCount > 0 ? (a.latSum / a.latCount) * 1000 : null,
     models: [...a.models].sort(),
     last: a.last,
+    live: a.live,
+    note: NOTES[name] ?? (a.live ? null : GONE),
   }))
 
   const dead = all.filter((c) => c.requests === c.failed)
@@ -757,8 +796,29 @@ function callersOf(
       keys: dead.length,
       requests: dead.reduce((n, c) => n + c.requests, 0),
       last: dead.reduce<string | null>((at, c) => (at === null || c.last > at ? c.last : at), null),
+      // Nearly always zero, and worth stating separately when it is not: a key
+      // that EXISTS and still fails every call is a different fault from one
+      // that was revoked, and only the first is a problem with the gateway.
+      live: dead.filter((c) => c.live).length,
     },
   }
+}
+
+const GONE = 'No key with this hash exists on the gateway any more — it was deleted or rotated, which is usually the whole explanation for a caller that succeeded and then failed forever.'
+
+/**
+ * What litellm's own two credentials actually are.
+ *
+ * Both are honest entries in the caller list — they make real inference calls
+ * and burn real GPU on the gaming PC — and both are unreadable without a
+ * sentence. The master key in particular is not one caller: it is the admin
+ * credential, and everything configured with it lands in one row.
+ */
+const NOTES: Record<string, string> = {
+  'master key':
+    'The admin credential, so this row is every consumer configured with it at once — Open WebUI (chat, RAG embeddings, transcription, speech, images), the pgvector connector, and this dashboard. Giving each its own aliased key is what would split them apart.',
+  'health check':
+    'LiteLLM testing its own deployments. Not a status ping — it sends a real minimal request to each one, which is why it has tokens against it. Triggered on demand, from the admin UI or /health, rather than on a schedule.',
 }
 
 function volumeOf(m: DayMetrics | undefined): Volume {
