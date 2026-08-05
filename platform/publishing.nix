@@ -265,6 +265,17 @@ in
                 type = lib.types.str;
                 description = "What this tunnel is for, in words. Also the reminder-mail subject.";
               };
+              provider = lib.mkOption {
+                type = lib.types.str;
+                default = "ProtonVPN";
+                description = ''
+                  Whose network this comes out on. Defaults to ProtonVPN
+                  because the whole library is shaped around it — gluetun
+                  runs in `custom` mode against a Proton wg0.conf, and
+                  `keyExpiry` exists because Proton's keys expire. A
+                  different provider sets this and keeps the rest.
+                '';
+              };
               keyExpiry = lib.mkOption {
                 type = lib.types.str;
                 description = "YYYY-MM-DD the ProtonVPN WireGuard key stops working.";

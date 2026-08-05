@@ -99,6 +99,7 @@ rec {
       runbookPath, # file whose header holds the renewal runbook
       ports, # host-publish list — ALL netns tenants' ports live here
       environment ? { }, # instance-specific gluetun env (kill-switch holes, port forwarding)
+      provider ? "ProtonVPN", # whose network this exits on — see fleet.vpnEgress
       scrapeJob ? name, # prometheus job_name for the exporter
       scrapeTarget, # exporter target ("host.containers.internal:<port>")
       # In-netns web UIs published on this gluetun, each
@@ -139,6 +140,7 @@ rec {
         inherit
           controlPort
           subject
+          provider
           keyExpiry
           ;
         runbook = runbookPath;

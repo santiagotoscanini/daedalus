@@ -4940,3 +4940,18 @@ h2 {
     animation: none;
   }
 }
+
+/* A provider's mark beside a board's title — the network a tunnel comes out
+   on is a brand, and the logo says it faster than the word does. Sized to the
+   board-note text it sits in, not to the artwork. */
+.board-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+.board-brand img {
+  display: block;
+  border-radius: 3px;
+}
