@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 
 import type { AiData } from '../lib/dashboard/categories/ai'
+import type { GamingData } from '../lib/dashboard/categories/gaming'
 import type { BooksData, TvData } from '../lib/dashboard/categories/media'
 import type { HomeData } from '../lib/dashboard/categories/home'
 import type { MonitoringData } from '../lib/dashboard/categories/monitoring'
@@ -31,7 +32,16 @@ import type { CategoryName } from '../lib/dashboard/tiles'
 // needs neither: it comes from the static CATEGORIES table on the client and
 // is on screen before either request is answered.
 
-export type { AiData, BooksData, HomeData, MonitoringData, NetworkData, SystemData, TvData }
+export type {
+  AiData,
+  BooksData,
+  GamingData,
+  HomeData,
+  MonitoringData,
+  NetworkData,
+  SystemData,
+  TvData,
+}
 
 /** The service directory that sits under every category's own panels. */
 export type Tile = {
@@ -101,6 +111,7 @@ type Body =
   | { kind: 'network'; data: NetworkData }
   | { kind: 'system'; data: SystemData }
   | { kind: 'monitoring'; data: MonitoringData }
+  | { kind: 'gaming'; data: GamingData }
 
 async function loadCategory(
   category: CategoryName,
@@ -133,6 +144,10 @@ async function loadCategory(
     case 'monitoring': {
       const { loadMonitoring } = await import('../lib/dashboard/categories/monitoring')
       return { kind: 'monitoring', data: await loadMonitoring(ctx) }
+    }
+    case 'gaming': {
+      const { loadGaming } = await import('../lib/dashboard/categories/gaming')
+      return { kind: 'gaming', data: await loadGaming() }
     }
   }
 }

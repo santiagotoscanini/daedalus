@@ -90,9 +90,14 @@ function RootDocument({ children }: { children: ReactNode }) {
                   search={{}}
                   className="nav-item"
                 >
-                  <span className="nav-icon" aria-hidden="true">
-                    {c.icon}
-                  </span>
+                  {/* Artwork where the subject has some; a glyph otherwise. Same
+                      box either way so the rail stays a single column. */}
+                  {c.iconImage !== undefined ?
+                    <img className="nav-icon nav-icon-img" src={c.iconImage} alt="" />
+                  : <span className="nav-icon" aria-hidden="true">
+                      {c.icon}
+                    </span>
+                  }
                   {c.label}
                 </Link>
               ))}
