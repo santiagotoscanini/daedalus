@@ -28,6 +28,10 @@
 // is enough, and the caption says so rather than leaving a login box to be
 // puzzled over.
 
+import { useState } from 'react'
+
+import { Segmented } from './ui'
+
 const GRAFANA = 'https://grafana.toscanini.me'
 
 /**
@@ -60,21 +64,62 @@ export function grafanaLogsFull(container: string, from = "now-7d"): string {
   )
 }
 
+/**
+ * The ranges worth one click.
+ *
+ * `d-solo` renders a panel with no time picker — that is the whole reason it
+ * is the right URL, since the picker comes attached to Grafana's entire
+ * toolbar. So the picker is ours: four ranges, swapped into the iframe's src,
+ * which is a page-local reload of one frame rather than a route change.
+ */
+const RANGES = [
+  { value: 'now-1h', label: '1h' },
+  { value: 'now-24h', label: '24h' },
+  { value: 'now-7d', label: '7d' },
+  { value: 'now-30d', label: '30d' },
+] as const
+
+type Range = (typeof RANGES)[number]['value']
+
 export function GrafanaLogs({ container, title }: { container: string; title: string }) {
+  // Seven days for the reason in grafanaLogsEmbed: most services here are
+  // quiet between restarts, and a short default shows nothing for a healthy
+  // one.
+  const [from, setFrom] = useState<Range>('now-7d')
+
   return (
     <>
+      <div className="logs-bar">
+        <Segmented
+          value={from}
+          onChange={setFrom}
+          options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
+        />
+        <a
+          className="btn btn-ghost"
+          href={grafanaLogsFull(container, from)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          ↗ Search
+        </a>
+      </div>
       <iframe
+        // `key` on the range so a change remounts the frame rather than
+        // mutating src — Grafana keeps its own history otherwise, and the back
+        // button would start walking through time ranges instead of pages.
+        key={from}
         className="embed embed-logs"
-        src={grafanaLogsEmbed(container)}
+        src={grafanaLogsEmbed(container, from)}
         title={title}
         loading="lazy"
       />
       <p className="board-foot">
-        Rendered by Grafana from <code>{container}</code>, newest first, over the last seven days —
-        most services here are quiet between restarts, and a short window shows nothing for a
-        service that is perfectly healthy. Follow the link above for search, filters and live
-        tail. If the frame shows a login screen, open Grafana once in a tab: it needs a session it
-        cannot obtain inside itself, because the IdP refuses to be framed.
+        Rendered by Grafana from <code>{container}</code>, newest first. The default is seven days
+        because most services here are quiet between restarts — a short window shows nothing for a
+        service that is perfectly healthy. If the frame shows a login screen, open Grafana once in
+        a tab: it needs a session it cannot obtain inside itself, because the IdP refuses to be
+        framed.
       </p>
     </>
   )
