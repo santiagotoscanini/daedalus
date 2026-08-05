@@ -186,8 +186,16 @@ export async function deleteApp(name: string): Promise<void> {
  * provisioning an SSO_SECRET_<NAME> into stacks/pocket-id/clients.sops —
  * writing encrypted state is its own design problem, and a half-applied auth
  * change locks you out of the app. `egress` needs a gluetun instance to exist
- * first. `operatorSecrets` needs a <name>-env.sops authored by hand.
- * `sourceMode` and `name` rewrite paths across the whole platform.
+ * first. `sourceMode` and `name` rewrite paths across the whole platform.
+ *
+ * `operatorSecrets` IS here, and it is the one field whose prerequisite lives
+ * outside this app: a tracked `stacks/apps/<name>-env.sops`, authored with
+ * sops. It is safe to expose anyway, because getting it wrong fails in the
+ * safest possible place — declarations.nix builds a `sops.secrets` entry from
+ * the flag and a missing file is an EVAL error, so the Apply dies in
+ * `nixos-rebuild build` before anything switches. Loud, and the running system
+ * never moves. What it must not be is silently ignorable: an app whose env file
+ * vanishes comes back up missing every operator-supplied variable.
  *
  * Everything here, by contrast, is a pure data change that the existing
  * modules already know how to act on.
@@ -202,6 +210,7 @@ export const EDITABLE_FIELDS = [
   'storage',
   'litellm',
   'prometheus',
+  'operatorSecrets',
   'limitCpus',
   'limitMemoryMb',
   'limitPids',
