@@ -885,20 +885,23 @@ const LITELLM_NEIGHBOURS: readonly Neighbour[] = [
  * `note` is the answer to "what IS this row" — a bare hash, a name that turns
  * out to be six services sharing one credential — and it hangs off the name
  * rather than the caption, where it would have to be written once per case and
- * read every time. `badge` is for the state that changes what the numbers
- * mean: a key the gateway no longer holds, a schedule that has stopped firing.
+ * read every time. `badges` are for the states that change what the numbers
+ * mean: a key the gateway no longer holds, a schedule that has stopped firing,
+ * runs that were all against a version somebody has since edited. A list
+ * rather than one, because those are independent — a workflow can be both
+ * stalled and unpublished, and picking one to show would hide the other.
  */
 function RankRow({
   name,
   note = null,
-  badge = null,
+  badges = [],
   value,
   max,
   meta,
 }: {
   name: string
   note?: string | null
-  badge?: { text: string; tone: 'warn' | 'muted' } | null
+  badges?: readonly { text: string; tone: 'warn' | 'muted'; why?: string }[]
   value: number
   max: number
   meta: ReactNode
@@ -907,11 +910,15 @@ function RankRow({
     <li className="rank">
       <span className={note === null ? 'rank-name' : 'rank-name rank-noted'}>
         <span title={note ?? name}>{name}</span>
-        {badge !== null && (
-          <em className={badge.tone === 'muted' ? 'is-muted' : undefined} title={note ?? undefined}>
-            {badge.text}
+        {badges.map((b) => (
+          <em
+            key={b.text}
+            className={b.tone === 'muted' ? 'is-muted' : undefined}
+            title={b.why ?? note ?? undefined}
+          >
+            {b.text}
           </em>
-        )}
+        ))}
       </span>
       <span className="rank-track">
         <span className="rank-fill" style={{ width: `${String(Math.max(1.5, (value / max) * 100))}%` }} />
@@ -936,7 +943,7 @@ function CallerRow({ caller, max, today }: { caller: Caller; max: number; today:
     <RankRow
       name={caller.name}
       note={caller.note}
-      badge={caller.live ? null : { text: 'revoked', tone: 'warn' }}
+      badges={caller.live ? [] : [{ text: 'revoked', tone: 'warn' } as const]}
       value={caller.requests}
       max={max}
       meta={
@@ -1113,6 +1120,28 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
 
 // ── n8n ────────────────────────────────────────────────────────────────────
 
+type N8nFlow = Extract<AiData, { tab: 'n8n' }>['flows'][number]
+
+/**
+ * The states a workflow can be in that change what its numbers mean.
+ *
+ * Independent, so this returns a list rather than picking one — a workflow can
+ * be both stalled and unpublished, and the second would explain the first.
+ * Warn for anything wanting a decision; muted for `off`, which is not a fault
+ * but the reason the row has no recent runs. Colouring that would make every
+ * deliberately-parked workflow look broken.
+ */
+function badgesFor(f: N8nFlow): { text: string; tone: 'warn' | 'muted'; why?: string }[] {
+  const out: { text: string; tone: 'warn' | 'muted'; why?: string }[] = []
+  if (f.stalled) out.push({ text: 'stalled', tone: 'warn', why: 'kept a cadence, then missed it' })
+  if (f.active === true && f.runs === 0)
+    out.push({ text: 'never run', tone: 'warn', why: 'switched on and has not fired in the window' })
+  if (f.unpublished)
+    out.push({ text: 'unpublished', tone: 'warn', why: 'edited since the version the schedule runs' })
+  if (f.active === false) out.push({ text: 'off', tone: 'muted', why: 'switched off in n8n' })
+  return out
+}
+
 function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
   const { gap, window: total, daily, flows } = data
   const firstDate = daily[0]?.date ?? ''
@@ -1236,23 +1265,24 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
                 <RankRow
                   key={f.id}
                   name={f.name ?? f.id.slice(0, 8)}
-                  note={f.name === null ? `workflow id ${f.id}` : null}
-                  badge={
-                    f.stalled ? { text: 'stalled', tone: 'warn' }
-                    : f.active === false ? { text: 'off', tone: 'muted' }
-                    : null
-                  }
+                  note={f.name === null ? `ran in this window, and no longer exists` : null}
+                  badges={badgesFor(f)}
                   value={f.runs}
                   max={flows[0]?.runs ?? 1}
                   meta={
                     <>
-                      {f.medianMs !== null && <span>{ms(f.medianMs)}</span>}
-                      {/* `until`, not `ms`: a cadence is a period, and the
-                          latency formatter tops out at minutes — a daily
-                          schedule read "1440m 0s". */}
-                      {f.everyMs !== null && <span>every {until(f.everyMs / 1000)}</span>}
-                      {f.failed > 0 && <span className="bad-text">{num(f.failed)} failed</span>}
-                      <span>{f.ago}</span>
+                      {f.runs === 0 ?
+                        <span className="bad-text">nothing in {total.days} days</span>
+                      : <>
+                          {f.medianMs !== null && <span>{ms(f.medianMs)}</span>}
+                          {/* `until`, not `ms`: a cadence is a period, and the
+                              latency formatter tops out at minutes — a daily
+                              schedule read "1440m 0s". */}
+                          {f.everyMs !== null && <span>every {until(f.everyMs / 1000)}</span>}
+                          {f.failed > 0 && <span className="bad-text">{num(f.failed)} failed</span>}
+                          <span>{f.ago}</span>
+                        </>
+                      }
                     </>
                   }
                 />
@@ -1261,14 +1291,19 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           }
 
           <p className="board-foot">
-            {/* The thing this panel exists for. A workflow that stops firing
-                produces no error, no failed run and no log line — it just goes
-                quiet, and the only evidence is that its own rhythm broke. */}
-            Built from the runs, not from the workflow list, so a workflow that has fired at all is
-            here and one that has not is not. <b>stalled</b> means it kept a cadence and has since
-            missed more than two of them — the one failure mode here that produces no error
-            anywhere. {data.nameNote ?? ''} Editing a workflow changes its <b>draft</b>; a scheduled
-            run uses the last published version, so a change is not live until you publish it.
+            {/* Three of the four badges are states nothing else reports: a
+                schedule that quietly stopped, a workflow switched on that has
+                never fired, and a draft that has drifted ahead of what the
+                schedule actually runs. None of them produces an error. */}
+            Everything that ran in the window, plus everything switched on that should have.{' '}
+            <b>stalled</b> kept a cadence and has since missed more than two of them;{' '}
+            <b>never run</b> is on and has not fired at all; <b>unpublished</b> has been edited
+            since it was last published, so the runs above it are the old version — that one is why
+            &ldquo;I changed it and nothing happened&rdquo;. <b>off</b> is switched off and explains
+            the silence rather than reporting it.
+            {data.archived > 0 &&
+              ` ${String(data.archived)} archived workflow${data.archived === 1 ? '' : 's'} are left out — they cannot run.`}
+            {data.nameNote !== null && ` ${data.nameNote}`}
           </p>
         </Board>
 

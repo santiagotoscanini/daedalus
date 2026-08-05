@@ -211,17 +211,19 @@ type OpenWebUiData = {
 }
 
 /**
- * One workflow, summarised from its executions.
+ * One workflow: what it is, and what its executions did.
  *
- * The name is null whenever the API key cannot read workflows, which is a
- * scope on the key rather than a fault — see `nameNote`. Everything else here
- * is derived from the execution list, which a key with `execution:read` alone
- * can see.
+ * The two halves come from two endpoints, and the union is the point. The
+ * workflow list alone cannot say the nightly digest has not fired since
+ * Sunday; the execution list alone cannot say a workflow is switched on and
+ * has never fired at all. Each of those is a fault, and each is invisible to
+ * the other endpoint.
  */
 type N8nFlow = {
   id: string
+  /** Null only for a workflow that ran and has since been deleted. */
   name: string | null
-  /** Null unless the workflow list could be read. */
+  /** Null when the workflow no longer exists. */
   active: boolean | null
   runs: number
   failed: number
@@ -239,6 +241,15 @@ type N8nFlow = {
    * It just goes quiet, and the only evidence is that its own rhythm broke.
    */
   stalled: boolean
+  /**
+   * Edited since it was last published.
+   *
+   * `versionId` is the draft, `activeVersionId` is what a schedule actually
+   * runs. They diverge the moment somebody edits a workflow without
+   * publishing, and the symptom is "I changed it and nothing happened" — the
+   * runs keep succeeding, against the old version.
+   */
+  unpublished: boolean
 }
 
 type N8nData = {
@@ -267,9 +278,11 @@ type N8nData = {
   }[]
   /** True when there were more executions than this fetched. */
   partial: boolean
+  /** Archived workflows, which are excluded from `flows` entirely. */
+  archived: number
   /** Set when the executions API refused, which leaves the page with nothing. */
   note: string | null
-  /** Set when only the workflow NAMES are missing, which is fixable. */
+  /** Set when the workflow list refused, which costs names and liveness. */
   nameNote: string | null
 }
 
@@ -1136,15 +1149,16 @@ const RUNNING = new Set(['running', 'new', 'waiting'])
 /**
  * n8n, read from its executions.
  *
- * The page is built on the execution list rather than the workflow list, and
- * that is the argument as much as it is the constraint. A workflow list says
- * what exists and whether a toggle is on; it cannot say that the nightly digest
- * has not fired since Sunday. Nothing here runs on a person being awake, so the
- * only questions worth a panel are did it run, did it work, and how long did it
- * take — all three of which are execution facts.
+ * Built from BOTH endpoints, unioned. Executions carry what actually happened
+ * — did it run, did it work, how long it took, on what rhythm — and nothing
+ * here runs on a person being awake, so those are the questions. The workflow
+ * list carries what is supposed to happen, and contributes the two facts no
+ * execution can: a workflow that is switched on and has never fired, and one
+ * whose draft has drifted ahead of the version its schedule actually runs.
  *
- * The workflow list is still fetched, for names alone. An API key scoped to
- * `execution:read` gets a 403 there, which costs nothing but the labels.
+ * Archived workflows are dropped outright. Six of the eleven on this box are
+ * archived TickTick experiments; they cannot run, and listing them would bury
+ * the two that can under things that are finished.
  */
 async function loadN8n(base: string): Promise<N8nData> {
   const auth = { headers: { 'X-N8N-API-KEY': key('N8N_API_KEY') } }
@@ -1158,13 +1172,21 @@ async function loadN8n(base: string): Promise<N8nData> {
 
   const [execs, flows] = await Promise.all([
     listExecutions(base, auth),
-    getJson<{ data?: { id: string; name: string; active?: boolean }[] }>(
-      `${base}/api/v1/workflows?limit=250`,
-      auth,
-    ),
+    getJson<{
+      data?: {
+        id: string
+        name: string
+        active?: boolean
+        isArchived?: boolean
+        versionId?: string | null
+        activeVersionId?: string | null
+      }[]
+    }>(`${base}/api/v1/workflows?limit=250`, auth),
   ])
 
-  const known = new Map((flows?.data ?? []).map((f) => [f.id, f]))
+  const all = flows?.data ?? []
+  const live = all.filter((f) => f.isArchived !== true)
+  const known = new Map(live.map((f) => [f.id, f]))
   const now = Date.now()
   const floor = now - DAYS * 86400_000
 
@@ -1185,14 +1207,22 @@ async function loadN8n(base: string): Promise<N8nData> {
     if (FAILED.has(e.status)) day.failed++
   }
 
-  const perFlow = new Map<string, { rows: typeof rows }>()
+  const perFlow = new Map<string, typeof rows>()
+  // Seeded with every ACTIVE workflow, so one that is switched on and has
+  // never fired gets a row saying so instead of being absent — which is the
+  // state it would otherwise share with a workflow that does not exist. Not
+  // the inactive ones: a parked draft with no runs is a row that says "off,
+  // nothing", which is true of every draft anybody ever abandoned.
+  for (const f of live) if (f.active === true) perFlow.set(f.id, [])
+  // Archiving a workflow keeps its executions, so the runs it made before
+  // being shelved would otherwise put it back on the page.
+  const archivedIds = new Set(all.filter((f) => f.isArchived === true).map((f) => f.id))
   for (const e of rows) {
-    const bucket = perFlow.get(e.workflowId) ?? { rows: [] }
-    bucket.rows.push(e)
-    perFlow.set(e.workflowId, bucket)
+    if (archivedIds.has(e.workflowId)) continue
+    perFlow.set(e.workflowId, [...(perFlow.get(e.workflowId) ?? []), e])
   }
 
-  const flowRows: N8nFlow[] = [...perFlow].map(([id, { rows: mine }]) => {
+  const flowRows: N8nFlow[] = [...perFlow].map(([id, mine]) => {
     const meta = known.get(id)
     const last = mine[0]?.at ?? now
     const durations = mine
@@ -1211,7 +1241,16 @@ async function loadN8n(base: string): Promise<N8nData> {
       failed: mine.filter((e) => FAILED.has(e.status)).length,
       medianMs: median(durations),
       everyMs: every,
-      ago: since((now - last) / 1000),
+      // An empty bucket has no last run, and `now` would render "just now" —
+      // the opposite of the truth. The view keys off `runs === 0` instead.
+      ago: mine.length === 0 ? DASH : since((now - last) / 1000),
+      // Only meaningful for a workflow that HAS a published version: a draft
+      // nobody ever published has `activeVersionId: null`, which is "off", not
+      // "drifted".
+      unpublished:
+        meta?.activeVersionId != null &&
+        meta.versionId != null &&
+        meta.versionId !== meta.activeVersionId,
       // Two and a half cycles of silence, not one: a daily job that slips a few
       // hours is normal, and a claim that fires on a normal day is a claim
       // nobody reads twice. A workflow known to be switched off is not stalled,
@@ -1244,7 +1283,11 @@ async function loadN8n(base: string): Promise<N8nData> {
           .filter((d) => Number.isFinite(d) && d >= 0),
       ),
     },
-    flows: flowRows.sort((a, b) => b.runs - a.runs),
+    // By runs, because the bar beside each row is a ranking and a ranking that
+    // is not sorted by its own bar is unreadable. A switched-on workflow that
+    // has never fired therefore lands at the bottom, which is why it carries a
+    // badge rather than relying on its position to be noticed.
+    flows: flowRows.sort((a, b) => b.runs - a.runs || (a.name ?? a.id).localeCompare(b.name ?? b.id)),
     failures: rows
       .filter((e) => FAILED.has(e.status))
       .slice(0, 6)
@@ -1253,18 +1296,19 @@ async function loadN8n(base: string): Promise<N8nData> {
         ago: since((now - e.at) / 1000),
       })),
     partial: execs.partial,
+    archived: all.length - live.length,
     note:
       execs.refused ?
         'n8n refused the executions API. The key needs the execution:read scope — make one ' +
         'in Settings → n8n API and put it in stacks/daedalus/service-keys.sops as N8N_API_KEY.'
       : null,
     // A different, smaller problem than the one above, and worth saying
-    // separately: everything on this page still works, the rows are just
-    // labelled with ids.
+    // separately: the runs still count, the rows are just labelled with ids
+    // and lose their on/off state.
     nameNote:
       !execs.refused && flows === null ?
-        'The API key cannot read workflows, so these are ids. Re-issue it in Settings → n8n API ' +
-        'with the workflow:read scope to get names.'
+        'The API key cannot read workflows, so these are ids and their on/off state is unknown. ' +
+        'Re-issue it in Settings → n8n API with the workflow:read scope.'
       : null,
   }
 }
