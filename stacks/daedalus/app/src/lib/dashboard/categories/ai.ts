@@ -27,8 +27,8 @@
 //             as "over the last N days" comes from the gateway's own ledger or
 //             from a range query, never from a counter read once.
 
-import { getJson, promBars, promScalar, promVector } from '../clients'
-import { versionGap, type VersionGap } from '../github'
+import { getJson, lokiLatest, promBars, promScalar, promVector } from '../clients'
+import { commitsSince, versionGap, type CommitGap, type VersionGap } from '../github'
 import { DASH, key, since } from '../format'
 
 export type AiTab = 'lemonade' | 'litellm' | 'open-webui' | 'n8n'
@@ -177,6 +177,34 @@ type LitellmData = {
   mcp: { server: string; tool: string; calls: number; latencyMs: number | null }[]
   /** The MCP servers those tools belong to, with their totals. */
   mcpServers: { name: string; calls: number }[]
+  /** The containers standing beside the gateway — see `Neighbour`. */
+  neighbours: Neighbour[]
+}
+
+/**
+ * A container the gateway dials, with its own update state.
+ *
+ * These three have no tab of their own and no tile, which used to mean their
+ * updates were invisible: three services on this box could go a year behind
+ * and nothing would say so. Each is pinned like everything else here, so
+ * "nothing is ever automatically up to date" (CLAUDE.md) applies to them too —
+ * they just had nowhere to report it.
+ *
+ * `gap` and `build` are alternatives, not both: a project that cuts releases
+ * gets the release list, one that ships a moving branch gets the commits since
+ * its build. Which applies is a property of the upstream, not a choice.
+ */
+export type Neighbour = {
+  container: string
+  label: string
+  /** What it is TO the gateway, completing "<label> — …". */
+  role: string
+  note: string
+  repo: string
+  /** What is running: a version, a short commit, or null if unknowable. */
+  version: string | null
+  gap: VersionGap | null
+  build: CommitGap | null
 }
 
 /**
@@ -777,7 +805,79 @@ async function loadLitellm(): Promise<LitellmData> {
     mcpServers: [...mcp.reduce((m, t) => m.set(t.server, (m.get(t.server) ?? 0) + t.calls), new Map<string, number>())]
       .map(([name, calls]) => ({ name, calls }))
       .sort((a, b) => b.calls - a.calls),
+    neighbours: await loadNeighbours(),
   }
+}
+
+/**
+ * The three containers the gateway dials, and whether each is behind.
+ *
+ * They had logs on this page and nothing else, which meant their UPDATES were
+ * invisible — three pinned services that could drift a year behind with
+ * nothing on the dashboard saying so. Every image on this box is pinned, so
+ * none of them is ever automatically current; the only difference between
+ * these three and the four with tabs was that the four had somewhere to say
+ * it.
+ *
+ * Each reads its version from wherever that version actually exists, which is
+ * three different places for three projects:
+ *
+ *   searxng            no releases, no tags, a rolling build — and it prints
+ *                      `SearXNG 2026.7.30-afdfd8161` in its startup banner,
+ *                      whose suffix is the commit. Read back out of Loki.
+ *   mcp-grocy          cuts versioned releases and the flake pins an exact
+ *                      tag, so this is the ordinary release-gap case.
+ *   litellm-pgvector   no published image at all — the flake pins a source
+ *                      COMMIT and builds it, so commits-since is the only
+ *                      question that has an answer.
+ */
+async function loadNeighbours(): Promise<Neighbour[]> {
+  const grocy = process.env.MCP_GROCY_VERSION || null
+  const pgvectorRev = process.env.PGVECTOR_REV || null
+
+  const [searxBanner, grocyGap, pgvectorBuild] = await Promise.all([
+    lokiLatest('{container="searxng"} |~ "^SearXNG [0-9]"'),
+    versionGap('miguelangel-nubla/mcp-grocy', grocy),
+    commitsSince('BerriAI/litellm-pgvector', pgvectorRev, 'main'),
+  ])
+
+  // `SearXNG 2026.7.30-afdfd8161` — the date is the build, the suffix is the
+  // commit it was cut from, and only the second can be compared to anything.
+  const searx = /^SearXNG\s+(\S+)/.exec(searxBanner?.trim() ?? '')?.[1] ?? null
+  const searxCommit = searx?.split('-')[1] ?? null
+
+  return [
+    {
+      container: 'searxng',
+      label: 'SearXNG',
+      role: 'the web search the gateway offers',
+      note: 'Registered as the `searxng` search tool, so a model asking to search the web is asking this. It answers on the shared websearch bridge and never talks to a caller directly.',
+      repo: 'searxng/searxng',
+      version: searx,
+      gap: null,
+      build: await commitsSince('searxng/searxng', searxCommit, 'master'),
+    },
+    {
+      container: 'mcp-grocy',
+      label: 'Grocy MCP',
+      role: 'the local tool server it proxies',
+      note: 'The one MCP server that runs on this box — TickTick is remote and logs nothing here. Every call counted in “tools models called” above passed through this container.',
+      repo: 'miguelangel-nubla/mcp-grocy',
+      version: grocy,
+      gap: grocyGap,
+      build: null,
+    },
+    {
+      container: 'litellm-pgvector',
+      label: 'pgvector connector',
+      role: 'the RAG store behind /vector_store',
+      note: 'Fronts pgvector in the shared pg cluster for LiteLLM’s vector-store API. Ingest failures land here rather than in the gateway’s log, which only sees the connector’s answer.',
+      repo: 'BerriAI/litellm-pgvector',
+      version: pgvectorRev,
+      gap: null,
+      build: pgvectorBuild,
+    },
+  ]
 }
 
 /**

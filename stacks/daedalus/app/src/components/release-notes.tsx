@@ -11,6 +11,11 @@
 // is what answers "is there anything in here for me", and opening one is a
 // deliberate act.
 
+import type { ReactNode } from 'react'
+
+import { Board } from './viz'
+import type { CommitGap, VersionGap } from '../lib/dashboard/github'
+
 export type Release = {
   version: string
   date: string
@@ -85,5 +90,83 @@ export function UpgradeChain({ behind }: { behind: string[] }) {
         </li>
       ))}
     </ol>
+  )
+}
+
+// ── the changelog panel ────────────────────────────────────────────────────
+
+/**
+ * A changelog, whichever kind the upstream publishes.
+ *
+ * Two shapes, one panel, because from the reader's side they answer the same
+ * question — what would I get if I updated — and which one applies is a
+ * property of the project rather than a choice: a repo that cuts releases gets
+ * its release notes, a repo whose image tracks a branch gets the commits since
+ * the build. Pass exactly one.
+ */
+export function Changelog({
+  gap = null,
+  build = null,
+  title,
+  span = 12,
+  aside,
+  foot,
+}: {
+  gap?: VersionGap | null
+  build?: CommitGap | null
+  title?: string
+  span?: 6 | 8 | 12
+  aside?: ReactNode
+  foot?: ReactNode
+}) {
+  const behind = gap?.behind.length ?? build?.behind.length ?? 0
+  const unit = gap !== null ? 'to apply' : 'commits since this build'
+
+  return (
+    <Board
+      title={title ?? (behind === 0 ? 'Release notes' : `${String(behind)} ${unit}`)}
+      icon="≡"
+      span={span}
+      // Only when it is sharing a row: the grid is align-items:start, so an
+      // unequal pair leaves a gap under the shorter one that reads as a
+      // missing panel.
+      fill={span !== 12}
+      aside={aside ?? <span className="board-note">github</span>}
+    >
+      {gap !== null ?
+        <>
+          <UpgradeChain behind={gap.behind} />
+          <ReleaseNotes
+            releases={gap.releases}
+            running={gap.installed}
+            empty={gap.note ?? 'no published notes for this version'}
+          />
+        </>
+      : build === null || build.behind.length === 0 ?
+        <p className="viz-empty">
+          {build?.note ?? 'Nothing new on the branch since this image was built.'}
+        </p>
+      : <ul className="commits">
+          {build.behind.map((c) => (
+            <li key={c.sha}>
+              <a className="mono" href={c.url} target="_blank" rel="noreferrer">
+                {c.sha}
+              </a>
+              <span className="commit-subject">{c.subject}</span>
+              <span className="commit-date">{c.date}</span>
+            </li>
+          ))}
+        </ul>
+      }
+      {foot ?? (
+        <p className="board-foot">
+          {gap !== null ?
+            behind === 0 ?
+              'What the running version shipped. Parsed from the project’s own GitHub releases and shortened — open one for the detail.'
+            : 'Everything between the running version and the newest release, oldest at the top. Parsed from the project’s own GitHub releases and shortened — open one for the detail, and the link inside goes to the full text.'
+          : 'Commits rather than releases, because this image tracks a branch instead of a tag — so this is what a re-pull would actually bring.'}
+        </p>
+      )}
+    </Board>
   )
 }

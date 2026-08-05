@@ -16,7 +16,7 @@ import {
   Trend,
 } from '../viz'
 import { GrafanaLogs, LogDetails } from '../logs'
-import { ReleaseNotes, UpgradeChain } from '../release-notes'
+import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead } from '../service-head'
 import { Segmented } from '../ui'
 import { Topology, type TopoEdge, type TopoStage } from '../topology'
@@ -810,19 +810,7 @@ function WireguardView({ data }: { data: Extract<NetworkData, { tab: 'wireguard'
           </p>
         </Board>
 
-        <Board
-          title={gap.behind.length === 0 ? 'Release notes' : `${String(gap.behind.length)} to apply`}
-          icon="≡"
-          span={12}
-          aside={<span className="board-note">github releases</span>}
-        >
-          <UpgradeChain behind={gap.behind} />
-          <ReleaseNotes
-            releases={gap.releases}
-            running={gap.installed}
-            empty={gap.note ?? 'no published notes for this version'}
-          />
-        </Board>
+        <Changelog gap={gap} />
 
         {/* No neighbours: wg-easy runs the tunnel, the web UI and the exporter
             in one container, and nothing else on the box is part of it. */}
@@ -870,38 +858,37 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
     <>
       <ServiceHead
         logo="/icon-gluetun.svg"
-        name={t.subject}
-        // The exit address, not the version — there is no version to show
-        // (gluetun's /v1/version is not in this instance's control-API allow
-        // list) and the address is the more identifying fact anyway: it is
-        // what the far side of every connection sees instead of this house.
-        version={t.exit.ip}
-        versionNote={`${flag(t.exit.country)} — where it comes out today`}
+        // The SOFTWARE, not the selected tunnel: everything in the header —
+        // the build, the verdict, the sentence — is identical whichever tunnel
+        // is chosen, and the tunnel's own identity is a row of its own below,
+        // next to the switch that picks it.
+        name="VPN egress"
+        version={data.gluetun.running}
+        versionNote={
+          data.gluetun.builtOn === null ?
+            'the gluetun build every tunnel runs'
+          : `built ${data.gluetun.builtOn} · every tunnel runs it`
+        }
         verdict={
-          t.up === null ? { label: 'unknown', tone: 'muted' }
-          : t.up ? { label: 'up', tone: 'ok' }
-          : { label: 'down', tone: 'bad' }
+          data.gluetun.running === null ? { label: 'unknown', tone: 'muted' }
+          : data.gluetun.behind.length === 0 ? { label: 'current', tone: 'ok' }
+          : { label: `${String(data.gluetun.behind.length)} behind`, tone: 'warn' }
         }
         compare={[
-          { k: 'Exit address', v: t.exit.ip, note: 'what the far side sees instead of this house' },
-          { k: 'Carrier', v: t.exit.org, note: 'the provider’s own network, not ours' },
+          {
+            k: 'Tunnels',
+            v: String(data.tunnels.length),
+            note: 'each its own key and its own exit — declared in fleet.vpnEgress',
+          },
+          { k: 'Pinned by', v: null, note: 'one image digest in platform/gluetun-lib.nix' },
         ]}
         lede={
           <>
-            gluetun holds a ProtonVPN WireGuard tunnel and owns a network namespace;{' '}
-            <b>{t.tenants.length}</b> containers borrow it outright rather than having interfaces of
-            their own. It is fail-closed, so a tunnel that drops takes their internet with it —
-            which is the point, and the reason this page exists.
+            gluetun holds a WireGuard tunnel and owns a network namespace; the containers behind one
+            borrow it outright rather than having interfaces of their own. It is fail-closed, so a
+            tunnel that drops takes their internet with it — which is the point, and the reason this
+            page exists.
           </>
-        }
-        actions={
-          data.tunnels.length > 1 ?
-            <Segmented
-              value={t.key}
-              onChange={setSelected}
-              options={data.tunnels.map((x) => ({ value: x.key, label: x.container.replace(/^gluetun-?/, '') || 'downloads' }))}
-            />
-          : undefined
         }
       />
       <LinkRow
@@ -910,6 +897,85 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           { label: 'ProtonVPN account', href: 'https://account.protonvpn.com/downloads' },
         ]}
       />
+
+      {/* The SOFTWARE first, because it is shared: however many tunnels this
+          page grows, `mkGluetunInstance` pins one gluetun digest and one
+          exporter digest, so both builds are the same on every one of them.
+          Repeating them per tunnel would print the same answer twice and
+          invite the reader to check whether they differ. */}
+      <BoardGrid>
+        <Changelog
+          build={data.gluetun}
+          span={6}
+          title={
+            data.gluetun.behind.length === 0 ?
+              'gluetun — current'
+            : `gluetun — ${String(data.gluetun.behind.length)} commits behind`
+          }
+          aside={
+            <span className="board-note">
+              {data.gluetun.running === null ?
+                'build unknown'
+              : <span className="mono">{data.gluetun.running}</span>}
+              {data.gluetun.builtOn !== null && ` · built ${data.gluetun.builtOn}`}
+            </span>
+          }
+          foot={
+            <p className="board-foot">
+              {/* Why this is not the release-notes panel every other service
+                  gets — a correctness point, not a shortcut. */}
+              Commits, not releases, and deliberately: this image is a digest-pinned{' '}
+              <code>:latest</code>, which is master, and master has <b>diverged</b> from the v3.41.x
+              release line — v3.41.2 ships an acknowledged port-forwarding deadlock this box would
+              trip, because it sets <code>VPN_PORT_FORWARDING_UP_COMMAND</code>. A release list here
+              would advise a downgrade into a known bug. The build is read out of gluetun’s own
+              startup banner in Loki, since <code>/v1/version</code> is not in the control-server
+              allow list and widening it would restart the tunnel.
+            </p>
+          }
+        />
+
+        <Changelog
+          gap={data.exporter}
+          span={6}
+          title="gluetun-exporter"
+          aside={<span className="board-note">version unknowable</span>}
+          foot={
+            <p className="board-foot">
+              What has been <b>published</b>. Which of it is running cannot be said: the image is a
+              digest-pinned <code>:latest</code> and the exporter prints no version in its log,
+              serves none on <code>/metrics</code>, and has no endpoint that would answer. So this
+              is the honest half — a release exists, and comparing it to what is here is a manual
+              job. It polls each tunnel’s control API every 30 seconds and is what the VPN-down
+              alert reads.
+            </p>
+          }
+        />
+      </BoardGrid>
+
+      {/* Everything below is per TUNNEL — including the logs, which are the
+          one thing here that genuinely differs between them. The switch sits
+          on the boundary rather than in the header, so it is visibly the thing
+          that governs what follows it and not what precedes it. */}
+      <div className="tunnel-bar">
+        <span className="tunnel-id">
+          <Pulse on={t.up === true} tone={t.up === true ? 'ok' : 'bad'} />
+          <b>{t.subject}</b>
+          <span className="mono">{t.exit.ip ?? DASH}</span>
+          <span>{flag(t.exit.country)}</span>
+        </span>
+        {data.tunnels.length > 1 && (
+          <Segmented
+            value={t.key}
+            onChange={setSelected}
+            options={data.tunnels.map((x) => ({
+              value: x.key,
+              // `gluetun` is the downloads one, historically unprefixed.
+              label: x.container.replace(/^gluetun-?/, '') || 'downloads',
+            }))}
+          />
+        )}
+      </div>
 
       <BoardGrid>
         <Board
@@ -1027,54 +1093,6 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
             answer it, because the container only ever sees a private tunnel address and the exit
             is only knowable from outside. The carrier is what an observer on the far side actually
             attributes this traffic to.
-          </p>
-        </Board>
-
-        <Board
-          title={
-            t.build.behind.length === 0 ?
-              'This build'
-            : `${String(t.build.behind.length)} commits since this build`
-          }
-          icon="≡"
-          span={12}
-          aside={
-            <span className="board-note">
-              {t.build.running === null ?
-                'gluetun master'
-              : <span className="mono">{t.build.running}</span>}
-              {t.build.builtOn !== null && ` · built ${t.build.builtOn}`}
-            </span>
-          }
-        >
-          {t.build.behind.length === 0 ?
-            <p className="viz-empty">
-              {t.build.note ?? t.build.running === null ?
-                'gluetun states its build in its startup banner; nothing matching is in the log window.'
-              : 'Nothing new on master since this image was built.'}
-            </p>
-          : <ul className="commits">
-              {t.build.behind.map((c) => (
-                <li key={c.sha}>
-                  <a className="mono" href={c.url} target="_blank" rel="noreferrer">
-                    {c.sha}
-                  </a>
-                  <span className="commit-subject">{c.subject}</span>
-                  <span className="commit-date">{c.date}</span>
-                </li>
-              ))}
-            </ul>
-          }
-          <p className="board-foot">
-            {/* Why this is not the release-notes board every other service
-                gets — and it is a correctness point, not a shortcut. */}
-            Commits, not releases, and deliberately: this image is a digest-pinned{' '}
-            <code>:latest</code>, which is master, and master has <b>diverged</b> from the v3.41.x
-            release line — v3.41.2 ships an acknowledged port-forwarding deadlock that this box
-            would trip, because it sets <code>VPN_PORT_FORWARDING_UP_COMMAND</code>. A release list
-            here would advise a downgrade into a known bug. This is what a re-pull would actually
-            bring. The build is read out of gluetun’s own startup banner in Loki, since its
-            <code>/v1/version</code> endpoint is not in this instance’s control-server allow list.
           </p>
         </Board>
 

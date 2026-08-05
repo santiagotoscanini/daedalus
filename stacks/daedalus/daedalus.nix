@@ -42,21 +42,30 @@
 let
   # `docker.io/n8nio/n8n:2.33.2@sha256:d31c…` → `2.33.2`. See the env binding
   # below for why this is parsed rather than restated.
-  n8nVersion =
+  # `docker.io/n8nio/n8n:2.33.2@sha256:d31c…` → `2.33.2`, and
+  # `…/mcp-grocy:v2.7.0@sha256:…` → `2.7.0`. See the env bindings below for
+  # why these are parsed rather than restated: a second copy of a version
+  # string is a second copy that goes stale on the next bump.
+  #
+  # Empty rather than absent when the image is pinned by digest alone, which
+  # every consumer renders as "unknown" rather than as a wrong number.
+  tagOf =
+    container:
     let
-      m = builtins.match ".*:([0-9][^@:]*)@sha256:.*" (
-        config.virtualisation.oci-containers.containers.n8n.image
+      m = builtins.match ".*:v?([0-9][^@:]*)@sha256:.*" (
+        config.virtualisation.oci-containers.containers.${container}.image
       );
     in
     if m == null then "" else builtins.head m;
 
-  # Same parse, and the same reason: wg-easy serves its version nowhere a
-  # read-only caller can reach it (v2's API is behind a TOTP session), so the
-  # tag it is pinned to IS the running version.
-  wgEasyVersion =
+  # `localhost/litellm-pgvector:b553f84-a4yhvmn9` → `b553f84`. Not a version:
+  # there is no published image and no release, so the flake pins a source
+  # COMMIT and mkLocalImage puts its short form in the tag. That commit is what
+  # a changelog can be measured from.
+  pgvectorRev =
     let
-      m = builtins.match ".*:([0-9][^@:]*)@sha256:.*" (
-        config.virtualisation.oci-containers.containers.wg-easy.image
+      m = builtins.match ".*:([0-9a-f]{7,40})-[^-]*$" (
+        config.virtualisation.oci-containers.containers.litellm-pgvector.image
       );
     in
     if m == null then "" else builtins.head m;
@@ -447,8 +456,16 @@ in
       # that goes stale on the next bump. Empty if the image is ever pinned by
       # digest alone, which the AI tab renders as "unknown" rather than as a
       # wrong number.
-      N8N_VERSION = n8nVersion;
-      WG_EASY_VERSION = wgEasyVersion;
+      N8N_VERSION = tagOf "n8n";
+      # wg-easy serves its version nowhere a read-only caller can reach it
+      # (v2's API is behind a TOTP session), so the pin IS the version.
+      WG_EASY_VERSION = tagOf "wg-easy";
+      # The two containers standing beside LiteLLM whose version is knowable
+      # from the flake. The third — searxng — is a digest-pinned `:latest`, and
+      # states its build in its own startup banner instead, which daedalus
+      # reads back out of Loki.
+      MCP_GROCY_VERSION = tagOf "mcp-grocy";
+      PGVECTOR_REV = pgvectorRev;
       # The VPN tunnels, as JSON. One variable rather than a variable per
       # tunnel per field, because the whole point is that the set grows: a
       # third gluetun instance appears on the Network page with no change

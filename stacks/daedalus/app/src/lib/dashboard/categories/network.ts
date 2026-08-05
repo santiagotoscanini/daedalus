@@ -21,7 +21,14 @@ import {
   promVector,
   lokiLatest,
 } from '../clients'
-import { commitsSince, versionGap, type CommitGap, type VersionGap } from '../github'
+import {
+  commitsSince,
+  versionGap,
+  EMPTY_COMMITS,
+  EMPTY_GAP,
+  type CommitGap,
+  type VersionGap,
+} from '../github'
 import { key, since } from '../format'
 
 export type NetworkTab = 'general' | 'wireguard' | 'outbound'
@@ -93,16 +100,25 @@ type Tunnel = {
   uptime7d: number | null
   /** Same, per day, oldest first — the shape a drop actually has. */
   daily: { date: string; uptime: number }[]
-  /**
-   * The gluetun build this instance is running, and what master has picked
-   * up since. Not a release list on purpose — see `commitsSince`.
-   */
-  build: CommitGap
   /** Containers sharing this netns, so they lose the network with it. */
   tenants: { name: string; up: boolean | null }[]
 }
 
-type OutboundData = { tunnels: Tunnel[]; note: string | null }
+type OutboundData = {
+  tunnels: Tunnel[]
+  /**
+   * The software, which is shared by every tunnel on the page.
+   *
+   * Both instances come out of one `mkGluetunInstance`, which pins ONE image
+   * digest for gluetun and one for the exporter — so however many tunnels are
+   * declared, they are always the same two builds. Reporting it per tunnel
+   * would print the same answer twice and invite the reader to check whether
+   * they differ.
+   */
+  gluetun: CommitGap
+  exporter: VersionGap
+  note: string | null
+}
 
 type GeneralData = {
   wan: {
@@ -504,6 +520,8 @@ async function loadOutbound(ctx: { hc: string }): Promise<OutboundData> {
   if (declared.length === 0) {
     return {
       tunnels: [],
+      gluetun: EMPTY_COMMITS,
+      exporter: EMPTY_GAP,
       note:
         'No VPN egress declared. The list comes from fleet.vpnEgress, which ' +
         'mkGluetunInstance fills in — see platform/gluetun-lib.nix.',
@@ -516,8 +534,31 @@ async function loadOutbound(ctx: { hc: string }): Promise<OutboundData> {
     return hit === undefined ? null : hit.value[1] === '1'
   }
 
-  const tunnels = await Promise.all(declared.map((d) => loadTunnel(d, ctx.hc, upOf)))
-  return { tunnels, note: null }
+  const [tunnels, gluetun, exporter] = await Promise.all([
+    Promise.all(declared.map((d) => loadTunnel(d, ctx.hc, upOf))),
+    // Read from the first instance's banner, and correct for all of them:
+    // `mkGluetunInstance` pins one image digest, so a second tunnel is the
+    // same binary. See `OutboundData.gluetun`.
+    gluetunBuild(declared[0]?.container ?? ''),
+    // No running version to compare against, deliberately unfaked: the image
+    // is a digest-pinned `:latest` and the exporter prints no version in its
+    // log, serves none on /metrics, and has no endpoint that would say. So
+    // this lists what EXISTS and the panel says it cannot tell you which of it
+    // is running — which is the true statement, and still tells you a release
+    // came out.
+    versionGap('thecfu/gluetun-exporter', null, { notesWhenUnknown: true }),
+  ])
+
+  return { tunnels, gluetun, exporter, note: null }
+}
+
+/** The commit gluetun states in its startup banner, and master since it. */
+async function gluetunBuild(container: string): Promise<CommitGap> {
+  if (container === '') return EMPTY_COMMITS
+  const banner = await lokiLatest(`{container=${JSON.stringify(container)}} |= "Running version"`)
+  // `Running version latest built on 2026-07-29T…Z (commit b00279b) on Linux …`
+  const commit = /\(commit ([0-9a-f]{7,40})\)/.exec(banner ?? '')?.[1] ?? null
+  return commitsSince('qdm12/gluetun', commit)
 }
 
 type Declared = {
@@ -541,7 +582,7 @@ async function loadTunnel(
   const control = `${hc}:${String(d.controlPort)}`
   const job = JSON.stringify(d.job)
 
-  const [ip, port, up, uptime7d, daily, banner] = await Promise.all([
+  const [ip, port, up, uptime7d, daily] = await Promise.all([
     // The provider's own view of where this tunnel surfaces. Nothing on this
     // box can answer it — the container sees a tun0 with a private address,
     // and the exit address is only knowable from outside.
@@ -557,17 +598,9 @@ async function loadTunnel(
     promScalar(`gluetun_vpn_status{job=${job}}`),
     promScalar(`avg_over_time(gluetun_vpn_status{job=${job}}[7d])`),
     promPoints(`avg_over_time(gluetun_vpn_status{job=${job}}[1d])`, DAYS * 24 * 60, 86400),
-    // gluetun states the commit it was built from in its startup banner and
-    // serves it on no endpoint this instance's control-server policy allows
-    // (`/v1/version` is 401 here, and widening that policy restarts the
-    // container — which, for the downloads tunnel, bounces ten others). The
-    // line is already in Loki, so it is read back from there instead.
-    lokiLatest(`{container=${JSON.stringify(d.container)}} |= "Running version"`),
   ])
 
   const expiry = Date.parse(`${d.keyExpiry}T00:00:00Z`)
-  // `Running version latest built on 2026-07-29T…Z (commit b00279b) on Linux …`
-  const commit = /\(commit ([0-9a-f]{7,40})\)/.exec(banner ?? '')?.[1] ?? null
 
   return {
     key: d.container,
@@ -594,7 +627,6 @@ async function loadTunnel(
     port: port?.port !== undefined && port.port > 0 ? port.port : null,
     uptime7d,
     daily: daily.map((p) => ({ date: localDay(p.t * 1000), uptime: p.v })),
-    build: await commitsSince('qdm12/gluetun', commit),
     // The exporter is in the list because it genuinely rides the tunnel, and
     // dropping it would misreport what a tunnel outage takes down.
     tenants: d.tenants.map((name) => ({ name, up: upOf(name) })),

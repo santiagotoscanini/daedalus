@@ -6,7 +6,7 @@ import { useRouter } from '@tanstack/react-router'
 // or a number that is zero almost always and means nothing when it is not.
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse } from '../viz'
 import { GrafanaLogs, LogDetails, type LogSource } from '../logs'
-import { ReleaseNotes, UpgradeChain } from '../release-notes'
+import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead, type CompareRow } from '../service-head'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
 import { compact, DASH, ms, num, pct, until } from '../../lib/dashboard/format'
@@ -69,37 +69,9 @@ function compareOf(gap: VersionGap, note: string): CompareRow[] {
   ]
 }
 
-/** The release-notes board, identical on all four tabs. */
-function ReleaseBoard({ gap, span = 12 }: { gap: VersionGap; span?: 6 | 8 | 12 }) {
-  const current = gap.behind.length === 0
+// `ReleaseBoard` is gone: it was `Changelog` with one of its two shapes, and
+// the neighbour panels below needed the other.
 
-  return (
-    <Board
-      title={current ? 'Release notes' : `${String(gap.behind.length)} to apply`}
-      icon="≡"
-      span={span}
-      // Only when it is sharing a row: the grid is align-items:start, so an
-      // unequal pair leaves a gap under the shorter one that reads as a
-      // missing panel.
-      fill={span !== 12}
-      aside={<span className="board-note">github releases</span>}
-    >
-      <UpgradeChain behind={gap.behind} />
-      <ReleaseNotes
-        releases={gap.releases}
-        running={gap.installed}
-        empty={gap.note ?? 'no published notes for this version'}
-      />
-      <p className="board-foot">
-        {current ?
-          'What the running version shipped. '
-        : 'Everything between the running version and the newest release, oldest at the top. '}
-        Parsed from the project’s own GitHub releases and shortened — open one for the detail, and
-        the link inside goes to the full text.
-      </p>
-    </Board>
-  )
-}
 
 // ── Lemonade ───────────────────────────────────────────────────────────────
 
@@ -211,7 +183,7 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
           </p>
         </Board>
 
-        <ReleaseBoard gap={gap} span={6} />
+        <Changelog gap={gap} span={6} />
 
         {/* Selected by STACK, not container. These lines were not produced on
             this box at all — the bridge in stacks/lemonade-logs reads
@@ -720,7 +692,7 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
         <Board
           title="Who is calling"
           icon="◑"
-          span={4}
+          span={6}
           fill
           aside={<span className="board-note">requests, {total.days}d</span>}
         >
@@ -760,13 +732,20 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
           </p>
         </Board>
 
-        <ReleaseBoard gap={gap} span={8} />
+        <Changelog gap={gap} span={6} />
 
-        <LogBoard
-          source={{ container: 'litellm' }}
-          title="LiteLLM logs"
-          neighbours={LITELLM_NEIGHBOURS}
-        />
+        <Board title="Logs" icon="≡" span={12}>
+          <GrafanaLogs source={{ container: 'litellm' }} title="LiteLLM logs" />
+        </Board>
+
+        {/* The three containers the gateway dials, each as a pair: what a
+            re-pull would bring, and what it has been saying. They used to be
+            three folded log frames and nothing else, which meant three pinned
+            services could drift a year behind with nothing on this dashboard
+            reporting it — the logs were there, the updates were not. */}
+        {data.neighbours.map((n) => (
+          <NeighbourPair key={n.container} n={n} />
+        ))}
       </BoardGrid>
     </>
   )
@@ -806,8 +785,12 @@ type Neighbour = {
 }
 
 /**
- * The logs board, identical on all four tabs: the service's own stream, and
- * its neighbours underneath it on the two tabs that have any.
+ * The logs board: the service's own stream, and its neighbours' underneath.
+ *
+ * `neighbours` here is the LIGHT kind — a container whose only question is
+ * "what did it say", folded away. LiteLLM's three are the heavy kind and get
+ * `NeighbourBoards` instead, because they also have updates nobody was
+ * reporting.
  */
 function LogBoard({
   source,
@@ -850,27 +833,54 @@ const LEMONADE_NEIGHBOURS: readonly Neighbour[] = [
   },
 ]
 
-/** What the gateway proxies TO, in the order a request would reach them. */
-const LITELLM_NEIGHBOURS: readonly Neighbour[] = [
-  {
-    container: 'searxng',
-    label: 'SearXNG',
-    role: 'the web search the gateway offers',
-    note: 'Registered as the `searxng` search tool, so a model asking to search the web is asking this. It answers on the shared websearch bridge and never talks to a caller directly.',
-  },
-  {
-    container: 'mcp-grocy',
-    label: 'Grocy MCP',
-    role: 'the local tool server it proxies',
-    note: 'The one MCP server that runs on this box — TickTick is remote and logs nothing here. Every call counted in “tools models called” above passed through this container.',
-  },
-  {
-    container: 'litellm-pgvector',
-    label: 'pgvector connector',
-    role: 'the RAG store behind /vector_store',
-    note: 'Fronts pgvector in the shared pg cluster for LiteLLM’s vector-store API. Ingest failures land here rather than in the gateway’s log, which only sees the connector’s answer.',
-  },
-]
+type NeighbourData = Extract<AiData, { tab: 'litellm' }>['neighbours'][number]
+
+/**
+ * One of the gateway's neighbours, as a pair of half-width boards.
+ *
+ * Changelog on the left, log on the right, because those are the only two
+ * things ever wanted from a container with no page of its own: what would
+ * change if I updated it, and what has it been saying. The title carries the
+ * verdict, so the row answers "is anything here behind" before it is read.
+ *
+ * These were three folded log frames and nothing else, which was the gap: the
+ * logs were on the page and the UPDATES were not, so three pinned services
+ * could drift a year behind with nothing on this dashboard reporting it.
+ */
+function NeighbourPair({ n }: { n: NeighbourData }) {
+  const behind = n.gap?.behind.length ?? n.build?.behind.length ?? 0
+  const unit =
+    n.gap !== null ? (behind === 1 ? 'release behind' : 'releases behind') : 'commits behind'
+  const count = String(behind)
+
+  return (
+    <>
+      <Changelog
+        gap={n.gap}
+        build={n.build}
+        span={6}
+        title={behind === 0 ? `${n.label} — current` : `${n.label} — ${count} ${unit}`}
+        aside={
+          <span className="board-note">
+            {n.version === null ?
+              'version unknown'
+            : <span className="mono">{n.version}</span>}
+          </span>
+        }
+        foot={<p className="board-foot">{n.note}</p>}
+      />
+      <Board
+        title={`${n.label} logs`}
+        icon="≡"
+        span={6}
+        fill
+        aside={<span className="board-note">{n.role}</span>}
+      >
+        <GrafanaLogs source={{ container: n.container }} title={`${n.label} logs`} />
+      </Board>
+    </>
+  )
+}
 
 /**
  * One row of a ranking, in two lines.
@@ -1110,7 +1120,7 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
             when somebody edits nix — an identity provider, a login form that
             is off, a sign-up that is closed — so it could only ever agree with
             what you already wrote. */}
-        <ReleaseBoard gap={gap} span={6} />
+        <Changelog gap={gap} span={6} />
 
         {/* No neighbours. Everything this app dials either has its own tab
             (LiteLLM), is already folded under that tab (searxng), or is the
@@ -1311,7 +1321,7 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           </p>
         </Board>
 
-        <ReleaseBoard gap={gap} />
+        <Changelog gap={gap} />
 
         {/* No neighbours, same bar: pg is the whole box's, and the gateway
             its AI steps call has a tab of its own. */}
