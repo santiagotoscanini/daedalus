@@ -1,4 +1,5 @@
 import { BigStat, Board, BoardGrid, Chip, Facts, Pulse, StatBand } from '../viz'
+import { GrafanaLogs, grafanaLogsFull } from '../logs'
 import { text } from '../../lib/dashboard/format'
 import type { GamingData } from '../../server/category'
 
@@ -227,7 +228,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           aside={
             <a
               className="board-note"
-              href={LOGS_FULL}
+              href={grafanaLogsFull("factorio")}
               target="_blank"
               rel="noreferrer"
             >
@@ -235,13 +236,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
             </a>
           }
         >
-          <iframe className="embed embed-logs" src={LOGS_EMBED} title="Factorio logs" loading="lazy" />
-          <p className="board-foot">
-            The real Logs Drilldown, framed. Search, filtering and live tail are Grafana’s, not a
-            reimplementation — this box already grants it the frame. If it shows a login screen,
-            open Grafana once in a tab: the frame needs a session it cannot obtain inside itself,
-            because the IdP refuses to be framed.
-          </p>
+          <GrafanaLogs container="factorio" title="Factorio logs" />
         </Board>
 
         <Board
@@ -275,26 +270,6 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
     </>
   )
 }
-
-/**
- * Two Grafana URLs for the same logs, because they are for different jobs.
- *
- * `/d-solo` renders ONE PANEL and nothing else — no nav, no time picker, no
- * label editor, no histogram. That is what belongs in a card. The Drilldown
- * app is the opposite: it brings its whole workbench, which is right when you
- * are investigating and absurd inside a 400px box.
- *
- * The panel comes from a provisioned dashboard (stacks/monitoring,
- * container-logs.json) whose only variable is the container name, so any page
- * here can frame the logs for any service by changing one query parameter.
- */
-const LOGS_EMBED =
-  "https://grafana.toscanini.me/d-solo/container-logs/container-logs" +
-  "?panelId=1&var-container=factorio&from=now-3h&to=now&theme=dark&refresh=30s"
-
-const LOGS_FULL =
-  "https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore" +
-  "?from=now-6h&to=now&var-ds=loki-default&var-filters=container%7C%3D%7Cfactorio"
 
 /**
  * Where a release actually lives on the wiki.

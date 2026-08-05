@@ -167,7 +167,7 @@ export type AppTabData =
   | { kind: 'deployments'; ci: CiSnapshot; activity: ActivityRow[]; deployments: DeployRow[] }
   | { kind: 'access'; access: AppAccess }
   | { kind: 'secrets'; env: EnvPayload }
-  | { kind: 'logs'; logs: LogRow[] }
+  | { kind: "logs" }
   | { kind: 'database'; database: AppDatabase }
   | { kind: 'vpn'; vpn: AppVpn }
   | { kind: 'settings' }
@@ -178,7 +178,6 @@ type AppVpn = Awaited<ReturnType<typeof import('../lib/metrics')['appVpn']>>
 type AppAccess = Awaited<ReturnType<typeof import('../lib/access')['appAccess']>>
 type CiSnapshot = Awaited<ReturnType<typeof import('../lib/ci')['readCiSnapshot']>>
 type ActivityRow = { ts: string; line: string; source: 'build' | 'deploy' }
-type LogRow = { ts: string; level: string | null; line: string }
 type EnvSnapshotVar = Awaited<
   ReturnType<typeof import('../lib/env-snapshot')['readEnvSnapshot']>
 >['vars'][number]
@@ -309,14 +308,11 @@ export const fetchAppTab = createServerFn()
         }
       }
 
-      case 'logs': {
-        const { recentLogs } = await import('../lib/metrics')
-        const logs = await recentLogs(name, 60)
-        return {
-          kind: 'logs',
-          logs: logs.map((l) => ({ ts: l.ts.toISOString(), level: l.level, line: l.line })),
-        }
-      }
+      // Nothing to fetch: the tab frames a Grafana panel that queries Loki
+      // itself, so pulling sixty lines through here would be a round trip
+      // whose result is serialised into the page and never rendered.
+      case 'logs':
+        return { kind: 'logs' }
 
       case 'database': {
         const { appDatabase, NO_DATABASE } = await import('../lib/metrics')
