@@ -6,7 +6,7 @@ import { GrafanaLogs } from '../logs'
 import { ReleaseNotes, UpgradeChain } from '../release-notes'
 import { LinkRow, ServiceHead, type CompareRow } from '../service-head'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
-import { DASH, num, pct } from '../../lib/dashboard/format'
+import { compact, DASH, num, pct } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { AiData } from '../../server/category'
 import type { Tone } from '../viz'
@@ -75,6 +75,10 @@ function ReleaseBoard({ gap, span = 12 }: { gap: VersionGap; span?: 6 | 12 }) {
       title={current ? 'Release notes' : `${String(gap.behind.length)} to apply`}
       icon="≡"
       span={span}
+      // Only when it is sharing a row: the grid is align-items:start, so an
+      // unequal pair leaves a gap under the shorter one that reads as a
+      // missing panel.
+      fill={span === 6}
       aside={<span className="board-note">github releases</span>}
     >
       <UpgradeChain behind={gap.behind} />
@@ -121,6 +125,13 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
           </a>
         }
       />
+      {/* The machine, as a strip rather than a panel. It was eight facts in a
+          board of their own, most of them constants — a CPU model does not
+          change — competing for width with the two things on this page that do
+          change. Here each is a phrase you can read past, with the detail
+          behind a hover for the once a year you need the driver version. */}
+      <HostStrip host={host} live={live} />
+
       <LinkRow
         links={[
           { label: 'API docs', href: 'https://lemonade-server.ai/docs/api/lemonade/' },
@@ -138,13 +149,31 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
         <Board
           title="Models"
           icon="▤"
-          span={12}
+          span={6}
+          fill
           aside={
             <span className="board-note">
-              {installed} installed · {num(data.catalog.sizeGb, 1)} GB on disk
+              {installed} · {num(data.catalog.sizeGb, 1)} GB
             </span>
           }
         >
+          {/* Only while something is actually downloading, and above the fold
+              of everything else: it is the one thing here that is mid-change
+              and the one thing that will look wrong if unexplained. */}
+          {data.downloads.length > 0 && (
+            <ul className="mdl-dl">
+              {data.downloads.map((d) => (
+                <li key={d.model}>
+                  <span>{d.model}</span>
+                  <span className="mono">
+                    {d.status}
+                    {d.percent === null ? '' : ` · ${num(d.percent)}%`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
           {categories.length === 0 ?
             <p className="viz-empty">Lemonade did not answer</p>
           : categories.map((c) => <ModelKind key={c.type} kind={c} />)}
@@ -171,60 +200,15 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
           )}
 
           <p className="board-foot">
-            One model of each kind stays in VRAM — that is Lemonade’s per-type limit, and it is
-            why picking a different chat model means putting down the current one. <b>Switch</b>{' '}
-            does both in order: pinned models are exempt from eviction, so the incoming load would
-            be refused outright if the slot were not freed first. Rates and counts are each model’s
-            own, and survive it being evicted, so a model you have not run today still shows what
-            it did last time.
+            One model of each kind stays in VRAM — Lemonade’s per-type limit — so picking a
+            different chat model means putting down the current one. <b>Switch</b> does both in
+            order, because a pinned model is exempt from eviction and the incoming load is refused
+            outright if the slot is not freed first. Counts survive an eviction, so a model you
+            have not run today still shows what it managed last time.
           </p>
         </Board>
 
-        <Board title="The gaming PC" icon="▣" span={12}>
-          <Facts
-            rows={[
-              { k: 'GPU', v: host.gpu ?? DASH },
-              { k: 'Driver', v: host.driver ?? DASH },
-              { k: 'CPU', v: host.cpu ?? DASH },
-              { k: 'Memory', v: host.ramGb === null ? DASH : `${num(host.ramGb)} GB` },
-              { k: 'OS', v: host.os ?? DASH },
-              {
-                k: 'CPU now',
-                v: live.cpuPct === null ? DASH : pct(live.cpuPct, 1),
-              },
-              {
-                k: 'Memory now',
-                v: live.memGb === null ? DASH : `${num(live.memGb, 1)} GB`,
-              },
-              {
-                k: 'Models on disk',
-                v: `${String(data.catalog.downloaded)} of ${String(data.catalog.total)} · ${num(data.catalog.sizeGb, 1)} GB`,
-              },
-            ]}
-          />
-          {data.downloads.length > 0 && (
-            <>
-              <h4 className="board-sub">Downloading</h4>
-              <Facts
-                rows={data.downloads.map((d) => ({
-                  k: d.model,
-                  v: `${d.status}${d.percent === null ? '' : ` · ${num(d.percent)}%`}`,
-                }))}
-              />
-            </>
-          )}
-          {/* Stated rather than left as two suspicious em dashes — and stated
-              accurately, which took reading the vendor's source. */}
-          <p className="board-foot">
-            CPU and memory are the whole of what Lemonade will report about this machine. GPU
-            utilisation and VRAM are not missing because of the card: its Windows metrics backend
-            returns “not implemented” for both, where its macOS and Linux ones do not. Zero would
-            be a claim that the card is idle, so nothing is drawn. Until something else measures
-            it, how hard the GPU is working is the throughput number above.
-          </p>
-        </Board>
-
-        <ReleaseBoard gap={gap} />
+        <ReleaseBoard gap={gap} span={6} />
 
         <Board title="Logs" icon="≡" span={12}>
           {/* Selected by STACK, not container. These lines were not produced on
@@ -268,48 +252,165 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
 }
 
 /**
- * Every model of one kind, with the one in the slot on top.
+ * Every model of one kind, folded away until asked for.
  *
  * The kind is the organising idea rather than a label, because the constraint
  * is per kind: exactly one chat model can be resident, so the four installed
- * ones are four answers to a single question. A flat list sorted by recency —
- * which is what this was — showed six unrelated models and hid both the choice
- * and the fact that there was one to make.
+ * ones are four answers to a single question rather than four list entries.
  *
- * It also removes most of the repetition. `llamacpp`, `rocm` and `gpu`
- * appeared on every row of the old list; here the runtime belongs to the model
- * actually running and the rest are candidates described by what distinguishes
- * them — their size, and what they did last time.
+ * Collapsed by default, and the summary has to earn that — a row you must open
+ * to learn anything from is worse than no row. So it carries the aggregate for
+ * the whole kind: how many models, how much disk, and what they have actually
+ * done between them. That is the reading most glances want ("has anything been
+ * using the image models?"), and opening one is for when the answer is yes.
+ *
+ * `details` rather than a state hook: it works before hydration, survives it,
+ * and the browser already knows how.
  */
 function ModelKind({ kind }: { kind: Extract<AiData, { tab: 'lemonade' }>['categories'][number] }) {
   const resident = kind.models.find((m) => m.resident) ?? null
   const others = kind.models.filter((m) => !m.resident)
 
+  const sum = (pick: (m: Model) => number | null | undefined) =>
+    kind.models.reduce((n, m) => n + (pick(m) ?? 0), 0)
+
+  const size = sum((m) => m.sizeGb)
+  const requests = sum((m) => m.stats?.requests)
+  const tokens = sum((m) => (m.stats?.inputTokens ?? 0) + (m.stats?.outputTokens ?? 0))
+
   return (
-    <section className="mkind">
-      <header className="mkind-head">
-        <h4>{kind.type}</h4>
-        <span className="mkind-count">
-          {kind.models.length === 1 ? 'only one installed' : `${kind.models.length} installed`}
+    <details className="mkind">
+      <summary>
+        <span className="mkind-type">{kind.type}</span>
+        {/* The one thing that is a fault rather than a statistic, so it is the
+            one thing that gets a colour in a collapsed row. */}
+        {resident === null && <span className="mkind-free">slot free</span>}
+        {/* Abbreviated, because these are a sense of scale rather than
+            quantities — 976k answers "has anything been using these", and
+            976,228 answers it no better while costing half the row. */}
+        <span className="mkind-agg">
+          <span>{kind.models.length === 1 ? '1 model' : `${String(kind.models.length)} models`}</span>
+          {size > 0 && <span>{num(size, 1)} GB</span>}
+          {requests > 0 && <span>{compact(requests)} req</span>}
+          {tokens > 0 && <span>{compact(tokens)} tok</span>}
         </span>
-      </header>
+      </summary>
 
-      {resident === null ?
-        <p className="mkind-empty">nothing loaded — the slot is free</p>
-      : <ModelHero model={resident} />}
+      <div className="mkind-body">
+        {resident === null ?
+          <p className="mkind-empty">nothing loaded — the next request will cold-load one</p>
+        : <ModelHero model={resident} />}
 
-      {others.length > 0 && (
-        <ul className="malts">
-          {others.map((m) => (
-            <ModelAlt key={m.name} model={m} replacing={resident} />
-          ))}
-        </ul>
-      )}
-    </section>
+        {others.length > 0 && (
+          <ul className="malts">
+            {others.map((m) => (
+              <ModelAlt key={m.name} model={m} replacing={resident} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </details>
   )
 }
 
-type Model = Extract<AiData, { tab: 'lemonade' }>['categories'][number]['models'][number]
+type Lemonade = Extract<AiData, { tab: 'lemonade' }>
+type Model = Lemonade['categories'][number]['models'][number]
+
+/**
+ * The machine Lemonade runs on, as a line of phrases under the description.
+ *
+ * This was a board of eight facts, and most of them are constants — the CPU
+ * model, the amount of RAM and the OS build do not change between page loads,
+ * so giving them a panel meant a third of the page never said anything new.
+ * What a glance wants is "yes, it is the 7900 XTX box, and it is not busy";
+ * what you occasionally want is the driver version, and that can be one hover
+ * away rather than permanently on screen.
+ *
+ * Short label visible, full string on hover. Same CSS-only mechanism as the
+ * version-compare card, for the same reason: this page streams, so anything
+ * needing hydration would be inert for the first moment.
+ */
+function HostStrip({ host, live }: { host: Lemonade['host']; live: Lemonade['live'] }) {
+  return (
+    <p className="hoststrip">
+      <HostFact
+        short={shortGpu(host.gpu)}
+        detail={host.gpu ?? 'GPU not reported'}
+        note={host.driver === null ? undefined : `driver ${host.driver}`}
+      />
+      <HostFact
+        short={shortCpu(host.cpu)}
+        detail={host.cpu ?? 'CPU not reported'}
+        note={live.cpuPct === null ? undefined : `${pct(live.cpuPct, 1)} in use now`}
+      />
+      <HostFact
+        short={
+          live.memGb === null || host.ramGb === null ?
+            host.ramGb === null ?
+              DASH
+            : `${num(host.ramGb)} GB`
+          : `${num(live.memGb, 1)} / ${num(host.ramGb)} GB`
+        }
+        detail="System memory in use on the gaming PC"
+        note="not VRAM — see below"
+      />
+      {/* Named rather than omitted. Two facts that are absent for a reason are
+          worth one muted phrase; silently showing five readings where there
+          should be seven invites the assumption that the card is idle. */}
+      <HostFact
+        short="GPU load —"
+        detail="Lemonade does not report GPU utilisation or VRAM on Windows"
+        note="its Windows metrics backend returns “not implemented”, where its macOS and Linux ones do not — so this is a gap in the port, not in the card"
+        muted
+      />
+      <HostFact short={shortOs(host.os)} detail={host.os ?? 'OS not reported'} />
+    </p>
+  )
+}
+
+function HostFact({
+  short,
+  detail,
+  note,
+  muted,
+}: {
+  short: string
+  detail: string
+  note?: string
+  muted?: boolean
+}) {
+  return (
+    <span className={muted === true ? 'hfact hfact-muted' : 'hfact'} tabIndex={0}>
+      {short}
+      <span className="hfact-card" role="tooltip">
+        <span className="hfact-detail">{detail}</span>
+        {note !== undefined && <span className="hfact-note">{note}</span>}
+      </span>
+    </span>
+  )
+}
+
+/** `AMD Radeon RX 7900 XTX` → `RX 7900 XTX`. The vendor prefix is noise. */
+function shortGpu(s: string | null): string {
+  if (s === null) return DASH
+  return s.replace(/^AMD\s+Radeon(\(TM\))?\s+/i, '').replace(/\s+Graphics$/i, '')
+}
+
+/** `AMD Ryzen 7 7800X3D 8-Core Processor (8 cores, …)` → `Ryzen 7 7800X3D`. */
+function shortCpu(s: string | null): string {
+  if (s === null) return DASH
+  return s
+    .replace(/^AMD\s+|^Intel\(R\)\s+/i, '')
+    .replace(/\s+\d+-Core Processor.*$/i, '')
+    .replace(/\s*\(.*$/, '')
+    .trim()
+}
+
+/** `Windows 11 Pro 6.3 (Build 26200)` → `Windows 11 Pro`. */
+function shortOs(s: string | null): string {
+  if (s === null) return DASH
+  return s.replace(/\s+\d[\d.]*\s*\(Build.*$/i, '').trim()
+}
 
 /** The model in the slot: what it is, and what it has done. */
 function ModelHero({ model }: { model: Model }) {
@@ -328,16 +429,21 @@ function ModelHero({ model }: { model: Model }) {
 
   return (
     <div className={model.hot ? 'mhero mhero-hot' : 'mhero'}>
+      {/* Name and action on one line, attributes on the next. At half width
+          they cannot share a line without the name being truncated to nothing,
+          and the name is the part being identified. */}
       <div className="mhero-id">
         <Pulse on={model.hot} tone="accent" />
         <span className="mhero-name">{model.name}</span>
-        <span className="mhero-tags">
-          {model.recipe !== '?' && <Chip tone="info">{model.recipe}</Chip>}
-          {model.backend !== null && <Chip tone={model.backend === 'rocm' ? 'ok' : 'muted'}>{model.backend}</Chip>}
-          {model.context !== null && <Chip>{num(model.context / 1024)}k ctx</Chip>}
-          {model.sizeGb !== null && <Chip>{num(model.sizeGb, 1)} GB</Chip>}
-        </span>
         <EvictButton model={model} />
+      </div>
+      <div className="mhero-tags">
+        {model.recipe !== '?' && <Chip tone="info">{model.recipe}</Chip>}
+        {model.backend !== null && (
+          <Chip tone={model.backend === 'rocm' ? 'ok' : 'muted'}>{model.backend}</Chip>
+        )}
+        {model.context !== null && <Chip>{num(model.context / 1024)}k ctx</Chip>}
+        {model.sizeGb !== null && <Chip>{num(model.sizeGb, 1)} GB</Chip>}
       </div>
 
       {/* Only the figures that say something. Lemonade emits every one of
@@ -377,11 +483,18 @@ function ModelAlt({ model, replacing }: { model: Model; replacing: Model | null 
 
   return (
     <li className="malt">
-      <span className="malt-name">{model.name}</span>
+      <span className="malt-name" title={model.name}>
+        {model.name}
+      </span>
       <span className="malt-meta">
         {model.sizeGb !== null && <span>{num(model.sizeGb, 1)} GB</span>}
-        {model.stats?.tps != null && <span>{model.stats.tps.toFixed(0)} tok/s</span>}
-        {model.stats?.requests != null && <span>{num(model.stats.requests)} req</span>}
+        {/* Its throughput last time it ran — the one number that actually
+            decides between two chat models you already have on disk. Requests
+            are dropped here: they say how much you have used it, not how well
+            it works, and the column has no room for both. */}
+        {model.stats?.tps != null && model.stats.tps > 0 && (
+          <span>{model.stats.tps.toFixed(0)} tok/s</span>
+        )}
       </span>
       {error !== null && (
         <span className="bad-text" title={error}>

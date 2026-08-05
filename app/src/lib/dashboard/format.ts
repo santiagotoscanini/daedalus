@@ -17,6 +17,24 @@ export function num(v: number | null | undefined, digits = 0): string {
   return v.toLocaleString('en-US', { maximumFractionDigits: digits })
 }
 
+/**
+ * A count, shortened — `976,228` → `976k`.
+ *
+ * For places where the figure is a sense of scale rather than a quantity: a
+ * collapsed summary row, a chip, an axis label. Anywhere the exact number is
+ * the point, use `num`, which is why this is a separate function rather than
+ * an option on it — the choice is about what the reader is being asked to do
+ * with the number, not about how wide the column is.
+ */
+export function compact(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return DASH
+  const abs = Math.abs(v)
+  if (abs >= 1e9) return `${(v / 1e9).toFixed(abs >= 1e10 ? 0 : 1)}B`
+  if (abs >= 1e6) return `${(v / 1e6).toFixed(abs >= 1e7 ? 0 : 1)}M`
+  if (abs >= 1_000) return `${(v / 1e3).toFixed(0)}k`
+  return num(v)
+}
+
 export function bytes(v: number | null | undefined): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return DASH
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
