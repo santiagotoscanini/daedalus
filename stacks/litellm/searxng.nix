@@ -65,6 +65,9 @@ in
 
     volumes = [
       "${./assets/searxng/settings.yml}:/etc/searxng/settings.yml:ro"
+      # Read even with the limiter off — botdetection initialises first
+      # and warns at every start when this is absent. See the file.
+      "${./assets/searxng/limiter.toml}:/etc/searxng/limiter.toml:ro"
     ];
 
     environment = {

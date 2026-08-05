@@ -304,6 +304,31 @@ let
           drop_counter_reason = "seerr_unhandled_dump"
         }
       }
+
+      // searxng announces at every start that it could not find an
+      // X-Forwarded-For or X-Real-IP header, at ERROR. It is correct and
+      // it is permanent: the instance is internal-only with no ingress,
+      // and both callers dial it straight over the `websearch` bridge, so
+      // there is no proxy and never was meant to be one. Not fixable in
+      // its config either — `botdetection` initialises even when the
+      // limiter is off (searx/limiter.py says so in as many words), and
+      // the check is unconditional in botdetection/trusted_proxies.py.
+      //
+      // Dropped rather than tolerated because it is the ONLY line that
+      // container emits, so leaving it turns a permanently-red panel into
+      // the normal state and trains the eye to ignore red. Scoped to the
+      // exact message: anything else searxng ever says still arrives.
+      //
+      // DELETE THIS if anything is ever put in front of searxng — at that
+      // point the message stops being a statement of the architecture and
+      // starts being a real report that the proxy is not passing headers.
+      stage.match {
+        selector = "{container=\"searxng\"}"
+        stage.drop {
+          expression          = "X-Forwarded-For nor X-Real-IP header is set"
+          drop_counter_reason = "searxng_no_proxy_by_design"
+        }
+      }
     }
 
     // ===== level, for CONTAINER lines =====

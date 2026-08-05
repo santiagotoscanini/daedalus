@@ -1,0 +1,33 @@
+# SearXNG botdetection config.
+#
+# This file exists even though the LIMITER IS OFF (`server.limiter: false`
+# in settings.yml), and that is not a contradiction — searx/limiter.py
+# says so in its own words:
+#
+#     # even if the limiter is not activated, the botdetection must be
+#     # activated (e.g. the self_info plugin uses the botdetection to get
+#     # client IP)
+#     cfg = get_cfg()
+#     botdetection.init(cfg, valkey_client)
+#     if not (settings['server']['limiter'] or ...): return
+#
+# So `botdetection.init` runs first and reads this path unconditionally,
+# and the early return that skips the actual rate limiter happens after.
+# Without the file, every start logged
+# `WARNING:searx.botdetection.config: missing config file:
+# /etc/searxng/limiter.toml`. Providing it cannot switch the limiter on —
+# that is decided by settings.yml, which is checked after this is loaded,
+# and the limiter would need a valkey this stack does not run anyway.
+#
+# Keys are validated against searx/limiter.toml (the schema); an unknown
+# key is a hard TypeError at startup, so only add what that file defines.
+
+[botdetection]
+
+# Empty, and stated rather than left to the default of loopback. Nothing
+# proxies to this instance: it is internal-only with no ingress, and both
+# callers — LiteLLM's `searxng` search_tool and Open WebUI's in-chat web
+# search — dial http://searxng:8080 straight over the `websearch` bridge.
+# So there is no hop whose X-Forwarded-For should ever be believed, and
+# an empty list is the accurate way to say that.
+trusted_proxies = []

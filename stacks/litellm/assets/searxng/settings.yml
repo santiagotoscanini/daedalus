@@ -66,12 +66,18 @@ use_default_settings:
 engines:
   - name: duckduckgo web
     disabled: false
-  # A second independent index, so a general search never rests on one
-  # engine again. Measured alongside the others: 20 results on every
-  # attempt, no rate limiting. (mwmbl also passed and is a candidate if
-  # more breadth is ever wanted; its index is much smaller.)
-  - name: yep
-    disabled: false
+
+# `yep` was added here and taken out again the same day, and the reason is
+# worth keeping: it passed a four-query test with 20 results every time,
+# and then returned HTTP 403 once the day's testing had put ~15 queries
+# through it — and kept returning 403 after the suspension expired. Same
+# failure as startpage and brave, just at a higher threshold, and a
+# four-query sample could not see it. mwmbl passed the same weak test and
+# is NOT being added on that evidence.
+#
+# So a general search here is duckduckgo web + google cse, both of which
+# have answered every one of the several dozen queries this box has made
+# today. Anything added later needs to survive a burst, not a handful.
 
 server:
   secret_key: "placeholder-overridden-by-SEARXNG_SECRET"
