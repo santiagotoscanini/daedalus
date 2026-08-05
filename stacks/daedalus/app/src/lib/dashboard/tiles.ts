@@ -59,7 +59,11 @@ export type Ctx = {
 }
 
 export type GroupName =
-  | 'AI & Automation'
+  // No 'AI & Automation'. That group held exactly four tiles — Lemonade,
+  // LiteLLM, n8n, Open WebUI — and each of those now has a whole tab of its
+  // own on the AI page, opening with the same name, status dot, description
+  // and link the tile carried. A directory that repeats the tab row above it
+  // is not a directory, it is the same page twice.
   | 'Home'
   | 'Media'
   | 'Books'
@@ -88,7 +92,6 @@ export const GROUPS: {
   tab?: string
   icon: string
 }[] = [
-  { name: 'AI & Automation', category: 'ai', icon: '◈' },
   { name: 'Home', category: 'home', icon: '⌂' },
   { name: 'Media', category: 'media', tab: 'tv', icon: '▶' },
   { name: 'Books', category: 'media', tab: 'books', icon: '❏' },
@@ -129,157 +132,6 @@ async function gluetunStats(port: number, withPort: boolean) {
 // ── the catalogue ──────────────────────────────────────────────────────────
 
 export const TILES: TileDef[] = [
-  // ══ AI & Automation ══════════════════════════════════════════════════════
-  {
-    key: 'lemonade',
-    name: 'Lemonade',
-    group: 'AI & Automation',
-    description: 'Local LLM model server on the gaming PC',
-    // Off-box (the gaming PC), so there is no webApp and no gatus probe —
-    // the URL is injected as LEMONADE_URL by stacks/daedalus/daedalus.nix.
-    link: { url: process.env.LEMONADE_URL ?? '' },
-    load: async () => {
-      const base = process.env.LEMONADE_URL ?? ''
-      const [health, stats] = await Promise.all([
-        getJson<{
-          all_models_loaded?: { model_name?: string; last_use?: number }[]
-          model_loaded?: string
-          version?: string
-        }>(`${base}/api/v1/health`),
-        getJson<{
-          tokens_per_second?: number
-          time_to_first_token?: number
-          request_count_total?: number
-          output_tokens_total?: number
-        }>(`${base}/api/v1/stats`),
-      ])
-      // The model actually being used, not the first one in the array. Six
-      // models sit resident at once here, so `[0]` names whichever Lemonade
-      // happened to list first — "Hot" is only a useful word if it means the
-      // most recently touched.
-      const hot = [...(health?.all_models_loaded ?? [])].sort(
-        (a, b) => (b.last_use ?? 0) - (a.last_use ?? 0),
-      )[0]
-      return {
-        stats: [
-          stat('Models', num(health?.all_models_loaded?.length)),
-          stat('Hot', text(health?.model_loaded ?? hot?.model_name)),
-          stat('Tok/s last', num(stats?.tokens_per_second, 1)),
-          // Reported in seconds; milliseconds is the unit anyone reads TTFT in.
-          stat(
-            'TTFT last',
-            stats?.time_to_first_token === undefined ?
-              DASH
-            : `${num(stats.time_to_first_token * 1000)} ms`,
-          ),
-          stat('Reqs total', num(stats?.request_count_total)),
-          stat('Out tok total', num(stats?.output_tokens_total)),
-        ],
-        note: health?.version ? `v${health.version}` : undefined,
-      }
-    },
-  },
-  {
-    key: 'litellm',
-    name: 'LiteLLM',
-    group: 'AI & Automation',
-    description: 'OpenAI-compatible LLM gateway',
-    link: { app: 'litellm', path: '/ui' },
-    gatus: 'litellm',
-    load: async () => {
-      // Over app-db-net, which daedalus already joins for its own database —
-      // the same bridge litellm lives on, so no traefik hop and no key in a URL.
-      const h = { headers: { Authorization: `Bearer ${process.env.LITELLM_API_KEY ?? ''}` } }
-      const url = (from: string) =>
-        `http://litellm:4000/user/daily/activity/aggregated?start_date=${from}&end_date=2030-12-31`
-      const today = new Date().toISOString().slice(0, 10)
-      type Activity = {
-        metadata?: {
-          total_api_requests?: number
-          total_failed_requests?: number
-          total_tokens?: number
-        }
-      }
-      // Two ranges, not one response read twice: `results[0]` is the FIRST
-      // day in the range, so with start_date=2020 it is the oldest day with
-      // traffic, not today.
-      const [all, day] = await Promise.all([
-        getJson<Activity>(url('2020-01-01'), h),
-        getJson<Activity>(url(today), h),
-      ])
-      return {
-        stats: [
-          stat('Reqs today', num(day?.metadata?.total_api_requests)),
-          stat('Failed today', num(day?.metadata?.total_failed_requests)),
-          stat('Tokens today', num(day?.metadata?.total_tokens)),
-          stat('Reqs all', num(all?.metadata?.total_api_requests)),
-          stat('Failed all', num(all?.metadata?.total_failed_requests)),
-          stat('Tokens all', num(all?.metadata?.total_tokens)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'n8n',
-    name: 'n8n',
-    group: 'AI & Automation',
-    description: 'Workflow automation',
-    link: { app: 'n8n' },
-    gatus: 'n8n',
-    load: async (ctx) => {
-      const h = { headers: { 'X-N8N-API-KEY': key('N8N_API_KEY') } }
-      const base = ctx.base('n8n')
-      // Workflow NAMES, resolved from the API rather than a hand-written
-      // id→name map that would go stale the moment one is renamed.
-      const [runs, flows] = await Promise.all([
-        getJson<{ data?: { workflowId: string; status: string; startedAt: string }[] }>(
-          `${base}/api/v1/executions?limit=3`,
-          h,
-        ),
-        getJson<{ data?: { id: string; name: string }[] }>(`${base}/api/v1/workflows`, h),
-      ])
-      const names = new Map((flows?.data ?? []).map((f) => [f.id, f.name]))
-      const list = runs?.data ?? []
-      return {
-        stats: list.map((e) =>
-          stat(names.get(e.workflowId) ?? e.workflowId.slice(0, 8), e.status),
-        ),
-        note:
-          list.length === 0 ? 'No recent executions'
-            // An execution record carries only `workflowId`, so names need the
-            // /workflows endpoint — which 403s unless the API key was minted
-            // with the `workflow:read` scope. Say so, rather than showing
-            // opaque ids and letting them look like the intended output.
-          : flows === null ? 'Workflow names need an n8n API key with workflow:read'
-          : undefined,
-      }
-    },
-  },
-  {
-    key: 'open-webui',
-    name: 'Open WebUI',
-    group: 'AI & Automation',
-    description: 'Chat with local models',
-    link: { app: 'open-webui' },
-    gatus: 'open-webui',
-    load: async (ctx) => {
-      const h = { headers: { Authorization: `Bearer ${key('OPENWEBUI_KEY')}` } }
-      const base = ctx.base('open-webui')
-      const [usage, ver] = await Promise.all([
-        getJson<{ user_count?: number; model_ids?: string[] }>(`${base}/api/usage`, h),
-        getJson<{ current?: string; latest?: string }>(`${base}/api/version/updates`, h),
-      ])
-      return {
-        stats: [
-          stat('Active 3m', num(usage?.user_count)),
-          stat('Generating', num(usage?.model_ids?.length)),
-          stat('Version', text(ver?.current)),
-          stat('Latest', text(ver?.latest)),
-        ],
-      }
-    },
-  },
-
   // ══ Home ═════════════════════════════════════════════════════════════════
   {
     key: 'pocket-id',

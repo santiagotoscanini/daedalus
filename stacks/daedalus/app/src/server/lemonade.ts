@@ -60,6 +60,36 @@ export const unloadLemonadeModel = createServerFn({ method: 'POST' })
   })
 
 /**
+ * Put a different model of the same kind into the slot.
+ *
+ * UNLOAD FIRST, and that is not belt-and-braces. Lemonade keeps a per-type LRU
+ * pool — one model deep for every type on this box — and pinned models are
+ * excluded from the eviction candidate search. So when the pool is full and
+ * everything in it is pinned, an explicit load does not evict anything: it
+ * fails with 409 and a `slots_pinned_error`. Every resident model here is
+ * pinned, so a plain load-the-new-one button would have failed every single
+ * time it was pressed.
+ *
+ * Freeing the slot explicitly is also the honest reading of the gesture. The
+ * user picked a replacement; evicting the incumbent is what they asked for,
+ * not a side effect to be inferred from memory pressure.
+ *
+ * `pinned` carries the incumbent's state forward: switching should not quietly
+ * change whether the slot survives the next squeeze.
+ */
+export const switchLemonadeModel = createServerFn({ method: 'POST' })
+  .inputValidator((input: { from: string | null; to: string; pinned: boolean }) => input)
+  .handler(async ({ data }): Promise<ModelActionResult> => {
+    if (data.from !== null) {
+      const freed = await call('/api/v1/unload', { model_name: data.from })
+      // Report the eviction failure rather than pressing on into the 409 it
+      // guarantees — "could not free the slot" is the actionable sentence.
+      if (!freed.ok) return { ok: false, message: `could not evict ${data.from}: ${freed.message}` }
+    }
+    return call('/api/v1/load', { model_name: data.to, pinned: data.pinned })
+  })
+
+/**
  * POST, and report what happened in words.
  *
  * A load can take tens of seconds — a cold 12B model is read off a spinning

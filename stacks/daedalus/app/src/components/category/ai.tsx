@@ -5,7 +5,7 @@ import { BarList, BigStat, Board, BoardGrid, Chip, Columns, Facts, Pulse, StatBa
 import { GrafanaLogs } from '../logs'
 import { ReleaseNotes, UpgradeChain } from '../release-notes'
 import { LinkRow, ServiceHead, type CompareRow } from '../service-head'
-import { loadLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
+import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
 import { DASH, num, pct } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { AiData } from '../../server/category'
@@ -97,8 +97,8 @@ function ReleaseBoard({ gap, span = 12 }: { gap: VersionGap; span?: 6 | 12 }) {
 // ── Lemonade ───────────────────────────────────────────────────────────────
 
 function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) {
-  const { gap, host, live, last, slots } = data
-  const full = slots.filter((s) => s.used >= s.max).length
+  const { gap, host, live, categories } = data
+  const installed = categories.reduce((n, c) => n + c.models.length, 0)
 
   return (
     <>
@@ -129,69 +129,58 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
         ]}
       />
 
-      <StatBand>
-        <BigStat
-          label="Resident"
-          value={String(data.models.length)}
-          tone="ok"
-          sub={`${String(full)} of ${String(slots.length)} slots full`}
-        />
-        <BigStat
-          label="Throughput"
-          value={last.tps === null ? DASH : last.tps.toFixed(1)}
-          unit="tok/s"
-          sub="last generation"
-        />
-        <BigStat
-          label="First token"
-          value={last.ttftMs === null ? DASH : num(last.ttftMs)}
-          unit="ms"
-          tone="info"
-          sub="last generation"
-        />
-        <BigStat
-          label="Requests served"
-          value={num(last.requests)}
-          tone="muted"
-          sub={`${num(last.outputTokens)} tokens out`}
-        />
-      </StatBand>
-
+      {/* No headline band. Every number that was in it — throughput, first
+          token, requests, how many are resident — is a property of a
+          particular model, and the band could only ever show it for whichever
+          one happened to run last. Stating it per model below says strictly
+          more, in less space, without the same figure appearing twice. */}
       <BoardGrid>
         <Board
-          title="Model rack"
+          title="Models"
           icon="▤"
           span={12}
-          aside={<span className="board-note">most recently used first</span>}
-        >
-          {data.models.length === 0 ?
-            <p className="viz-empty">Lemonade did not answer</p>
-          : <div className="rack">
-              {data.models.map((m) => (
-                <ModelRow key={m.name} model={m} />
-              ))}
-            </div>
+          aside={
+            <span className="board-note">
+              {installed} installed · {num(data.catalog.sizeGb, 1)} GB on disk
+            </span>
           }
-          {/* The cap is per TYPE, which is the thing that surprises people:
-              one chat model resident out of a limit of one means the rack is
-              full even though five other models are also loaded. */}
-          <div className="slots">
-            {slots.map((s) => (
-              <span key={s.type} className={s.used >= s.max ? 'slot slot-full' : 'slot'}>
-                {s.type} <b>{s.used}</b>/{s.max}
-              </span>
-            ))}
-          </div>
+        >
+          {categories.length === 0 ?
+            <p className="viz-empty">Lemonade did not answer</p>
+          : categories.map((c) => <ModelKind key={c.type} kind={c} />)}
+
+          {/* The build behind each runtime named above. Folded in here rather
+              than given a panel of its own, which restated every runtime name
+              a second time: what is worth knowing separately is only the build
+              NUMBER, and it moves far more often than a Lemonade release does
+              — it is the thing that changes how fast a model runs. */}
+          {data.backends.length > 0 && (
+            <p className="mbuilds">
+              {data.backends.map((b) => (
+                <span key={`${b.recipe}-${b.backend}`}>
+                  {b.recipe}
+                  {b.url === null ?
+                    <span className="mono">{b.version}</span>
+                  : <a className="mono" href={b.url} target="_blank" rel="noreferrer">
+                      {b.version}
+                    </a>
+                  }
+                </span>
+              ))}
+            </p>
+          )}
+
           <p className="board-foot">
-            Lemonade loads on demand and evicts the least recently used model when the card fills,
-            so this changes on its own. <b>Warm</b> pins a model so it survives that eviction and
-            the next request skips a cold load; <b>Evict</b> hands the VRAM and the file handle
-            back. Ordering is Lemonade’s own — it reports a sequence, not timestamps, so there is
-            no “used 4 minutes ago” to show.
+            One model of each kind stays in VRAM — that is Lemonade’s per-type limit, and it is
+            why picking a different chat model means putting down the current one. <b>Switch</b>{' '}
+            does both in order: pinned models are exempt from eviction, so the incoming load would
+            be refused outright if the slot were not freed first. Rates and counts are each model’s
+            own, and survive it being evicted, so a model you have not run today still shows what
+            it did last time.
           </p>
         </Board>
 
-        <Board title="The gaming PC" icon="▣" span={6} fill>
+        <Board title="The gaming PC" icon="▣" span={12}>
           <Facts
             rows={[
               { k: 'GPU', v: host.gpu ?? DASH },
@@ -232,40 +221,6 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
             returns “not implemented” for both, where its macOS and Linux ones do not. Zero would
             be a claim that the card is idle, so nothing is drawn. Until something else measures
             it, how hard the GPU is working is the throughput number above.
-          </p>
-        </Board>
-
-        <Board
-          title="Inference runtimes"
-          icon="⚙"
-          span={6}
-          fill
-          aside={<span className="board-note">installed backends</span>}
-        >
-          {data.backends.length === 0 ?
-            <p className="viz-empty">could not read the backend matrix</p>
-          : <ul className="runtimes">
-              {data.backends.map((b) => (
-                <li key={`${b.recipe}-${b.backend}`}>
-                  <span className="rt-name">
-                    {b.recipe}
-                    <Chip tone={b.backend === 'rocm' ? 'ok' : 'muted'}>{b.backend}</Chip>
-                  </span>
-                  {b.url === null ?
-                    <span className="rt-ver mono">{b.version}</span>
-                  : <a className="rt-ver mono" href={b.url} target="_blank" rel="noreferrer">
-                      {b.version}
-                    </a>
-                  }
-                </li>
-              ))}
-            </ul>
-          }
-          <p className="board-foot">
-            These move independently of the Lemonade version above — a llama.cpp build number
-            bumps far more often than a release does, and it is the thing that changes how fast a
-            model runs. ROCm is the AMD path; the one known hole is StableDiffusion.cpp on ROCm,
-            which is missing a Tensile library for this card and needs the Vulkan backend instead.
           </p>
         </Board>
 
@@ -313,75 +268,189 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
 }
 
 /**
- * One resident model, with the two things you can do to it.
+ * Every model of one kind, with the one in the slot on top.
  *
- * Both actions are optimistic about nothing: the button goes busy, the server
- * function answers, and the router is invalidated so the rack re-reads from
- * Lemonade rather than from what we assumed happened. A load can take tens of
- * seconds on a cold 12B model, which is exactly why the state is visible.
+ * The kind is the organising idea rather than a label, because the constraint
+ * is per kind: exactly one chat model can be resident, so the four installed
+ * ones are four answers to a single question. A flat list sorted by recency —
+ * which is what this was — showed six unrelated models and hid both the choice
+ * and the fact that there was one to make.
+ *
+ * It also removes most of the repetition. `llamacpp`, `rocm` and `gpu`
+ * appeared on every row of the old list; here the runtime belongs to the model
+ * actually running and the rest are candidates described by what distinguishes
+ * them — their size, and what they did last time.
  */
-function ModelRow({ model }: { model: Extract<AiData, { tab: 'lemonade' }>['models'][number] }) {
-  const router = useRouter()
-  const [busy, setBusy] = useState<null | 'warm' | 'evict'>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const run = (what: 'warm' | 'evict', fn: () => Promise<{ ok: boolean; message: string }>) => {
-    setBusy(what)
-    setError(null)
-    void fn()
-      .then((r) => {
-        if (!r.ok) setError(r.message)
-        return router.invalidate()
-      })
-      .finally(() => {
-        setBusy(null)
-      })
-  }
+function ModelKind({ kind }: { kind: Extract<AiData, { tab: 'lemonade' }>['categories'][number] }) {
+  const resident = kind.models.find((m) => m.resident) ?? null
+  const others = kind.models.filter((m) => !m.resident)
 
   return (
-    <div className={model.hot ? 'rack-row rack-hot' : 'rack-row'}>
-      <span className="rack-name" title={model.checkpoint}>
-        {model.hot && <Pulse on tone="accent" />}
-        {model.name}
-      </span>
-      <span className="rack-tags">
-        <Chip tone={model.device === 'gpu' ? 'ok' : 'muted'}>{model.device}</Chip>
-        <Chip tone="info">{model.type}</Chip>
-        <Chip>{model.recipe}</Chip>
-        {model.backend !== null && <Chip>{model.backend}</Chip>}
-        {model.context !== null && <Chip>{num(model.context / 1024)}k ctx</Chip>}
-        {model.pinned && <Chip tone="accent">pinned</Chip>}
-      </span>
-      <span className="rack-actions">
-        {error !== null && (
-          <span className="bad-text" title={error}>
-            failed
-          </span>
-        )}
-        {!model.pinned && (
-          <button
-            type="button"
-            className="btn btn-ghost"
-            disabled={busy !== null}
-            onClick={() => {
-              run('warm', () => loadLemonadeModel({ data: { model: model.name, pinned: true } }))
-            }}
-          >
-            {busy === 'warm' ? '· warming…' : 'Warm'}
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={busy !== null}
-          onClick={() => {
-            run('evict', () => unloadLemonadeModel({ data: { model: model.name } }))
-          }}
-        >
-          {busy === 'evict' ? '· evicting…' : 'Evict'}
-        </button>
-      </span>
+    <section className="mkind">
+      <header className="mkind-head">
+        <h4>{kind.type}</h4>
+        <span className="mkind-count">
+          {kind.models.length === 1 ? 'only one installed' : `${kind.models.length} installed`}
+        </span>
+      </header>
+
+      {resident === null ?
+        <p className="mkind-empty">nothing loaded — the slot is free</p>
+      : <ModelHero model={resident} />}
+
+      {others.length > 0 && (
+        <ul className="malts">
+          {others.map((m) => (
+            <ModelAlt key={m.name} model={m} replacing={resident} />
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+type Model = Extract<AiData, { tab: 'lemonade' }>['categories'][number]['models'][number]
+
+/** The model in the slot: what it is, and what it has done. */
+function ModelHero({ model }: { model: Model }) {
+  const s = model.stats
+  const some = (n: number | null | undefined) => n != null && n > 0
+
+  const stats =
+    s === null ? []
+    : [
+        { k: 'throughput', v: `${(s.tps ?? 0).toFixed(1)} tok/s`, on: some(s.tps) },
+        { k: 'first token', v: `${num(s.ttftMs)} ms`, on: some(s.ttftMs) },
+        { k: 'requests', v: num(s.requests), on: some(s.requests) },
+        { k: 'tokens out', v: num(s.outputTokens), on: some(s.outputTokens) },
+        { k: 'tokens in', v: num(s.inputTokens), on: some(s.inputTokens) },
+      ].filter((f) => f.on)
+
+  return (
+    <div className={model.hot ? 'mhero mhero-hot' : 'mhero'}>
+      <div className="mhero-id">
+        <Pulse on={model.hot} tone="accent" />
+        <span className="mhero-name">{model.name}</span>
+        <span className="mhero-tags">
+          {model.recipe !== '?' && <Chip tone="info">{model.recipe}</Chip>}
+          {model.backend !== null && <Chip tone={model.backend === 'rocm' ? 'ok' : 'muted'}>{model.backend}</Chip>}
+          {model.context !== null && <Chip>{num(model.context / 1024)}k ctx</Chip>}
+          {model.sizeGb !== null && <Chip>{num(model.sizeGb, 1)} GB</Chip>}
+        </span>
+        <EvictButton model={model} />
+      </div>
+
+      {/* Only the figures that say something. Lemonade emits every one of
+          these series for every loaded model, so an embedding model that has
+          never been asked for a token still reports 0.0 tok/s and 0 ms to
+          first token — and a TTS model would report those forever, because
+          they do not mean anything for it. Rendering them produced five
+          identical rows of noughts under five of the six kinds, which reads
+          as broken instrumentation rather than as an idle model.
+
+          Zero is dropped rather than shown because in every one of these the
+          quantity is cumulative-or-latest: nothing has happened yet, which is
+          what an absent row already says. */}
+      {stats.length > 0 && (
+        <dl className="mstats">
+          {stats.map((f) => (
+            <div key={f.k}>
+              <dt>{f.k}</dt>
+              <dd>{f.v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </div>
+  )
+}
+
+/**
+ * An installed model that is not in the slot, and the button that puts it
+ * there. Shows what it managed last time it ran, which is the whole basis for
+ * choosing between two chat models you already have.
+ */
+function ModelAlt({ model, replacing }: { model: Model; replacing: Model | null }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <li className="malt">
+      <span className="malt-name">{model.name}</span>
+      <span className="malt-meta">
+        {model.sizeGb !== null && <span>{num(model.sizeGb, 1)} GB</span>}
+        {model.stats?.tps != null && <span>{model.stats.tps.toFixed(0)} tok/s</span>}
+        {model.stats?.requests != null && <span>{num(model.stats.requests)} req</span>}
+      </span>
+      {error !== null && (
+        <span className="bad-text" title={error}>
+          failed
+        </span>
+      )}
+      <button
+        type="button"
+        className="btn btn-ghost"
+        disabled={busy}
+        title={
+          replacing === null ?
+            `Load ${model.name}`
+          : `Evict ${replacing.name} and load ${model.name}`
+        }
+        onClick={() => {
+          setBusy(true)
+          setError(null)
+          void switchLemonadeModel({
+            data: {
+              from: replacing?.name ?? null,
+              to: model.name,
+              // Carry the incumbent's pinning forward rather than silently
+              // changing whether the slot survives the next squeeze.
+              pinned: replacing?.pinned ?? false,
+            },
+          })
+            .then((r) => {
+              if (!r.ok) setError(r.message)
+              return router.invalidate()
+            })
+            .finally(() => {
+              setBusy(false)
+            })
+        }}
+      >
+        {busy ? '· switching…' : 'Switch'}
+      </button>
+    </li>
+  )
+}
+
+/**
+ * Hands the VRAM and the file handle back.
+ *
+ * The file-handle half is the one that comes up: a model that is loaded cannot
+ * be replaced on the Windows box, so a stuck download is often just this.
+ */
+function EvictButton({ model }: { model: Model }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+
+  return (
+    <button
+      type="button"
+      className="btn btn-ghost mhero-evict"
+      disabled={busy}
+      title={`Unload ${model.name}, leaving this slot empty`}
+      onClick={() => {
+        setBusy(true)
+        void unloadLemonadeModel({ data: { model: model.name } })
+          .then(() => router.invalidate())
+          .finally(() => {
+            setBusy(false)
+          })
+      }}
+    >
+      {busy ? '· evicting…' : 'Evict'}
+    </button>
   )
 }
 

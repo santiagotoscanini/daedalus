@@ -63,10 +63,13 @@ export const CATEGORIES: CategorySpec[] = [
     label: 'AI',
     icon: '◈',
     lede: 'The local model server, the gateway in front of it, and what is driving traffic through it.',
-    // Shaped to Lemonade, the tab that opens by default: a full-width rack,
-    // then a pair, then the release notes.
-    boardSpans: [12, 6, 6, 12],
-    tileGroups: 1,
+    // Shaped to Lemonade, the tab that opens by default: full-width panels
+    // all the way down.
+    boardSpans: [12, 12, 12, 12],
+    // No tile directory. It held one tile per service, and each of those is
+    // now a tab on this page — the same name, dot, description and link, one
+    // scroll further down.
+    tileGroups: 0,
     // A tab per service, in the order a prompt travels: the thing that holds
     // the weights, the gateway in front of it, then the two callers. Lemonade
     // leads because it is the one that is off this box and the one whose state

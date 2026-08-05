@@ -2760,7 +2760,7 @@ h2 {
 
 /* ── lists shared by several boards ─────────────────────────────────────── */
 
-.rack,
+
 .runs,
 .people,
 .peers,
@@ -2775,131 +2775,200 @@ h2 {
   flex-direction: column;
 }
 
-.rack {
-  gap: 0.3rem;
+
+/* ── the model widget ───────────────────────────────────────────────────── */
+
+/* Grouped by KIND, because the constraint is per kind: one model of each type
+   may be resident, so a category's installed models are competing answers to a
+   single question rather than a list. The previous flat rack repeated the
+   runtime, the backend and the device on every row; here those belong to the
+   model actually running and the candidates are described by what tells them
+   apart — size, and what they managed last time. */
+.mkind + .mkind {
+  margin-top: 1.15rem;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 1rem;
 }
-.rack-row {
+.mkind-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: baseline;
   gap: 0.6rem;
-  padding: 0.3rem 0.45rem;
-  border-radius: 7px;
-  background: var(--panel-2);
-  min-width: 0;
+  margin-bottom: 0.45rem;
 }
-.rack-hot {
+.mkind-head h4 {
+  margin: 0;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.mkind-count {
+  font-size: 0.68rem;
+  color: var(--dim);
+  margin-left: auto;
+}
+.mkind-empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--warn);
+}
+
+/* The model in the slot. Given real weight — it is the answer to the
+   category's question, and everything below it is an alternative. */
+.mhero {
+  border-radius: 9px;
+  background: var(--panel-2);
+  padding: 0.5rem 0.6rem;
+}
+.mhero-hot {
   background: color-mix(in srgb, var(--accent) 8%, var(--panel-2));
 }
-.rack-name {
+.mhero-id {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.82rem;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.mhero-name {
+  font-size: 0.9rem;
+  color: var(--text);
+  font-weight: 600;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rack-tags {
+.mhero-tags {
   display: flex;
   gap: 0.25rem;
-  flex: 0 0 auto;
   flex-wrap: wrap;
-  justify-content: flex-end;
 }
-/* The rack is the one list on the dashboard whose rows can be acted on, so
-   `margin-left: auto` on the tags no longer holds them at the end — the
-   buttons do, and the tags pack against them. */
-.rack-tags {
+/* Quiet until wanted, like the Switch buttons below. Six lit Evict buttons
+   down the widget competed with the six models they belong to, and evicting
+   is a thing you do occasionally rather than a thing you read. */
+.mhero-evict {
   margin-left: auto;
-}
-.rack-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex: 0 0 auto;
-}
-.rack-actions .btn {
-  padding: 0.2rem 0.5rem;
-  font-size: 0.7rem;
-}
-.rack-actions .bad-text {
+  padding: 0.18rem 0.5rem;
   font-size: 0.68rem;
+  flex: none;
+  opacity: 0.4;
+  transition: opacity 0.12s ease;
 }
-@media (max-width: 46rem) {
-  .rack-row {
-    flex-wrap: wrap;
-  }
-  .rack-actions {
-    margin-left: auto;
-  }
+.mhero:hover .mhero-evict,
+.mhero-evict:focus-visible {
+  opacity: 1;
 }
 
-/* Per-TYPE residency caps. A footnote-sized row rather than four gauges: the
-   number only matters when one reads full, so that is the only state drawn in
-   a colour. */
-.slots {
+/* What this model has done. A measure line, not cards: five small numbers
+   that are read across rather than compared against each other. */
+.mstats {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-top: 0.6rem;
+  gap: 0 1.6rem;
+  margin: 0.55rem 0 0;
 }
-.slot {
-  font-size: 0.68rem;
+.mstats div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+.mstats dt {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--dim);
-  padding: 0.12rem 0.4rem;
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
+}
+.mstats dd {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.slot b {
-  color: var(--muted);
-  font-weight: 600;
-}
-.slot-full {
-  border-color: color-mix(in srgb, var(--warn) 45%, var(--border-soft));
-  color: var(--warn);
-}
-.slot-full b {
-  color: var(--warn);
-}
 
-/* Installed inference backends. Two columns — what it is, which build — so
-   the build numbers line up and a bump is visible without reading. */
-.runtimes {
+/* The other models of this kind — one click from the slot. */
+.malts {
   list-style: none;
-  margin: 0;
+  margin: 0.3rem 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
+  gap: 0.15rem;
 }
-.runtimes li {
+.malt {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  padding: 0.22rem 0.45rem;
+  gap: 0.6rem;
+  padding: 0.22rem 0.6rem;
   border-radius: 7px;
-  background: var(--panel-2);
-}
-.rt-name {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
   min-width: 0;
 }
-.rt-ver {
-  margin-left: auto;
-  font-size: 0.74rem;
-  color: var(--dim);
+.malt:hover {
+  background: var(--panel-2);
+}
+.malt-name {
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-a.rt-ver {
+.malt-meta {
+  display: flex;
+  gap: 0 0.9rem;
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.malt .btn {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.68rem;
+  flex: none;
+  /* Quiet until wanted: the row is information first and an action second,
+     and six always-lit buttons would compete with the model that is running. */
+  opacity: 0.45;
+  transition: opacity 0.12s ease;
+}
+.malt:hover .btn,
+.malt .btn:focus-visible {
+  opacity: 1;
+}
+@media (max-width: 46rem) {
+  .malt {
+    flex-wrap: wrap;
+  }
+  .malt-meta {
+    margin-left: 0;
+  }
+}
+
+/* Build numbers for the runtimes named on the models above. One line, because
+   that is all they are worth once the runtime itself is stated per model. */
+.mbuilds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.1rem;
+  margin: 1.1rem 0 0;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border-soft);
+  font-size: 0.68rem;
+  color: var(--dim);
+}
+.mbuilds span {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+.mbuilds .mono {
+  color: var(--muted);
+}
+.mbuilds a {
+  color: var(--muted);
   text-decoration: none;
 }
-a.rt-ver:hover {
+.mbuilds a:hover {
   color: var(--accent);
 }
 
