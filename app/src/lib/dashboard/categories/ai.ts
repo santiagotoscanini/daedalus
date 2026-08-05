@@ -590,7 +590,13 @@ async function loadLitellm(): Promise<LitellmData> {
     // Which keys still EXIST, as opposed to which ones have called. The ledger
     // is history and keys get rotated out of it, so the difference between the
     // two lists is what turns an unanswerable hash into "this was revoked".
-    getJson<{ keys?: { token?: string }[] }>(
+    //
+    // 100 is the endpoint's hard maximum, not a choice — a larger `size` is a
+    // 422 rather than a clamp. `total_pages` is read below and the revoked
+    // marking is dropped entirely if there is a second page, because a
+    // half-read key list would mark live keys as revoked, and a wrong
+    // accusation is worse here than no annotation.
+    getJson<{ keys?: { token?: string }[]; total_pages?: number }>(
       'http://litellm:4000/key/list?return_full_object=true&size=100',
       auth,
     ),
@@ -660,7 +666,12 @@ async function loadLitellm(): Promise<LitellmData> {
     days,
     latSum,
     latCount,
-    new Set((keys?.keys ?? []).map((k) => k.token ?? '')),
+    // `null` means "could not establish which keys are live" — the gateway did
+    // not answer, or answered with more pages than were read. Distinct from an
+    // empty set, which would claim every caller is revoked.
+    keys === null || (keys.total_pages ?? 1) > 1 ?
+      null
+    : new Set((keys.keys ?? []).map((k) => k.token ?? '')),
   )
 
   const toolMs = new Map(toolLatency.map((t) => [t.label, t.value * 1000]))
@@ -713,7 +724,8 @@ function callersOf(
   days: Day[],
   latSum: { label: string; value: number }[],
   latCount: { label: string; value: number }[],
-  liveKeys: Set<string>,
+  /** Null when the live-key list could not be established — see the caller. */
+  liveKeys: Set<string> | null,
 ): { callers: Caller[]; rejected: LitellmData['rejected'] } {
   const sums = new Map(latSum.map((r) => [r.label, r.value]))
   const counts = new Map(latCount.map((r) => [r.label, r.value]))
@@ -743,12 +755,16 @@ function callersOf(
         models: new Set<string>(),
         last: date,
         // The two literals are litellm's own credentials rather than rows in
-        // its key table, so they are never "missing" from it.
-        live: hash === 'litellm_proxy_master_key' || hash === 'litellm-internal-health-check',
+        // its key table, so they are never "missing" from it — and with no
+        // key list to check against, nothing is called revoked at all.
+        live:
+          liveKeys === null ||
+          hash === 'litellm_proxy_master_key' ||
+          hash === 'litellm-internal-health-check',
       }
       // One live hash is enough: a rotated key keeps its alias, so `plane`
       // legitimately covers one current key and one that was replaced.
-      if (liveKeys.has(hash)) at.live = true
+      if (liveKeys?.has(hash) === true) at.live = true
       // Prometheus totals are per key, so they may only be added the first time
       // a hash is seen — a caller active on nine days would otherwise have its
       // latency counted nine times.
