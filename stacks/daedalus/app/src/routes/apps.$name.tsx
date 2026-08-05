@@ -600,6 +600,20 @@ function AppDetail() {
               label="Prometheus scrape"
               hint="Only turn on once the app actually serves /metrics — otherwise it is a permanently-down target."
             />
+            <Toggle
+              checked={app.operatorSecrets}
+              disabled={readOnly}
+              onChange={(v) => {
+                patch({ operatorSecrets: v })
+              }}
+              label="Operator secrets"
+              hint={`Loads stacks/apps/${app.name}-env.sops into the container. That file has to exist and be committed — if it does not, the Apply fails at build and nothing switches.`}
+            />
+            <p className="panel-note">
+              Operator secrets are the only switch here with a prerequisite outside daedalus: the
+              encrypted file is authored with <code>sops</code> in the flake repo. Turning this on
+              without it is caught by Nix evaluation, so the failure costs an Apply, not the app.
+            </p>
           </Panel>
 
           <Panel title="Routing">
@@ -719,12 +733,11 @@ function AppDetail() {
 
           <Panel title="Not editable here">
             <p className="panel-empty">
-              <strong>Auth mode, egress and operator secrets</strong> are read-only for now. Moving
-              auth means provisioning an <code>SSO_SECRET_{app.name.toUpperCase()}</code> into
+              <strong>Auth mode and egress</strong> are read-only. Moving auth means provisioning an{' '}
+              <code>SSO_SECRET_{app.name.toUpperCase()}</code> into
               <code> stacks/pocket-id/clients.sops</code> — writing encrypted state is its own
               design problem, and a half-applied auth change locks you out of the app. Egress needs
-              a gluetun instance to exist first; operator secrets need a{' '}
-              <code>{app.name}-env.sops</code> authored by hand.
+              a gluetun instance to exist first.
             </p>
           </Panel>
 
