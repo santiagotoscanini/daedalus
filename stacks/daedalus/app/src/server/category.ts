@@ -89,6 +89,35 @@ export const fetchCategoryBoards = createServerFn()
     return loadCategory(data.category, resolveTab(data.category, data.tab), await makeCtx())
   })
 
+/** Tab id → is its subject answering. `null` = nothing probes it. */
+export type TabStatus = Record<string, boolean | null>
+
+/**
+ * The dots on the sub-tab row.
+ *
+ * Its own entry point rather than a field on the boards payload, because the
+ * tab row is the one part of a category page that renders before anything is
+ * fetched — see the note at the top of this file. Hanging the dots off the
+ * boards would hold the whole row hostage to the slowest upstream on the
+ * page, to draw a circle. This is one Prometheus query and lands first.
+ */
+export const fetchTabStatus = createServerFn()
+  .inputValidator((input: { category: CategoryName }) => input)
+  .handler(async ({ data }): Promise<TabStatus> => {
+    const spec = CATEGORIES.find((c) => c.id === data.category)
+    if (spec === undefined) return {}
+
+    const { promVector } = await import('../lib/dashboard/clients')
+    const probes = await promVector('gatus_results_endpoint_success')
+    const health = new Map(
+      probes.map((p) => [(p.metric.key ?? '').replace(/^web-apps_/, ''), p.value[1] === '1']),
+    )
+
+    return Object.fromEntries(
+      spec.tabs.map((t) => [t.id, t.probe === undefined ? null : (health.get(t.probe) ?? null)]),
+    )
+  })
+
 export const fetchCategoryTiles = createServerFn()
   .inputValidator((input: { category: CategoryName; tab: string }) => input)
   .handler(async ({ data }): Promise<CategoryTiles> => {

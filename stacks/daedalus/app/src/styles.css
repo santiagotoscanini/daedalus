@@ -188,13 +188,18 @@ h2 {
   min-width: 0;
 }
 
-/* One measure for every run of prose in the app. 74ch is a comfortable line
+/* One measure for every run of PAGE-level prose. 74ch is a comfortable line
    at this size and is deliberately wider than the 62ch a book would use —
-   these are captions under a diagram, read in one glance, not chapters. */
+   these are introductions, read in one glance, not chapters.
+
+   `.board-foot` is deliberately NOT in this list. A caption inside a board is
+   already bounded by the board, and capping it again left the text hugging
+   the left edge of a wide panel with a column of empty background beside it,
+   which reads as a layout bug rather than as a measure. The panel is the
+   measure. */
 .lede,
 .cat-lede,
 .footnote,
-.board-foot,
 .panel-note,
 .exposure-note,
 .alerts-summary {
@@ -538,6 +543,13 @@ h2 {
 .tabs a.active {
   color: var(--text);
   border-bottom-color: var(--accent);
+}
+/* A tab can wear its subject's status — see CategorySpec.tabs. Slightly
+   smaller than the tile dot: at this size the ring around a live one would
+   collide with the label. */
+.tabs a .dot {
+  width: 0.46rem;
+  height: 0.46rem;
 }
 .metrics {
   display: grid;
@@ -2205,6 +2217,22 @@ h2 {
   overflow: hidden;
 }
 
+/* Opted in by `<Board fill>` — see the note there. The board grows to the row
+   height and its body distributes the extra room, so the caption sits on the
+   floor of the panel instead of leaving a strip of empty background under a
+   short list next to a tall diagram. */
+.board-fill {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+}
+.board-fill .board-body {
+  flex: 1;
+}
+.board-fill .board-body > .board-foot:last-child {
+  margin-top: auto;
+}
+
 /* Boards are laid out on a 12-column grid at desktop width, collapse to two
    half-widths on a laptop, and stack completely on a phone. The spans are
    declared per board because a pipeline needs the full width and a set of
@@ -3350,17 +3378,6 @@ h2 {
   color: var(--accent);
 }
 
-/* The caption under an embedded panel. Deliberately NOT `.board-foot`: that
-   one is capped at a prose measure, which is right under a paragraph and
-   wrong under a full-width frame, where it leaves the text hugging the left
-   edge of a very wide box. */
-.logs-foot {
-  margin: 0.4rem 0 0;
-  color: var(--dim);
-  font-size: 0.73rem;
-  line-height: 1.45;
-}
-
 /* The controls above an embedded panel: our own range picker, because
    d-solo deliberately ships without one. */
 .logs-bar {
@@ -3395,9 +3412,9 @@ h2 {
    at a glance. */
 .game-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.85rem;
-  margin: 0 0 1.3rem;
+  margin: 0 0 1.1rem;
 }
 .game-logo {
   width: 44px;
@@ -3405,16 +3422,127 @@ h2 {
   object-fit: contain;
   flex: none;
 }
+.game-ident {
+  min-width: 0;
+}
 .game-head h2 {
   margin: 0;
   font-size: 1.15rem;
 }
-.game-head .lede {
+/* The running build, under the name it is the build OF and above the sentence
+   describing it. Everything else on the page is a comparison against this
+   number, so it is the one that gets to sit with the title. */
+.game-version {
   margin: 0.15rem 0 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.game-version .mono {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.game-version-note {
+  font-size: 0.73rem;
+  color: var(--dim);
+}
+.game-head .lede {
+  margin: 0.3rem 0 0;
   font-size: 0.82rem;
 }
-.game-head > :last-child {
+/* The status chip and the one action on the page, kept together at the far
+   end. The action was at the bottom of a facts panel, three scrolls from the
+   thing it opens. */
+.game-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: none;
+}
+.game-actions .btn {
+  white-space: nowrap;
+  text-decoration: none;
+}
+@media (max-width: 44rem) {
+  .game-head {
+    flex-wrap: wrap;
+  }
+  .game-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* The verdict chip, with the comparison that produced it one hover away.
+   CSS-only and shown on `:focus-within` as well as `:hover`: this page
+   streams, so anything that needed hydration would be inert for the first
+   moment, and a keyboard has no hover. */
+.vercmp {
+  position: relative;
+  display: inline-flex;
+  cursor: default;
+  border-radius: 999px;
+}
+.vercmp:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.vercmp-card {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: max-content;
+  max-width: 19rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 45%);
+  /* Not `display: none` — the card animates in, and a hidden-then-shown box
+     that has never been laid out flashes at its final position. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-3px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
+}
+.vercmp:hover .vercmp-card,
+.vercmp:focus-within .vercmp-card {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+.vercmp-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 0 0.7rem;
+}
+.vercmp-k {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+}
+.vercmp-v {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.vercmp-note {
+  grid-column: 1 / -1;
+  font-size: 0.7rem;
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 /* Release notes, collapsed. `details` rather than a state hook: it works

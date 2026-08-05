@@ -355,6 +355,7 @@ export function Board({
   icon,
   aside,
   span,
+  fill,
   children,
 }: {
   title: string
@@ -362,10 +363,24 @@ export function Board({
   aside?: ReactNode
   /** Columns of the 12-wide category grid. Defaults to 6 (half width). */
   span?: 3 | 4 | 6 | 8 | 12
+  /**
+   * Grow to the height of the tallest board beside it, rather than to the
+   * height of its own content.
+   *
+   * The grid is `align-items: start` because a board of four facts should not
+   * be stretched into a wall of whitespace next to a chart. That is the right
+   * default and the wrong one for a *pair* — two half-width boards of unequal
+   * length leave a gap under the shorter one that reads as a missing panel.
+   * Opt in on the board whose content can absorb the extra room.
+   */
+  fill?: boolean
   children: ReactNode
 }) {
   return (
-    <section className="board" style={{ ['--span' as string]: String(span ?? 6) }}>
+    <section
+      className={fill === true ? 'board board-fill' : 'board'}
+      style={{ ['--span' as string]: String(span ?? 6) }}
+    >
       <header className="board-head">
         <h3>
           {icon !== undefined && (
