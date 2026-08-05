@@ -110,7 +110,7 @@
       "egress": null,
       "env": [],
       "auth": {
-        "mode": "none"
+        "mode": "native"
       },
       "presentation": {
         "description": "Voyra app",
