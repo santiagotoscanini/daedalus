@@ -597,6 +597,9 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
           title="Traffic"
           icon="◇"
           span={8}
+          // Both halves of a pair fill: which one is taller depends on data
+          // (how many callers, how many workflows), so it cannot be decided here.
+          fill
           aside={
             <span className="board-live">
               <Pulse on={busy} tone="accent" />
@@ -1188,6 +1191,7 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           title="Runs"
           icon="⟳"
           span={8}
+          fill
           aside={
             <span className="board-live">
               <Pulse on={total.running > 0} tone="accent" />

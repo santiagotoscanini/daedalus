@@ -4955,3 +4955,49 @@ h2 {
   display: block;
   border-radius: 3px;
 }
+
+/* A commit list, for the images that track a moving branch instead of a
+   release. Three columns so the shas line up and the dates form a right edge;
+   the subject takes the slack and truncates, because a conventional-commit
+   subject is already the summary. */
+.commits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.commits li {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr auto;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.24rem 0.45rem;
+  border-radius: 7px;
+  font-size: 0.76rem;
+  min-width: 0;
+}
+.commits li:hover {
+  background: var(--panel-2);
+}
+.commits a {
+  color: var(--dim);
+  text-decoration: none;
+}
+.commits a:hover {
+  color: var(--accent);
+}
+.commit-subject {
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.commit-date {
+  color: var(--dim);
+  font-size: 0.69rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
