@@ -27,7 +27,13 @@
 
 import { getJson, promScalar } from '../clients'
 
-export type GamingData = {
+/**
+ * One shape per sub-tab. A union rather than optional fields, so the
+ * Minecraft tab cannot accidentally read a Factorio number that is not there.
+ */
+export type GamingData = { tab: "factorio" } & FactorioData | { tab: "minecraft" }
+
+type FactorioData = {
   factorio: {
     /** Pinned in nix, downloaded on every container start — so, running. */
     installed: string | null
@@ -69,7 +75,14 @@ const CHANGELOG_MAX_ITEMS = 10
 
 const PORT = 34197
 
-export async function loadGaming(): Promise<GamingData> {
+export async function loadGaming(tab: string): Promise<GamingData> {
+  // Nothing is deployed yet, so there is nothing to read — and a placeholder
+  // that made a request anyway would be pretending.
+  if (tab === "minecraft") return { tab: "minecraft" }
+  return { tab: "factorio", ...(await loadFactorio()) }
+}
+
+async function loadFactorio(): Promise<FactorioData> {
   const installed = process.env.FACTORIO_VERSION ?? null
 
   const [releases, graph, feed, adminUp] = await Promise.all([
@@ -150,7 +163,7 @@ function chain(
  * dependency in a container that reparses its whole module graph on a cold
  * load, to read three fields.
  */
-async function fetchFeed(): Promise<GamingData['news']> {
+async function fetchFeed(): Promise<FactorioData['news']> {
   try {
     const res = await fetch('https://factorio.com/blog/rss', {
       signal: AbortSignal.timeout(4_000),
@@ -211,7 +224,7 @@ function decode(s: string): string {
  * (2.0.x → 2.1.x) fetches two pages instead of guessing one. Failure is empty,
  * like everything else here: the wiki being down must not cost the page.
  */
-async function fetchChangelog(versions: string[]): Promise<GamingData['changelog']> {
+async function fetchChangelog(versions: string[]): Promise<FactorioData['changelog']> {
   if (versions.length === 0) return []
 
   // `2.0.77` → `2.0.0`, the page that holds the whole series.
@@ -222,7 +235,7 @@ async function fetchChangelog(versions: string[]): Promise<GamingData['changelog
   const series = [...new Set(versions.map(seriesOf).filter((s): s is string => s !== null))]
 
   const pages = await Promise.all(series.map(fetchSeries))
-  const found = new Map<string, GamingData['changelog'][number]>()
+  const found = new Map<string, FactorioData['changelog'][number]>()
   for (const page of pages) {
     for (const entry of page) found.set(entry.version, entry)
   }
@@ -230,11 +243,11 @@ async function fetchChangelog(versions: string[]): Promise<GamingData['changelog
   // Newest first, and only the versions asked for — the page holds hundreds.
   return versions
     .map((v) => found.get(v))
-    .filter((e): e is GamingData['changelog'][number] => e !== undefined)
+    .filter((e): e is FactorioData['changelog'][number] => e !== undefined)
     .reverse()
 }
 
-async function fetchSeries(series: string): Promise<GamingData['changelog']> {
+async function fetchSeries(series: string): Promise<FactorioData['changelog']> {
   const url =
     'https://wiki.factorio.com/api.php?action=parse&format=json&formatversion=2' +
     `&prop=wikitext&page=${encodeURIComponent(`Version_history/${series}`)}`
@@ -243,7 +256,7 @@ async function fetchSeries(series: string): Promise<GamingData['changelog']> {
   const wikitext = body?.parse?.wikitext
   if (typeof wikitext !== 'string') return []
 
-  const out: GamingData['changelog'] = []
+  const out: FactorioData['changelog'] = []
   // Split on the version headings; `==` at line start is unambiguous here
   // because every deeper heading uses three or more.
   const blocks = wikitext.split(/^==\s*([0-9]+\.[0-9]+\.[0-9]+)\s*==\s*$/m)

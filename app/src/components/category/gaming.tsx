@@ -10,12 +10,68 @@ import type { GamingData } from '../../server/category'
 // the status dot already answers.
 
 export function GamingView({ data }: { data: GamingData }) {
+  if (data.tab === 'minecraft') return <MinecraftView />
+  return <FactorioView data={data} />
+}
+
+/**
+ * Declared but not deployed.
+ *
+ * The tab exists so the shape is settled before the server is — and it says
+ * so plainly rather than rendering empty gauges, which would read as a broken
+ * server instead of an absent one. It makes no requests: there is nothing
+ * there to ask.
+ */
+function MinecraftView() {
+  return (
+    <>
+      <div className="game-head">
+        <img className="game-logo" src="/icon-minecraft.svg" alt="" width={44} height={44} />
+        <div>
+          <h2>Minecraft</h2>
+          <p className="lede">No server yet — nothing to read, so nothing is claimed.</p>
+        </div>
+        <Chip tone="muted">planned</Chip>
+      </div>
+
+      <BoardGrid>
+        <Board title="What it would take" icon="⚒" span={12}>
+          <Facts
+            rows={[
+              { k: 'Stack', v: 'stacks/minecraft — not written yet' },
+              { k: 'Port', v: 'TCP 25565 — would need a router forward, unlike Factorio’s UDP' },
+              { k: 'Admin', v: 'LAN-only behind traefik, like every other UI here' },
+              { k: 'World', v: 'under /s2, so the ZFS snapshots would cover it' },
+            ]}
+          />
+          <p className="board-foot">
+            Factorio next door is the template: a build pinned in the flake, the vendor’s idea of
+            current, and the release notes between the two.
+          </p>
+        </Board>
+      </BoardGrid>
+    </>
+  )
+}
+
+function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }> }) {
   const { factorio, news } = data
   const behind = factorio.behind.length
   const current = behind === 0 && factorio.installed !== null
 
   return (
     <>
+      <div className="game-head">
+        <img className="game-logo" src="/icon-factorio.png" alt="" width={44} height={44} />
+        <div>
+          <h2>Factorio</h2>
+          <p className="lede">
+            Headless server behind ofsm, on the one UDP port the router forwards.
+          </p>
+        </div>
+        <Chip tone={current ? 'ok' : 'warn'}>{current ? 'current' : 'update available'}</Chip>
+      </div>
+
       <StatBand>
         <BigStat
           label="Server"

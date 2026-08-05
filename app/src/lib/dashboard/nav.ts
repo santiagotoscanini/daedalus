@@ -26,8 +26,8 @@ export type CategorySpec = {
    * Duplicated from the view component on purpose, and the duplication is the
    * cheap half of the trade: the placeholder has to know the shape before the
    * data exists, and a uniform grid of six would visibly reflow into an 8+4 on
-   * every page here. Only the first few matter â the fold is around four
-   * boards â so this is not a mirror of the whole layout, just its opening.
+   * every page here. Only the first few matter Ã¢ÂÂ the fold is around four
+   * boards Ã¢ÂÂ so this is not a mirror of the whole layout, just its opening.
    */
   boardSpans: number[]
 }
@@ -36,7 +36,7 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'ai',
     label: 'AI',
-    icon: 'â',
+    icon: 'Ã¢ÂÂ',
     lede: 'The local model server, the gateway in front of it, and what is driving traffic through it.',
     boardSpans: [8, 4, 6, 6],
     tabs: [],
@@ -44,7 +44,7 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'media',
     label: 'Media',
-    icon: 'â¶',
+    icon: 'Ã¢ÂÂ¶',
     lede: 'What is playing, what is downloading, and what the library has become.',
     boardSpans: [12, 8, 4, 6],
     tabs: [
@@ -55,7 +55,7 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'home',
     label: 'Home',
-    icon: 'â',
+    icon: 'Ã¢ÂÂ',
     lede: 'The household: automation, photos, files, the pantry, and who can sign in.',
     boardSpans: [8, 4, 6, 6],
     tabs: [],
@@ -64,23 +64,25 @@ export const CATEGORIES: CategorySpec[] = [
     id: "gaming",
     label: "Gaming",
     icon: "⛶",
-    iconImage: "/icon-factorio.png",
-    lede: "The game servers, what version they are on, and whether the people on the sofa can still join.",
-    boardSpans: [6, 6, 12, 6],
-    tabs: [],
+    lede: "The game servers: which build each one runs, and whether the people on the sofa can still join.",
+    boardSpans: [6, 6, 12, 12],
+    tabs: [
+      { id: "factorio", label: "Factorio" },
+      { id: "minecraft", label: "Minecraft" },
+    ],
   },
   {
     id: "network",
     label: 'Network',
-    icon: 'â',
-    lede: 'Everything between a packet and this box â the link, the ways in, the proxy, the resolver.',
+    icon: 'Ã¢ÂÂ',
+    lede: 'Everything between a packet and this box Ã¢ÂÂ the link, the ways in, the proxy, the resolver.',
     boardSpans: [8, 4, 6, 6],
     tabs: [],
   },
   {
     id: 'system',
     label: 'System',
-    icon: 'â',
+    icon: 'Ã¢ÂÂ',
     lede: 'The machine itself, and whether anything running on it is unhappy.',
     boardSpans: [6, 6, 6, 6],
     tabs: [],
@@ -88,7 +90,7 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'monitoring',
     label: 'Monitoring',
-    icon: 'â',
+    icon: 'Ã¢ÂÂ',
     lede: 'The watchers: what is firing, what is being collected, and what has gone quiet.',
     boardSpans: [6, 6, 8, 4],
     tabs: [],
