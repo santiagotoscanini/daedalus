@@ -17,8 +17,22 @@ export type CategorySpec = {
    * subject has real artwork. Rendered at the same box size as a glyph.
    */
   iconImage?: string
-  /** Empty when the category has no sub-tabs. */
-  tabs: { id: string; label: string }[]
+  /**
+   * Empty when the category has no sub-tabs.
+   *
+   * `probe` is a gatus endpoint name — the tab wears its subject's status as
+   * a dot, so a category of several servers answers "which of these is up"
+   * from the tab row, without visiting each one. It is on the TAB rather than
+   * inside the page for exactly that reason: a status you have to navigate to
+   * is a status you check one at a time.
+   *
+   * Omitted means there is nothing probing that tab's subject, which is not
+   * the same claim as "down" and is drawn grey. Dots appear only in a
+   * category where at least one tab declares one — Media's TV/Books split is
+   * a view of one library, not two services, and would sprout two permanently
+   * grey dots for nothing.
+   */
+  tabs: { id: string; label: string; probe?: string }[]
   /**
    * Column spans of this page's boards, for the skeleton that stands in while
    * they load.
@@ -79,10 +93,14 @@ export const CATEGORIES: CategorySpec[] = [
     label: 'Gaming',
     icon: '⛶',
     lede: "The game servers: which build each one runs, and whether the people on the sofa can still join.",
-    boardSpans: [6, 6, 12, 12],
+    boardSpans: [6, 6, 12],
     tileGroups: 0,
     tabs: [
-      { id: "factorio", label: "Factorio" },
+      // ofsm answering is the closest thing to a liveness check this server
+      // has: the game itself speaks UDP straight to a forwarded port and
+      // nothing on this box can ask it a question.
+      { id: "factorio", label: "Factorio", probe: "factorio-admin" },
+      // No server, so no probe — grey, and correctly so.
       { id: "minecraft", label: "Minecraft" },
     ],
   },

@@ -25,7 +25,7 @@
 //                                 and Friday Facts, which is the closest thing
 //                                 to a changelog that is machine-readable
 
-import { getJson, promScalar } from '../clients'
+import { getJson } from '../clients'
 
 /**
  * One shape per sub-tab. A union rather than optional fields, so the
@@ -44,8 +44,6 @@ type FactorioData = {
     /** How the game is reached, which is not through traefik. */
     connect: string
     port: number
-    /** Whether the admin UI is answering, from gatus. */
-    adminUp: boolean | null
     /** Where the manager lives. LAN only — deliberately not forwarded. */
     adminUrl: string
   }
@@ -90,7 +88,7 @@ export async function loadGaming(
 async function loadFactorio(ctx: { base: (app: string) => string }): Promise<FactorioData> {
   const installed = process.env.FACTORIO_VERSION ?? null
 
-  const [releases, graph, feed, adminUp] = await Promise.all([
+  const [releases, graph, feed] = await Promise.all([
     getJson<{ stable?: { headless?: string }; experimental?: { headless?: string } }>(
       'https://factorio.com/api/latest-releases',
     ),
@@ -98,7 +96,6 @@ async function loadFactorio(ctx: { base: (app: string) => string }): Promise<Fac
       'https://updater.factorio.com/get-available-versions',
     ),
     fetchFeed(),
-    promScalar('gatus_results_endpoint_success{name="factorio-admin"}'),
   ])
 
   const stable = releases?.stable?.headless ?? null
@@ -122,7 +119,6 @@ async function loadFactorio(ctx: { base: (app: string) => string }): Promise<Fac
       // player outside the LAN actually types.
       connect: `s2.toscanini.me:${String(PORT)}`,
       port: PORT,
-      adminUp: adminUp === null ? null : adminUp === 1,
       adminUrl: ctx.base("factorio-admin"),
     },
     news: feed,

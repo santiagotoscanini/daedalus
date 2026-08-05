@@ -1,4 +1,4 @@
-import { BigStat, Board, BoardGrid, Chip, Facts, Pulse, StatBand } from '../viz'
+import { Board, BoardGrid, Chip, Facts } from '../viz'
 import { GrafanaLogs } from '../logs'
 import { text } from '../../lib/dashboard/format'
 import type { GamingData } from '../../server/category'
@@ -7,15 +7,19 @@ import type { GamingData } from '../../server/category'
 //
 // It leads with the version rather than with uptime because that is the fact
 // that actually breaks things here: a client on a different build cannot join
-// at all, so "am I current" is the question, and "is it up" is the easy part
-// the status dot already answers.
+// at all, so "am I current" is the question. Whether it is up is answered by
+// the dot on the sub-tab, one level up — see CategorySpec.tabs — which is
+// also where a second game server's answer will be, so the two are read
+// together rather than one page at a time.
 //
-// ── one fact, one place ───────────────────────────────────────────────────
+// ── one number on the page, and its comparisons on demand ─────────────────
 //
-// The headline band owns the version numbers. Nothing below repeats them:
-// the panels answer different questions — how do I reach it, what changed,
-// what is it saying — and a number that appears twice is a number that can
-// disagree with itself.
+// The running build is the only version stated outright. What Wube calls
+// stable and what it calls experimental are the numbers it is measured
+// AGAINST, not facts about this server, and as headline cards they read as
+// three unrelated versions competing for the same glance. They live behind
+// the chip that summarises them instead: the chip already says the answer
+// ("current"), and hovering it shows the working.
 
 export function GamingView({ data }: { data: GamingData }) {
   if (data.tab === 'minecraft') return <MinecraftView />
@@ -35,11 +39,13 @@ function MinecraftView() {
     <>
       <div className="game-head">
         <img className="game-logo" src="/icon-minecraft.svg" alt="" width={44} height={44} />
-        <div>
+        <div className="game-ident">
           <h2>Minecraft</h2>
           <p className="lede">No server yet — nothing to read, so nothing is claimed.</p>
         </div>
-        <Chip tone="muted">planned</Chip>
+        <div className="game-actions">
+          <Chip tone="muted">planned</Chip>
+        </div>
       </div>
 
       <BoardGrid>
@@ -71,96 +77,41 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
     <>
       <div className="game-head">
         <img className="game-logo" src="/icon-factorio.png" alt="" width={44} height={44} />
-        <div>
+        <div className="game-ident">
           <h2>Factorio</h2>
+          {/* The build, attached to the name it is the build OF, with its
+              verdict beside it — the two are one sentence, so they sit on one
+              line rather than in two cards a screen apart. */}
+          <p className="game-version">
+            <span className="mono">{text(factorio.installed)}</span>
+            <span className="game-version-note">running · re-downloaded on every start</span>
+            <VersionCompare
+              current={current}
+              behind={behind}
+              stable={factorio.stable}
+              experimental={factorio.experimental}
+            />
+          </p>
           <p className="lede">
-            Headless server behind ofsm, on the one UDP port the router forwards.
+            Headless server behind ofsm. Players connect to{' '}
+            <span className="mono">{factorio.connect}</span> over UDP — the one port the router
+            forwards inward, and the only thing here that leaves the house.
           </p>
         </div>
-        <Chip tone={current ? 'ok' : 'warn'}>{current ? 'current' : 'update available'}</Chip>
+
+        <div className="game-actions">
+          <a className="btn btn-primary" href={factorio.adminUrl} target="_blank" rel="noreferrer">
+            Open server manager ↗
+          </a>
+        </div>
       </div>
 
-      {/* The band owns the numbers. Every panel below answers a different
-          question and repeats none of them. */}
-      <StatBand>
-        <BigStat
-          label="Server"
-          value={
-            factorio.adminUp === null ? 'unknown'
-            : factorio.adminUp ? 'up'
-            : 'down'
-          }
-          tone={factorio.adminUp === false ? 'bad' : 'ok'}
-          sub={
-            <>
-              <Pulse on={factorio.adminUp === true} tone="ok" />
-              admin UI answering
-            </>
-          }
-        />
-        <BigStat
-          label="Running"
-          value={text(factorio.installed)}
-          tone="accent"
-          sub="re-downloaded on every start"
-        />
-        <BigStat
-          label="Stable"
-          value={text(factorio.stable)}
-          tone={current ? 'ok' : 'warn'}
-          sub={current ? 'up to date' : `${String(behind)} release${behind === 1 ? '' : 's'} behind`}
-        />
-        <BigStat
-          label="Experimental"
-          value={text(factorio.experimental)}
-          tone="muted"
-          sub="this server tracks stable"
-        />
-      </StatBand>
-
       <BoardGrid>
-        <Board title="Reaching it" icon="⚙" span={4}>
-          <Facts
-            rows={[
-              { k: 'Players connect to', v: <span className="mono">{factorio.connect}</span> },
-              { k: 'Protocol', v: `UDP ${String(factorio.port)}` },
-              {
-                // The dependency that is invisible from inside the house and
-                // is the first thing to check when someone off-LAN cannot
-                // join: nothing on this box can make it true.
-                k: 'Requires',
-                v: (
-                  <>
-                    a router forward of <span className="mono">UDP {factorio.port}</span> → this
-                    box
-                  </>
-                ),
-              },
-              { k: 'Manager', v: 'ofsm — saves, mods, RCON' },
-            ]}
-          />
-
-          <a className="cta" href={factorio.adminUrl} target="_blank" rel="noreferrer">
-            <span className="cta-main">Open the server manager</span>
-            <span className="cta-sub">ofsm · LAN only, behind the Pocket ID gate</span>
-            <span className="cta-arrow" aria-hidden="true">
-              ↗
-            </span>
-          </a>
-
-          {/* The one exception in the router's forward list, and the reason it
-              is acceptable: a game protocol, not an admin surface. */}
-          <p className="board-foot">
-            Only the game port is forwarded. Everything else about this server — the manager, the
-            saves, RCON — is LAN-only and never leaves the house, which is why the address above
-            works from outside and the one below does not.
-          </p>
-        </Board>
-
         <Board
           title={current ? 'Release notes' : `${String(behind)} to apply`}
           icon="≡"
-          span={8}
+          span={6}
+          fill
           aside={<span className="board-note">wiki.factorio.com</span>}
         >
           {/* The chain lives here rather than in a panel of its own: when
@@ -180,9 +131,11 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
             <p className="viz-empty">no release notes for this version</p>
           : <div className="changelog">
               {data.changelog.map((rel, i) => (
-                // Collapsed, except the newest when there is something to
-                // apply: that one is the reason you opened the page.
-                <details key={rel.version} open={!current && i === 0} className="rel">
+                // The newest is open. It is the reason you opened the page in
+                // both directions — the next thing to apply when something is
+                // pending, and what the running build shipped when nothing is
+                // — and a row of collapsed summary is not an answer.
+                <details key={rel.version} open={i === 0} className="rel">
                   <summary>
                     <span className="rel-version mono">{rel.version}</span>
                     <span className="rel-date">{rel.date}</span>
@@ -218,21 +171,11 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           </p>
         </Board>
 
-        {/* Grafana itself rather than a log viewer of our own — see the note
-            below and stacks/monitoring, which already allows this exact
-            frame-ancestor. */}
-        <Board
-          title="Logs"
-          icon="≡"
-          span={12}
-        >
-          <GrafanaLogs container="factorio" title="Factorio logs" />
-        </Board>
-
         <Board
           title="From the devs"
           icon="◫"
-          span={12}
+          span={6}
+          fill
           aside={<span className="board-note">factorio.com/blog</span>}
         >
           {news.length === 0 ?
@@ -256,8 +199,61 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
             coming rather than what shipped.
           </p>
         </Board>
+
+        {/* Grafana itself rather than a log viewer of our own — see the note
+            in components/logs.tsx and stacks/monitoring, which already allows
+            this exact frame-ancestor. */}
+        <Board title="Logs" icon="≡" span={12}>
+          <GrafanaLogs container="factorio" title="Factorio logs" />
+        </Board>
       </BoardGrid>
     </>
+  )
+}
+
+/**
+ * The verdict, with what produced it one hover away.
+ *
+ * "current" is the answer; stable and experimental are the working. Two
+ * headline cards spent a quarter of the page restating a comparison that the
+ * word already made, so they moved in here — visible on hover and on keyboard
+ * focus, and CSS-only, because a popover that needs hydration would be dead
+ * for the first moment of a page that streams.
+ *
+ * `title` is deliberately NOT the mechanism: it truncates, it cannot hold two
+ * labelled rows, and it appears after a delay long enough that nobody waits.
+ */
+function VersionCompare({
+  current,
+  behind,
+  stable,
+  experimental,
+}: {
+  current: boolean
+  behind: number
+  stable: string | null
+  experimental: string | null
+}) {
+  return (
+    <span className="vercmp" tabIndex={0}>
+      <Chip tone={current ? 'ok' : 'warn'}>
+        {current ? 'current' : `${String(behind)} behind`}
+      </Chip>
+      <span className="vercmp-card" role="tooltip">
+        <span className="vercmp-row">
+          <span className="vercmp-k">Stable</span>
+          <span className="vercmp-v mono">{text(stable)}</span>
+          <span className="vercmp-note">
+            {current ? 'this is what is running' : 'what this server should be on'}
+          </span>
+        </span>
+        <span className="vercmp-row">
+          <span className="vercmp-k">Experimental</span>
+          <span className="vercmp-v mono">{text(experimental)}</span>
+          <span className="vercmp-note">not tracked — this server follows stable</span>
+        </span>
+      </span>
+    </span>
   )
 }
 

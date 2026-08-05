@@ -12,8 +12,10 @@ import { CATEGORIES, type CategorySpec } from '../lib/dashboard/nav'
 import {
   fetchCategoryBoards,
   fetchCategoryTiles,
+  fetchTabStatus,
   type CategoryPayload,
   type CategoryTiles,
+  type TabStatus,
   type Tile,
 } from '../server/category'
 import type { CategoryName } from '../lib/dashboard/tiles'
@@ -61,13 +63,18 @@ export const Route = createFileRoute('/c/$category')({
       tab,
       boards: fetchCategoryBoards({ data: { category, tab } }),
       tiles: fetchCategoryTiles({ data: { category, tab } }),
+      // Only where a tab actually wears a dot — see CategorySpec.tabs.
+      tabStatus:
+        spec.tabs.some((t) => t.probe !== undefined) ?
+          fetchTabStatus({ data: { category } })
+        : null,
     }
   },
   component: CategoryPage,
 })
 
 function CategoryPage() {
-  const { spec, tab, boards, tiles } = Route.useLoaderData()
+  const { spec, tab, boards, tiles, tabStatus } = Route.useLoaderData()
   const { category } = Route.useParams()
 
   return (
@@ -77,22 +84,18 @@ function CategoryPage() {
       </header>
       <p className="lede cat-lede">{spec.lede}</p>
 
-      {spec.tabs.length > 0 && (
-        <nav className="tabs">
-          {spec.tabs.map((t) => (
-            <Link
-              key={t.id}
-              to="/c/$category"
-              params={{ category }}
-              search={{ tab: t.id }}
-              className={t.id === tab ? 'active' : ''}
-              replace
-            >
-              {t.label}
-            </Link>
-          ))}
-        </nav>
-      )}
+      {spec.tabs.length > 0 &&
+        (tabStatus === null ?
+          <TabNav spec={spec} category={category} tab={tab} status={null} />
+        : // The tabs are drawn immediately either way — navigation is the one
+          // thing on this page that must never wait. The dot arrives in its
+          // reserved slot, grey until it is known, so nothing moves.
+          <Await
+            promise={tabStatus}
+            fallback={<TabNav spec={spec} category={category} tab={tab} status={null} />}
+          >
+            {(status) => <TabNav spec={spec} category={category} tab={tab} status={status} />}
+          </Await>)}
 
       <Await promise={boards} fallback={<BoardsPlaceholder spec={spec} />}>
         {(payload) => <CategoryBoards payload={payload} />}
@@ -107,6 +110,62 @@ function CategoryPage() {
         </Await>
       }
     </>
+  )
+}
+
+/**
+ * The sub-tab row, optionally wearing each tab's status.
+ *
+ * `status === null` covers both "this category has no probes" and "they have
+ * not landed yet". The dot is drawn in the second case and not the first,
+ * which is why the caller decides rather than this component: a grey dot is a
+ * claim ("nothing is probing this"), and a category that never had one should
+ * not appear to be making it.
+ */
+function TabNav({
+  spec,
+  category,
+  tab,
+  status,
+}: {
+  spec: CategorySpec
+  category: string
+  tab: string
+  status: TabStatus | null
+}) {
+  const dotted = spec.tabs.some((t) => t.probe !== undefined)
+
+  return (
+    <nav className="tabs">
+      {spec.tabs.map((t) => {
+        const up = status?.[t.id] ?? null
+        return (
+          <Link
+            key={t.id}
+            to="/c/$category"
+            params={{ category }}
+            search={{ tab: t.id }}
+            className={t.id === tab ? 'active' : ''}
+            replace
+          >
+            {dotted && (
+              <span
+                className={`dot dot-${up === null ? 'unknown' : up ? 'running' : 'attention'}`}
+                role="img"
+                aria-label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
+                title={
+                  t.probe === undefined ? 'nothing probes this yet'
+                  : up === null ? 'no reading from gatus'
+                  : up ? 'answering'
+                  : 'not answering'
+                }
+              />
+            )}
+            {t.label}
+          </Link>
+        )
+      })}
+    </nav>
   )
 }
 
