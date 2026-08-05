@@ -1,22 +1,15 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
-import {
-  BigStat,
-  Board,
-  BoardGrid,
-  Chip,
-  Columns,
-  Facts,
-  Measures,
-  Pulse,
-  StatBand,
-} from '../viz'
-import { GrafanaLogs, LogDetails } from '../logs'
+// No `StatBand`/`BigStat` anywhere on these four pages any more: every one of
+// them ended up saying either a number the panel below it states in context,
+// or a number that is zero almost always and means nothing when it is not.
+import { Board, BoardGrid, Chip, Columns, Facts, Measures, Pulse } from '../viz'
+import { GrafanaLogs, LogDetails, type LogSource } from '../logs'
 import { ReleaseNotes, UpgradeChain } from '../release-notes'
 import { LinkRow, ServiceHead, type CompareRow } from '../service-head'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
-import { compact, DASH, ms, num, pct } from '../../lib/dashboard/format'
+import { compact, DASH, ms, num, pct, until } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { AiData } from '../../server/category'
 import type { Tone } from '../viz'
@@ -220,40 +213,22 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
 
         <ReleaseBoard gap={gap} span={6} />
 
-        <Board title="Logs" icon="≡" span={12}>
-          {/* Selected by STACK, not container. These lines were not produced on
-              this box at all — the bridge in stacks/lemonade-logs reads
-              Lemonade's WebSocket on the gaming PC and pushes them to Loki
-              directly, so there is no podman container to name. */}
-          <GrafanaLogs
-            source={{ stack: 'lemonade' }}
-            title="Lemonade server logs"
-            foot={
-              <p className="board-foot">
-                Lemonade’s own log, streamed off the gaming PC over its <code>/logs/stream</code>{' '}
-                WebSocket — the only log egress it has — and pushed to Loki by the bridge below.
-                Timestamps are the ones Lemonade recorded, not the ones Loki received.
-              </p>
-            }
-          />
-
-          {/* The bridge is diagnostics for the panel above, not a service
-              anybody watches. Collapsed, so it is one click away on the day the
-              logs above stop arriving and invisible on every other day. */}
-          <LogDetails
-            summary="Bridge logs — the process shipping the above"
-            source={{ container: 'lemonade-logs' }}
-            title="Lemonade log bridge"
-            foot={
-              <p className="board-foot">
-                Deliberately a separate stream: this is the bridge’s own reconnects and gap
-                warnings, and mixing them into Lemonade’s log would make the model server look like
-                it was reporting network trouble it knows nothing about. Look here when the panel
-                above goes quiet.
-              </p>
-            }
-          />
-        </Board>
+        {/* Selected by STACK, not container. These lines were not produced on
+            this box at all — the bridge in stacks/lemonade-logs reads
+            Lemonade's WebSocket on the gaming PC and pushes them to Loki
+            directly, so there is no podman container to name. */}
+        <LogBoard
+          source={{ stack: 'lemonade' }}
+          title="Lemonade server logs"
+          foot={
+            <p className="board-foot">
+              Lemonade’s own log, streamed off the gaming PC over its <code>/logs/stream</code>{' '}
+              WebSocket — the only log egress it has — and pushed to Loki by the bridge below.
+              Timestamps are the ones Lemonade recorded, not the ones Loki received.
+            </p>
+          }
+          neighbours={LEMONADE_NEIGHBOURS}
+        />
       </BoardGrid>
     </>
   )
@@ -701,19 +676,19 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
         >
           {data.mcp.length === 0 ?
             <p className="viz-empty">no tool calls in the window</p>
-          : <ul className="mcplist">
+          : <ul className="itemlist">
               {data.mcp.map((t) => (
                 <li key={`${t.server}/${t.tool}`}>
                   <Chip tone="info">{t.server}</Chip>
-                  <span className="mcp-tool mono" title={t.tool}>
+                  <span className="item-main mono" title={t.tool}>
                     {t.tool}
                   </span>
                   {/* The tool's own time, which is the only latency on this
                       page that is NOT mostly Lemonade — a tool call is the
                       gateway talking to a container on this box, so tens of
                       milliseconds is what right looks like. */}
-                  <span className="mcp-ms">{ms(t.latencyMs)}</span>
-                  <span className="mcp-n">{num(t.calls)}</span>
+                  <span className="item-side">{ms(t.latencyMs)}</span>
+                  <span className="item-n">{num(t.calls)}</span>
                 </li>
               ))}
             </ul>
@@ -748,7 +723,7 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
         >
           {data.callers.length === 0 ?
             <p className="viz-empty">no keyed traffic in the window</p>
-          : <ul className="callers">
+          : <ul className="ranks">
               {data.callers.map((c) => (
                 <CallerRow key={c.name} caller={c} max={data.callers[0]?.requests ?? 1} today={todayDate} />
               ))}
@@ -784,39 +759,83 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
 
         <ReleaseBoard gap={gap} span={8} />
 
-        <Board title="Logs" icon="≡" span={12}>
-          <GrafanaLogs source={{ container: 'litellm' }} title="LiteLLM logs" />
-
-          {/* The three containers the gateway dials that are not Lemonade.
-              None of them has a tab, none of them is worth a panel of its own,
-              and every one of them is a plausible answer to "the gateway
-              returned an error and its own log only says the upstream did".
-              Folded, in the order a request would reach them. */}
-          {NEIGHBOURS.map((n) => (
-            <LogDetails
-              key={n.container}
-              summary={`${n.label} — ${n.role}`}
-              source={{ container: n.container }}
-              title={`${n.label} logs`}
-              foot={<p className="board-foot">{n.note}</p>}
-            />
-          ))}
-        </Board>
+        <LogBoard
+          source={{ container: 'litellm' }}
+          title="LiteLLM logs"
+          neighbours={LITELLM_NEIGHBOURS}
+        />
       </BoardGrid>
     </>
   )
 }
 
 /**
- * What sits behind the gateway besides the model server.
+ * A container standing next to the one this tab is about.
  *
- * These are the containers LiteLLM proxies TO — a web search tool, a tool
- * server, a vector store — so a failure in any of them surfaces to a caller as
- * a LiteLLM error, and LiteLLM's own log will only say that its upstream
- * refused. Listed here rather than inline because the set is a fact about the
- * stack, and it is the thing to extend when a fourth one is added.
+ * Every service here talks to two or three others, and when one of those
+ * breaks the symptom arrives as a failure in the service you were watching,
+ * whose own log says only that its upstream refused. So each tab carries its
+ * neighbours' logs, folded: on the day the main panel goes quiet or starts
+ * erroring, the explanation is one click away instead of a Grafana search
+ * away, and on every other day they are not in the way.
  */
-const NEIGHBOURS = [
+type Neighbour = {
+  container: string
+  label: string
+  /** Completes “<label> — …”, so it says what this container IS to the tab. */
+  role: string
+  note: string
+  /** Only when the panel heading should differ from `<label> logs`. */
+  title?: string
+}
+
+/**
+ * The logs board, identical on all four tabs: the service's own stream, then
+ * its neighbours underneath it.
+ */
+function LogBoard({
+  source,
+  title,
+  foot,
+  neighbours,
+}: {
+  source: LogSource
+  title: string
+  foot?: ReactNode
+  neighbours: readonly Neighbour[]
+}) {
+  return (
+    <Board title="Logs" icon="≡" span={12}>
+      <GrafanaLogs source={source} title={title} foot={foot} />
+      {neighbours.map((n) => (
+        <LogDetails
+          key={n.container}
+          summary={`${n.label} — ${n.role}`}
+          source={{ container: n.container }}
+          title={n.title ?? `${n.label} logs`}
+          foot={<p className="board-foot">{n.note}</p>}
+        />
+      ))}
+    </Board>
+  )
+}
+
+/**
+ * The bridge is diagnostics for Lemonade's panel, not a service anybody
+ * watches — so it gets the same treatment as everyone else's neighbours.
+ */
+const LEMONADE_NEIGHBOURS: readonly Neighbour[] = [
+  {
+    container: 'lemonade-logs',
+    label: 'Bridge logs',
+    role: 'the process shipping the above',
+    title: 'Lemonade log bridge',
+    note: 'Deliberately a separate stream: this is the bridge’s own reconnects and gap warnings, and mixing them into Lemonade’s log would make the model server look like it was reporting network trouble it knows nothing about. Look here when the panel above goes quiet.',
+  },
+]
+
+/** What the gateway proxies TO, in the order a request would reach them. */
+const LITELLM_NEIGHBOURS: readonly Neighbour[] = [
   {
     container: 'searxng',
     label: 'SearXNG',
@@ -835,18 +854,103 @@ const NEIGHBOURS = [
     role: 'the RAG store behind /vector_store',
     note: 'Fronts pgvector in the shared pg cluster for LiteLLM’s vector-store API. Ingest failures land here rather than in the gateway’s log, which only sees the connector’s answer.',
   },
-] as const
+]
+
+/** Everything the chat window dials. It originates nothing on its own. */
+const OWUI_NEIGHBOURS: readonly Neighbour[] = [
+  {
+    container: 'litellm',
+    label: 'LiteLLM',
+    role: 'the only model backend it has',
+    note: 'Chat, transcription, speech, embeddings, reranking and images all leave through the gateway on this app’s own virtual key. A model that answers with an error usually explains itself here rather than above.',
+  },
+  {
+    container: 'searxng',
+    label: 'SearXNG',
+    role: 'the in-chat web search, dialled direct',
+    note: 'The one capability that does NOT go through the gateway: Open WebUI queries searxng:8080 itself over the websearch bridge. So a chat that says it searched and found nothing is answered here, not in LiteLLM’s log.',
+  },
+  {
+    container: 'pg',
+    label: 'Postgres',
+    role: 'chats, settings and its RAG vectors',
+    note: 'The shared cluster — every app’s lines are in this stream, so filter by the open_webui database. Its knowledge bases live here too, as pgvector tables, which is why a failed upload can look like a database error.',
+  },
+]
+
+/** n8n's two dependencies: where it keeps state, and what its workflows call. */
+const N8N_NEIGHBOURS: readonly Neighbour[] = [
+  {
+    container: 'pg',
+    label: 'Postgres',
+    role: 'where every workflow and run is stored',
+    note: 'The shared cluster. n8n writes each execution as it runs, so a database that is refusing connections shows up as runs that never start rather than as runs that fail.',
+  },
+  {
+    container: 'litellm',
+    label: 'LiteLLM',
+    role: 'the gateway its AI steps call',
+    note: 'n8n is the largest caller on the gateway’s ledger. A workflow that failed on a summarisation step failed inside a request that is logged there, with the model and the error.',
+  },
+]
+
+/**
+ * One row of a ranking, in two lines.
+ *
+ * The bar carries the comparison — the whole question a ranking answers is
+ * which of these is the big one — and the line under it carries everything the
+ * bar cannot: what it cost, how slowly it went, when it was last seen. A bar
+ * list alone said only "n8n is the big one", which was true on the first read
+ * and had nothing to add on any later one.
+ *
+ * Shared by the gateway's callers and n8n's workflows because they are the
+ * same object: a named thing, a count worth comparing, and four facts that
+ * only make sense next to it.
+ *
+ * `note` is the answer to "what IS this row" — a bare hash, a name that turns
+ * out to be six services sharing one credential — and it hangs off the name
+ * rather than the caption, where it would have to be written once per case and
+ * read every time. `badge` is for the state that changes what the numbers
+ * mean: a key the gateway no longer holds, a schedule that has stopped firing.
+ */
+function RankRow({
+  name,
+  note = null,
+  badge = null,
+  value,
+  max,
+  meta,
+}: {
+  name: string
+  note?: string | null
+  badge?: { text: string; tone: 'warn' | 'muted' } | null
+  value: number
+  max: number
+  meta: ReactNode
+}) {
+  return (
+    <li className="rank">
+      <span className={note === null ? 'rank-name' : 'rank-name rank-noted'}>
+        <span title={note ?? name}>{name}</span>
+        {badge !== null && (
+          <em className={badge.tone === 'muted' ? 'is-muted' : undefined} title={note ?? undefined}>
+            {badge.text}
+          </em>
+        )}
+      </span>
+      <span className="rank-track">
+        <span className="rank-fill" style={{ width: `${String(Math.max(1.5, (value / max) * 100))}%` }} />
+      </span>
+      <span className="rank-n">{num(value)}</span>
+      <span className="rank-meta">{meta}</span>
+    </li>
+  )
+}
 
 type Caller = Extract<AiData, { tab: 'litellm' }>['callers'][number]
 
 /**
- * One caller, in two lines.
- *
- * The bar carries the comparison — this is a ranking, and the whole question is
- * which of these is the big one — and the line under it carries everything the
- * bar cannot: what it cost, how slowly it was answered, what it asked for, and
- * when it was last seen. A bar list alone said only "n8n is the big one",
- * which was true on the first read and had nothing to add on any later one.
+ * One caller.
  *
  * Failures get the only colour in the row, and only when there are any. A
  * caller that works is the normal case and does not need to be decorated to
@@ -854,39 +958,31 @@ type Caller = Extract<AiData, { tab: 'litellm' }>['callers'][number]
  */
 function CallerRow({ caller, max, today }: { caller: Caller; max: number; today: string }) {
   return (
-    <li className="caller">
-      {/* The note is the answer to "what IS this row" — a bare hash, or a name
-          that turns out to be six services sharing one credential — so it is
-          on the name itself rather than in the caption, where it would have to
-          be written once per case and read every time. */}
-      <span className={caller.note === null ? 'caller-name' : 'caller-name caller-noted'}>
-        <span title={caller.note ?? caller.name}>{caller.name}</span>
-        {!caller.live && <em title={caller.note ?? undefined}>revoked</em>}
-      </span>
-      <span className="caller-track">
-        <span
-          className="caller-fill"
-          style={{ width: `${String(Math.max(1.5, (caller.requests / max) * 100))}%` }}
-        />
-      </span>
-      <span className="caller-n">{num(caller.requests)}</span>
-      <span className="caller-meta">
-        {caller.tokens > 0 && <span>{compact(caller.tokens)} tok</span>}
-        {caller.latencyMs !== null && <span>{ms(caller.latencyMs)}</span>}
-        {caller.failed > 0 && <span className="bad-text">{num(caller.failed)} failed</span>}
-        {/* One name and a count. A caller reaching a single model is the norm,
-            the master key reaches seven, and two full model names wrapped this
-            line onto a second row for the one caller that did — the rest is a
-            hover away. */}
-        {caller.models[0] !== undefined && (
-          <span className="mono" title={caller.models.join(', ')}>
-            {caller.models[0]}
-            {caller.models.length > 1 && ` +${String(caller.models.length - 1)}`}
-          </span>
-        )}
-        <span>{ago(caller.last, today)}</span>
-      </span>
-    </li>
+    <RankRow
+      name={caller.name}
+      note={caller.note}
+      badge={caller.live ? null : { text: 'revoked', tone: 'warn' }}
+      value={caller.requests}
+      max={max}
+      meta={
+        <>
+          {caller.tokens > 0 && <span>{compact(caller.tokens)} tok</span>}
+          {caller.latencyMs !== null && <span>{ms(caller.latencyMs)}</span>}
+          {caller.failed > 0 && <span className="bad-text">{num(caller.failed)} failed</span>}
+          {/* One name and a count. A caller reaching a single model is the
+              norm, the master key reaches seven, and two full model names
+              wrapped this line onto a second row for the one caller that did —
+              the rest is a hover away. */}
+          {caller.models[0] !== undefined && (
+            <span className="mono" title={caller.models.join(', ')}>
+              {caller.models[0]}
+              {caller.models.length > 1 && ` +${String(caller.models.length - 1)}`}
+            </span>
+          )}
+          <span>{ago(caller.last, today)}</span>
+        </>
+      }
+    />
   )
 }
 
@@ -918,7 +1014,8 @@ function volume(v: { requests: number; tokens: number } | null): string {
 // ── Open WebUI ─────────────────────────────────────────────────────────────
 
 function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> }) {
-  const { gap, auth } = data
+  const { gap, auth, counts, people } = data
+  const busy = data.generating !== null && data.generating > 0
 
   return (
     <>
@@ -928,7 +1025,21 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
         version={data.version}
         versionNote="the chat window"
         verdict={verdictOf(gap)}
-        compare={compareOf(gap, 'a digest in the flake, against a moving main tag')}
+        compare={[
+          ...compareOf(gap, 'a digest in the flake, against a moving main tag'),
+          // Its own update check, which used to be a whole stat card saying
+          // "up to date". It is a second opinion on the line above it, so it
+          // belongs beside that line — and it only earns a sentence when the
+          // two disagree.
+          {
+            k: 'Its own check',
+            v: data.selfLatest,
+            note:
+              data.selfLatest === null ? 'it could not reach GitHub either'
+              : data.selfLatest === data.version ? 'agrees: this is current'
+              : 'what the app itself reports as newest',
+          },
+        ]}
         lede={
           <>
             The one service here a person types into. It talks to LiteLLM like any other OpenAI
@@ -953,35 +1064,82 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
         ]}
       />
 
-      <StatBand>
-        <BigStat
-          label="Active users"
-          value={num(data.users)}
-          tone="ok"
-          sub="seen in the last 3 minutes"
-        />
-        <BigStat
-          label="Generating"
-          value={num(data.generating)}
-          tone={data.generating !== null && data.generating > 0 ? 'accent' : 'muted'}
-          sub={
-            <>
-              <Pulse on={data.generating !== null && data.generating > 0} tone="accent" />
-              models mid-answer
-            </>
-          }
-        />
-        <BigStat label="Models offered" value={String(data.models.length)} tone="info" sub="in the picker" />
-        <BigStat
-          label="Self-reported"
-          value={data.latest === null || data.latest === data.version ? 'up to date' : data.latest}
-          tone="muted"
-          sub="its own update check"
-        />
-      </StatBand>
-
+      {/* No headline band. It held four cards, and all four were either a
+          number this page states better in context (models offered, sitting a
+          few pixels above the list of them) or a number that is zero almost
+          always and means nothing when it is not (users seen in the last three
+          minutes, on a one-account instance). */}
       <BoardGrid>
-        <Board title="How you get in" icon="⚿" span={6} fill>
+        <Board
+          title="What the chat can reach"
+          icon="▤"
+          span={6}
+          fill
+          aside={
+            <span className="board-live">
+              <Pulse on={busy} tone="accent" />
+              {busy ? `${num(data.generating)} mid-answer` : 'idle'}
+            </span>
+          }
+        >
+          <Measures
+            items={[
+              { k: 'models', v: String(counts.models) },
+              { k: 'tool servers', v: String(counts.tools) },
+              { k: 'knowledge', v: String(counts.knowledge) },
+            ]}
+          />
+
+          {data.reach.length === 0 ?
+            <p className="viz-empty">{data.note ?? 'nothing registered'}</p>
+          : <ul className="itemlist">
+              {data.reach.map((r) => (
+                <li key={`${r.kind}-${r.name}`}>
+                  <Chip tone={r.kind === 'model' ? 'info' : r.kind === 'tool' ? 'accent' : 'muted'}>
+                    {r.kind}
+                  </Chip>
+                  <span className="item-main">{r.name}</span>
+                  <span
+                    className={r.flag ? 'item-side bad-text' : 'item-side'}
+                    title={r.detail}
+                  >
+                    {r.detail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          }
+
+          <p className="board-foot">
+            Read back from the running instance, not from the config that was meant to produce it —
+            which is the only way to catch the two ways these disappear quietly. An env-backed
+            setting the database had already overridden leaves the models list short, and a virtual
+            key not permitted to reach an MCP server makes its tools return an empty list rather
+            than an error. A knowledge base holding no files is marked: it answers nothing, and says
+            nothing about it.
+          </p>
+        </Board>
+
+        <Board
+          title="Who gets in"
+          icon="⚿"
+          span={6}
+          fill
+          aside={<span className="board-note">last seen {people.lastSeen}</span>}
+        >
+          <Measures
+            items={[
+              { k: 'accounts', v: String(people.total) },
+              { k: 'admins', v: String(people.admins) },
+              // The one figure here that is a to-do rather than a fact.
+              {
+                k: 'awaiting approval',
+                v: String(people.pending),
+                tone: people.pending > 0 ? 'bad' : undefined,
+              },
+            ]}
+          />
+
           <Facts
             rows={[
               { k: 'Identity provider', v: auth.oidc ?? 'none configured' },
@@ -990,42 +1148,28 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
               { k: 'Self sign-up', v: auth.signup ? 'open' : 'closed' },
             ]}
           />
-          <p className="board-foot">
-            The login form is off, so the page redirects to Pocket ID rather than offering a
-            password box that would be a second way in. The break-glass form is still reachable at{' '}
-            <code>/auth?form=true</code> if the IdP is ever the thing that is down.
-          </p>
-        </Board>
 
-        <Board
-          title="Models in the picker"
-          icon="▤"
-          span={6}
-          fill
-          aside={<span className="board-note">as the chat sees them</span>}
-        >
-          {data.models.length === 0 ?
-            <p className="viz-empty">could not read the model list</p>
-          : <ul className="modellist">
-              {data.models.map((m) => (
-                <li key={m.id}>
-                  <span className="model-name">{m.name}</span>
-                  <span className="model-id mono">{m.id}</span>
-                </li>
-              ))}
-            </ul>
-          }
           <p className="board-foot">
-            These are the gateway’s models plus whatever presets have been saved on top — a name
-            here that is not on LiteLLM’s routing table is a preset, not a model.
+            {people.pending > 0 ?
+              <>
+                <b>Somebody is waiting.</b> New accounts land as <code>pending</code> and can see
+                nothing until an admin promotes them in Admin → Users, and the app sends no notice
+                that it happened.{' '}
+              </>
+            : 'New accounts arrive through Pocket ID and land as pending until an admin promotes them — nothing announces that, which is why the count is here. '}
+            The password form is off, so the page redirects to the IdP rather than offering a second
+            way in; the break-glass form is still at <code>/auth?form=true</code> for the day the
+            IdP is what is down.
           </p>
         </Board>
 
         <ReleaseBoard gap={gap} />
 
-        <Board title="Logs" icon="≡" span={12}>
-          <GrafanaLogs source={{ container: 'open-webui' }} title="Open WebUI logs" />
-        </Board>
+        <LogBoard
+          source={{ container: 'open-webui' }}
+          title="Open WebUI logs"
+          neighbours={OWUI_NEIGHBOURS}
+        />
       </BoardGrid>
     </>
   )
@@ -1034,7 +1178,9 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
 // ── n8n ────────────────────────────────────────────────────────────────────
 
 function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
-  const { gap, counts } = data
+  const { gap, window: total, daily, flows } = data
+  const firstDate = daily[0]?.date ?? ''
+  const lastDate = daily[daily.length - 1]?.date ?? ''
 
   return (
     <>
@@ -1069,82 +1215,131 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
         ]}
       />
 
-      <StatBand>
-        <BigStat label="Active workflows" value={num(counts.active)} tone="ok" sub="on a schedule or trigger" />
-        <BigStat label="Total workflows" value={num(counts.total)} tone="info" sub="including drafts" />
-        <BigStat
-          label="Failed"
-          value={num(counts.failed)}
-          tone={counts.failed !== null && counts.failed > 0 ? 'bad' : 'muted'}
-          sub="of the recent runs below"
-        />
-        <BigStat
-          label="Latest release"
-          value={gap.latest ?? DASH}
-          tone="muted"
-          sub={gap.behind.length === 0 ? 'running it' : `${String(gap.behind.length)} behind`}
-        />
-      </StatBand>
-
+      {/* No headline band, for the same reason the gateway lost its: three of
+          the four cards were counts of things listed a few pixels below, and
+          the fourth repeated the version verdict already in the header. */}
       <BoardGrid>
-        <Board title="Recent runs" icon="⟳" span={6} fill>
-          {data.runs.length === 0 ?
-            <p className="viz-empty">{data.note ?? 'no recent executions'}</p>
-          : <ul className="runs">
-              {data.runs.map((r, i) => (
-                <li key={`${r.name}-${String(i)}`} className={`runs-row runs-${statusTone(r.status)}`}>
-                  <span className="runs-name">{r.name}</span>
-                  <span className="runs-status">{r.status}</span>
-                  <span className="runs-when">{r.ago}</span>
-                </li>
-              ))}
-            </ul>
+        <Board
+          title="Runs"
+          icon="⟳"
+          span={8}
+          aside={
+            <span className="board-live">
+              <Pulse on={total.running > 0} tone="accent" />
+              {total.running > 0 ? `${num(total.running)} running` : 'idle'}
+            </span>
           }
+        >
+          <Measures
+            items={[
+              { k: `${String(total.days)} days`, v: `${num(total.runs)} runs` },
+              {
+                k: 'failed',
+                v:
+                  total.runs === 0 ? DASH
+                  : `${num(total.failed)} · ${pct((total.failed / total.runs) * 100, 1)}`,
+                tone: total.failed > 0 ? 'bad' : undefined,
+              },
+              { k: 'typical run', v: ms(total.medianMs) },
+              { k: 'workflows seen', v: String(flows.length) },
+            ]}
+          />
+
+          <Columns
+            points={daily.map((d) => ({
+              // Month-day only: the year is the same for every column.
+              label: d.date.slice(5),
+              value: d.runs,
+              display: `${num(d.runs)} run${d.runs === 1 ? '' : 's'}${d.failed > 0 ? ` · ${num(d.failed)} failed` : ''}`,
+              flag: d.failed > 0,
+            }))}
+            height={112}
+            empty={data.note ?? 'no executions in the window'}
+          />
+          {daily.length > 0 && (
+            <p className="colaxis">
+              <span>{firstDate.slice(5)}</span>
+              <span>runs per day</span>
+              <span>{lastDate.slice(5)}</span>
+            </p>
+          )}
+
+          {/* Few enough to name, which is the whole point of naming them: one
+              failure a fortnight is a thing to go and read, not a rate. */}
+          {data.failures.length > 0 && (
+            <p className="rejected">
+              {data.failures.map((f, i) => (
+                <span key={`${f.name}-${String(i)}`}>
+                  {i > 0 && ' · '}
+                  <b>{f.name}</b> failed {f.ago}
+                </span>
+              ))}
+            </p>
+          )}
+
           <p className="board-foot">
-            The newest eight, whatever their outcome. n8n keeps the full history and the stack
-            traces behind the Executions tab — this is only enough to notice.
+            Counted from n8n’s own execution history, which it prunes on a schedule — so this window
+            is what n8n still holds, and an empty column early on may be forgetting rather than
+            silence. A day that saw a failure is underlined in red; the stack trace is behind the
+            Executions tab.
+            {data.partial && ' There were more executions than this fetched, so these are a lower bound.'}
           </p>
         </Board>
 
         <Board
           title="Workflows"
           icon="◫"
-          span={6}
+          span={4}
           fill
-          aside={<span className="board-note">active first</span>}
+          aside={<span className="board-note">runs, {total.days}d</span>}
         >
-          {data.workflows.length === 0 ?
-            <p className="viz-empty">{data.note ?? 'no workflows'}</p>
-          : <ul className="modellist">
-              {data.workflows.map((w) => (
-                <li key={w.name}>
-                  <span className="model-name">{w.name}</span>
-                  <Chip tone={w.active ? 'ok' : 'muted'}>{w.active ? 'active' : 'inactive'}</Chip>
-                </li>
+          {flows.length === 0 ?
+            <p className="viz-empty">{data.note ?? 'nothing has run in the window'}</p>
+          : <ul className="ranks">
+              {flows.map((f) => (
+                <RankRow
+                  key={f.id}
+                  name={f.name ?? f.id.slice(0, 8)}
+                  note={f.name === null ? `workflow id ${f.id}` : null}
+                  badge={
+                    f.stalled ? { text: 'stalled', tone: 'warn' }
+                    : f.active === false ? { text: 'off', tone: 'muted' }
+                    : null
+                  }
+                  value={f.runs}
+                  max={flows[0]?.runs ?? 1}
+                  meta={
+                    <>
+                      {f.medianMs !== null && <span>{ms(f.medianMs)}</span>}
+                      {/* `until`, not `ms`: a cadence is a period, and the
+                          latency formatter tops out at minutes — a daily
+                          schedule read "1440m 0s". */}
+                      {f.everyMs !== null && <span>every {until(f.everyMs / 1000)}</span>}
+                      {f.failed > 0 && <span className="bad-text">{num(f.failed)} failed</span>}
+                      <span>{f.ago}</span>
+                    </>
+                  }
+                />
               ))}
             </ul>
           }
+
           <p className="board-foot">
-            {/* The draft/published split has bitten this box before: an edit
-                lands on the draft and the schedule keeps running the published
-                version, so "I changed it and nothing happened" is expected. */}
-            Editing a workflow changes its draft. A scheduled run uses the last <b>published</b>{' '}
-            version, so a change is not live until you publish it.
+            {/* The thing this panel exists for. A workflow that stops firing
+                produces no error, no failed run and no log line — it just goes
+                quiet, and the only evidence is that its own rhythm broke. */}
+            Built from the runs, not from the workflow list, so a workflow that has fired at all is
+            here and one that has not is not. <b>stalled</b> means it kept a cadence and has since
+            missed more than two of them — the one failure mode here that produces no error
+            anywhere. {data.nameNote ?? ''} Editing a workflow changes its <b>draft</b>; a scheduled
+            run uses the last published version, so a change is not live until you publish it.
           </p>
         </Board>
 
         <ReleaseBoard gap={gap} />
 
-        <Board title="Logs" icon="≡" span={12}>
-          <GrafanaLogs source={{ container: 'n8n' }} title="n8n logs" />
-        </Board>
+        <LogBoard source={{ container: 'n8n' }} title="n8n logs" neighbours={N8N_NEIGHBOURS} />
       </BoardGrid>
     </>
   )
-}
-
-function statusTone(status: string): string {
-  if (status === 'success') return 'ok'
-  if (status === 'running' || status === 'waiting' || status === 'new') return 'live'
-  return 'bad'
 }

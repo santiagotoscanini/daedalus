@@ -3121,10 +3121,11 @@ h2 {
   color: var(--accent);
 }
 
-/* Who is calling: a ranking, with the things a ranking cannot say underneath
-   each bar. Two rows of a three-column grid rather than a flex row, so the
-   counts line up down the panel while the meta line runs the full width. */
-.callers {
+/* A ranking, with the things a ranking cannot say underneath each bar. Two
+   rows of a three-column grid rather than a flex row, so the counts line up
+   down the panel while the meta line runs the full width. Shared by the
+   gateway's callers and n8n's workflows. */
+.ranks {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -3136,7 +3137,7 @@ h2 {
    so a content-sized column is measured per row — the bars would start at a
    different x on every line and stop at a different one, which is the entire
    comparison this list exists to make. */
-.caller {
+.rank {
   display: grid;
   grid-template-columns: 9.5rem minmax(2rem, 1fr) 2.6rem;
   align-items: center;
@@ -3145,10 +3146,10 @@ h2 {
   border-radius: 7px;
   min-width: 0;
 }
-.caller:hover {
+.rank:hover {
   background: var(--panel-2);
 }
-.caller-name {
+.rank-name {
   font-size: 0.79rem;
   color: var(--text);
   min-width: 0;
@@ -3156,7 +3157,7 @@ h2 {
   align-items: baseline;
   gap: 0.35rem;
 }
-.caller-name > span {
+.rank-name > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3165,14 +3166,14 @@ h2 {
 /* A name that cannot be read at face value — an internal credential, or a
    hash — carries its explanation on a hover, and says so with the same dotted
    underline the host strip uses for the same promise. */
-.caller-noted > span:first-child {
+.rank-noted > span:first-child {
   border-bottom: 1px dotted var(--border);
   cursor: help;
 }
-/* The key is gone from the gateway, which is the reason the row exists at all
-   when it is also failing. Warn, not bad: a revoked key is history, not a
-   fault. */
-.caller-name em {
+/* The state that changes what the row's numbers mean — a key the gateway no
+   longer holds, a schedule that has stopped firing. Warn, not bad: both are
+   something to look into, not something that is currently on fire. */
+.rank-name em {
   font-style: normal;
   font-size: 0.6rem;
   color: var(--warn);
@@ -3181,13 +3182,19 @@ h2 {
   padding: 0.02rem 0.35rem;
   flex: none;
 }
-.caller-track {
+/* Deliberately switched off is not a warning at all — it explains the silence
+   rather than reporting it. */
+.rank-name em.is-muted {
+  color: var(--dim);
+  border-color: var(--border);
+}
+.rank-track {
   height: 5px;
   border-radius: 3px;
   background: var(--raise);
   overflow: hidden;
 }
-.caller-fill {
+.rank-fill {
   display: block;
   height: 100%;
   border-radius: 3px;
@@ -3199,7 +3206,7 @@ h2 {
   transform-origin: 0 50%;
   animation: bar-grow 600ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
-.caller-n {
+.rank-n {
   font-size: 0.79rem;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -3209,7 +3216,7 @@ h2 {
 /* Everything the bar cannot say, on its own line under it. Interpuncts are
    generated between the items rather than typed, so a caller with no tokens
    and no latency does not trail a separator into empty space. */
-.caller-meta {
+.rank-meta {
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
@@ -3219,20 +3226,20 @@ h2 {
   font-variant-numeric: tabular-nums;
   min-width: 0;
 }
-.caller-meta > span + span::before {
+.rank-meta > span + span::before {
   content: "·";
   margin-right: 0.4rem;
   color: var(--border);
 }
-.caller-meta .mono {
+.rank-meta .mono {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The keys that never got an answer. A statement rather than a list: the rows
-   would be hashes of credentials nobody here holds. Warn rather than bad —
-   it is something to look into, not something that is currently broken. */
+/* The exception a panel's main list cannot hold: keys that never got an
+   answer, the runs that failed. Warn rather than bad — it is something to look
+   into, not something that is currently broken. */
 .rejected {
   margin: 0.5rem 0 0;
   padding: 0.4rem 0.55rem;
@@ -3249,8 +3256,10 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
-/* Tools a model called back out through the gateway. */
-.mcplist {
+/* A flat list of named things, each led by a chip saying what kind it is and
+   trailed by whatever detail that kind has. Tools the gateway proxied, models
+   and knowledge bases a chat window can reach. */
+.itemlist {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -3258,7 +3267,7 @@ h2 {
   flex-direction: column;
   gap: 0.22rem;
 }
-.mcplist li {
+.itemlist li {
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -3268,95 +3277,33 @@ h2 {
   background: var(--panel-2);
   min-width: 0;
 }
-.mcp-tool {
-  color: var(--muted);
+/* The name takes the slack, so the detail is pushed right without a spacer.
+   Both truncate: a latency is three characters but a tool's own description of
+   itself is a sentence, and one long row must not widen the panel. */
+.item-main {
+  color: var(--text);
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mcp-ms {
-  margin-left: auto;
+.item-side {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
   color: var(--dim);
   font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mcp-n {
+.item-n {
   color: var(--text);
   font-variant-numeric: tabular-nums;
   min-width: 1.4rem;
   text-align: right;
-}
-
-/* Name on the left, identifier on the right — the models a chat window offers
-   and the workflows n8n holds are both this shape. */
-.modellist {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.22rem;
-}
-.modellist li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.78rem;
-  padding: 0.2rem 0.45rem;
-  border-radius: 7px;
-  background: var(--panel-2);
-  min-width: 0;
-}
-.model-name {
-  color: var(--text);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.model-id {
-  margin-left: auto;
-  font-size: 0.7rem;
-  color: var(--dim);
-  white-space: nowrap;
-}
-.modellist .vchip {
-  margin-left: auto;
-}
-
-.runs {
-  gap: 0.25rem;
-}
-.runs-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.28rem 0.45rem;
-  border-radius: 7px;
-  background: var(--panel-2);
-  border-left: 2px solid var(--dim);
-  font-size: 0.8rem;
-  min-width: 0;
-}
-.runs-ok { border-left-color: var(--ok); }
-.runs-bad { border-left-color: var(--bad); }
-.runs-live { border-left-color: var(--accent); }
-.runs-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.runs-status {
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-.runs-when {
-  color: var(--dim);
-  font-size: 0.72rem;
-  white-space: nowrap;
 }
 
 .people {

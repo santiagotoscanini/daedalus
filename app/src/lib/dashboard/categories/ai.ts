@@ -179,25 +179,92 @@ type LitellmData = {
   mcpServers: { name: string; calls: number }[]
 }
 
+/**
+ * One thing the chat window can reach.
+ *
+ * Models, tool servers and knowledge bases are three different registries
+ * inside Open WebUI and one question to the reader: is everything that was
+ * declared actually there. They are listed together because each of them is
+ * wired from nix and each of them has a way of quietly not arriving — an
+ * env-backed setting the database overrode, an MCP server a virtual key is not
+ * permitted to reach, an upload that indexed nothing.
+ */
+type Reach = {
+  kind: 'model' | 'tool' | 'knowledge'
+  name: string
+  detail: string
+  /** Present but empty — a knowledge base holding no files. */
+  flag: boolean
+}
+
 type OpenWebUiData = {
   version: string | null
-  latest: string | null
   gap: VersionGap
-  users: number | null
+  /** Its own update check. A second opinion on the release gap, not a repeat. */
+  selfLatest: string | null
+  /** Models mid-answer at this instant. */
   generating: number | null
-  /** Models the chat window offers, which is the gateway's list plus presets. */
-  models: { id: string; name: string }[]
+  reach: Reach[]
+  counts: { models: number; tools: number; knowledge: number }
+  /**
+   * The accounts, and the one number among them that is a to-do: signups land
+   * as `pending` and stay there until an admin promotes them, with no notice
+   * anywhere that it happened.
+   */
+  people: { total: number; pending: number; admins: number; lastSeen: string }
   /** How sign-in is configured — the answer to "why is there no login box". */
   auth: { oidc: string | null; autoRedirect: boolean; loginForm: boolean; signup: boolean }
+  /** Set when the admin API refused — everything below it is then empty. */
+  note: string | null
+}
+
+/**
+ * One workflow, summarised from its executions.
+ *
+ * The name is null whenever the API key cannot read workflows, which is a
+ * scope on the key rather than a fault — see `nameNote`. Everything else here
+ * is derived from the execution list, which a key with `execution:read` alone
+ * can see.
+ */
+type N8nFlow = {
+  id: string
+  name: string | null
+  /** Null unless the workflow list could be read. */
+  active: boolean | null
+  runs: number
+  failed: number
+  /** Median wall-clock of a finished run. */
+  medianMs: number | null
+  /** Typical gap between starts, once there are enough runs to say. */
+  everyMs: number | null
+  /** Words, computed here — see the note on hydration below. */
+  ago: string
+  /**
+   * Ran on a cadence, and has since missed it.
+   *
+   * The one thing on this page that cannot be read off any single row: a
+   * workflow that stops firing leaves no error, no failed run and no log line.
+   * It just goes quiet, and the only evidence is that its own rhythm broke.
+   */
+  stalled: boolean
 }
 
 type N8nData = {
   version: string | null
   gap: VersionGap
-  workflows: { name: string; active: boolean }[]
-  runs: {
+  /** Every day of the window, oldest first — including the empty ones. */
+  daily: { date: string; runs: number; failed: number }[]
+  window: { days: number; runs: number; failed: number; running: number; medianMs: number | null }
+  /** Busiest first. */
+  flows: N8nFlow[]
+  /**
+   * The failures themselves, newest first.
+   *
+   * Few enough to name — one in a fortnight here — which is the whole reason
+   * this is a list and the rejected keys on the gateway tab are a count.
+   */
+  failures: {
     name: string
-    status: string
     /**
      * Computed here rather than in the component on purpose: a relative time
      * derived from the client's clock renders differently on the server and on
@@ -206,9 +273,12 @@ type N8nData = {
      */
     ago: string
   }[]
-  counts: { active: number | null; total: number | null; failed: number | null }
-  /** Set when the API refused, which on this box means the key. */
+  /** True when there were more executions than this fetched. */
+  partial: boolean
+  /** Set when the executions API refused, which leaves the page with nothing. */
   note: string | null
+  /** Set when only the workflow NAMES are missing, which is fixable. */
+  nameNote: string | null
 }
 
 /** How far back the gateway charts look. Two weeks fits a column per day. */
@@ -926,47 +996,181 @@ function rank(
 
 // ── Open WebUI ─────────────────────────────────────────────────────────────
 
+/**
+ * The chat window, as three registries and a door.
+ *
+ * What this page deliberately does NOT report is usage. Open WebUI knows how
+ * many chats it holds and could be made to draw them, and on a household
+ * instance with one account that number is vanity: it goes up when somebody
+ * talks to a model, which is the thing the model server's own tab measures
+ * properly, per model, with latency. Counting it a second time here would be a
+ * chart of the same fact with less in it.
+ *
+ * What is worth reading off a running instance is everything a restart could
+ * silently take away — the models the picker offers, the tool servers that
+ * registered, the knowledge bases that hold anything — plus the one account
+ * fact nothing else on this box will tell you: somebody signed in and is
+ * sitting in `pending`, waiting to be let in.
+ */
 async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
   const auth = { headers: { Authorization: `Bearer ${key('OPENWEBUI_KEY')}` } }
 
-  const [usage, ver, config, models] = await Promise.all([
-    getJson<{ user_count?: number; model_ids?: string[] }>(`${base}/api/usage`, auth),
-    // The one service here that checks its own updates. Kept as the source of
-    // `latest` even though the release gap below also has it: this is the
-    // number its own UI shows, so disagreeing with it would be confusing.
+  const [usage, ver, config, models, users, knowledge, tools] = await Promise.all([
+    getJson<{ model_ids?: string[] }>(`${base}/api/usage`, auth),
+    // The one service here that checks its own updates, which is why it is
+    // kept alongside the release gap rather than replaced by it: two
+    // independent answers to "is this current", and them disagreeing is
+    // itself worth seeing.
     getJson<{ current?: string; latest?: string }>(`${base}/api/version/updates`, auth),
     getJson<{
-      oauth?: { providers?: Record<string, string> }
+      oauth?: { providers?: Record<string, string>; auto_redirect?: boolean }
       features?: { enable_login_form?: boolean; enable_signup?: boolean }
     }>(`${base}/api/config`, auth),
     getJson<{ data?: { id?: string; name?: string }[] }>(`${base}/api/models`, auth),
+    getJson<{ users?: { role?: string; last_active_at?: number }[] }>(`${base}/api/v1/users/`, auth),
+    getJson<{ items?: { name?: string; file_count?: number }[] }>(`${base}/api/v1/knowledge/`, auth),
+    getJson<{ name?: string; meta?: { description?: string } }[]>(`${base}/api/v1/tools/`, auth),
   ])
 
   const version = ver?.current ?? null
+  const modelList = models?.data ?? []
+  const toolList = tools ?? []
+  const kbList = knowledge?.items ?? []
+  const userList = users?.users ?? []
+
+  // Models first, then tools, then knowledge: the order a request uses them.
+  const reach: Reach[] = [
+    ...modelList.map((m) => ({
+      kind: 'model' as const,
+      name: m.name ?? m.id ?? '?',
+      detail: m.id ?? '?',
+      flag: false,
+    })),
+    ...toolList.map((t) => ({
+      kind: 'tool' as const,
+      name: t.name ?? '?',
+      detail: t.meta?.description ?? '',
+      flag: false,
+    })),
+    ...kbList.map((k) => {
+      const files = k.file_count ?? 0
+      return {
+        kind: 'knowledge' as const,
+        name: k.name ?? '?',
+        detail: `${String(files)} file${files === 1 ? '' : 's'}`,
+        // A collection with nothing in it answers no question it is asked, and
+        // reports no error while doing so.
+        flag: files === 0,
+      }
+    }),
+  ]
+
+  const seen = userList
+    .map((u) => u.last_active_at ?? 0)
+    .filter((t) => t > 0)
+    .sort((a, b) => b - a)[0]
 
   return {
     version,
-    latest: ver?.latest ?? null,
     gap: await versionGap('open-webui/open-webui', version),
-    users: usage?.user_count ?? null,
+    selfLatest: ver?.latest ?? null,
     generating: usage?.model_ids?.length ?? null,
-    models: (models?.data ?? [])
-      .map((m) => ({ id: m.id ?? '?', name: m.name ?? m.id ?? '?' }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
+    reach,
+    counts: { models: modelList.length, tools: toolList.length, knowledge: kbList.length },
+    people: {
+      total: userList.length,
+      pending: userList.filter((u) => u.role === 'pending').length,
+      admins: userList.filter((u) => u.role === 'admin').length,
+      lastSeen: seen === undefined ? DASH : since(Date.now() / 1000 - seen),
+    },
     auth: {
       oidc: config?.oauth?.providers?.oidc ?? null,
-      // Not in /api/config as a field — it is inferred from the login form
-      // being off while an OIDC provider is configured, which is exactly the
-      // combination that produces the redirect. See the Open WebUI stack.
-      autoRedirect: config?.features?.enable_login_form === false && config.oauth?.providers?.oidc !== undefined,
+      autoRedirect: config?.oauth?.auto_redirect === true,
       loginForm: config?.features?.enable_login_form === true,
       signup: config?.features?.enable_signup === true,
     },
+    // The admin endpoints share one key, so one refusal is the key rather than
+    // the endpoint. /api/config answers without one, which is why it is not
+    // the thing tested here.
+    note:
+      users === null || tools === null ?
+        'Open WebUI refused the admin API. It needs a key from Account → API Keys, in ' +
+        'stacks/daedalus/service-keys.sops as OPENWEBUI_KEY.'
+      : null,
   }
 }
 
 // ── n8n ────────────────────────────────────────────────────────────────────
 
+type Execution = {
+  workflowId: string
+  status: string
+  startedAt: string
+  stoppedAt?: string | null
+}
+
+/** n8n's page cap is 250; four pages is a fortnight of this box several times over. */
+const EXEC_PAGES = 4
+
+/**
+ * Every execution n8n still holds, up to a bound.
+ *
+ * Paged because the interesting figures here — a per-day column, a per-workflow
+ * median, a cadence — are all aggregates, and an aggregate over the first page
+ * is not an aggregate. `partial` says when the bound was hit rather than
+ * letting a truncated window pass for a complete one.
+ */
+async function listExecutions(
+  base: string,
+  auth: RequestInit,
+): Promise<{ rows: Execution[]; refused: boolean; partial: boolean }> {
+  const rows: Execution[] = []
+  let cursor: string | null = null
+
+  for (let page = 0; page < EXEC_PAGES; page++) {
+    // Annotated and hoisted: inline, the URL's type would depend on `cursor`'s
+    // narrowing, which depends on the assignment below it, which depends on
+    // this call — a cycle TypeScript refuses to resolve.
+    const next: string = cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`
+    const body = await getJson<{ data?: Execution[]; nextCursor?: string | null }>(
+      `${base}/api/v1/executions?limit=250${next}`,
+      auth,
+    )
+    // A refusal on the first page is the key; on a later one it is a partial
+    // answer, and the rows already in hand are still worth drawing.
+    if (body === null) return { rows, refused: page === 0, partial: page > 0 }
+    rows.push(...(body.data ?? []))
+    cursor = body.nextCursor ?? null
+    if (cursor === null) return { rows, refused: false, partial: false }
+  }
+  return { rows, refused: false, partial: true }
+}
+
+/** `YYYY-MM-DD` in the box's timezone, so a column is the day you lived. */
+const localDay = (ms: number): string => new Date(ms).toLocaleDateString('en-CA')
+
+function median(xs: number[]): number | null {
+  if (xs.length === 0) return null
+  const s = [...xs].sort((a, b) => a - b)
+  return s[Math.floor(s.length / 2)] ?? null
+}
+
+const FAILED = new Set(['error', 'crashed'])
+const RUNNING = new Set(['running', 'new', 'waiting'])
+
+/**
+ * n8n, read from its executions.
+ *
+ * The page is built on the execution list rather than the workflow list, and
+ * that is the argument as much as it is the constraint. A workflow list says
+ * what exists and whether a toggle is on; it cannot say that the nightly digest
+ * has not fired since Sunday. Nothing here runs on a person being awake, so the
+ * only questions worth a panel are did it run, did it work, and how long did it
+ * take — all three of which are execution facts.
+ *
+ * The workflow list is still fetched, for names alone. An API key scoped to
+ * `execution:read` gets a 403 there, which costs nothing but the labels.
+ */
 async function loadN8n(base: string): Promise<N8nData> {
   const auth = { headers: { 'X-N8N-API-KEY': key('N8N_API_KEY') } }
   // Pinned in the flake and passed in as an env var. n8n's public API has no
@@ -978,24 +1182,66 @@ async function loadN8n(base: string): Promise<N8nData> {
   const version = process.env.N8N_VERSION || null
 
   const [execs, flows] = await Promise.all([
-    getJson<{ data?: { workflowId: string; status: string; startedAt: string }[] }>(
-      `${base}/api/v1/executions?limit=8`,
-      auth,
-    ),
+    listExecutions(base, auth),
     getJson<{ data?: { id: string; name: string; active?: boolean }[] }>(
-      `${base}/api/v1/workflows?limit=100`,
+      `${base}/api/v1/workflows?limit=250`,
       auth,
     ),
   ])
 
-  const workflows = (flows?.data ?? []).map((f) => ({ name: f.name, active: f.active === true }))
-  const names = new Map((flows?.data ?? []).map((f) => [f.id, f.name]))
-  const runs = (execs?.data ?? []).map((e) => {
-    const ms = Date.parse(e.startedAt)
+  const known = new Map((flows?.data ?? []).map((f) => [f.id, f]))
+  const now = Date.now()
+  const floor = now - DAYS * 86400_000
+
+  // Clamped to the window the chart draws, so the measure line beside it
+  // counts the same runs. n8n prunes its own history well inside a fortnight,
+  // so in practice this drops nothing.
+  const rows = execs.rows
+    .map((e) => ({ ...e, at: Date.parse(e.startedAt) }))
+    .filter((e) => Number.isFinite(e.at) && e.at >= floor)
+    .sort((a, b) => b.at - a.at)
+
+  const dates = Array.from({ length: DAYS }, (_, i) => localDay(now - (DAYS - 1 - i) * 86400_000))
+  const byDate = new Map(dates.map((d) => [d, { date: d, runs: 0, failed: 0 }]))
+  for (const e of rows) {
+    const day = byDate.get(localDay(e.at))
+    if (day === undefined) continue
+    day.runs++
+    if (FAILED.has(e.status)) day.failed++
+  }
+
+  const perFlow = new Map<string, { rows: typeof rows }>()
+  for (const e of rows) {
+    const bucket = perFlow.get(e.workflowId) ?? { rows: [] }
+    bucket.rows.push(e)
+    perFlow.set(e.workflowId, bucket)
+  }
+
+  const flowRows: N8nFlow[] = [...perFlow].map(([id, { rows: mine }]) => {
+    const meta = known.get(id)
+    const last = mine[0]?.at ?? now
+    const durations = mine
+      .filter((e) => typeof e.stoppedAt === 'string' && e.stoppedAt !== '')
+      .map((e) => Date.parse(e.stoppedAt ?? '') - e.at)
+      .filter((d) => Number.isFinite(d) && d >= 0)
+    // Gaps between consecutive starts, newest-first list walked backwards.
+    const gaps = mine.slice(1).map((e, i) => (mine[i]?.at ?? 0) - e.at)
+    const every = mine.length >= 4 ? median(gaps) : null
+
     return {
-      name: names.get(e.workflowId) ?? e.workflowId.slice(0, 8),
-      status: e.status,
-      ago: Number.isFinite(ms) ? since((Date.now() - ms) / 1000) : DASH,
+      id,
+      name: meta?.name ?? null,
+      active: meta === undefined ? null : meta.active === true,
+      runs: mine.length,
+      failed: mine.filter((e) => FAILED.has(e.status)).length,
+      medianMs: median(durations),
+      everyMs: every,
+      ago: since((now - last) / 1000),
+      // Two and a half cycles of silence, not one: a daily job that slips a few
+      // hours is normal, and a claim that fires on a normal day is a claim
+      // nobody reads twice. A workflow known to be switched off is not stalled,
+      // it is off.
+      stalled: every !== null && every > 0 && now - last > every * 2.5 && meta?.active !== false,
     }
   })
 
@@ -1010,18 +1256,40 @@ async function loadN8n(base: string): Promise<N8nData> {
       // patches to a line it is not on.
       sameMajor: true,
     }),
-    workflows: workflows.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)),
-    runs,
-    counts: {
-      active: flows === null ? null : workflows.filter((w) => w.active).length,
-      total: flows === null ? null : workflows.length,
-      failed: execs === null ? null : runs.filter((r) => r.status === 'error').length,
+    daily: dates.map((d) => byDate.get(d) ?? { date: d, runs: 0, failed: 0 }),
+    window: {
+      days: DAYS,
+      runs: rows.length,
+      failed: rows.filter((e) => FAILED.has(e.status)).length,
+      running: rows.filter((e) => RUNNING.has(e.status)).length,
+      medianMs: median(
+        rows
+          .filter((e) => typeof e.stoppedAt === 'string' && e.stoppedAt !== '')
+          .map((e) => Date.parse(e.stoppedAt ?? '') - e.at)
+          .filter((d) => Number.isFinite(d) && d >= 0),
+      ),
     },
-    // Both calls use the same key, so one 403 means the key, not the endpoint.
+    flows: flowRows.sort((a, b) => b.runs - a.runs),
+    failures: rows
+      .filter((e) => FAILED.has(e.status))
+      .slice(0, 6)
+      .map((e) => ({
+        name: known.get(e.workflowId)?.name ?? e.workflowId.slice(0, 8),
+        ago: since((now - e.at) / 1000),
+      })),
+    partial: execs.partial,
     note:
-      flows === null || execs === null ?
-        'n8n refused the API key. It needs a key from Settings → n8n API, in ' +
-        'stacks/daedalus/service-keys.sops as N8N_API_KEY.'
+      execs.refused ?
+        'n8n refused the executions API. The key needs the execution:read scope — make one ' +
+        'in Settings → n8n API and put it in stacks/daedalus/service-keys.sops as N8N_API_KEY.'
+      : null,
+    // A different, smaller problem than the one above, and worth saying
+    // separately: everything on this page still works, the rows are just
+    // labelled with ids.
+    nameNote:
+      !execs.refused && flows === null ?
+        'The API key cannot read workflows, so these are ids. Re-issue it in Settings → n8n API ' +
+        'with the workflow:read scope to get names.'
       : null,
   }
 }

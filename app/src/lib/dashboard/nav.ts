@@ -95,8 +95,10 @@ export const CATEGORIES: CategorySpec[] = [
       // Traffic + the tool list, then who is calling + the changelog. Paired
       // by height rather than by subject — see the note on that board.
       { id: 'litellm', label: 'LiteLLM', probe: 'litellm', boardSpans: [8, 4, 4, 8], statBand: false },
-      { id: 'open-webui', label: 'Open WebUI', probe: 'open-webui' },
-      { id: 'n8n', label: 'n8n', probe: 'n8n' },
+      // What it can reach + who gets in, then the changelog across.
+      { id: 'open-webui', label: 'Open WebUI', probe: 'open-webui', boardSpans: [6, 6, 12], statBand: false },
+      // Runs + the workflows behind them, same 8/4 pairing as the gateway.
+      { id: 'n8n', label: 'n8n', probe: 'n8n', boardSpans: [8, 4, 12], statBand: false },
     ],
   },
   {
