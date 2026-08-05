@@ -3350,6 +3350,17 @@ h2 {
   color: var(--accent);
 }
 
+/* The controls above an embedded panel: our own range picker, because
+   d-solo deliberately ships without one. */
+.logs-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
 /* An embedded Grafana panel. Sized rather than aspect-ratioed: a log view
    wants a fixed number of visible lines, not a shape. */
 .embed {

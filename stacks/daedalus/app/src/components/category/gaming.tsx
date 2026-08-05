@@ -1,5 +1,5 @@
 import { BigStat, Board, BoardGrid, Chip, Facts, Pulse, StatBand } from '../viz'
-import { GrafanaLogs, grafanaLogsFull } from '../logs'
+import { GrafanaLogs } from '../logs'
 import { text } from '../../lib/dashboard/format'
 import type { GamingData } from '../../server/category'
 
@@ -225,16 +225,6 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           title="Logs"
           icon="≡"
           span={12}
-          aside={
-            <a
-              className="board-note"
-              href={grafanaLogsFull("factorio")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              open in Grafana ↗
-            </a>
-          }
         >
           <GrafanaLogs container="factorio" title="Factorio logs" />
         </Board>

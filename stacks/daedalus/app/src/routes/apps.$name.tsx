@@ -15,7 +15,7 @@ import {
 } from '../components/ui'
 import { BarList } from '../components/viz'
 import { BlockSkeleton, MetricsSkeleton, PanelsSkeleton } from '../components/skeleton'
-import { GrafanaLogs, grafanaLogsFull } from '../components/logs'
+import { GrafanaLogs } from '../components/logs'
 // ./access-window, NOT ./access — same split as env-groups below. The window
 // table is a value the picker and validateSearch both need in the browser;
 // ./access talks to Loki and must never follow it there.
@@ -741,16 +741,6 @@ function AppDetail() {
       {tab === 'logs' && (
         <Panel
           title="Logs"
-          action={
-            <a
-              className="btn btn-ghost"
-              href={grafanaLogsFull(`app-${app.name}`)}
-              target="_blank"
-              rel="noreferrer"
-            >
-              ↗ Search in Grafana
-            </a>
-          }
         >
           <GrafanaLogs container={`app-${app.name}`} title={`${app.name} logs`} />
         </Panel>
