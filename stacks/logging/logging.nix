@@ -28,7 +28,11 @@
 # Each entry becomes one relabel rule assigning the `stack` label.
 # FALLBACK: any container NOT claimed by an entry gets
 # `stack = <its own container name>` — unregistered single-container
-# stacks stay usable and nothing lands in a "no stack" bucket.
+# stacks stay usable and nothing lands in a "no stack" bucket. The one
+# exception is a container carrying podman's auto-generated
+# `adjective_surname` name (an ad-hoc `podman run` with no --name):
+# those collapse into `stack = adhoc` rather than each minting a
+# phantom service that outlives the container by 30 days.
 #
 # Why alloy in a container (not as a native NixOS service): keeps the
 # "everything in containers + declared in nix" pattern uniform across
@@ -195,6 +199,40 @@ let
         replacement   = "kernel"
       }
 
+      // ===== throwaway containers =====
+      // An ad-hoc `podman run` with no --name gets an auto-generated
+      // `adjective_surname`, and the fallback below would promote each
+      // one to its own stack — so a week of one-off `recyclarr sync`
+      // runs and debugging shells becomes dozens of phantom services in
+      // Grafana's Logs Drilldown, each alive for the full 30-day
+      // retention. They collapse into one `adhoc` bucket instead.
+      //
+      // The underscore IS the discriminator: podman's generator always
+      // produces exactly `[a-z]+_[a-z]+` (plus a digit on collision),
+      // and every declared container on this box is [a-z0-9-]. Both
+      // rules read `stack` while it is still empty, so an explicit
+      // fleet.logStacks registration always wins; service_name is set
+      // first because the second rule is what fills `stack` in.
+      //
+      // service_name is set explicitly because Loki otherwise derives it
+      // from the container name — leaving Drilldown's *service* list
+      // just as polluted as the stack list. `container` is deliberately
+      // kept, so an individual throwaway run is still traceable.
+      rule {
+        source_labels = ["stack", "__journal_container_name"]
+        separator     = ";"
+        regex         = ";[a-z]+_[a-z]+[0-9]*"
+        target_label  = "service_name"
+        replacement   = "adhoc"
+      }
+      rule {
+        source_labels = ["stack", "__journal_container_name"]
+        separator     = ";"
+        regex         = ";[a-z]+_[a-z]+[0-9]*"
+        target_label  = "stack"
+        replacement   = "adhoc"
+      }
+
       // Fallback: any container not claimed above gets stack = its own
       // container name, so unregistered single-container stacks never
       // land in a "no stack" bucket. Anchored regex: it only matches
@@ -211,10 +249,18 @@ let
       // Final catch-all: native units not claimed above (syncoid,
       // app-*-deploy, sshd, timers, ...) land in stack="system" so
       // every journald line carries a stack label.
+      //
+      // Matches ANY unit suffix, not just `.service`: sudo invocations
+      // and login sessions are logged against `session-N.scope` and
+      // `init.scope`, and restricting this to `.service` dropped them
+      // into the "no stack" bucket this rule exists to prevent — which
+      // silently hid the sudo audit trail from every stack-grouped view.
+      // Lines with no unit at all are already claimed by the kernel rule
+      // above, so `(.+)` cannot steal them.
       rule {
         source_labels = ["stack", "__journal__systemd_unit"]
         separator     = ";"
-        regex         = ";(.+)\\.service"
+        regex         = ";(.+)"
         target_label  = "stack"
         replacement   = "system"
       }
