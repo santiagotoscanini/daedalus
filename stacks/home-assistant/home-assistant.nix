@@ -354,8 +354,8 @@ in
   fleet.grafanaDashboardsByFolder."Services".home-assistant =
     builtins.readFile ./assets/dashboard.json;
 
-  # Pocket ID client — id `home-assistant`, secret
-  # SSO_SECRET_HOME_ASSISTANT in stacks/pocket-id/clients.sops, rendered
+  # Pocket ID client — id `home-assistant`, secret generated on the box,
+  # rendered
   # into the container as HA_OIDC_CLIENT_SECRET (the name the generated
   # configuration.yaml reads via !env_var). Admin-only for now: there is
   # nothing for the household to see until the phase-2 dashboards land,

@@ -25,10 +25,13 @@ import {
 //              than a comment nobody reads.
 //   ordering + timestamps — so the UI can show what changed and when.
 //
-// What it deliberately does NOT store: secret VALUES. `operatorSecrets` is a
-// boolean saying "this app has a tracked <name>-env.sops at the stack root".
-// The ciphertext stays in sops, in git, decrypted at activation — never in
-// Postgres, never in a page render.
+// What it deliberately does NOT store: secret VALUES, and not whether an app
+// HAS operator secrets either. That one is decided by a tracked
+// <name>-env.sops existing at stacks/apps/, so a column here could only ever
+// agree or disagree with the filesystem — and the disagreements were the whole
+// problem. It arrives from the Nix manifest as a fact instead. The ciphertext
+// stays in sops, in git, decrypted at activation — never in Postgres, never in
+// a page render.
 
 export const apps = pgTable(
   'apps',
@@ -68,10 +71,6 @@ export const apps = pgTable(
     storage: boolean('storage').notNull().default(false),
     litellm: boolean('litellm').notNull().default(false),
     prometheus: boolean('prometheus').notNull().default(false),
-
-    // Whether a tracked <name>-env.sops exists at stacks/apps/. Not the
-    // contents — see the header.
-    operatorSecrets: boolean('operator_secrets').notNull().default(false),
 
     // "none" | "proxy" (traefik forward-auth) | "native" (the app is the
     // OIDC client). See AUTH.md for the order of preference.
@@ -123,7 +122,7 @@ export const apps = pgTable(
 // shows inline, and because ordering is stable and editable.
 //
 // NOT for secrets — these end up in /nix/store, world-readable. Secrets ride
-// the sops env file (see apps.operatorSecrets).
+// the stack's sops env file (stacks/apps/<name>-env.sops).
 export const appEnvVars = pgTable(
   'app_env_vars',
   {

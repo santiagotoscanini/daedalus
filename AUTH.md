@@ -123,9 +123,12 @@ and (for nextcloud) set their `nextcloud_uid` custom claim = their NC username.
   (consent + audit log show the service name; per-client group
   restrictions possible). New clients are DECLARED, not clicked —
   `fleet.ssoClients.<name>` in `stacks/pocket-id/clients.nix`:
-  1. Add the secret: `sops stacks/pocket-id/clients.sops`, one
-     `SSO_SECRET_<NAME>` key (>= 16 printable ASCII; name uppercased,
-     dashes to underscores). The client ID is the attr name itself.
+  1. Nothing — the secret is machine-generated.
+     `sso-client-secrets.service` mints `SSO_SECRET_<NAME>` (64 hex,
+     name uppercased, dashes to underscores) on the rebuild that
+     declares the client, into
+     `/home/santiago/selfhost/pocket-id/secrets/client-secrets.env`.
+     The client ID is the attr name itself.
   2. Declare the client. For a `fleet.apps` entry that is one option —
      `auth.mode = "proxy"` (forward-auth) or `"native"` (the app is the
      client); anything else declares `fleet.ssoClients.<name>` directly,
@@ -144,16 +147,16 @@ and (for nextcloud) set their `nextcloud_uid` custom claim = their NC username.
   `/oidc/callback`, `authGroups` → allowed groups). The consent screen's
   copy is the one thing with no mechanical source, so each stack sets
   `displayName`/`description` on its own `fleet.ssoClients.<n>` entry.
-  Only the secret is per-app work.
+  Nothing else is per-app work — the secret used to be, and is not.
 - **Every client on the box is declarative except immich and
   nextcloud**, whose OIDC config lives in their own application
   database rather than in env (FUTURE.md #10).
-- Rotating any client secret: `sops stacks/pocket-id/clients.sops`,
-  rebuild, then `systemctl restart podman-traefik` — an env.sops-only
-  change does NOT restart traefik (same store path), so the middleware
-  keeps the old value until it is bounced by hand. Native-OIDC
-  consumers restart on their own (their rendered env file is a unit
-  dependency).
+- Rotating any client secret: delete its line from
+  `pocket-id/secrets/client-secrets.env`, rebuild (the generator mints a
+  new one and the sync pushes it to the IdP), then `systemctl restart
+  podman-traefik` — the middleware holds the old value in memory until
+  it is bounced by hand. Native-OIDC consumers restart on their own
+  (their rendered env file is a unit dependency).
 - Lockout paths: SSH by IP always works; NixOS generation rollback;
   per-app escapes noted per row above.
 - Order per service: gate first → verify from LAN + tunnel → only then

@@ -82,10 +82,10 @@ export async function importFromNix(): Promise<{ imported: string[] }> {
  * the create form asks only for what cannot be sensibly defaulted, plus the
  * toggles somebody adding an app already knows the answer to.
  *
- * `authMode`, `operatorSecrets` and `egress` are NOT here, for the same reason
- * they are not in EDITABLE_FIELDS below: each needs encrypted state or a
- * gluetun instance authored outside this app. A new app arrives ungated and
- * gets its gate in a second, deliberate step.
+ * `authMode` and `egress` are not here: a new app arrives ungated and gets its
+ * gate in a second, deliberate step, and egress needs a gluetun instance to
+ * exist before anything can join its netns. Operator secrets are not a field at
+ * all any more — a tracked `stacks/apps/<name>-env.sops` is the whole switch.
  */
 export type NewApp = {
   name: string
@@ -147,7 +147,6 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
     storage: input.storage,
     litellm: input.litellm,
     prometheus: input.prometheus,
-    operatorSecrets: false,
     authMode: 'none',
     description: input.description.trim(),
     icon: input.icon.trim() || 'mdi-cube-outline-#94a3b8',
@@ -182,34 +181,17 @@ export async function deleteApp(name: string): Promise<void> {
 /**
  * Fields daedalus may change today.
  *
+ * Every one of them is a pure data change the existing Nix modules already know
+ * how to act on, with no state anybody has to author first. `authMode` included:
+ * its Pocket ID client secret is generated on the box the first time the client
+ * is declared (see stacks/pocket-id/clients.nix), the same way an app's database
+ * password and AUTH_SECRET are.
+ *
  * The omissions are deliberate, not unfinished. `egress` needs a gluetun
  * instance to exist first. `sourceMode` and `name` rewrite paths across the
- * whole platform.
- *
- * `authMode` is here, with the same prerequisite-outside-daedalus shape as
- * `operatorSecrets`: an `SSO_SECRET_<NAME>` in stacks/pocket-id/clients.sops.
- * What makes it safe to expose is the assertion in stacks/pocket-id/clients.nix
- * — sops leaves dotenv KEYS in plaintext, so Nix can check the key exists
- * without decrypting anything, and a client declared without one fails
- * evaluation. That matters more here than anywhere else: the creds render is a
- * single unit for every client, so one missing secret would otherwise fail at
- * activation and take the login path out for ALL of them.
- *
- * The hole the assertion cannot close is a key present with an EMPTY value;
- * the value is encrypted, so eval cannot see it. That case is still caught at
- * activation by the render's own `[ -n ]` check, which fails loudly.
- *
- * `operatorSecrets` IS here, and it is the one field whose prerequisite lives
- * outside this app: a tracked `stacks/apps/<name>-env.sops`, authored with
- * sops. It is safe to expose anyway, because getting it wrong fails in the
- * safest possible place — declarations.nix builds a `sops.secrets` entry from
- * the flag and a missing file is an EVAL error, so the Apply dies in
- * `nixos-rebuild build` before anything switches. Loud, and the running system
- * never moves. What it must not be is silently ignorable: an app whose env file
- * vanishes comes back up missing every operator-supplied variable.
- *
- * Everything here, by contrast, is a pure data change that the existing
- * modules already know how to act on.
+ * whole platform. `operatorSecrets` is gone entirely rather than omitted — the
+ * presence of a tracked `stacks/apps/<name>-env.sops` is the setting, and the
+ * page reports it from the Nix manifest.
  */
 export const EDITABLE_FIELDS = [
   'stage',
@@ -221,7 +203,6 @@ export const EDITABLE_FIELDS = [
   'storage',
   'litellm',
   'prometheus',
-  'operatorSecrets',
   'authMode',
   'authHealthPath',
   'limitCpus',
@@ -345,7 +326,6 @@ function toRow(entry: ManifestEntry) {
     storage: entry.storage,
     litellm: entry.litellm,
     prometheus: entry.prometheus,
-    operatorSecrets: entry.operatorSecrets,
     authMode: entry.auth.mode,
     authHealthPath: entry.auth.healthPath ?? null,
     authIsolated: entry.auth.isolated ?? false,
@@ -381,7 +361,6 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     storage: record.storage,
     litellm: record.litellm,
     prometheus: record.prometheus,
-    operatorSecrets: record.operatorSecrets,
     authMode: record.authMode,
     authHealthPath: record.authHealthPath,
     authIsolated: record.authIsolated,
@@ -404,7 +383,6 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     storage: manifest.storage,
     litellm: manifest.litellm,
     prometheus: manifest.prometheus,
-    operatorSecrets: manifest.operatorSecrets,
     authMode: manifest.auth.mode,
     authHealthPath: manifest.auth.healthPath ?? null,
     authIsolated: manifest.auth.isolated ?? false,
@@ -449,7 +427,6 @@ export function toRegistryExport(records: AppRecord[]): {
             storage: r.storage,
             litellm: r.litellm,
             prometheus: r.prometheus,
-            operatorSecrets: r.operatorSecrets,
             image: r.image,
             hostname: r.hostname,
             egress:

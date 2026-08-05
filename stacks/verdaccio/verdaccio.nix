@@ -53,8 +53,8 @@ in
   # restart — with no crash to make that visible.
   fleet.sso.discoveryConsumers = [ "verdaccio" ];
 
-  # Pocket ID client — id `verdaccio`, secret SSO_SECRET_VERDACCIO in
-  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # Pocket ID client — id `verdaccio`, secret generated on the box,
+  # rendered into the container as the
   # VERDACCIO_OPENID_CLIENT_* pair config.yaml references by name.
   # Three callbacks: the web UI, `npm login --auth-type=web` (authn) and
   # the CLI flow. PKCE off — the plugin doesn't send a verifier.

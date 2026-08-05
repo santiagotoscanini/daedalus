@@ -353,7 +353,7 @@ in
   ];
 
   # Grafana's Pocket ID client. Declarative: id `grafana`, secret
-  # SSO_SECRET_GRAFANA in stacks/pocket-id/clients.sops, rendered into
+  # generated on the box, rendered into
   # the container under the two names grafana reads. Prometheus is
   # forward-auth'd, so ITS client is derived from the webApp below.
   fleet.ssoClients.grafana = {

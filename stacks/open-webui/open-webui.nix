@@ -70,8 +70,8 @@ in
     extensions = [ "vector" ];
   };
 
-  # Pocket ID client — id `open-webui`, secret SSO_SECRET_OPEN_WEBUI in
-  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # Pocket ID client — id `open-webui`, secret generated on the box,
+  # rendered into the container as the
   # OAUTH_CLIENT_* pair. Deliberately NOT group-restricted: this is the
   # one client any Pocket ID account may use (chat is the household's
   # front door), matching what the IdP has enforced since it was made

@@ -35,7 +35,6 @@ export type ManifestApp = {
   storage: boolean
   litellm: boolean
   prometheus: boolean
-  operatorSecrets: boolean
   /** null = `<name>.<baseDomain>`. Exactly one label under it — see apps.nix. */
   hostname?: string | null
   image: string | null
@@ -68,14 +67,35 @@ export type NixManifest = {
    * with it instead of stranding a literal in TypeScript.
    */
   webAppHosts: Record<string, string>
+  /**
+   * Apps with a tracked `stacks/apps/<name>-env.sops`.
+   *
+   * A fact, not a setting — the file existing is the only thing that decides
+   * whether an app gets operator secrets, so there is nothing for the database
+   * to hold an opinion about and nothing to drift. It arrives here rather than
+   * through the registry export for exactly that reason: `apps.json` carries
+   * what daedalus decides, this manifest carries what Nix found.
+   */
+  operatorSecretApps: string[]
 }
 
-/** Every app Nix knows about, tagged with whether daedalus may edit it. */
-export type ManifestEntry = ManifestApp & { name: string; managedInNix: boolean }
+/**
+ * Every app Nix knows about, tagged with whether daedalus may edit it.
+ *
+ * `operatorSecrets` is resolved here from `operatorSecretApps` so callers see
+ * one shape per app instead of having to remember which facts live in which
+ * half of the manifest.
+ */
+export type ManifestEntry = ManifestApp & {
+  name: string
+  managedInNix: boolean
+  operatorSecrets: boolean
+}
 
 let cachedManaged: NixManifest['nixManaged'] | null = null
 let cachedTaken: string[] | null = null
 let cachedHosts: Record<string, string> | null = null
+let cachedSecretApps: string[] | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {
   const managedPath = process.env.NIX_MANIFEST_PATH
@@ -90,11 +110,17 @@ export async function readNixManifest(): Promise<NixManifest> {
   // The hand-written entries are a /nix/store path: immutable, and a change to
   // them restarts this container anyway, so caching for the process lifetime
   // is safe.
-  if (cachedManaged === null || cachedTaken === null || cachedHosts === null) {
+  if (
+    cachedManaged === null ||
+    cachedTaken === null ||
+    cachedHosts === null ||
+    cachedSecretApps === null
+  ) {
     const parsed = JSON.parse(await readFile(managedPath, 'utf8')) as NixManifest
     cachedManaged = parsed.nixManaged
     cachedTaken = parsed.takenHostnames
     cachedHosts = parsed.webAppHosts
+    cachedSecretApps = parsed.operatorSecretApps ?? []
   }
 
   // The committed registry is NOT cached. It lives at a fixed path that
@@ -110,7 +136,13 @@ export async function readNixManifest(): Promise<NixManifest> {
     nixManaged: cachedManaged,
     takenHostnames: cachedTaken,
     webAppHosts: cachedHosts,
+    operatorSecretApps: cachedSecretApps,
   }
+}
+
+/** Apps with a tracked operator-secrets file. See `NixManifest.operatorSecretApps`. */
+export async function operatorSecretApps(): Promise<string[]> {
+  return (await readNixManifest()).operatorSecretApps
 }
 
 /** Published hostnames, keyed by webApp name. See `NixManifest.webAppHosts`. */
@@ -129,8 +161,11 @@ export async function hostnamesTakenBy(others: string): Promise<string[]> {
 
 export async function manifestEntries(): Promise<ManifestEntry[]> {
   const m = await readNixManifest()
+  const hasSecrets = new Set(m.operatorSecretApps)
   return [
     ...Object.entries(m.registry.apps).map(([name, a]) => ({ ...a, name, managedInNix: false })),
     ...Object.entries(m.nixManaged).map(([name, a]) => ({ ...a, name, managedInNix: true })),
-  ].sort((a, b) => a.name.localeCompare(b.name))
+  ]
+    .map((e) => ({ ...e, operatorSecrets: hasSecrets.has(e.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }

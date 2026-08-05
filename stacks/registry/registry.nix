@@ -113,8 +113,8 @@ in
 
   fleet.logStacks.registry = [ "zot" ];
 
-  # Pocket ID client — id `zot`, secret SSO_SECRET_ZOT in
-  # stacks/pocket-id/clients.sops. Not group-restricted: anonymous pull
+  # Pocket ID client — id `zot`, secret generated on the box. Not
+  # group-restricted: anonymous pull
   # is the point, and the browser UI is the only thing OIDC covers.
   # PKCE off — zot's generic oidc provider sends no verifier.
   fleet.ssoClients.zot = {

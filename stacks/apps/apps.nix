@@ -79,8 +79,8 @@
 # Either way the client itself is declared, not clicked: the entry
 # materializes `fleet.ssoClients.<name>` (stacks/pocket-id/clients.nix),
 # whose oneshot creates/updates it at the IdP with the id and secret
-# this repo chose. Adding SSO to an app is one option plus one key in
-# stacks/pocket-id/clients.sops.
+# this box chose. Adding SSO to an app is this one option: the secret is
+# generated the first time the client is declared.
 #
 # Convention enforced #2: an app that needs a disk writes it to
 # /app/data. Same reasoning as the port — we build the images, so we
@@ -336,10 +336,10 @@ let
 
       # The Pocket ID client.
       #
-      # Native mode declares the whole thing — id `<name>`, secret from
-      # SSO_SECRET_<NAME> in stacks/pocket-id/clients.sops. The oneshot in
-      # stacks/pocket-id/clients.nix converges it at the IdP and hands the
-      # container its OIDC_CLIENT_SECRET env file.
+      # Native mode declares the whole thing — id `<name>`, and a secret
+      # generated on first declaration. stacks/pocket-id/clients.nix mints it,
+      # converges the client at the IdP and hands the container its
+      # OIDC_CLIENT_SECRET env file.
       #
       # Proxy mode declares only the copy: the client itself is derived from
       # the webApp's `auth = "oidc"` like every other forward-auth'd app,

@@ -1,12 +1,36 @@
 # Declarative Pocket ID OIDC clients — `fleet.ssoClients.<name>`.
 #
-# Both halves of a client credential originate in this repo: the client
-# ID is a plain nix string (the attr name), and the secret is one key in
-# `clients.sops`. Pocket ID >= 2.12.0 accepts a caller-supplied `id` on
-# `POST /api/oidc/clients` and a caller-supplied `secret` on
-# `POST /api/oidc/clients/{id}/secret`, so nothing has to be minted by
-# the server and pasted back. A fresh `pocket_id` database re-converges
-# on the next boot instead of needing every client recreated by hand.
+# Both halves of a client credential originate on this box: the client ID
+# is a plain nix string (the attr name), and the secret is generated here
+# the first time a client is declared. Pocket ID >= 2.12.0 accepts a
+# caller-supplied `id` on `POST /api/oidc/clients` and a caller-supplied
+# `secret` on `POST /api/oidc/clients/{id}/secret`, so nothing has to be
+# minted by the server and pasted back. A fresh `pocket_id` database
+# re-converges on the next boot instead of needing every client recreated
+# by hand.
+#
+# ── the secret is machine-generated, not operator state ────────────────
+#
+# `sso-client-secrets.service` ensures one 64-hex key per declared client
+# in a dotenv file under this stack's state dir, and generates the ones
+# that are missing. Same class as the app-db cluster password and each
+# app's AUTH_SECRET: born on the box, never in git, rotated by deleting
+# the key and rebuilding.
+#
+# It used to be operator state — a key per client in a tracked
+# `clients.sops`, hand-authored with `sops`. That made declaring a client
+# a two-step act, and since the render below is ONE unit for every
+# client, forgetting the second step failed the login path for all of
+# them at activation. The defences that grew around that (an eval-time
+# assertion reading the ciphertext for key presence, then a whole
+# privileged agent so daedalus could write the file on request) were
+# elaborate answers to a question that did not need asking: nothing about
+# a random 32-byte string wants a human in the loop.
+#
+# Losing the file costs nothing but a rotation. The sync PUTs our secret
+# to the IdP on every boot, so a regenerated one converges there, and
+# every consumer reads the same file through the renders below. That is
+# what makes generating it safe where an app's data would not be.
 #
 # Two consumer shapes, both fed from the same secret:
 #
@@ -42,9 +66,10 @@
 # a cold boot where a gated app's middleware has creds for a client the
 # IdP doesn't know yet (fresh DB only — clients persist).
 #
-# Rotating a secret: `sops clients.sops`, rebuild. The oneshot pushes
-# the new value to the IdP and the renders hand the same value to the
-# consumers, so both sides move together.
+# Rotating a secret: delete its line from the state file and rebuild. The
+# generator mints a new one, the sync pushes it to the IdP and the renders
+# hand the same value to the consumers, so all three move together —
+# though a consumer holding the old secret in memory needs a restart.
 
 {
   config,
@@ -63,7 +88,86 @@ let
   envName = n: lib.toUpper (lib.replaceStrings [ "-" ] [ "_" ] n);
   secretKey = n: "SSO_SECRET_${envName n}";
 
-  secretsFile = config.sops.secrets."sso-client-secrets".path;
+  # Machine-generated, one key per client, gitignored like every other
+  # `secrets/` path on the box. Not in /run: it has to survive a reboot,
+  # or every client would rotate on every boot.
+  secretsFile = "${stateDir}/client-secrets.env";
+  stateDir = "/home/santiago/selfhost/pocket-id/secrets";
+
+  secretsUnit = "sso-client-secrets.service";
+
+  # One unit for every client, and its ExecStart embeds the key list — so
+  # declaring a client changes the unit and systemd re-runs it on the
+  # rebuild that declares it, which is what makes "add a client and it
+  # works" true without a second step.
+  #
+  # Existing keys are never touched. That is the whole contract: this is
+  # ensure-exists, not converge, because rewriting a live secret would
+  # log every user of that client out at an unpredictable moment.
+  secretsScript = pkgs.writeShellApplication {
+    name = "sso-client-secrets";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+    ];
+    text = ''
+      set -euo pipefail
+
+      FILE=${lib.escapeShellArg secretsFile}
+      LEGACY=${config.sops.secrets."sso-client-secrets".path}
+
+      # state-paths.service pre-creates this, but not in the window
+      # between a fresh clone and its first boot.
+      if [ ! -f "$FILE" ]; then
+        install -d -m 0700 -o santiago -g users ${lib.escapeShellArg stateDir}
+        install -m 0600 -o santiago -g users /dev/null "$FILE"
+      fi
+
+      for key in ${lib.concatStringsSep " " (map secretKey (lib.attrNames cfg))}; do
+        # A key with an EMPTY value counts as missing. That was the one
+        # hole the old eval-time assertion could not see (sops encrypts
+        # dotenv values, so nix could check the key and not the value),
+        # and it surfaced as a client the IdP accepted with a blank
+        # secret. Here the value is readable, so it is just checked.
+        if grep -q "^$key=." "$FILE"; then
+          continue
+        fi
+
+        # ── one-time migration ─────────────────────────────────────────
+        # Adopt the value from the tracked clients.sops these secrets
+        # used to live in, when there is one, so switching to generated
+        # secrets rotates NOTHING. Without this, one rebuild would
+        # invalidate every client at once and log out every SSO app until
+        # each consumer restarted — a fleet-wide outage as the cost of a
+        # refactor. Drops out with $LEGACY once every key is adopted.
+        VALUE=""
+        if [ -f "$LEGACY" ]; then
+          VALUE=$(grep -m1 "^$key=" "$LEGACY" | cut -d= -f2- || true)
+        fi
+
+        if [ -n "$VALUE" ]; then
+          echo "adopted $key from clients.sops"
+        else
+          VALUE=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          echo "generated $key"
+        fi
+
+        # Rename rather than write in place: this file is read by the
+        # renders and by the sync, and a reader must never see it
+        # half-written even though both are ordered after this unit.
+        grep -v "^$key=" "$FILE" > "$FILE.next" || true
+        printf '%s=%s\n' "$key" "$VALUE" >> "$FILE.next"
+        chmod 0600 "$FILE.next"
+        chown santiago:users "$FILE.next"
+        mv -f "$FILE.next" "$FILE"
+      done
+
+      # Keys for clients no longer declared are LEFT ALONE. Nothing reads
+      # them, and keeping one means an app deleted and re-created under
+      # the same name comes back with the same credential instead of a
+      # silent rotation.
+    '';
+  };
 
   # NOT /run/<container-name>: systemd wipes a RuntimeDirectory named
   # after a unit when that unit stops, which silently empties the
@@ -132,8 +236,9 @@ in
     default = { };
     description = ''
       Pocket ID OIDC clients, converged by `pocket-id-clients.service`.
-      The attr name IS the OIDC client_id; the secret is
-      `SSO_SECRET_<NAME>` in stacks/pocket-id/clients.sops.
+      The attr name IS the OIDC client_id; the secret is generated on
+      first declaration by `sso-client-secrets.service` and needs no
+      operator step.
     '';
     type = lib.types.attrsOf (
       lib.types.submodule (
@@ -312,8 +417,30 @@ in
     }
 
     {
-      # One dotenv file, one key per client. Ciphertext, tracked in git.
+      # Kept only as the migration source for `sso-client-secrets.service`
+      # — see the one-time migration note there. Nothing reads it once
+      # every declared client has a key in the state file.
       sops.secrets."sso-client-secrets" = mkDotenvSecret ./clients.sops;
+
+      fleet.statePaths = {
+        ${stateDir}.mode = "0700";
+        ${secretsFile} = {
+          type = "f";
+          mode = "0600";
+        };
+      };
+
+      systemd.services.sso-client-secrets = lib.mkIf (cfg != { }) {
+        description = "Generate the Pocket ID client secret for every fleet.ssoClients entry";
+        # /home is ZFS, and the renders that read this file are ordered
+        # after it rather than the other way round.
+        after = [ "local-fs.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${secretsScript}/bin/sso-client-secrets";
+        };
+      };
 
       assertions = lib.mapAttrsToList (n: c: {
         assertion = c.traefikForwardAuth -> (config.fleet.webApps.${n}.auth or "none") == "oidc";
@@ -326,8 +453,14 @@ in
 
       systemd.services.pocket-id-clients = lib.mkIf (cfg != { }) {
         description = "Converge Pocket ID OIDC clients from fleet.ssoClients";
-        after = [ "podman-pocket-id.service" ];
-        wants = [ "podman-pocket-id.service" ];
+        after = [
+          "podman-pocket-id.service"
+          secretsUnit
+        ];
+        wants = [
+          "podman-pocket-id.service"
+          secretsUnit
+        ];
         wantedBy = [ "multi-user.target" ];
         serviceConfig = {
           Type = "oneshot";
@@ -352,6 +485,10 @@ in
         gates = [ "podman-traefik.service" ];
         dir = renderDir;
         file = traefikEnvFile;
+        # Unlike a /run/secrets path, this one is written by a unit rather
+        # than by activation, so the ordering has to be said out loud.
+        after = [ secretsUnit ];
+        wants = [ secretsUnit ];
         prep = lib.concatMapStrings extractSecret (lib.attrNames forwardAuthClients);
         content = lib.concatStringsSep "\n" (
           lib.concatMap (n: [
@@ -372,6 +509,8 @@ in
           gates = map (unit: "podman-${unit}.service") c.consumers;
           dir = renderDir;
           file = clientEnvFile n;
+          after = [ secretsUnit ];
+          wants = [ secretsUnit ];
           prep = extractSecret n;
           content = lib.concatStringsSep "\n" (
             lib.optional (c.consumerEnv.id != null) "${c.consumerEnv.id}=${n}"
@@ -379,42 +518,6 @@ in
           );
         })
       ) (lib.filterAttrs (_: c: c.consumers != [ ]) cfg);
-    }
-
-    # Every declared client must already have its secret in clients.sops,
-    # checked HERE, at eval time.
-    #
-    # This is possible because sops encrypts dotenv VALUES and leaves the
-    # KEYS in plaintext, so the file can be read for key presence without
-    # any decryption — and it is worth doing because of how badly the
-    # alternative fails. The render below is one oneshot for all clients:
-    # `extractSecret` exits 1 on the first key it cannot find, so a single
-    # missing secret fails the whole unit and leaves EVERY client's creds
-    # file — including traefik's forward-auth env — unwritten or stale.
-    # One app declared carelessly would take the gate off, or the login
-    # path out from under, all of them.
-    #
-    # That failure lands at activation, where `nixos-rebuild build` cannot
-    # see it and daedalus's apply agent has already committed. Asserting at
-    # eval turns it into a build error: the Apply fails, the switch never
-    # runs, and the fleet's SSO keeps working. It is also what makes
-    # `auth.mode` safe to expose as a control in daedalus rather than
-    # something only editable by hand here.
-    {
-      assertions = map (n: {
-        assertion = builtins.match ".*(^|\n)${secretKey n}=.*" (builtins.readFile ./clients.sops) != null;
-        message = ''
-          fleet.ssoClients.${n} has no ${secretKey n} in stacks/pocket-id/clients.sops.
-
-          Add it before declaring the client:
-            sops stacks/pocket-id/clients.sops     # ${secretKey n}=<random hex>
-            git -C /etc/nixos add stacks/pocket-id/clients.sops
-
-          Without it the sso-clients render exits 1 at activation, which is
-          one unit for every client — so this would break the login path for
-          all of them, not just ${n}.
-        '';
-      }) (lib.attrNames cfg);
     }
 
     # The env file lands on the consumer container from HERE rather than

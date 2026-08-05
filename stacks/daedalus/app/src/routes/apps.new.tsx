@@ -360,12 +360,12 @@ function Wizard({ options }: { options: Options }) {
                   hint="Only once the app actually serves /metrics — otherwise it is a permanently-down target."
                 />
                 <p className="panel-note">
-                  Not here, on purpose: <b>SSO</b> needs an <code>SSO_SECRET_&lt;NAME&gt;</code> in{' '}
-                  <code>stacks/pocket-id/clients.sops</code>, <b>operator secrets</b> need a{' '}
-                  <code>{name}-env.sops</code> authored by hand, and <b>VPN egress</b> needs a
-                  gluetun instance to exist first. All three are encrypted or declarative state
-                  that this app cannot write — add them in the flake, then flip them on the app’s
-                  page.
+                  Not here, on purpose. <b>SSO</b> is a second, deliberate step on the app’s own
+                  page — its client secret is generated on the box, so there is nothing to author
+                  first. <b>Operator secrets</b> have no switch at all: commit a{' '}
+                  <code>{name || '<name>'}-env.sops</code> to <code>stacks/apps/</code> and the next
+                  rebuild loads it. <b>VPN egress</b> is the one thing that still needs the flake —
+                  it wants a gluetun instance to exist before anything can join its netns.
                 </p>
               </Panel>
 

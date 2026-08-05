@@ -55,8 +55,8 @@ in
   # by app-db-n8n-bootstrap.service (see stacks/app-db/).
   fleet.appDatabases.n8n.consumers = [ "n8n" ];
 
-  # Pocket ID client — id `n8n`, secret SSO_SECRET_N8N in
-  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # Pocket ID client — id `n8n`, secret generated on the box,
+  # rendered into the container as the
   # OIDC_CLIENT_* pair the hook reads. PKCE stays off: the hook's
   # authorization request carries no code_challenge.
   fleet.ssoClients.n8n = {

@@ -2,8 +2,9 @@
 #
 # Sourced by the wrapper in ../clients.nix, which sets: MANIFEST (store
 # JSON, non-secret desired state), IDP_ENV (/run/secrets/pocket-id-env,
-# holds STATIC_API_KEY), SECRETS (/run/secrets/sso-client-secrets, holds
-# SSO_SECRET_<NAME> per client).
+# holds STATIC_API_KEY), SECRETS (the machine-generated
+# client-secrets.env, holds SSO_SECRET_<NAME> per client — written by
+# sso-client-secrets.service, which this unit is ordered after).
 #
 # Every request runs INSIDE the pocket-id container against
 # http://localhost:1411 — the IdP publishes no host port, and going in
@@ -83,7 +84,7 @@ jq -c '.[]' "$MANIFEST" | while read -r client; do
   # The secret is OURS (Pocket ID >= 2.12.0 accepts a caller-supplied
   # value), so re-setting the same string every boot is a no-op that
   # also repairs a hand-edited or half-restored client. Consumers read
-  # the identical value out of the same sops file.
+  # the identical value out of the same file, via the renders.
   secret_key=$(printf '%s' "$client" | jq -r '.secretKey')
   secret=$(grep "^$secret_key=" "$SECRETS" | head -1 | cut -d= -f2-)
   [ -n "$secret" ] || { echo "$key: $secret_key missing from $SECRETS" >&2; exit 1; }

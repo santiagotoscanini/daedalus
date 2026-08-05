@@ -134,36 +134,6 @@ let
     '';
   };
 
-  # Writes the one piece of encrypted state an app's own settings depend on:
-  # its Pocket ID client secret. See host/sso-secret.sh for why this needs the
-  # host key and why it commits its own file.
-  ssoSecretScript = pkgs.writeShellApplication {
-    name = "daedalus-sso-secret";
-    runtimeInputs = [
-      pkgs.jq
-      pkgs.sops
-      pkgs.ssh-to-age
-      pkgs.git
-      pkgs.util-linux # setpriv, flock
-      pkgs.coreutils
-      pkgs.gnugrep
-      pkgs.findutils
-    ];
-    text = ''
-      APPLY_DIR=${lib.escapeShellArg applyDir}
-      FLAKE=/etc/nixos
-      CLIENTS=/etc/nixos/stacks/pocket-id/clients.sops
-      # The committed registry IS the applied state — what the running system
-      # was built from. A revoke is refused against this, not against the
-      # database, which may be ahead of it.
-      REGISTRY=/etc/nixos/stacks/apps/apps.json
-      LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
-      GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
-
-      ${builtins.readFile ./host/sso-secret.sh}
-    '';
-  };
-
   # Where the merged per-container environment is published. /run, so these
   # secrets live on tmpfs and never enter a ZFS snapshot or the syncoid mirror.
   envDir = "/run/daedalus-env";
@@ -246,11 +216,18 @@ let
   # host ports, already restated in the stack that owns each one.
   webAppHosts = lib.mapAttrs (_: w: w.hostname) config.fleet.webApps;
 
+  # Apps with a tracked stacks/apps/<name>-env.sops. A FACT, read from the same
+  # directory listing declarations.nix reads, not a setting: this is the only
+  # thing that decides whether an app gets operator secrets, so the page shows
+  # it and offers no switch. The registry (apps.json) carries settings; the
+  # manifest carries what Nix knows — and this belongs on that side.
+  operatorSecretApps = lib.attrNames (import ../apps/operator-secrets-lib.nix { inherit lib; });
+
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
     builtins.toJSON {
       schemaVersion = 1;
       nixManaged.daedalus = self;
-      inherit takenHostnames webAppHosts;
+      inherit takenHostnames webAppHosts operatorSecretApps;
     }
   );
 
@@ -292,7 +269,6 @@ let
     storage = false;
     litellm = true;
     prometheus = false;
-    operatorSecrets = false;
     hostname = null; # = daedalus.<baseDomain>
     image = null;
     egress = null;
@@ -598,28 +574,6 @@ in
   # Not monitoredJobs, unlike its two siblings: both verbs are synchronous
   # requests from somebody looking at the page, and the failure is reported
   # there with GitHub's own message. An email would arrive second, with less.
-
-  # Provision/revoke an app's Pocket ID client secret. Root: it decrypts with
-  # the host key and commits to the flake, neither of which the container can
-  # do — same file-drop bridge, fourth verb.
-  systemd.services.daedalus-sso-secret = {
-    description = "Provision or revoke an app's Pocket ID client secret";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${ssoSecretScript}/bin/daedalus-sso-secret";
-      # sops round trip plus a git commit; the only slow part is waiting on the
-      # rebuild lock, which the script bounds itself.
-      TimeoutStartSec = "10min";
-    };
-  };
-
-  systemd.paths.daedalus-sso-secret = {
-    description = "Watch for a daedalus SSO secret request";
-    wantedBy = [ "multi-user.target" ];
-    pathConfig.PathChanged = "${applyDir}/sso-request.json";
-  };
 
   # A failed apply means the box may have been rolled back without anyone
   # watching the UI. Mail it.

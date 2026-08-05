@@ -223,8 +223,6 @@ So they are the last piece of the restore-from-scratch hole: a fresh
 these two need a human in two admin UIs.
 
 Plan when picked up (per app, ~5 minutes each, needs a browser):
-- Add `SSO_SECRET_IMMICH` / `SSO_SECRET_NEXTCLOUD` to
-  `stacks/pocket-id/clients.sops`.
 - Declare `fleet.ssoClients.{immich,nextcloud}` with the callbacks the
   live clients already carry — immich needs all three
   (`app.immich:///oauth-callback` for mobile, plus `/auth/login` and
@@ -232,8 +230,10 @@ Plan when picked up (per app, ~5 minutes each, needs a browser):
   `/index.php/apps/user_oidc/code` shapes — `allowedGroups =
   [ "admins" "family" ]`, and `pkce = false` for nextcloud. No
   `consumers`: nothing on this side reads the creds.
-- Then paste the new id + secret into each app's own settings, and
-  delete the old UUID client at the IdP.
+- Then paste the new id + secret into each app's own settings (read the
+  generated secret out of
+  `pocket-id/secrets/client-secrets.env`), and delete the old UUID
+  client at the IdP.
 - Immich's mobile app has to be re-logged-in afterwards; Nextcloud's
   desktop/mobile sync clients keep working (they hold app passwords,
   not OIDC sessions).

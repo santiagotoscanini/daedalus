@@ -139,8 +139,8 @@ in
 
   sops.secrets."gatus-env" = mkDotenvSecret ./env.sops;
 
-  # Pocket ID client — id `gatus`, secret SSO_SECRET_GATUS in
-  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # Pocket ID client — id `gatus`, secret generated on the box,
+  # rendered into the container as the
   # GATUS_OIDC_* pair that config.yaml interpolates. PKCE stays off:
   # gatus's built-in OIDC client doesn't send a code verifier.
   fleet.ssoClients.gatus = {

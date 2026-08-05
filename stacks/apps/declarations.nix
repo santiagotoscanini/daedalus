@@ -52,10 +52,12 @@
 # writes it can make are a repo secret whose value this box owns, and a
 # workflow dispatch.
 #
-# Auth, operator secrets and VPN egress are NOT part of creating an app. Each
-# needs state authored in this repo first — `SSO_SECRET_<NAME>` in
-# stacks/pocket-id/clients.sops, a tracked <name>-env.sops, or a gluetun
-# instance — after which the flag is editable like any other.
+# Auth is editable from the app's page and needs nothing here: its Pocket ID
+# client secret is machine-generated on the box, like every app-db password (see
+# stacks/pocket-id/clients.nix). Operator secrets have no flag at all — a
+# tracked <name>-env.sops IS the switch (./operator-secrets-lib.nix). VPN egress
+# is the one thing still authored here, because it needs a gluetun instance to
+# exist before an app can join its netns.
 #
 # From then on, every push to main goes live on its own: `app-<name>-deploy.timer`
 # polls the registry every 2 minutes, and when the digest moves it pulls,
@@ -76,15 +78,15 @@ let
 
   inherit (registry) apps;
 
-  # Operator-managed secrets are a per-app sops file at this stack's root,
-  # `<name>-env.sops` (tracked, edited with `sops <file>`). The registry
-  # carries only the boolean — the path is derived, so the two can never
-  # disagree and a future Apply that enables secrets for an app has exactly
-  # one filename to write.
-  sopsFileFor = name: ./. + "/${name}-env.sops";
   secretName = name: "app-${name}-env";
 
-  withSecrets = lib.filterAttrs (_: a: a.operatorSecrets) apps;
+  # Operator-managed secrets: a tracked `<name>-env.sops` at this stack's root
+  # IS the switch — see ./operator-secrets-lib.nix for why it is derived from
+  # the directory rather than declared in the registry. Intersected with the
+  # declared apps, so a leftover file for a deleted app is inert.
+  operatorSecretFiles = lib.filterAttrs (name: _: apps ? ${name}) (
+    import ./operator-secrets-lib.nix { inherit lib; }
+  );
 
   # JSON → the `fleet.apps.<name>` submodule. Every field is emitted
   # unconditionally where the option's default matches the exported value, so
@@ -136,7 +138,9 @@ let
       # database. daedalus renders them next to the value; nix only needs the pair.
       env = lib.listToAttrs (map (e: lib.nameValuePair e.key e.value) a.env);
 
-      environmentFiles = lib.optional a.operatorSecrets config.sops.secrets.${secretName name}.path;
+      environmentFiles = lib.optional (
+        operatorSecretFiles ? ${name}
+      ) config.sops.secrets.${secretName name}.path;
     }
     // lib.optionalAttrs (a.hostname or null != null) {
       inherit (a) hostname;
@@ -151,13 +155,13 @@ let
     };
 in
 {
-  # One sops secret per app that declares operator-managed values. Same
+  # One sops secret per app that HAS an operator-secrets file. Same
   # mkDotenvSecret shape as every other stack; the app's own machine-generated
   # secrets/<name>/env (AUTH_SECRET) is separate and never carries operator
   # values.
   sops.secrets = lib.mapAttrs' (
-    name: _: lib.nameValuePair (secretName name) (mkDotenvSecret (sopsFileFor name))
-  ) withSecrets;
+    name: file: lib.nameValuePair (secretName name) (mkDotenvSecret file)
+  ) operatorSecretFiles;
 
   fleet.apps = lib.mapAttrs mkApp apps;
 

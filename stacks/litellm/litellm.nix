@@ -74,8 +74,8 @@
   # (see stacks/app-db/).
   fleet.appDatabases.litellm.consumers = [ "litellm" ];
 
-  # Pocket ID client — id `litellm`, secret SSO_SECRET_LITELLM in
-  # stacks/pocket-id/clients.sops, rendered into the container as the
+  # Pocket ID client — id `litellm`, secret generated on the box,
+  # rendered into the container as the
   # GENERIC_* pair. PKCE stays off: litellm's GENERIC SSO sends no
   # code_challenge, which is also what makes AUTO_REDIRECT safe.
   fleet.ssoClients.litellm = {
