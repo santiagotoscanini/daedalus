@@ -5015,6 +5015,11 @@ h2 {
   padding-bottom: 0.55rem;
   border-bottom: 1px solid var(--border);
 }
+/* With nothing on the left — the inbound switch carries its own labels — a
+   space-between row would park the lone child at the start. */
+.tunnel-bar > :last-child {
+  margin-left: auto;
+}
 .tunnel-id {
   display: inline-flex;
   align-items: baseline;
@@ -5032,20 +5037,9 @@ h2 {
   color: var(--dim);
 }
 
-/* Which ways in are working, all at once — the point of putting three
-   unrelated routes on one tab. Reads as a status line, not as navigation:
-   the switch beside it is what navigates. */
-.routes {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.9rem;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.routes-one {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.78rem;
-  color: var(--muted);
+/* A health dot inside a segmented button. Slightly tighter than the gap the
+   button already sets, so the dot reads as part of the label rather than as a
+   separate item beside it. */
+.segmented button .pulse {
+  margin-right: -0.08rem;
 }
