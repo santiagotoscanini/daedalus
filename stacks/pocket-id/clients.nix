@@ -25,12 +25,17 @@
 # assertion reading the ciphertext for key presence, then a whole
 # privileged agent so daedalus could write the file on request) were
 # elaborate answers to a question that did not need asking: nothing about
-# a random 32-byte string wants a human in the loop.
+# a random 32-byte string wants a human in the loop. The file's last job
+# was seeding this one, and it is gone from the tree — `git log --
+# stacks/pocket-id/clients.sops` still has it, if a value is ever needed
+# from before the switch.
 #
-# Losing the file costs nothing but a rotation. The sync PUTs our secret
-# to the IdP on every boot, so a regenerated one converges there, and
-# every consumer reads the same file through the renders below. That is
-# what makes generating it safe where an app's data would not be.
+# Losing the state file costs nothing but a rotation. The sync PUTs our
+# secret to the IdP on every boot, so a regenerated one converges there,
+# and every consumer reads the same file through the renders below. That
+# is what makes generating it safe where an app's data would not be. The
+# one manual step after a rotation is bouncing traefik, which holds the
+# forward-auth secret in memory.
 #
 # Two consumer shapes, both fed from the same secret:
 #
@@ -75,7 +80,6 @@
   config,
   lib,
   pkgs,
-  mkDotenvSecret,
   mkSecretRender,
   ...
 }:
@@ -114,7 +118,6 @@ let
       set -euo pipefail
 
       FILE=${lib.escapeShellArg secretsFile}
-      LEGACY=${config.sops.secrets."sso-client-secrets".path}
 
       # state-paths.service pre-creates this, but not in the window
       # between a fresh clone and its first boot.
@@ -133,24 +136,7 @@ let
           continue
         fi
 
-        # ── one-time migration ─────────────────────────────────────────
-        # Adopt the value from the tracked clients.sops these secrets
-        # used to live in, when there is one, so switching to generated
-        # secrets rotates NOTHING. Without this, one rebuild would
-        # invalidate every client at once and log out every SSO app until
-        # each consumer restarted — a fleet-wide outage as the cost of a
-        # refactor. Drops out with $LEGACY once every key is adopted.
-        VALUE=""
-        if [ -f "$LEGACY" ]; then
-          VALUE=$(grep -m1 "^$key=" "$LEGACY" | cut -d= -f2- || true)
-        fi
-
-        if [ -n "$VALUE" ]; then
-          echo "adopted $key from clients.sops"
-        else
-          VALUE=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
-          echo "generated $key"
-        fi
+        VALUE=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
 
         # Rename rather than write in place: this file is read by the
         # renders and by the sync, and a reader must never see it
@@ -160,6 +146,7 @@ let
         chmod 0600 "$FILE.next"
         chown santiago:users "$FILE.next"
         mv -f "$FILE.next" "$FILE"
+        echo "generated $key"
       done
 
       # Keys for clients no longer declared are LEFT ALONE. Nothing reads
@@ -417,11 +404,6 @@ in
     }
 
     {
-      # Kept only as the migration source for `sso-client-secrets.service`
-      # — see the one-time migration note there. Nothing reads it once
-      # every declared client has a key in the state file.
-      sops.secrets."sso-client-secrets" = mkDotenvSecret ./clients.sops;
-
       fleet.statePaths = {
         ${stateDir}.mode = "0700";
         ${secretsFile} = {
