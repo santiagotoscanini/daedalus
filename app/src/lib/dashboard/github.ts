@@ -24,6 +24,8 @@
 // not a cache, because every other number on this dashboard has to be live.
 // Release history is the one upstream where staleness is free.
 
+import { key } from './format'
+
 /**
  * How long a repo's release list is reused.
  *
@@ -103,6 +105,28 @@ type GhRelease = {
   prerelease?: boolean
 }
 
+/**
+ * Authenticated when a token is present, which is only about the rate limit.
+ *
+ * Everything read here is PUBLIC — four projects' release notes — so the token
+ * buys no access, just headroom: 60 requests an hour per IP unauthenticated
+ * against 5000 authenticated. It is the GHCR pull credential, re-shaped into
+ * this env var by a boot oneshot (see stacks/daedalus/daedalus.nix), so there
+ * is no second secret to rotate.
+ *
+ * Absent is a supported state, not a misconfiguration: without it this falls
+ * back to the unauthenticated budget, which normal use spends about a quarter
+ * of. So the token expiring costs nothing here — it is caught by the deploys
+ * that actually need it.
+ */
+function auth(): Record<string, string> {
+  const token = key('GITHUB_TOKEN')
+  return {
+    Accept: 'application/vnd.github+json',
+    ...(token === '' ? {} : { Authorization: `Bearer ${token}` }),
+  }
+}
+
 type Cached = {
   /** When the last SUCCESSFUL fetch landed. */
   at: number
@@ -139,7 +163,7 @@ async function releases(repo: string): Promise<GhRelease[] | null> {
 
   try {
     const res = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=60`, {
-      headers: { Accept: 'application/vnd.github+json' },
+      headers: auth(),
       signal: AbortSignal.timeout(6_000),
     })
     if (res.ok) {
