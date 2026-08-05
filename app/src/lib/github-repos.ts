@@ -39,20 +39,28 @@ async function cached<T>(k: string, load: () => Promise<T>): Promise<T> {
 }
 
 /**
- * The read-only PAT, when one is configured.
+ * The credential these reads authenticate with.
  *
- * `DASH_GITHUB_REPO_TOKEN` is its own key in service-keys.sops rather than a
- * reuse of `DASH_GITHUB_TOKEN`: that one is scraped out of the GHCR authfile
- * and carries `read:packages` only, which cannot list private repositories.
- * Both are read-only and neither can write anything.
+ * `GITHUB_REPO_TOKEN` first, when service-keys.sops defines one — that key
+ * exists so this can be narrowed to a read-only PAT independently of the
+ * credential below.
  *
- * Absent is a supported state: the listing falls back to the account's PUBLIC
- * repos and every check that needs authentication reports `unknown` rather
- * than failing. The UI says which of the two it is — an empty list because a
- * token is missing must not read as "you have no repos".
+ * Otherwise `GITHUB_TOKEN`, which is the GHCR pull credential re-shaped by a
+ * boot oneshot (stacks/daedalus/daedalus.nix) and already present for the
+ * release-notes panels. It is a classic PAT carrying `repo`, so it can list
+ * private repositories, read `.github/workflows` inside them and read their
+ * Actions secret names — everything the create flow needs. Worth knowing what
+ * that means: `repo` is read-WRITE on every repository on the account, and
+ * this module only ever issues GETs. Narrowing it is what the first key is
+ * for.
+ *
+ * Neither present is a supported state: the listing falls back to the
+ * account's PUBLIC repos and the checks that need authentication report
+ * `unknown` rather than failing. The UI says which it is — an empty list
+ * because a token is missing must not read as "you have no repos".
  */
 function token(): string | null {
-  return key('GITHUB_REPO_TOKEN') || null
+  return key('GITHUB_REPO_TOKEN') || key('GITHUB_TOKEN') || null
 }
 
 function headers(): Record<string, string> {
@@ -263,18 +271,26 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
     // Grepping the YAML rather than parsing it: the question is "does this repo
     // push to zot at all", which a substring answers, and a YAML parser here
     // would be a dependency plus a schema to keep in step with GitHub's.
-    const pushesImage = allYaml.includes('registry.toscanini.me')
+    //
+    // `zot:5000` is what the app repos actually write, and it is the string
+    // that matters: the runner and zot share the registry-net bridge, so the
+    // push resolves the container by name and never leaves the box. The public
+    // hostname is matched too, for a workflow that pushes from somewhere with
+    // no bridge — but a repo that only mentions `registry.toscanini.me` in a
+    // comment is exactly the false positive worth accepting over missing the
+    // in-cluster form, which is the one every current app uses.
+    const pushesImage = /zot:5000|registry\.toscanini\.me/.test(allYaml)
     checks.push({
       id: 'image-workflow',
-      label: 'Publishes to registry.toscanini.me',
+      label: 'Publishes an image to the box’s registry',
       state: allYaml === '' ? 'unknown' : pushesImage ? 'ok' : 'bad',
       detail:
         allYaml === '' ? 'no workflow contents could be read'
-        : pushesImage ? 'a workflow pushes to the box’s registry'
-        : 'no workflow mentions the registry — nothing would ever be deployed',
+        : pushesImage ? 'a workflow pushes to zot'
+        : 'no workflow pushes to zot:5000 — nothing would ever be deployed',
       fix:
         pushesImage ? undefined : (
-          'Add the image workflow that builds and pushes registry.toscanini.me/<name>:latest.'
+          'Add the release workflow that builds and pushes zot:5000/<name>:latest (copy it from an existing app).'
         ),
     })
 

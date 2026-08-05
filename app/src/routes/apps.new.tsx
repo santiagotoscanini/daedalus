@@ -76,7 +76,6 @@ function Wizard({ options }: { options: Options }) {
 
   const [preflight, setPreflight] = useState<Preflight | null>(null)
   const [checking, setChecking] = useState(false)
-  const [runnerAck, setRunnerAck] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -168,11 +167,12 @@ function Wizard({ options }: { options: Options }) {
         )}
         {options.error === null && !options.authenticated && (
           <p className="banner banner-muted">
-            No GitHub token configured, so this lists <b>public</b> repositories only. Add{' '}
-            <code>GITHUB_REPO_TOKEN</code> to <code>stacks/daedalus/service-keys.sops</code> — a
-            read-only fine-grained PAT with <code>Contents: read</code> (plus{' '}
-            <code>Secrets: read</code> if you want the REGISTRY_PASSWORD check answered) — to see
-            private ones.
+            No GitHub token in the container’s environment, so this lists <b>public</b>
+            repositories only and the checks below that need authentication will say so. The
+            fleet’s GitHub credential is rendered by{' '}
+            <code>daedalus-dashboard-keys.service</code>; a{' '}
+            <code>GITHUB_REPO_TOKEN</code> in <code>stacks/daedalus/service-keys.sops</code>
+            overrides it.
           </p>
         )}
 
@@ -378,32 +378,13 @@ function Wizard({ options }: { options: Options }) {
                 <CheckRow
                   check={{
                     id: 'runner-pat',
-                    label: 'Repo covered by the runner PAT',
-                    state: runnerAck ? 'ok' : 'unknown',
+                    label: 'CI runner credential',
+                    state: 'ok',
                     detail:
-                      'The PAT in stacks/gha-runner/env.sops grants Administration on selected repositories, and it never enters a container — so daedalus cannot check this one.',
-                    fix: 'Add this repo at github.com/settings/personal-access-tokens. Without it the runner unit fails its ExecStartPre on every start and mails an alert.',
+                      'The PAT in stacks/gha-runner/env.sops covers every repository on the account, so declaring the app is all its runner needs.',
+                    fix: 'If the runner unit ever fails ExecStartPre with a 404, that PAT’s repository access is the thing to check — daedalus cannot see it from here.',
                   }}
                 />
-                <li className="check-ack">
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={runnerAck}
-                      onChange={(e) => {
-                        setRunnerAck(e.target.checked)
-                      }}
-                    />
-                    <span className="track" aria-hidden="true" />
-                    <span className="toggle-text">
-                      I have added this repository to the runner PAT
-                      <small>
-                        Not enforced — it is here so the one unverifiable step is a decision rather
-                        than an omission.
-                      </small>
-                    </span>
-                  </label>
-                </li>
               </ul>
             )}
 
