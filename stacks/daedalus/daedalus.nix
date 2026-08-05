@@ -50,6 +50,39 @@ let
     in
     if m == null then "" else builtins.head m;
 
+  # Same parse, and the same reason: wg-easy serves its version nowhere a
+  # read-only caller can reach it (v2's API is behind a TOTP session), so the
+  # tag it is pinned to IS the running version.
+  wgEasyVersion =
+    let
+      m = builtins.match ".*:([0-9][^@:]*)@sha256:.*" (
+        config.virtualisation.oci-containers.containers.wg-easy.image
+      );
+    in
+    if m == null then "" else builtins.head m;
+
+  # Which containers ride each VPN tunnel, derived rather than declared: a
+  # netns tenant says so in its own `--network=container:<owner>` flag, and
+  # that flag is the thing that actually puts it behind the tunnel. A
+  # hand-kept list beside it could only ever be the same fact, less reliably.
+  netnsTenantsOf =
+    owner:
+    lib.sort (a: b: a < b) (
+      lib.attrNames (
+        lib.filterAttrs (
+          _: c: lib.any (o: o == "--network=container:${owner}") (c.extraOptions or [ ])
+        ) config.virtualisation.oci-containers.containers
+      )
+    );
+
+  # The VPN egress registry, as the dashboard consumes it. Nix knows things
+  # about these tunnels that no API can answer — when the key expires, what
+  # the tunnel is for, where the renewal runbook lives — and this is the one
+  # place those cross the boundary.
+  vpnEgress = lib.mapAttrsToList (_: v: v // { tenants = netnsTenantsOf v.container; }) (
+    config.fleet.vpnEgress
+  );
+
   # Where the container drops an apply request and reads back status. A bind
   # mount, deliberately, rather than an API the host calls: the container has
   # no privilege to lose, and the host agent never has to authenticate to the
@@ -415,6 +448,12 @@ in
       # digest alone, which the AI tab renders as "unknown" rather than as a
       # wrong number.
       N8N_VERSION = n8nVersion;
+      WG_EASY_VERSION = wgEasyVersion;
+      # The VPN tunnels, as JSON. One variable rather than a variable per
+      # tunnel per field, because the whole point is that the set grows: a
+      # third gluetun instance appears on the Network page with no change
+      # here and none in the app.
+      VPN_EGRESS = builtins.toJSON vpnEgress;
     };
   };
 

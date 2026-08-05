@@ -16,12 +16,88 @@ import {
   promBars,
   promScalar,
   promScalars,
+  promPoints,
   promSeries,
   promVector,
 } from '../clients'
-import { key } from '../format'
+import { versionGap, type VersionGap } from '../github'
+import { key, since } from '../format'
 
-export type NetworkData = {
+export type NetworkTab = 'general' | 'wireguard' | 'outbound'
+
+export type NetworkData =
+  | ({ tab: 'general' } & GeneralData)
+  | ({ tab: 'wireguard' } & WireguardData)
+  | ({ tab: 'outbound' } & OutboundData)
+
+/**
+ * One WireGuard peer, as wg-easy's exporter reports it.
+ *
+ * The handshake is the only liveness there is: WireGuard is connectionless,
+ * so a peer is "connected" exactly in the sense that it exchanged a handshake
+ * recently. A phone on the far side of a sleep cycle is not down.
+ */
+type Peer = {
+  name: string
+  ipv4: string | null
+  enabled: boolean
+  /** Null for a peer that has never completed one — see loadPeers. */
+  handshakeAgo: number | null
+  ago: string
+  rx: number
+  tx: number
+}
+
+type WireguardData = {
+  version: string | null
+  gap: VersionGap
+  counts: { configured: number | null; enabled: number | null; connected: number | null }
+  peers: Peer[]
+  /** Peak simultaneous peers per day, oldest first. */
+  daily: { date: string; peers: number }[]
+}
+
+/**
+ * One VPN egress tunnel.
+ *
+ * Assembled from three sources that each know something the others cannot:
+ * nix (what the tunnel is for, when its key dies, where the runbook is),
+ * gluetun's control API (where it currently comes out), and prometheus (how
+ * reliable it has been, and what is riding it right now).
+ */
+type Tunnel = {
+  key: string
+  subject: string
+  container: string
+  exporter: string
+  runbook: string
+  portForwarding: boolean
+  up: boolean | null
+  /** Days until the WireGuard key expires. Negative once it has. */
+  expiryDays: number
+  keyExpiry: string
+  /** Where this tunnel surfaces, from the provider's own view of it. */
+  exit: {
+    ip: string | null
+    country: string | null
+    city: string | null
+    region: string | null
+    org: string | null
+    timezone: string | null
+  }
+  /** The provider-forwarded port, when this instance asks for one. */
+  port: number | null
+  /** Share of the last 7 days the tunnel reported itself up. */
+  uptime7d: number | null
+  /** Same, per day, oldest first — the shape a drop actually has. */
+  daily: { date: string; uptime: number }[]
+  /** Containers sharing this netns, so they lose the network with it. */
+  tenants: { name: string; up: boolean | null }[]
+}
+
+type OutboundData = { tunnels: Tunnel[]; note: string | null }
+
+type GeneralData = {
   wan: {
     ping: number | null
     down: number | null
@@ -77,10 +153,27 @@ export type NetworkData = {
   certs: { soonestDays: number | null; expiring: { name: string; days: number }[] }
 }
 
-export async function loadNetwork(ctx: {
+export async function loadNetwork(
+  tab: string,
+  ctx: { base: (app: string) => string; hc: string },
+): Promise<NetworkData> {
+  switch (tab) {
+    case 'wireguard':
+      return { tab: 'wireguard', ...(await loadWireguard()) }
+    case 'outbound':
+      return { tab: 'outbound', ...(await loadOutbound(ctx)) }
+    default:
+      return { tab: 'general', ...(await loadGeneral(ctx)) }
+  }
+}
+
+/** How far back the two VPN tabs chart. A column per day, same as the AI tabs. */
+const DAYS = 14
+
+async function loadGeneral(ctx: {
   base: (app: string) => string
   hc: string
-}): Promise<NetworkData> {
+}): Promise<GeneralData> {
   const [
     speed,
     speedHistory,
@@ -152,7 +245,7 @@ export async function loadNetwork(ctx: {
     promScalar('sum(rate(cloudflared_tunnel_total_requests[6h])) * 3600'),
   ])
 
-  const expiring = certs
+  const expiring: { name: string; days: number }[] = certs
     .map((c) => ({ name: c.metric.name ?? '?', days: Number(c.value[1]) / 86400 }))
     .filter((c) => Number.isFinite(c.days))
     .sort((a, b) => a.days - b.days)
@@ -214,7 +307,7 @@ type CfTunnel = {
  * pairing (two connections into each of two colos) is the redundancy actually
  * in place, so that gets counted per colo.
  */
-function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null): NetworkData['tunnel'] {
+function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null): GeneralData['tunnel'] {
   const conns = t?.connections ?? []
   const byColo = new Map<string, number>()
   for (const c of conns) {
@@ -239,7 +332,7 @@ function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null
   }
 }
 
-async function loadPihole(base: string): Promise<NetworkData['dns']> {
+async function loadPihole(base: string): Promise<GeneralData['dns']> {
   const sid = await piholeSid(base)
   const h = sid === null ? {} : { headers: { sid } }
 
@@ -276,7 +369,7 @@ async function loadPihole(base: string): Promise<NetworkData['dns']> {
   }
 }
 
-async function loadPeers(): Promise<NetworkData['wireguard']['peers']> {
+async function loadPeers(): Promise<GeneralData['wireguard']['peers']> {
   const [handshake, rx, tx] = await Promise.all([
     promVector('wireguard_latest_handshake_seconds'),
     promVector('wireguard_received_bytes'),
@@ -301,3 +394,194 @@ async function loadPeers(): Promise<NetworkData['wireguard']['peers']> {
     })
     .sort((a, b) => (a.handshakeAgo ?? Infinity) - (b.handshakeAgo ?? Infinity))
 }
+
+// ── WireGuard: the way in ──────────────────────────────────────────────────
+
+/**
+ * wg-easy, read entirely from its Prometheus endpoint.
+ *
+ * Not from its API, and that is a property of the software rather than a
+ * shortcut: wg-easy v2 requires a TOTP code on `/api/session`, so there is no
+ * unattended credential login to be had. The exporter it publishes is
+ * unauthenticated on the same container and carries everything this page
+ * shows — peers, their addresses, their handshakes and their byte counters.
+ *
+ * The version comes from nix for the same reason: nothing a read-only caller
+ * can reach reports it, so the tag the image is pinned to IS the version.
+ */
+async function loadWireguard(): Promise<WireguardData> {
+  const version = process.env.WG_EASY_VERSION || null
+
+  const [counts, peers, peak] = await Promise.all([
+    promScalars({
+      configured: 'wireguard_configured_peers',
+      enabled: 'wireguard_enabled_peers',
+      connected: 'wireguard_connected_peers',
+    }),
+    loadWgPeers(),
+    // Peak, not average: the question a household asks of a personal VPN is
+    // "did anyone use it", and a peer connected for twenty minutes averages
+    // to nearly nothing over a day while being the entire answer.
+    promPoints(`max_over_time(wireguard_connected_peers[1d])`, DAYS * 24 * 60, 86400),
+  ])
+
+  return {
+    version,
+    gap: await versionGap('wg-easy/wg-easy', version),
+    counts,
+    peers,
+    daily: peak.map((p) => ({ date: localDay(p.t * 1000), peers: p.v })),
+  }
+}
+
+/**
+ * Every peer, whether or not it has ever connected.
+ *
+ * Keyed off the byte counters rather than the handshake series, because a
+ * peer that has never completed a handshake has no handshake sample at all —
+ * and a configured-but-never-used peer is exactly the one worth seeing.
+ */
+async function loadWgPeers(): Promise<Peer[]> {
+  const [handshake, rx, tx] = await Promise.all([
+    promVector('wireguard_latest_handshake_seconds'),
+    promVector('wireguard_received_bytes'),
+    promVector('wireguard_sent_bytes'),
+  ])
+
+  const num = (v: VectorLike[], name: string): number =>
+    Number(v.find((r) => r.metric.name === name)?.value[1] ?? 0)
+
+  const shake = new Map(handshake.map((r) => [r.metric.name ?? '?', Number(r.value[1])]))
+
+  return rx
+    .map((r) => {
+      const name = r.metric.name ?? '?'
+      // The exporter reports 0 for "never", which as an age would render as
+      // "just now" — the exact opposite of what it means.
+      const seconds = shake.get(name) ?? 0
+      const ago = seconds > 0 ? Date.now() / 1000 - seconds : null
+      return {
+        name,
+        ipv4: r.metric.ipv4Address ?? null,
+        enabled: r.metric.enabled !== 'false',
+        handshakeAgo: ago,
+        ago: ago === null ? 'never' : since(ago),
+        rx: Number(r.value[1]),
+        tx: num(tx, name),
+      }
+    })
+    .sort((a, b) => (a.handshakeAgo ?? Infinity) - (b.handshakeAgo ?? Infinity))
+}
+
+type VectorLike = { metric: Record<string, string>; value: [number, string] }
+
+// ── Egress: the ways out ───────────────────────────────────────────────────
+
+/**
+ * One entry per gluetun instance, from `fleet.vpnEgress`.
+ *
+ * The list is nix's, deliberately: a third tunnel registers itself from the
+ * `mkGluetunInstance` call that creates it, so this page grows without being
+ * told. Everything time-varying is fetched per instance and in parallel —
+ * where it comes out now, how reliable it has been, and which containers are
+ * currently sharing its namespace.
+ */
+async function loadOutbound(ctx: { hc: string }): Promise<OutboundData> {
+  let declared: Declared[] = []
+  try {
+    declared = JSON.parse(process.env.VPN_EGRESS ?? '[]') as Declared[]
+  } catch {
+    declared = []
+  }
+
+  if (declared.length === 0) {
+    return {
+      tunnels: [],
+      note:
+        'No VPN egress declared. The list comes from fleet.vpnEgress, which ' +
+        'mkGluetunInstance fills in — see platform/gluetun-lib.nix.',
+    }
+  }
+
+  const liveness = await promVector('container_up')
+  const upOf = (name: string): boolean | null => {
+    const hit = liveness.find((r) => r.metric.name === name)
+    return hit === undefined ? null : hit.value[1] === '1'
+  }
+
+  const tunnels = await Promise.all(declared.map((d) => loadTunnel(d, ctx.hc, upOf)))
+  return { tunnels, note: null }
+}
+
+type Declared = {
+  container: string
+  exporter: string
+  job: string
+  controlPort: number
+  subject: string
+  keyExpiry: string
+  runbook: string
+  portForwarding: boolean
+  tenants: string[]
+}
+
+async function loadTunnel(
+  d: Declared,
+  hc: string,
+  upOf: (name: string) => boolean | null,
+): Promise<Tunnel> {
+  const control = `${hc}:${String(d.controlPort)}`
+  const job = JSON.stringify(d.job)
+
+  const [ip, port, up, uptime7d, daily] = await Promise.all([
+    // The provider's own view of where this tunnel surfaces. Nothing on this
+    // box can answer it — the container sees a tun0 with a private address,
+    // and the exit address is only knowable from outside.
+    getJson<{
+      public_ip?: string
+      country?: string
+      city?: string
+      region?: string
+      organization?: string
+      timezone?: string
+    }>(`${control}/v1/publicip/ip`),
+    d.portForwarding ? getJson<{ port?: number }>(`${control}/v1/portforward`) : null,
+    promScalar(`gluetun_vpn_status{job=${job}}`),
+    promScalar(`avg_over_time(gluetun_vpn_status{job=${job}}[7d])`),
+    promPoints(`avg_over_time(gluetun_vpn_status{job=${job}}[1d])`, DAYS * 24 * 60, 86400),
+  ])
+
+  const expiry = Date.parse(`${d.keyExpiry}T00:00:00Z`)
+
+  return {
+    key: d.container,
+    subject: d.subject,
+    container: d.container,
+    exporter: d.exporter,
+    runbook: d.runbook,
+    portForwarding: d.portForwarding,
+    up: up === null ? null : up === 1,
+    keyExpiry: d.keyExpiry,
+    expiryDays: Math.round((expiry - Date.now()) / 86400_000),
+    exit: {
+      ip: ip?.public_ip ?? null,
+      country: ip?.country ?? null,
+      city: ip?.city ?? null,
+      region: ip?.region ?? null,
+      // "AS9009 M247 Europe SRL" — the provider's carrier, which is what an
+      // observer on the far side actually sees this traffic as.
+      org: ip?.organization ?? null,
+      timezone: ip?.timezone ?? null,
+    },
+    // A forwarded port of 0 is gluetun for "none yet", not port zero.
+    port: port?.port !== undefined && port.port > 0 ? port.port : null,
+    uptime7d,
+    daily: daily.map((p) => ({ date: localDay(p.t * 1000), uptime: p.v })),
+    // The exporter is in the list because it genuinely rides the tunnel, and
+    // dropping it would misreport what a tunnel outage takes down.
+    tenants: d.tenants.map((name) => ({ name, up: upOf(name) })),
+  }
+}
+
+/** `YYYY-MM-DD` in the box's timezone, so a column is the day you lived. */
+const localDay = (ms: number): string => new Date(ms).toLocaleDateString('en-CA')

@@ -113,7 +113,38 @@ rec {
       # the container's ExecStart).
       webUis ? [ ],
     }:
+    let
+      # The HOST port the in-netns control API (:8000) is published on.
+      # Read out of `ports` rather than taken as another argument: the
+      # mapping is already stated there, and a second statement of it is a
+      # second thing to get wrong on the instance that takes 8002 instead
+      # of 8000. Fails the build loudly if no such mapping exists, which
+      # is the correct answer — an instance with no reachable control API
+      # has no exporter and no VPN alerts either.
+      controlPort = lib.toInt (
+        lib.head (
+          (map (lib.removeSuffix ":8000") (lib.filter (lib.hasSuffix ":8000") ports))
+          ++ [ (throw "gluetun instance ${name}: no port maps to the control API (:8000)") ]
+        )
+      );
+    in
     {
+      # Registered from the call that creates the instance, so a third
+      # tunnel appears on the dashboard by existing rather than by being
+      # added to a list somewhere else. See fleet.vpnEgress.
+      fleet.vpnEgress.${name} = {
+        container = name;
+        exporter = exporterName;
+        job = scrapeJob;
+        inherit
+          controlPort
+          subject
+          keyExpiry
+          ;
+        runbook = runbookPath;
+        portForwarding = (environment.VPN_PORT_FORWARDING or "off") == "on";
+      };
+
       # ProtonVPN shows the private key ONCE at export — the sops copy
       # IS the recovery path. Renewal: re-export from
       # account.protonvpn.com/downloads, `sops -e --input-type binary

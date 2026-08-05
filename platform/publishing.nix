@@ -234,6 +234,73 @@ in
       '';
     };
 
+    vpnEgress = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { name, ... }:
+          {
+            options = {
+              container = lib.mkOption {
+                type = lib.types.str;
+                default = name;
+                description = "The gluetun container that OWNS the netns.";
+              };
+              exporter = lib.mkOption {
+                type = lib.types.str;
+                description = "Its gluetun-exporter sibling, in the same netns.";
+              };
+              job = lib.mkOption {
+                type = lib.types.str;
+                description = "Prometheus job_name, which is how every series here is keyed.";
+              };
+              controlPort = lib.mkOption {
+                type = lib.types.port;
+                description = ''
+                  HOST port the in-netns control API (:8000) is published on.
+                  Only the netns owner can publish, so this is on the gluetun
+                  container; daedalus dials host.containers.internal:<this>.
+                '';
+              };
+              subject = lib.mkOption {
+                type = lib.types.str;
+                description = "What this tunnel is for, in words. Also the reminder-mail subject.";
+              };
+              keyExpiry = lib.mkOption {
+                type = lib.types.str;
+                description = "YYYY-MM-DD the ProtonVPN WireGuard key stops working.";
+              };
+              runbook = lib.mkOption {
+                type = lib.types.str;
+                description = "File whose header holds the renewal runbook.";
+              };
+              portForwarding = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "Whether this instance asks the provider for a forwarded port.";
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      description = ''
+        The box's VPN EGRESS tunnels — one entry per gluetun instance.
+
+        Written by `mkGluetunInstance` itself rather than by hand: every
+        field here is an argument that call already takes, so a third
+        tunnel registers by existing. Read by daedalus (serialised into
+        its environment as VPN_EGRESS), which is why facts that live only
+        in nix — the key expiry date, the renewal runbook, what the
+        tunnel is FOR — belong in it. The rest of what that page shows is
+        fetched live from the control API and prometheus.
+
+        Deliberately not a list of tenants: which containers ride a
+        tunnel is already stated by their `--network=container:<owner>`,
+        and daedalus derives it from there rather than from a second
+        list that could disagree.
+      '';
+    };
+
     grafanaDashboardsByFolder = lib.mkOption {
       type = lib.types.attrsOf (lib.types.attrsOf lib.types.lines);
       default = { };

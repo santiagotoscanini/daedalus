@@ -76,6 +76,7 @@ export const Route = createFileRoute('/c/$category')({
 function CategoryPage() {
   const { spec, tab, boards, tiles, tabStatus } = Route.useLoaderData()
   const { category } = Route.useParams()
+  const groups = spec.tabs.find((t) => t.id === tab)?.tileGroups ?? spec.tileGroups
 
   return (
     <>
@@ -102,10 +103,12 @@ function CategoryPage() {
       </Await>
 
       {/* A category whose boards cover everything has no tile directory, and
-          a placeholder for a section that never arrives is worse than none. */}
-      {spec.tileGroups === 0 ?
+          a placeholder for a section that never arrives is worse than none.
+          Per TAB, not per category: a directory can belong to one sibling and
+          not the others — Network's does. */}
+      {groups === 0 ?
         <Await promise={tiles}>{(t) => <CategoryTilesView tiles={t} />}</Await>
-      : <Await promise={tiles} fallback={<TilesSkeleton groups={spec.tileGroups} />}>
+      : <Await promise={tiles} fallback={<TilesSkeleton groups={groups} />}>
           {(t) => <CategoryTilesView tiles={t} />}
         </Await>
       }

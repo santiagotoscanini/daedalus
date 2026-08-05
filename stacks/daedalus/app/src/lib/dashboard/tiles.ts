@@ -95,7 +95,7 @@ export const GROUPS: {
   { name: 'Home', category: 'home', icon: '⌂' },
   { name: 'Media', category: 'media', tab: 'tv', icon: '▶' },
   { name: 'Books', category: 'media', tab: 'books', icon: '❏' },
-  { name: 'Network', category: 'network', icon: '⇄' },
+  { name: 'Network', category: 'network', tab: 'general', icon: '⇄' },
   { name: 'Monitoring', category: 'monitoring', icon: '◎' },
 ]
 
