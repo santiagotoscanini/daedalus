@@ -84,7 +84,7 @@ export const fetchApp = createServerFn()
     const { name } = data
     const { getApp, driftOf } = await import('../lib/repo/apps')
     const { effectiveHostname } = await import('../lib/hostname')
-    const { hostnamesTakenBy } = await import('../lib/nix-manifest')
+    const { hostnamesTakenBy, operatorSecretApps } = await import('../lib/nix-manifest')
     const { manifestEntries } = await import('../lib/nix-manifest')
     const { appStatuses } = await import('../lib/metrics')
     const { readApplyStatus } = await import('../lib/apply')
@@ -133,7 +133,9 @@ export const fetchApp = createServerFn()
         storage: record.storage,
         litellm: record.litellm,
         prometheus: record.prometheus,
-        operatorSecrets: record.operatorSecrets,
+        // From Nix, not the record: the file's presence is the setting, so
+        // there is no column for this and nothing that could drift from it.
+        operatorSecrets: (await operatorSecretApps()).includes(name),
         limitCpus: record.limitCpus,
         limitMemoryMb: record.limitMemoryMb,
         limitPids: record.limitPids,
@@ -307,8 +309,13 @@ export const fetchAppTab = createServerFn()
         // would put every database password in view-source — theatre, not
         // concealment. The reveal button fetches one value at a time.
         const { readEnvSnapshot } = await import('../lib/env-snapshot')
+        const { operatorSecretApps } = await import('../lib/nix-manifest')
         const declared = new Map(record.envVars.map((e) => [e.key, e.note]))
-        const snapshot = await readEnvSnapshot(name, declared, record.operatorSecrets)
+        const snapshot = await readEnvSnapshot(
+          name,
+          declared,
+          (await operatorSecretApps()).includes(name),
+        )
         return {
           kind: 'secrets',
           env: {
@@ -473,34 +480,6 @@ export const runCiFn = createServerFn({ method: 'POST' })
 export const fetchCiRequestStatus = createServerFn().handler(async () => {
   const { readCiRequestStatus } = await import('../lib/ci-request')
   return readCiRequestStatus()
-})
-
-/**
- * Turn an app's SSO on or off for real, rather than checking whether somebody
- * did the encrypted half by hand.
- *
- * `provision` is called when the mode moves to proxy or native, and it is safe
- * in any order: adding a key to clients.sops cannot break a client that does
- * not reference it, and the operation is idempotent.
- *
- * `revoke` is NOT called from the toggle, and that asymmetry is the point. The
- * creds render is one unit for every client, so removing a secret the APPLIED
- * config still requires fails it at the next boot and takes the login path out
- * fleet-wide — for apps that had nothing to do with this change. The host agent
- * refuses on exactly that condition, reading the committed apps.json rather
- * than the database, which may be ahead of what is running.
- */
-export const provisionSsoSecret = createServerFn({ method: 'POST' })
-  .inputValidator((i: { app: string; action: 'provision' | 'revoke' }) => i)
-  .handler(async ({ data }) => {
-    const { requestSso } = await import('../lib/ci-request')
-    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
-    return { id: await requestSso({ action: data.action, app: data.app, actor }) }
-  })
-
-export const fetchSsoStatus = createServerFn().handler(async () => {
-  const { readSsoStatus } = await import('../lib/ci-request')
-  return readSsoStatus()
 })
 
 export const createAppFn = createServerFn({ method: 'POST' })

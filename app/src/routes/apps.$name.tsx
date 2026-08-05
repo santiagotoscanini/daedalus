@@ -40,9 +40,7 @@ import {
   fetchAppTab,
   fetchCiRequestStatus,
   fetchDeployStatus,
-  fetchSsoStatus,
   revealEnvVar,
-  provisionSsoSecret,
   runCiFn,
   saveApp,
   triggerDeploy,
@@ -602,19 +600,16 @@ function AppDetail() {
               label="Prometheus scrape"
               hint="Only turn on once the app actually serves /metrics — otherwise it is a permanently-down target."
             />
-            <Toggle
-              checked={app.operatorSecrets}
-              disabled={readOnly}
-              onChange={(v) => {
-                patch({ operatorSecrets: v })
-              }}
-              label="Operator secrets"
-              hint={`Loads stacks/apps/${app.name}-env.sops into the container. That file has to exist and be committed — if it does not, the Apply fails at build and nothing switches.`}
+            <Row
+              k="operator secrets"
+              v={app.operatorSecrets ? `${app.name}-env.sops — loaded` : 'none'}
+              mono
             />
             <p className="panel-note">
-              Operator secrets are the only switch here with a prerequisite outside daedalus: the
-              encrypted file is authored with <code>sops</code> in the flake repo. Turning this on
-              without it is caught by Nix evaluation, so the failure costs an Apply, not the app.
+              Operator secrets have no switch, because the file is the switch: a tracked{' '}
+              <code>stacks/apps/{app.name}-env.sops</code> is loaded into the container, and nothing
+              else decides it. Author it with <code>sops</code>, <code>git add</code> it, and the
+              next rebuild injects it.
             </p>
           </Panel>
 
@@ -733,20 +728,12 @@ function AppDetail() {
             />
           </Panel>
 
-          <Panel title="Single sign-on" wide action={<SsoSecretState name={app.name} mode={app.authMode} />}>
+          <Panel title="Single sign-on" wide>
             <Segmented
               value={app.authMode}
               disabled={readOnly}
               onChange={(v) => {
                 patch({ authMode: v })
-                // Moving to a mode that needs a client secret provisions it,
-                // rather than asserting somebody already did. Fired alongside
-                // the record write instead of after it: the two are independent
-                // — the secret is safe to exist for an app that ends up
-                // ungated, and the record is what the next Apply reads.
-                if (v !== 'none') {
-                  void provisionSsoSecret({ data: { app: app.name, action: 'provision' } })
-                }
               }}
               options={[
                 { value: 'none', label: 'None', icon: '○' },
@@ -788,12 +775,9 @@ function AppDetail() {
             <Row k="redirect uri" v={`https://${app.effectiveHostname}/api/auth/callback/pocket-id`} mono />
             <p className="panel-note">
               The client is declared, not clicked: this materializes{' '}
-              <code>fleet.ssoClients.{app.name}</code>, and a oneshot creates or updates it at the
-              IdP with the id and secret this repo chose. The secret must already exist as{' '}
-              <code>SSO_SECRET_{app.name.toUpperCase().replace(/-/g, '_')}</code> in{' '}
-              <code>stacks/pocket-id/clients.sops</code> — Nix asserts that at build time, because
-              the creds render is one unit for every client and a missing key would take the login
-              path out for all of them.
+              <code>fleet.ssoClients.{app.name}</code>, and a oneshot creates it at the IdP on the
+              next Apply. Its secret is generated on the box the first time the client is declared,
+              so there is nothing to author and nothing to paste back.
             </p>
           </Panel>
 
@@ -1876,79 +1860,6 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
       >
         {running ? '↻ deploying…' : '↻ Redeploy'}
       </button>
-    </span>
-  )
-}
-
-/**
- * What the host did with this app's client secret, and the way back out.
- *
- * Provisioning happens on the toggle, so most of the time this is just a
- * receipt. Revoking is a button rather than a side effect of choosing "None":
- * the host refuses while the applied config still gates the app, and the
- * operator should see that refusal as an answer to something they asked for,
- * not as a mysterious failure attached to a toggle they flipped.
- */
-function SsoSecretState({ name, mode }: { name: string; mode: string }) {
-  const [status, setStatus] = useState<{ state: string; detail: string; error: string } | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const run = (action: 'provision' | 'revoke') => {
-    setBusy(true)
-    setStatus(null)
-    void provisionSsoSecret({ data: { app: name, action } })
-      .then(async () => {
-        for (let i = 0; i < 40; i++) {
-          await new Promise((r) => setTimeout(r, 1500))
-          const s = await fetchSsoStatus()
-          if (s.state === 'done' || s.state === 'failed') return s
-        }
-        return { state: 'failed', detail: '', error: 'the host did not answer within a minute' }
-      })
-      .then((s) => {
-        setStatus(s)
-        setBusy(false)
-      })
-      .catch((e: unknown) => {
-        setStatus({ state: 'failed', detail: '', error: e instanceof Error ? e.message : String(e) })
-        setBusy(false)
-      })
-  }
-
-  return (
-    <span className="redeploy">
-      {status !== null && (
-        <span
-          className={status.state === 'failed' ? 'bad-text' : 'ok-text'}
-          title={status.state === 'failed' ? status.error : status.detail}
-        >
-          {status.state === 'failed' ? 'secret action failed' : status.detail || 'done'}
-        </span>
-      )}
-      <button
-        type="button"
-        className="btn btn-ghost"
-        disabled={busy}
-        title="Write a fresh client secret into clients.sops if this app has none. Idempotent."
-        onClick={() => {
-          run('provision')
-        }}
-      >
-        {busy ? '⚿ working…' : '⚿ Provision secret'}
-      </button>
-      {mode === 'none' && (
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={busy}
-          title="Remove this app's client secret. Refused while the applied config still gates the app."
-          onClick={() => {
-            run('revoke')
-          }}
-        >
-          Revoke
-        </button>
-      )}
     </span>
   )
 }
