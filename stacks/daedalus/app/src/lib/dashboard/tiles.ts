@@ -63,7 +63,6 @@ export type GroupName =
   | 'Home'
   | 'Media'
   | 'Books'
-  | 'Gaming'
   | 'Network'
   | 'Monitoring'
 
@@ -91,7 +90,6 @@ export const GROUPS: {
 }[] = [
   { name: 'AI & Automation', category: 'ai', icon: '◈' },
   { name: 'Home', category: 'home', icon: '⌂' },
-  { name: 'Gaming', category: 'gaming', tab: 'factorio', icon: '⚙' },
   { name: 'Media', category: 'media', tab: 'tv', icon: '▶' },
   { name: 'Books', category: 'media', tab: 'books', icon: '❏' },
   { name: 'Network', category: 'network', icon: '⇄' },
@@ -833,19 +831,6 @@ export const TILES: TileDef[] = [
         ],
       }
     },
-  },
-
-  // ══ Gaming ═══════════════════════════════════════════════════════════════
-  {
-    key: 'factorio',
-    name: 'Factorio Admin',
-    group: 'Gaming',
-    description: 'Server manager',
-    link: { app: "factorio-admin" },
-    gatus: "factorio-admin",
-    // No stats: the Gaming page above owns every version number, and a tile
-    // repeating them is a second place for the same fact to be wrong. This
-    // stays as the click-through to ofsm.
   },
 
   // ══ Network ══════════════════════════════════════════════════════════════
