@@ -20,6 +20,7 @@ import {
   promSeries,
   promVector,
   lokiLatest,
+  lokiScalar,
 } from '../clients'
 import {
   commitsSince,
@@ -35,7 +36,7 @@ export type NetworkTab = 'general' | 'wireguard' | 'outbound'
 
 export type NetworkData =
   | ({ tab: 'general' } & GeneralData)
-  | ({ tab: 'wireguard' } & WireguardData)
+  | ({ tab: 'wireguard' } & InboundData)
   | ({ tab: 'outbound' } & OutboundData)
 
 /**
@@ -64,6 +65,64 @@ type WireguardData = {
   /** Peak simultaneous peers per day, oldest first. */
   daily: { date: string; peers: number }[]
 }
+
+/** The Cloudflare tunnel, from Cloudflare's side and cloudflared's own. */
+type TunnelData = {
+  version: string | null
+  gap: VersionGap
+  status: string | null
+  /** How many of the four HA connections are up, per Cloudflare. */
+  connections: number | null
+  /** This house's WAN address, as the edge sees it arriving. */
+  originIp: string | null
+  edges: { colo: string; count: number }[]
+  heldForSeconds: number | null
+  /** Round trip to the edge, from cloudflared's own QUIC stats. */
+  rttMs: number | null
+  requestsPerHour: number | null
+  errors: number | null
+  inFlight: number | null
+  /** Requests per day through the tunnel, oldest first. */
+  daily: { date: string; requests: number }[]
+  /** Every hostname the tunnel will answer for — its ingress rules. */
+  published: { hostname: string; service: string }[]
+}
+
+/**
+ * The third way in: no proxy at all, just this house's address.
+ *
+ * The tunnel carries HTTP and nothing else, so anything speaking another
+ * protocol has to be dialled directly — and a home connection's address
+ * moves. `platform/ddclient` is what keeps a name pointed at it, and this is
+ * the page that says whether it is currently pointed at the right one.
+ */
+type DdnsData = {
+  version: string | null
+  gap: VersionGap
+  host: string
+  /** Every N seconds ddclient re-checks, from the service definition. */
+  intervalSeconds: number | null
+  /** What the world resolves the name to, asked of a public resolver. */
+  resolved: string | null
+  ttl: number | null
+  /**
+   * What the address ACTUALLY is, per Cloudflare's view of the tunnel.
+   *
+   * The one place on this box that can answer it: everything here is behind
+   * NAT and sees 192.168.0.2. Comparing the two is the whole check — a name
+   * pointed at a stale address is a Factorio server nobody can join, with no
+   * error anywhere.
+   */
+  actual: string | null
+  /** ddclient runs that could not work out the address, by window. */
+  lookupFailures: { day: number | null; week: number | null; month: number | null }
+  /** Whether anything alerts when that happens. See fleet.monitoredJobs. */
+  monitored: boolean
+  /** What needs the address, from fleet.directIngress. */
+  needs: { name: string; port: number; proto: string; note: string }[]
+}
+
+type InboundData = { wireguard: WireguardData; tunnel: TunnelData; ddns: DdnsData }
 
 /**
  * One VPN egress tunnel.
@@ -182,7 +241,7 @@ export async function loadNetwork(
 ): Promise<NetworkData> {
   switch (tab) {
     case 'wireguard':
-      return { tab: 'wireguard', ...(await loadWireguard()) }
+      return { tab: 'wireguard', ...(await loadInbound(ctx)) }
     case 'outbound':
       return { tab: 'outbound', ...(await loadOutbound(ctx)) }
     default:
@@ -432,6 +491,47 @@ async function loadPeers(): Promise<GeneralData['wireguard']['peers']> {
  * The version comes from nix for the same reason: nothing a read-only caller
  * can reach reports it, so the tag the image is pinned to IS the version.
  */
+/**
+ * All three ways in, whichever one the page is showing.
+ *
+ * Every route is loaded on every visit and that is deliberate: the strip above
+ * the switch says which of the three is working, and a strip that only knew
+ * about the selected one would be a strip nobody could trust. The switch is
+ * client-side, so the server could not know which to fetch anyway.
+ *
+ * The Cloudflare tunnel is fetched ONCE and handed to both consumers. It
+ * answers two unrelated questions — is the tunnel healthy, and what is this
+ * house's WAN address — and asking twice cost a second of wall clock for the
+ * same bytes. `getJson`'s coalescer cannot help: it only shares plain GETs,
+ * and this one carries an Authorization header.
+ */
+async function loadInbound(ctx: { hc: string }): Promise<InboundData> {
+  void ctx
+  // Started, not awaited. Cloudflare's API is the slowest upstream this page
+  // has — a second per call from here — so awaiting it before the fan-out put
+  // that second in front of everything else instead of alongside it. The
+  // PROMISE is handed to both consumers; each awaits it inside its own
+  // Promise.all, so the one request overlaps every other query on the page.
+  const cf = cfTunnel()
+  const [wireguard, tunnel, ddns] = await Promise.all([
+    loadWireguard(),
+    loadCfTunnel(cf),
+    loadDdns(cf),
+  ])
+  return { wireguard, tunnel, ddns }
+}
+
+/** Cloudflare's view of the tunnel. The one place the WAN address appears. */
+async function cfTunnel(): Promise<CfTunnel | undefined> {
+  const body = await getJson<{ result?: CfTunnel }>(
+    `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
+      process.env.CF_TUNNEL_ID ?? ''
+    }`,
+    { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
+  )
+  return body?.result
+}
+
 async function loadWireguard(): Promise<WireguardData> {
   const version = process.env.WG_EASY_VERSION || null
 
@@ -635,3 +735,130 @@ async function loadTunnel(
 
 /** `YYYY-MM-DD` in the box's timezone, so a column is the day you lived. */
 const localDay = (ms: number): string => new Date(ms).toLocaleDateString('en-CA')
+
+// ── Coming in: the Cloudflare tunnel ───────────────────────────────────────
+
+/**
+ * The tunnel, from both ends of it.
+ *
+ * Cloudflare's API knows what the EDGE sees — is the tunnel healthy, how many
+ * of its four connections are up, which datacentres they landed in, and the
+ * address they arrived from, which is the only place this house's WAN IP is
+ * readable at all. cloudflared's own metrics know what the LOCAL end sees —
+ * how many requests it forwarded, how many failed, and the QUIC round trip to
+ * the edge. Neither can answer the other's half.
+ */
+async function loadCfTunnel(cfP: Promise<CfTunnel | undefined>): Promise<TunnelData> {
+  const account = process.env.CF_ACCOUNT_ID ?? ''
+  const id = process.env.CF_TUNNEL_ID ?? ''
+  const auth = { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } }
+
+  const [cf, config, rph, errors, inFlight, rtt, daily] = await Promise.all([
+    cfP,
+    // The ingress rules, which are the literal answer to "what can be reached
+    // from outside" — generated from every webApp with `exposeRemotely`, so
+    // this is a readback of that decision rather than a restatement of it.
+    getJson<{ result?: { config?: { ingress?: { hostname?: string; service?: string }[] } } }>(
+      `https://api.cloudflare.com/client/v4/accounts/${account}/cfd_tunnel/${id}/configurations`,
+      auth,
+    ),
+    // Per HOUR over six, not per minute over ten: off-LAN traffic to this box
+    // is a couple of dozen requests a day, and a per-minute rate of that is
+    // indistinguishable from a tunnel carrying nothing at all.
+    promScalar('sum(rate(cloudflared_tunnel_total_requests[6h])) * 3600'),
+    promScalar('sum(cloudflared_tunnel_request_errors)'),
+    promScalar('sum(cloudflared_tunnel_concurrent_requests_per_tunnel)'),
+    // Smoothed rather than latest: the latest sample is one packet and swings
+    // by tens of milliseconds; smoothed is what the connection actually feels
+    // like. Averaged across the four connections, which land in two colos.
+    promScalar('avg(quic_client_smoothed_rtt)'),
+    promPoints('sum(increase(cloudflared_tunnel_total_requests[1d]))', DAYS * 24 * 60, 86400),
+  ])
+
+  const summary = summariseTunnel(cf, rph)
+  const version = summary.clientVersion
+
+  return {
+    version,
+    // cloudflared tags releases by date — `2026.7.3` — so the default
+    // three-number pattern matches without help.
+    gap: await versionGap('cloudflare/cloudflared', version),
+    status: summary.status,
+    connections: summary.connections,
+    originIp: summary.originIp,
+    edges: summary.edges,
+    heldForSeconds: summary.heldForSeconds,
+    // Already milliseconds — quic-go reports these in ms, and the readings
+    // (3-8, to a Buenos Aires edge from Buenos Aires) are only sane on that
+    // reading. Dividing by anything produced 5 nanoseconds.
+    rttMs: rtt,
+    requestsPerHour: rph,
+    errors,
+    inFlight,
+    daily: daily.map((p) => ({ date: localDay(p.t * 1000), requests: p.v })),
+    published: (config?.result?.config?.ingress ?? [])
+      // The last rule is the catch-all, which has no hostname and is not a
+      // published name — dropping it is what makes this list a list of names.
+      .filter((r) => r.hostname !== undefined && r.hostname !== '')
+      .map((r) => ({ hostname: r.hostname ?? '', service: r.service ?? '' }))
+      .sort((a, b) => a.hostname.localeCompare(b.hostname)),
+  }
+}
+
+// ── Coming in: the address itself ──────────────────────────────────────────
+
+/** Public DNS, asked over HTTPS so the LAN resolver cannot answer for it. */
+async function resolvePublic(name: string): Promise<{ ip: string | null; ttl: number | null }> {
+  if (name === '') return { ip: null, ttl: null }
+  // 1.1.1.1 directly, NOT this box's resolver: pi-hole short-circuits
+  // *.toscanini.me to 192.168.0.2 so the LAN never leaves the house for its
+  // own services, which is right and would make this check answer itself.
+  const body = await getJson<{ Answer?: { type: number; data: string; TTL: number }[] }>(
+    `https://1.1.1.1/dns-query?name=${encodeURIComponent(name)}&type=A`,
+    { headers: { Accept: 'application/dns-json' } },
+  )
+  const a = (body?.Answer ?? []).find((r) => r.type === 1)
+  return { ip: a?.data ?? null, ttl: a?.TTL ?? null }
+}
+
+async function loadDdns(cfP: Promise<CfTunnel | undefined>): Promise<DdnsData> {
+  const host = process.env.DDNS_HOST ?? ''
+  const version = process.env.DDCLIENT_VERSION || null
+  const interval = /^(\d+)s?$/.exec(process.env.DDNS_INTERVAL ?? '')?.[1]
+
+  let needs: DdnsData['needs'] = []
+  try {
+    needs = JSON.parse(process.env.DIRECT_INGRESS ?? '[]') as DdnsData['needs']
+  } catch {
+    needs = []
+  }
+
+  // The one ddclient failure that matters and is invisible: it cannot work out
+  // the address, so it publishes nothing, so a real IP change would go
+  // unnoticed. The unit still exits 0, which is why counting the log line is
+  // the only way to see it.
+  const FAIL = '{unit="ddclient.service"} |= "unable to determine IP address"'
+  const [cf, resolved, day, week, month, gap] = await Promise.all([
+    cfP,
+    resolvePublic(host),
+    lokiScalar(`sum(count_over_time(${FAIL} [24h]))`),
+    lokiScalar(`sum(count_over_time(${FAIL} [7d]))`),
+    lokiScalar(`sum(count_over_time(${FAIL} [30d]))`),
+    versionGap('ddclient/ddclient', version),
+  ])
+
+  return {
+    version,
+    gap,
+    host,
+    intervalSeconds: interval === undefined ? null : Number(interval),
+    resolved: resolved.ip,
+    ttl: resolved.ttl,
+    actual: cf?.connections?.[0]?.origin_ip ?? null,
+    lookupFailures: { day, week, month },
+    // Nothing in fleet.monitoredJobs names it, and the unit exits 0 on the
+    // failure above anyway — so an OnFailure hook would not have fired either.
+    monitored: false,
+    needs: needs.sort((a, b) => a.port - b.port),
+  }
+}
