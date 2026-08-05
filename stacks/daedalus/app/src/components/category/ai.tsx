@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
 import {
-  BarList,
   BigStat,
   Board,
   BoardGrid,
@@ -78,7 +77,7 @@ function compareOf(gap: VersionGap, note: string): CompareRow[] {
 }
 
 /** The release-notes board, identical on all four tabs. */
-function ReleaseBoard({ gap, span = 12 }: { gap: VersionGap; span?: 6 | 12 }) {
+function ReleaseBoard({ gap, span = 12 }: { gap: VersionGap; span?: 6 | 8 | 12 }) {
   const current = gap.behind.length === 0
 
   return (
@@ -89,7 +88,7 @@ function ReleaseBoard({ gap, span = 12 }: { gap: VersionGap; span?: 6 | 12 }) {
       // Only when it is sharing a row: the grid is align-items:start, so an
       // unequal pair leaves a gap under the shorter one that reads as a
       // missing panel.
-      fill={span === 6}
+      fill={span !== 12}
       aside={<span className="board-note">github releases</span>}
     >
       <UpgradeChain behind={gap.behind} />
@@ -570,10 +569,13 @@ function EvictButton({ model }: { model: Model }) {
 // ── LiteLLM ────────────────────────────────────────────────────────────────
 
 function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
-  const { gap, today, daily, window: total } = data
+  const { gap, daily, window: total } = data
   const busy = data.inFlight !== null && data.inFlight > 0
-  const first = daily[0]?.date ?? ''
-  const last = daily[daily.length - 1]?.date ?? ''
+  const firstDate = daily[0]?.date ?? ''
+  // The window's last day IS today, since the window ends at today — and it is
+  // the reference every "2d ago" below is measured against, rather than the
+  // browser's clock, which would not agree with the server's at midnight.
+  const todayDate = daily[daily.length - 1]?.date ?? ''
 
   return (
     <>
@@ -629,7 +631,7 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
         >
           <Measures
             items={[
-              { k: 'today', v: volume(today) },
+              { k: 'today', v: volume(data.today) },
               { k: `${String(total.days)} days`, v: volume(total) },
               {
                 k: 'failed',
@@ -662,9 +664,9 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
           />
           {daily.length > 0 && (
             <p className="colaxis">
-              <span>{first.slice(5)}</span>
+              <span>{firstDate.slice(5)}</span>
               <span>requests per day</span>
-              <span>{last.slice(5)}</span>
+              <span>{todayDate.slice(5)}</span>
             </p>
           )}
 
@@ -684,87 +686,62 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
           </p>
         </Board>
 
+        {/* The one axis on this page worth a panel. What a published name
+            resolves to is a fact you configured — the checkpoint is on a
+            machine in the next room and the mapping does not change on its
+            own — so the routing table that used to sit below said nothing you
+            did not already know, in nine rows, six of which were idle. Who is
+            calling cannot be known from anywhere else. */}
         <Board
           title="Who is calling"
           icon="◑"
           span={4}
           fill
-          aside={<span className="board-note">tokens, {total.days}d</span>}
+          aside={<span className="board-note">requests, {total.days}d</span>}
         >
-          <BarList
-            items={data.callers.map((c) => ({ label: c.label, value: c.value, display: compact(c.value) }))}
-            tone="info"
-            empty="no keyed traffic in the window"
-          />
+          {data.callers.length === 0 ?
+            <p className="viz-empty">no keyed traffic in the window</p>
+          : <ul className="callers">
+              {data.callers.map((c) => (
+                <CallerRow key={c.name} caller={c} max={data.callers[0]?.requests ?? 1} today={todayDate} />
+              ))}
+            </ul>
+          }
+
+          {/* Ranked by requests, not tokens, and that is the reason this box
+              exists in the shape it does: a key that is rejected returns no
+              tokens at all, so on a token ranking the eleven of them below
+              scored zero and never appeared. */}
+          {data.rejected.keys > 0 && (
+            <p className="rejected">
+              <b>{num(data.rejected.keys)}</b> keys never completed a request —{' '}
+              <b>{num(data.rejected.requests)}</b> attempts, last{' '}
+              {ago(data.rejected.last, todayDate)}.
+            </p>
+          )}
+
           <p className="board-foot">
-            Named by their virtual key’s alias; an unaliased key shows as its hash. A caller missing
-            from this list is idle, not gone.
+            Named by their key’s alias; an unaliased key shows as its hash. A key that fails
+            authentication never reaches a model, so it has no tokens and no model to show — which
+            is what the line above is counting. The gateway is LAN-only, so those attempts came from
+            something in the house.
           </p>
         </Board>
 
-        {/* One table, not three panels. The routing table, "where the tokens
-            went" and "latency by model" were all keyed by the same published
-            name, so each was a third of an answer laid out as a whole one — and
-            two of them were single-bar bar charts, which is a number wearing a
-            chart's costume. Joined, a row says what a caller asks for, what
-            that resolves to, and what it has actually cost to serve. */}
-        <Board
-          title="What resolves where"
-          icon="⇄"
-          span={8}
-          fill
-          aside={
-            <span className="board-note">
-              {data.routes.length} published · {total.days}d
-            </span>
-          }
-        >
-          {data.routes.length === 0 ?
-            <p className="viz-empty">the gateway did not answer</p>
-          : <div className="rtable">
-              <div className="rtable-head" aria-hidden="true">
-                <span>published</span>
-                <span />
-                <span>served by</span>
-                <span>kind</span>
-                <span>req</span>
-                <span>tokens</span>
-                <span>mean</span>
-              </div>
-              <ul>
-                {data.routes.map((r) => (
-                  <li key={r.name} className={r.requests === 0 ? 'rt-row rt-idle' : 'rt-row'}>
-                    <span className="rt-name mono">{r.name}</span>
-                    <span className="rt-arrow" aria-hidden="true">
-                      →
-                    </span>
-                    <span className="rt-target mono" title={r.target}>
-                      {r.target}
-                      <em>{r.upstream}</em>
-                    </span>
-                    <Chip tone="muted">{r.mode}</Chip>
-                    <span className="rt-n">{r.requests === 0 ? DASH : num(r.requests)}</span>
-                    <span className="rt-n">{r.tokens === 0 ? DASH : compact(r.tokens)}</span>
-                    <span className="rt-n">{ms(r.latencyMs)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          }
-          <p className="board-foot">
-            Left is what a caller asks for, right is the model Lemonade is told to load — different
-            on purpose, so renaming a checkpoint on the gaming PC does not break Home Assistant’s
-            config. Times are end to end, so they carry Lemonade’s cold-load penalty; the gateway’s
-            own share of them is the <b>{ms(data.overheadMs)}</b> above.
-          </p>
-        </Board>
+        <ReleaseBoard gap={gap} span={8} />
 
         <Board
           title="Tools models called"
           icon="⌗"
           span={4}
           fill
-          aside={<span className="board-note">MCP, {total.days}d</span>}
+          aside={
+            <span className="board-note">
+              {data.mcpServers.length === 0 ?
+                `MCP, ${String(total.days)}d`
+              : data.mcpServers.map((s) => `${s.name} ${String(s.calls)}`).join(' · ')}
+            </span>
+          }
         >
           {data.mcp.length === 0 ?
             <p className="viz-empty">no tool calls in the window</p>
@@ -775,6 +752,11 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
                   <span className="mcp-tool mono" title={t.tool}>
                     {t.tool}
                   </span>
+                  {/* The tool's own time, which is the only latency on this
+                      page that is NOT mostly Lemonade — a tool call is the
+                      gateway talking to a container on this box, so tens of
+                      milliseconds is what right looks like. */}
+                  <span className="mcp-ms">{ms(t.latencyMs)}</span>
                   <span className="mcp-n">{num(t.calls)}</span>
                 </li>
               ))}
@@ -782,11 +764,10 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
           }
           <p className="board-foot">
             The other direction: tools the gateway hands to a model mid-answer, counted when one was
-            actually invoked. Registered servers with no calls do not appear.
+            actually invoked. A registered server with no calls does not appear, and a tool whose
+            counters were reset by a restart shows no time.
           </p>
         </Board>
-
-        <ReleaseBoard gap={gap} />
 
         <Board title="Logs" icon="≡" span={12}>
           <GrafanaLogs source={{ container: 'litellm' }} title="LiteLLM logs" />
@@ -840,6 +821,72 @@ const NEIGHBOURS = [
     note: 'Fronts pgvector in the shared pg cluster for LiteLLM’s vector-store API. Ingest failures land here rather than in the gateway’s log, which only sees the connector’s answer.',
   },
 ] as const
+
+type Caller = Extract<AiData, { tab: 'litellm' }>['callers'][number]
+
+/**
+ * One caller, in two lines.
+ *
+ * The bar carries the comparison — this is a ranking, and the whole question is
+ * which of these is the big one — and the line under it carries everything the
+ * bar cannot: what it cost, how slowly it was answered, what it asked for, and
+ * when it was last seen. A bar list alone said only "n8n is the big one",
+ * which was true on the first read and had nothing to add on any later one.
+ *
+ * Failures get the only colour in the row, and only when there are any. A
+ * caller that works is the normal case and does not need to be decorated to
+ * say so.
+ */
+function CallerRow({ caller, max, today }: { caller: Caller; max: number; today: string }) {
+  return (
+    <li className="caller">
+      <span className="caller-name" title={caller.name}>
+        {caller.name}
+      </span>
+      <span className="caller-track">
+        <span
+          className="caller-fill"
+          style={{ width: `${String(Math.max(1.5, (caller.requests / max) * 100))}%` }}
+        />
+      </span>
+      <span className="caller-n">{num(caller.requests)}</span>
+      <span className="caller-meta">
+        {caller.tokens > 0 && <span>{compact(caller.tokens)} tok</span>}
+        {caller.latencyMs !== null && <span>{ms(caller.latencyMs)}</span>}
+        {caller.failed > 0 && <span className="bad-text">{num(caller.failed)} failed</span>}
+        {/* Truncated at two: a caller reaching one model is the norm and the
+            master key reaches seven, which is a list nobody reads in a column
+            this wide. */}
+        {caller.models.length > 0 && (
+          <span className="mono" title={caller.models.join(', ')}>
+            {caller.models.slice(0, 2).join(', ')}
+            {caller.models.length > 2 && ` +${String(caller.models.length - 2)}`}
+          </span>
+        )}
+        <span>{ago(caller.last, today)}</span>
+      </span>
+    </li>
+  )
+}
+
+/**
+ * A ledger date as a phrase.
+ *
+ * Days rather than `since`, because the ledger's resolution IS a day: it knows
+ * a key called on the 3rd, not at what time, and "2 days ago" is the strongest
+ * true statement available. Computed against a date passed in rather than
+ * against `Date.now()` — this page renders on the server and hydrates in the
+ * browser, and a relative time derived from two different clocks is a
+ * hydration mismatch waiting for midnight.
+ */
+function ago(date: string | null, today: string): string {
+  if (date === null || date === '') return DASH
+  const days = Math.round((Date.parse(today) - Date.parse(date)) / 86400_000)
+  if (!Number.isFinite(days)) return date
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return `${String(days)}d ago`
+}
 
 /** `29 req · 28k tok`, or an em dash for a day the gateway served nothing. */
 function volume(v: { requests: number; tokens: number } | null): string {
