@@ -3390,21 +3390,65 @@ h2 {
 }
 
 /* An embedded Grafana panel. Sized rather than aspect-ratioed: a log view
-   wants a fixed number of visible lines, not a shape. */
-.embed {
-  display: block;
-  width: 100%;
+   wants a fixed number of visible lines, not a shape.
+
+   The wrapper owns the height so the box never changes size between the
+   placeholder and the panel — the iframe is absolutely positioned over the
+   skeleton rather than replacing it. */
+.embed-wrap {
+  position: relative;
   border: 1px solid var(--border-soft);
   border-radius: 9px;
   background: var(--bg);
+  overflow: hidden;
 }
 .embed-logs {
   height: 22rem;
 }
- (max-width: 50rem) {
+@media (max-width: 50rem) {
   .embed-logs {
     height: 18rem;
   }
+}
+
+.embed {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  /* Tells the browser to paint the embedded document's canvas dark before it
+     has any styles of its own — otherwise the first frame is a white
+     rectangle regardless of what we do on this side. */
+  color-scheme: dark;
+  /* Hidden until Grafana's own preloader is done — see LogFrame. The
+     animation is the backstop for a page whose JS never runs: zero duration,
+     six-second delay, so it only ever fires when `load` did not. */
+  opacity: 0;
+  animation: embed-reveal 0s linear 6s forwards;
+}
+.embed.is-ready {
+  opacity: 1;
+  animation: none;
+  transition: opacity 0.18s ease;
+}
+@keyframes embed-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Log-shaped: a short line for the timestamp column, then ragged message
+   lines. Same grey blocks as every other placeholder in the app. */
+.embed-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 1.1rem 1.2rem;
 }
 
 /* A game gets a header with its own artwork: the rail is monochrome and
@@ -4104,6 +4148,13 @@ h2 {
   .sk,
   .sk-block {
     animation: none;
+  }
+  /* The embed appears instead of fading. Its `animation` is deliberately NOT
+     cleared here: that one is a zero-duration opacity flip on a timer, the
+     backstop that guarantees the frame is never permanently invisible, and
+     removing it would take a safety net away in the name of stillness. */
+  .embed.is-ready {
+    transition: none;
   }
   .topo-edge-live,
   .topo-live {
