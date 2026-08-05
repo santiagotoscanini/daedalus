@@ -27,7 +27,7 @@
 //             as "over the last N days" comes from the gateway's own ledger or
 //             from a range query, never from a counter read once.
 
-import { getJson, promBars, promScalar } from '../clients'
+import { getJson, promBars, promScalar, promVector } from '../clients'
 import { versionGap, type VersionGap } from '../github'
 import { DASH, key, since } from '../format'
 
@@ -39,19 +39,49 @@ export type AiData =
   | ({ tab: 'open-webui' } & OpenWebUiData)
   | ({ tab: 'n8n' } & N8nData)
 
-export type ResidentModel = {
+/**
+ * One installed model, resident or not.
+ *
+ * Deliberately covers the whole catalogue rather than just what is loaded:
+ * the useful question here is "which of my four chat models is in the slot",
+ * and that cannot be asked of a list containing only the answer.
+ */
+export type CatalogModel = {
   name: string
-  type: string
-  device: string
-  status: string
+  /** In VRAM right now. At most one per type on this box — see `slots`. */
+  resident: boolean
+  /** Exempt from LRU eviction, and the reason a switch has to unload first. */
   pinned: boolean
-  context: number | null
-  /** Most recently used. See the note on `last_use` in loadLemonade. */
+  /** Most recently used of the resident set. See `last_use` in loadLemonade. */
   hot: boolean
-  /** Which llama.cpp/whisper/sd build is serving it, when Lemonade says. */
+  sizeGb: number | null
+  /** llamacpp / whispercpp / sd-cpp / kokoro. */
   recipe: string
+  /** rocm / vulkan / cpu — which build of that runtime is serving it. */
   backend: string | null
-  checkpoint: string
+  device: string | null
+  context: number | null
+  /**
+   * What this model has actually done, from Lemonade's own counters. Null for
+   * a model that has not been used since the server started — which is not
+   * the same as zero, and is drawn as nothing rather than as a row of noughts.
+   */
+  stats: {
+    requests: number | null
+    inputTokens: number | null
+    outputTokens: number | null
+    /** Last generation, not an average — Lemonade reports these as gauges. */
+    tps: number | null
+    ttftMs: number | null
+  } | null
+}
+
+/** Every installed model of one kind, resident first. */
+export type ModelCategory = {
+  type: string
+  /** How many of this kind may be resident at once. One, everywhere, today. */
+  max: number
+  models: CatalogModel[]
 }
 
 type LemonadeData = {
@@ -59,9 +89,8 @@ type LemonadeData = {
   gap: VersionGap
   /** The server's own GUI, on the LAN. Not through traefik — it is off-box. */
   baseUrl: string
-  models: ResidentModel[]
-  /** Per model TYPE, how many may be resident at once. */
-  slots: { type: string; used: number; max: number }[]
+  /** The whole catalogue, grouped by kind. Ordered biggest group first. */
+  categories: ModelCategory[]
   host: {
     os: string | null
     cpu: string | null
@@ -192,7 +221,7 @@ type SystemInfo = {
 async function loadLemonade(): Promise<LemonadeData> {
   const base = process.env.LEMONADE_URL ?? ''
 
-  const [health, stats, info, live, downloads, catalog] = await Promise.all([
+  const [health, stats, info, live, downloads, catalog, perModel] = await Promise.all([
     getJson<Health>(`${base}/api/v1/health`),
     getJson<{
       tokens_per_second?: number
@@ -211,9 +240,16 @@ async function loadLemonade(): Promise<LemonadeData> {
     getJson<{ model_name?: string; percent?: number; status?: string }[]>(
       `${base}/api/v1/downloads`,
     ),
-    getJson<{ data?: { id?: string; downloaded?: boolean; size?: number }[] }>(
-      `${base}/api/v1/models`,
-    ),
+    getJson<{
+      data?: {
+        id?: string
+        downloaded?: boolean
+        size?: number
+        recipe?: string
+        labels?: string[]
+      }[]
+    }>(`${base}/api/v1/models`),
+    modelStats(),
   ])
 
   const version = health?.version ?? null
@@ -225,36 +261,65 @@ async function loadLemonade(): Promise<LemonadeData> {
   const gpu = (info?.devices?.amd_gpu ?? []).find((g) => g.vram_gb !== undefined)
 
   const models = catalog?.data ?? []
+  const loaded = new Map(resident.map((m) => [m.model_name ?? '', m]))
+  const hottest = resident[0]?.model_name
+
+  const catalogModels: CatalogModel[] = models.map((m) => {
+    const id = m.id ?? '?'
+    const live = loaded.get(id)
+    const seen = perModel.get(id)
+    return {
+      name: id,
+      resident: live !== undefined,
+      pinned: live?.pinned === true,
+      // `last_use` is a monotonic counter, not a wall clock — it orders the
+      // resident set but cannot be turned into "used 4 minutes ago". Only the
+      // top of that ordering is a claim worth making, so only it gets marked.
+      hot: id === hottest,
+      sizeGb: m.size ?? null,
+      recipe: live?.recipe ?? m.recipe ?? '?',
+      backend: pickBackend(live?.recipe ?? m.recipe, live?.recipe_options) ?? seen?.backend ?? null,
+      device: live?.device ?? seen?.device ?? null,
+      context: live?.max_context_window ?? null,
+      stats: seen?.stats ?? null,
+    }
+  })
+
+  // The per-type cap is what makes this page make sense: it is 1 for every
+  // type here, so "which model is in the slot" is the actual question and a
+  // flat list of six residents was the wrong shape for it.
+  const maxes = health?.max_models ?? {}
+  const typeOf = (m: (typeof models)[number]) =>
+    loaded.get(m.id ?? '')?.type ?? perModel.get(m.id ?? '')?.type ?? typeFromLabels(m.labels)
+
+  const byType = new Map<string, CatalogModel[]>()
+  models.forEach((m, i) => {
+    const t = typeOf(m)
+    const row = catalogModels[i]
+    if (row === undefined) return
+    byType.set(t, [...(byType.get(t) ?? []), row])
+  })
 
   return {
     version,
     gap: await versionGap('lemonade-sdk/lemonade', version),
     baseUrl: base,
-    models: resident.map((m, i) => ({
-      name: m.model_name ?? '?',
-      type: m.type ?? 'llm',
-      device: m.device ?? '?',
-      status: m.status ?? '?',
-      pinned: m.pinned === true,
-      context: m.max_context_window ?? null,
-      // `last_use` is a monotonic counter, not a wall clock — it orders the
-      // list but cannot be turned into "used 4 minutes ago". Only the top of
-      // that ordering is a claim worth making, so only it gets marked.
-      hot: i === 0,
-      recipe: m.recipe ?? '?',
-      backend: pickBackend(m.recipe, m.recipe_options),
-      checkpoint: m.checkpoint ?? '',
-    })),
-    // "5 of 6 loaded" is the wrong frame here: the cap is PER TYPE, so one
-    // chat model resident out of a limit of one means the rack is full even
-    // though five other models are also loaded.
-    slots: Object.entries(health?.max_models ?? {})
-      .map(([type, max]) => ({
+    categories: [...byType]
+      .map(([type, list]) => ({
         type,
-        used: resident.filter((m) => m.type === type).length,
-        max,
+        max: maxes[type] ?? 1,
+        // Resident first, then most-used, then alphabetical — so the model in
+        // the slot leads and the plausible alternatives follow it.
+        models: [...list].sort(
+          (a, b) =>
+            Number(b.resident) - Number(a.resident) ||
+            (b.stats?.requests ?? 0) - (a.stats?.requests ?? 0) ||
+            a.name.localeCompare(b.name),
+        ),
       }))
-      .sort((a, b) => a.type.localeCompare(b.type)),
+      // Categories with a real choice to make come first; singletons are just
+      // statements of fact and can sit at the bottom.
+      .sort((a, b) => b.models.length - a.models.length || a.type.localeCompare(b.type)),
     host: {
       os: info?.['OS Version'] ?? null,
       cpu: info?.Processor ?? null,
@@ -314,6 +379,96 @@ async function loadLemonade(): Promise<LemonadeData> {
         .reduce((n, m) => n + (m.size ?? 0), 0),
     },
   }
+}
+
+/**
+ * What each model has actually done, from the Lemonade scrape.
+ *
+ * Worth going to Prometheus rather than to Lemonade's own /api/v1/stats: that
+ * endpoint reports one set of numbers for the SERVER, so it answers "how fast
+ * was the last generation" and not "how fast is this model". These series
+ * carry a `model_name` label and — the part that makes the picker useful —
+ * they persist for models that have since been EVICTED. So a chat model you
+ * are considering switching back to can show what it did last time it ran.
+ *
+ * Six queries in one round trip each rather than one `{__name__=~...}` match:
+ * that regex form makes Prometheus scan every metric name in the index, and
+ * these are cheap instant queries against a 60s-resolution job.
+ */
+async function modelStats(): Promise<
+  Map<
+    string,
+    {
+      type: string
+      device: string | null
+      backend: string | null
+      stats: NonNullable<CatalogModel['stats']>
+    }
+  >
+> {
+  const names = [
+    'lemonade_model_requests_total',
+    'lemonade_model_input_tokens_total',
+    'lemonade_model_output_tokens_total',
+    'lemonade_model_tokens_per_second',
+    'lemonade_model_time_to_first_token_seconds',
+  ] as const
+
+  const [requests, input, output, tps, ttft] = await Promise.all(names.map((n) => promVector(n)))
+
+  const out = new Map<
+    string,
+    { type: string; device: string | null; backend: string | null; stats: NonNullable<CatalogModel['stats']> }
+  >()
+
+  const pick = (rows: typeof requests | undefined, model: string): number | null => {
+    const hit = (rows ?? []).find((r) => r.metric.model_name === model)
+    const n = hit === undefined ? NaN : Number(hit.value[1])
+    return Number.isFinite(n) ? n : null
+  }
+
+  // Every series carries the same identity labels, so any one of them can
+  // establish which models Prometheus has seen.
+  for (const r of requests ?? []) {
+    const model = r.metric.model_name
+    if (model === undefined || out.has(model)) continue
+    const ttftS = pick(ttft, model)
+    out.set(model, {
+      type: r.metric.type ?? 'llm',
+      device: r.metric.device ?? null,
+      // The scrape labels carry the recipe but not which backend build served
+      // it; that only comes from the live health document.
+      backend: null,
+      stats: {
+        requests: pick(requests, model),
+        inputTokens: pick(input, model),
+        outputTokens: pick(output, model),
+        tps: pick(tps, model),
+        ttftMs: ttftS === null ? null : ttftS * 1000,
+      },
+    })
+  }
+  return out
+}
+
+/**
+ * A model's kind, when nothing authoritative has said.
+ *
+ * Lemonade reports `type` on the health document and on its metrics, but only
+ * for models it has loaded or served since starting. A model that has never
+ * run has neither, and the catalogue entry carries only free-form `labels`.
+ * Those labels name every kind EXCEPT the commonest one — a chat model is
+ * tagged `tool-calling`, `vision`, `mtp`, never `llm` — so the fallback is a
+ * default rather than a match, which is why it is written this way round.
+ */
+function typeFromLabels(labels: string[] | undefined): string {
+  const has = (s: string) => (labels ?? []).some((l) => l.toLowerCase().includes(s))
+  if (has('embed')) return 'embedding'
+  if (has('rerank')) return 'reranking'
+  if (has('transcription')) return 'transcription'
+  if (has('tts')) return 'tts'
+  if (has('image')) return 'image'
+  return 'llm'
 }
 
 /** The one recipe_option worth surfacing: which compute backend is serving. */
