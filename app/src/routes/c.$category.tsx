@@ -3,6 +3,7 @@ import { Await, createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { AiView } from '../components/category/ai'
 import { HomeView } from '../components/category/home'
 import { BooksView, TvView } from '../components/category/media'
+import { GamingView } from '../components/category/gaming'
 import { MonitoringView } from '../components/category/monitoring'
 import { NetworkView } from '../components/category/network'
 import { SystemView } from '../components/category/system'
@@ -130,6 +131,8 @@ function CategoryBoards({ payload }: { payload: CategoryPayload }) {
       return <SystemView data={payload.data} />
     case 'monitoring':
       return <MonitoringView data={payload.data} />
+    case 'gaming':
+      return <GamingView data={payload.data} />
   }
 }
 

@@ -3224,6 +3224,95 @@ h2 {
   font-size: 0.74rem;
 }
 
+/* An artwork rail icon. Sized to the glyph box so the labels stay aligned
+   whichever kind a category uses, and slightly desaturated at rest so one
+   full-colour icon does not shout over six monochrome ones. */
+.nav-icon-img {
+  width: 1.05rem;
+  height: 1.05rem;
+  object-fit: contain;
+  opacity: 0.85;
+  filter: saturate(0.9);
+}
+.nav-item:hover .nav-icon-img,
+.nav-item.active .nav-icon-img {
+  opacity: 1;
+  filter: none;
+}
+
+/* ── gaming ─────────────────────────────────────────────────────────────── */
+
+/* The releases between what is installed and what is stable, as a path
+   rather than a count — a pulled release shows as a gap. */
+.relchain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+}
+.relchain li {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.76rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  color: var(--muted);
+}
+.relchain li::after {
+  content: "\2192";
+  color: var(--dim);
+  margin-left: 0.1rem;
+}
+.relchain li.relchain-last {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+}
+.relchain li.relchain-last::after {
+  content: none;
+}
+
+.news {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.news-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  min-width: 0;
+}
+.news-title {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.news-title:hover {
+  text-decoration: underline;
+}
+.news-date {
+  color: var(--dim);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ── topology ───────────────────────────────────────────────────────────── */
 
 /* Flow reads left-to-right on a wide screen and top-to-bottom on a narrow one,

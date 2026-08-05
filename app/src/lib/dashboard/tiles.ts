@@ -67,7 +67,14 @@ export type GroupName =
   | 'Network'
   | 'Monitoring'
 
-export type CategoryName = 'ai' | 'media' | 'home' | 'network' | 'system' | 'monitoring'
+export type CategoryName =
+  | 'ai'
+  | 'media'
+  | 'home'
+  | 'gaming'
+  | 'network'
+  | 'system'
+  | 'monitoring'
 
 /**
  * Group → the category page it belongs to, and (where the category has
@@ -84,7 +91,7 @@ export const GROUPS: {
 }[] = [
   { name: 'AI & Automation', category: 'ai', icon: '◈' },
   { name: 'Home', category: 'home', icon: '⌂' },
-  { name: 'Gaming', category: 'home', icon: '⛶' },
+  { name: 'Gaming', category: 'gaming', icon: '⛶' },
   { name: 'Media', category: 'media', tab: 'tv', icon: '▶' },
   { name: 'Books', category: 'media', tab: 'books', icon: '❏' },
   { name: 'Network', category: 'network', icon: '⇄' },
