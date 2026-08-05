@@ -76,6 +76,23 @@ export function since(seconds: number | null | undefined): string {
   return `${String(Math.round(seconds / 31536000))}y ago`
 }
 
+/**
+ * A latency, in whichever unit keeps it readable.
+ *
+ * Three ranges rather than one because these span five orders of magnitude on a
+ * single panel: the gateway's own overhead is ~10 ms, and a 12B model answering
+ * a 30k-token prompt after a cold load is minutes. Any one unit makes one end
+ * of that unreadable — "0.01 s" and "145000 ms" are both technically the value
+ * and neither is the answer.
+ */
+export function ms(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return DASH
+  if (v < 1000) return `${v.toFixed(0)} ms`
+  if (v < 60_000) return `${(v / 1000).toFixed(1)} s`
+  const total = Math.round(v / 1000)
+  return `${String(Math.floor(total / 60))}m ${String(total % 60)}s`
+}
+
 /** A countdown, same one-unit rule as `since`. */
 export function until(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return DASH

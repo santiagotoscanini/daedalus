@@ -1,12 +1,23 @@
 import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
-import { BarList, BigStat, Board, BoardGrid, Chip, Columns, Facts, Pulse, StatBand } from '../viz'
+import {
+  BarList,
+  BigStat,
+  Board,
+  BoardGrid,
+  Chip,
+  Columns,
+  Facts,
+  Measures,
+  Pulse,
+  StatBand,
+} from '../viz'
 import { GrafanaLogs } from '../logs'
 import { ReleaseNotes, UpgradeChain } from '../release-notes'
 import { LinkRow, ServiceHead, type CompareRow } from '../service-head'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
-import { compact, DASH, num, pct } from '../../lib/dashboard/format'
+import { compact, DASH, ms, num, pct } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { AiData } from '../../server/category'
 import type { Tone } from '../viz'
@@ -457,16 +468,7 @@ function ModelHero({ model }: { model: Model }) {
           Zero is dropped rather than shown because in every one of these the
           quantity is cumulative-or-latest: nothing has happened yet, which is
           what an absent row already says. */}
-      {stats.length > 0 && (
-        <dl className="mstats">
-          {stats.map((f) => (
-            <div key={f.k}>
-              <dt>{f.k}</dt>
-              <dd>{f.v}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      {stats.length > 0 && <Measures items={stats} />}
     </div>
   )
 }
@@ -570,9 +572,10 @@ function EvictButton({ model }: { model: Model }) {
 // ── LiteLLM ────────────────────────────────────────────────────────────────
 
 function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
-  const { gap, headline } = data
-  const busy = headline.inFlight !== null && headline.inFlight > 0
-  const total = data.daily.reduce((a, d) => a + d.requests, 0)
+  const { gap, today, daily, window: total } = data
+  const busy = data.inFlight !== null && data.inFlight > 0
+  const first = daily[0]?.date ?? ''
+  const last = daily[daily.length - 1]?.date ?? ''
 
   return (
     <>
@@ -608,127 +611,180 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
         ]}
       />
 
-      <StatBand>
-        <BigStat
-          label="Requests today"
-          value={num(headline.requestsToday)}
-          spark={headline.requestsSpark}
-          sub={`${num(total)} in ${String(data.daily.length)}d`}
-        />
-        <BigStat
-          label="Tokens today"
-          value={num(headline.tokensToday)}
-          tone="info"
-          sub={`${num(data.daily.reduce((a, d) => a + d.tokens, 0))} in ${String(data.daily.length)}d`}
-        />
-        <BigStat
-          label="In flight"
-          value={num(headline.inFlight)}
-          tone={busy ? 'accent' : 'muted'}
-          sub={
-            <>
-              <Pulse on={busy} tone="accent" />
-              right now
-            </>
-          }
-        />
-        <BigStat
-          label="Failed today"
-          value={num(headline.failedToday)}
-          tone={headline.failedToday !== null && headline.failedToday > 0 ? 'bad' : 'muted'}
-          sub={`${num(data.daily.reduce((a, d) => a + d.failed, 0))} in ${String(data.daily.length)}d`}
-        />
-      </StatBand>
-
+      {/* No headline band. Four stat cards spent the width of the page on
+          "requests today: 18" and "failed today: 0" — one figure each, most of
+          them zero most of the time, none of them worth the glance they were
+          demanding. The same numbers are a measure line inside the panel whose
+          chart they describe, which is also where they can be read AGAINST that
+          chart instead of a screen away from it. */}
       <BoardGrid>
         <Board
-          title="Gateway traffic"
+          title="Traffic"
           icon="◇"
           span={8}
-          aside={<span className="board-note">requests per day, {data.daily.length} days</span>}
+          aside={
+            <span className="board-live">
+              <Pulse on={busy} tone="accent" />
+              {busy ? `${num(data.inFlight)} in flight` : 'idle'}
+            </span>
+          }
         >
+          <Measures
+            items={[
+              { k: 'today', v: volume(today) },
+              { k: `${String(total.days)} days`, v: volume(total) },
+              {
+                k: 'failed',
+                v:
+                  total.requests === 0 ?
+                    DASH
+                  : `${num(total.failed)} · ${pct((total.failed / total.requests) * 100)}`,
+                tone: total.failed > 0 ? 'bad' : undefined,
+              },
+              // The one latency figure on this page that is actually about the
+              // gateway. Every other one is end-to-end and therefore mostly
+              // Lemonade, and this is the number that says so — three lines of
+              // caption replaced by the measurement they were describing.
+              { k: 'gateway adds', v: ms(data.overheadMs) },
+            ]}
+          />
+
           <Columns
-            points={data.daily.map((d) => ({
-              // Month-day only: the year is the same for every column and the
-              // axis is narrow.
+            points={daily.map((d) => ({
+              // Month-day only: the year is the same for every column.
               label: d.date.slice(5),
               value: d.requests,
-              display: `${num(d.requests)} requests · ${num(d.tokens)} tokens`,
+              display:
+                `${num(d.requests)} requests · ${num(d.tokens)} tokens` +
+                (d.failed > 0 ? ` · ${num(d.failed)} failed` : ''),
+              flag: d.failed > 0,
             }))}
+            height={64}
+            empty="the gateway’s ledger is empty"
           />
+          {daily.length > 0 && (
+            <p className="colaxis">
+              <span>{first.slice(5)}</span>
+              <span>requests per day</span>
+              <span>{last.slice(5)}</span>
+            </p>
+          )}
+
           <p className="board-foot">
-            From the gateway’s own ledger rather than its Prometheus counters, which reset on every
-            restart — a “top day” read off a counter would quietly mean “since the last deploy”.
+            {data.endpoints.length > 0 && (
+              <span className="endpoints">
+                {data.endpoints.map((e) => (
+                  <span key={e.label}>
+                    {e.label} <b>{num(e.value)}</b>
+                  </span>
+                ))}
+              </span>
+            )}
+            Counted from the gateway’s own ledger, which survives a restart — its Prometheus
+            counters do not. A day that saw a failure is underlined in red.
+            {data.partial && ' The window has more rows than one page, so these are a lower bound.'}
           </p>
         </Board>
 
         <Board
-          title="Latency by model"
-          icon="⚡"
+          title="Who is calling"
+          icon="◑"
           span={4}
           fill
-          aside={<span className="board-note">mean, 24h</span>}
+          aside={<span className="board-note">tokens, {total.days}d</span>}
         >
           <BarList
-            items={data.latency.map((l) => ({
-              label: l.label,
-              value: l.value,
-              display: `${num(l.value)}ms`,
-            }))}
-            tone="info"
-            empty="no requests in the last day"
-          />
-          <p className="board-foot">
-            End to end, so it includes the cold-load penalty when Lemonade had evicted the model —
-            which is what makes the Warm button on the Lemonade tab worth having.
-          </p>
-        </Board>
-
-        <Board title="Where the tokens went" icon="◑" span={6} fill>
-          <BarList
-            items={data.byModel.map((m) => ({ label: m.label, value: m.value, display: num(m.value) }))}
-            empty="no traffic in the window"
-          />
-          <h4 className="board-sub">By client</h4>
-          <BarList
-            items={data.byClient.map((c) => ({ label: c.label, value: c.value, display: num(c.value) }))}
+            items={data.callers.map((c) => ({ label: c.label, value: c.value, display: compact(c.value) }))}
             tone="info"
             empty="no keyed traffic in the window"
           />
           <p className="board-foot">
-            Clients are named by their virtual key’s alias, so an unaliased key shows as a hash
-            prefix. A caller missing from this list is idle, not absent.
+            Named by their virtual key’s alias; an unaliased key shows as its hash. A caller missing
+            from this list is idle, not gone.
+          </p>
+        </Board>
+
+        {/* One table, not three panels. The routing table, "where the tokens
+            went" and "latency by model" were all keyed by the same published
+            name, so each was a third of an answer laid out as a whole one — and
+            two of them were single-bar bar charts, which is a number wearing a
+            chart's costume. Joined, a row says what a caller asks for, what
+            that resolves to, and what it has actually cost to serve. */}
+        <Board
+          title="What resolves where"
+          icon="⇄"
+          span={8}
+          fill
+          aside={
+            <span className="board-note">
+              {data.routes.length} published · {total.days}d
+            </span>
+          }
+        >
+          {data.routes.length === 0 ?
+            <p className="viz-empty">the gateway did not answer</p>
+          : <div className="rtable">
+              <div className="rtable-head" aria-hidden="true">
+                <span>published</span>
+                <span />
+                <span>served by</span>
+                <span>kind</span>
+                <span>req</span>
+                <span>tokens</span>
+                <span>mean</span>
+              </div>
+              <ul>
+                {data.routes.map((r) => (
+                  <li key={r.name} className={r.requests === 0 ? 'rt-row rt-idle' : 'rt-row'}>
+                    <span className="rt-name mono">{r.name}</span>
+                    <span className="rt-arrow" aria-hidden="true">
+                      →
+                    </span>
+                    <span className="rt-target mono" title={r.target}>
+                      {r.target}
+                      <em>{r.upstream}</em>
+                    </span>
+                    <Chip tone="muted">{r.mode}</Chip>
+                    <span className="rt-n">{r.requests === 0 ? DASH : num(r.requests)}</span>
+                    <span className="rt-n">{r.tokens === 0 ? DASH : compact(r.tokens)}</span>
+                    <span className="rt-n">{ms(r.latencyMs)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          }
+          <p className="board-foot">
+            Left is what a caller asks for, right is the model Lemonade is told to load — different
+            on purpose, so renaming a checkpoint on the gaming PC does not break Home Assistant’s
+            config. Times are end to end, so they carry Lemonade’s cold-load penalty; the gateway’s
+            own share of them is the <b>{ms(data.overheadMs)}</b> above.
           </p>
         </Board>
 
         <Board
-          title="What resolves where"
-          icon="⇄"
-          span={6}
+          title="Tools models called"
+          icon="⌗"
+          span={4}
           fill
-          aside={<span className="board-note">{data.routes.length} published</span>}
+          aside={<span className="board-note">MCP, {total.days}d</span>}
         >
-          {data.routes.length === 0 ?
-            <p className="viz-empty">the gateway did not answer</p>
-          : <ul className="routes">
-              {data.routes.map((r) => (
-                <li key={r.name}>
-                  <span className="route-name mono">{r.name}</span>
-                  <span className="route-arrow" aria-hidden="true">
-                    →
+          {data.mcp.length === 0 ?
+            <p className="viz-empty">no tool calls in the window</p>
+          : <ul className="mcplist">
+              {data.mcp.map((t) => (
+                <li key={`${t.server}/${t.tool}`}>
+                  <Chip tone="info">{t.server}</Chip>
+                  <span className="mcp-tool mono" title={t.tool}>
+                    {t.tool}
                   </span>
-                  <span className="route-target mono" title={r.target}>
-                    {r.target}
-                  </span>
-                  <Chip tone="muted">{r.mode}</Chip>
+                  <span className="mcp-n">{num(t.calls)}</span>
                 </li>
               ))}
             </ul>
           }
           <p className="board-foot">
-            The left column is what a caller asks for; the right is the model Lemonade actually
-            serves. They are deliberately different — renaming a model on the gaming PC should not
-            break Home Assistant’s config.
+            The other direction: tools the gateway hands to a model mid-answer, counted when one was
+            actually invoked. Registered servers with no calls do not appear.
           </p>
         </Board>
 
@@ -740,6 +796,12 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
       </BoardGrid>
     </>
   )
+}
+
+/** `29 req · 28k tok`, or an em dash for a day the gateway served nothing. */
+function volume(v: { requests: number; tokens: number } | null): string {
+  if (v === null || v.requests === 0) return DASH
+  return `${num(v.requests)} req · ${compact(v.tokens)} tok`
 }
 
 // ── Open WebUI ─────────────────────────────────────────────────────────────

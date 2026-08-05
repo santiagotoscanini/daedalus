@@ -115,23 +115,48 @@ type LemonadeData = {
   catalog: { total: number; downloaded: number; sizeGb: number }
 }
 
+/** Requests, failures and tokens over some period. The gateway's one shape. */
+type Volume = { requests: number; failed: number; tokens: number }
+
+/**
+ * One published model name, with what actually went through it.
+ *
+ * The routing table and the traffic-by-model list and the latency-by-model list
+ * were three panels keyed by the same string, so this joins them once, here,
+ * where both keys are in hand: the ledger counts per model GROUP (the published
+ * name) and the latency histogram carries it as `requested_model`.
+ */
+type Route = Volume & {
+  name: string
+  /** The model Lemonade is asked to load — deliberately not `name`. */
+  target: string
+  /** Which machine answers. Shortened; the box's own hosts lose their domain. */
+  upstream: string
+  mode: string
+  /** Mean end to end, including the cold-load penalty. Null = never called. */
+  latencyMs: number | null
+}
+
 type LitellmData = {
   version: string | null
   gap: VersionGap
-  headline: {
-    requestsToday: number | null
-    tokensToday: number | null
-    inFlight: number | null
-    failedToday: number | null
-    requestsSpark: number[]
-  }
-  daily: { date: string; requests: number; tokens: number; failed: number }[]
-  byModel: { label: string; value: number }[]
-  byClient: { label: string; value: number }[]
-  /** What each published model name actually resolves to. */
-  routes: { name: string; target: string; mode: string; upstream: string }[]
-  /** Mean end-to-end latency per model, from the gateway's own histogram. */
-  latency: { label: string; value: number }[]
+  /** Every day of the window, oldest first — including the ones with nothing. */
+  daily: (Volume & { date: string })[]
+  /** Null when the gateway has not served anything yet today. */
+  today: Volume | null
+  window: Volume & { days: number }
+  /** True when the ledger had more rows than one page — see `PAGE_SIZE`. */
+  partial: boolean
+  inFlight: number | null
+  /** Mean milliseconds the gateway itself adds on top of the model's time. */
+  overheadMs: number | null
+  /** What KIND of call, by endpoint — `/chat/completions` → `chat/completions`. */
+  endpoints: { label: string; value: number }[]
+  /** Who asked, by virtual key. */
+  callers: { label: string; value: number }[]
+  routes: Route[]
+  /** Tools a model called back out through the gateway. */
+  mcp: { server: string; tool: string; calls: number }[]
 }
 
 type OpenWebUiData = {
@@ -487,29 +512,53 @@ function parseGb(s: string | undefined): number | null {
 // ── LiteLLM ────────────────────────────────────────────────────────────────
 
 type DayMetrics = { api_requests?: number; total_tokens?: number; failed_requests?: number }
-type Breakdown = { metrics?: DayMetrics; metadata?: { key_alias?: string | null } }
-type DailyActivity = {
-  results?: {
-    date?: string
-    metrics?: DayMetrics
-    breakdown?: {
-      model_groups?: Record<string, Breakdown>
-      api_keys?: Record<string, Breakdown>
-    }
-  }[]
+type Bucket = { metrics?: DayMetrics; metadata?: { key_alias?: string | null } }
+type Breakdown = Record<string, Bucket> | undefined
+type Day = {
+  date?: string
+  metrics?: DayMetrics
+  breakdown?: {
+    model_groups?: Record<string, Bucket>
+    api_keys?: Record<string, Bucket>
+    endpoints?: Record<string, Bucket>
+    mcp_servers?: Record<string, Bucket>
+  }
 }
+type DailyActivity = { results?: Day[]; metadata?: { has_more?: boolean } }
+
+/**
+ * How many ledger ROWS to ask for — not how many days.
+ *
+ * This is the endpoint's one real trap. `page_size` bounds the underlying
+ * spend records, and there is one of those per day PER key PER model, so a day
+ * with four callers costs a dozen rows. Passing `page_size = 14` for a
+ * fortnight therefore returned the newest three days and reported their totals
+ * as the fortnight's — a chart that silently showed a quarter of its window and
+ * a "requests in 14d" figure that was out by 3x. Asking for a thousand costs
+ * nothing (the response is aggregated per day before it is sent) and `partial`
+ * below reports the case where even that was not enough, rather than truncating
+ * quietly a second time.
+ */
+const PAGE_SIZE = 1000
+
+/** The window every figure on the tab is measured over, as a PromQL range. */
+const RANGE = `${String(DAYS)}d`
 
 async function loadLitellm(): Promise<LitellmData> {
   const auth = { headers: { Authorization: `Bearer ${process.env.LITELLM_API_KEY ?? ''}` } }
 
-  const from = new Date(Date.now() - (DAYS - 1) * 86400_000).toISOString().slice(0, 10)
-  const today = new Date().toISOString().slice(0, 10)
+  // Every day in the window, oldest first — the chart's x axis, independent of
+  // which of them the ledger happens to have a row for.
+  const dates = Array.from({ length: DAYS }, (_, i) =>
+    new Date(Date.now() - (DAYS - 1 - i) * 86400_000).toISOString().slice(0, 10),
+  )
+  const from = dates[0] ?? ''
+  const today = dates[DAYS - 1] ?? ''
 
-  const [activity, routes, version, inFlight, latency] = await Promise.all([
-    // `page_size` bounds the response rather than the range: one row per day,
-    // so a fortnight is a fortnight of rows and asking for more is free.
+  const [activity, models, version, inFlight, latency, overhead] = await Promise.all([
     getJson<DailyActivity>(
-      `http://litellm:4000/user/daily/activity?start_date=${from}&end_date=${today}&page_size=${String(DAYS)}`,
+      `http://litellm:4000/user/daily/activity?start_date=${from}&end_date=${today}` +
+        `&page_size=${String(PAGE_SIZE)}`,
       auth,
     ),
     getJson<{
@@ -521,55 +570,162 @@ async function loadLitellm(): Promise<LitellmData> {
     }>('http://litellm:4000/model/info', auth),
     litellmVersion(auth),
     promScalar('sum(litellm_in_flight_requests)'),
-    // Mean seconds per request from the histogram's own sum/count, which is
-    // the only honest average available: the buckets are coarse enough that a
-    // quantile over this little traffic would be quantisation noise.
+    // Keyed by `requested_model` — the name a caller ASKED for — rather than by
+    // `model`, the checkpoint that served it. Two reasons: it is the key the
+    // routing table and the ledger are both already on, so the join is exact;
+    // and the `model` label is also where litellm files its MCP tool calls
+    // (`MCP: Grocy-…`), which would otherwise arrive as pseudo-models in a list
+    // of models. Mean from the histogram's own sum/count, which is the only
+    // honest average here — the buckets are coarse enough that a quantile over
+    // this little traffic would be quantisation noise.
     promBars(
-      'sum by (model) (increase(litellm_request_total_latency_metric_sum[24h]))' +
-        ' / sum by (model) (increase(litellm_request_total_latency_metric_count[24h]))',
-      'model',
+      `sum by (requested_model) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))` +
+        ` / sum by (requested_model) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
+      'requested_model',
+    ),
+    // What the gateway costs, separated from what the model costs. Every
+    // latency figure on this page is end-to-end and therefore mostly Lemonade;
+    // this is the part that is actually attributable to litellm.
+    promScalar(
+      `sum(increase(litellm_overhead_latency_metric_sum[${RANGE}]))` +
+        ` / sum(increase(litellm_overhead_latency_metric_count[${RANGE}]))`,
     ),
   ])
 
-  // Oldest-first: the API returns newest-first, and a chart that reads
-  // right-to-left is a chart nobody reads correctly.
-  const days = [...(activity?.results ?? [])].reverse()
-  const daily = days.map((d) => ({
-    date: d.date ?? '',
-    requests: d.metrics?.api_requests ?? 0,
-    tokens: d.metrics?.total_tokens ?? 0,
-    failed: d.metrics?.failed_requests ?? 0,
+  // Order is not read off this list — the chart's axis is `dates` and
+  // everything else here is a sum — so it is taken as the API sends it.
+  const days = activity?.results ?? []
+
+  // Laid over the whole window rather than taken as-is. The ledger has no row
+  // at all for a day nothing was served, so using its rows directly puts two
+  // non-adjacent days side by side in a chart whose whole premise is one column
+  // per day — a quiet Sunday disappears and the week looks continuous.
+  const byDate = new Map(days.map((d) => [d.date ?? '', volumeOf(d.metrics)]))
+  const daily = dates.map((date) => ({
+    date,
+    ...(byDate.get(date) ?? { requests: 0, failed: 0, tokens: 0 }),
   }))
-  const todayRow = daily.find((d) => d.date === today)
+  const total = {
+    ...daily.reduce(
+      (a, d) => ({
+        requests: a.requests + d.requests,
+        failed: a.failed + d.failed,
+        tokens: a.tokens + d.tokens,
+      }),
+      { requests: 0, failed: 0, tokens: 0 },
+    ),
+    days: daily.length,
+  }
+
+  // The gateway's own ledger, not its prometheus counters: those reset whenever
+  // the container restarts, which would make every "over the last N days"
+  // figure here quietly mean "since the last deploy".
+  const served = tally(days, (d) => d.breakdown?.model_groups)
+  const lat = new Map(latency.map((l) => [l.label, l.value * 1000]))
 
   return {
     version,
     gap: await versionGap('BerriAI/litellm', version),
-    headline: {
-      requestsToday: todayRow?.requests ?? null,
-      tokensToday: todayRow?.tokens ?? null,
-      failedToday: todayRow?.failed ?? null,
-      inFlight,
-      requestsSpark: daily.map((d) => d.requests),
-    },
     daily,
-    // The gateway's per-model-group ledger over the window, not the lifetime
-    // prometheus counter — the counter resets whenever litellm restarts, which
-    // would make a "top models" list quietly mean "since the last deploy".
-    byModel: rank(days, (d) => d.breakdown?.model_groups),
-    byClient: rank(days, (d) => d.breakdown?.api_keys, (k, b) => b.metadata?.key_alias ?? k.slice(0, 8)),
-    routes: (routes?.data ?? [])
-      .map((m) => ({
-        name: m.model_name ?? '?',
-        target: (m.litellm_params?.model ?? '').replace(/^openai\//, ''),
-        mode: m.model_info?.mode ?? 'chat',
-        // Host only. The full base URL is the same string thirteen times over
-        // and its path adds nothing — what varies, and what matters, is which
-        // machine is answering.
-        upstream: hostOf(m.litellm_params?.api_base),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    latency: latency.map((l) => ({ label: l.label, value: l.value * 1000 })),
+    today: daily.find((d) => d.date === today) ?? null,
+    window: total,
+    partial: activity?.metadata?.has_more === true,
+    inFlight,
+    overheadMs: overhead === null ? null : overhead * 1000,
+    endpoints: rank(days, (d) => d.breakdown?.endpoints, requestsOf, (k) => k.replace(/^\//, '')),
+    callers: rank(days, (d) => d.breakdown?.api_keys, (m) => m.total_tokens ?? 0, callerName),
+    routes: (models?.data ?? [])
+      .map((m) => {
+        const name = m.model_name ?? '?'
+        return {
+          name,
+          target: (m.litellm_params?.model ?? '').replace(/^openai\//, ''),
+          upstream: upstreamOf(m.litellm_params?.api_base, m.litellm_params?.model),
+          mode: modeOf(m.model_info?.mode),
+          ...(served.get(name) ?? { requests: 0, failed: 0, tokens: 0 }),
+          latencyMs: lat.get(name) ?? null,
+        }
+      })
+      // Busiest first, so the routes that are actually load-bearing lead and
+      // the published-but-idle ones settle at the bottom, where they read as
+      // the inventory they are.
+      .sort((a, b) => b.requests - a.requests || a.name.localeCompare(b.name)),
+    mcp: rank(days, (d) => d.breakdown?.mcp_servers, requestsOf, (k) => k, 8).map((t) => {
+      const [server, ...rest] = t.label.split('/')
+      return { server: server ?? '?', tool: rest.join('/'), calls: t.value }
+    }),
+  }
+}
+
+function volumeOf(m: DayMetrics | undefined): Volume {
+  return {
+    // Every attempt, failures included — `successful_requests` is the same
+    // number minus `failed_requests`, so carrying all three would be one fact
+    // stated twice and a chance for them to disagree.
+    requests: m?.api_requests ?? 0,
+    failed: m?.failed_requests ?? 0,
+    tokens: m?.total_tokens ?? 0,
+  }
+}
+
+const requestsOf = (m: DayMetrics): number => m.api_requests ?? 0
+
+/**
+ * A virtual key, named.
+ *
+ * Most callers here carry an alias and are simply that. The rest are the two
+ * keys litellm issues itself, which arrive as literal strings rather than
+ * hashes and mean something specific — the master key is anything holding the
+ * admin credential, the health-check key is the gateway probing its own
+ * upstreams — and saying so is the difference between a caller list and a list
+ * of hashes. Absent aliases arrive as null AND as the string "None", because
+ * litellm stringifies its own Python None on the way out.
+ */
+function callerName(hash: string, b: Bucket): string {
+  const alias = b.metadata?.key_alias
+  if (alias !== null && alias !== undefined && alias !== '' && alias !== 'None') return alias
+  if (hash === 'litellm_proxy_master_key') return 'master key'
+  if (hash === 'litellm-internal-health-check') return 'health check'
+  if (hash === '') return 'unattributed'
+  return `key ${hash.slice(0, 8)}`
+}
+
+/**
+ * What a route is FOR, in the reader's vocabulary rather than the API's.
+ *
+ * litellm's own strings are qualified against the OpenAI endpoint they belong
+ * to (`audio_speech`, `audio_transcription`, `image_generation`), which is
+ * precision this column does not need — nothing here is ambiguous once the
+ * qualifier is gone, and the qualifier was the widest part of the column.
+ * Anything unrecognised passes through as it came, so a mode this box has not
+ * seen yet is never silently relabelled.
+ */
+function modeOf(mode: string | undefined): string {
+  const SHORT: Record<string, string> = {
+    audio_speech: 'speech',
+    audio_transcription: 'transcription',
+    image_generation: 'image',
+  }
+  if (mode === undefined || mode === '') return 'chat'
+  return SHORT[mode] ?? mode
+}
+
+/**
+ * Which machine answers a route.
+ *
+ * No `api_base` is not "unknown" — it means litellm falls through to the
+ * provider's own endpoint, so the request leaves the house. That is the one
+ * distinction this column exists to draw, and rendering it as an em dash beside
+ * eight local routes would hide exactly the row worth noticing.
+ */
+function upstreamOf(apiBase: string | undefined, model: string | undefined): string {
+  if (apiBase === undefined || apiBase === '') {
+    return model?.startsWith('openai/') === true ? 'api.openai.com' : DASH
+  }
+  try {
+    return new URL(apiBase).hostname.replace(/\.local\.toscanini\.me$/, '')
+  } catch {
+    return DASH
   }
 }
 
@@ -605,32 +761,43 @@ async function litellmVersion(init: RequestInit): Promise<string | null> {
   }
 }
 
-function hostOf(url: string | undefined): string {
-  try {
-    return new URL(url ?? '').host
-  } catch {
-    return DASH
-  }
-}
-
-/** Sum a per-day breakdown map into a ranked top-6. */
+/** Sum a per-day breakdown map into a ranked list, on one chosen metric. */
 function rank(
-  days: NonNullable<DailyActivity['results']>,
-  pick: (d: NonNullable<DailyActivity['results']>[number]) => Record<string, Breakdown> | undefined,
-  label: (k: string, b: Breakdown) => string = (k) => k,
+  days: Day[],
+  pick: (d: Day) => Breakdown,
+  metric: (m: DayMetrics) => number,
+  label: (k: string, b: Bucket) => string = (k) => k,
+  limit = 6,
 ): { label: string; value: number }[] {
   const totals = new Map<string, number>()
   for (const d of days) {
     for (const [k, b] of Object.entries(pick(d) ?? {})) {
       const name = label(k, b)
-      totals.set(name, (totals.get(name) ?? 0) + (b.metrics?.total_tokens ?? 0))
+      totals.set(name, (totals.get(name) ?? 0) + metric(b.metrics ?? {}))
     }
   }
   return [...totals]
     .map(([l, value]) => ({ label: l, value }))
     .filter((x) => x.value > 0)
     .sort((a, b) => b.value - a.value)
-    .slice(0, 6)
+    .slice(0, limit)
+}
+
+/** The same sum, keeping every figure rather than ranking on one of them. */
+function tally(days: Day[], pick: (d: Day) => Breakdown): Map<string, Volume> {
+  const totals = new Map<string, Volume>()
+  for (const d of days) {
+    for (const [k, b] of Object.entries(pick(d) ?? {})) {
+      const at = totals.get(k) ?? { requests: 0, failed: 0, tokens: 0 }
+      const add = volumeOf(b.metrics)
+      totals.set(k, {
+        requests: at.requests + add.requests,
+        failed: at.failed + add.failed,
+        tokens: at.tokens + add.tokens,
+      })
+    }
+  }
+  return totals
 }
 
 // ── Open WebUI ─────────────────────────────────────────────────────────────

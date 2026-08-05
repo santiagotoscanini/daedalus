@@ -97,7 +97,7 @@ function CategoryPage() {
             {(status) => <TabNav spec={spec} category={category} tab={tab} status={status} />}
           </Await>)}
 
-      <Await promise={boards} fallback={<BoardsPlaceholder spec={spec} />}>
+      <Await promise={boards} fallback={<BoardsPlaceholder spec={spec} tab={tab} />}>
         {(payload) => <CategoryBoards payload={payload} />}
       </Await>
 
@@ -169,12 +169,20 @@ function TabNav({
   )
 }
 
-/** The headline band plus the grid, sized to the page that is arriving. */
-function BoardsPlaceholder({ spec }: { spec: CategorySpec }) {
+/**
+ * The headline band plus the grid, sized to the page that is arriving.
+ *
+ * Sized per TAB where a tab says so: the category's own spans describe its
+ * default tab, and a sibling laid out differently would reflow on arrival —
+ * worst of all a band of stat cards that the page turns out not to have.
+ */
+function BoardsPlaceholder({ spec, tab }: { spec: CategorySpec; tab: string }) {
+  const t = spec.tabs.find((x) => x.id === tab)
+
   return (
     <>
-      <StatBandSkeleton />
-      <BoardsSkeleton spans={spec.boardSpans} />
+      {t?.statBand !== false && <StatBandSkeleton />}
+      <BoardsSkeleton spans={t?.boardSpans ?? spec.boardSpans} />
     </>
   )
 }
