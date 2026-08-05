@@ -59,6 +59,12 @@ in
     # (No RCON host port — ofsm drives RCON internally.)
     networking.firewall.allowedUDPPorts = [ 34197 ];
 
+    # The router forwards this port — see fleet.directIngress.
+    fleet.directIngress.factorio = {
+      port = 34197;
+      note = "The Factorio protocol is UDP and the game client dials the address directly, so this cannot ride the tunnel.";
+    };
+
     fleet.statePaths = {
       "/home/santiago/selfhost/factorio" = { };
       "/home/santiago/selfhost/factorio/fsm-data" = { };

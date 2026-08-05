@@ -161,6 +161,9 @@ export const CATEGORIES: CategorySpec[] = [
     // "tunnel" each meant two things a scroll apart.
     tabs: [
       { id: 'general', label: 'General' },
+      // Three ways in — WireGuard, the Cloudflare tunnel, and the address
+      // itself — chosen by a switch inside the page. The probe is wg-easy's
+      // because it is the only one of the three gatus can check.
       { id: 'wireguard', label: 'Coming in', probe: 'wg-easy', boardSpans: [8, 4, 12], statBand: false, tileGroups: 0 },
       // No probe: gatus checks HTTP endpoints, and a VPN egress tunnel
       // publishes none. Its liveness is on the page instead, per tunnel.

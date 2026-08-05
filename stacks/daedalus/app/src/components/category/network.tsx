@@ -20,7 +20,7 @@ import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead } from '../service-head'
 import { Segmented } from '../ui'
 import { Topology, type TopoEdge, type TopoStage } from '../topology'
-import { DASH, bytes, flag, num, pct, since, until } from '../../lib/dashboard/format'
+import { DASH, bytes, flag, ms, num, pct, since, until } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { NetworkData } from '../../server/category'
 import type { Tone } from '../viz'
@@ -39,7 +39,7 @@ import type { Tone } from '../viz'
 export function NetworkView({ data }: { data: NetworkData }) {
   switch (data.tab) {
     case 'wireguard':
-      return <WireguardView data={data} />
+      return <InboundView data={data} />
     case 'outbound':
       return <OutboundView data={data} />
     default:
@@ -661,7 +661,73 @@ function egressEdges(data: General): TopoEdge[] {
 
 type General = Extract<NetworkData, { tab: 'general' }>
 
-// ── Coming in: WireGuard ───────────────────────────────────────────────────
+// ── Coming in ──────────────────────────────────────────────────────────────
+
+type Inbound = Extract<NetworkData, { tab: 'wireguard' }>
+
+/**
+ * Three ways in, and they have almost nothing in common.
+ *
+ * The tunnel is an outbound connection cloudflared holds open, so the edge
+ * reaches this box without the router ever accepting one. WireGuard is the
+ * exception: one forwarded UDP port, acceptable only because the protocol
+ * ignores unauthenticated packets. And the third is no proxy at all — the
+ * address itself, for the things that speak neither HTTP nor WireGuard.
+ *
+ * Three different pieces of software, three different failure modes, so each
+ * gets its own header and its own boards rather than a shared row that would
+ * fit none of them. What IS shared is the strip above the switch: which of the
+ * three is working, all at once, so a broken one is visible without visiting
+ * it. That is the whole reason they live on one tab instead of three.
+ */
+function InboundView({ data }: { data: Inbound }) {
+  const [route, setRoute] = useState<'wireguard' | 'tunnel' | 'direct'>('wireguard')
+  const { wireguard, tunnel, ddns } = data
+
+  const wgOk = (wireguard.counts.configured ?? 0) > 0
+  const tunnelOk = tunnel.status === 'healthy'
+  // The address is right when the name resolves to where the tunnel says
+  // traffic is actually arriving from. Unknown on either side is not a fault.
+  const dnsOk =
+    ddns.resolved === null || ddns.actual === null ? null : ddns.resolved === ddns.actual
+
+  return (
+    <>
+      <div className="tunnel-bar">
+        <span className="routes">
+          <RouteChip on={tunnelOk} label="tunnel" />
+          <RouteChip on={wgOk} label="wireguard" />
+          <RouteChip on={dnsOk} label="direct" />
+        </span>
+        <Segmented
+          value={route}
+          onChange={setRoute}
+          options={[
+            { value: 'tunnel', label: 'Cloudflare tunnel' },
+            { value: 'wireguard', label: 'WireGuard' },
+            { value: 'direct', label: 'Direct' },
+          ]}
+        />
+      </div>
+
+      {route === 'tunnel' ?
+        <CfTunnelView t={tunnel} />
+      : route === 'direct' ?
+        <DdnsView d={ddns} />
+      : <WireguardView data={wireguard} />}
+    </>
+  )
+}
+
+/** One way in, as a dot and a word. Grey is "cannot tell", not "down". */
+function RouteChip({ on, label }: { on: boolean | null; label: string }) {
+  return (
+    <span className="routes-one">
+      <Pulse on={on === true} tone={on === false ? 'bad' : 'ok'} />
+      {label}
+    </span>
+  )
+}
 
 /**
  * The way back into the house.
@@ -672,7 +738,7 @@ type General = Extract<NetworkData, { tab: 'general' }>
  * A peer that exists and has never handshaken is a credential somebody was
  * issued and never used, which is worth seeing on a list of two.
  */
-function WireguardView({ data }: { data: Extract<NetworkData, { tab: 'wireguard' }> }) {
+function WireguardView({ data }: { data: Inbound['wireguard'] }) {
   const { gap, counts, peers, daily } = data
   const live = counts.connected !== null && counts.connected > 0
   const max = Math.max(...peers.map((p) => p.rx + p.tx), 1)
@@ -1140,4 +1206,309 @@ function place(city: string | null, region: string | null): string {
   if (city === null || city === '') return region ?? DASH
   if (region === null || region === '' || fold(region) === fold(city)) return city
   return `${city}, ${region}`
+}
+
+/**
+ * The Cloudflare tunnel, from both ends.
+ *
+ * Cloudflare knows what the edge sees; cloudflared knows what this box sent.
+ * The panel that matters is the second one: `published` is every hostname the
+ * tunnel will answer for, which is the literal answer to "what of this house
+ * is reachable from the internet" — a question no other page here asks, and
+ * one whose wrong answer is a service exposed by accident.
+ */
+function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
+  const healthy = t.status === 'healthy'
+
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-cloudflare.svg"
+        name="Cloudflare tunnel"
+        version={t.version}
+        versionNote="cloudflared, as the edge reports it"
+        verdict={verdictOf(t.gap)}
+        compare={[
+          {
+            k: 'Latest',
+            v: t.gap.latest,
+            note:
+              t.gap.latest === null ? 'GitHub did not answer'
+              : t.gap.behind.length === 0 ? 'this is what is running'
+              : `${String(t.gap.behind.length)} release${t.gap.behind.length === 1 ? '' : 's'} between them`,
+          },
+          { k: 'Pinned by', v: null, note: 'a digest in stacks/cloudflared' },
+        ]}
+        lede={
+          <>
+            An <b>outbound</b> connection cloudflared holds open to Cloudflare, which the edge then
+            reaches this box through. So the router never accepts an inbound connection for it —
+            no forwarded port, nothing to scan — and everything it carries is HTTP, terminated at
+            traefik’s <code>cfweb</code> entrypoint on plain HTTP because the edge already did TLS.
+          </>
+        }
+        actions={
+          <a
+            className="btn btn-primary"
+            href="https://one.dash.cloudflare.com/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Cloudflare dashboard ↗
+          </a>
+        }
+      />
+      <LinkRow
+        links={[
+          { label: 'cloudflared', href: 'https://github.com/cloudflare/cloudflared' },
+          { label: 'Docs', href: 'https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/' },
+        ]}
+      />
+
+      <BoardGrid>
+        <Board
+          title="Holding the tunnel"
+          icon="⇥"
+          span={8}
+          fill
+          aside={
+            <span className="board-live">
+              <Pulse on={healthy} tone={healthy ? 'ok' : 'bad'} />
+              {t.status ?? 'unknown'}
+            </span>
+          }
+        >
+          <Measures
+            items={[
+              { k: 'connections', v: num(t.connections) },
+              { k: 'edge round trip', v: ms(t.rttMs) },
+              { k: 'held for', v: since(t.heldForSeconds).replace(' ago', '') },
+              {
+                k: 'errors',
+                v: num(t.errors),
+                tone: t.errors !== null && t.errors > 0 ? 'bad' : undefined,
+              },
+            ]}
+          />
+
+          <Columns
+            points={t.daily.map((d) => ({
+              label: d.date.slice(5),
+              value: d.requests,
+              display: `${num(d.requests)} request${d.requests === 1 ? '' : 's'}`,
+            }))}
+            height={112}
+            empty="no history yet"
+          />
+          {t.daily.length > 0 && (
+            <p className="colaxis">
+              <span>{t.daily[0]?.date.slice(5)}</span>
+              <span>requests from outside, per day</span>
+              <span>{t.daily[t.daily.length - 1]?.date.slice(5)}</span>
+            </p>
+          )}
+
+          <p className="board-foot">
+            Four connections into{' '}
+            {t.edges.length === 0 ?
+              'the edge'
+            : t.edges.map((e) => `${e.colo}×${String(e.count)}`).join(' · ')}{' '}
+            — two datacentres, so losing one is a reconnect rather than an outage. The counts are
+            small on purpose: almost everything here is reached over the LAN, and the tunnel only
+            carries what is genuinely away from home. <b>Held for</b> is the oldest connection, not
+            the newest, since the newest may have rotated seconds ago and says nothing.
+          </p>
+        </Board>
+
+        <Board
+          title="Published to the world"
+          icon="◍"
+          span={4}
+          fill
+          aside={<span className="board-note">{t.published.length} hostnames</span>}
+        >
+          {t.published.length === 0 ?
+            <p className="viz-empty">could not read the tunnel’s ingress rules</p>
+          : <ul className="itemlist">
+              {t.published.map((p) => (
+                <li key={p.hostname}>
+                  <span className="item-main">{p.hostname.replace(/\.toscanini\.me$/, '')}</span>
+                  <span className="item-side mono">{p.service.replace(/^https?:\/\//, '')}</span>
+                </li>
+              ))}
+            </ul>
+          }
+          <p className="board-foot">
+            Read back from the tunnel’s own ingress rules, which is the only list that decides
+            anything — a hostname here is reachable from the internet, and one that is not here is
+            not, whatever DNS says. Every entry is generated by a{' '}
+            <code>webApps.exposeRemotely</code>, so this is that decision as Cloudflare received it.
+            They all point at the same place: traefik’s plain-HTTP <code>cfweb</code> entrypoint.
+          </p>
+        </Board>
+
+        <Changelog gap={t.gap} />
+
+        <Board title="Logs" icon="≡" span={12}>
+          <GrafanaLogs source={{ container: 'cloudflared' }} title="cloudflared logs" />
+        </Board>
+      </BoardGrid>
+    </>
+  )
+}
+
+/**
+ * The address, and whether anything still points at it.
+ *
+ * This page exists because the failure is silent in both directions: a home
+ * connection's address changes with no notice, and ddclient failing to notice
+ * exits 0. Nothing alerts, nothing logs an error a human would see, and the
+ * first symptom is somebody unable to join a Factorio game.
+ */
+function DdnsView({ d }: { d: Inbound['ddns'] }) {
+  const known = d.resolved !== null && d.actual !== null
+  const match = known && d.resolved === d.actual
+
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-cloudflare.svg"
+        name="Direct"
+        version={d.resolved}
+        versionNote={`${d.host} — what the world resolves it to`}
+        verdict={
+          !known ? { label: 'unknown', tone: 'muted' }
+          : match ? { label: 'pointing here', tone: 'ok' }
+          : { label: 'stale', tone: 'bad' }
+        }
+        compare={[
+          { k: 'Actually here', v: d.actual, note: 'the address the tunnel reports arriving from' },
+          { k: 'Kept current by', v: `ddclient ${d.version ?? ''}`.trim(), note: 'platform/ddclient, every 5 minutes' },
+        ]}
+        lede={
+          <>
+            No proxy at all — the house’s own address. The tunnel carries HTTP and nothing else, so
+            anything speaking another protocol has to be dialled directly, and a home connection’s
+            address moves. ddclient is what keeps <code>{d.host}</code> pointed at it.
+          </>
+        }
+      />
+      <LinkRow
+        links={[
+          { label: 'ddclient', href: 'https://github.com/ddclient/ddclient' },
+          { label: 'The record', href: `https://dash.cloudflare.com/` },
+        ]}
+      />
+
+      <BoardGrid>
+        <Board
+          title="Is the name right"
+          icon="◎"
+          span={8}
+          fill
+          aside={
+            <span className="board-live">
+              <Pulse on={match} tone={known && !match ? 'bad' : 'ok'} />
+              {!known ? 'cannot tell'
+              : match ? 'matches'
+              : 'does not match'}
+            </span>
+          }
+        >
+          <Measures
+            items={[
+              { k: 'resolves to', v: d.resolved ?? DASH },
+              { k: 'actually here', v: d.actual ?? DASH, tone: known && !match ? 'bad' : undefined },
+              { k: 'record ttl', v: d.ttl === null ? DASH : until(d.ttl) },
+              {
+                k: 'rechecked every',
+                v: d.intervalSeconds === null ? DASH : until(d.intervalSeconds),
+              },
+            ]}
+          />
+
+          <p className="board-foot">
+            {match ?
+              <>
+                The name resolves to the address the tunnel reports traffic arriving from, so
+                everything below can be reached.{' '}
+              </>
+            : known ?
+              <>
+                <b>They disagree.</b> The name is pointing somewhere this box is not, so everything
+                below is unreachable from outside until ddclient catches up — its next run is within{' '}
+                {d.intervalSeconds === null ? 'five minutes' : until(d.intervalSeconds)}.{' '}
+              </>
+            : <>One of the two could not be read, so this check is not currently making a claim. </>
+            }
+            Asked of <code>1.1.1.1</code> over HTTPS rather than this box’s resolver, deliberately:
+            pi-hole short-circuits <code>*.toscanini.me</code> to the LAN address, which is right and
+            would make this check answer itself.
+          </p>
+
+          {/* The failure that has no other symptom. Counted from the log
+              because the unit exits 0 either way. */}
+          {(d.lookupFailures.month ?? 0) > 0 && (
+            <p className="rejected">
+              ddclient could not work out this house’s address{' '}
+              <b>{num(d.lookupFailures.day)}</b> times in the last day,{' '}
+              <b>{num(d.lookupFailures.week)}</b> in the week and{' '}
+              <b>{num(d.lookupFailures.month)}</b> in the month — its lookup against{' '}
+              <code>cloudflare.com/cdn-cgi/trace</code> got no answer. Each run that fails publishes
+              nothing, so a real address change during one would not be noticed until the next
+              success.{' '}
+              {d.monitored ?
+                'It is in fleet.monitoredJobs, so a failure mails you.'
+              : 'The unit still exits 0, so nothing alerts on it — including the OnFailure hook it does not have.'}
+            </p>
+          )}
+        </Board>
+
+        <Board
+          title="What needs it"
+          icon="⇥"
+          span={4}
+          fill
+          aside={<span className="board-note">router-forwarded</span>}
+        >
+          {d.needs.length === 0 ?
+            <p className="viz-empty">nothing declares a direct port</p>
+          : <ul className="itemlist">
+              {d.needs.map((n) => (
+                <li key={n.name} title={n.note}>
+                  <Chip tone="info">{n.proto}</Chip>
+                  <span className="item-main">{n.name}</span>
+                  <span className="item-side mono">{n.port}</span>
+                </li>
+              ))}
+            </ul>
+          }
+          <p className="board-foot">
+            From <code>fleet.directIngress</code>, which each service declares beside its own
+            firewall rule. This is the one registry on the box recording something nix does not own
+            — the router’s port-forward table lives in the router — and it is written next to the
+            service so that removing the service takes the note with it. Everything else reaches
+            this house through the tunnel and needs no address at all.
+          </p>
+        </Board>
+
+        <Changelog gap={d.gap} />
+
+        <Board title="Logs" icon="≡" span={12}>
+          <GrafanaLogs
+            source={{ unit: 'ddclient.service' }}
+            title="ddclient logs"
+            foot={
+              <p className="board-foot">
+                A systemd unit rather than a container — ddclient is host plumbing, so these are
+                journal lines. It runs every{' '}
+                {d.intervalSeconds === null ? 'five minutes' : until(d.intervalSeconds)} and says
+                nothing at all on a successful run that changed nothing, which is most of them.
+              </p>
+            }
+          />
+        </Board>
+      </BoardGrid>
+    </>
+  )
 }

@@ -234,6 +234,52 @@ in
       '';
     };
 
+    directIngress = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            port = lib.mkOption {
+              type = lib.types.port;
+              description = "The port the router forwards to this box.";
+            };
+            proto = lib.mkOption {
+              type = lib.types.enum [
+                "tcp"
+                "udp"
+              ];
+              default = "udp";
+            };
+            note = lib.mkOption {
+              type = lib.types.str;
+              description = "Why this one cannot ride the tunnel, in a sentence.";
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Services reachable from outside at this house's WAN address,
+        rather than through the Cloudflare tunnel.
+
+        The tunnel carries HTTP and nothing else, so anything speaking
+        another protocol needs the address itself — which is what
+        `platform/ddclient` keeps current, and the whole reason that job
+        exists. Two things qualify today: WireGuard and the Factorio
+        server, both UDP.
+
+        This is the ONE registry here that records a fact nix does not
+        own: the router's port-forward table lives in the router. It is
+        declared beside the service that needs it because that is the
+        only place a reader would think to look, and because a service
+        removed from the box should take its forwarding note with it.
+        Opening the firewall is still the owning stack's job — this does
+        not do it, it says why it was done.
+      '';
+      example = lib.literalExpression ''
+        { wireguard = { port = 51820; note = "a WireGuard socket ignores unauthenticated packets"; }; }
+      '';
+    };
+
     vpnEgress = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule (

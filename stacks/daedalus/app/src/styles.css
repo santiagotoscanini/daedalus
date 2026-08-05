@@ -5031,3 +5031,21 @@ h2 {
   font-size: 0.78rem;
   color: var(--dim);
 }
+
+/* Which ways in are working, all at once — the point of putting three
+   unrelated routes on one tab. Reads as a status line, not as navigation:
+   the switch beside it is what navigates. */
+.routes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.routes-one {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}

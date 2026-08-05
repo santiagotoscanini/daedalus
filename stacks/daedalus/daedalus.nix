@@ -471,6 +471,18 @@ in
       # third gluetun instance appears on the Network page with no change
       # here and none in the app.
       VPN_EGRESS = builtins.toJSON vpnEgress;
+
+      # The third way in, which is no proxy at all: the WAN address itself,
+      # kept current by platform/ddclient. What DEPENDS on that address is
+      # the registry each service contributes to; the rest is how the job
+      # that maintains it is configured, read from the service definition so
+      # a change to the poll interval cannot leave a stale number on a page.
+      DIRECT_INGRESS = builtins.toJSON (
+        lib.mapAttrsToList (name: v: { inherit name; inherit (v) port proto note; }) config.fleet.directIngress
+      );
+      DDNS_HOST = lib.head (config.services.ddclient.domains ++ [ "" ]);
+      DDNS_INTERVAL = config.services.ddclient.interval;
+      DDCLIENT_VERSION = config.services.ddclient.package.version;
     };
   };
 

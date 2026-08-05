@@ -94,13 +94,21 @@ export function grafanaLogsFull(source: LogSource, from = "now-7d"): string {
  * service whose logs did not come from this box's journal at all — Lemonade
  * runs on the gaming PC and reaches Loki through the WebSocket bridge in
  * stacks/lemonade-logs, which pushes directly and therefore has no container
- * to be named after. A union rather than two optional fields, so a caller
- * cannot pass both and leave the query to guess.
+ * to be named after. `unit` is for host plumbing that is not containerised at
+ * all: ddclient and pi-hole are NixOS services, so their lines carry a
+ * systemd unit label and no container one. A union rather than three optional
+ * fields, so a caller cannot pass two and leave the query to guess.
  */
-export type LogSource = { container: string } | { stack: string }
+export type LogSource = { container: string } | { stack: string } | { unit: string }
 
-const label = (s: LogSource) => ('container' in s ? 'container' : 'stack')
-const value = (s: LogSource) => ('container' in s ? s.container : s.stack)
+const label = (s: LogSource) =>
+  'container' in s ? 'container'
+  : 'stack' in s ? 'stack'
+  : 'unit'
+const value = (s: LogSource) =>
+  'container' in s ? s.container
+  : 'stack' in s ? s.stack
+  : s.unit
 
 /**
  * The ranges worth one click.

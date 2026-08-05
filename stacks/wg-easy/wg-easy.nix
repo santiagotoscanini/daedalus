@@ -45,6 +45,14 @@
     "iptable_filter"
   ];
 
+
+  # The router forwards this port to the box — see fleet.directIngress. The
+  # tunnel carries HTTP only, and WireGuard is UDP.
+  fleet.directIngress.wireguard = {
+    port = 51820;
+    note = "A WireGuard socket does not answer an unauthenticated packet at all, which is the entire reason a forwarded port is acceptable here.";
+  };
+
   networking.firewall.allowedUDPPorts = [ 51820 ];
 
   fleet.statePaths = {
