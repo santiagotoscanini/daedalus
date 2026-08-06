@@ -5292,12 +5292,24 @@ h2 {
   opacity: 0.85;
 }
 
-/* Two-up on a full-width board, since these rows are short and forty of them
-   in one column is a scroll for nothing. */
+/* Two-up on a full-width board, since these rows are short. 34rem rather
+   than 24: at 24 the target column had nothing left after the name and the
+   age, so every name truncated to four characters and "3d ago" wrapped onto
+   two lines. A column that cannot hold its content is not a column. */
 .zone-changed {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(34rem, 1fr));
   gap: 0.22rem 0.6rem;
+}
+/* Fixed tracks, so the name always gets its width and the target gives:
+   the name is what identifies the row, the target is context. */
+.zone-changed li {
+  display: grid;
+  grid-template-columns: minmax(6rem, 9rem) 3.4rem 1fr auto;
+  align-items: center;
+}
+.zone-changed .item-n {
+  white-space: nowrap;
 }
 
 .zone-drift {
@@ -5443,4 +5455,40 @@ h2 {
 .dhcp-mac {
   color: var(--dim);
   font-size: 0.66rem;
+}
+
+/* Grid tracks, not flex, for the two record lists — a per-row flex layout put
+   each type chip at a different x, so a column of CNAMEs read as scattered
+   rather than as a column. `min-width: 0` on the giving track is what lets its
+   ellipsis fire at all: a grid item's default `auto` minimum refuses to shrink
+   below its content, so without it the row overflows instead of truncating. */
+.zone-records li {
+  display: grid;
+  grid-template-columns: minmax(6rem, 16rem) 3.4rem 1fr;
+  align-items: center;
+}
+.zone-records .item-main,
+.zone-records .item-side,
+.zone-changed .item-main,
+.zone-changed .item-side {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── mail posture ───────────────────────────────────────────────────────── */
+
+.mail-name {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+/* The exchangers are the answer to "who receives this", so they belong under
+   the name — but they are three words of context, not a heading. */
+.mail-mx {
+  margin: 0.1rem 0 0.45rem;
+  font-size: 0.7rem;
+  color: var(--dim);
 }
