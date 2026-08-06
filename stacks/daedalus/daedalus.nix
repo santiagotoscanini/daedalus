@@ -680,6 +680,19 @@ in
     };
   };
 
+  # Both snapshots fail SILENTLY from the reader's side, which is the whole
+  # reason they are monitored. A missing image snapshot does not blank a page —
+  # `imageVersion` falls back to the flake pin, and for the services whose pin
+  # is a channel it reports "unknown", which is indistinguishable from a
+  # service that genuinely has no version. So a stuck oneshot would show up as
+  # Shelfmark and Recyclarr quietly going back to saying nothing.
+  #
+  # No `slug`: these are not dead-man jobs. A missed run costs a stale reading
+  # of something that changes on rebuilds, so a failure email is the whole of
+  # what is wanted.
+  fleet.monitoredJobs.daedalus-image-snapshot = { };
+  fleet.monitoredJobs.daedalus-env-snapshot = { };
+
   # Fifteen minutes, not two: an image label changes only when an image does,
   # which means a rebuild or a deploy pull — both of which restart the
   # container and re-run this via the ordering above. The timer is the
