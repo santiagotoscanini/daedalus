@@ -1725,12 +1725,73 @@ type ZoneData = {
   note: string | null
 }
 
-type DomainsData = { resolver: ResolverData; zone: ZoneData }
+/**
+ * One entry in pi-hole's hosts file, with what the rest of the box says about
+ * it.
+ *
+ * The row exists because of the join, not the entry: a name and an address is
+ * pi-hole's own screen and adds nothing here. Whether traefik has a router for
+ * it, and whether the same name is also published to the internet, are facts
+ * from two other systems that decide what the entry actually does.
+ */
+type LanName = {
+  short: string
+  fqdn: string
+  ip: string
+  /** Anything but the LAN address — the gaming PC is the only one today. */
+  elsewhere: boolean
+  /**
+   * traefik has a router, HTTP or TCP, for this name.
+   *
+   * Null for an entry pointing anywhere but this box, and that is not a
+   * missing reading — traefik is not in the path at all, so "no router" would
+   * be a true statement about an irrelevant program. It is also null when
+   * traefik could not be asked, because a claim about what is NOT served must
+   * not be made from an empty list.
+   */
+  served: boolean | null
+  /** The zone publishes it too, so it works from outside the house. */
+  public: boolean
+}
+
+type DomainsData = { resolver: ResolverData; zone: ZoneData; lan: LanName[] }
 
 async function loadDomains(ctx: { base: (app: string) => string }): Promise<DomainsData> {
-  const [resolver, zone] = await Promise.all([loadResolver(ctx.base('pihole')), loadZone()])
-  return { resolver, zone }
+  const [resolver, zone, hosts, served] = await Promise.all([
+    loadResolver(ctx.base('pihole')),
+    loadZone(),
+    lanHosts(),
+    servedHosts(),
+  ])
+
+  const published = new Set(zone.names.map((n) => n.fqdn))
+
+  return {
+    resolver,
+    zone,
+    lan: hosts.map((h) => {
+      const elsewhere = h.ip !== LAN_IP
+      return {
+        fqdn: h.host,
+        short: h.host.replace(new RegExp(`\\.${BASE_DOMAIN}$`), ''),
+        ip: h.ip,
+        elsewhere,
+        served: served === null || elsewhere ? null : served.has(h.host),
+        public: published.has(h.host),
+      }
+    }),
+  }
 }
+
+/**
+ * This box, as the LAN addresses it.
+ *
+ * Nearly every hosts entry points here, so the address is only worth printing
+ * when it does NOT — and that comparison needs something to compare against.
+ * Bound from `fleet.lanIp`, the same option that generates those entries, so
+ * the two cannot drift apart into a page where every row looks interesting.
+ */
+const LAN_IP = process.env.LAN_IP ?? ''
 
 // ── Domains: the resolver ──────────────────────────────────────────────────
 
@@ -1942,7 +2003,7 @@ async function loadZone(): Promise<ZoneData> {
 
   const raw = recordsBody?.result ?? null
   const records = (raw ?? []).map(toRecord(domain))
-  const lanSet = new Set(lan)
+  const lanSet = new Set(lan.map((h) => h.host))
   const publishedSet = new Set(Object.values(published))
 
   // Every name the zone points at this house: the tunnel CNAMEs the reconciler

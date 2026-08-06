@@ -78,15 +78,16 @@ export type NixManifest = {
    */
   operatorSecretApps: string[]
   /**
-   * Names pi-hole answers itself instead of forwarding.
+   * Names pi-hole answers itself instead of forwarding, and what it answers.
    *
-   * The hostname half of every `fleet.dnsHosts` line. Nearly the same set as
-   * `takenHostnames` and deliberately not derived from it: this one is what
-   * makes a name resolve to this box on the LAN and to Cloudflare's edge
-   * everywhere else, and the whole point of showing it is the case where the
-   * two disagree.
+   * Read from FTL's own `dns.hosts` setting, so it includes the entries that
+   * belong to no stack as well as every `fleet.dnsHosts` contribution. Nearly
+   * the same set as `takenHostnames` and deliberately not derived from it:
+   * this is what makes a name resolve to this box on the LAN and to
+   * Cloudflare's edge everywhere else, and the point of showing it is the case
+   * where the two disagree.
    */
-  lanHosts: string[]
+  lanHosts: { ip: string; host: string }[]
 }
 
 /**
@@ -106,7 +107,7 @@ let cachedManaged: NixManifest['nixManaged'] | null = null
 let cachedTaken: string[] | null = null
 let cachedHosts: Record<string, string> | null = null
 let cachedSecretApps: string[] | null = null
-let cachedLanHosts: string[] | null = null
+let cachedLanHosts: NixManifest["lanHosts"] | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {
   const managedPath = process.env.NIX_MANIFEST_PATH
@@ -165,7 +166,7 @@ export async function webAppHosts(): Promise<Record<string, string>> {
 }
 
 /** Names pi-hole answers from its own hosts file. See `NixManifest.lanHosts`. */
-export async function lanHosts(): Promise<string[]> {
+export async function lanHosts(): Promise<NixManifest['lanHosts']> {
   return (await readNixManifest()).lanHosts
 }
 
