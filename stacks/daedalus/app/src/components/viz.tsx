@@ -368,7 +368,6 @@ export function Board({
   icon,
   aside,
   span,
-  fill,
   children,
 }: {
   title: string
@@ -376,30 +375,10 @@ export function Board({
   aside?: ReactNode
   /** Columns of the 12-wide category grid. Defaults to 6 (half width). */
   span?: 3 | 4 | 6 | 8 | 9 | 12
-  /**
-   * Grow to the height of the tallest board beside it, rather than to the
-   * height of its own content.
-   *
-   * The grid is `align-items: start` because a board of four facts should not
-   * be stretched into a wall of whitespace next to a nine-hundred-pixel
-   * changelog. That is the right default and the wrong one for a *pair* of
-   * comparable length — there, the shorter one leaves a strip of page
-   * background under it that reads as a missing panel rather than as a short
-   * panel. Opt in on the SHORTER board of such a pair; the extra room becomes
-   * quiet space inside its border, and the row gets one bottom edge.
-   *
-   * What this does NOT do is push the caption down to sit on that floor. It
-   * used to, and the result was a two-row list with its explanation stranded
-   * two hundred pixels below it — a worse artefact than the one it fixed.
-   */
-  fill?: boolean
   children: ReactNode
 }) {
   return (
-    <section
-      className={fill === true ? 'board board-fill' : 'board'}
-      style={{ ['--span' as string]: String(span ?? 6) }}
-    >
+    <section className="board" style={{ ['--span' as string]: String(span ?? 6) }}>
       <header className="board-head">
         <h3>
           {icon !== undefined && (

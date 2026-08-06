@@ -127,10 +127,6 @@ export function Changelog({
       title={title ?? (behind === 0 ? 'Release notes' : `${String(behind)} ${unit}`)}
       icon="≡"
       span={span}
-      // Only when it is sharing a row: the grid is align-items:start, so an
-      // unequal pair leaves a gap under the shorter one that reads as a
-      // missing panel.
-      fill={span !== 12}
       aside={aside ?? <span className="board-note">github</span>}
     >
       {gap !== null ?
