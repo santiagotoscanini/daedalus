@@ -5087,12 +5087,15 @@ h2 {
   flex-direction: column;
   gap: 0.1rem;
 }
+/* Half-width board, so the name column gives before the bar does: the bar is
+   the comparison and a 3rem one compares nothing, while a truncated name is
+   still recognisable and has its full form on hover. */
 .idp-app > summary {
   display: grid;
-  grid-template-columns: minmax(9rem, 15rem) 1fr 2.6rem minmax(6rem, 8rem);
+  grid-template-columns: minmax(6rem, 11rem) minmax(3rem, 1fr) 2.2rem auto;
   align-items: center;
-  gap: 0.8rem;
-  padding: 0.28rem 0.45rem;
+  gap: 0.6rem;
+  padding: 0.3rem 0.45rem;
   border-radius: 7px;
   cursor: pointer;
   font-size: 0.78rem;
@@ -5146,4 +5149,14 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+/* The "show all 33" toggle under the registration list. Left-aligned with the
+   rows rather than centred: it is the continuation of the list, not a footer
+   action. */
+.idp-more {
+  align-self: flex-start;
+  margin-top: 0.35rem;
+  padding: 0.18rem 0.5rem;
+  font-size: 0.7rem;
 }

@@ -1552,7 +1552,8 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
         <Board
           title="Signing in"
           icon="⚿"
-          span={12}
+          span={6}
+          fill
           aside={
             <span className="board-note">
               {w.days} days · {d.clients.length} applications registered
@@ -1586,12 +1587,7 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
             </p>
           )}
 
-          <h4 className="board-sub">Every registration, most recently used first</h4>
-          <ul className="idp-apps">
-            {d.clients.map((c) => (
-              <AppRow key={c.id} c={c} max={max} />
-            ))}
-          </ul>
+          <AppList clients={d.clients} max={max} />
 
           {shared.length > 0 && (
             <p className="board-foot">
@@ -1603,9 +1599,10 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
               {[...new Set(shared.map((c) => c.host ?? c.name))].join(', ')} — and that is a design
               rather than a leftover: the proxy gate and the app&rsquo;s own login are different
               consumers with different callbacks, and one client cannot hold both, because the
-              generated one would overwrite the hand-written callbacks on every rebuild. What is
-              genuinely lost is attribution — both carry the same display name and the audit log
-              records only the name, so the counts above cover the pair and cannot be split.
+              generated one would overwrite the hand-written callbacks on every rebuild. Each of the
+              pair says which it is. What is genuinely lost is attribution — both carry the same
+              display name and the audit log records only the name, so one count covers the pair and
+              cannot be split.
             </p>
           )}
 
@@ -1613,16 +1610,19 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
             The measures are the value of single sign-on stated as a subtraction:{' '}
             <b>{num(w.signIns)} passkey sign-ins</b> against{' '}
             <b>{num(w.authorizations)} applications opened</b> is{' '}
-            {num(w.authorizations - w.signIns)} logins that did not have to happen. Ordered by when
-            each was last used rather than by volume, so a registration nobody has opened sinks to
-            the bottom — {num(idle)} of them are down there, which for a proxy-gated app means
-            nobody visited it rather than that the registration is dead. Open a row for who went in
-            and from what; the full log is in Pocket ID. A <b>re-consent</b> is not a first use:
+            {num(w.authorizations - w.signIns)} logins that did not have to happen. The list is
+            ordered by when each was last used rather than by volume, so the five above are the
+            recent activity and the {num(idle)} nobody opened at all sit at the end of the full one
+            — which for a proxy-gated app means nobody visited it, not that the registration is
+            dead. Open a row for who went in and from what; the full log is in Pocket ID. A{' '}
+            <b>re-consent</b> is not a first use:
             rewriting a client drops its stored consent, and the convergence job rewrites every one
             of them on every rebuild, so these mark where a rebuild made everybody agree again.
             {d.truncated && ' The window is longer than the pages read, so these are a lower bound.'}
           </p>
         </Board>
+
+        <Changelog gap={d.gap} span={6} />
 
         <Board title="Who" icon="◑" span={3} fill>
           <ul className="itemlist">
@@ -1692,9 +1692,7 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
           </p>
         </Board>
 
-        <Changelog gap={d.gap} span={9} />
-
-        <Board title="Logs" icon="≡" span={12}>
+        <Board title="Logs" icon="≡" span={9} fill>
           <GrafanaLogs source={{ container: 'pocket-id' }} title="Pocket ID logs" />
           {/* The two units that WRITE the client list above. Neither is a
               container and neither has anywhere else on this dashboard to be
@@ -1727,6 +1725,48 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
           />
         </Board>
       </BoardGrid>
+    </>
+  )
+}
+
+/** How many registrations the list shows before it is asked for the rest. */
+const APPS_SHOWN = 5
+
+/**
+ * The registration list, five deep until asked.
+ *
+ * Thirty-three rows is the whole answer to "which of these is still in use"
+ * and about a screen and a half of it, most of which is the tail nobody
+ * looks at. Five is the part that changes — the list is ordered by recency,
+ * so the top of it IS the recent activity — and the rest is one click away
+ * for the times the question is about the tail.
+ */
+function AppList({ clients, max }: { clients: Gateway['idp']['clients']; max: number }) {
+  const [all, setAll] = useState(false)
+  const shown = all ? clients : clients.slice(0, APPS_SHOWN)
+  const rest = clients.length - APPS_SHOWN
+
+  return (
+    <>
+      <h4 className="board-sub">
+        {all ? 'Every registration' : `Last ${String(APPS_SHOWN)} used`}
+      </h4>
+      <ul className="idp-apps">
+        {shown.map((c) => (
+          <AppRow key={c.id} c={c} max={max} />
+        ))}
+      </ul>
+      {rest > 0 && (
+        <button
+          type="button"
+          className="btn btn-ghost idp-more"
+          onClick={() => {
+            setAll(!all)
+          }}
+        >
+          {all ? 'Show fewer' : `Show all ${String(clients.length)}`}
+        </button>
+      )}
     </>
   )
 }
