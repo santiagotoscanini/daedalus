@@ -1342,7 +1342,7 @@ function ShelfmarkPage({ d }: { d: Books }) {
   return (
     <>
       <ServiceHead
-        logo={null}
+        logo="/icon-shelfmark.png"
         name="Shelfmark"
         version={shelfmark.running.version}
         versionNote={SOURCE_NOTE[shelfmark.running.source]}
