@@ -19,6 +19,7 @@ import { ServiceHead, verdictOf, type CompareRow } from '../service-head'
 import { Segmented } from '../ui'
 import { DASH, bytes, flag, num, rate, since, until } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
+import type { RunningVersion } from '../../lib/dashboard/images'
 import type { MediaData } from '../../server/category'
 
 // The Media pages — a tab per job, and a switch inside the page for the
@@ -59,6 +60,23 @@ export function MediaView({ data }: { data: MediaData }) {
 }
 
 /* ── shared ───────────────────────────────────────────────────────────── */
+
+/**
+ * Where a running version came from, in the four words the header has room for.
+ *
+ * Not decoration: the three sources carry different weight. A version the
+ * service reported about itself is a measurement. One read off the tag the
+ * flake pins is reproducible from git but only true while the tag names a
+ * release. One read off the image's OCI label is a claim the publisher made
+ * about an artefact that a re-pull could silently replace — which is exactly
+ * the case for every service pinned to a moving tag, and the reason those
+ * pages used to say nothing at all.
+ */
+const SOURCE_NOTE: Record<RunningVersion['source'], string> = {
+  pin: 'from the tag the flake pins',
+  label: 'from the image’s own label',
+  unknown: 'unknown — the pin names a channel',
+}
 
 /**
  * The working behind a version verdict, shown on hover.
@@ -1326,10 +1344,17 @@ function ShelfmarkPage({ d }: { d: Books }) {
       <ServiceHead
         logo={null}
         name="Shelfmark"
-        version={shelfmark.version}
-        versionNote="pinned by digest to :latest"
+        version={shelfmark.running.version}
+        versionNote={SOURCE_NOTE[shelfmark.running.source]}
         verdict={verdictOf(shelfmark.gap)}
-        compare={compareOf(shelfmark.gap, 'a moving tag — nothing here can say')}
+        compare={compareOf(
+          shelfmark.gap,
+          // The pin is `:latest` by digest, so the tag names a channel and this
+          // number comes from org.opencontainers.image.version in the image.
+          shelfmark.running.revision === null ?
+            'the image’s OCI label'
+          : `the image’s OCI label · built from ${shelfmark.running.revision}`,
+        )}
         lede={
           <>
             The half that goes and gets things: searches Anna&rsquo;s Archive through the downloads
@@ -1398,13 +1423,17 @@ function ShelfmarkPage({ d }: { d: Books }) {
         <Changelog
           gap={shelfmark.gap}
           span={12}
-          title="Shelfmark releases"
-          aside={<span className="board-note">version unknown</span>}
+          aside={
+            shelfmark.running.revision === null ?
+              <span className="board-note">calibrain/shelfmark</span>
+            : <span className="board-note mono">{shelfmark.running.revision}</span>
+          }
           foot={
             <p className="board-foot">
-              Pinned by digest to a moving <span className="mono">:latest</span>, so nothing here can
-              say which of these it is running — only what has shipped. Its container is restarted by
-              a re-pull, not by a version bump.
+              The pin is a moving <span className="mono">:latest</span> by digest, so the tag says
+              nothing — but the image does. Its OCI labels carry the version and the commit it was
+              built from, which is what makes this a real gap rather than a list of everything that
+              has ever shipped.
             </p>
           }
         />
@@ -1429,7 +1458,13 @@ function HousekeepingView({ d }: { d: Housekeeping }) {
         onChange={setWhich}
         options={[
           { value: 'cleanuparr', label: 'Cleanuparr', dot: tone(d.cleanuparr.removed !== null) },
-          { value: 'janitorr', label: 'Janitorr', dot: tone(d.janitorr.version !== null) },
+          // Whether it has SPOKEN in the last day, not whether we know its
+          // version. That used to be the same test by accident — the version
+          // came from a startup line in the log — and it stopped meaning
+          // anything the moment the version started coming from the image,
+          // which is present whether or not the container ever runs. Janitorr
+          // announces its schedules hourly, so silence for a day is the signal.
+          { value: 'janitorr', label: 'Janitorr', dot: tone(d.janitorr.schedules.length > 0) },
           {
             value: 'recyclarr',
             label: 'Recyclarr',
@@ -1514,10 +1549,15 @@ function JanitorrPage({ d }: { d: Housekeeping }) {
       <ServiceHead
         logo="/icon-janitorr.png"
         name="Janitorr"
-        version={janitorr.version}
-        versionNote="printed at startup"
+        version={janitorr.running.version}
+        versionNote={SOURCE_NOTE[janitorr.running.source]}
         verdict={verdictOf(janitorr.gap)}
-        compare={compareOf(janitorr.gap, 'from its own log — the tag is a channel')}
+        compare={compareOf(
+          janitorr.gap,
+          janitorr.running.revision === null ?
+            'the image’s OCI label — the tag is a channel'
+          : `the image’s OCI label · built from ${janitorr.running.revision}`,
+        )}
         lede={
           <>
             Retention: deletes what nobody has watched, on a schedule. Running in dry-run, so it
@@ -1563,7 +1603,7 @@ function JanitorrPage({ d }: { d: Housekeeping }) {
           <p className="board-foot">
             Dry-run — nothing is removed, so this is what it decided it would take if it were armed.
             The image is pinned to a moving <span className="mono">jvm-stable</span>, which carries
-            no version; the one in the header is what Janitorr itself printed when it last started.
+            no version; the one in the header comes from the image&rsquo;s own OCI label.
           </p>
         </Board>
 
@@ -1583,13 +1623,15 @@ function RecyclarrPage({ d }: { d: Housekeeping }) {
       <ServiceHead
         logo="/icon-recyclarr.svg"
         name="Recyclarr"
-        version={null}
-        versionNote="pinned to a bare major"
-        verdict={{ label: 'unknown', tone: 'muted' }}
-        compare={[
-          { k: 'Latest', v: recyclarr.gap.latest, note: 'the newest published release' },
-          { k: 'Running', v: null, note: 'no banner, no API, no flag — genuinely unknowable' },
-        ]}
+        version={recyclarr.running.version}
+        versionNote={SOURCE_NOTE[recyclarr.running.source]}
+        verdict={verdictOf(recyclarr.gap)}
+        compare={compareOf(
+          recyclarr.gap,
+          recyclarr.running.revision === null ?
+            'the image’s OCI label — the pin is a bare major'
+          : `the image’s OCI label · built from ${recyclarr.running.revision}`,
+        )}
         lede={
           <>
             Syncs the TRaSH Guides into Sonarr and Radarr every night: custom formats, their scores,
@@ -1659,14 +1701,17 @@ function RecyclarrPage({ d }: { d: Housekeeping }) {
         <Changelog
           gap={recyclarr.gap}
           span={12}
-          title="Recyclarr releases"
-          aside={<span className="board-note">version unknown</span>}
+          aside={
+            recyclarr.running.revision === null ?
+              <span className="board-note">recyclarr/recyclarr</span>
+            : <span className="board-note mono">{recyclarr.running.revision}</span>
+          }
           foot={
             <p className="board-foot">
-              What has shipped, not what is pending. Recyclarr is pinned to a bare major (
-              <span className="mono">:8</span>) — a channel, not a version — and prints its own
-              nowhere this box can read, so it is the one service here whose running version cannot
-              be established at all.
+              Recyclarr is pinned to a bare major (<span className="mono">:8</span>) — a channel,
+              not a version — prints no banner, exposes no API and logs nothing about itself. This
+              page used to say its version could not be established at all. It can: the image
+              records it, along with the commit it was built from.
             </p>
           }
         />

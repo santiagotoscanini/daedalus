@@ -40,6 +40,7 @@ import {
 } from '../clients'
 import { key } from '../format'
 import { versionGap, type VersionGap } from '../github'
+import { imageTag, imageVersion, type RunningVersion } from '../images'
 
 /**
  * A tab is a JOB; the services doing it are a switch inside the page.
@@ -108,33 +109,6 @@ export async function loadMedia(tab: string, ctx: Ctx): Promise<MediaData> {
   }
 }
 
-/**
- * The tag a container is pinned to, from the flake.
- *
- * `IMAGE_TAGS` is every oci container's tag as nix wrote it, so the answer for
- * a service that reports no version anywhere is read from the thing that
- * decides it rather than retyped here. Stripped to the leading digits-and-dots:
- * linuxserver appends its own build (`10.11.11ubu2404-ls42`), and the part
- * before that suffix is the upstream version their image actually contains.
- *
- * Null for a MOVING tag — `latest`, `jvm-stable`, a bare major — which is the
- * honest answer rather than a wrong one: those pins say nothing about what is
- * running, and the panel that receives this says so out loud.
- */
-export function imageTag(container: string): string | null {
-  let tags: Record<string, string> = {}
-  try {
-    tags = JSON.parse(process.env.IMAGE_TAGS ?? '{}') as Record<string, string>
-  } catch {
-    return null
-  }
-  const raw = tags[container]
-  if (raw === undefined) return null
-  // Two segments minimum: a bare `8` (recyclarr's major-only pin) is a channel,
-  // not a version, and comparing it to releases would report a box on 8.6.1 as
-  // seven hundred releases behind.
-  return /^v?(\d+\.\d+(?:\.\d+)*)/.exec(raw)?.[1] ?? null
-}
 
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */
 
@@ -1071,7 +1045,14 @@ type BooksData = {
     categories: number | null
   }
   shelfmark: {
-    version: string | null
+    /**
+     * From the image's own OCI label, because the pin cannot say.
+     *
+     * Shelfmark is pinned by digest to a moving `:latest`, so the tag names a
+     * channel. The image itself carries `org.opencontainers.image.version`,
+     * which is a fact about the artefact on disk — see lib/dashboard/images.ts.
+     */
+    running: RunningVersion
     gap: VersionGap
     jobs: { title: string; state: string; pct: number | null }[]
     counts: { downloading: number; queued: number; done: number; errors: number } | null
@@ -1081,8 +1062,9 @@ type BooksData = {
 
 async function loadBooks(ctx: Ctx): Promise<BooksData> {
   const calibreVersion = imageTag('calibre-web')
-  // A digest-pinned `:latest`, so the tag says nothing about what is running.
-  const shelfmarkVersion = imageTag('shelfmark')
+  // Pinned by digest to a moving `:latest`, so the tag names a channel and the
+  // image's own label is the only thing that knows.
+  const shelfmark = await imageVersion('shelfmark')
 
   const [stats, status, disk, calibreGap, shelfmarkGap] = await Promise.all([
     // /opds is on calibre-web's forward-auth bypass and takes its own basic
@@ -1110,11 +1092,10 @@ async function loadBooks(ctx: Ctx): Promise<BooksData> {
     versionGap('crocodilestick/Calibre-Web-Automated', calibreVersion, {
       tag: /^[Vv]?(\d+\.\d+\.\d+)$/,
     }),
-    // `notesWhenUnknown` because the pin is a moving tag: nothing can be said
-    // to be PENDING, and the other true statement — here is what has shipped,
-    // and no, we cannot tell you which of it you have — is worth more than a
-    // blank panel. The view says the second half out loud.
-    versionGap('calibrain/shelfmark', shelfmarkVersion, { notesWhenUnknown: true }),
+    // A real gap now that the label supplies a version. `notesWhenUnknown`
+    // stays as the fallback for the day a publisher stops setting the label:
+    // the panel then shows what has shipped rather than going blank.
+    versionGap('calibrain/shelfmark', shelfmark.version, { notesWhenUnknown: true }),
   ])
 
   const bucket = (state: string) => Object.values(status?.[state] ?? {})
@@ -1129,7 +1110,7 @@ async function loadBooks(ctx: Ctx): Promise<BooksData> {
       categories: stats?.categories ?? null,
     },
     shelfmark: {
-      version: shelfmarkVersion,
+      running: shelfmark,
       gap: shelfmarkGap,
       jobs: ['downloading', 'resolving', 'locating', 'queued', 'error']
         .flatMap((state) =>
@@ -1176,7 +1157,8 @@ type HousekeepingData = {
     searches: number | null
   }
   janitorr: {
-    version: string | null
+    /** From the image label — its pin is the channel `jvm-stable`. */
+    running: RunningVersion
     gap: VersionGap
     /** Dry-run: what it WOULD have deleted in the window. */
     wouldDelete: number | null
@@ -1191,14 +1173,15 @@ type HousekeepingData = {
   }
   recyclarr: {
     /**
-     * Always null, and the field stays to say so.
+     * From the image label, and it took a snapshot to get there.
      *
-     * Recyclarr is pinned to a bare major (`:8`) — a channel — and prints no
-     * banner, no `--version` a caller can reach, and nothing in its logs. This
-     * is the one service on the page whose running version genuinely cannot be
-     * established from this box, which the panel states rather than hides.
+     * Recyclarr is pinned to a bare major (`:8`) — a channel — prints no
+     * banner, exposes no API and logs no version, so this was reported as
+     * genuinely unknowable. That was wrong: the image says 8.7.0 in
+     * `org.opencontainers.image.version`, which is a fact about the artefact
+     * on disk and needed nothing but somewhere to read it from.
      */
-    version: null
+    running: RunningVersion
     gap: VersionGap
     /** How its last scheduled run ended, and when. */
     lastRun: { ok: boolean; day: string } | null
@@ -1227,56 +1210,61 @@ async function loadHousekeeping(): Promise<HousekeepingData> {
       `sum(count_over_time({container="${container}"} |= \`${needle}\` [${window}])) or vector(0)`,
     )
 
+  // Cleanuparr's tag carries a real version and wins. Its image LABEL says
+  // `24.04`, inherited from the Ubuntu base — the exact case that makes the
+  // label a fallback rather than the primary. See lib/dashboard/images.ts.
   const cleanuparrVersion = imageTag('cleanuparr')
 
-  const [removed, blocked, searches, wouldDelete, janitorrBanner, recyclarrRun, recyclarrErrors] =
-    await Promise.all([
-      over('cleanuparr', 'Removing item with max strikes'),
-      over('cleanuparr', 'blocked item keeps coming back'),
-      over('cleanuparr', 'Replacement search triggered'),
-      over('janitorr', 'Deleting'),
-      // Janitorr's image is pinned to `jvm-stable` by digest — a channel that
-      // carries no version — but the application prints one on startup, so the
-      // running version is read from the box rather than from the pin.
-      //
-      // The default 30-day window, and it is a ceiling rather than a choice:
-      // Loki refuses a range longer than `max_query_length` (721h) with a 400,
-      // which reads here as "no banner". So a container that has been up for
-      // more than a month reports its version as unknown — correct, in the
-      // sense that nothing on this box can still see the claim.
-      lokiLatest('{container="janitorr"} |~ "Starting JanitorrApplicationKt"'),
-      // How the last scheduled sync ended. This is the whole of Recyclarr's
-      // output — it has no API, no metrics and no UI — and "did it run, did it
-      // succeed" is the only question anybody has about a nightly job.
-      lokiLatest('{container="recyclarr"} |~ `msg="job (succeeded|failed)"`'),
-      lokiScalar(
-        `sum(count_over_time({container="recyclarr"} |~ \`\\[ERR\\]|job failed\` [${window}])) or vector(0)`,
-      ),
-    ])
+  const [
+    removed,
+    blocked,
+    searches,
+    wouldDelete,
+    recyclarrRun,
+    recyclarrErrors,
+    janitorr,
+    recyclarr,
+  ] = await Promise.all([
+    over('cleanuparr', 'Removing item with max strikes'),
+    over('cleanuparr', 'blocked item keeps coming back'),
+    over('cleanuparr', 'Replacement search triggered'),
+    over('janitorr', 'Deleting'),
+    // How the last scheduled sync ended. Recyclarr has no API, no metrics and
+    // no UI, and "did it run, did it succeed" is the only question anybody has
+    // about a nightly job.
+    lokiLatest('{container="recyclarr"} |~ `msg="job (succeeded|failed)"`'),
+    lokiScalar(
+      `sum(count_over_time({container="recyclarr"} |~ \`\\[ERR\\]|job failed\` [${window}])) or vector(0)`,
+    ),
+    // Both pinned to a channel — `jvm-stable` and a bare `8` — so both read
+    // their version off the image's own OCI label.
+    //
+    // Janitorr's used to be scraped out of its startup banner in Loki, which
+    // worked only while the container had restarted inside the retention
+    // window; past 30 days Loki refuses the range outright and the version
+    // silently became "unknown". The label has no such expiry.
+    imageVersion('janitorr'),
+    imageVersion('recyclarr'),
+  ])
 
   const [schedules, synced] = await Promise.all([
     janitorrSchedules(),
     recyclarrSynced(CLEANUP_DAYS),
   ])
 
-  // `Starting JanitorrApplicationKt vv2.1.1 using Java 25` — the doubled v is
-  // Janitorr's own, not a typo here.
-  const janitorrVersion = /JanitorrApplicationKt vv?(\d+\.\d+\.\d+)/.exec(janitorrBanner ?? '')?.[1] ?? null
   const runStamp = /time="([^"T]+)/.exec(recyclarrRun ?? '')?.[1] ?? null
 
   const [cleanuparrGap, janitorrGap, recyclarrGap] = await Promise.all([
     versionGap('Cleanuparr/Cleanuparr', cleanuparrVersion),
-    versionGap('Schaka/janitorr', janitorrVersion),
-    // Nothing on this box knows what Recyclarr is running, so the panel shows
-    // what has shipped instead of a blank — and says which of the two it is.
-    versionGap('recyclarr/recyclarr', null, { notesWhenUnknown: true }),
+    versionGap('Schaka/janitorr', janitorr.version),
+    versionGap('recyclarr/recyclarr', recyclarr.version, { notesWhenUnknown: true }),
   ])
 
   return {
     cleanuparr: { version: cleanuparrVersion, gap: cleanuparrGap, removed, blocked, searches },
-    janitorr: { version: janitorrVersion, gap: janitorrGap, wouldDelete, schedules },
+    janitorr: { running: janitorr, gap: janitorrGap, wouldDelete, schedules },
     recyclarr: {
-      version: null,
+      running: recyclarr,
       gap: recyclarrGap,
       lastRun:
         runStamp === null ? null : (
