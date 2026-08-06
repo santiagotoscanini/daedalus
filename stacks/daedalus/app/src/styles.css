@@ -175,8 +175,8 @@ h2 {
   text-decoration: none;
 }
 
-/* No page-level max-width: the panels here are grids, tables and topology
-   diagrams, and every one of them uses the width it is given — capping the
+/* No page-level max-width: the panels here are grids, tables and charts,
+   and every one of them uses the width it is given — capping the
    page just moved that space to the right-hand margin.
 
    Long-form TEXT is bounded instead, on the elements that hold it (the rule
@@ -4310,406 +4310,6 @@ h2 {
   margin-top: 0.7rem;
 }
 
-/* ── topology ───────────────────────────────────────────────────────────── */
-
-/* Flow reads left-to-right on a wide screen and top-to-bottom on a narrow one,
-   which is the one thing a network diagram must never be ambiguous about. The
-   breakpoint is where four columns stop fitting, not a device width. */
-.topo-wrap {
-  container-type: inline-size;
-}
-.topo {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  overflow-x: auto;
-  padding-bottom: 0.2rem;
-}
-/* Every group reserves the zone-label line whether or not it has one, and
-   the label is taken out of flow — so a boundary gap sitting between two
-   groups starts its curves at exactly the same y as the gaps inside them. */
-.topo-group {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-width: 0;
-  padding-top: 1rem;
-}
-/* Trust boundary. Dashed is the convention for "everything inside this is one
-   zone of trust" — the internet, the house, this box. */
-.topo-zone {
-  position: absolute;
-  top: 0;
-  left: 0.25rem;
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--dim);
-  padding-left: 0.2rem;
-}
-.topo-group:has(.topo-zone) .topo-group-body {
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  padding: 0.5rem 0.4rem;
-  background: color-mix(in srgb, var(--panel-2) 45%, transparent);
-}
-.topo-group-body {
-  display: flex;
-  align-items: stretch;
-  flex: 1;
-  min-width: 0;
-}
-.topo-run {
-  display: flex;
-  align-items: stretch;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.topo-stage {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  flex: 1 1 0;
-  min-width: 7rem;
-}
-.topo-stage-title {
-  margin: 0;
-  font-size: 0.6rem;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--dim);
-  text-align: center;
-}
-/* Equal rows are what make the edge maths true without measuring: node i of n
-   is centred at (i + 0.5)/n of the column. */
-.topo-nodes {
-  display: grid;
-  grid-auto-rows: 1fr;
-  gap: 0.4rem;
-  flex: 1;
-}
-
-.topo-node {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.18rem;
-  padding: 0.45rem 0.55rem;
-  border-radius: 9px;
-  background: var(--panel-2);
-  border: 1px solid var(--border-soft);
-  border-left: 2px solid var(--border);
-  min-width: 0;
-}
-.topo-node header {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 0;
-}
-.topo-node strong {
-  font-size: 0.78rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.topo-icon {
-  font-size: 0.8rem;
-  opacity: 0.85;
-  flex: none;
-}
-.topo-node-idle {
-  opacity: 0.55;
-}
-.topo-sub {
-  margin: 0;
-  font-size: 0.66rem;
-  color: var(--dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.topo-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.1rem 0.5rem;
-  margin: 0.12rem 0 0;
-}
-.topo-facts div {
-  display: flex;
-  align-items: baseline;
-  gap: 0.25rem;
-  min-width: 0;
-}
-.topo-facts dt {
-  font-size: 0.6rem;
-  color: var(--dim);
-  white-space: nowrap;
-}
-.topo-facts dd {
-  margin: 0;
-  font-size: 0.66rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.topo-accent {
-  border-left-color: var(--accent);
-}
-.topo-ok {
-  border-left-color: var(--ok);
-}
-.topo-warn {
-  border-left-color: var(--warn);
-}
-.topo-bad {
-  border-left-color: var(--bad);
-}
-.topo-info {
-  border-left-color: #5b8dd9;
-}
-
-/* A node with something happening in it right now. Same rule as everywhere
-   else here: motion is never decorative. */
-.topo-live {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ok);
-  margin-left: auto;
-  flex: none;
-  animation: topo-beat 1.9s ease-in-out infinite;
-}
-@keyframes topo-beat {
-  0%,
-  100% {
-    opacity: 1;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent);
-  }
-  50% {
-    opacity: 0.55;
-    box-shadow: 0 0 0 4px transparent;
-  }
-}
-
-.topo-gap {
-  position: relative;
-  flex: 0 0 4.6rem;
-  min-width: 4.6rem;
-  /* Skip the stage title so the curves meet the node grid, not the heading. */
-  margin-top: calc(0.75rem + 0.35rem);
-}
-/* A boundary crossing: outside both dashed boxes, so it also has to skip the
-   zone-label line that the groups reserve. */
-.topo-gap-outer {
-  flex: 0 0 4rem;
-  margin-top: calc(1rem + 0.5rem + 0.75rem + 0.35rem);
-  margin-bottom: 0.5rem;
-}
-.topo-lines {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.topo-edge {
-  stroke: var(--border);
-  stroke-width: 1.5;
-}
-.topo-edge-accent {
-  stroke: var(--accent);
-  opacity: 0.75;
-}
-.topo-edge-ok {
-  stroke: var(--ok);
-  opacity: 0.7;
-}
-.topo-edge-info {
-  stroke: #5b8dd9;
-  opacity: 0.7;
-}
-.topo-edge-warn {
-  stroke: var(--warn);
-  opacity: 0.7;
-}
-.topo-edge-bad {
-  stroke: var(--bad);
-  opacity: 0.8;
-}
-.topo-edge-dashed {
-  stroke-dasharray: 2 4;
-  opacity: 0.5;
-}
-/* A branch: something acting on the line above rather than a step along it.
-   The stub is short and vertical so the eye reads the main row first. */
-.topo-aside {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin-top: 0.15rem;
-}
-.topo-branch {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.1rem;
-}
-.topo-stub {
-  width: 2px;
-  height: 0.7rem;
-  margin-left: 1.1rem;
-  background: var(--border);
-}
-.topo-branch-accent .topo-stub {
-  background: color-mix(in srgb, var(--accent) 60%, transparent);
-}
-.topo-branch-ok .topo-stub {
-  background: color-mix(in srgb, var(--ok) 60%, transparent);
-}
-.topo-branch-warn .topo-stub {
-  background: color-mix(in srgb, var(--warn) 60%, transparent);
-}
-.topo-branch-info .topo-stub {
-  background: color-mix(in srgb, #5b8dd9 60%, transparent);
-}
-.topo-branch-label {
-  font-size: 0.56rem;
-  color: var(--dim);
-  padding-left: 0.3rem;
-  margin-bottom: 0.08rem;
-}
-/* A branch box is visibly secondary: dashed, so the solid pipeline reads as
-   the path and these read as attachments to it. */
-.topo-branch .topo-node {
-  border-style: dashed;
-  border-left-style: solid;
-  background: color-mix(in srgb, var(--panel-2) 60%, transparent);
-}
-
-.topo-node-link {
-  text-decoration: none;
-  color: inherit;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-.topo-node-link:hover {
-  background: var(--raise);
-  border-color: var(--border);
-}
-.topo-node-link:hover .topo-open {
-  opacity: 1;
-}
-.topo-open {
-  font-size: 0.62rem;
-  color: var(--dim);
-  opacity: 0;
-  transition: opacity 0.12s ease;
-  flex: none;
-}
-
-/* Marching ants: the conventional read for "packets are on this link". Only
-   an edge with real traffic gets it. */
-.topo-edge-live {
-  stroke-dasharray: 5 7;
-  animation: topo-march 0.9s linear infinite;
-}
-@keyframes topo-march {
-  to {
-    stroke-dashoffset: -12;
-  }
-}
-
-.topo-labels {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.15rem;
-  pointer-events: none;
-}
-/* Deliberately allowed to be wider than the gap: it is absolutely positioned,
-   so overflowing costs no layout, and a truncated edge label ("375,3…") is
-   worse than one that leans a few pixels over a node. */
-.topo-label {
-  font-size: 0.58rem;
-  line-height: 1.25;
-  padding: 0.06rem 0.3rem;
-  border-radius: 5px;
-  background: var(--panel);
-  border: 1px solid var(--border-soft);
-  color: var(--muted);
-  white-space: nowrap;
-}
-.topo-label-live {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-}
-
-/* Narrow: one column, flow top-to-bottom. The curves go — four crossing
-   beziers in 90px of width is not a diagram, it is a scribble — and each gap
-   becomes a rail with its labels beside it. */
-@container (max-width: 46rem) {
-  .topo,
-  .topo-group-body,
-  .topo-run {
-    flex-direction: column;
-  }
-  .topo-stage {
-    min-width: 0;
-  }
-  .topo-nodes {
-    grid-auto-rows: auto;
-  }
-  .topo-gap {
-    flex: none;
-    min-width: 0;
-    min-height: 2.3rem;
-    margin-top: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
-  }
-  .topo-lines {
-    position: static;
-    width: 2px;
-    height: 100%;
-    flex: none;
-    /* One vertical rail instead of the fan. The SVG is reused rather than
-       swapped so the animated state stays in one place. */
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      var(--border) 15%,
-      var(--border) 85%,
-      transparent
-    );
-  }
-  .topo-lines path {
-    display: none;
-  }
-  .topo-gap:has(.topo-edge-live) .topo-lines {
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      color-mix(in srgb, var(--accent) 70%, transparent) 15%,
-      color-mix(in srgb, var(--accent) 70%, transparent) 85%,
-      transparent
-    );
-  }
-  .topo-labels {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    inset: auto;
-  }
-}
-
 /* ── skeletons ──────────────────────────────────────────────────────────── */
 
 /* The one unconditional animation in the app. Everything else moves because
@@ -4946,10 +4546,6 @@ h2 {
      dropping it would trade a safety net for stillness. */
   .embed.is-ready {
     transition: none;
-  }
-  .topo-edge-live,
-  .topo-live {
-    animation: none;
   }
 }
 
@@ -5336,7 +4932,8 @@ h2 {
 /* Folded groups of raw records. Collapsed is the default state and the
    summary has to earn a click on its own, so the count sits in it. */
 .zone-group > summary,
-.zone-ns > summary {
+.zone-ns > summary,
+.more > summary {
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -5347,19 +4944,32 @@ h2 {
   list-style: none;
 }
 .zone-group > summary::-webkit-details-marker,
-.zone-ns > summary::-webkit-details-marker {
+.zone-ns > summary::-webkit-details-marker,
+.more > summary::-webkit-details-marker {
   display: none;
 }
 .zone-group > summary::before,
-.zone-ns > summary::before {
+.zone-ns > summary::before,
+.more > summary::before {
   content: '▸';
   color: var(--dim);
   font-size: 0.7rem;
   transition: transform 0.12s ease;
 }
 .zone-group[open] > summary::before,
-.zone-ns[open] > summary::before {
+.zone-ns[open] > summary::before,
+.more[open] > summary::before {
   transform: rotate(90deg);
+}
+/* The tail of a ranked list, folded. Set apart from the rows above it so the
+   fold reads as the end of the list rather than as another row in it. */
+.more {
+  margin-top: 0.4rem;
+  border-top: 1px solid var(--border-soft);
+}
+.more > summary {
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 .zone-group + .zone-group {
   margin-top: 0.5rem;
@@ -5460,6 +5070,140 @@ h2 {
 .dhcp-mac {
   color: var(--dim);
   font-size: 0.66rem;
+}
+
+/* ── the house network ──────────────────────────────────────────────────── */
+
+/* One row per hop: a light, the name, the round trip, and six hours of it.
+   The sparkline sits last and unlabelled on purpose — it is context for the
+   number beside it, not a chart anyone reads on its own, and giving it a
+   heading would promote it above the reading that matters. */
+.hops {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+}
+.hop {
+  display: grid;
+  grid-template-columns: auto 1fr auto minmax(3rem, 5rem);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+}
+.hop + .hop {
+  border-top: 1px solid var(--border-soft);
+}
+.hop-label {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+.hop-rtt {
+  color: var(--text);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Per-container traffic: one track with two fills, in then out.
+   Two stacked bars per row would double the height of a ten-row list to say
+   something the split already says, and ranking by the sum keeps a service
+   that only ever uploads from sorting below one doing half as much both ways.
+   The direction is not lost — it IS the split. */
+.traffic {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.traffic-row {
+  display: grid;
+  grid-template-columns: minmax(4rem, 10rem) 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.22rem 0;
+  font-size: 0.75rem;
+}
+.traffic-name {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.traffic-track {
+  display: flex;
+  height: 8px;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.traffic-in {
+  background: var(--accent);
+}
+/* The same blue the bar lists use for their info tone; there is no token for
+   it, and inventing a second blue for one chart is worse than the literal. */
+.traffic-out {
+  background: #5b8dd9;
+}
+.traffic-total {
+  color: var(--dim);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Devices. Dimmed unless the thing has asked for a name today, which is the
+   whole difference between "on the network" and "was, once" — and the reason
+   the inactive ones are still printed rather than filtered out. */
+.devices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.device {
+  display: grid;
+  grid-template-columns: 1fr 6.6rem 9.4rem 4.6rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.26rem 0;
+  font-size: 0.74rem;
+  color: var(--dim);
+}
+.device + .device {
+  border-top: 1px solid var(--border-soft);
+}
+.device-name {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.device.is-active .device-name {
+  color: var(--text);
+}
+.device-ip {
+  font-variant-numeric: tabular-nums;
+}
+.device.is-active .device-ip {
+  color: var(--muted);
+}
+.device-mac {
+  font-size: 0.66rem;
+}
+.device-seen {
+  text-align: right;
+  font-size: 0.68rem;
+}
+
+/* On a phone the MAC goes before anything else does. Not at half width —
+   below 78rem every board is already full width, so the row has MORE room
+   there, not less; the only place four columns genuinely do not fit is the
+   narrowest breakpoint, where the name and address are what gets scanned and
+   the MAC is what gets looked up once. */
+@media (max-width: 34rem) {
+  .device {
+    grid-template-columns: 1fr 6.6rem 4.6rem;
+  }
+  .device-mac {
+    display: none;
+  }
 }
 
 /* Grid tracks, not flex, for the two record lists — a per-row flex layout put

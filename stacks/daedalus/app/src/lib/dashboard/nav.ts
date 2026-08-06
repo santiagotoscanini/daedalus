@@ -183,7 +183,12 @@ export const CATEGORIES: CategorySpec[] = [
     // as two boards on one page meant the words "VPN", "WireGuard" and
     // "tunnel" each meant two things a scroll apart.
     tabs: [
-      { id: 'general', label: 'General' },
+      // The wire itself, and everyone using it: what crosses the cable, what
+      // the line behind it can carry, which container moved which bytes, and
+      // every device that has ever asked this house for a name. No probe —
+      // there is no one service to check, and the router that would be the
+      // obvious subject serves no API at all.
+      { id: 'general', label: 'General', boardSpans: [8, 4, 4, 8] },
       // Three ways in — WireGuard, the Cloudflare tunnel, and the address
       // itself — chosen by a switch inside the page. The probe is wg-easy's
       // because it is the only one of the three gatus can check.

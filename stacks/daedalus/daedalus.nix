@@ -470,6 +470,13 @@ in
       # it this box holds declaratively — everything else on the Network tab
       # is measured, because the TP-Link serves no API to ask.
       GATEWAY_IP = config.networking.defaultGateway.address;
+      # Pi-hole NOT through traefik, and bound from the same option that tells
+      # traefik where to dial rather than restated. The reads this backs carry
+      # device identities — hostnames, MAC addresses, what each one looks up —
+      # and reaching them on the public hostname would mean widening the
+      # unauthenticated bypass in front of it to match. Off the bridge there is
+      # nothing to widen: the gate stays exactly where it is.
+      PIHOLE_URL = config.fleet.webApps.pihole.serviceUrl;
       ROUTER_URL = "http://${config.networking.defaultGateway.address}";
       # What nearly every pi-hole hosts entry points at. Bound from the option
       # that GENERATES those entries, so "this one points somewhere else" stays
