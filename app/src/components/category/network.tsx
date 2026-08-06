@@ -2196,7 +2196,7 @@ function DnsView({ data }: { data: Dns }) {
 
       {side === 'zone' ?
         <ZoneView d={zone} />
-      : <ResolverView d={resolver} lan={data.lan} />}
+      : <ResolverView d={resolver} lan={data.lan} admin={data.admin} />}
     </>
   )
 }
@@ -2214,12 +2214,50 @@ function DnsView({ data }: { data: Dns }) {
  * past a zone to get to it.
  */
 function DhcpView({ data }: { data: Dhcp }) {
-  const { dhcp, devices } = data
+  const { dhcp, devices, admin } = data
   const active = devices.filter((v) => v.lastSeenAgo !== null && v.lastSeenAgo < ACTIVE)
   const unbound = devices.filter((v) => v.reserved && v.lastSeenAgo === null)
 
   return (
-    <BoardGrid>
+    <>
+      <ServiceHead
+        logo="/icon-pihole.svg"
+        name="Pi-hole"
+        version={data.version}
+        versionNote="from the package the service runs"
+        // No verdict here. It is the same process the DNS tab reports on, and
+        // the release notes that justify the word live over there — a second
+        // copy of "3 behind" with nothing behind it to open is a claim this
+        // page cannot support.
+        lede={
+          <>
+            The same process that answers names hands out the addresses. Every device in the house
+            asks this box for one and gets it from a pool this box decides —{' '}
+            {dhcp.reservations.length} of them pinned by hardware address, so the rest of the
+            machine can name them.
+          </>
+        }
+        actions={
+          admin !== null && (
+            <a
+              className="btn btn-primary"
+              href={`${admin}/settings-dhcp`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              DHCP settings ↗
+            </a>
+          )
+        }
+      />
+      <LinkRow
+        links={[
+          { label: 'Docs', href: 'https://docs.pi-hole.net/docker/DHCP/' },
+          ...(admin === null ? [] : [{ label: 'Leases in the admin', href: `${admin}/settings-dhcp` }]),
+        ]}
+      />
+
+      <BoardGrid>
       <Board
         title="The pool"
         icon="⊞"
@@ -2310,7 +2348,8 @@ function DhcpView({ data }: { data: Dhcp }) {
           <b>active</b> means it looked something up in the last day.
         </p>
       </Board>
-    </BoardGrid>
+      </BoardGrid>
+    </>
   )
 }
 
@@ -2324,7 +2363,15 @@ const SOURCES = [
   { k: 'blocked' as const, label: 'Blocked', tone: 'warn' as Tone },
 ]
 
-function ResolverView({ d, lan }: { d: Dns['resolver']; lan: Dns['lan'] }) {
+function ResolverView({
+  d,
+  lan,
+  admin,
+}: {
+  d: Dns['resolver']
+  lan: Dns['lan']
+  admin: Dns['admin']
+}) {
   const { answered, queries } = d
   const sum = answered.cached + answered.local + answered.forwarded + answered.blocked
   const share = (n: number) => (sum === 0 ? null : (n / sum) * 100)
@@ -2361,19 +2408,17 @@ function ResolverView({ d, lan }: { d: Dns['resolver']; lan: Dns['lan'] }) {
         lede={
           <>
             Every device in the house resolves through this, including this box. It answers for the{' '}
-            {d.clients.total === null ? 'LAN' : `${num(d.clients.total)} clients`} it has seen, hands
-            out the addresses they use, and forwards whatever it cannot answer itself.
+            {d.clients.total === null ? 'LAN' : `${num(d.clients.total)} clients`} it has seen, and
+            forwards whatever it cannot answer itself. The addresses those clients hold are the{' '}
+            <b>DHCP</b> tab.
           </>
         }
         actions={
-          <a
-            className="btn btn-primary"
-            href="https://pihole.toscanini.me/admin/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open the admin ↗
-          </a>
+          admin !== null && (
+            <a className="btn btn-primary" href={`${admin}/`} target="_blank" rel="noreferrer">
+              Open the admin ↗
+            </a>
+          )
         }
       />
       <LinkRow
