@@ -295,13 +295,27 @@ export function LogDetails({
  * is everyone's neighbour is nobody's.
  */
 export type LogNeighbour = {
-  container: string
+  /**
+   * A container, a systemd unit, or a stack.
+   *
+   * Not just a container name: some of what a page depends on is a oneshot,
+   * and the version snapshot behind Shelfmark's and Recyclarr's numbers is
+   * exactly that. A neighbour is defined by "you would come looking here when
+   * the panel above went wrong", which has nothing to do with whether the
+   * thing happens to be a container.
+   */
+  source: LogSource
   label: string
-  /** Completes “<label> — …”, so it says what this container IS to the tab. */
+  /** Completes “<label> — …”, so it says what this thing IS to the tab. */
   role: string
   note: string
   /** Only when the panel heading should differ from `<label> logs`. */
   title?: string
+}
+
+/** A stable React key for a neighbour, whichever kind of source it is. */
+function sourceKey(s: LogSource): string {
+  return 'container' in s ? s.container : 'unit' in s ? s.unit : s.stack
 }
 
 /**
@@ -328,9 +342,9 @@ export function LogBoard({
       <GrafanaLogs source={source} title={title} foot={foot} />
       {neighbours.map((n) => (
         <LogDetails
-          key={n.container}
+          key={sourceKey(n.source)}
           summary={`${n.label} — ${n.role}`}
-          source={{ container: n.container }}
+          source={n.source}
           title={n.title ?? `${n.label} logs`}
           foot={<p className="board-foot">{n.note}</p>}
         />

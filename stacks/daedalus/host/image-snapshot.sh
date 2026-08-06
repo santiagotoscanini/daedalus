@@ -94,3 +94,19 @@ chown santiago:users "$tmp"
 # would otherwise be able to see a partial file.
 mv "$tmp" "$OUT_DIR/labels.json"
 trap - EXIT
+
+# Say what happened, every run, and not only on failure.
+#
+# A oneshot that succeeds silently has NO lines under its own unit: systemd's
+# "Starting"/"Finished" messages are emitted by PID 1 and journald attributes
+# them to init.scope, not here. So the unit was invisible in Loki — which made
+# it the one thing on the dashboard that could stop working with no way to see
+# that it had, while the pages it feeds quietly went back to reporting
+# "unknown".
+#
+# The counts are the useful part, not the fact that it ran: `labelled` falling
+# to zero means every publisher's annotation vanished at once, which is a bug
+# here rather than upstream.
+total=$("$JQ" 'length' "$OUT_DIR/labels.json")
+labelled=$("$JQ" '[.[] | select(.version != null)] | length' "$OUT_DIR/labels.json")
+echo "published labels for $total containers, $labelled with a version"
