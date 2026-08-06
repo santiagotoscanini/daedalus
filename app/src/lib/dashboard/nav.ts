@@ -37,6 +37,17 @@ export type CategorySpec = {
     label: string
     probe?: string
     /**
+     * Several probes that must ALL be green, for a tab whose subject is more
+     * than one service.
+     *
+     * The Gateway tab is the case: traefik routes and Pocket ID authorises,
+     * and either one down means requests are not getting where they were
+     * going. Picking one of the two to represent the pair would draw a green
+     * dot over a broken half. Unknown on any of them makes the whole thing
+     * unknown — a partial answer to "is this working" is not an answer.
+     */
+    probes?: string[]
+    /**
      * This tab's own opening shape, when it differs from the category's.
      *
      * The category-level `boardSpans` are the DEFAULT tab's, so a sibling that
@@ -177,6 +188,20 @@ export const CATEGORIES: CategorySpec[] = [
       // itself — chosen by a switch inside the page. The probe is wg-easy's
       // because it is the only one of the three gatus can check.
       { id: 'wireguard', label: 'Coming in', probe: 'wg-easy', boardSpans: [8, 4, 12], statBand: false, tileGroups: 0 },
+      // What happens to a request once it has arrived: traefik terminates it,
+      // Pocket ID decides whether it goes any further. Two services, one tab,
+      // because neither answers "can this be reached" alone — a route with no
+      // gate and a gate with no route are the same page read from two ends.
+      // The probe is traefik's dashboard, the only one of the two that can go
+      // down without taking the probe path with it.
+      {
+        id: 'gateway',
+        label: 'Gateway',
+        probes: ['traefik-dashboard', 'pocket-id'],
+        boardSpans: [12, 8, 4],
+        statBand: false,
+        tileGroups: 0,
+      },
       // No gatus probe: it checks HTTP endpoints, and a VPN egress tunnel
       // answers nothing — it is a network namespace. Its dot is computed from
       // every declared tunnel's state and its containers instead.

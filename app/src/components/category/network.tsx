@@ -20,7 +20,7 @@ import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead } from '../service-head'
 import { Segmented } from '../ui'
 import { Topology, type TopoEdge, type TopoStage } from '../topology'
-import { DASH, bytes, flag, ms, num, pct, since, until } from '../../lib/dashboard/format'
+import { DASH, bytes, compact, flag, ms, num, pct, since, until } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { NetworkData } from '../../server/category'
 import type { Tone } from '../viz'
@@ -40,6 +40,8 @@ export function NetworkView({ data }: { data: NetworkData }) {
   switch (data.tab) {
     case 'wireguard':
       return <InboundView data={data} />
+    case 'gateway':
+      return <GatewayView data={data} />
     case 'outbound':
       return <OutboundView data={data} />
     default:
@@ -48,7 +50,7 @@ export function NetworkView({ data }: { data: NetworkData }) {
 }
 
 function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> }) {
-  const { wan, proxy, dns, tunnel, certs } = data
+  const { wan, proxy, dns, tunnel } = data
 
   return (
     <>
@@ -183,63 +185,21 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
               { k: 'Requests', v: tunnel.requestsPerHour === null ? DASH : `${num(tunnel.requestsPerHour, 1)}/hour` },
               { k: 'Held for', v: since(tunnel.heldForSeconds).replace(' ago', '') },
               { k: 'cloudflared', v: <span className="mono">{tunnel.clientVersion ?? DASH}</span> },
-              // The WireGuard peer count used to be here, in a board about
-              // Cloudflare, because there was nowhere better. There is now.
-              {
-                k: 'Certificate',
-                v:
-                  certs.soonestDays === null ? DASH
-                  : certs.soonestDays < 14 ?
-                    <span className="text-bad">{certs.soonestDays.toFixed(0)}d left</span>
-                  : `${certs.soonestDays.toFixed(0)}d left`,
-              },
+              // The WireGuard peer count used to be here, and the certificate
+              // expiry after it, both in a board about Cloudflare because
+              // there was nowhere better. There is now, for both.
             ]}
           />
-          {/* One entrypoint-level wildcard covers every hostname, so these all
-              move together — the soonest expiry IS the estate's expiry. */}
           <p className="board-foot">
-            One wildcard certificate covers every hostname, so they renew together.
+            An outbound connection this box holds open, so the edge can reach it without the router
+            accepting anything. The detail is on <b>Coming in</b>.
           </p>
         </Board>
 
-        <Board
-          title="Through the proxy"
-          icon="⇄"
-          span={6}
-          fill
-          aside={<span className="board-note">requests/min, 10 min average</span>}
-        >
-          <BarList
-            items={proxy.byService.map((s) => ({
-              label: s.label,
-              value: s.value,
-              display: s.value.toFixed(1),
-            }))}
-            empty="no traffic"
-          />
-          <h4 className="board-sub">Response codes</h4>
-          <BarList
-            items={proxy.byCode.map((c) => ({
-              label: c.label,
-              value: c.value,
-              display: c.value.toFixed(1),
-              tone: codeTone(c.label),
-            }))}
-            empty="no traffic"
-          />
-          <Facts
-            rows={[
-              { k: 'Routers', v: num(proxy.routers) },
-              { k: 'Services', v: num(proxy.services) },
-              { k: 'Open connections', v: num(proxy.openConnections) },
-            ]}
-          />
-          {/* rootlessport rewrites the client address on published ports, so
-              every LAN and WireGuard request arrives as a bridge address. */}
-          <p className="board-foot">
-            Client addresses here are bridge addresses — published ports rewrite the source IP.
-          </p>
-        </Board>
+        {/* The proxy had a board here — top services, response codes, router
+            counts — and the Gateway tab now says all of it beside the routing
+            table those numbers are about, which is where they answer something.
+            Repeating them here would be the same figures a click apart. */}
 
         <Board title="DNS" icon="◎" span={6} fill>
           <div className="library-split">
@@ -269,27 +229,10 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
             above, which is where both belong: a diagram of how traffic moves,
             not the detail of either end. */}
 
-        <Board title="Certificates" icon="⌸" span={12}>
-          <ul className="certs">
-            {certs.expiring.map((c) => (
-              <li key={c.name} className="certs-row">
-                <span className="certs-name">{c.name}</span>
-                {/* 90 days is Let's Encrypt's full lifetime, so the bar reads
-                    as "how much of this certificate is left". */}
-                <Progress
-                  pct={Math.min(100, (c.days / 90) * 100)}
-                  tone={c.days < 14 ? 'bad' : c.days < 30 ? 'warn' : 'ok'}
-                />
-                <span className="certs-days">{c.days.toFixed(0)}d</span>
-              </li>
-            ))}
-          </ul>
-          {certs.expiring.length === 0 && <p className="viz-empty">no probes reporting a certificate</p>}
-          <p className="board-foot">
-            Soonest five, from the outside — this is what a browser sees, not what is on disk.{' '}
-            <Chip tone="muted">gatus</Chip>
-          </p>
-        </Board>
+        {/* Certificates moved to the Gateway tab, and got better in the move:
+            gatus reported one expiry per PROBE, which was forty copies of the
+            same wildcard. traefik reports its store — two certificates, which
+            is how many there are. */}
       </BoardGrid>
     </>
   )
@@ -317,7 +260,7 @@ function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
  * Pocket ID — the difference is only who performs the redirect.
  */
 function inboundStages(data: General): TopoStage[] {
-  const { tunnel, wireguard, proxy, certs, dns } = data
+  const { tunnel, wireguard, proxy, dns } = data
   const live = tunnel.status === 'healthy'
   const peersUp = wireguard.connected !== null && wireguard.connected > 0
   const busy = proxy.rpm !== null && proxy.rpm > 0
@@ -443,7 +386,9 @@ function inboundStages(data: General): TopoStage[] {
           facts: [
             { k: 'req/min', v: num(proxy.rpm) },
             { k: 'routers', v: num(proxy.routers) },
-            { k: 'cert', v: certs.soonestDays === null ? DASH : `${certs.soonestDays.toFixed(0)}d` },
+            // Certificate expiry was a third fact here. It is a number about
+            // the proxy, not about the shape of the path, and it has a panel
+            // of its own on the Gateway tab now.
           ],
         },
       ],
@@ -489,7 +434,9 @@ function inboundStages(data: General): TopoStage[] {
           sub: 'health paths, APIs with their own keys',
           icon: '▦',
           tone: 'muted',
-          facts: [{ k: 'upstreams', v: num(proxy.services) }],
+          // No count: the one that was here was traefik's total service
+          // count, which is every upstream on the box rather than the open
+          // ones. The Gateway tab counts them properly, by protection.
         },
       ],
     },
@@ -1190,6 +1137,654 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
       </BoardGrid>
     </>
   )
+}
+
+// ── Gateway ────────────────────────────────────────────────────────────────
+
+type Gateway = Extract<NetworkData, { tab: 'gateway' }>
+
+/**
+ * The proxy and the gate, on one tab.
+ *
+ * They are separate programs with separate release cycles, so each gets its
+ * own header and its own boards — but they are one subject, because neither
+ * answers the question people actually bring to this page. "What can be
+ * reached, and by whom" is half a routing table and half an identity
+ * provider: traefik knows every published name and nothing about who is
+ * behind a request, the IdP knows every account and nothing about the forty
+ * names that never ask it anything. The routing table below is the join.
+ */
+function GatewayView({ data }: { data: Gateway }) {
+  const [side, setSide] = useState<'traefik' | 'idp'>('traefik')
+  const { traefik, idp } = data
+
+  return (
+    <>
+      <div className="tunnel-bar">
+        <Segmented
+          value={side}
+          onChange={setSide}
+          options={[
+            // Each dot is "did it answer us", which is the only claim this
+            // page can make first-hand — gatus makes the fuller one, and it
+            // is already on the tab these buttons sit under.
+            { value: 'traefik', label: 'Traefik', dot: tone(traefik.version !== null) },
+            { value: 'idp', label: 'Pocket ID', dot: tone(idp.users.length > 0) },
+          ]}
+        />
+      </div>
+
+      {side === 'idp' ?
+        <IdpView d={idp} />
+      : <TraefikView d={traefik} />}
+    </>
+  )
+}
+
+/** How each protection class reads, and in what order the table groups them. */
+const PROTECTION: Record<
+  Gateway['traefik']['routes'][number]['protection'],
+  { title: string; note: string; tone: Tone }
+> = {
+  app: {
+    title: 'The app decides',
+    note: 'traefik routes these straight through. Whatever login they have is their own, and this page cannot see it — several of them do have one.',
+    tone: 'muted',
+  },
+  gate: {
+    title: 'Behind the gate',
+    note: 'A forward-auth middleware. The request goes to Pocket ID first and only reaches the app once it has come back authenticated, so the app never sees an anonymous request at all.',
+    tone: 'ok',
+  },
+  client: {
+    title: 'Signs in against Pocket ID itself',
+    note: 'No middleware — the app is a registered OIDC client and runs the login itself, which means it also decides what an unauthenticated request gets.',
+    tone: 'info',
+  },
+}
+
+/**
+ * traefik: what is published, and what it did with it.
+ *
+ * The routing table leads because it is the one thing here that exists
+ * nowhere else — nix declares the intent, and this is what traefik actually
+ * built out of it, including the routers it refused.
+ */
+function TraefikView({ d }: { d: Gateway['traefik'] }) {
+  const { traffic, counts } = d
+  const busy = traffic.rpm !== null && traffic.rpm > 0
+  const groups = (['app', 'gate', 'client'] as const)
+    .map((p) => ({ p, rows: d.routes.filter((r) => r.protection === p) }))
+    .filter((g) => g.rows.length > 0)
+  const remote = d.routes.filter((r) => r.remote).length
+
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-traefik.svg"
+        name="Traefik"
+        version={d.version}
+        versionNote={
+          d.codename === null ? 'from its own API' : `“${d.codename}” · from its own API`
+        }
+        verdict={verdictOf(d.gap)}
+        compare={[
+          {
+            k: 'Latest',
+            v: d.gap.latest,
+            note:
+              d.gap.latest === null ? 'GitHub did not answer'
+              : d.gap.behind.length === 0 ? 'this is what is running'
+              : `${String(d.gap.behind.length)} release${d.gap.behind.length === 1 ? '' : 's'} between them`,
+          },
+          {
+            k: 'Read from',
+            v: null,
+            // Worth stating: every other version on this dashboard is the tag
+            // the flake pinned, which is what was ASKED for.
+            note: 'the running process, not the tag in the flake',
+          },
+        ]}
+        lede={
+          <>
+            Every hostname on this box resolves to one process, and this is it. It terminates the
+            TLS, picks a container by the name in the request, and — for about half of them — asks
+            Pocket ID whether the request should go any further.
+          </>
+        }
+        actions={
+          <a
+            className="btn btn-primary"
+            href="https://traefik.toscanini.me/dashboard/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open the dashboard ↗
+          </a>
+        }
+      />
+      <LinkRow
+        links={[
+          { label: 'Docs', href: 'https://doc.traefik.io/traefik/' },
+          { label: 'GitHub', href: 'https://github.com/traefik/traefik' },
+        ]}
+      />
+
+      <BoardGrid>
+        <Board
+          title="What is published, and what protects it"
+          icon="⇄"
+          span={12}
+          aside={
+            <span className="board-note">
+              {d.routes.length} hostnames · {remote} also off-LAN
+            </span>
+          }
+        >
+          {groups.map((g) => (
+            <section key={g.p} className="routes-group">
+              <h4 className="board-sub">
+                {PROTECTION[g.p].title}
+                <Chip tone={PROTECTION[g.p].tone}>{g.rows.length}</Chip>
+              </h4>
+              <ul className="itemlist routes">
+                {g.rows.map((r) => (
+                  <li key={r.host} title={r.via ?? undefined}>
+                    <span className="item-main mono">{r.host.replace(/\.toscanini\.me$/, '')}</span>
+                    {/* The chip is the whole point of the row: off-LAN means
+                        the internet can ask, and the protection column beside
+                        it says what answers. */}
+                    {r.remote && <Chip tone="warn">off-LAN</Chip>}
+                    {r.disabled && <Chip tone="bad">disabled</Chip>}
+                    {/* An em dash is not zero: traefik labels no request
+                        counters for its own dashboard's router, and a 0 there
+                        would read as "nobody has opened it". */}
+                    <span className="item-n">{r.requests === null ? DASH : compact(r.requests)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="board-foot">{PROTECTION[g.p].note}</p>
+            </section>
+          ))}
+
+          <p className="board-foot">
+            One row per hostname rather than per router, because a name published both on the LAN
+            and through the tunnel is two routers for one thing. Read from the configuration traefik
+            actually built — not from what the flake asked for, which is the point of looking. The
+            count on the right is requests over {d.windowDays} days.
+            {counts.errors > 0 && (
+              <>
+                {' '}
+                <b>
+                  {num(counts.errors)} piece{counts.errors === 1 ? '' : 's'} of configuration failed
+                  to build
+                </b>{' '}
+                — a router that does not exist answers nothing, quietly.
+              </>
+            )}
+          </p>
+        </Board>
+
+        <Board
+          title="Traffic"
+          icon="◇"
+          span={8}
+          fill
+          aside={
+            <span className="board-live">
+              <Pulse on={busy} tone="accent" />
+              {busy ? `${num(traffic.rpm)}/min` : 'idle'}
+            </span>
+          }
+        >
+          <Measures
+            items={[
+              { k: 'open connections', v: num(traffic.open) },
+              // p95 of the SERVICE duration, which is the app answering. Named
+              // for what it measures so nobody reads it as proxy overhead.
+              { k: 'backends, p95', v: ms(traffic.p95Ms) },
+              { k: 'routers', v: num(counts.routers) },
+              { k: 'config read', v: since(d.config.reloadedAgo) },
+            ]}
+          />
+
+          <Columns
+            points={traffic.daily.map((p) => ({
+              label: p.date.slice(5),
+              value: p.requests,
+              display: `${num(p.requests)} requests`,
+            }))}
+            height={112}
+            empty="nothing scraped yet"
+          />
+          {traffic.daily.length > 0 && (
+            <p className="colaxis">
+              <span>{traffic.daily[0]?.date.slice(5)}</span>
+              <span>requests per day</span>
+              <span>{traffic.daily[traffic.daily.length - 1]?.date.slice(5)}</span>
+            </p>
+          )}
+
+          {traffic.byEntrypoint.length > 0 && (
+            <p className="board-foot">
+              <span className="endpoints">
+                {traffic.byEntrypoint.map((e) => (
+                  <span key={e.label}>
+                    {e.label === 'websecure' ? 'LAN'
+                    : e.label === 'cfweb' ? 'tunnel'
+                    : e.label}{' '}
+                    <b>{compact(e.value)}</b>
+                  </span>
+                ))}
+              </span>
+              Split by entrypoint over {d.windowDays} days. The gap is the shape of this box: almost
+              everything is asked from inside the house, and what the tunnel carries is the handful
+              of services deliberately published to the internet.
+            </p>
+          )}
+        </Board>
+
+        <Board
+          title="Where it goes"
+          icon="⌗"
+          span={4}
+          fill
+          aside={<span className="board-note">requests/min, 1h</span>}
+        >
+          <BarList
+            items={traffic.byService.map((s) => ({
+              label: s.label,
+              value: s.value,
+              display: s.value.toFixed(1),
+            }))}
+            empty="no traffic"
+          />
+          <h4 className="board-sub">Response codes, 24h</h4>
+          <BarList
+            items={traffic.byCode.map((c) => ({
+              label: c.label === '0' ? 'no reply' : c.label,
+              value: c.value,
+              display: compact(c.value),
+              tone: codeTone(c.label),
+            }))}
+            empty="no traffic"
+          />
+          <p className="board-foot">
+            {/* 401 is the gate working, not a fault, and on a box where half
+                the routers forward-auth it is one of the commonest codes. */}
+            A 401 here is usually the gate doing its job — a request arriving without a session, on
+            its way to the login. <code>no reply</code> is traefik&rsquo;s code for a client that
+            hung up before an answer was written.
+          </p>
+        </Board>
+
+        <Board
+          title="Certificates"
+          icon="⌸"
+          span={6}
+          fill
+          aside={<span className="board-note">traefik&rsquo;s own store</span>}
+        >
+          <ul className="certs">
+            {d.certs.map((c) => (
+              <li key={c.cn} className="certs-row" title={c.sans.join(', ')}>
+                <span className="certs-name mono">{c.cn}</span>
+                {/* 90 days is Let's Encrypt's full lifetime, so the bar reads
+                    as how much of this certificate is left. */}
+                <Progress
+                  pct={Math.min(100, (c.days / 90) * 100)}
+                  tone={c.days < 14 ? 'bad' : c.days < 30 ? 'warn' : 'ok'}
+                />
+                <span className="certs-days">{c.days.toFixed(0)}d</span>
+              </li>
+            ))}
+          </ul>
+          {d.certs.length === 0 && <p className="viz-empty">no certificate in the store</p>}
+
+          {d.tls.length > 0 && (
+            <Facts
+              rows={d.tls.map((t) => ({
+                k: `TLS ${t.version}`,
+                v: `${t.share.toFixed(t.share > 99 ? 0 : 1)}% of requests`,
+              }))}
+            />
+          )}
+
+          <p className="board-foot">
+            Read out of the running proxy rather than probed from outside, so this is what is
+            actually loaded. One wildcard covers every name on the box —{' '}
+            <code>*.toscanini.me</code> — which is why there are two entries here and not forty, and
+            why they all renew together. Issued over DNS-01 against Cloudflare, so nothing has to be
+            reachable from the internet for a renewal to work.
+          </p>
+        </Board>
+
+        <Changelog gap={d.gap} span={6} />
+
+        {/* No neighbours. cloudflared dials the cfweb entrypoint and is the
+            obvious candidate, but it has its own page one tab over — and a
+            second copy of a log stream is not a second source. */}
+        <Board title="Logs" icon="≡" span={12}>
+          <GrafanaLogs
+            source={{ container: 'traefik' }}
+            title="Traefik logs"
+            foot={
+              <p className="board-foot">
+                The service log, not the access log: startup, certificate renewals, configuration
+                reloads and the errors behind a router that refused to build. Per-request lines go
+                to the access log, which is not shipped here — the metrics above are what that
+                answers.
+              </p>
+            }
+          />
+        </Board>
+      </BoardGrid>
+    </>
+  )
+}
+
+/**
+ * Pocket ID: who can get in, and who did.
+ *
+ * The audit log is the panel. It is the only record on this box of a person
+ * signing in — traefik sees a 302 to the IdP and a 200 afterwards and cannot
+ * tell you which human that was — and it is also the only way to find out
+ * which of the registered applications anybody actually uses.
+ */
+function IdpView({ d }: { d: Gateway['idp'] }) {
+  const { window: w } = d
+  const used = d.clients.filter((c) => c.used > 0)
+  const idle = d.clients.filter((c) => c.used === 0)
+  const dupes = d.clients.filter((c) => c.duplicate)
+  const max = used[0]?.used ?? 1
+
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-pocket-id.svg"
+        name="Pocket ID"
+        version={d.version}
+        versionNote="pinned in the flake"
+        verdict={verdictOf(d.gap)}
+        compare={[
+          {
+            k: 'Latest',
+            v: d.gap.latest,
+            note:
+              d.gap.latest === null ? 'GitHub did not answer'
+              : d.gap.behind.length === 0 ? 'this is what is running'
+              : `${String(d.gap.behind.length)} release${d.gap.behind.length === 1 ? '' : 's'} between them`,
+          },
+          { k: 'Pinned by', v: null, note: 'an exact tag in stacks/pocket-id — it serves no version' },
+        ]}
+        lede={
+          <>
+            Passkeys only — there is no password on this box to guess, phish or reuse. Every admin
+            UI either sits behind it at the proxy or signs in against it directly, so a single
+            authentication here is what opens all of them for the day.
+          </>
+        }
+        actions={
+          <a
+            className="btn btn-primary"
+            href="https://id.toscanini.me"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open Pocket ID ↗
+          </a>
+        }
+      />
+      <LinkRow
+        links={[
+          { label: 'Docs', href: 'https://pocket-id.org/docs/introduction' },
+          { label: 'GitHub', href: 'https://github.com/pocket-id/pocket-id' },
+        ]}
+      />
+
+      <BoardGrid>
+        <Board
+          title="Signing in"
+          icon="⚿"
+          span={8}
+          fill
+          aside={<span className="board-note">{w.days} days</span>}
+        >
+          <Measures
+            items={[
+              { k: 'passkey sign-ins', v: num(w.signIns) },
+              { k: 'apps opened', v: num(w.authorizations) },
+              { k: 'first time', v: num(w.firstTime) },
+              { k: 'people', v: num(w.people) },
+            ]}
+          />
+
+          <Columns
+            points={d.daily.map((p) => ({
+              label: p.date.slice(5),
+              value: p.authorizations,
+              display: `${num(p.authorizations)} app${p.authorizations === 1 ? '' : 's'} opened`,
+            }))}
+            tone="ok"
+            height={100}
+            empty="nothing in the window"
+          />
+          {d.daily.length > 0 && (
+            <p className="colaxis">
+              <span>{d.daily[0]?.date.slice(5)}</span>
+              <span>applications opened per day</span>
+              <span>{d.daily[d.daily.length - 1]?.date.slice(5)}</span>
+            </p>
+          )}
+
+          <h4 className="board-sub">Most recent</h4>
+          {d.events.length === 0 ?
+            <p className="viz-empty">nothing in the window</p>
+          : <ul className="itemlist">
+              {d.events.map((e) => (
+                <li key={e.id} title={e.where}>
+                  <Chip tone={eventTone(e.event)}>{eventLabel(e.event)}</Chip>
+                  <span className="item-main">
+                    {e.client ?? e.username}
+                    {e.times > 1 && <span className="muted"> ×{e.times}</span>}
+                    {e.client !== null && <span className="muted"> · {e.username}</span>}
+                  </span>
+                  <span className="item-side">{e.device}</span>
+                  <span className="item-side">{e.ago}</span>
+                </li>
+              ))}
+            </ul>
+          }
+
+          <p className="board-foot">
+            Two different events, and the difference is the whole value of single sign-on:{' '}
+            <b>signed in</b> is a passkey being used, <b>opened</b> is an application accepting the
+            session that already existed. A day of one sign-in and nine opens is nine logins that
+            did not happen. A <b>×n</b> is the same thing repeated back to back — mostly a service
+            re-authorising on a timer. Requests arrive over the bridge with no usable source
+            address, so everything from the house reads as one place.
+            {d.truncated && ' The window is longer than the pages read, so these are a lower bound.'}
+          </p>
+        </Board>
+
+        <Board title="Who" icon="◑" span={4} fill>
+          <ul className="itemlist">
+            {d.users.map((u) => (
+              <li key={u.username} title={u.groups.join(', ')}>
+                <span className="item-main">
+                  {u.displayName}
+                  {u.admin && <span className="muted"> · admin</span>}
+                </span>
+                {u.disabled && <Chip tone="bad">disabled</Chip>}
+                {/* An admin account that is not a person, and the only place
+                    on this dashboard it is visible at all. */}
+                {u.service && (
+                  <Chip tone="muted">
+                    <span title="The principal behind STATIC_API_KEY — how daedalus reads this page">
+                      api key
+                    </span>
+                  </Chip>
+                )}
+                <span className="item-side">
+                  {u.service ? 'never signs in' : (u.lastSignInAgo ?? 'not in the window')}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <h4 className="board-sub">Groups</h4>
+          <ul className="itemlist">
+            {d.groups.map((g) => (
+              <li key={g.name}>
+                <span className="item-main">{g.name}</span>
+                <span className="item-side">
+                  {g.members === 0 ? 'nobody in it' : `${String(g.members)} member${g.members === 1 ? '' : 's'}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <p className="board-foot">
+            Groups are what an application is restricted to, so an empty one is an application
+            nobody can reach through it. Sign-ups are{' '}
+            <b>{d.signups ?? 'unknown'}</b> — read back from the IdP rather than restated here, so
+            it cannot go stale. An account is created by an admin, and it is worth nothing until a
+            passkey is registered on it.
+          </p>
+        </Board>
+
+        <Board
+          title="Applications"
+          icon="⌗"
+          span={6}
+          fill
+          aside={<span className="board-note">{d.clients.length} registered</span>}
+        >
+          {used.length === 0 ?
+            <p className="viz-empty">nothing was opened in the window</p>
+          : <ul className="ranks">
+              {used.map((c) => (
+                <li className="rank" key={c.id}>
+                  <span className="rank-name">
+                    <span title={c.host ?? c.name}>{c.name}</span>
+                    {!c.restricted && <em title="Open to every account, not a named group">any account</em>}
+                    {c.duplicate && (
+                      <em title="A second registration claims the same hostname — the audit log records only the name, so this count covers both">
+                        duplicate
+                      </em>
+                    )}
+                  </span>
+                  <span className="rank-track">
+                    <span
+                      className="rank-fill"
+                      style={{ width: `${String(Math.max(1.5, (c.used / max) * 100))}%` }}
+                    />
+                  </span>
+                  <span className="rank-n">{num(c.used)}</span>
+                  <span className="rank-meta">
+                    <span>{c.lastAgo ?? DASH}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          }
+
+          {idle.length > 0 && (
+            <p className="board-foot">
+              {/* Not framed as cruft: for a forward-auth app the client is
+                  what the MIDDLEWARE authenticates with, so "not opened" says
+                  nobody visited the app, not that the registration is dead. */}
+              <b>{num(idle.length)}</b>{' '}
+              {idle.length === 1 ? 'application was' : 'applications were'} not opened in the
+              window: {idle.map((c) => c.name).join(', ')}. For the ones behind the proxy gate that
+              means nobody visited them — their registration is what the middleware itself signs in
+              with, and is doing its job either way.
+            </p>
+          )}
+
+          {dupes.length > 0 && (
+            <p className="rejected">
+              <b>{num(dupes.length)}</b> registrations share a hostname —{' '}
+              {[...new Set(dupes.map((c) => c.host ?? c.name))].join(', ')}. The convergence job
+              creates a client per <code>fleet.ssoClients</code> entry and never deletes one, so a
+              rename leaves the old registration behind, live and still trusted. They cannot be told
+              apart above: the audit log records only the name, so a shared one counts for both.
+            </p>
+          )}
+
+          <p className="board-foot">
+            Counted by the name in the audit log, which is all it records — so a client renamed
+            inside the window reads as unopened, and its history stays with the name it had. Ranked
+            by how many times a session was handed to it.
+          </p>
+        </Board>
+
+        <Changelog gap={d.gap} span={6} />
+
+        <Board title="Logs" icon="≡" span={12}>
+          <GrafanaLogs source={{ container: 'pocket-id' }} title="Pocket ID logs" />
+          {/* The two units that WRITE the client list above. Neither is a
+              container and neither has anywhere else on this dashboard to be
+              read, which is the bar — and when a redirect URI is wrong after a
+              rebuild, this is the log that says why. */}
+          <LogDetails
+            summary="Client convergence — what put the applications above there"
+            source={{ unit: 'pocket-id-clients.service' }}
+            title="pocket-id-clients"
+            foot={
+              <p className="board-foot">
+                Runs on every rebuild and upserts one OIDC client per{' '}
+                <code>fleet.ssoClients</code> entry — name, redirect URIs, allowed groups. It
+                creates and updates; it never deletes, which is where the duplicates above come
+                from.
+              </p>
+            }
+          />
+          <LogDetails
+            summary="Client secrets — where each app’s credential comes from"
+            source={{ unit: 'sso-client-secrets.service' }}
+            title="sso-client-secrets"
+            foot={
+              <p className="board-foot">
+                Generates the client secret for every SSO app on the box and keeps it out of the nix
+                store. An app that suddenly cannot complete a login, having been fine, is usually
+                this having handed it a secret the IdP no longer holds.
+              </p>
+            }
+          />
+        </Board>
+      </BoardGrid>
+    </>
+  )
+}
+
+/** Pocket ID's event names, as a person would say them. */
+function eventLabel(event: string): string {
+  switch (event) {
+    case 'SIGN_IN':
+      return 'signed in'
+    case 'TOKEN_SIGN_IN':
+      return 'token sign-in'
+    case 'CLIENT_AUTHORIZATION':
+      return 'opened'
+    case 'NEW_CLIENT_AUTHORIZATION':
+      return 'first time'
+    case 'PASSKEY_ADDED':
+      return 'passkey added'
+    default:
+      return event.toLowerCase().replace(/_/g, ' ')
+  }
+}
+
+/**
+ * A passkey being used is the event worth spotting; an app accepting an
+ * existing session is the routine one. Status colours are reserved, so these
+ * are the neutral pair — nothing here is a fault.
+ */
+function eventTone(event: string): Tone {
+  if (event === 'SIGN_IN' || event === 'TOKEN_SIGN_IN') return 'accent'
+  if (event === 'PASSKEY_ADDED') return 'info'
+  return 'muted'
 }
 
 /** Same three answers the AI tabs give, for the same reason — see ai.tsx. */
