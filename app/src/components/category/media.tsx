@@ -1512,7 +1512,7 @@ function JanitorrPage({ d }: { d: Housekeeping }) {
   return (
     <>
       <ServiceHead
-        logo={null}
+        logo="/icon-janitorr.png"
         name="Janitorr"
         version={janitorr.version}
         versionNote="printed at startup"
