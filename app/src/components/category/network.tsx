@@ -1441,6 +1441,22 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
           </ul>
           {d.certs.length === 0 && <p className="viz-empty">no certificate in the store</p>}
 
+          {/* The join worth making on a page that has both: a certificate is
+              only worth renewing if something published matches it, and traefik
+              renews whatever is in the store regardless. */}
+          <p className="board-foot">
+            {d.certs.map((c) => (
+              <span key={c.cn} className="endpoints">
+                <span>
+                  <b>{c.cn}</b>{' '}
+                  {c.covers === 0 ?
+                    'answers for nothing published here'
+                  : `covers ${String(c.covers)} of the ${String(d.routes.length)} published names`}
+                </span>
+              </span>
+            ))}
+          </p>
+
           {d.tls.length > 0 && (
             <Facts
               rows={d.tls.map((t) => ({
@@ -1451,11 +1467,19 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
           )}
 
           <p className="board-foot">
-            Read out of the running proxy rather than probed from outside, so this is what is
-            actually loaded. One wildcard covers every name on the box —{' '}
-            <code>*.toscanini.me</code> — which is why there are two entries here and not forty, and
-            why they all renew together. Issued over DNS-01 against Cloudflare, so nothing has to be
-            reachable from the internet for a renewal to work.
+            Read out of the running proxy rather than probed from outside, so this is the store, not
+            a sample: <b>every</b> certificate this box serves HTTPS with is here. One wildcard
+            covers every published name — <code>*.toscanini.me</code> — which is why the list is
+            this short and why they renew together. Issued over DNS-01 against Cloudflare, so
+            nothing has to be reachable from the internet for a renewal to work.{' '}
+            {d.certs.some((c) => c.covers === 0) && (
+              <>
+                A certificate covering nothing is a leftover: only one domain pair is declared
+                (<code>entrypoints.websecure.http.tls.domains</code> in stacks/traefik), and traefik
+                renews whatever it already holds rather than what is asked for — so an old one stays
+                in <code>acme.json</code>, and stays renewed, until it is removed from there.
+              </>
+            )}
           </p>
         </Board>
 

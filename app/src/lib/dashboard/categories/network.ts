@@ -797,8 +797,15 @@ type TraefikData = {
   routes: RouteRow[]
   /** How far back `daily`, `byEntrypoint` and each route's count reach. */
   windowDays: number
-  /** Every certificate in the store, with days left. */
-  certs: { cn: string; sans: string[]; days: number }[]
+  /**
+   * Every certificate in the store, with days left and how much it is for.
+   *
+   * `covers` is the join this tab exists to make: a certificate is only worth
+   * renewing if some published hostname matches it, and traefik will renew one
+   * forever whether or not anything does. Counted against the routing table on
+   * the same page, so a zero here is a certificate nothing serves.
+   */
+  certs: { cn: string; sans: string[]; days: number; covers: number }[]
   /** Share of requests per negotiated TLS version, since traefik started. */
   tls: { version: string; share: number }[]
 }
@@ -1066,6 +1073,7 @@ async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikDa
     0,
   )
   const tlsTotal = tls.reduce((n, t) => n + t.value, 0)
+  const routes = buildRoutes(routers ?? [], perRouter, nativeHosts)
 
   return {
     version: version3,
@@ -1095,17 +1103,21 @@ async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikDa
       daily: daily.map((p) => ({ date: localDay(p.t * 1000), requests: p.v })),
       p95Ms: p95 === null ? null : p95 * 1000,
     },
-    routes: buildRoutes(routers ?? [], perRouter, nativeHosts),
+    routes,
     windowDays: DAYS,
     certs: certs
-      .map((c) => ({
-        cn: c.metric.cn ?? '?',
+      .map((c) => {
         // The SANs are the whole point of the wildcard: `*.toscanini.me`
         // covering every name on the box is why there is one certificate here
         // and not forty.
-        sans: (c.metric.sans ?? '').split(',').filter((s) => s !== ''),
-        days: (Number(c.value[1]) * 1000 - Date.now()) / 86400_000,
-      }))
+        const sans = (c.metric.sans ?? '').split(',').filter((s) => s !== '')
+        return {
+          cn: c.metric.cn ?? '?',
+          sans,
+          days: (Number(c.value[1]) * 1000 - Date.now()) / 86400_000,
+          covers: routes.filter((r) => sans.some((s) => sanCovers(s, r.host))).length,
+        }
+      })
       .filter((c) => Number.isFinite(c.days))
       .sort((a, b) => a.days - b.days),
     tls:
@@ -1113,6 +1125,21 @@ async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikDa
         []
       : tls.map((t) => ({ version: t.label, share: (t.value / tlsTotal) * 100 })),
   }
+}
+
+/**
+ * Does a certificate SAN answer for a hostname.
+ *
+ * A wildcard matches exactly ONE label, which is the rule the whole naming
+ * convention on this box rests on — `*.toscanini.me` covers `immich.…` and
+ * does not cover `a.b.…`, which is why every published name is one level
+ * under the apex (see the assertion in stacks/apps).
+ */
+function sanCovers(san: string, host: string): boolean {
+  if (!san.startsWith('*.')) return san === host
+  const suffix = san.slice(1)
+  if (!host.endsWith(suffix)) return false
+  return !host.slice(0, host.length - suffix.length).includes('.')
 }
 
 /**
