@@ -2126,24 +2126,35 @@ async function loadZone(): Promise<ZoneData> {
     changed: [...records]
       .filter((r) => r.changedAgo !== null)
       .sort((a, b) => (a.changedAgo ?? 0) - (b.changedAgo ?? 0))
-      .slice(0, 6),
+      .slice(0, 6)
+      .map((r) => ({ ...r, content: readableTarget(r.content) })),
     lanOnly: [...lanSet].filter((h) => !tunnel.has(h) && !wan.has(h)).length,
     drift: {
       // A name traefik serves that pi-hole does not short-circuit: it still
       // works at home, by going out to Cloudflare and back in through the
       // tunnel — or not at all, if it is LAN-only.
       publishedWithoutLan: [...publishedSet].filter((h) => !lanSet.has(h)).sort(),
-      // The reverse: pi-hole points a name at this box and traefik has no
+      // The reverse: pi-hole points a name at THIS BOX and traefik has no
       // router for it, so every request for it lands on the default
       // certificate and 404s.
       //
-      // Checked against traefik rather than against the webApps registry,
-      // because not everything traefik serves is a webApp: the shared postgres
-      // cluster is a TCP/SNI router contributed as raw YAML, and comparing
-      // against webApps alone reported it as broken when it is working
-      // exactly as designed. Traefik is the only thing that knows the whole
-      // answer, and it is one call away.
-      lanWithoutRoute: served === null ? [] : [...lanSet].filter((h) => !served.has(h)).sort(),
+      // Two filters, both of which this check got wrong on the way here.
+      // Traefik rather than the webApps registry, because not everything
+      // traefik serves is a webApp — the shared postgres cluster is a TCP/SNI
+      // router contributed as raw YAML, and comparing against webApps alone
+      // reported it as broken while it was working exactly as designed. And
+      // only entries whose address IS this box: `gaming-pc.local` points at
+      // 192.168.0.120, so traefik is not in its path and "no router" would be
+      // a true statement about an irrelevant program.
+      lanWithoutRoute:
+        served === null ? (
+          []
+        ) : (
+          lan
+            .filter((h) => h.ip === LAN_IP && !served.has(h.host))
+            .map((h) => h.host)
+            .sort()
+        ),
       // A tunnel CNAME with no webApp behind it. The reconciler sweeps records
       // carrying its own comment, so anything here was made by hand.
       tunnelWithoutApp: [...tunnel].filter((h) => !publishedSet.has(h)).sort(),
@@ -2185,6 +2196,19 @@ const age = (iso: string | undefined): number | null => {
   if (iso === undefined) return null
   const t = Date.parse(iso)
   return Number.isFinite(t) ? (Date.now() - t) / 1000 : null
+}
+
+/**
+ * What a record points at, said in a way worth reading.
+ *
+ * Every tunnel CNAME in this zone is the same forty-character tunnel id, and
+ * printing it seven times says only that seven rows are identical — while
+ * being long enough to push the name that DOES differ out of the row. The
+ * substitution is safe because the id is the tunnel's: `cfargotunnel.com` is
+ * not a name anything else resolves to.
+ */
+function readableTarget(content: string): string {
+  return content.endsWith('.cfargotunnel.com') ? 'the tunnel' : content
 }
 
 const toRecord =

@@ -2891,6 +2891,7 @@ function ZoneView({ d }: { d: Domains['zone'] }) {
           title="The registration"
           icon="◷"
           span={4}
+          fill
           aside={<span className="board-note">rdap</span>}
         >
           <Facts
@@ -2943,15 +2944,22 @@ function ZoneView({ d }: { d: Domains['zone'] }) {
           </p>
         </Board>
 
-        <Board title="Mail" icon="✉" span={6} aside={<span className="board-note">{d.mail.length} domains</span>}>
+        <Board
+          title="Mail"
+          icon="✉"
+          span={6}
+          fill
+          aside={<span className="board-note">{d.mail.length} domains</span>}
+        >
           {d.mail.length === 0 ?
             <p className="viz-empty">no MX records in this zone</p>
           : d.mail.map((m) => (
               <section key={m.domain} className="mail-domain">
-                <h4 className="board-sub">
-                  <span className="mono">{m.domain}</span>
-                  <span className="board-note">{m.mx.join(' · ') || 'no MX'}</span>
-                </h4>
+                {/* Not `board-sub`: that heading is uppercased, and a domain
+                    name and its mail exchangers are literal strings that are
+                    wrong in capitals. */}
+                <h4 className="mail-name mono">{m.domain}</h4>
+                <p className="mail-mx mono">{m.mx.join(' · ') || 'no MX'}</p>
                 <Measures
                   items={[
                     {
