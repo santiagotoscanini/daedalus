@@ -749,7 +749,7 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
  */
 const LEMONADE_NEIGHBOURS: readonly LogNeighbour[] = [
   {
-    container: 'lemonade-logs',
+    source: { container: 'lemonade-logs' },
     label: 'Bridge logs',
     role: 'the process shipping the above',
     title: 'Lemonade log bridge',

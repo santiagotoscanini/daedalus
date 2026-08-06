@@ -188,6 +188,22 @@ function HealthChecks({
   )
 }
 
+/**
+ * The oneshot behind every "from the image's own label" version on this page.
+ *
+ * A neighbour of Shelfmark, Janitorr and Recyclarr specifically — the three
+ * whose pin is a channel, so the snapshot is the ONLY thing that knows what
+ * they are running. When one of them starts reporting "unknown", this is the
+ * log that says why, and it is the reason a systemd unit can be a neighbour at
+ * all (see `LogNeighbour`).
+ */
+const VERSION_SNAPSHOT: LogNeighbour = {
+  source: { unit: 'daedalus-image-snapshot.service' },
+  label: 'Version snapshot',
+  role: 'where this version comes from',
+  note: 'Reads the OCI labels off every running image and publishes them for this dashboard, since the pin on these three names a channel rather than a release. One line per run with the counts; if the version above says “unknown”, this says whether the snapshot ran at all. Its failures also send mail — see fleet.monitoredJobs in stacks/daedalus.',
+}
+
 /** The button every service head carries. */
 function Open({ name, host }: { name: string; host: string }) {
   return (
@@ -361,7 +377,7 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
  */
 const WANTED_NEIGHBOURS: readonly LogNeighbour[] = [
   {
-    container: 'scraparr',
+    source: { container: 'scraparr' },
     label: 'Scraparr',
     role: 'the exporter behind the *arr graphs',
     note: 'Polls Sonarr, Radarr, Prowlarr and Bazarr on a timer and republishes what they say as prometheus metrics. Nothing on this tab reads it — every number here comes from the *arrs directly — but the dashboards on the Monitoring page do, so a flat line there starts here. Expect periodic “scrape failed” and “No data found” errors: those four are dialled at a rootless-published host port, where a new connection occasionally hangs ~10.5s, and scraparr gives up at a hardcoded 10 with no retry. The scrape after it succeeds and the previous value is kept, so the metrics stay correct — but scraparr_services_up dips while it happens.',
@@ -692,7 +708,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
  */
 const PROWLARR_NEIGHBOURS: readonly LogNeighbour[] = [
   {
-    container: 'flaresolverr',
+    source: { container: 'flaresolverr' },
     label: 'FlareSolverr',
     role: 'the browser that answers Cloudflare challenges',
     note: 'Indexers behind a Cloudflare challenge are searched through this. When one of them starts failing every query while the others are fine, this log says whether the challenge was refused or the browser never started — Prowlarr itself only records that the request timed out.',
@@ -795,7 +811,7 @@ function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'prowlarr' }> }) {
 
 const BAZARR_NEIGHBOURS: readonly LogNeighbour[] = [
   {
-    container: 'subgen',
+    source: { container: 'subgen' },
     label: 'Subgen',
     role: 'Whisper, for the subtitles nobody published',
     note: 'Registered with Bazarr as the `whisperai` provider. When an episode has no subtitles anywhere, this transcribes the audio instead — on the CPU, so a single film can take a long time and the only evidence it is working is here.',
@@ -1438,7 +1454,11 @@ function ShelfmarkPage({ d }: { d: Books }) {
           }
         />
 
-        <LogBoard source={{ container: 'shelfmark' }} title="Shelfmark logs" />
+        <LogBoard
+          source={{ container: 'shelfmark' }}
+          title="Shelfmark logs"
+          neighbours={[VERSION_SNAPSHOT]}
+        />
       </BoardGrid>
     </>
   )
@@ -1609,7 +1629,11 @@ function JanitorrPage({ d }: { d: Housekeeping }) {
 
         <Changelog gap={janitorr.gap} span={12} aside={<span className="board-note">Schaka/janitorr</span>} />
 
-        <LogBoard source={{ container: 'janitorr' }} title="Janitorr logs" />
+        <LogBoard
+          source={{ container: 'janitorr' }}
+          title="Janitorr logs"
+          neighbours={[VERSION_SNAPSHOT]}
+        />
       </BoardGrid>
     </>
   )
@@ -1716,7 +1740,11 @@ function RecyclarrPage({ d }: { d: Housekeeping }) {
           }
         />
 
-        <LogBoard source={{ container: 'recyclarr' }} title="Recyclarr logs" />
+        <LogBoard
+          source={{ container: 'recyclarr' }}
+          title="Recyclarr logs"
+          neighbours={[VERSION_SNAPSHOT]}
+        />
       </BoardGrid>
     </>
   )
