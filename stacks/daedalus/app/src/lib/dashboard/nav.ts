@@ -175,7 +175,11 @@ export const CATEGORIES: CategorySpec[] = [
     icon: '⇄',
     lede: 'Everything between a packet and this box — the link, the ways in, the proxy, the resolver.',
     boardSpans: [12, 12, 8, 4],
-    tileGroups: 1,
+    // No tiles on any tab here. The nine that used to sit under General were
+    // each a service already given a whole tab, restating three of its numbers
+    // one screen below the panel that explains them, plus four bare links —
+    // and every one of those links now lives on the tab whose subject it is.
+    tileGroups: 0,
     // Split by DIRECTION, because that is the only axis on which these two
     // are alike: both are WireGuard, both are tunnels, and everything else
     // about them is opposite. One lets a phone reach the house from a hotel;
@@ -188,11 +192,11 @@ export const CATEGORIES: CategorySpec[] = [
       // every device that has ever asked this house for a name. No probe —
       // there is no one service to check, and the router that would be the
       // obvious subject serves no API at all.
-      { id: 'general', label: 'General', boardSpans: [8, 4, 4, 8] },
+      { id: 'general', label: 'General', boardSpans: [8, 4, 4, 8], statBand: false },
       // Three ways in — WireGuard, the Cloudflare tunnel, and the address
       // itself — chosen by a switch inside the page. The probe is wg-easy's
       // because it is the only one of the three gatus can check.
-      { id: 'wireguard', label: 'Coming in', probe: 'wg-easy', boardSpans: [8, 4, 12], statBand: false, tileGroups: 0 },
+      { id: 'wireguard', label: 'Coming in', probe: 'wg-easy', boardSpans: [8, 4, 12], statBand: false },
       // What happens to a request once it has arrived: traefik terminates it,
       // Pocket ID decides whether it goes any further. Two services, one tab,
       // because neither answers "can this be reached" alone — a route with no
@@ -205,7 +209,6 @@ export const CATEGORIES: CategorySpec[] = [
         probes: ['traefik-dashboard', 'pocket-id'],
         boardSpans: [12, 8, 4],
         statBand: false,
-        tileGroups: 0,
       },
       // How a name becomes an address, on both sides of the front door: the
       // resolver every device in the house asks, and the zone the internet
@@ -220,7 +223,6 @@ export const CATEGORIES: CategorySpec[] = [
         probe: 'pihole',
         boardSpans: [8, 4, 8, 4],
         statBand: false,
-        tileGroups: 0,
       },
       // No gatus probe: it checks HTTP endpoints, and a VPN egress tunnel
       // answers nothing — it is a network namespace. Its dot is computed from
@@ -231,7 +233,6 @@ export const CATEGORIES: CategorySpec[] = [
         health: 'vpn-egress',
         boardSpans: [8, 4, 12],
         statBand: false,
-        tileGroups: 0,
       },
     ],
   },

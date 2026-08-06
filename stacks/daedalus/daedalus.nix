@@ -466,10 +466,16 @@ in
       # Off-box, so it cannot come from webAppHosts. One binding here rather
       # than a literal per Lemonade tile.
       LEMONADE_URL = "http://gaming-pc.local.${config.fleet.baseDomain}:13305";
-      # The default route, which is the router, which is the only fact about
-      # it this box holds declaratively — everything else on the Network tab
-      # is measured, because the TP-Link serves no API to ask.
+      # The default route, which is the router. Bound from the one option that
+      # already says where this box sends everything it cannot deliver itself,
+      # so there is no second copy of the address to drift.
       GATEWAY_IP = config.networking.defaultGateway.address;
+      # The product name, and ONLY that. The router serves no API, but its
+      # login page carries a build stamp — model, hardware revision, firmware,
+      # build date — so all four of those are read off the device and a
+      # firmware bump reaches the tab with nothing edited here. What the stamp
+      # does not carry is the name printed on the box, which is this.
+      ROUTER_PRODUCT = "AXE5400 Tri-Band Wi-Fi 6E";
       # Pi-hole NOT through traefik, and bound from the same option that tells
       # traefik where to dial rather than restated. The reads this backs carry
       # device identities — hostnames, MAC addresses, what each one looks up —

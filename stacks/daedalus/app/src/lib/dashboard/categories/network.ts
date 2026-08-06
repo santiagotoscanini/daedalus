@@ -12,6 +12,7 @@
 
 import {
   getJson,
+  getText,
   piholeSid,
   promBars,
   promScalar,
@@ -235,6 +236,8 @@ type GeneralData = {
     down: number | null
     up: number | null
     ping: number | null
+    /** Where MySpeed itself is published, read from the manifest. */
+    url: string | null
     /** 7 days of the hourly test. */
     downHistory: number[]
     upHistory: number[]
@@ -254,6 +257,14 @@ type GeneralData = {
     /** This house's public address — see the note on the fetch. */
     wan: string | null
     url: string
+    /** What the router says it is. Null when it did not answer. */
+    model: string | null
+    hardware: string | null
+    firmware: string | null
+    /** ISO date the firmware was built. */
+    built: string | null
+    /** The product name, which the device never states. Declared in nix. */
+    product: string
   }
   proxy: { rpm: number | null; routers: number | null; spark: number[] }
   /** Bytes per container over 24h, biggest mover first. */
@@ -316,8 +327,22 @@ const NIC = 'node_network_%s_bytes_total{device!="lo"}'
 const nic = (dir: 'receive' | 'transmit') => NIC.replace('%s', dir)
 
 async function loadGeneral(): Promise<GeneralData> {
-  const [speed, speedHistory, wire, wireHistory, hops, rpm, overview, rpmSpark, pihole, services, devices, tunnel] =
-    await Promise.all([
+  const [
+    speed,
+    speedHistory,
+    wire,
+    wireHistory,
+    hops,
+    rpm,
+    overview,
+    rpmSpark,
+    pihole,
+    services,
+    devices,
+    router,
+    hosts,
+    tunnel,
+  ] = await Promise.all([
       promScalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
       // MySpeed tests hourly, so an hourly step is the native resolution — a
       // finer one would just carry each sample forward and draw stairs.
@@ -350,6 +375,8 @@ async function loadGeneral(): Promise<GeneralData> {
       loadAsked(),
       loadServiceTraffic(),
       loadDevices(),
+      loadRouter(),
+      webAppHosts(),
       // Cloudflare's own view of the tunnel, for exactly one field. cloudflared
       // never learns the WAN address it is dialling out from, and neither does
       // anything else on this box behind NAT — the edge records the address the
@@ -377,12 +404,17 @@ async function loadGeneral(): Promise<GeneralData> {
       down: speed.down,
       up: speed.up,
       ping: speed.ping,
+      // From the manifest, never derived from the key: the hostname a stack
+      // publishes on is a nix fact, and guessing it produces a link that 404s
+      // for every app whose name and hostname differ.
+      url: hosts.myspeed === undefined ? null : `https://${hosts.myspeed}`,
       downHistory: speedHistory[0] ?? [],
       upHistory: speedHistory[1] ?? [],
       pingHistory: speedHistory[2] ?? [],
     },
     hops,
     router: {
+      ...router,
       gateway: process.env.GATEWAY_IP ?? DASH_IP,
       lan: LAN_IP,
       wan: tunnel?.result?.connections?.[0]?.origin_ip ?? null,
@@ -397,6 +429,56 @@ async function loadGeneral(): Promise<GeneralData> {
 
 /** Printed when nix did not bind an address, which would be a config fault. */
 const DASH_IP = '—'
+
+/**
+ * What the router is, from the router.
+ *
+ * It serves no API — every configuration call sits behind an authenticated
+ * session — but its login page carries a build stamp in a meta tag, and that
+ * tag is served to anyone who asks:
+ *
+ *     <meta name="version" content="AXE75v1_1.10.5_2025-11-26T09:34:41.954Z">
+ *
+ * Model, hardware revision, firmware and the date it was built, from the
+ * device itself. So the one fact on this page that would otherwise be typed
+ * into nix and left to rot the next time the thing updates itself is derived
+ * instead, and a firmware bump shows up here without anyone editing anything.
+ *
+ * Not fetched through the tunnel or a proxy — straight at the default route
+ * over the LAN. A router that has stopped answering returns nulls, which the
+ * board prints as such rather than as a stale reading.
+ */
+const ROUTER_STAMP = /name="version"\s+content="([^"_]+?)_([^"_]+)_([^"]+)"/
+
+async function loadRouter(): Promise<{
+  model: string | null
+  hardware: string | null
+  firmware: string | null
+  built: string | null
+  product: string
+}> {
+  const product = process.env.ROUTER_PRODUCT ?? ''
+  const blank = { model: null, hardware: null, firmware: null, built: null, product }
+
+  const url = process.env.ROUTER_URL
+  if (url === undefined || url === '') return blank
+
+  const html = await getText(`${url}/webpages/onboarding.html`)
+  const m = html === null ? null : ROUTER_STAMP.exec(html)
+  if (m === null) return blank
+
+  // "AXE75v1" — the trailing vN is the hardware revision, and separating it
+  // keeps the model comparable to the name on the box and on the support site.
+  const rev = /^(.*?)(v\d+)$/.exec(m[1] ?? '')
+  return {
+    model: rev?.[1] ?? m[1] ?? null,
+    hardware: rev?.[2] ?? null,
+    firmware: m[2] ?? null,
+    // Date only: the build's millisecond is not a fact anyone reads.
+    built: (m[3] ?? '').slice(0, 10) || null,
+    product,
+  }
+}
 
 const HOPS = [
   { id: 'gateway', label: 'The router' },
