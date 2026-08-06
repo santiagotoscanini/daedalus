@@ -267,16 +267,23 @@ let
 
   # Names pi-hole answers from its own hosts file instead of forwarding.
   #
-  # The hostname half of each `fleet.dnsHosts` line ("<ip> <fqdn>"), which is
-  # what makes a published name resolve to this box on the LAN and to
-  # Cloudflare's edge everywhere else. Nothing else on the box states that
-  # split, and it is the whole of the difference between how a name behaves at
-  # home and how it behaves from a phone on mobile data — so the page joins on
-  # it rather than inferring it from the presence of a tunnel CNAME, which is a
-  # different fact that usually agrees.
-  lanHosts = lib.sort (a: b: a < b) (
-    map (e: lib.elemAt (lib.splitString " " e) 1) config.fleet.dnsHosts
-  );
+  # Read from the setting FTL is actually configured with, not from
+  # `fleet.dnsHosts`: the stacks contribute most of these, but pi-hole's own
+  # module appends the hosts that belong to no stack (the gaming PC), and a
+  # page that showed only the stack half would be quietly missing entries that
+  # exist. Split into address and name because they are the two halves of the
+  # answer — nearly every one points at this box, and the ones that do not are
+  # exactly the interesting rows.
+  lanHosts =
+    let
+      parse = e: {
+        ip = lib.elemAt (lib.splitString " " e) 0;
+        host = lib.elemAt (lib.splitString " " e) 1;
+      };
+    in
+    lib.sort (a: b: a.host < b.host) (
+      map parse config.services.pihole-ftl.settings.dns.hosts
+    );
 
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
     builtins.toJSON {
@@ -460,6 +467,10 @@ in
       # than a literal per Lemonade tile.
       LEMONADE_URL = "http://gaming-pc.local.${config.fleet.baseDomain}:13305";
       ROUTER_URL = "http://192.168.0.1";
+      # What nearly every pi-hole hosts entry points at. Bound from the option
+      # that GENERATES those entries, so "this one points somewhere else" stays
+      # a real distinction instead of a comparison against a stale literal.
+      LAN_IP = config.fleet.lanIp;
       # Read from the stack that pins it rather than restated here, so the
       # tile reports the version the server actually downloads on start.
       FACTORIO_VERSION = config.fleet.factorio.version;

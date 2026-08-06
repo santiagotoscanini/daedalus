@@ -213,7 +213,7 @@ export const CATEGORIES: CategorySpec[] = [
         id: 'domains',
         label: 'Domains',
         probe: 'pihole',
-        boardSpans: [8, 4, 4, 4],
+        boardSpans: [8, 4, 8, 4],
         statBand: false,
         tileGroups: 0,
       },

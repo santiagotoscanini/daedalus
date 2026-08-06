@@ -2401,7 +2401,7 @@ function DomainsView({ data }: { data: Domains }) {
 
       {side === 'zone' ?
         <ZoneView d={zone} />
-      : <ResolverView d={resolver} />}
+      : <ResolverView d={resolver} lan={data.lan} />}
     </>
   )
 }
@@ -2410,33 +2410,19 @@ function DomainsView({ data }: { data: Domains }) {
 
 /** The four ways a query ends, in the order they are tried. */
 const SOURCES = [
-  {
-    k: 'cached' as const,
-    label: 'From cache',
-    tone: 'ok' as Tone,
-    note: 'asked before, still valid',
-  },
-  {
-    k: 'local' as const,
-    label: 'Answered here',
-    tone: 'accent' as Tone,
-    note: 'the hosts file and the DHCP leases',
-  },
-  {
-    k: 'forwarded' as const,
-    label: 'Forwarded',
-    tone: 'info' as Tone,
-    note: 'left the house for an upstream',
-  },
-  { k: 'blocked' as const, label: 'Blocked', tone: 'warn' as Tone, note: 'matched the blocklist' },
+  { k: 'cached' as const, label: 'From cache', tone: 'ok' as Tone },
+  { k: 'local' as const, label: 'Answered here', tone: 'accent' as Tone },
+  { k: 'forwarded' as const, label: 'Forwarded', tone: 'info' as Tone },
+  { k: 'blocked' as const, label: 'Blocked', tone: 'warn' as Tone },
 ]
 
-function ResolverView({ d }: { d: Domains['resolver'] }) {
+function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] }) {
   const { answered, queries } = d
   const sum = answered.cached + answered.local + answered.forwarded + answered.blocked
   const share = (n: number) => (sum === 0 ? null : (n / sum) * 100)
   const paused = d.blocking.on === false
   const busiest = Math.max(...d.history.map((h) => h.total), 0)
+  const unserved = lan.filter((n) => n.served === false)
 
   return (
     <>
@@ -2491,14 +2477,85 @@ function ResolverView({ d }: { d: Domains['resolver'] }) {
 
       <BoardGrid>
         <Board
-          title="Where answers come from"
-          icon="◈"
+          title="The names we declare"
+          icon="⌂"
           span={8}
           aside={
             <span className="board-note">
-              {queries.perSecond === null ? DASH : num(queries.perSecond, 1)} queries a second
+              {lan.length} entries · {lan.filter((n) => n.public).length} also public
             </span>
           }
+        >
+          <ul className="lan-names">
+            {lan.map((n) => (
+              <li key={n.fqdn} className={n.served === false ? 'lan-name is-broken' : 'lan-name'}>
+                <span className="lan-host mono">{n.short}</span>
+                {n.elsewhere && <span className="lan-ip mono">{n.ip}</span>}
+                {n.public && <Chip tone="info">public</Chip>}
+                {n.served === false && <Chip tone="bad">no route</Chip>}
+              </li>
+            ))}
+          </ul>
+          <p className="board-foot">
+            The names this house answers for itself instead of asking anyone. Each one is an entry
+            in pi-hole’s hosts file generated from the stack that owns it, so a name gets here by
+            being declared and never by being typed into the admin — and nothing in this list can
+            outlive the thing it points at. An address is printed only when the entry points
+            somewhere other than this box. <b>public</b> marks the ones the zone publishes as well,
+            which is the same set the other side of this tab lists, seen from outside.
+            {unserved.length === 0 ?
+              ' Everything pointed at this box has a traefik router behind it.'
+            : ' A name marked no route resolves, then lands on the default certificate and 404s.'}
+          </p>
+        </Board>
+
+        <Board
+          title="Where answers come from"
+          icon="◈"
+          span={4}
+          aside={
+            <span className="board-note">
+              {queries.perSecond === null ? DASH : num(queries.perSecond, 1)}/s
+            </span>
+          }
+        >
+          <ul className="itemlist sources">
+            {SOURCES.map((s) => (
+              <li key={s.k}>
+                <span className="item-main">{s.label}</span>
+                <Progress pct={share(answered[s.k])} tone={s.tone} height={6} />
+                <span className="item-n">{pct(share(answered[s.k]), 1)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="board-foot">
+            {num(sum)} queries in the window FTL keeps in memory. Cache and the hosts file never
+            left the box, which is the whole job — the forwarded slice is the only part any upstream
+            sees.
+          </p>
+
+          <h4 className="board-sub">Upstreams</h4>
+          <ul className="itemlist upstreams">
+            {d.upstreams.map((u) => (
+              <li key={u.ip}>
+                <span className="item-main mono">{u.ip}</span>
+                {!u.declared && <Chip tone="warn">not configured</Chip>}
+                <span className="item-n">{u.replyMs === null ? DASH : ms(u.replyMs)}</span>
+                <span className="item-side mono">{compact(u.count)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="board-foot">
+            Mean round trip, as FTL measured it — what a page load waits for on a name nobody has
+            asked for recently.
+          </p>
+        </Board>
+
+        <Board
+          title="Traffic"
+          icon="⌁"
+          span={8}
+          aside={<span className="board-note">an hour per column</span>}
         >
           <Columns
             points={d.history.map((h) => ({
@@ -2509,169 +2566,85 @@ function ResolverView({ d }: { d: Domains['resolver'] }) {
             empty="pi-hole returned no history"
           />
           <p className="board-foot">
-            An hour per column, over the last day. Peak {num(busiest)} in one hour.
-          </p>
-
-          <ul className="itemlist sources">
-            {SOURCES.map((s) => (
-              <li key={s.k}>
-                <span className="item-main">{s.label}</span>
-                <span className="source-note">{s.note}</span>
-                <Progress pct={share(answered[s.k])} tone={s.tone} height={6} />
-                <span className="item-n">{pct(share(answered[s.k]), 1)}</span>
-                <span className="item-side mono">{compact(answered[s.k])}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="board-foot">
-            {num(sum)} queries in the window FTL keeps in memory. The first two never left the box —
-            which is the whole job, and why the forwarded share is the only part any upstream sees.
+            The last day, busiest hour {num(busiest)}. A house at rest still asks thousands of
+            questions an hour — most of it is background chatter from devices nobody is touching,
+            which is why the cache share above is what it is.
           </p>
         </Board>
 
         <Board
-          title="Upstreams"
-          icon="↗"
+          title="The resolver itself"
+          icon="⚙"
           span={4}
-          fill
-          aside={<span className="board-note">{pct(share(answered.forwarded), 1)} of queries</span>}
+          aside={paused ? <Chip tone="bad">blocking paused</Chip> : undefined}
         >
-          {d.upstreams.length === 0 ?
-            <p className="viz-empty">pi-hole reported no upstreams</p>
-          : <ul className="itemlist upstreams">
-              {d.upstreams.map((u) => (
-                <li key={u.ip}>
-                  <span className="item-main mono">{u.ip}</span>
-                  {!u.declared && <Chip tone="warn">not configured</Chip>}
-                  <span className="item-side">{u.name}</span>
-                  <span className="item-n">{u.replyMs === null ? DASH : ms(u.replyMs)}</span>
-                  <span className="item-side mono">{compact(u.count)}</span>
-                </li>
-              ))}
-            </ul>
-          }
-          <p className="board-foot">
-            Where a name goes when this box cannot answer it. The time is the mean round trip FTL
-            measured, not a ping — it is what a page load waits for on a name nobody has asked for
-            recently. A resolver marked <b>not configured</b> is one FTL still has counters for and
-            the current configuration no longer lists.
-          </p>
-        </Board>
-
-        <Board
-          title="Blocking"
-          icon="⊘"
-          span={4}
-          aside={
-            paused ?
-              <Chip tone="bad">paused</Chip>
-            : <span className="board-note">{pct(queries.blockedPct, 2)} of queries</span>
-          }
-        >
-          <Facts
-            rows={[
+          <Measures
+            items={[
               {
-                k: 'State',
+                k: 'Blocking',
                 v:
                   d.blocking.on === null ? DASH
-                  : d.blocking.on ?
-                    <span className="ok-text">on</span>
-                  : <span className="bad-text">
-                      off
-                      {d.blocking.resumesIn !== null && ` — back in ${until(d.blocking.resumesIn)}`}
-                    </span>,
+                  : d.blocking.on ? 'on'
+                  : `off, back in ${until(d.blocking.resumesIn)}`,
+                tone: d.blocking.on === false ? 'bad' : 'ok',
               },
-              { k: 'Domains on the list', v: compact(d.lists.gravity) },
-              { k: 'Allowed by hand', v: num(d.lists.allowed) },
-              { k: 'Denied by hand', v: num(d.lists.denied) },
-              { k: 'Blocked in the window', v: num(d.answered.blocked) },
-            ]}
-          />
-          <p className="board-foot">
-            {paused ?
-              'Blocking is off right now — every blocklist domain is being answered normally.'
-            : 'A blocked query is answered instantly with nothing, so the share here is closer to “how much of the traffic was junk” than to anything about speed.'}
-          </p>
-        </Board>
-
-        <Board
-          title="Cache"
-          icon="▤"
-          span={4}
-          aside={
-            <span className="board-note">
-              {d.cache.evicted === 0 ? 'nothing evicted' : `${num(d.cache.evicted)} evicted`}
-            </span>
-          }
-        >
-          <Facts
-            rows={[
-              { k: 'Slots', v: num(d.cache.size) },
-              { k: 'Inserted', v: num(d.cache.inserted) },
-              { k: 'Expired', v: num(d.cache.expired) },
               {
-                k: 'Evicted',
-                v:
-                  d.cache.evicted === null ? DASH
-                  : d.cache.evicted === 0 ?
-                    <span className="ok-text">0</span>
-                  : <span className="warn-text">{num(d.cache.evicted)}</span>,
+                k: 'Cache',
+                v: d.cache.evicted === 0 ? 'not full' : `${num(d.cache.evicted)} evicted`,
+                tone: d.cache.evicted === 0 ? 'ok' : 'warn',
               },
+              { k: 'Clients', v: num(d.clients.active), tone: 'muted' },
+              { k: 'On the list', v: compact(d.lists.gravity), tone: 'muted' },
             ]}
           />
           <p className="board-foot">
-            Evictions are the number that matters: entries expiring is a TTL running out, entries
-            being <i>evicted</i> is the cache being too small for the traffic. Zero means the{' '}
-            {num(d.cache.size)} slots are enough.
+            The four that can go wrong quietly. Blocking is left off by a “disable for 5 minutes”
+            nobody came back to; a cache with <i>evictions</i> is too small for the traffic, which
+            expiries do not mean.
           </p>
+
+          <details className="zone-group">
+            <summary>
+              What is being asked
+              <Chip tone="muted">{d.types.length}</Chip>
+            </summary>
+            <BarList
+              items={d.types.slice(0, 6).map((t) => ({
+                label: t.label,
+                value: t.value,
+                display: compact(t.value),
+              }))}
+              tone="info"
+              empty="no query types reported"
+            />
+            <p className="board-foot">
+              A and AAAA are one question asked twice — every modern client wants both addresses at
+              once. PTR is reverse lookups, mostly this box naming its own LAN.
+            </p>
+          </details>
+
+          <details className="zone-group">
+            <summary>
+              The query store
+              <Chip tone="muted">{bytes(d.store.bytes)}</Chip>
+            </summary>
+            <Facts
+              rows={[
+                { k: 'Queries kept', v: compact(d.store.queries) },
+                { k: 'Oldest', v: since(d.store.sinceSeconds) },
+                { k: 'Allowed by hand', v: num(d.lists.allowed) },
+                { k: 'Denied by hand', v: num(d.lists.denied) },
+              ]}
+            />
+            <p className="board-foot">
+              Every query, with the client that asked and the domain it asked for. It is the most
+              revealing file on the machine — the argument for the admin being behind the gate
+              rather than behind a password.
+            </p>
+          </details>
         </Board>
 
-        <Board title="What is being asked" icon="?" span={4}>
-          <BarList
-            items={d.types.slice(0, 6).map((t) => ({
-              label: t.label,
-              value: t.value,
-              display: compact(t.value),
-            }))}
-            tone="info"
-            empty="no query types reported"
-          />
-          <p className="board-foot">
-            A and AAAA are the same question asked twice — every modern client asks for both
-            addresses at once. PTR is reverse lookups, mostly this box naming its own LAN.
-          </p>
-        </Board>
-
-        <Board title="The query store" icon="⛁" span={3} aside={<span className="board-note">on disk</span>}>
-          <Facts
-            rows={[
-              { k: 'Queries kept', v: compact(d.store.queries) },
-              { k: 'Oldest query', v: since(d.store.sinceSeconds) },
-              { k: 'Size', v: bytes(d.store.bytes) },
-            ]}
-          />
-          <p className="board-foot">
-            Every query, with its client and its domain, in a database on this box. It is the most
-            revealing file on the machine — which is the argument for the admin being behind the
-            gate rather than behind a password.
-          </p>
-        </Board>
-
-        <Changelog gap={d.gap} span={9} />
-
-        <Board title="Logs" icon="≣" span={12}>
-          <GrafanaLogs
-            source={{ unit: 'pihole-ftl.service' }}
-            title="pihole-ftl logs"
-            foot={
-              <p className="board-foot">
-                A NixOS service rather than a container, so these are the unit’s journal lines —
-                startup, gravity runs, DHCP leases and upstream trouble. Individual queries are not
-                here; they go to the store above.
-              </p>
-            }
-          />
-        </Board>
+        <Changelog gap={d.gap} span={12} />
       </BoardGrid>
     </>
   )
@@ -2829,7 +2802,6 @@ function ZoneView({ d }: { d: Domains['zone'] }) {
           title="The registration"
           icon="◷"
           span={4}
-          fill
           aside={<span className="board-note">rdap</span>}
         >
           <Facts

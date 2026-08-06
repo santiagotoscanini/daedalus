@@ -5226,20 +5226,13 @@ h2 {
    because the bars only compare if they start at the same x — ragged bars are
    four separate readings rather than one breakdown. */
 .sources {
-  margin-top: 0.9rem;
+  margin-top: 0.2rem;
 }
 .sources li {
   display: grid;
-  grid-template-columns: 7.5rem 1fr minmax(6rem, 12rem) 3.2rem 3.6rem;
+  grid-template-columns: 7.5rem 1fr 3.2rem;
   align-items: center;
   gap: 0.6rem;
-}
-.source-note {
-  color: var(--dim);
-  font-size: 0.68rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /* The share is what the eye compares; the count is the audit trail underneath
    it, so it is dimmed and right-aligned with its neighbour. */
@@ -5367,4 +5360,44 @@ h2 {
   align-items: baseline;
   gap: 0.6rem;
   flex-wrap: wrap;
+}
+
+/* ── the names this house answers for ───────────────────────────────────── */
+
+/* Forty short names. A wrapping flex rather than a grid of fixed columns:
+   `jellyfin` and `homeassistant` differ by a factor of two, and a column wide
+   enough for the longest leaves the shortest floating in whitespace — which is
+   what a fixed grid does to a list whose whole content is names. Wrapping puts
+   as many on each line as fit and nothing anywhere else. */
+.lan-names {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.lan-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.5rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  font-size: 0.75rem;
+  min-width: 0;
+}
+.lan-host {
+  color: var(--text);
+}
+/* Printed only when the entry does not point at this box, so it is a
+   distinction rather than a column — it earns the eye by being rare. */
+.lan-ip {
+  color: var(--dim);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+/* The one state worth interrupting the wall of names for. */
+.lan-name.is-broken {
+  box-shadow: inset 0 0 0 1px var(--bad);
 }
