@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 import { Chip, type Tone } from './viz'
 import { DASH } from '../lib/dashboard/format'
+import type { VersionGap } from '../lib/dashboard/github'
 
 // The header a page gets when its subject is one identifiable SERVICE.
 //
@@ -96,6 +97,20 @@ function VersionCompare({ verdict, rows }: { verdict: { label: string; tone: Ton
       </span>
     </span>
   )
+}
+
+/**
+ * A version gap as the one word that goes in `verdict`.
+ *
+ * Lives beside the header it feeds rather than in whichever page happened to
+ * need it first: every service tab on this dashboard makes the same three-way
+ * call, and a second copy of it is how two pages come to disagree about what
+ * "current" means.
+ */
+export function verdictOf(gap: VersionGap): { label: string; tone: Tone } {
+  if (gap.installed === null || gap.latest === null) return { label: 'unknown', tone: 'muted' }
+  if (gap.behind.length === 0) return { label: 'current', tone: 'ok' }
+  return { label: `${String(gap.behind.length)} behind`, tone: 'warn' }
 }
 
 /** A row of related links, for the ones worth one click but not a button. */

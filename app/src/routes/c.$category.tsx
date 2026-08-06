@@ -6,6 +6,7 @@ import { BooksView, TvView } from '../components/category/media'
 import { GamingView } from '../components/category/gaming'
 import { MonitoringView } from '../components/category/monitoring'
 import { NetworkView } from '../components/category/network'
+import { SecurityView } from '../components/category/security'
 import { SystemView } from '../components/category/system'
 import { BoardsSkeleton, StatBandSkeleton, TilesSkeleton } from '../components/skeleton'
 import { CATEGORIES, type CategorySpec } from '../lib/dashboard/nav'
@@ -202,6 +203,8 @@ function CategoryBoards({ payload }: { payload: CategoryPayload }) {
       return <HomeView data={payload.data} />
     case 'network':
       return <NetworkView data={payload.data} />
+    case 'security':
+      return <SecurityView data={payload.data} />
     case 'system':
       return <SystemView data={payload.data} />
     case 'monitoring':

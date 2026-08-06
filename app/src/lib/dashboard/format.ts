@@ -139,3 +139,9 @@ export function flag(country: string | undefined | null): string {
 
 /** Per-service API keys, rendered to /run/daedalus-dashboard/env by nix. */
 export const key = (name: string): string => process.env[`DASH_${name}`] ?? ''
+
+/**
+ * `YYYY-MM-DD` in the box's timezone, so a daily column is the day you lived
+ * rather than the day UTC was having.
+ */
+export const localDay = (ms: number): string => new Date(ms).toLocaleDateString('en-CA')
