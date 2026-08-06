@@ -40,8 +40,6 @@
 }:
 
 let
-  # `docker.io/n8nio/n8n:2.33.2@sha256:d31c…` → `2.33.2`. See the env binding
-  # below for why this is parsed rather than restated.
   # `docker.io/n8nio/n8n:2.33.2@sha256:d31c…` → `2.33.2`, and
   # `…/mcp-grocy:v2.7.0@sha256:…` → `2.7.0`. See the env bindings below for
   # why these are parsed rather than restated: a second copy of a version
@@ -57,6 +55,29 @@ let
       );
     in
     if m == null then "" else builtins.head m;
+
+  # Every container's image tag, WHATEVER shape it is: `10.11.11ubu2404-ls42`,
+  # `jvm-stable`, `latest`, `8`.
+  #
+  # Deliberately not `tagOf`, which insists the tag look like a version and
+  # answers empty otherwise. Deciding whether a tag names a version is the
+  # reader's job, and a channel name arriving intact is exactly what lets a
+  # panel say "this pin carries no version" rather than show a wrong one.
+  #
+  # One variable over every container rather than a variable per service,
+  # because the alternative is a nix edit — and a rebuild — every time a page
+  # wants to report a version that is already written down here. The Media
+  # tabs read eight of these.
+  imageTags = lib.mapAttrs (
+    _: c:
+    let
+      pinned = builtins.match ".*:([^@:]+)@sha256:.*" c.image;
+      plain = builtins.match ".*:([^@:]+)" c.image;
+    in
+    if pinned != null then builtins.head pinned
+    else if plain != null then builtins.head plain
+    else ""
+  ) config.virtualisation.oci-containers.containers;
 
   # `localhost/litellm-pgvector:b553f84-a4yhvmn9` → `b553f84`. Not a version:
   # there is no published image and no release, so the flake pins a source
@@ -522,6 +543,11 @@ in
       # reads back out of Loki.
       MCP_GROCY_VERSION = tagOf "mcp-grocy";
       PGVECTOR_REV = pgvectorRev;
+      # Every container's pinned tag, as JSON. The four variables above predate
+      # it and stay because their consumers already read them by name; anything
+      # new reads this instead, so a page that wants to report what a service
+      # is running costs no nix edit and no rebuild. See `imageTags`.
+      IMAGE_TAGS = builtins.toJSON imageTags;
       # The VPN tunnels, as JSON. One variable rather than a variable per
       # tunnel per field, because the whole point is that the set grows: a
       # third gluetun instance appears on the Network page with no change

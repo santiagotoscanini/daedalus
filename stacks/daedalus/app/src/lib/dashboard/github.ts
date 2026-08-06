@@ -181,17 +181,25 @@ async function releases(repo: string): Promise<GhRelease[] | null> {
 }
 
 /**
- * Semver-ish ordering, on the three numbers and nothing else.
+ * Semver-ish ordering, on the numbers and nothing else.
  *
  * Deliberately not a full semver comparator: every tag reaching this has
  * already been stripped to digits and dots by the caller's `tag` pattern, and
  * a build/prerelease suffix is a reason to have dropped the release, not to
  * rank it.
+ *
+ * As many segments as the longer of the two, rather than three, because the
+ * *arrs number their builds: Sonarr ships `4.0.19.2979` and Radarr
+ * `6.3.0.10514`, where the fourth segment is the only one that moves between
+ * most releases. Stopping at three would rank every build of a point release
+ * equal, which reads as "current" on a box that is nine builds behind. A
+ * missing segment counts as zero, so three-part versions compare exactly as
+ * they did.
  */
 function cmp(a: string, b: string): number {
   const pa = a.split('.').map(Number)
   const pb = b.split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const d = (pa[i] ?? 0) - (pb[i] ?? 0)
     if (d !== 0) return d
   }

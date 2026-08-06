@@ -5253,3 +5253,223 @@ h2 {
   font-size: 0.7rem;
   color: var(--dim);
 }
+
+/* ── media: service health checks ─────────────────────────────────────── */
+
+/* What a service says is wrong about itself. Two columns rather than a
+   paragraph per row: the source is the part you scan for (which subsystem),
+   the message is the part you read once you have found it. */
+.hchecks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.hcheck {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: baseline;
+  padding: 0.4rem 0.55rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  font-size: 0.8rem;
+}
+.hcheck-warn {
+  background: color-mix(in srgb, var(--warn) 10%, var(--panel-2));
+}
+.hcheck-bad {
+  background: color-mix(in srgb, var(--bad) 12%, var(--panel-2));
+}
+.hcheck-src {
+  color: var(--dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.hcheck-msg {
+  color: var(--text);
+  min-width: 0;
+}
+.hcheck-msg a {
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+/* ── media: request list ──────────────────────────────────────────────── */
+
+/* Status first, because it is the column that decides whether the row needs
+   you. The title takes the slack; requester and age are fixed so the eye can
+   run down them. */
+.reqs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.req {
+  display: grid;
+  grid-template-columns: 5.6rem minmax(0, 1fr) 3.6rem 6rem 5rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.22rem 0;
+  font-size: 0.82rem;
+}
+.req-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.req-kind,
+.req-by,
+.req-when {
+  color: var(--dim);
+  font-size: 0.75rem;
+}
+.req-when {
+  text-align: right;
+}
+
+/* ── media: an activity feed ──────────────────────────────────────────── */
+
+/* Event, then subject, then when. The event is a fixed column because the
+   vocabulary is small and repeated — grabbed, imported, failed — so a reader
+   scanning for the third one is scanning a single column. */
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  font-size: 0.8rem;
+}
+.feed-row {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr) 5.5rem;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 0.16rem 0;
+}
+.feed-event {
+  color: var(--dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.feed-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feed-when {
+  color: var(--dim);
+  font-size: 0.75rem;
+  text-align: right;
+}
+
+/* ── media: what is coming ────────────────────────────────────────────── */
+
+.upnext {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.upnext-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.7rem;
+  font-size: 0.82rem;
+}
+.upnext-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upnext-title em {
+  display: block;
+  color: var(--dim);
+  font-size: 0.72rem;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.upnext-when {
+  color: var(--accent);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.upnext-when.is-muted {
+  color: var(--dim);
+}
+
+/* ── media: people ────────────────────────────────────────────────────── */
+
+.who {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.who-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.7rem;
+  font-size: 0.82rem;
+}
+.who-when {
+  color: var(--dim);
+  font-size: 0.75rem;
+}
+.who-when.is-muted {
+  opacity: 0.55;
+}
+
+/* ── media: subtitle providers ────────────────────────────────────────── */
+
+/* A wrapping row rather than a list: there are five of these, each is two
+   words, and the only thing being compared is whether any of them is not
+   "Good". */
+.provs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+}
+.prov {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+.prov-retry {
+  color: var(--warn);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 34rem) {
+  .hcheck,
+  .req,
+  .feed-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.15rem;
+  }
+  .req-when,
+  .feed-when {
+    text-align: left;
+  }
+}

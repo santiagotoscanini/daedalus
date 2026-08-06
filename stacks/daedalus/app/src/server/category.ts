@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 
 import type { AiData } from '../lib/dashboard/categories/ai'
 import type { GamingData } from '../lib/dashboard/categories/gaming'
-import type { BooksData, TvData } from '../lib/dashboard/categories/media'
+import type { MediaData } from '../lib/dashboard/categories/media'
 import type { HomeData } from '../lib/dashboard/categories/home'
 import type { MonitoringData } from '../lib/dashboard/categories/monitoring'
 import type { NetworkData } from '../lib/dashboard/categories/network'
@@ -35,14 +35,13 @@ import type { CategoryName } from '../lib/dashboard/tiles'
 
 export type {
   AiData,
-  BooksData,
   GamingData,
   HomeData,
+  MediaData,
   MonitoringData,
   NetworkData,
   SecurityData,
   SystemData,
-  TvData,
 }
 
 /** The service directory that sits under every category's own panels. */
@@ -216,8 +215,7 @@ export const fetchCategoryTiles = createServerFn()
 
 type Body =
   | { kind: 'ai'; data: AiData }
-  | { kind: 'tv'; data: TvData }
-  | { kind: 'books'; data: BooksData }
+  | { kind: 'media'; data: MediaData }
   | { kind: 'home'; data: HomeData }
   | { kind: 'network'; data: NetworkData }
   | { kind: 'security'; data: SecurityData }
@@ -236,10 +234,8 @@ async function loadCategory(
       return { kind: 'ai', data: await loadAi(tab, ctx) }
     }
     case 'media': {
-      const { loadBooks, loadTv } = await import('../lib/dashboard/categories/media')
-      return tab === 'books' ?
-          { kind: 'books', data: await loadBooks(ctx) }
-        : { kind: 'tv', data: await loadTv(ctx) }
+      const { loadMedia } = await import('../lib/dashboard/categories/media')
+      return { kind: 'media', data: await loadMedia(tab, ctx) }
     }
     case 'home': {
       const { loadHome } = await import('../lib/dashboard/categories/home')

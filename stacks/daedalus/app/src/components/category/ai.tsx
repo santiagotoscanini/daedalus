@@ -1,11 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
 // No `StatBand`/`BigStat` anywhere on these four pages any more: every one of
 // them ended up saying either a number the panel below it states in context,
 // or a number that is zero almost always and means nothing when it is not.
-import { Board, BoardGrid, Chip, Columns, Measures, Pulse } from '../viz'
-import { GrafanaLogs, LogDetails, type LogSource } from '../logs'
+import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../viz'
+import { GrafanaLogs, LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead, type CompareRow } from '../service-head'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
@@ -744,78 +744,10 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
 }
 
 /**
- * A container standing next to the one this tab is about.
- *
- * When a service's upstream breaks, the symptom arrives as a failure in the
- * service you were watching, whose own log says only that its upstream
- * refused. So a tab can carry its neighbours' logs, folded: one click away on
- * the day the main panel goes quiet, out of the way on every other day.
- *
- * ── the bar for being listed here ─────────────────────────────────────────
- *
- * A neighbour must have **nowhere else on this dashboard to be read**. Every
- * service in this category already has its own tab with its own log panel, so
- * listing LiteLLM under Open WebUI or n8n does not add a stream — it adds a
- * second copy of one, two tabs away from the page that owns it. And `pg` is
- * the whole box's database: it is behind Nextcloud, Immich, the *arrs, every
- * app on the platform. A container that is everyone's neighbour is nobody's.
- *
- * What passes: searxng, mcp-grocy and litellm-pgvector under LiteLLM, and the
- * log bridge under Lemonade. None of those has a tab, none is worth one, and
- * each is a plausible answer to "it errored and its own log only blamed its
- * upstream". That is the whole list — Open WebUI and n8n have no neighbour
- * meeting it, so they carry none.
- */
-type Neighbour = {
-  container: string
-  label: string
-  /** Completes “<label> — …”, so it says what this container IS to the tab. */
-  role: string
-  note: string
-  /** Only when the panel heading should differ from `<label> logs`. */
-  title?: string
-}
-
-/**
- * The logs board: the service's own stream, and its neighbours' underneath.
- *
- * `neighbours` here is the LIGHT kind — a container whose only question is
- * "what did it say", folded away. LiteLLM's three are the heavy kind and get
- * `NeighbourBoards` instead, because they also have updates nobody was
- * reporting.
- */
-function LogBoard({
-  source,
-  title,
-  foot,
-  neighbours = [],
-}: {
-  source: LogSource
-  title: string
-  foot?: ReactNode
-  neighbours?: readonly Neighbour[]
-}) {
-  return (
-    <Board title="Logs" icon="≡" span={12}>
-      <GrafanaLogs source={source} title={title} foot={foot} />
-      {neighbours.map((n) => (
-        <LogDetails
-          key={n.container}
-          summary={`${n.label} — ${n.role}`}
-          source={{ container: n.container }}
-          title={n.title ?? `${n.label} logs`}
-          foot={<p className="board-foot">{n.note}</p>}
-        />
-      ))}
-    </Board>
-  )
-}
-
-/**
  * The bridge is diagnostics for Lemonade's panel, not a service anybody
  * watches — so it gets the same treatment as everyone else's neighbours.
  */
-const LEMONADE_NEIGHBOURS: readonly Neighbour[] = [
+const LEMONADE_NEIGHBOURS: readonly LogNeighbour[] = [
   {
     container: 'lemonade-logs',
     label: 'Bridge logs',
@@ -870,66 +802,6 @@ function NeighbourPair({ n }: { n: NeighbourData }) {
         <GrafanaLogs source={{ container: n.container }} title={`${n.label} logs`} />
       </Board>
     </>
-  )
-}
-
-/**
- * One row of a ranking, in two lines.
- *
- * The bar carries the comparison — the whole question a ranking answers is
- * which of these is the big one — and the line under it carries everything the
- * bar cannot: what it cost, how slowly it went, when it was last seen. A bar
- * list alone said only "n8n is the big one", which was true on the first read
- * and had nothing to add on any later one.
- *
- * Shared by the gateway's callers and n8n's workflows because they are the
- * same object: a named thing, a count worth comparing, and four facts that
- * only make sense next to it.
- *
- * `note` is the answer to "what IS this row" — a bare hash, a name that turns
- * out to be six services sharing one credential — and it hangs off the name
- * rather than the caption, where it would have to be written once per case and
- * read every time. `badges` are for the states that change what the numbers
- * mean: a key the gateway no longer holds, a schedule that has stopped firing,
- * runs that were all against a version somebody has since edited. A list
- * rather than one, because those are independent — a workflow can be both
- * stalled and unpublished, and picking one to show would hide the other.
- */
-function RankRow({
-  name,
-  note = null,
-  badges = [],
-  value,
-  max,
-  meta,
-}: {
-  name: string
-  note?: string | null
-  badges?: readonly { text: string; tone: 'warn' | 'muted'; why?: string }[]
-  value: number
-  max: number
-  meta: ReactNode
-}) {
-  return (
-    <li className="rank">
-      <span className={note === null ? 'rank-name' : 'rank-name rank-noted'}>
-        <span title={note ?? name}>{name}</span>
-        {badges.map((b) => (
-          <em
-            key={b.text}
-            className={b.tone === 'muted' ? 'is-muted' : undefined}
-            title={b.why ?? note ?? undefined}
-          >
-            {b.text}
-          </em>
-        ))}
-      </span>
-      <span className="rank-track">
-        <span className="rank-fill" style={{ width: `${String(Math.max(1.5, (value / max) * 100))}%` }} />
-      </span>
-      <span className="rank-n">{num(value)}</span>
-      <span className="rank-meta">{meta}</span>
-    </li>
   )
 }
 

@@ -32,6 +32,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 
 import { Bar } from './skeleton'
 import { Segmented } from './ui'
+import { Board } from './viz'
 
 const GRAFANA = 'https://grafana.toscanini.me'
 
@@ -278,6 +279,63 @@ export function LogDetails({
       <summary>{summary}</summary>
       {seen && <GrafanaLogs source={source} title={title} foot={foot} />}
     </details>
+  )
+}
+
+/**
+ * A container standing beside the tab's subject, with no page of its own.
+ *
+ * The light kind of neighbour: something whose only question is "what did it
+ * say". flaresolverr solving a challenge for an indexer, subgen transcribing
+ * an episode, recyclarr writing a profile — each is a plausible answer to "it
+ * failed and its own log only blamed its upstream", and none is worth a tab.
+ *
+ * What does NOT belong here is a container everybody shares. `pg` is behind
+ * Nextcloud, Immich, the *arrs and every app on the platform; a container that
+ * is everyone's neighbour is nobody's.
+ */
+export type LogNeighbour = {
+  container: string
+  label: string
+  /** Completes “<label> — …”, so it says what this container IS to the tab. */
+  role: string
+  note: string
+  /** Only when the panel heading should differ from `<label> logs`. */
+  title?: string
+}
+
+/**
+ * The logs board: the service's own stream, and its neighbours' underneath.
+ *
+ * One component rather than a `<Board>` per page because the argument is the
+ * same everywhere — the subject's log is open, everything adjacent to it is one
+ * disclosure away — and a page that made a different call about that would be a
+ * page you have to learn separately.
+ */
+export function LogBoard({
+  source,
+  title,
+  foot,
+  neighbours = [],
+}: {
+  source: LogSource
+  title: string
+  foot?: ReactNode
+  neighbours?: readonly LogNeighbour[]
+}) {
+  return (
+    <Board title="Logs" icon="≡" span={12}>
+      <GrafanaLogs source={source} title={title} foot={foot} />
+      {neighbours.map((n) => (
+        <LogDetails
+          key={n.container}
+          summary={`${n.label} — ${n.role}`}
+          source={{ container: n.container }}
+          title={n.title ?? `${n.label} logs`}
+          foot={<p className="board-foot">{n.note}</p>}
+        />
+      ))}
+    </Board>
   )
 }
 
