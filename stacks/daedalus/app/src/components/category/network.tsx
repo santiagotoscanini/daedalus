@@ -1493,7 +1493,7 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
  */
 function IdpView({ d }: { d: Gateway['idp'] }) {
   const { window: w } = d
-  const dupes = d.clients.filter((c) => c.duplicate)
+  const shared = d.clients.filter((c) => c.sharesHost)
   const idle = d.clients.filter((c) => c.used === 0).length
   // The bar's scale. Not the list's order — see the note on the loader.
   const max = Math.max(...d.clients.map((c) => c.used), 1)
@@ -1593,13 +1593,19 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
             ))}
           </ul>
 
-          {dupes.length > 0 && (
-            <p className="rejected">
-              <b>{num(dupes.length)}</b> registrations share a hostname —{' '}
-              {[...new Set(dupes.map((c) => c.host ?? c.name))].join(', ')}. The convergence job
-              creates a client per <code>fleet.ssoClients</code> entry and never deletes one, so a
-              rename leaves the old registration behind, live and still trusted. They cannot be told
-              apart above: the audit log records only the name, so a shared one counts twice.
+          {shared.length > 0 && (
+            <p className="board-foot">
+              {/* This said "duplicate" and blamed a rename. Both were wrong:
+                  the pair is declared, and the module that declares it says
+                  why. Reading a coincidence as a defect is worse than not
+                  noticing it. */}
+              <b>{num(shared.length)}</b> registrations answer for one hostname —{' '}
+              {[...new Set(shared.map((c) => c.host ?? c.name))].join(', ')} — and that is a design
+              rather than a leftover: the proxy gate and the app&rsquo;s own login are different
+              consumers with different callbacks, and one client cannot hold both, because the
+              generated one would overwrite the hand-written callbacks on every rebuild. What is
+              genuinely lost is attribution — both carry the same display name and the audit log
+              records only the name, so the counts above cover the pair and cannot be split.
             </p>
           )}
 
@@ -1746,9 +1752,18 @@ function AppRow({ c, max }: { c: Gateway['idp']['clients'][number]; max: number 
           <span className="idp-app-name">
             <span title={c.host ?? c.name}>{c.name}</span>
             {!c.restricted && <em title="Open to every account, not a named group">any account</em>}
-            {c.duplicate && (
-              <em title="A second registration claims the same hostname — the audit log records only the name, so this count covers both">
-                duplicate
+            {/* Which of a hostname's registrations this one is. Not a fault
+                badge — see the note on `role`. */}
+            {c.role !== null && (
+              <em
+                className="is-muted"
+                title={
+                  c.role === 'gate' ?
+                    'The credential traefik’s forward-auth middleware signs in with, before the request reaches the app at all'
+                  : 'The credential the app itself runs its own login with'
+                }
+              >
+                {c.role === 'gate' ? 'proxy gate' : 'app login'}
               </em>
             )}
           </span>
