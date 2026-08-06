@@ -5030,48 +5030,6 @@ h2 {
   box-shadow: inset 0 0 0 1px var(--bad);
 }
 
-/* ── DHCP reservations ──────────────────────────────────────────────────── */
-
-/* Address, name, hardware address. Wrapping columns rather than one tall list:
-   nine rows in a two-thirds-width board is a column of text with a page of
-   nothing beside it, and these rows are read by scanning the addresses. */
-.dhcp {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
-  gap: 0.22rem 0.7rem;
-}
-.dhcp li {
-  display: grid;
-  grid-template-columns: 7.2rem 1fr auto;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.22rem 0.5rem;
-  border-radius: 7px;
-  background: var(--panel-2);
-  font-size: 0.75rem;
-  min-width: 0;
-}
-.dhcp-ip {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.dhcp-name {
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* The identifier the reservation is actually keyed on, and the least readable
-   thing in the row — present because it is what you compare against a device,
-   recessive because you only ever look at one of them. */
-.dhcp-mac {
-  color: var(--dim);
-  font-size: 0.66rem;
-}
-
 /* ── the house network ──────────────────────────────────────────────────── */
 
 /* One row per hop: a light, the name, the round trip, and six hours of it.

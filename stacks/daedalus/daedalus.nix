@@ -483,7 +483,15 @@ in
       # unauthenticated bypass in front of it to match. Off the bridge there is
       # nothing to widen: the gate stays exactly where it is.
       PIHOLE_URL = config.fleet.webApps.pihole.serviceUrl;
+      # Two URLs for one device, and the split is the point rather than an
+      # oversight. The read is a machine fetching an unauthenticated login
+      # page: the router's TLS is a self-signed certificate, so HTTPS there
+      # would have to be verification-disabled, which buys nothing over plain
+      # HTTP for a page that carries no secret. The LINK is a person about to
+      # type an admin password, where TLS is the whole point. Both interpolate
+      # the same gateway option, so neither can drift from the other.
       ROUTER_URL = "http://${config.networking.defaultGateway.address}";
+      ROUTER_ADMIN_URL = "https://${config.networking.defaultGateway.address}/webpages/index.html#/login";
       # What nearly every pi-hole hosts entry points at. Bound from the option
       # that GENERATES those entries, so "this one points somewhere else" stays
       # a real distinction instead of a comparison against a stale literal.

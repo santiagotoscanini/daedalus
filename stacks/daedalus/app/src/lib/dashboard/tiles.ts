@@ -63,10 +63,12 @@ export type GroupName =
   // own on the AI page, opening with the same name, status dot, description
   // and link the tile carried. A directory that repeats the tab row above it
   // is not a directory, it is the same page twice.
+  // No 'Network' either, and for the same reason: five of its nine tiles were
+  // a service that now has a tab, and the other four were bare links that
+  // belong on the tab whose subject they are.
   | 'Home'
   | 'Media'
   | 'Books'
-  | 'Network'
   | 'Monitoring'
 
 export type CategoryName =
@@ -94,7 +96,6 @@ export const GROUPS: {
   { name: 'Home', category: 'home', icon: '⌂' },
   { name: 'Media', category: 'media', tab: 'tv', icon: '▶' },
   { name: 'Books', category: 'media', tab: 'books', icon: '❏' },
-  { name: 'Network', category: 'network', tab: 'general', icon: '⇄' },
   { name: 'Monitoring', category: 'monitoring', icon: '◎' },
 ]
 
