@@ -466,7 +466,11 @@ in
       # Off-box, so it cannot come from webAppHosts. One binding here rather
       # than a literal per Lemonade tile.
       LEMONADE_URL = "http://gaming-pc.local.${config.fleet.baseDomain}:13305";
-      ROUTER_URL = "http://192.168.0.1";
+      # The default route, which is the router, which is the only fact about
+      # it this box holds declaratively — everything else on the Network tab
+      # is measured, because the TP-Link serves no API to ask.
+      GATEWAY_IP = config.networking.defaultGateway.address;
+      ROUTER_URL = "http://${config.networking.defaultGateway.address}";
       # What nearly every pi-hole hosts entry points at. Bound from the option
       # that GENERATES those entries, so "this one points somewhere else" stays
       # a real distinction instead of a comparison against a stale literal.

@@ -70,6 +70,18 @@ let
   # `user.slice` is podman's own default parent within it.
   cgroupRoot = "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/user.slice";
 
+  # The router, and something past it. Two pings a minute is the whole
+  # extent of what this house can learn about its own uplink: the TP-Link
+  # serves no API, so every fact about it has to be measured from this side.
+  #
+  # Two probes rather than one because separately they localise a fault that
+  # either alone only reports. Gateway up + internet down is the ISP; both
+  # down is this box's link. A literal address for the far end, never a
+  # name — resolving it would route the check through pi-hole and turn a DNS
+  # outage into a phantom internet outage.
+  gateway = config.networking.defaultGateway.address;
+  farSide = "1.1.1.1";
+
   livenessScript = pkgs.writeShellScript "container-up-export" ''
     set -eu
     export PATH=${
@@ -78,6 +90,7 @@ let
         pkgs.coreutils
         pkgs.gnugrep
         pkgs.gawk # cpu.max quota → cores, the one bit of float division here
+        pkgs.iputils # the only way to learn anything about the router
         pkgs.systemd
       ]
     }
@@ -98,6 +111,28 @@ let
       echo "# HELP systemd_failed_units Count of systemd system units in failed state."
       echo "# TYPE systemd_failed_units gauge"
       echo "systemd_failed_units $failed"
+
+      # The uplink, one hop at a time.
+      #
+      # `rtt` is emitted only when the probe answered, so a gap in the graph
+      # is an outage rather than a zero that reads as "instant". `up` is the
+      # series to alert on; the pair of them says which side is at fault.
+      echo "# HELP network_hop_up Probe answered (1) or timed out (0)."
+      echo "# TYPE network_hop_up gauge"
+      echo "# HELP network_hop_rtt_seconds Round trip to the hop, absent when it did not answer."
+      echo "# TYPE network_hop_rtt_seconds gauge"
+      for hop in "gateway ${gateway}" "internet ${farSide}"; do
+        set -- $hop
+        # -n so a reply never triggers a reverse lookup; the whole point of
+        # probing by address is not to depend on the resolver.
+        if rtt=$(ping -c 1 -W 1 -n -q "$2" 2>/dev/null | awk -F'[/=]' '/^rtt|^round-trip/ { printf "%.6f", $5 / 1000 }') \
+           && [ -n "$rtt" ]; then
+          echo "network_hop_up{hop=\"$1\"} 1"
+          echo "network_hop_rtt_seconds{hop=\"$1\"} $rtt"
+        else
+          echo "network_hop_up{hop=\"$1\"} 0"
+        fi
+      done
 
       # Per-container resource usage, straight out of cgroup v2.
       #
@@ -126,11 +161,19 @@ let
       echo "# TYPE container_pids_limit gauge"
       echo "# HELP container_oom_kills_total Processes killed by the cgroup OOM killer."
       echo "# TYPE container_oom_kills_total counter"
+      echo "# HELP container_network_receive_bytes_total Bytes into the container's network namespace, tunnels excluded."
+      echo "# TYPE container_network_receive_bytes_total counter"
+      echo "# HELP container_network_transmit_bytes_total Bytes out of the container's network namespace, tunnels excluded."
+      echo "# TYPE container_network_transmit_bytes_total counter"
 
-      # id → name from the same `podman ps` above would need --no-trunc, so
-      # take a second pass with full IDs. Still one podman call: the cgroup
-      # numbers all come from the filesystem.
-      podman ps --no-trunc --format '{{.ID}} {{.Names}}' 2>/dev/null | while read -r id name; do
+      # One inspect for the whole fleet — the same single call the
+      # `podman ps --no-trunc` this replaces cost, and the two extra fields
+      # are what make per-container NETWORK counters possible at all. A
+      # cgroup accounts cpu, memory and pids but never bytes, because a
+      # network namespace is not a cgroup; /proc/<pid>/net/dev is the same
+      # counter the kernel would show from inside the container.
+      podman inspect --format '{{.ID}} {{.Name}} {{.State.Pid}} {{.HostConfig.NetworkMode}}' \
+        $running 2>/dev/null | while read -r id name pid netmode; do
         cg="${cgroupRoot}/libpod-$id.scope"
         [ -d "$cg" ] || continue
 
@@ -162,6 +205,38 @@ let
         # this counter moving is not.
         oom=$(grep -m1 '^oom_kill ' "$cg/memory.events" 2>/dev/null | cut -d' ' -f2) || true
         [ -n "''${oom:-}" ] && echo "container_oom_kills_total{name=\"$name\"} $oom"
+
+        # Two kinds of container are skipped here rather than reported as
+        # zero, and both would otherwise be a lie about who moved the bytes.
+        # `host` shares the host's interfaces, so its counters ARE
+        # node-exporter's — printing them under one app's name would
+        # attribute the entire box to it. `container:<id>` borrows another
+        # container's namespace: the ten sharing gluetun's all read the same
+        # numbers, so emitting each would multiply one flow by ten. The
+        # namespace owner reports for the group, which is also the only
+        # honest reading available — a shared namespace has no per-member
+        # split to report.
+        #
+        # tun/wg devices are left out of the sum for the reason a packet is
+        # not counted twice: inside gluetun the same payload crosses tun0
+        # decrypted and enp3s0 encrypted. Summing both would double every
+        # byte the VPN carries. What is left is what crossed the wire.
+        case "$netmode" in
+          host | container:*) ;;
+          *)
+            set -- $(awk 'NR > 2 {
+                p = index($0, ":")
+                dev = substr($0, 1, p - 1); gsub(/[ \t]/, "", dev)
+                if (dev == "lo" || dev ~ /^(tun|wg)/) next
+                split(substr($0, p + 1), b, " ")
+                rx += b[1]; tx += b[9]
+              } END { printf "%d %d", rx, tx }' "/proc/$pid/net/dev" 2>/dev/null || true)
+            [ $# -eq 2 ] && {
+              echo "container_network_receive_bytes_total{name=\"$name\"} $1"
+              echo "container_network_transmit_bytes_total{name=\"$name\"} $2"
+            }
+            ;;
+        esac
       done
     } > "$tmp"
     # Atomic swap — node-exporter reads whole files; a half-written file
