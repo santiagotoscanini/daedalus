@@ -399,6 +399,69 @@ let
       }
     }
 
+    // ===== the one service that does not use the journal =====
+    // pihole-FTL writes its own log files and sends nothing to journald.
+    // The only journal lines ABOUT the unit come from systemd itself and
+    // carry `_SYSTEMD_UNIT=init.scope` — so the `unit` label above is
+    // never `pihole-ftl.service`, and a query for it matched nothing at
+    // all. This is the file that makes that query true.
+    //
+    // An exact path, NOT a glob. `/var/log/pihole/pihole.log` sits in the
+    // same directory and is the per-query log: every domain every device
+    // in the house asked for, currently 2 GB. It is deliberately not
+    // here, and a `*.log` match would have swallowed it (and the rotated
+    // FTL.log.N, which would re-ingest the same lines on every rotation).
+    // stacks/pihole grants the traverse bit this needs.
+    local.file_match "pihole" {
+      path_targets = [{
+        __path__ = "/var/log/pihole/FTL.log",
+        // The labels the rest of the fleet already queries by, applied
+        // here because relabel_rules on a journal source cannot reach a
+        // file one. `unit` is what every daedalus logs panel selects on;
+        // `infra` is the same stack the journal rules give ddclient and
+        // smartd, which is where a reader would look for this.
+        unit         = "pihole-ftl.service",
+        stack        = "infra",
+        host         = "s2-server",
+        job          = "pihole-ftl",
+        service_name = "pihole-ftl",
+      }]
+    }
+
+    loki.source.file "pihole" {
+      targets    = local.file_match.pihole.targets
+      forward_to = [loki.process.pihole.receiver]
+    }
+
+    // FTL's own format: `2026-08-06 14:30:46.900 -03 [pid/Tthread] LEVEL: text`.
+    // Parsed for two reasons — the timestamp, so a line is filed under when
+    // FTL wrote it rather than when alloy read it (they differ by the whole
+    // backlog on first ingest), and the level, which FTL states in words and
+    // which every other source on this box already carries as a label.
+    loki.process "pihole" {
+      forward_to = [loki.write.default.receiver]
+
+      stage.regex {
+        expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d+ [+-]\\d{2}) \\[[^\\]]*\\] (?P<lvl>[A-Z]+):"
+      }
+
+      stage.timestamp {
+        source   = "ts"
+        format   = "2006-01-02 15:04:05.000 -07"
+      }
+
+      stage.template {
+        source   = "lvl"
+        template = "{{ $l := ToLower .Value }}{{ if eq $l \"\" }}unknown{{ else if eq $l \"err\" }}error{{ else if eq $l \"warn\" }}warning{{ else if eq $l \"crit\" }}crit{{ else }}{{ $l }}{{ end }}"
+      }
+
+      stage.labels {
+        values = {
+          level = "lvl",
+        }
+      }
+    }
+
     // ===== OTLP metrics =====
     // Apps that PUSH OpenTelemetry (no /metrics scrape endpoint) send
     // OTLP/gRPC here; alloy re-exports over OTLP/HTTP to prometheus's
@@ -533,6 +596,17 @@ in
         "/var/log/journal:/var/log/journal:ro"
         "/run/log/journal:/run/log/journal:ro"
         "/etc/machine-id:/etc/machine-id:ro"
+        # The one service that does not use the journal — see
+        # loki.source.file "pihole" above.
+        #
+        # The DIRECTORY, not the file. FTL.log rotates weekly, and a
+        # single-file bind mount pins the inode: alloy would go on reading
+        # the rotated copy and never see another line. What keeps its 2 GB
+        # neighbour out is not this mount — it is that `pihole.log` is 0640
+        # pihole:pihole and alloy runs as santiago, so the kernel refuses
+        # the read regardless of what the config asks for. The explicit
+        # path in file_match is the second lock, not the only one.
+        "/var/log/pihole:/var/log/pihole:ro"
         "/home/santiago/selfhost/logging/alloy/data:/var/lib/alloy/data"
       ];
 

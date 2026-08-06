@@ -1623,6 +1623,27 @@ type ResolverData = {
   /** Hourly buckets over the last day, oldest first. */
   history: { label: string; total: number; blocked: number; forwarded: number }[]
   store: { queries: number | null; sinceSeconds: number | null; bytes: number | null }
+  dhcp: Dhcp
+}
+
+/**
+ * The other half of what this resolver does.
+ *
+ * pi-hole is the DHCP server as well, so the addresses on the LAN are decided
+ * here rather than by the router — and the fixed ones are declared in nix, not
+ * clicked into the admin. That is what makes them worth a panel: a reservation
+ * is the reason something else on this box is allowed to name an address.
+ */
+type Dhcp = {
+  active: boolean
+  router: string
+  /** The pool handed out to everything without a reservation. */
+  start: string
+  end: string
+  leaseTime: string
+  reservations: { mac: string; ip: string; name: string }[]
+  /** Offers, acks and declines since FTL started — see `loadResolver`. */
+  counters: { offers: number | null; acks: number | null; declines: number | null; nak: number | null }
 }
 
 /** One resolver every name not answered locally is forwarded to. */
@@ -1835,6 +1856,7 @@ async function loadResolver(base: string): Promise<ResolverData> {
         dns?: {
           cache?: { size?: number; inserted?: number; evicted?: number; expired?: number }
         }
+        dhcp?: { offer?: number; ack?: number; decline?: number; nak?: number }
       }
     }>(`${base}/api/info/metrics`),
     getJson<{ types?: Record<string, number> }>(`${base}/api/stats/query_types`),
@@ -1916,7 +1938,65 @@ async function loadResolver(base: string): Promise<ResolverData> {
         : Date.now() / 1000 - store.earliest_timestamp_disk,
       bytes: store?.size ?? null,
     },
+    dhcp: dhcpConfig(metrics?.metrics?.dhcp),
   }
+}
+
+/**
+ * The DHCP half: how it is configured, and what it has actually done.
+ *
+ * The configuration is bound in from nix rather than asked of FTL, because the
+ * reservations are DECLARED — a list read back from the running service would
+ * be the same nine lines with no way to tell a declared one from something
+ * somebody clicked in. The counters come from FTL because only it knows them.
+ */
+function dhcpConfig(counters: { offer?: number; ack?: number; decline?: number; nak?: number } | undefined): Dhcp {
+  let cfg: Partial<{
+    active: boolean
+    router: string
+    start: string
+    end: string
+    leaseTime: string
+    hosts: string[]
+  }> = {}
+  try {
+    cfg = JSON.parse(process.env.DHCP_CONFIG ?? '{}') as typeof cfg
+  } catch {
+    cfg = {}
+  }
+
+  return {
+    active: cfg.active === true,
+    router: cfg.router ?? '',
+    start: cfg.start ?? '',
+    end: cfg.end ?? '',
+    leaseTime: cfg.leaseTime ?? '',
+    reservations: (cfg.hosts ?? [])
+      .map((h) => h.split(','))
+      // "MAC,IP,hostname". Anything shorter is an entry shape this page does
+      // not understand, and inventing a name for it would be worse than
+      // leaving it out — dnsmasq accepts several other forms.
+      .filter((p) => p.length >= 3)
+      .map((p) => ({ mac: (p[0] ?? '').toLowerCase(), ip: p[1] ?? '', name: p[2] ?? '' }))
+      .sort((a, b) => cmpIp(a.ip, b.ip)),
+    counters: {
+      offers: counters?.offer ?? null,
+      acks: counters?.ack ?? null,
+      declines: counters?.decline ?? null,
+      nak: counters?.nak ?? null,
+    },
+  }
+}
+
+/** Numeric by octet — a string sort puts .100 before .2, which reads as a bug. */
+function cmpIp(a: string, b: string): number {
+  const parts = (s: string) => s.split('.').map(Number)
+  const [x, y] = [parts(a), parts(b)]
+  for (let i = 0; i < 4; i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0)
+    if (d !== 0) return d
+  }
+  return 0
 }
 
 /**

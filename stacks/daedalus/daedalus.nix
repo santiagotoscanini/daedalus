@@ -527,6 +527,21 @@ in
       # reports per-upstream counts and timings by IP, and this is what turns
       # those into a list with an order.
       DNS_UPSTREAMS = builtins.toJSON config.services.pihole-ftl.settings.dns.upstreams;
+      # The DHCP scope and its fixed reservations, as pi-hole is configured
+      # with them. `hosts` is "MAC,IP,hostname" per entry — the addresses that
+      # are decided here rather than handed out, which is why they are worth a
+      # panel: a device with a reservation is one something else on this box is
+      # allowed to refer to by address.
+      DHCP_CONFIG = builtins.toJSON {
+        inherit (config.services.pihole-ftl.settings.dhcp)
+          active
+          router
+          start
+          end
+          leaseTime
+          hosts
+          ;
+      };
     };
   };
 

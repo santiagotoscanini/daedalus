@@ -381,10 +381,16 @@ export function Board({
    * height of its own content.
    *
    * The grid is `align-items: start` because a board of four facts should not
-   * be stretched into a wall of whitespace next to a chart. That is the right
-   * default and the wrong one for a *pair* — two half-width boards of unequal
-   * length leave a gap under the shorter one that reads as a missing panel.
-   * Opt in on the board whose content can absorb the extra room.
+   * be stretched into a wall of whitespace next to a nine-hundred-pixel
+   * changelog. That is the right default and the wrong one for a *pair* of
+   * comparable length — there, the shorter one leaves a strip of page
+   * background under it that reads as a missing panel rather than as a short
+   * panel. Opt in on the SHORTER board of such a pair; the extra room becomes
+   * quiet space inside its border, and the row gets one bottom edge.
+   *
+   * What this does NOT do is push the caption down to sit on that floor. It
+   * used to, and the result was a two-row list with its explanation stranded
+   * two hundred pixels below it — a worse artefact than the one it fixed.
    */
   fill?: boolean
   children: ReactNode

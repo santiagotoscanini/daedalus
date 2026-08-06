@@ -164,6 +164,32 @@ in
   # rendered toml.
   environment.etc."pihole/pihole.toml".mode = lib.mkForce "symlink";
 
+  # Let alloy reach FTL.log — traverse the log directory, do not list it.
+  #
+  # FTL is the one service on this box that does not log to the journal: it
+  # writes its own files here, and the only journal lines about the unit come
+  # from systemd itself carrying `_SYSTEMD_UNIT=init.scope`, which is not what
+  # alloy labels on. So `{unit="pihole-ftl.service"}` in Loki matched nothing,
+  # ever. Shipping the file is the fix, and rootless podman resolves a bind
+  # mount as santiago, who cannot traverse the upstream module's 0700.
+  #
+  # 0751 rather than 0755 on purpose. The `x` bit is all a bind mount of a
+  # KNOWN path needs; without `r` nothing can enumerate the directory to
+  # discover what else is in it. What that exposes is exactly the two files
+  # already world-readable — FTL.log and webserver.log, both 0644 from FTL
+  # itself. `pihole.log` is the per-query log, 0640, currently 2 GB, and stays
+  # unreadable to everything but pihole: it is the most revealing file on the
+  # machine and emphatically not something to put in Loki.
+  #
+  # A separate tmpfiles file rather than another `rules` line: the upstream
+  # module's `d /var/log/pihole 0700` lands in 00-nixos.conf, and systemd
+  # applies files in lexical order, so this one has to sort after it to win.
+  systemd.tmpfiles.settings."10-pihole-log-dir"."/var/log/pihole".z = {
+    mode = "0751";
+    user = "pihole";
+    group = "pihole";
+  };
+
   # pihole-ftl is Type=simple — it declares "active" the instant the FTL
   # process starts, well before it's loaded gravity.db and bound :53. So
   # `After=pihole-ftl.service` only orders, it doesn't wait for readiness.
