@@ -6,6 +6,7 @@ import type { BooksData, TvData } from '../lib/dashboard/categories/media'
 import type { HomeData } from '../lib/dashboard/categories/home'
 import type { MonitoringData } from '../lib/dashboard/categories/monitoring'
 import type { NetworkData } from '../lib/dashboard/categories/network'
+import type { SecurityData } from '../lib/dashboard/categories/security'
 import type { SystemData } from '../lib/dashboard/categories/system'
 import { CATEGORIES } from '../lib/dashboard/nav'
 import type { CategoryName } from '../lib/dashboard/tiles'
@@ -39,6 +40,7 @@ export type {
   HomeData,
   MonitoringData,
   NetworkData,
+  SecurityData,
   SystemData,
   TvData,
 }
@@ -108,11 +110,12 @@ export const fetchTabStatus = createServerFn()
     if (spec === undefined) return {}
 
     const { promVector } = await import('../lib/dashboard/clients')
-    const [probes, egress] = await Promise.all([
+    const [probes, egress, uplink] = await Promise.all([
       promVector('gatus_results_endpoint_success'),
       // Only when a tab actually asks for it — this is two more prometheus
       // queries and every category pays for this handler.
       spec.tabs.some((t) => t.health === 'vpn-egress') ? vpnEgressHealth() : Promise.resolve(null),
+      spec.tabs.some((t) => t.health === 'uplink') ? uplinkHealth() : Promise.resolve(null),
     ])
     // The `name` label, not `key` — `key` is `<group>_<name>`, so reading it
     // means knowing which group an endpoint was declared in. gatus probes the
@@ -130,6 +133,7 @@ export const fetchTabStatus = createServerFn()
       spec.tabs.map((t) => [
         t.id,
         t.health === 'vpn-egress' ? egress
+        : t.health === 'uplink' ? uplink
         : t.probes !== undefined ? all(t.probes)
         : t.probe === undefined ? null
         : (health.get(t.probe) ?? null),
@@ -174,6 +178,28 @@ async function vpnEgressHealth(): Promise<boolean | null> {
   return tunnels === 1 && containers === 1 && seen >= declared.length
 }
 
+/**
+ * Can this house reach the router, and anything past it.
+ *
+ * The General tab has no service to probe — it is the wire — but "the wire is
+ * fine" is a real, checkable claim, and the exporter pings both hops every
+ * minute for exactly this. Green needs BOTH: the router alone answering means
+ * the LAN works and the internet does not, which is not a working uplink.
+ *
+ * `count` beside `min` for the same reason the egress check has it: min over
+ * an empty set is not a failure, it is no answer, and those must not render
+ * the same.
+ */
+async function uplinkHealth(): Promise<boolean | null> {
+  const { promScalar } = await import('../lib/dashboard/clients')
+  const [worst, seen] = await Promise.all([
+    promScalar('min(network_hop_up)'),
+    promScalar('count(network_hop_up)'),
+  ])
+  if (worst === null || seen === null || seen < 2) return null
+  return worst === 1
+}
+
 export const fetchCategoryTiles = createServerFn()
   .inputValidator((input: { category: CategoryName; tab: string }) => input)
   .handler(async ({ data }): Promise<CategoryTiles> => {
@@ -194,6 +220,7 @@ type Body =
   | { kind: 'books'; data: BooksData }
   | { kind: 'home'; data: HomeData }
   | { kind: 'network'; data: NetworkData }
+  | { kind: 'security'; data: SecurityData }
   | { kind: 'system'; data: SystemData }
   | { kind: 'monitoring'; data: MonitoringData }
   | { kind: 'gaming'; data: GamingData }
@@ -221,6 +248,10 @@ async function loadCategory(
     case 'network': {
       const { loadNetwork } = await import('../lib/dashboard/categories/network')
       return { kind: 'network', data: await loadNetwork(tab, ctx) }
+    }
+    case 'security': {
+      const { loadSecurity } = await import('../lib/dashboard/categories/security')
+      return { kind: 'security', data: await loadSecurity(tab, ctx) }
     }
     case 'system': {
       const { loadSystem } = await import('../lib/dashboard/categories/system')

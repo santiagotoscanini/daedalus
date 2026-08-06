@@ -76,7 +76,7 @@ export type CategorySpec = {
      * this file is imported into the browser bundle for five labels and must
      * stay data.
      */
-    health?: 'vpn-egress'
+    health?: 'vpn-egress' | 'uplink'
   }[]
   /**
    * Column spans of this page's boards, for the skeleton that stands in while
@@ -188,25 +188,27 @@ export const CATEGORIES: CategorySpec[] = [
     // "tunnel" each meant two things a scroll apart.
     tabs: [
       // The wire itself, and everyone using it: what crosses the cable, what
-      // the line behind it can carry, which container moved which bytes, and
-      // every device that has ever asked this house for a name. No probe —
-      // there is no one service to check, and the router that would be the
-      // obvious subject serves no API at all.
-      { id: 'general', label: 'General', boardSpans: [8, 4, 4, 8], statBand: false },
+      // the line behind it can carry, and which container moved which bytes.
+      //
+      // No gatus probe, because there is no one service here to check — but
+      // the tab is not therefore unknowable. The two things that would make
+      // this page meaningless are the router being unreachable and the
+      // internet being down, and both are measured every minute, so the dot
+      // is computed from them instead of left permanently grey.
+      { id: 'general', label: 'General', boardSpans: [8, 4, 4, 8], statBand: false, health: 'uplink' },
       // Three ways in — WireGuard, the Cloudflare tunnel, and the address
       // itself — chosen by a switch inside the page. The probe is wg-easy's
       // because it is the only one of the three gatus can check.
       { id: 'wireguard', label: 'Coming in', probe: 'wg-easy', boardSpans: [8, 4, 12], statBand: false },
-      // What happens to a request once it has arrived: traefik terminates it,
-      // Pocket ID decides whether it goes any further. Two services, one tab,
-      // because neither answers "can this be reached" alone — a route with no
-      // gate and a gate with no route are the same page read from two ends.
-      // The probe is traefik's dashboard, the only one of the two that can go
-      // down without taking the probe path with it.
+      // What happens to a request once it has arrived. Pocket ID shared this
+      // tab and is its own category now: the routing table still borrows the
+      // IdP's client list to say which routes are gated, but that is one
+      // column, and a column is not a reason for a second service's header
+      // and release notes to sit behind a switch on a page about routing.
       {
-        id: 'gateway',
-        label: 'Gateway',
-        probes: ['traefik-dashboard', 'pocket-id'],
+        id: 'proxy',
+        label: 'Proxy',
+        probe: 'traefik-dashboard',
         boardSpans: [12, 8, 4],
         statBand: false,
       },
@@ -248,6 +250,19 @@ export const CATEGORIES: CategorySpec[] = [
         statBand: false,
       },
     ],
+  },
+  {
+    id: 'security',
+    label: 'Security',
+    icon: '⛨',
+    lede: 'Who can sign in to this house, with what, and to which of its applications.',
+    boardSpans: [8, 4, 3, 3],
+    tileGroups: 0,
+    // One tab, and it is a tab rather than a tabless page because the things
+    // that belong beside it — what is exposed, where the secrets are, what
+    // holds a certificate — are the same subject and none of them is
+    // networking, which is where this half used to live.
+    tabs: [{ id: 'oidc', label: 'OIDC', probe: 'pocket-id', statBand: false }],
   },
   {
     id: "system",

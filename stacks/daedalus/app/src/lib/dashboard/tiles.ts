@@ -77,6 +77,7 @@ export type CategoryName =
   | 'home'
   | 'gaming'
   | 'network'
+  | 'security'
   | 'system'
   | 'monitoring'
 
