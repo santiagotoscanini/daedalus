@@ -66,8 +66,21 @@
     # Probe /opds, not /login: healthPath is appended to the auth-bypass
     # rule as Path(), which matches POST as well as GET, so aiming it at
     # a credential-accepting route leaves the local password form
-    # reachable outside the gate. /opds is bypassed already and 401s.
+    # reachable outside the gate.
     healthPath = "/opds";
+    # ...and probe it AUTHENTICATED, for the same reason bazarr's is.
+    # Unauthenticated, /opds answers 401, which passes `[STATUS] < 500`
+    # — so the probe certified traefik rather than Calibre-Web, and would
+    # have stayed green over a library that could not be read at all.
+    # It also cost a `OPDS Login failed for user ""` warning in
+    # Calibre-Web's log every 60 seconds, 1440 a day, from the monitoring
+    # that was supposed to be watching it.
+    #
+    # The value expands from gatus's env.sops at config load, never into
+    # the store-rendered YAML. Base64 of `user:pass` rather than the pair,
+    # because gatus sends a header, not credentials — same copy-of-a-read-
+    # credential arrangement gatus already has for BAZARR_API_KEY.
+    healthHeaders.Authorization = "Basic \${CALIBREWEB_OPDS_AUTH}";
     isolated = true;
     authBypassRule = "PathPrefix(`/opds`) || PathPrefix(`/kobo`)";
     authHeaders."Remote-User" = "santi";
