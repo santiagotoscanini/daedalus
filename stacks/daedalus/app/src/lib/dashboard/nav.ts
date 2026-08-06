@@ -144,34 +144,57 @@ export const CATEGORIES: CategorySpec[] = [
     // dot and link, plus the version verdict, the health checks and the log a
     // tile had no room for.
     tileGroups: 0,
-    // A tab per service, in the order a file travels: it is asked for, the
-    // indexers are searched, something downloads it, an *arr imports it, Bazarr
-    // subtitles it, Jellyfin plays it. Jellyfin leads anyway, because it is the
-    // one somebody else in the house notices when it breaks.
+    // A tab per JOB, in the order a file travels: it is asked for and pursued,
+    // the indexers are searched, something downloads it, Bazarr subtitles it,
+    // Jellyfin plays it. Jellyfin leads anyway, because it is the one somebody
+    // else in the house notices when it breaks.
+    //
+    // Four of these hold more than one service, picked by a switch inside the
+    // page — the same shape Network uses for its three ways in. The split
+    // between Seerr, Sonarr and Radarr is the software's, not the reader's:
+    // they answer one question between them, and a tab each meant reassembling
+    // that answer from three pages.
+    //
+    // `probes` on those tabs rather than `probe`: every service behind the
+    // switch has to be green, because picking one to represent the group would
+    // draw a green dot over a broken half. Unknown on any makes the whole thing
+    // unknown, which is the honest answer to a partial reading.
     tabs: [
       { id: 'jellyfin', label: 'Jellyfin', probe: 'jellyfin', boardSpans: [8, 4, 4, 8], statBand: false },
-      { id: 'seerr', label: 'Seerr', probe: 'seerr', boardSpans: [8, 4, 4, 8], statBand: false },
-      // Sonarr and Radarr are the same program pointed at different content, so
-      // they get the same page shape from the same component — see `ArrData`.
-      { id: 'sonarr', label: 'Sonarr', probe: 'sonarr', boardSpans: [8, 4, 8, 4], statBand: false },
-      { id: 'radarr', label: 'Radarr', probe: 'radarr', boardSpans: [8, 4, 8, 4], statBand: false },
-      { id: 'prowlarr', label: 'Prowlarr', probe: 'prowlarr', boardSpans: [12, 12, 12], statBand: false },
-      { id: 'bazarr', label: 'Bazarr', probe: 'bazarr', boardSpans: [8, 4, 12], statBand: false },
-      // Three downloaders on one tab because they are one job. Both probes must
-      // be green: either one down means half the queue is not moving, and
-      // picking one to represent the pair would draw a dot over the broken half.
       {
-        id: 'downloads',
-        label: 'Downloads',
-        probes: ['qbittorrent', 'nzbget'],
-        boardSpans: [8, 4, 6, 6],
+        id: 'wanted',
+        label: 'Wanted',
+        probes: ['seerr', 'sonarr', 'radarr'],
+        boardSpans: [8, 4, 4, 8],
         statBand: false,
       },
-      { id: 'books', label: 'Books', probe: 'calibre-web', boardSpans: [8, 4, 6, 6], statBand: false },
-      // No probe: Cleanuparr has one, but the other two services on this tab
-      // are timers with nothing to answer an HTTP request, so a green dot here
-      // would report a third of the page.
-      { id: 'cleanup', label: 'Housekeeping', boardSpans: [8, 4, 4, 8], statBand: false },
+      { id: 'prowlarr', label: 'Prowlarr', probe: 'prowlarr', boardSpans: [12, 12, 12], statBand: false },
+      { id: 'bazarr', label: 'Bazarr', probe: 'bazarr', boardSpans: [8, 4, 12], statBand: false },
+      {
+        id: 'downloaders',
+        label: 'Downloaders',
+        probes: ['qbittorrent', 'nzbget', 'metube'],
+        boardSpans: [8, 4, 4, 8],
+        statBand: false,
+      },
+      {
+        id: 'books',
+        label: 'Books',
+        probes: ['calibre-web', 'shelfmark'],
+        boardSpans: [8, 4, 12],
+        statBand: false,
+      },
+      // Only Cleanuparr answers HTTP. Janitorr and Recyclarr are timers with
+      // nothing to probe — Recyclarr is not even a running process between
+      // runs — so one probe here would report a third of the page and the other
+      // two carry their health inside, on the switch.
+      {
+        id: 'housekeeping',
+        label: 'Housekeeping',
+        probe: 'cleanuparr',
+        boardSpans: [8, 4, 12],
+        statBand: false,
+      },
     ],
   },
   {

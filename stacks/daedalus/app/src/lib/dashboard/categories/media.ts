@@ -1,4 +1,5 @@
-// The Media category: one tab per service, in the order a file travels.
+// The Media category: a tab per JOB, in the order a file travels, and a switch
+// inside the page for the services that share one.
 //
 // This replaced a two-tab page (a pipeline diagram, then a directory of eleven
 // tiles) and the reason is what a tile could never hold. Every service here is
@@ -8,19 +9,19 @@
 // either thing, so eleven services shared one page on which nothing was
 // answerable and nine of them were a number nobody had asked for.
 //
-// ── what each tab owes the reader ─────────────────────────────────────────
+// ── what every service page owes the reader ───────────────────────────────
 //
 // The same three things, in the same place: what version is running and what
 // is between it and current, what the service itself says is wrong, and its
 // log — with the logs of any container that has nowhere else to be read folded
-// underneath. flaresolverr, subgen, recyclarr and janitorr are on this page for
-// exactly that reason: each is a plausible answer to "it failed and its own log
-// blamed its upstream", and none is worth a tab.
+// underneath. flaresolverr, subgen and scraparr are on this page for exactly
+// that reason: each is a plausible answer to "it failed and its own log blamed
+// its upstream", none has an API this box can reach, and so none has a page.
 //
 // ── where a number comes from ─────────────────────────────────────────────
 //
 // The service's own API, wherever it will answer. Prometheus is used only for
-// what no API can say — a month of disk growth — and Loki only for the two
+// what no API can say — a month of disk growth — and Loki only for the three
 // services that publish no numbers at all. This is the opposite of the old
 // page's rule, and the reason is that these panels are read WHILE something is
 // wrong: scraparr's copy of a queue depth is up to a minute old, which is a
@@ -29,6 +30,7 @@
 import {
   getJson,
   getText,
+  lokiEntries,
   lokiLatest,
   lokiScalar,
   pool,
@@ -39,47 +41,68 @@ import {
 import { key } from '../format'
 import { versionGap, type VersionGap } from '../github'
 
+/**
+ * A tab is a JOB; the services doing it are a switch inside the page.
+ *
+ * Seven tabs rather than the sixteen containers behind them, because several
+ * of those containers are one job split across processes for historical
+ * reasons rather than for the reader's. Seerr, Sonarr and Radarr answer one
+ * question — what should be here that isn't. qBittorrent, NZBGet and MeTube
+ * answer another — what is coming down the wire. Giving each of them a tab
+ * made the reader reassemble a job the software had already split.
+ *
+ * The same shape the Network category uses for its three ways in: the tab is
+ * the subject, the switch picks which implementation of it you are looking at,
+ * and each option carries its own health dot so the choice is informed before
+ * it is made.
+ *
+ * A service earns a switch option by having a PAGE — something to say beyond
+ * its log. flaresolverr, subgen and scraparr have no reachable API at all, so
+ * they stay folded under the log of the tab they serve.
+ */
 export type MediaTab =
   | 'jellyfin'
-  | 'seerr'
-  | 'sonarr'
-  | 'radarr'
+  | 'wanted'
   | 'prowlarr'
   | 'bazarr'
-  | 'downloads'
+  | 'downloaders'
   | 'books'
-  | 'cleanup'
+  | 'housekeeping'
 
 export type MediaData =
   | ({ tab: 'jellyfin' } & JellyfinData)
-  | ({ tab: 'seerr' } & SeerrData)
-  | ({ tab: 'sonarr' | 'radarr' } & ArrData)
+  | { tab: 'wanted'; seerr: SeerrData; sonarr: ArrData; radarr: ArrData }
   | ({ tab: 'prowlarr' } & ProwlarrData)
   | ({ tab: 'bazarr' } & BazarrData)
-  | ({ tab: 'downloads' } & DownloadsData)
+  | ({ tab: 'downloaders' } & DownloadsData)
   | ({ tab: 'books' } & BooksData)
-  | ({ tab: 'cleanup' } & CleanupData)
+  | ({ tab: 'housekeeping' } & HousekeepingData)
 
 type Ctx = { base: (app: string) => string; hc: string }
 
 export async function loadMedia(tab: string, ctx: Ctx): Promise<MediaData> {
   switch (tab) {
-    case 'seerr':
-      return { tab: 'seerr', ...(await loadSeerr(ctx.base('seerr'))) }
-    case 'sonarr':
-      return { tab: 'sonarr', ...(await loadArr('sonarr', ctx)) }
-    case 'radarr':
-      return { tab: 'radarr', ...(await loadArr('radarr', ctx)) }
+    case 'wanted': {
+      // All three, because all three are on the page — the switch chooses what
+      // is SHOWN, not what is fetched. Fetching on selection would put a
+      // spinner behind a button that is meant to feel like a toggle.
+      const [seerr, sonarr, radarr] = await Promise.all([
+        loadSeerr(ctx.base('seerr')),
+        loadArr('sonarr', ctx),
+        loadArr('radarr', ctx),
+      ])
+      return { tab: 'wanted', seerr, sonarr, radarr }
+    }
     case 'prowlarr':
       return { tab: 'prowlarr', ...(await loadProwlarr(ctx)) }
     case 'bazarr':
       return { tab: 'bazarr', ...(await loadBazarr(ctx)) }
-    case 'downloads':
-      return { tab: 'downloads', ...(await loadDownloads(ctx)) }
+    case 'downloaders':
+      return { tab: 'downloaders', ...(await loadDownloads(ctx)) }
     case 'books':
       return { tab: 'books', ...(await loadBooks(ctx)) }
-    case 'cleanup':
-      return { tab: 'cleanup', ...(await loadCleanup()) }
+    case 'housekeeping':
+      return { tab: 'housekeeping', ...(await loadHousekeeping()) }
     default:
       return { tab: 'jellyfin', ...(await loadJellyfin(ctx.base('jellyfin'))) }
   }
@@ -805,9 +828,24 @@ type DownloadsData = {
     rate: number | null
     remainingBytes: number | null
     downloadedBytes: number | null
+    /** This calendar month and today, as NZBGet counts them. */
+    monthBytes: number | null
+    dayBytes: number | null
     paused: boolean
-    /** Article-level failures since the counters were reset. */
-    articleFailures: number | null
+    standby: boolean
+    /** Seconds since the container started, by NZBGet's own clock. */
+    uptimeSeconds: number | null
+    /** Of that uptime, how much was spent actually downloading. */
+    downloadSeconds: number | null
+    freeBytes: number | null
+    /**
+     * The upstream usenet providers and whether NZBGet is using them.
+     *
+     * The failure this surfaces: a provider whose subscription lapsed goes
+     * inactive and everything simply stops being found, which looks exactly
+     * like "the release is not on usenet".
+     */
+    servers: { id: number; active: boolean }[]
     groups: { name: string; pct: number; remainingBytes: number }[]
   }
   metube: {
@@ -843,10 +881,14 @@ async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
           DownloadRate?: number
           RemainingSizeMB?: number
           DownloadedSizeMB?: number
+          MonthSizeMB?: number
+          DaySizeMB?: number
           DownloadPaused?: boolean
-          ArticleCacheMB?: number
-          TotalArticles?: number
-          FailedArticles?: number
+          ServerStandBy?: boolean
+          UpTimeSec?: number
+          DownloadTimeSec?: number
+          FreeDiskSpaceMB?: number
+          NewsServers?: { ID?: number; Active?: boolean }[]
         }
       }>(`${nzbBase}/jsonrpc/status`),
       getJson<{ result?: { NZBName?: string; FileSizeMB?: number; RemainingSizeMB?: number }[] }>(
@@ -882,10 +924,19 @@ async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
       version: nzbVer,
       gap: nzbGap,
       rate: r?.DownloadRate ?? null,
-      remainingBytes: r?.RemainingSizeMB === undefined ? null : r.RemainingSizeMB * 1024 * 1024,
-      downloadedBytes: r?.DownloadedSizeMB === undefined ? null : r.DownloadedSizeMB * 1024 * 1024,
+      remainingBytes: mb(r?.RemainingSizeMB),
+      downloadedBytes: mb(r?.DownloadedSizeMB),
+      monthBytes: mb(r?.MonthSizeMB),
+      dayBytes: mb(r?.DaySizeMB),
       paused: r?.DownloadPaused === true,
-      articleFailures: r?.FailedArticles ?? null,
+      standby: r?.ServerStandBy === true,
+      uptimeSeconds: r?.UpTimeSec ?? null,
+      downloadSeconds: r?.DownloadTimeSec ?? null,
+      freeBytes: mb(r?.FreeDiskSpaceMB),
+      servers: (r?.NewsServers ?? []).map((s) => ({
+        id: s.ID ?? 0,
+        active: s.Active === true,
+      })),
       groups: (nzbGroups?.result ?? []).map((g) => {
         const total = g.FileSizeMB ?? 0
         const left = g.RemainingSizeMB ?? 0
@@ -1116,7 +1167,7 @@ async function loadBooks(ctx: Ctx): Promise<BooksData> {
  * evidence any of them is alive is a log line. Two publish no numbers at all,
  * so the counts here are counted out of Loki — which is why the panel says so.
  */
-type CleanupData = {
+type HousekeepingData = {
   cleanuparr: {
     version: string | null
     gap: VersionGap
@@ -1129,6 +1180,14 @@ type CleanupData = {
     gap: VersionGap
     /** Dry-run: what it WOULD have deleted in the window. */
     wouldDelete: number | null
+    /**
+     * The cleanups that report their own state, and whether each is armed.
+     *
+     * Not every cleanup Janitorr has — see `janitorrSchedules` — because only
+     * some of them say so, and a list presented as complete would be a claim
+     * this box cannot support.
+     */
+    schedules: { name: string; enabled: boolean }[]
   }
   recyclarr: {
     /**
@@ -1144,6 +1203,16 @@ type CleanupData = {
     /** How its last scheduled run ended, and when. */
     lastRun: { ok: boolean; day: string } | null
     errors: number | null
+    /**
+     * What the last sync actually changed, per *arr instance.
+     *
+     * The number that makes this service legible: Recyclarr writes TRaSH custom
+     * formats and scoring straight into Sonarr and Radarr on a timer, and
+     * "updated 2, skipped 59" is the difference between a job that ran and a
+     * job that did something — including the something that silently reverted
+     * a profile somebody edited by hand.
+     */
+    synced: { instance: string; updated: number; skipped: number }[]
   }
   /** The window all three counts are over. */
   days: number
@@ -1151,7 +1220,7 @@ type CleanupData = {
 
 const CLEANUP_DAYS = 7
 
-async function loadCleanup(): Promise<CleanupData> {
+async function loadHousekeeping(): Promise<HousekeepingData> {
   const window = `${String(CLEANUP_DAYS)}d`
   const over = (container: string, needle: string) =>
     lokiScalar(
@@ -1185,6 +1254,11 @@ async function loadCleanup(): Promise<CleanupData> {
       ),
     ])
 
+  const [schedules, synced] = await Promise.all([
+    janitorrSchedules(),
+    recyclarrSynced(CLEANUP_DAYS),
+  ])
+
   // `Starting JanitorrApplicationKt vv2.1.1 using Java 25` — the doubled v is
   // Janitorr's own, not a typo here.
   const janitorrVersion = /JanitorrApplicationKt vv?(\d+\.\d+\.\d+)/.exec(janitorrBanner ?? '')?.[1] ?? null
@@ -1200,7 +1274,7 @@ async function loadCleanup(): Promise<CleanupData> {
 
   return {
     cleanuparr: { version: cleanuparrVersion, gap: cleanuparrGap, removed, blocked, searches },
-    janitorr: { version: janitorrVersion, gap: janitorrGap, wouldDelete },
+    janitorr: { version: janitorrVersion, gap: janitorrGap, wouldDelete, schedules },
     recyclarr: {
       version: null,
       gap: recyclarrGap,
@@ -1209,9 +1283,70 @@ async function loadCleanup(): Promise<CleanupData> {
           { ok: (recyclarrRun ?? '').includes('job succeeded'), day: runStamp }
         ),
       errors: recyclarrErrors,
+      synced,
     },
     days: CLEANUP_DAYS,
   }
+}
+
+/**
+ * The Janitorr cleanups that ANNOUNCE themselves, and whether each is armed.
+ *
+ * Read from the log because there is nowhere else: Janitorr exposes no API and
+ * its configuration lives in a file inside the container. Two of its schedules
+ * state their own status every hour when they fire, which a one-day window
+ * catches many times over.
+ *
+ * Deliberately not a claim about every cleanup Janitorr has. Its media-based
+ * schedule says nothing at all on this box — enabled or not — so a list
+ * presented as complete would report "everything is off" while that one was
+ * quietly deleting. The `wouldDelete` count beside this is what covers that
+ * case: it counts decisions, whichever schedule reached them.
+ */
+async function janitorrSchedules(): Promise<HousekeepingData['janitorr']['schedules']> {
+  const kinds = [
+    { name: 'Tag', match: 'Tag based cleanup' },
+    { name: 'Episode', match: 'Episode based cleanup' },
+  ]
+  const seen = await Promise.all(
+    kinds.map(async (k) => {
+      const line = await lokiLatest(`{container="janitorr"} |= \`${k.match}\``, 24 * 60)
+      // Absent from the log is not "enabled" — it is "we have not seen it say
+      // either", which lands as disabled=false only if a line exists.
+      return line === null ? null : { name: k.name, enabled: !line.includes('disabled') }
+    }),
+  )
+  return seen.filter((s): s is NonNullable<typeof s> => s !== null)
+}
+
+/** `radarr-main: Updated 2 Existing Custom Formats` and its Skipped sibling. */
+async function recyclarrSynced(days: number): Promise<HousekeepingData['recyclarr']['synced']> {
+  const entries = await lokiEntries(
+    `{container="recyclarr"} |~ \`(Updated|Skipped) [0-9]+ .*Custom Formats\``,
+    days * 24 * 60,
+    200,
+  )
+
+  // Newest first, and the FIRST value per instance-and-verb wins: these are the
+  // last run's numbers, not a sum over the window. A nightly job that changed
+  // two formats every night for a week did not change fourteen.
+  const byInstance = new Map<string, { updated: number | null; skipped: number | null }>()
+  for (const { line } of entries) {
+    const m = /(\S+?): (Updated|Skipped) (\d+)/.exec(line)
+    if (m === null) continue
+    const [, instance, verb, count] = m
+    if (instance === undefined || verb === undefined || count === undefined) continue
+    const row = byInstance.get(instance) ?? { updated: null, skipped: null }
+    if (verb === 'Updated') row.updated ??= Number(count)
+    else row.skipped ??= Number(count)
+    byInstance.set(instance, row)
+  }
+
+  return [...byInstance].map(([instance, n]) => ({
+    instance,
+    updated: n.updated ?? 0,
+    skipped: n.skipped ?? 0,
+  }))
 }
 
 /* ── shared ───────────────────────────────────────────────────────────── */
@@ -1236,4 +1371,18 @@ function iso(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10)
 }
 
-export type { ArrData, BooksData, CleanupData, DownloadsData, JellyfinData, ProwlarrData, BazarrData, SeerrData }
+/** NZBGet reports every size in whole megabytes. */
+function mb(v: number | undefined): number | null {
+  return v === undefined ? null : v * 1024 * 1024
+}
+
+export type {
+  ArrData,
+  BazarrData,
+  BooksData,
+  DownloadsData,
+  HousekeepingData,
+  JellyfinData,
+  ProwlarrData,
+  SeerrData,
+}

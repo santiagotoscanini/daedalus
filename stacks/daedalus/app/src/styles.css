@@ -5473,3 +5473,19 @@ h2 {
     text-align: left;
   }
 }
+
+/* A service with no published artwork. A monogram rather than a borrowed
+   mark: both services this applies to share a tab with one that HAS a logo,
+   so reusing it would not read as "no icon" — it would read as the neighbour. */
+.svc-logo-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
