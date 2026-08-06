@@ -2963,6 +2963,11 @@ function ZoneView({ d }: { d: Domains['zone'] }) {
                     },
                   ]}
                 />
+                <RecordList
+                  records={m.records}
+                  summary={`The ${String(m.records.length)} records`}
+                  note="MX says who receives it, SPF which servers may send as this domain, the _domainkey selectors carry the signing keys, and _dmarc says what a receiver should do when neither of the first two holds."
+                />
               </section>
             ))
           }
@@ -2972,7 +2977,8 @@ function ZoneView({ d }: { d: Domains['zone'] }) {
             when neither holds. <b>quarantine</b> means spam folder rather than bounce, and{' '}
             <b>accepted, marked</b> is an SPF ending in <span className="mono">~all</span> — a
             forgery is flagged rather than refused. Both are the cautious settings, and both are
-            worth tightening once nothing legitimate is being caught by them.
+            worth tightening once nothing legitimate is being caught by them. Open a domain to
+            check the reading against the records it came from.
           </p>
         </Board>
 
@@ -2996,8 +3002,31 @@ function ZoneView({ d }: { d: Domains['zone'] }) {
             records={d.leftovers}
             summary="Leftovers"
             tone="warn"
-            note="An _acme-challenge TXT is written during a certificate issuance and deleted when it finishes, so one that is still here belongs to an issuance that did not clean up — it proves nothing and grants nothing. The others are the same record entered twice."
+            note="An _acme-challenge TXT is written during a certificate issuance and deleted when it finishes, so every one still in the zone belongs to an issuance that did not clean up — it proves nothing and grants nothing. Two pairs of them are also the same value entered twice, once quoted and once not."
           />
+          <RecordList
+            records={d.unclassified}
+            summary="Everything else"
+            tone="bad"
+            note="Records none of the groups on this page claimed. The groups are rules — has an MX, is an _acme-challenge, points at the tunnel — and anything a rule set does not cover belongs here rather than nowhere."
+            open
+          />
+
+          <p className="board-foot">
+            {d.tally.total === null ?
+              'The zone could not be read.'
+            : <>
+                All {d.tally.total} records in the zone are on this page: {d.tally.house} pointing
+                back here, {d.tally.mail} for mail, {d.tally.elsewhere} pointed elsewhere and{' '}
+                {/* The tail is ONE expression on ONE line: JSX turns a newline
+                    before an interpolation into a space, so splitting this
+                    left the sentence ending in " ." */}
+                {`${String(d.tally.leftovers)} left over${d.tally.unclassified > 0 ? `, plus ${String(d.tally.unclassified)} unclassified` : ''}.`}{' '}
+                The count is Cloudflare’s and the groups are computed from it, so a record that
+                stopped matching its rule shows up above rather than going missing.
+              </>
+            }
+          </p>
         </Board>
 
         <Board
