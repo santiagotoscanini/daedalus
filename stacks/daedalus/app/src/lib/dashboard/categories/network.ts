@@ -36,14 +36,15 @@ import { lanHosts, webAppHosts } from '../../nix-manifest'
 import { BASE_DOMAIN } from '../../hostname'
 import { key, since } from '../format'
 
-export type NetworkTab = 'general' | 'wireguard' | 'gateway' | 'outbound' | 'domains'
+export type NetworkTab = 'general' | 'wireguard' | 'gateway' | 'outbound' | 'dns' | 'dhcp'
 
 export type NetworkData =
   | ({ tab: 'general' } & GeneralData)
   | ({ tab: 'wireguard' } & InboundData)
   | ({ tab: 'gateway' } & GatewayData)
   | ({ tab: 'outbound' } & OutboundData)
-  | ({ tab: 'domains' } & DomainsData)
+  | ({ tab: 'dns' } & DnsData)
+  | ({ tab: 'dhcp' } & DhcpData)
 
 /**
  * One WireGuard peer, as wg-easy's exporter reports it.
@@ -325,8 +326,10 @@ export async function loadNetwork(
       return { tab: 'gateway', ...(await loadGateway(ctx)) }
     case 'outbound':
       return { tab: 'outbound', ...(await loadOutbound(ctx)) }
-    case 'domains':
-      return { tab: 'domains', ...(await loadDomains(ctx)) }
+    case 'dns':
+      return { tab: 'dns', ...(await loadDns(ctx)) }
+    case 'dhcp':
+      return { tab: 'dhcp', ...(await loadDhcp()) }
     default:
       return { tab: 'general', ...(await loadGeneral()) }
   }
@@ -1851,7 +1854,7 @@ async function loadDdns(cfP: Promise<CfTunnel | undefined>): Promise<DdnsData> {
   }
 }
 
-// ── Domains: the resolver, and the name it resolves ────────────────────────
+// ── DNS: the resolver, and the name it resolves ────────────────────────
 //
 // One tab for two halves of the same sentence. A name becomes an address in
 // exactly two places: pi-hole, for anything asked from inside the house, and
@@ -1887,7 +1890,6 @@ type ResolverData = {
   /** Hourly buckets over the last day, oldest first. */
   history: { label: string; total: number; blocked: number; forwarded: number }[]
   store: { queries: number | null; sinceSeconds: number | null; bytes: number | null }
-  dhcp: Dhcp
 }
 
 /**
@@ -2060,15 +2062,34 @@ type LanName = {
   public: boolean
 }
 
-type DomainsData = {
-  resolver: ResolverData
-  zone: ZoneData
-  lan: LanName[]
-  /** Every device on the LAN — see `loadDevices` for why it lives here. */
-  devices: Device[]
+type DnsData = { resolver: ResolverData; zone: ZoneData; lan: LanName[] }
+
+/**
+ * The other half of what this box does for the LAN.
+ *
+ * Its own tab rather than a corner of the resolver's, because it is a
+ * different service that happens to share a process: DNS answers "what
+ * address is this name", DHCP decides "what address is this device". The only
+ * thing they have in common is FTL, and a reader looking for a lease is not
+ * looking for a zone.
+ *
+ * Loaded on its own rather than out of `loadResolver`, so the tab costs the
+ * one metrics call it actually reads instead of the nine that page makes.
+ */
+type DhcpData = { dhcp: Dhcp; devices: Device[] }
+
+async function loadDhcp(): Promise<DhcpData> {
+  const base = PIHOLE()
+  const sid = await piholeSid(base)
+  const metrics = await getJson<{
+    metrics?: { dhcp?: { offer?: number; ack?: number; decline?: number; nak?: number } }
+  }>(`${base}/api/info/metrics`, sid === null ? {} : { headers: { sid } })
+
+  const dhcp = dhcpConfig(metrics?.metrics?.dhcp)
+  return { dhcp, devices: await loadDevices(dhcp.reservations) }
 }
 
-async function loadDomains(ctx: { base: (app: string) => string }): Promise<DomainsData> {
+async function loadDns(ctx: { base: (app: string) => string }): Promise<DnsData> {
   const [resolver, zone, hosts, served] = await Promise.all([
     loadResolver(ctx.base('pihole')),
     loadZone(),
@@ -2076,16 +2097,11 @@ async function loadDomains(ctx: { base: (app: string) => string }): Promise<Doma
     servedHosts(),
   ])
 
-  // After the resolver, not beside it: the reservations come out of the same
-  // load and are what the device list is merged against.
-  const devices = await loadDevices(resolver.dhcp.reservations)
-
   const published = new Set(zone.names.map((n) => n.fqdn))
 
   return {
     resolver,
     zone,
-    devices,
     lan: hosts.map((h) => {
       const elsewhere = h.ip !== LAN_IP
       return {
@@ -2110,7 +2126,7 @@ async function loadDomains(ctx: { base: (app: string) => string }): Promise<Doma
  */
 const LAN_IP = process.env.LAN_IP ?? ''
 
-// ── Domains: the resolver ──────────────────────────────────────────────────
+// ── DNS: the resolver ──────────────────────────────────────────────────
 
 type FtlUpstream = {
   ip?: string
@@ -2152,7 +2168,6 @@ async function loadResolver(base: string): Promise<ResolverData> {
         dns?: {
           cache?: { size?: number; inserted?: number; evicted?: number; expired?: number }
         }
-        dhcp?: { offer?: number; ack?: number; decline?: number; nak?: number }
       }
     }>(`${base}/api/info/metrics`),
     getJson<{ types?: Record<string, number> }>(`${base}/api/stats/query_types`),
@@ -2234,7 +2249,6 @@ async function loadResolver(base: string): Promise<ResolverData> {
         : Date.now() / 1000 - store.earliest_timestamp_disk,
       bytes: store?.size ?? null,
     },
-    dhcp: dhcpConfig(metrics?.metrics?.dhcp),
   }
 }
 
@@ -2333,7 +2347,7 @@ function hourly(
     }))
 }
 
-// ── Domains: the zone ──────────────────────────────────────────────────────
+// ── DNS: the zone ──────────────────────────────────────────────────────
 
 const CF_API = 'https://api.cloudflare.com/client/v4'
 
@@ -2628,7 +2642,7 @@ function mailPosture(domain: string, records: ZoneRecord[]): MailDomain {
   }
 }
 
-// ── Domains: the registration ──────────────────────────────────────────────
+// ── DNS: the registration ──────────────────────────────────────────────
 
 /**
  * The `.me` registry's RDAP service.

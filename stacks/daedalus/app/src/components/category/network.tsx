@@ -40,8 +40,10 @@ export function NetworkView({ data }: { data: NetworkData }) {
       return <GatewayView data={data} />
     case 'outbound':
       return <OutboundView data={data} />
-    case 'domains':
-      return <DomainsView data={data} />
+    case 'dns':
+      return <DnsView data={data} />
+    case 'dhcp':
+      return <DhcpView data={data} />
     default:
       return <GeneralView data={data} />
   }
@@ -269,9 +271,9 @@ function GeneralView({ data }: { data: General }) {
           </p>
         </Board>
 
-        {/* The device list was here and is on Domains now, beside the resolver
-            that knows them and merged with the reservations that name them.
-            What is on the LAN is a DHCP fact, not a throughput one. */}
+        {/* The device list was here. It is on DHCP now, merged with the
+            reservations that name those devices — what is on the LAN is a
+            lease fact, not a throughput one. */}
       </BoardGrid>
     </>
   )
@@ -337,7 +339,7 @@ function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceilin
   )
 }
 
-type Device = Domains['devices'][number]
+type Device = Dhcp['devices'][number]
 
 /**
  * The LAN, in two sections that are one list.
@@ -2153,9 +2155,10 @@ function Countdown({ at }: { at: number | null }) {
   )
 }
 
-// ── Domains ────────────────────────────────────────────────────────────────
+// ── DNS ────────────────────────────────────────────────────────────────
 
-type Domains = Extract<NetworkData, { tab: 'domains' }>
+type Dns = Extract<NetworkData, { tab: 'dns' }>
+type Dhcp = Extract<NetworkData, { tab: 'dhcp' }>
 
 /**
  * How a name becomes an address, on both sides of the front door.
@@ -2167,7 +2170,7 @@ type Domains = Extract<NetworkData, { tab: 'domains' }>
  * resolver cannot explain what the internet is told. The tables on both sides
  * are joined on the same list of published names.
  */
-function DomainsView({ data }: { data: Domains }) {
+function DnsView({ data }: { data: Dns }) {
   const [side, setSide] = useState<'resolver' | 'zone'>('resolver')
   const { resolver, zone } = data
 
@@ -2193,12 +2196,125 @@ function DomainsView({ data }: { data: Domains }) {
 
       {side === 'zone' ?
         <ZoneView d={zone} />
-      : <ResolverView d={resolver} lan={data.lan} devices={data.devices} />}
+      : <ResolverView d={resolver} lan={data.lan} />}
     </>
   )
 }
 
-// ── Domains: the resolver ──────────────────────────────────────────────────
+// ── DHCP ───────────────────────────────────────────────────────────────
+
+/**
+ * Who gets which address, which is a different question from what a name
+ * resolves to and now has its own page for saying so.
+ *
+ * The two shared a tab because they share a process — FTL is both servers —
+ * and that is a fact about the software rather than about the subject. DNS
+ * answers "where does this name point"; DHCP answers "what is this device
+ * called and what address does it hold". A reader chasing a lease was reading
+ * past a zone to get to it.
+ */
+function DhcpView({ data }: { data: Dhcp }) {
+  const { dhcp, devices } = data
+  const active = devices.filter((v) => v.lastSeenAgo !== null && v.lastSeenAgo < ACTIVE)
+  const unbound = devices.filter((v) => v.reserved && v.lastSeenAgo === null)
+
+  return (
+    <BoardGrid>
+      <Board
+        title="The pool"
+        icon="⊞"
+        span={6}
+        aside={<Chip tone={dhcp.active ? 'ok' : 'muted'}>{dhcp.active ? 'serving' : 'off'}</Chip>}
+      >
+        <Facts
+          rows={[
+            {
+              k: 'Range',
+              v: (
+                <span className="mono">
+                  {dhcp.start} – {dhcp.end}
+                </span>
+              ),
+            },
+            { k: 'Lease', v: dhcp.leaseTime },
+            { k: 'Gateway offered', v: <span className="mono">{dhcp.router}</span> },
+            { k: 'Fixed addresses', v: num(dhcp.reservations.length) },
+          ]}
+        />
+        <p className="board-foot">
+          The resolver is the DHCP server too, so addresses on this LAN are decided by this box
+          rather than by the router — which is also why the device list below can exist at all.
+          Everything without a reservation gets whatever is free in that range, for {dhcp.leaseTime}{' '}
+          at a time. A reservation is what lets something else on this box name a device by
+          address, which is why the fixed ones are declared in nix and not clicked into an admin.
+        </p>
+      </Board>
+
+      <Board
+        title="Leases"
+        icon="⇌"
+        span={6}
+        aside={<span className="board-note">since FTL started</span>}
+      >
+        <Facts
+          rows={[
+            { k: 'Offers made', v: num(dhcp.counters.offers) },
+            { k: 'Accepted', v: num(dhcp.counters.acks) },
+            {
+              k: 'Declined',
+              v:
+                dhcp.counters.declines === null ? DASH
+                : dhcp.counters.declines === 0 ?
+                  <span className="ok-text">0</span>
+                : <span className="warn-text">{num(dhcp.counters.declines)}</span>,
+            },
+            {
+              k: 'Refused',
+              v:
+                dhcp.counters.nak === null ? DASH
+                : dhcp.counters.nak === 0 ?
+                  <span className="ok-text">0</span>
+                : <span className="warn-text">{num(dhcp.counters.nak)}</span>,
+            },
+          ]}
+        />
+        <p className="board-foot">
+          Offers vastly outnumber acceptances and that is normal — a device wakes, is offered an
+          address, and often already has one it is happy with. The two to watch are the bottom
+          pair: a <b>decline</b> means a client found the address already in use, a <b>refusal</b>{' '}
+          means it asked for one this server would not give it. Both are zero on a LAN with one
+          DHCP server, and non-zero is usually a second one.
+        </p>
+      </Board>
+
+      <Board
+        title="Everything on the LAN"
+        icon="▤"
+        span={12}
+        aside={
+          <span className="board-note">
+            {active.length} active · {devices.length} known · {dhcp.reservations.length} fixed
+          </span>
+        }
+      >
+        <LanDevices devices={devices} />
+        <p className="board-foot">
+          Two lists joined on the hardware address. Everything in the house resolves through this
+          box, so anything that ever asked for a name has a row here whether or not it took a
+          lease — which is what makes this more than the leases above. The <b>fixed</b> ones are
+          the reservations, and one of those with no matching device is kept and marked{' '}
+          <b>never</b>: a declared address for something that has not appeared is the only thing
+          on this page worth acting on.
+          {unbound.length > 0 &&
+            ` ${String(unbound.length)} of ${String(dhcp.reservations.length)} are in that state — a device presenting a private, rotating Wi-Fi address never matches the MAC its reservation was written for.`}{' '}
+          <b>active</b> means it looked something up in the last day.
+        </p>
+      </Board>
+    </BoardGrid>
+  )
+}
+
+// ── DNS: the resolver ──────────────────────────────────────────────────
 
 /** The four ways a query ends, in the order they are tried. */
 const SOURCES = [
@@ -2208,15 +2324,7 @@ const SOURCES = [
   { k: 'blocked' as const, label: 'Blocked', tone: 'warn' as Tone },
 ]
 
-function ResolverView({
-  d,
-  lan,
-  devices,
-}: {
-  d: Domains['resolver']
-  lan: Domains['lan']
-  devices: Domains['devices']
-}) {
+function ResolverView({ d, lan }: { d: Dns['resolver']; lan: Dns['lan'] }) {
   const { answered, queries } = d
   const sum = answered.cached + answered.local + answered.forwarded + answered.blocked
   const share = (n: number) => (sum === 0 ? null : (n / sum) * 100)
@@ -2444,71 +2552,7 @@ function ResolverView({
           </details>
         </Board>
 
-        <Board
-          title="Everything on the LAN"
-          icon="⊞"
-          span={12}
-          aside={
-            <span className="board-note">
-              {devices.filter((v) => v.lastSeenAgo !== null && v.lastSeenAgo < ACTIVE).length} active ·{' '}
-              {devices.length} known · {devices.filter((v) => v.reserved).length} fixed
-            </span>
-          }
-        >
-          <LanDevices devices={devices} />
-          <p className="board-foot">
-            The resolver is the DHCP server too, so addresses on this LAN are decided here rather
-            than by the router — and it is also the reason this list can exist at all: everything
-            in the house resolves through this box, so anything that ever asked for a name has a
-            row, whether or not it ever took a lease. The <b>fixed</b> ones are declared in nix,
-            because a reservation is what lets something else on this box name a device by address.
-            Everything else gets whatever is free in{' '}
-            <span className="mono">
-              {d.dhcp.start} – {d.dhcp.end}
-            </span>{' '}
-            for {d.dhcp.leaseTime} at a time, with <span className="mono">{d.dhcp.router}</span> as
-            its gateway. <b>active</b> means it looked something up in the last day.
-          </p>
-        </Board>
-
-        <Changelog gap={d.gap} span={9} />
-
-        <Board
-          title="Leases"
-          icon="⇌"
-          span={3}
-          aside={<span className="board-note">since FTL started</span>}
-        >
-          <Facts
-            rows={[
-              { k: 'Offers made', v: num(d.dhcp.counters.offers) },
-              { k: 'Accepted', v: num(d.dhcp.counters.acks) },
-              {
-                k: 'Declined',
-                v:
-                  d.dhcp.counters.declines === null ? DASH
-                  : d.dhcp.counters.declines === 0 ?
-                    <span className="ok-text">0</span>
-                  : <span className="warn-text">{num(d.dhcp.counters.declines)}</span>,
-              },
-              {
-                k: 'Refused',
-                v:
-                  d.dhcp.counters.nak === null ? DASH
-                  : d.dhcp.counters.nak === 0 ?
-                    <span className="ok-text">0</span>
-                  : <span className="warn-text">{num(d.dhcp.counters.nak)}</span>,
-              },
-            ]}
-          />
-          <p className="board-foot">
-            Offers vastly outnumber acceptances and that is normal — a device wakes, is offered an
-            address, and often already has one it is happy with. The two to watch are the bottom
-            pair: a <b>decline</b> means a client found the address already in use, a{' '}
-            <b>refusal</b> means it asked for one this server would not give it. Both are zero on a
-            LAN with one DHCP server, and non-zero is usually a second one.
-          </p>
-        </Board>
+        <Changelog gap={d.gap} span={12} />
 
         <Board title="Logs" icon="≣" span={12}>
           <GrafanaLogs
@@ -2531,12 +2575,12 @@ function ResolverView({
   )
 }
 
-// ── Domains: the zone ──────────────────────────────────────────────────────
+// ── DNS: the zone ──────────────────────────────────────────────────────
 
 /** Under a month is the point at which an expiry stops being a date. */
 const EXPIRY_WARN_DAYS = 45
 
-function expiryVerdict(r: Domains['zone']['registration']): { label: string; tone: Tone } {
+function expiryVerdict(r: Dns['zone']['registration']): { label: string; tone: Tone } {
   if (r.expiresIn === null) return { label: 'unknown', tone: 'muted' }
   const days = Math.floor(r.expiresIn / 86400)
   if (days < 0) return { label: 'expired', tone: 'bad' }
@@ -2544,7 +2588,7 @@ function expiryVerdict(r: Domains['zone']['registration']): { label: string; ton
   return { label: `${String(days)} days left`, tone: 'ok' }
 }
 
-function ZoneView({ d }: { d: Domains['zone'] }) {
+function ZoneView({ d }: { d: Dns['zone'] }) {
   const { registration: reg } = d
   const locked = reg.status.some((s) => s.includes('transfer prohibited'))
   const drift =
@@ -2896,7 +2940,7 @@ function RecordList({
   tone = 'muted',
   open = false,
 }: {
-  records: Domains['zone']['elsewhere']
+  records: Dns['zone']['elsewhere']
   summary: string
   note: string
   tone?: Tone
