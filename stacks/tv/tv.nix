@@ -190,6 +190,14 @@ in
     volumes = [
       "/home/santiago/selfhost/tv/qbittorrent:/config"
       "/s2/tv/torrents:/data/torrents:rw"
+      # Books, and deliberately a SEPARATE mount on a separate dataset. The
+      # note above is about keeping the *arrs' hardlink space on one
+      # filesystem; a book never takes that path — shelfmark copies it out to
+      # the CWA ingest folder — so there is nothing to hardlink and every
+      # reason to keep it off the media pool. Shelfmark declares the state
+      # path and mounts the same directory read-only at the same container
+      # path (stacks/shelfmark).
+      "/s2/books/torrents:/data/books:rw"
     ];
 
     environment.WEBUI_PORT = "8090";

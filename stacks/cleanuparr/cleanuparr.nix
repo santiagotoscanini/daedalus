@@ -28,6 +28,29 @@
 # only covers the in-netns port-forward script, not calls arriving via
 # host.containers.internal.
 #
+# ── books are out of scope, and only two of three reasons are structural
+#
+# Shelfmark grabs book torrents through the same qBittorrent (see
+# stacks/shelfmark), so "does Cleanuparr eat them" is a real question.
+# Today it cannot:
+#
+#   Queue Cleaner    walks the *arr QUEUES. Registered instances are
+#                    Sonarr and Radarr only — no Readarr — and a book
+#                    torrent is in neither queue, so it is invisible.
+#   Content Blocker  same, per-*arr and scoped to those two.
+#   Download Cleaner the one feature that sweeps the CLIENT by category,
+#                    which WOULD reach them. Currently disabled, with no
+#                    seeding rules defined.
+#
+# The third is a setting, not a structure. If Download Cleaner is ever
+# switched on, exclude book torrents by the identity shelfmark gives
+# them: qBittorrent category `books`, tag `shelfmark`. Both are declared
+# in stacks/shelfmark precisely so this exclusion is possible — the UI
+# fields are the per-rule category list and `ignored_downloads`.
+#
+# The flip side: nothing prunes seeding book torrents either. They
+# accumulate until Download Cleaner is configured for that category.
+#
 # Auth: the Pocket ID forward-auth gate at traefik is the boundary;
 # Cleanuparr ships its own account system (a first-run setup wizard,
 # not completed here), and its local-address bypass is off by default,

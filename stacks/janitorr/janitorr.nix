@@ -13,6 +13,14 @@
 # No web UI — logs are the interface. Tag an *arr item `janitorr_keep`
 # (or favorite it in Jellyfin) to protect it forever.
 #
+# Books need no exclusion here, and that is structural rather than
+# configured: janitorr's only clients are Sonarr, Radarr, Jellyfin and
+# Seerr — none of which knows /s2/books exists — and the single media
+# bind below is /s2/tv, so the books dataset is not in its mount
+# namespace at all. Its free-space tiers watch /data, which IS /s2/tv.
+# Adding an exclusion rule would be a comment pretending to be a
+# control; keeping the mount narrow is the actual guarantee.
+#
 # Image user is 1002:1001 (CNB buildpacks) -> host 101001:101000; only
 # /logs needs to be writable.
 
