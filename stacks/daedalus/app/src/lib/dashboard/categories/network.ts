@@ -1705,6 +1705,15 @@ type MailDomain = {
   /** Selector count — three for Proton, one for SimpleLogin. */
   dkim: number
   dmarc: { policy: string | null } | null
+  /**
+   * The records the four readings above were derived FROM.
+   *
+   * Carried so the summary can be checked rather than trusted. A posture is an
+   * interpretation, and an interpretation that hides its inputs is where a
+   * page starts claiming DKIM is fine because it counted a record that turned
+   * out to be something else.
+   */
+  records: ZoneRecord[]
 }
 
 /** The registration itself, from the registry's RDAP service. */
@@ -1739,6 +1748,18 @@ type ZoneData = {
   elsewhere: ZoneRecord[]
   leftovers: ZoneRecord[]
   mail: MailDomain[]
+  /**
+   * Records that landed in none of the groups above.
+   *
+   * Always rendered when non-empty, and the reason it exists is that the four
+   * groups are RULES — "has an MX", "is an _acme-challenge", "points at the
+   * tunnel" — and a rule set that does not cover the zone should say so
+   * instead of quietly showing 34 of 37 records. Empty today; a record type
+   * nobody here has used yet lands in it rather than nowhere.
+   */
+  unclassified: ZoneRecord[]
+  /** Group totals plus the zone's own count, so the arithmetic is on the page. */
+  tally: { total: number | null; house: number; mail: number; elsewhere: number; leftovers: number; unclassified: number }
   changed: ZoneRecord[]
   /** Published names with no record in the zone at all — LAN-only. */
   lanOnly: number
@@ -2107,7 +2128,22 @@ async function loadZone(): Promise<ZoneData> {
     .sort((a, b) => a.short.localeCompare(b.short))
 
   const mailNames = new Set(mailDomains(records))
+  const mail = [...mailNames].sort().map((d) => mailPosture(d, records))
   const rest = records.filter((r) => !tunnel.has(r.fqdn) && !wan.has(r.fqdn) && !isMail(r, mailNames))
+  const elsewhere = rest.filter((r) => !isDebris(r, records)).sort(byShort)
+  const leftovers = rest.filter((r) => isDebris(r, records)).sort(byShort)
+
+  // What the groups claimed, so whatever is left can be SHOWN rather than
+  // lost. Identity is the whole triple: one name holds several records of one
+  // type — the apex carries four TXTs — so keying on `fqdn` would let three of
+  // them vanish into a set of one. The house group is not in here because its
+  // records are the tunnel and WAN ones, already excluded below.
+  const claimed = new Set(
+    [...mail.flatMap((m) => m.records), ...elsewhere, ...leftovers].map(recordKey),
+  )
+  const unclassified = records.filter(
+    (r) => !tunnel.has(r.fqdn) && !wan.has(r.fqdn) && !claimed.has(recordKey(r)),
+  )
 
   return {
     domain,
@@ -2120,9 +2156,18 @@ async function loadZone(): Promise<ZoneData> {
       records: raw === null ? null : raw.length,
     },
     names,
-    elsewhere: rest.filter((r) => !isDebris(r, records)).sort((a, b) => a.short.localeCompare(b.short)),
-    leftovers: rest.filter((r) => isDebris(r, records)).sort((a, b) => a.short.localeCompare(b.short)),
-    mail: [...mailNames].sort().map((d) => mailPosture(d, records)),
+    elsewhere,
+    leftovers,
+    mail,
+    unclassified,
+    tally: {
+      total: raw === null ? null : raw.length,
+      house: names.length,
+      mail: mail.reduce((n, m) => n + m.records.length, 0),
+      elsewhere: elsewhere.length,
+      leftovers: leftovers.length,
+      unclassified: unclassified.length,
+    },
     changed: [...records]
       .filter((r) => r.changedAgo !== null)
       .sort((a, b) => (a.changedAgo ?? 0) - (b.changedAgo ?? 0))
@@ -2192,6 +2237,11 @@ async function servedHosts(): Promise<Set<string> | null> {
   return hosts
 }
 
+/** A record's identity. Name alone is not one — the apex holds four TXTs. */
+const recordKey = (r: ZoneRecord): string => `${r.fqdn}|${r.type}|${r.content}`
+
+const byShort = (a: ZoneRecord, b: ZoneRecord): number => a.short.localeCompare(b.short)
+
 const age = (iso: string | undefined): number | null => {
   if (iso === undefined) return null
   const t = Date.parse(iso)
@@ -2244,6 +2294,9 @@ function isDebris(r: ZoneRecord, all: ZoneRecord[]): boolean {
   return all.filter((o) => o.fqdn === r.fqdn && o.type === r.type && o.content === r.content).length > 1
 }
 
+/** MX before the TXTs that qualify it, CNAME (the DKIM selectors) last. */
+const MAIL_ORDER = ['MX', 'TXT', 'CNAME']
+
 /** Names with an MX record — the apex and any subdomain given its own mail. */
 function mailDomains(records: ZoneRecord[]): string[] {
   return [...new Set(records.filter((r) => r.type === 'MX').map((r) => r.fqdn))]
@@ -2276,7 +2329,16 @@ function mailPosture(domain: string, records: ZoneRecord[]): MailDomain {
   const spf = at(domain, 'TXT').find((r) => r.content.startsWith('v=spf1'))
   const dmarc = at(`_dmarc.${domain}`, 'TXT').find((r) => r.content.startsWith('v=DMARC1'))
 
+  // Every record this domain's posture was read from, in the order the four
+  // readings above use them: who receives, who may send, what signs, what a
+  // receiver should do. The same set `isMail` claims, so the two cannot
+  // disagree about which records belong to mail.
+  const mine = records
+    .filter((r) => isMail(r, new Set([domain])))
+    .sort((a, b) => MAIL_ORDER.indexOf(a.type) - MAIL_ORDER.indexOf(b.type) || byShort(a, b))
+
   return {
+    records: mine,
     domain,
     mx: at(domain, 'MX').map((r) => r.content).sort(),
     spf:
