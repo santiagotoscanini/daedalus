@@ -842,7 +842,24 @@ type IdpClient = {
    * a row you are already looking at, and paying a page load to answer it
    * elsewhere is worse than carrying eight rows that are already in memory.
    */
-  opens: { id: string; ago: string; username: string; device: string; first: boolean }[]
+  opens: {
+    id: string
+    ago: string
+    username: string
+    device: string
+    /**
+     * A consent record was CREATED here, rather than an existing one reused.
+     *
+     * Not "the first time somebody used this app", which is how it was
+     * labelled and is wrong — the event recurs, and an access older than it
+     * sitting below it in the list is what gives that away. Pocket ID drops
+     * the stored authorization whenever the client is rewritten, and
+     * `pocket-id-clients.service` rewrites every client on every rebuild (a
+     * full PUT of the body, plus a write of the secret, both unconditional).
+     * So this marks where a rebuild made everyone consent again.
+     */
+    consent: boolean
+  }[]
 }
 
 type IdpUser = {
@@ -887,7 +904,13 @@ type IdpData = {
     days: number
     signIns: number
     authorizations: number
-    firstTime: number
+    /**
+     * Consent records created. NOT first-ever uses — see `opens[].consent`.
+     * On this box it is mostly the convergence job invalidating consent on
+     * a rebuild, which is why it is a two-figure number for thirty clients
+     * nobody newly adopted.
+     */
+    consents: number
     /** People, so not the static-API-key principal. */
     people: number
   }
@@ -1246,7 +1269,7 @@ async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise
         ago: since((Date.now() - e.at) / 1000),
         username: e.username ?? '?',
         device: (e.device ?? '').trim() || 'unknown device',
-        first: e.event === 'NEW_CLIENT_AUTHORIZATION',
+        consent: e.event === 'NEW_CLIENT_AUTHORIZATION',
       })
     }
     used.set(name, { n: hit.n + 1, last: Math.max(hit.last, e.at), opens: hit.opens })
@@ -1360,7 +1383,7 @@ async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise
       days: DAYS,
       signIns: recent.filter((e) => SIGNED_IN.has(e.event ?? '')).length,
       authorizations: recent.filter((e) => AUTHORIZED.has(e.event ?? '')).length,
-      firstTime: recent.filter((e) => e.event === 'NEW_CLIENT_AUTHORIZATION').length,
+      consents: recent.filter((e) => e.event === 'NEW_CLIENT_AUTHORIZATION').length,
       people: people.length,
     },
     signups: (config ?? []).find((c) => c.key === 'allowUserSignups')?.value ?? null,

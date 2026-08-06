@@ -1563,7 +1563,7 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
             items={[
               { k: 'passkey sign-ins', v: num(w.signIns) },
               { k: 'apps opened', v: num(w.authorizations) },
-              { k: 'first time', v: num(w.firstTime) },
+              { k: 're-consents', v: num(w.consents) },
               { k: 'people', v: num(w.people) },
             ]}
           />
@@ -1617,7 +1617,9 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
             each was last used rather than by volume, so a registration nobody has opened sinks to
             the bottom — {num(idle)} of them are down there, which for a proxy-gated app means
             nobody visited it rather than that the registration is dead. Open a row for who went in
-            and from what; the full log is in Pocket ID.
+            and from what; the full log is in Pocket ID. A <b>re-consent</b> is not a first use:
+            rewriting a client drops its stored consent, and the convergence job rewrites every one
+            of them on every rebuild, so these mark where a rebuild made everybody agree again.
             {d.truncated && ' The window is longer than the pages read, so these are a lower bound.'}
           </p>
         </Board>
@@ -1791,7 +1793,15 @@ function AppRow({ c, max }: { c: Gateway['idp']['clients'][number]; max: number 
           : <ul className="itemlist">
               {c.opens.map((o) => (
                 <li key={o.id}>
-                  {o.first && <Chip tone="info">first time</Chip>}
+                  {/* Not "first time": the event recurs, and an access older
+                      than it sitting below it is what gave that away. */}
+                  {o.consent && (
+                    <Chip tone="info">
+                      <span title="A consent record was created here rather than reused — Pocket ID drops the stored one whenever the client is rewritten, which every rebuild does">
+                        re-consented
+                      </span>
+                    </Chip>
+                  )}
                   <span className="item-main">{o.username}</span>
                   <span className="item-side">{o.device}</span>
                   <span className="item-side">{o.ago}</span>
