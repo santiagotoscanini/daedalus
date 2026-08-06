@@ -114,7 +114,6 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           title={current ? 'Release notes' : `${String(behind)} to apply`}
           icon="≡"
           span={6}
-          fill
           aside={<span className="board-note">wiki.factorio.com</span>}
         >
           {/* The chain lives here rather than in a panel of its own: when
@@ -138,7 +137,6 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           title="From the devs"
           icon="◫"
           span={6}
-          fill
           aside={<span className="board-note">factorio.com/blog</span>}
         >
           {news.length === 0 ?

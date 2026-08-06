@@ -2207,11 +2207,26 @@ h2 {
 
 /* ── boards ─────────────────────────────────────────────────────────────── */
 
+/* Boards in the same row share a bottom edge. `stretch` is the grid default
+   and it is left alone deliberately.
+
+   This used to be `align-items: start` with a per-board `fill` opt-in, and
+   that shape cannot work: which sibling is taller depends on live data, on
+   the viewport width that decides how a list wraps, and on whether a reader
+   has opened a <details>. Every `fill` was a guess about a value that changes
+   after the guess, so a row was either torn along the bottom or had its
+   caption stranded — and the fix for one produced the other. Thirty-two of
+   those guesses had accumulated.
+
+   Stretching instead makes the surplus a property of the LAYOUT: it collects
+   under the content, inside the border, as room in a panel. The cost is that
+   pairing a four-line board with a nine-hundred-pixel one now shows that
+   mismatch honestly — which is a signal to give the tall one its own row, and
+   the reason the changelog and logs boards are always span 12. */
 .board-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   gap: 0.8rem;
-  align-items: start;
 }
 
 .board {
@@ -2221,24 +2236,14 @@ h2 {
   background: var(--panel);
   min-width: 0;
   overflow: hidden;
-}
-
-/* Opted in by `<Board fill>` — see the note there. The board grows to the row
-   height so the pair shares one bottom edge, and the content stays where it
-   was: the extra room collects UNDER the caption, inside the border, as space
-   in a panel rather than a hole between panels.
-
-   Deliberately no `margin-top: auto` on the caption. Pinning it to the floor
-   put a two-row list at the top of a tall box and its explanation at the
-   bottom, with nothing in between — which read as a rendering fault. */
-.board-fill {
-  align-self: stretch;
+  /* Column flex so the body, not the header, absorbs the stretch. */
   display: flex;
   flex-direction: column;
 }
-.board-fill .board-body {
+.board-body {
   flex: 1;
 }
+
 
 /* Boards are laid out on a 12-column grid at desktop width, collapse to two
    half-widths on a laptop, and stack completely on a phone. The spans are

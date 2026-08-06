@@ -136,7 +136,6 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
           title="Internet link"
           icon="⇅"
           span={8}
-          fill
           aside={<span className="board-note">7 days, hourly test</span>}
         >
           <h4 className="board-sub">Download, Mbps</h4>
@@ -155,7 +154,6 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
           title="Cloudflare tunnel"
           icon="⇥"
           span={4}
-          fill
           aside={
             <Chip tone={tunnel.status === 'healthy' ? 'ok' : 'bad'}>{tunnel.status ?? 'unknown'}</Chip>
           }
@@ -203,7 +201,7 @@ function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> 
             table those numbers are about, which is where they answer something.
             Repeating them here would be the same figures a click apart. */}
 
-        <Board title="DNS" icon="◎" span={6} fill>
+        <Board title="DNS" icon="◎" span={6}>
           <div className="library-split">
             <Ring
               pct={dns.blockedPct}
@@ -739,7 +737,6 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
           title="Peers"
           icon="⚿"
           span={8}
-          fill
           aside={
             <span className="board-live">
               <Pulse on={live} tone="ok" />
@@ -801,7 +798,6 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
           title="Anyone home"
           icon="◷"
           span={4}
-          fill
           aside={<span className="board-note">peak per day, 14d</span>}
         >
           <Columns
@@ -1002,12 +998,6 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           title="Staying up"
           icon="⛨"
           span={8}
-          // Both halves of a pair fill, not just the shorter one. `fill` is
-          // align-self:stretch, so whichever of the two turns out to be taller
-          // sets the row height and the other grows into it — and which one
-          // that is depends on data (ten tenants here, two on the other
-          // tunnel), so it cannot be decided at write time.
-          fill
           aside={
             <span className="board-live">
               <Pulse on={t.up === true} tone={t.up === true ? 'ok' : 'bad'} />
@@ -1066,7 +1056,6 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           title="What rides it"
           icon="◫"
           span={4}
-          fill
           aside={<span className="board-note">{t.tenants.length} containers</span>}
         >
           <ul className="itemlist">
@@ -1331,7 +1320,6 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
           title="Traffic"
           icon="◇"
           span={9}
-          fill
           aside={
             <span className="board-live">
               <Pulse on={busy} tone="accent" />
@@ -1390,7 +1378,6 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
           title="Certificates"
           icon="⌸"
           span={3}
-          fill
           aside={<span className="board-note">the store</span>}
         >
           <ul className="certs">
@@ -1454,10 +1441,6 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
           title="Where it goes"
           icon="⌗"
           span={3}
-          // Deliberately not `fill`. Its caption now lives inside the fold, so
-          // there is nothing to pin to the bottom — stretching it beside a tall
-          // changelog would just move the hole from the page into the panel,
-          // which is the shape being fixed here.
           aside={<span className="board-note">req/min, 1h</span>}
         >
           <BarList
@@ -1565,7 +1548,6 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
           title="Signing in"
           icon="⚿"
           span={6}
-          fill
           aside={
             <span className="board-note">
               {w.days} days · {d.clients.length} applications registered
@@ -1636,7 +1618,7 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
 
         <Changelog gap={d.gap} span={6} />
 
-        <Board title="Who" icon="◑" span={3} fill>
+        <Board title="Who" icon="◑" span={3}>
           <ul className="itemlist">
             {d.users.map((u) => (
               <li key={u.username} title={u.groups.join(', ')}>
@@ -1704,7 +1686,7 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
           </p>
         </Board>
 
-        <Board title="Logs" icon="≡" span={9} fill>
+        <Board title="Logs" icon="≡" span={9}>
           <GrafanaLogs source={{ container: 'pocket-id' }} title="Pocket ID logs" />
           {/* The two units that WRITE the client list above. Neither is a
               container and neither has anywhere else on this dashboard to be
@@ -1759,8 +1741,7 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
  *
  * Seventeen distinct codes in a day is normal for a proxy in front of forty
  * services, and as a bar list it was three times the height of the panel
- * beside it — which is where the hole under the traffic chart came from, since
- * the grid stretches a `fill`ed pair to the taller one.
+ * beside it, which is where the hole under the traffic chart came from.
  *
  * The summary is not a teaser for the list, it is the answer: the question
  * anybody brings to a status-code panel is "is anything broken", and that is
@@ -2035,7 +2016,6 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
           title="Holding the tunnel"
           icon="⇥"
           span={8}
-          fill
           aside={
             <span className="board-live">
               <Pulse on={healthy} tone={healthy ? 'ok' : 'bad'} />
@@ -2089,7 +2069,6 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
           title="Published to the world"
           icon="◍"
           span={4}
-          fill
           aside={<span className="board-note">{t.published.length} hostnames</span>}
         >
           {t.published.length === 0 ?
@@ -2170,7 +2149,6 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           title="Is the name right"
           icon="◎"
           span={8}
-          fill
           aside={
             <span className="board-live">
               <Pulse on={match} tone={known && !match ? 'bad' : 'ok'} />
@@ -2233,7 +2211,6 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           title="What needs it"
           icon="⇥"
           span={4}
-          fill
           aside={<span className="board-note">router-forwarded</span>}
         >
           {d.needs.length === 0 ?
@@ -2261,7 +2238,6 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           title="The address, over time"
           icon="◷"
           span={6}
-          fill
           aside={<Countdown at={d.nextRunAt} />}
         >
           {d.history.length === 0 ?
@@ -2480,7 +2456,6 @@ function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] 
           title="The names we declare"
           icon="⌂"
           span={8}
-          fill
           aside={
             <span className="board-note">
               {lan.length} entries · {lan.filter((n) => n.public).length} also public
@@ -2556,7 +2531,6 @@ function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] 
           title="Traffic"
           icon="⌁"
           span={8}
-          fill
           aside={<span className="board-note">an hour per column</span>}
         >
           <Columns
@@ -2650,7 +2624,6 @@ function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] 
           title="Addresses we hand out"
           icon="⊞"
           span={8}
-          fill
           aside={
             <span className="board-note">
               {d.dhcp.active ? `${d.dhcp.start} – ${d.dhcp.end}` : 'DHCP is off'}
@@ -2891,7 +2864,6 @@ function ZoneView({ d }: { d: Domains['zone'] }) {
           title="The registration"
           icon="◷"
           span={4}
-          fill
           aside={<span className="board-note">rdap</span>}
         >
           <Facts
@@ -2948,7 +2920,6 @@ function ZoneView({ d }: { d: Domains['zone'] }) {
           title="Mail"
           icon="✉"
           span={6}
-          fill
           aside={<span className="board-note">{d.mail.length} domains</span>}
         >
           {d.mail.length === 0 ?

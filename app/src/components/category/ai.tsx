@@ -125,7 +125,6 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
           title="Models"
           icon="▤"
           span={6}
-          fill
           aside={
             <span className="board-note">
               {installed} · {num(data.catalog.sizeGb, 1)} GB
@@ -569,9 +568,6 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
           title="Traffic"
           icon="◇"
           span={8}
-          // Both halves of a pair fill: which one is taller depends on data
-          // (how many callers, how many workflows), so it cannot be decided here.
-          fill
           aside={
             <span className="board-live">
               <Pulse on={busy} tone="accent" />
@@ -640,7 +636,6 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
           title="Tools models called"
           icon="⌗"
           span={4}
-          fill
           aside={
             <span className="board-note">
               {data.mcpServers.length === 0 ?
@@ -684,16 +679,13 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
 
             It also opens the second row rather than sharing the first, and that
             is a layout decision rather than an editorial one: it runs to about
-            twice the height of the traffic panel, and the grid is
-            align-items:start, so pairing the two left a screen-height hole
-            under the shorter one. Boards here are paired by height — the two
-            tall ones together, the two short ones together — because a `fill`
-            can stretch a box but cannot invent content to put in it. */}
+            twice the height of the traffic panel, so the two are paired with
+            boards of their own size — stretching makes a row share one bottom
+            edge, but it cannot invent content to fill the taller one with. */}
         <Board
           title="Who is calling"
           icon="◑"
           span={6}
-          fill
           aside={<span className="board-note">requests, {total.days}d</span>}
         >
           {data.callers.length === 0 ?
@@ -873,7 +865,6 @@ function NeighbourPair({ n }: { n: NeighbourData }) {
         title={`${n.label} logs`}
         icon="≡"
         span={6}
-        fill
         aside={<span className="board-note">{n.role}</span>}
       >
         <GrafanaLogs source={{ container: n.container }} title={`${n.label} logs`} />
@@ -1069,7 +1060,6 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
           title="What the chat can reach"
           icon="▤"
           span={6}
-          fill
           aside={
             <span className="board-live">
               <Pulse on={busy} tone="accent" />
@@ -1201,7 +1191,6 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           title="Runs"
           icon="⟳"
           span={8}
-          fill
           aside={
             <span className="board-live">
               <Pulse on={total.running > 0} tone="accent" />
@@ -1269,7 +1258,6 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           title="Workflows"
           icon="◫"
           span={4}
-          fill
           aside={<span className="board-note">runs, {total.days}d</span>}
         >
           {flows.length === 0 ?
