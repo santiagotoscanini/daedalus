@@ -205,58 +205,89 @@ type OutboundData = {
   note: string | null
 }
 
+/**
+ * The house network — a different subject from every tab beside it, which are
+ * each one piece of software. This one is the wire.
+ *
+ * It keeps apart two readings of "the connection" that get used
+ * interchangeably and are not the same measurement. The NIC counters say what
+ * crossed the cable: a film streamed from Jellyfin to the TV is most of a
+ * gigabyte of that and never touches the internet. The hourly speed test says
+ * what the ISP line can carry. One is usage and the other is capacity, and
+ * neither bounds the other — the wire routinely carries more than the line
+ * could, because most of it never leaves the house.
+ */
 type GeneralData = {
-  wan: {
-    ping: number | null
+  /** Everything crossing the network cable, internal traffic included. */
+  wire: {
+    inMbps: number | null
+    outMbps: number | null
+    /** 24 hours at 5-minute resolution. */
+    inHistory: number[]
+    outHistory: number[]
+    inDay: number | null
+    outDay: number | null
+    /** What the NIC negotiated with the switch, in Mbps. */
+    linkMbps: number | null
+  }
+  /** The ISP line, as the hourly speed test last found it. */
+  line: {
     down: number | null
     up: number | null
-    /** 7 days of the hourly test, for the two trend lines. */
+    ping: number | null
+    /** 7 days of the hourly test. */
     downHistory: number[]
     upHistory: number[]
     pingHistory: number[]
   }
   /**
-   * The headline only — one rate and one count.
+   * The uplink, one hop at a time.
    *
-   * The breakdown that used to be here (top services, response codes, open
-   * connections) lives on the Gateway tab now, beside the routing table those
-   * numbers are about. This page is the map; that one is the proxy.
+   * Two probes rather than one because together they localise a fault that
+   * either alone only reports: gateway up with the internet down is the ISP,
+   * both down is this box's own link.
    */
+  hops: Hop[]
+  router: {
+    gateway: string
+    lan: string
+    /** This house's public address — see the note on the fetch. */
+    wan: string | null
+    url: string
+  }
   proxy: { rpm: number | null; routers: number | null; spark: number[] }
+  /** Bytes per container over 24h, biggest mover first. */
+  services: { name: string; in: number; out: number }[]
   dns: {
     queries: number | null
-    blocked: number | null
-    blockedPct: number | null
-    gravity: number | null
-    topBlocked: { label: string; value: number }[]
-    topClients: { label: string; value: number }[]
+    /** Queries whose client was 127.0.0.1 — every container on the box. */
+    fromBox: number | null
+    topDomains: { label: string; value: number }[]
   }
-  tunnel: {
-    status: string | null
-    connections: number | null
-    /** This house's WAN address, as Cloudflare's edge sees it arriving. */
-    originIp: string | null
-    /** Cloudflare's own name for the version cloudflared is running. */
-    clientVersion: string | null
-    /** Edge datacentres the four tunnel connections landed in. */
-    edges: { colo: string; count: number }[]
-    /** How long the oldest connection has been up — a proxy for last reconnect. */
-    heldForSeconds: number | null
-    requestsPerHour: number | null
-  }
-  wireguard: {
-    connected: number | null
-    enabled: number | null
-    total: number | null
-    peers: { name: string; handshakeAgo: number | null; rx: number | null; tx: number | null }[]
-  }
-  vpn: {
-    up: boolean | null
-    ip: string | null
-    country: string | null
-    city: string | null
-    port: number | null
-  }
+  devices: Device[]
+}
+
+type Hop = {
+  id: string
+  label: string
+  up: boolean | null
+  rttMs: number | null
+  history: number[]
+}
+
+type Device = {
+  name: string | null
+  ip: string
+  mac: string
+  iface: string
+  queries: number
+  /**
+   * Ages in seconds, resolved here rather than timestamps resolved in the
+   * browser: the page is streamed, so a clock read on the client would differ
+   * from the one the server rendered and hydration would fault.
+   */
+  lastSeenAgo: number
+  knownForDays: number
 }
 
 export async function loadNetwork(
@@ -273,97 +304,253 @@ export async function loadNetwork(
     case 'domains':
       return { tab: 'domains', ...(await loadDomains(ctx)) }
     default:
-      return { tab: 'general', ...(await loadGeneral(ctx)) }
+      return { tab: 'general', ...(await loadGeneral()) }
   }
 }
 
 /** How far back the two VPN tabs chart. A column per day, same as the AI tabs. */
 const DAYS = 14
 
-async function loadGeneral(ctx: {
-  base: (app: string) => string
-  hc: string
-}): Promise<GeneralData> {
-  const [
-    speed,
-    speedHistory,
-    rpm,
-    overview,
-    rpmSpark,
-    pihole,
-    tunnel,
-    wg,
-    peers,
-    vpnIp,
-    vpnPort,
-    vpnUp,
-    tunnelRph,
-  ] = await Promise.all([
-    promScalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
-    // MySpeed tests hourly, so an hourly step is the native resolution — a
-    // finer one would just carry each sample forward and draw stairs.
-    Promise.all([
-      promSeries('myspeed_download', 7 * 24 * 60, 3600),
-      promSeries('myspeed_upload', 7 * 24 * 60, 3600),
-      promSeries('myspeed_ping', 7 * 24 * 60, 3600),
-    ]),
-    promScalar('sum(rate(traefik_service_requests_total[10m])) * 60'),
-    // One number wanted out of it — the router count under the headline — and
-    // it is a call to a container on the next bridge over, so it costs less
-    // than the prometheus query that would half-answer it.
-    getJson<{ http?: { routers?: { total?: number } } }>('http://traefik:8080/api/overview'),
-    promSeries('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
-    loadPihole(ctx.base('pihole')),
-    // Cloudflare's own view of the tunnel, which is the only place the origin
-    // address appears: cloudflared never learns the WAN IP it is dialling out
-    // from, and neither does anything else on this box behind NAT. The edge
-    // records the address the connection arrived from, so this is a free
-    // answer to "what is our public IP" — from outside, which is the only
-    // vantage point that can answer it truthfully.
-    getJson<{ result?: CfTunnel }>(
-      `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
-        process.env.CF_TUNNEL_ID ?? ''
-      }`,
-      { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
-    ),
-    promScalars({
-      connected: 'wireguard_connected_peers',
-      enabled: 'wireguard_enabled_peers',
-      total: 'wireguard_configured_peers',
-    }),
-    loadPeers(),
-    getJson<{ public_ip?: string; country?: string; city?: string }>(
-      `${ctx.hc}:8000/v1/publicip/ip`,
-    ),
-    getJson<{ port?: number }>(`${ctx.hc}:8000/v1/portforward`),
-    promScalar('gluetun_vpn_status'),
-    // Per HOUR over six, not per minute over ten: off-LAN traffic to this box
-    // is a couple of dozen requests a day, and a per-minute rate of that is
-    // indistinguishable from a tunnel carrying nothing at all.
-    promScalar('sum(rate(cloudflared_tunnel_total_requests[6h])) * 3600'),
-  ])
+/** Everything the box has that is not the loopback — in practice, enp3s0. */
+const NIC = 'node_network_%s_bytes_total{device!="lo"}'
+const nic = (dir: 'receive' | 'transmit') => NIC.replace('%s', dir)
+
+async function loadGeneral(): Promise<GeneralData> {
+  const [speed, speedHistory, wire, wireHistory, hops, rpm, overview, rpmSpark, pihole, services, devices, tunnel] =
+    await Promise.all([
+      promScalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
+      // MySpeed tests hourly, so an hourly step is the native resolution — a
+      // finer one would just carry each sample forward and draw stairs.
+      Promise.all([
+        promSeries('myspeed_download', 7 * 24 * 60, 3600),
+        promSeries('myspeed_upload', 7 * 24 * 60, 3600),
+        promSeries('myspeed_ping', 7 * 24 * 60, 3600),
+      ]),
+      promScalars({
+        // Bits, because a link is sold and negotiated in bits and the speed
+        // test reports bits — the whole board would otherwise print two
+        // numbers eight times apart in the same unit column.
+        inMbps: `sum(rate(${nic('receive')}[5m])) * 8 / 1e6`,
+        outMbps: `sum(rate(${nic('transmit')}[5m])) * 8 / 1e6`,
+        inDay: `sum(increase(${nic('receive')}[24h]))`,
+        outDay: `sum(increase(${nic('transmit')}[24h]))`,
+        linkMbps: 'max(node_network_speed_bytes{device!="lo"}) * 8 / 1e6',
+      }),
+      Promise.all([
+        promSeries(`sum(rate(${nic('receive')}[5m])) * 8 / 1e6`, 24 * 60, 300),
+        promSeries(`sum(rate(${nic('transmit')}[5m])) * 8 / 1e6`, 24 * 60, 300),
+      ]),
+      loadHops(),
+      promScalar('sum(rate(traefik_service_requests_total[10m])) * 60'),
+      // One number wanted out of it — the router count under the headline —
+      // and it is a call to a container on the next bridge over, so it costs
+      // less than the prometheus query that would half-answer it.
+      getJson<{ http?: { routers?: { total?: number } } }>('http://traefik:8080/api/overview'),
+      promSeries('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
+      loadAsked(),
+      loadServiceTraffic(),
+      loadDevices(),
+      // Cloudflare's own view of the tunnel, for exactly one field. cloudflared
+      // never learns the WAN address it is dialling out from, and neither does
+      // anything else on this box behind NAT — the edge records the address the
+      // connection arrived from, so this is the only vantage point on the box
+      // that can answer "what is our public IP" truthfully.
+      getJson<{ result?: CfTunnel }>(
+        `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
+          process.env.CF_TUNNEL_ID ?? ''
+        }`,
+        { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
+      ),
+    ])
 
   return {
-    wan: {
-      ping: speed.ping,
+    wire: {
+      inMbps: wire.inMbps,
+      outMbps: wire.outMbps,
+      inHistory: wireHistory[0] ?? [],
+      outHistory: wireHistory[1] ?? [],
+      inDay: wire.inDay,
+      outDay: wire.outDay,
+      linkMbps: wire.linkMbps,
+    },
+    line: {
       down: speed.down,
       up: speed.up,
+      ping: speed.ping,
       downHistory: speedHistory[0] ?? [],
       upHistory: speedHistory[1] ?? [],
       pingHistory: speedHistory[2] ?? [],
     },
-    proxy: { rpm, routers: overview?.http?.routers?.total ?? null, spark: rpmSpark },
-    dns: pihole,
-    tunnel: summariseTunnel(tunnel?.result, tunnelRph),
-    wireguard: { connected: wg.connected, enabled: wg.enabled, total: wg.total, peers },
-    vpn: {
-      up: vpnUp === null ? null : vpnUp === 1,
-      ip: vpnIp?.public_ip ?? null,
-      country: vpnIp?.country ?? null,
-      city: vpnIp?.city ?? null,
-      port: vpnPort?.port ?? null,
+    hops,
+    router: {
+      gateway: process.env.GATEWAY_IP ?? DASH_IP,
+      lan: LAN_IP,
+      wan: tunnel?.result?.connections?.[0]?.origin_ip ?? null,
+      url: process.env.ROUTER_URL ?? '',
     },
+    proxy: { rpm, routers: overview?.http?.routers?.total ?? null, spark: rpmSpark },
+    services,
+    dns: pihole,
+    devices,
   }
+}
+
+/** Printed when nix did not bind an address, which would be a config fault. */
+const DASH_IP = '—'
+
+const HOPS = [
+  { id: 'gateway', label: 'The router' },
+  { id: 'internet', label: 'Past it' },
+]
+
+async function loadHops(): Promise<Hop[]> {
+  const [up, rtt, history] = await Promise.all([
+    promVector('network_hop_up'),
+    promVector('network_hop_rtt_seconds * 1000'),
+    Promise.all(
+      HOPS.map((h) =>
+        promSeries(`network_hop_rtt_seconds{hop="${h.id}"} * 1000`, 6 * 60, 300),
+      ),
+    ),
+  ])
+
+  const at = (v: typeof up, id: string) => v.find((r) => r.metric.hop === id)
+  return HOPS.map((h, i) => {
+    const u = at(up, h.id)
+    return {
+      ...h,
+      up: u === undefined ? null : Number(u.value[1]) === 1,
+      // Absent rather than zero when the probe timed out — the exporter emits
+      // no rtt at all in that case, so there is nothing to mistake for "fast".
+      rttMs: Number(at(rtt, h.id)?.value[1] ?? NaN) || null,
+      history: history[i] ?? [],
+    }
+  })
+}
+
+/**
+ * Bytes per container over a day.
+ *
+ * Only containers with a network namespace of their own appear, which is the
+ * exporter's doing rather than a filter here: one sharing gluetun's namespace
+ * has no traffic separable from the other nine, and one on the host's would
+ * report the whole box. gluetun stands in for the download stack, and its
+ * figure is the encrypted traffic that crossed the wire.
+ */
+async function loadServiceTraffic(): Promise<GeneralData['services']> {
+  const [inBytes, outBytes] = await Promise.all([
+    promVector('sum by (name) (increase(container_network_receive_bytes_total[24h]))'),
+    promVector('sum by (name) (increase(container_network_transmit_bytes_total[24h]))'),
+  ])
+
+  const rows = new Map<string, { name: string; in: number; out: number }>()
+  const add = (v: typeof inBytes, dir: 'in' | 'out') => {
+    for (const r of v) {
+      const name = r.metric.name
+      if (name === undefined) continue
+      const row = rows.get(name) ?? { name, in: 0, out: 0 }
+      row[dir] = Math.max(0, Number(r.value[1]))
+      rows.set(name, row)
+    }
+  }
+  add(inBytes, 'in')
+  add(outBytes, 'out')
+
+  return [...rows.values()].filter((r) => r.in + r.out > 0).sort((a, b) => b.in + b.out - (a.in + a.out))
+}
+
+/**
+ * Pi-hole off the bridge rather than on its public hostname.
+ *
+ * Both reads below carry identities — which names the house looked up, which
+ * devices are on it, what their MAC addresses are. On the public hostname they
+ * would have to be added to the unauthenticated bypass that lets this app read
+ * the aggregate counts, which would put the whole list one unauthenticated GET
+ * away from anything on the LAN. Dialled directly there is nothing to widen.
+ */
+const PIHOLE = () => process.env.PIHOLE_URL ?? 'http://host.containers.internal:8080'
+
+/** What the house looked up, and how much of it came from this box. */
+async function loadAsked(): Promise<GeneralData['dns']> {
+  const base = PIHOLE()
+  const sid = await piholeSid(base)
+  const h = sid === null ? {} : { headers: { sid } }
+
+  const [domains, clients] = await Promise.all([
+    getJson<{ domains?: { domain?: string; count?: number }[]; total_queries?: number }>(
+      `${base}/api/stats/top_domains?count=12`,
+      h,
+    ),
+    getJson<{ clients?: { ip?: string; count?: number }[] }>(
+      `${base}/api/stats/top_clients?count=20`,
+      h,
+    ),
+  ])
+
+  return {
+    queries: domains?.total_queries ?? null,
+    // Every container resolves through the host's stub, so pi-hole sees one
+    // client for all of them. That number is the reason this panel cannot be
+    // broken down per service, and printing it is more useful than pretending
+    // the limitation is not there.
+    fromBox: (clients?.clients ?? []).find((c) => c.ip === '127.0.0.1')?.count ?? null,
+    topDomains: (domains?.domains ?? []).map((d) => ({
+      label: d.domain ?? '?',
+      value: d.count ?? 0,
+    })),
+  }
+}
+
+type FtlDevice = {
+  hwaddr?: string
+  interface?: string
+  firstSeen?: number
+  lastQuery?: number
+  numQueries?: number
+  ips?: { ip?: string; name?: string | null; lastSeen?: number }[]
+}
+
+/**
+ * Every device pi-hole has ever seen on the LAN.
+ *
+ * The nearest thing this house has to the router's own client list, and it
+ * arrives by a different route: the router serves no API, but everything on
+ * the network resolves through this box, so FTL's network table has a row for
+ * anything that ever asked for a name. A device with a static address and no
+ * DHCP lease is in here too, which is why this is not the lease list.
+ *
+ * The loopback row is dropped: it is this box talking to itself, it is the
+ * single busiest "device" by two orders of magnitude, and leaving it in makes
+ * every real device's share round to zero.
+ */
+async function loadDevices(): Promise<Device[]> {
+  const base = PIHOLE()
+  const sid = await piholeSid(base)
+  const body = await getJson<{ devices?: FtlDevice[] }>(
+    `${base}/api/network/devices?max_devices=200&max_addresses=4`,
+    sid === null ? {} : { headers: { sid } },
+  )
+
+  const now = Date.now() / 1000
+  return (body?.devices ?? [])
+    .filter((d) => d.interface !== 'lo')
+    .map((d) => {
+      // One row per device, not per address: a phone that held three leases
+      // over a year is one thing on the network. The newest address is the
+      // one it is reachable at now.
+      const ips = (d.ips ?? []).filter((a) => a.ip !== undefined && !a.ip.includes(':'))
+      const best = [...ips].sort((a, b) => (b.lastSeen ?? 0) - (a.lastSeen ?? 0))[0]
+      return {
+        name: best?.name !== undefined && best.name !== null && best.name !== '' ? best.name : null,
+        ip: best?.ip ?? '?',
+        mac: d.hwaddr ?? '?',
+        iface: d.interface ?? '?',
+        queries: d.numQueries ?? 0,
+        lastSeenAgo: now - (d.lastQuery ?? 0),
+        knownForDays: (now - (d.firstSeen ?? now)) / 86400,
+      }
+    })
+    .sort((a, b) => a.lastSeenAgo - b.lastSeenAgo)
 }
 
 type CfTunnel = {
@@ -385,7 +572,21 @@ type CfTunnel = {
  * pairing (two connections into each of two colos) is the redundancy actually
  * in place, so that gets counted per colo.
  */
-function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null): GeneralData['tunnel'] {
+type TunnelSummary = {
+  status: string | null
+  connections: number | null
+  /** This house's WAN address, as Cloudflare's edge sees it arriving. */
+  originIp: string | null
+  /** Cloudflare's own name for the version cloudflared is running. */
+  clientVersion: string | null
+  /** Edge datacentres the tunnel's connections landed in. */
+  edges: { colo: string; count: number }[]
+  /** How long the oldest connection has been up — a proxy for last reconnect. */
+  heldForSeconds: number | null
+  requestsPerHour: number | null
+}
+
+function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null): TunnelSummary {
   const conns = t?.connections ?? []
   const byColo = new Map<string, number>()
   for (const c of conns) {
@@ -408,69 +609,6 @@ function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null
     heldForSeconds: opened.length === 0 ? null : (Date.now() - Math.min(...opened)) / 1000,
     requestsPerHour,
   }
-}
-
-async function loadPihole(base: string): Promise<GeneralData['dns']> {
-  const sid = await piholeSid(base)
-  const h = sid === null ? {} : { headers: { sid } }
-
-  const [summary, blocked, clients] = await Promise.all([
-    getJson<{
-      queries?: { total?: number; blocked?: number; percent_blocked?: number }
-      gravity?: { domains_being_blocked?: number }
-    }>(`${base}/api/stats/summary`, h),
-    getJson<{ domains?: { domain?: string; count?: number }[] }>(
-      `${base}/api/stats/top_domains?blocked=true&count=6`,
-      h,
-    ),
-    getJson<{ clients?: { name?: string; ip?: string; count?: number }[] }>(
-      `${base}/api/stats/top_clients?count=6`,
-      h,
-    ),
-  ])
-
-  return {
-    queries: summary?.queries?.total ?? null,
-    blocked: summary?.queries?.blocked ?? null,
-    blockedPct: summary?.queries?.percent_blocked ?? null,
-    gravity: summary?.gravity?.domains_being_blocked ?? null,
-    topBlocked: (blocked?.domains ?? []).map((d) => ({
-      label: d.domain ?? '?',
-      value: d.count ?? 0,
-    })),
-    // The name is often absent for devices that never announced a hostname to
-    // DHCP; the address is the only identifier those have.
-    topClients: (clients?.clients ?? []).map((c) => ({
-      label: c.name !== undefined && c.name !== '' ? c.name : (c.ip ?? '?'),
-      value: c.count ?? 0,
-    })),
-  }
-}
-
-async function loadPeers(): Promise<GeneralData['wireguard']['peers']> {
-  const [handshake, rx, tx] = await Promise.all([
-    promVector('wireguard_latest_handshake_seconds'),
-    promVector('wireguard_received_bytes'),
-    promVector('wireguard_sent_bytes'),
-  ])
-
-  const by = (v: typeof rx) => new Map(v.map((r) => [r.metric.name ?? '?', Number(r.value[1])]))
-  const rxBy = by(rx)
-  const txBy = by(tx)
-
-  return handshake
-    .map((r) => {
-      const seconds = Number(r.value[1])
-      return {
-        name: r.metric.name ?? '?',
-        // The exporter reports 0 for "never", which as an age would render as
-        // "just now" — the exact opposite of what it means.
-        handshakeAgo: seconds > 0 ? seconds : null,
-        rx: rxBy.get(r.metric.name ?? '?') ?? null,
-        tx: txBy.get(r.metric.name ?? '?') ?? null,
-      }
-    })
-    .sort((a, b) => (a.handshakeAgo ?? Infinity) - (b.handshakeAgo ?? Infinity))
 }
 
 // ── WireGuard: the way in ──────────────────────────────────────────────────

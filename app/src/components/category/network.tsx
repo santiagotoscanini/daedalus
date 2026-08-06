@@ -11,7 +11,6 @@ import {
   Measures,
   Progress,
   Pulse,
-  Ring,
   StatBand,
   Trend,
 } from '../viz'
@@ -19,7 +18,6 @@ import { GrafanaLogs, LogDetails } from '../logs'
 import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead } from '../service-head'
 import { Segmented } from '../ui'
-import { Topology, type TopoEdge, type TopoStage } from '../topology'
 import { DASH, bytes, compact, flag, ms, num, pct, since, until } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { NetworkData } from '../../server/category'
@@ -51,190 +49,325 @@ export function NetworkView({ data }: { data: NetworkData }) {
   }
 }
 
-function GeneralView({ data }: { data: Extract<NetworkData, { tab: 'general' }> }) {
-  const { wan, proxy, dns, tunnel } = data
+type General = Extract<NetworkData, { tab: 'general' }>
+
+/** Sub-millisecond on the LAN, single digits to the edge — decimals or nothing. */
+const rtt = (v: number | null) => (v === null ? DASH : `${num(v, v < 10 ? 2 : 0)} ms`)
+
+/** A device that has asked for a name today is a device that is switched on. */
+const ACTIVE = 24 * 3600
+
+/**
+ * The house network: the cable, the line behind it, and who is using both.
+ *
+ * The organising distinction is one that gets collapsed constantly and is two
+ * different measurements. The NIC counters are USAGE — every byte that crossed
+ * the cable, most of which never leaves the house. The hourly speed test is
+ * CAPACITY — what the ISP line can carry. A film streamed to the TV moves a
+ * gigabyte of the first and none of the second, so the wire routinely carries
+ * more than the line could, and neither number bounds the other. They are two
+ * boards for that reason, never one chart with two lines on it.
+ */
+function GeneralView({ data }: { data: General }) {
+  const { wire, line, hops, router, services, dns, devices } = data
+
+  const gateway = hops.find((h) => h.id === 'gateway')
+  const internet = hops.find((h) => h.id === 'internet')
+  const online = devices.filter((d) => d.lastSeenAgo < ACTIVE)
+  const moved = services.reduce((n, s) => n + s.in + s.out, 0)
 
   return (
     <>
       <StatBand>
         <BigStat
-          label="Download"
-          value={num(wan.down)}
+          label="Receiving"
+          value={num(wire.inMbps, 1)}
           unit="Mbps"
-          spark={wan.downHistory}
-          sub={`${num(wan.up)} Mbps up`}
+          spark={wire.inHistory}
+          sub={`${bytes(wire.inDay)} in 24h`}
         />
         <BigStat
-          label="Latency"
-          value={num(wan.ping, 1)}
-          unit="ms"
+          label="Sending"
+          value={num(wire.outMbps, 1)}
+          unit="Mbps"
           tone="info"
-          spark={wan.pingHistory}
-          sub="last hourly test"
+          spark={wire.outHistory}
+          sub={`${bytes(wire.outDay)} in 24h`}
         />
         <BigStat
-          label="Requests"
-          value={num(proxy.rpm)}
-          unit="/min"
-          tone="accent"
-          spark={proxy.spark}
-          sub={`${num(proxy.routers)} routers`}
+          label="Round trip"
+          value={internet?.rttMs === null || internet === undefined ? DASH : num(internet.rttMs, 1)}
+          unit="ms"
+          tone={internet?.up === false ? 'bad' : 'accent'}
+          spark={internet?.history ?? []}
+          sub={`${rtt(gateway?.rttMs ?? null)} to the router`}
         />
         <BigStat
-          label="Ads blocked"
-          value={dns.blockedPct === null ? DASH : `${dns.blockedPct.toFixed(1)}%`}
+          label="Devices"
+          value={num(online.length)}
           tone="ok"
-          sub={`${num(dns.blocked)} of ${num(dns.queries)} queries`}
+          sub={`of ${num(devices.length)} ever seen here`}
         />
       </StatBand>
 
       <BoardGrid>
         <Board
-          title="Getting in"
-          icon="⇥"
-          span={12}
-          aside={<span className="board-note">inbound · nothing here needs a forwarded TCP port</span>}
-        >
-          <Topology
-            stages={inboundStages(data)}
-            edges={inboundEdges(data)}
-            foot={
-              <>
-                Two ways in and they cross the router differently. The tunnel is an OUTBOUND
-                connection cloudflared holds open, so the edge reaches this box without the
-                router ever accepting an inbound connection — no port forward, nothing to scan.
-                WireGuard is the exception that proves it: it is the one service the router
-                forwards a port for, UDP 51820, and the only reason that is acceptable is that
-                a WireGuard socket does not answer an unauthenticated packet at all.
-              </>
-            }
-          />
-        </Board>
-
-        <Board
-          title="Getting out"
-          icon="⇤"
-          span={12}
-          aside={<span className="board-note">egress · which traffic leaves through what</span>}
-        >
-          <Topology
-            stages={egressStages(data)}
-            edges={egressEdges(data)}
-            foot={
-              <>
-                Two exits, and which one a container gets is decided by its network namespace,
-                not by routing. Everything on a bridge leaves through the house connection with
-                this address. The download stack has no interfaces of its own — it borrows
-                gluetun's namespace outright, so if that tunnel drops those containers lose the
-                network rather than falling back to the house line.
-              </>
-            }
-          />
-        </Board>
-
-        <Board
-          title="Internet link"
+          title="What crosses the cable"
           icon="⇅"
           span={8}
-          aside={<span className="board-note">7 days, hourly test</span>}
+          aside={
+            <span className="board-note">
+              24 hours · {wire.linkMbps === null ? 'one NIC' : `${num(wire.linkMbps / 1000, 1)} Gbps link`}
+            </span>
+          }
         >
+          <h4 className="board-sub">Receiving, Mbps</h4>
+          <Trend values={wire.inHistory} height={72} />
+          <h4 className="board-sub">Sending, Mbps</h4>
+          <Trend values={wire.outHistory} tone="info" height={56} />
+          <Measures
+            items={[
+              { k: 'In, 24h', v: bytes(wire.inDay) },
+              { k: 'Out, 24h', v: bytes(wire.outDay) },
+              { k: 'Peak in', v: `${num(Math.max(...wire.inHistory, 0), 1)} Mbps` },
+              { k: 'Peak out', v: `${num(Math.max(...wire.outHistory, 0), 1)} Mbps` },
+            ]}
+          />
+          <p className="board-foot">
+            Every byte over this box’s one network interface, which is not the same thing as
+            internet traffic and is usually much more of it — a film streamed to the TV crosses
+            this cable in full and never leaves the house. The line’s own capacity is the board
+            below; these two numbers are not comparable and are deliberately not on one chart.
+          </p>
+        </Board>
+
+        <Board
+          title="The way out"
+          icon="⌗"
+          span={4}
+          aside={
+            <Chip tone={internet?.up === false ? 'bad' : gateway?.up === false ? 'warn' : 'ok'}>
+              {internet?.up === false ? 'no internet'
+              : gateway?.up === false ? 'no router'
+              : 'reachable'}
+            </Chip>
+          }
+        >
+          <div className="origin">
+            <span className="origin-label">public address</span>
+            <strong className="origin-ip">{router.wan ?? DASH}</strong>
+            <span className="origin-note">this house, as Cloudflare’s edge sees it arrive</span>
+          </div>
+          <ul className="hops">
+            {hops.map((h) => (
+              <li key={h.id} className="hop">
+                <Pulse on={h.up === true} tone={h.up === true ? 'ok' : 'bad'} />
+                <span className="hop-label">{h.label}</span>
+                <span className="hop-rtt mono">{rtt(h.rttMs)}</span>
+                <Trend values={h.history} height={22} tone="muted" empty="" />
+              </li>
+            ))}
+          </ul>
+          <Facts
+            rows={[
+              { k: 'Router', v: <a href={router.url}>{router.gateway}</a> },
+              { k: 'This box', v: <span className="mono">{router.lan}</span> },
+              {
+                k: 'Link',
+                v: wire.linkMbps === null ? DASH : `${num(wire.linkMbps)} Mbps negotiated`,
+              },
+            ]}
+          />
+          <p className="board-foot">
+            Everything here is measured from this side, because the router serves no API to ask.
+            Two probes a minute rather than one: the router answering while the far side does not
+            is the ISP, and neither answering is this box’s own link. The public address is the
+            one fact that cannot be measured from inside — behind NAT nothing here can see it, so
+            it is read back from the edge the tunnel dials out to.
+          </p>
+        </Board>
+
+        <Board
+          title="The line itself"
+          icon="◎"
+          span={4}
+          aside={<span className="board-note">7 days, hourly</span>}
+        >
+          <Measures
+            items={[
+              { k: 'Down', v: `${num(line.down)} Mbps` },
+              { k: 'Up', v: `${num(line.up)} Mbps` },
+              { k: 'Latency', v: `${num(line.ping, 1)} ms` },
+            ]}
+          />
           <h4 className="board-sub">Download, Mbps</h4>
-          <Trend values={wan.downHistory} height={72} />
+          <Trend values={line.downHistory} height={64} />
           <h4 className="board-sub">Upload, Mbps</h4>
-          <Trend values={wan.upHistory} tone="info" height={56} />
+          <Trend values={line.upHistory} tone="info" height={48} />
           {/* The hourly test saturates the WAN for a couple of minutes and has
               historically taken LAN DNS down with it — worth knowing when a
               gap in another chart lines up with the top of an hour. */}
           <p className="board-foot">
-            MySpeed runs on the hour and briefly saturates the link while it does.
+            What the connection can do rather than what it is doing. MySpeed runs on the hour and
+            briefly saturates the link while it measures, so a gap at the top of an hour in any
+            other chart on this page is this test rather than an outage.
           </p>
         </Board>
 
         <Board
-          title="Cloudflare tunnel"
-          icon="⇥"
-          span={4}
-          aside={
-            <Chip tone={tunnel.status === 'healthy' ? 'ok' : 'bad'}>{tunnel.status ?? 'unknown'}</Chip>
-          }
+          title="Which services move the bytes"
+          icon="▦"
+          span={8}
+          aside={<span className="board-note">{bytes(moved)} over 24 hours</span>}
         >
-          <div className="origin">
-            <span className="origin-label">origin IP</span>
-            <strong className="origin-ip">{tunnel.originIp ?? DASH}</strong>
-            {/* The address the edge sees traffic arriving from — which is this
-                house's WAN IP, and the only place on the box it can be read.
-                Everything here is behind NAT and sees 192.168.0.2. */}
-            <span className="origin-note">this house, as Cloudflare sees it</span>
-          </div>
-          <div className="vpn-state">
-            <Pulse
-              on={tunnel.status === 'healthy'}
-              tone={tunnel.status === 'healthy' ? 'ok' : 'bad'}
-            />
-            <strong>
-              {num(tunnel.connections)} connections{' '}
-              {tunnel.edges.length > 0 && (
-                <span className="muted">
-                  via {tunnel.edges.map((e) => `${e.colo}×${String(e.count)}`).join(' · ')}
-                </span>
-              )}
-            </strong>
-          </div>
-          <Facts
-            rows={[
-              { k: 'Requests', v: tunnel.requestsPerHour === null ? DASH : `${num(tunnel.requestsPerHour, 1)}/hour` },
-              { k: 'Held for', v: since(tunnel.heldForSeconds).replace(' ago', '') },
-              { k: 'cloudflared', v: <span className="mono">{tunnel.clientVersion ?? DASH}</span> },
-              // The WireGuard peer count used to be here, and the certificate
-              // expiry after it, both in a board about Cloudflare because
-              // there was nowhere better. There is now, for both.
-            ]}
-          />
+          <TrafficList rows={services} />
           <p className="board-foot">
-            An outbound connection this box holds open, so the edge can reach it without the router
-            accepting anything. The detail is on <b>Coming in</b>.
+            Counted inside each container’s own network namespace, so this is traffic the app
+            itself moved rather than a share of the total guessed from anything. Two kinds are
+            absent by construction and not by omission: a container on the host’s network has no
+            figures separable from the box, and the ten sharing <b>gluetun</b>’s namespace have
+            none separable from each other — gluetun’s row is the download stack entire, counted
+            as it crossed the wire encrypted.
           </p>
         </Board>
 
-        {/* The proxy had a board here — top services, response codes, router
-            counts — and the Gateway tab now says all of it beside the routing
-            table those numbers are about, which is where they answer something.
-            Repeating them here would be the same figures a click apart. */}
-
-        <Board title="DNS" icon="◎" span={6}>
-          <div className="library-split">
-            <Ring
-              pct={dns.blockedPct}
-              value={dns.blockedPct === null ? DASH : `${dns.blockedPct.toFixed(1)}%`}
-              label="blocked"
-              tone="ok"
-            />
-            <Facts
-              rows={[
-                { k: 'Queries today', v: num(dns.queries) },
-                { k: 'Blocked', v: num(dns.blocked) },
-                { k: 'On the blocklist', v: num(dns.gravity) },
-              ]}
-            />
-          </div>
-          <h4 className="board-sub">Most blocked domains</h4>
-          <BarList items={dns.topBlocked} tone="bad" empty="nothing blocked yet" />
-          <h4 className="board-sub">Busiest clients</h4>
-          <BarList items={dns.topClients} tone="info" empty="no clients recorded" />
+        <Board
+          title="What this house asks for"
+          icon="◈"
+          span={6}
+          aside={<span className="board-note">{compact(dns.queries)} lookups today</span>}
+        >
+          <BarList items={dns.topDomains} tone="accent" empty="no queries recorded" />
+          <p className="board-foot">
+            The names most looked up, which is the closest thing to a list of what this house
+            depends on outside itself.{' '}
+            {dns.fromBox === null || dns.queries === null ?
+              'Most of it is this box rather than the devices on the LAN.'
+            : `${pct((dns.fromBox / dns.queries) * 100)} of it came from 127.0.0.1 — every container on this box resolves through the host’s stub, so pi-hole sees them as one client and no split by service is available from here.`}
+          </p>
         </Board>
 
-        {/* The two tunnels used to be boards here. They are tabs now — the
-            same words meant two different things a scroll apart, and neither
-            of them fitted in a half-row. What stays on this page is the map
-            above, which is where both belong: a diagram of how traffic moves,
-            not the detail of either end. */}
-
-        {/* Certificates moved to the Gateway tab, and got better in the move:
-            gatus reported one expiry per PROBE, which was forty copies of the
-            same wildcard. traefik reports its store — two certificates, which
-            is how many there are. */}
+        <Board
+          title="Devices on the network"
+          icon="▤"
+          span={6}
+          aside={
+            <span className="board-note">
+              {online.length} active · {devices.length} known
+            </span>
+          }
+        >
+          <DeviceList devices={devices} />
+          <p className="board-foot">
+            Everything that has ever asked this box for a name, which is the nearest thing to the
+            router’s own client list and arrives by a different route entirely — the router will
+            not say, but every device on the LAN resolves through here. A machine with a static
+            address and no lease is in this list too, which is what makes it more than the DHCP
+            leases on <b>Domains</b>. <b>active</b> means it looked something up in the last day.
+          </p>
+        </Board>
       </BoardGrid>
     </>
+  )
+}
+
+/**
+ * Per-container traffic, in and out on one row.
+ *
+ * Ranked by the two directions added together and drawn as one split bar,
+ * because the question this answers is "who is using the network" and a
+ * service that only ever uploads should not sort below one that does half as
+ * much in both directions. The direction still shows: it is the split.
+ */
+function TrafficList({ rows }: { rows: General['services'] }) {
+  if (rows.length === 0) return <p className="viz-empty">no per-container counters yet</p>
+
+  const top = rows.slice(0, 12)
+  const rest = rows.slice(12)
+  const ceiling = Math.max(...rows.map((r) => r.in + r.out), 1)
+
+  return (
+    <>
+      <ul className="traffic">
+        {top.map((r) => (
+          <TrafficRow key={r.name} row={r} ceiling={ceiling} />
+        ))}
+      </ul>
+      {rest.length > 0 && (
+        <details className="more">
+          <summary>
+            {rest.length} quieter container{rest.length === 1 ? '' : 's'}
+          </summary>
+          <ul className="traffic">
+            {rest.map((r) => (
+              <TrafficRow key={r.name} row={r} ceiling={ceiling} />
+            ))}
+          </ul>
+        </details>
+      )}
+    </>
+  )
+}
+
+function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceiling: number }) {
+  const total = row.in + row.out
+  const width = (n: number) => `${String((n / ceiling) * 100)}%`
+
+  return (
+    <li className="traffic-row">
+      <span className="traffic-name" title={row.name}>
+        {row.name}
+      </span>
+      <span className="traffic-track">
+        <span className="traffic-in" style={{ width: width(row.in) }} title={`${bytes(row.in)} in`} />
+        <span
+          className="traffic-out"
+          style={{ width: width(row.out) }}
+          title={`${bytes(row.out)} out`}
+        />
+      </span>
+      <span className="traffic-total mono">{bytes(total)}</span>
+    </li>
+  )
+}
+
+function DeviceList({ devices }: { devices: General['devices'] }) {
+  if (devices.length === 0) return <p className="viz-empty">no devices recorded</p>
+
+  const shown = devices.slice(0, 12)
+  const rest = devices.slice(12)
+
+  return (
+    <>
+      <ul className="devices">
+        {shown.map((d) => (
+          <DeviceRow key={d.mac + d.ip} d={d} />
+        ))}
+      </ul>
+      {rest.length > 0 && (
+        <details className="more">
+          <summary>{rest.length} not seen today</summary>
+          <ul className="devices">
+            {rest.map((d) => (
+              <DeviceRow key={d.mac + d.ip} d={d} />
+            ))}
+          </ul>
+        </details>
+      )}
+    </>
+  )
+}
+
+function DeviceRow({ d }: { d: General['devices'][number] }) {
+  return (
+    <li className={d.lastSeenAgo < ACTIVE ? 'device is-active' : 'device'}>
+      <span className="device-name">{d.name ?? <span className="muted">unnamed</span>}</span>
+      <span className="device-ip mono">{d.ip}</span>
+      <span className="device-mac mono" title={`first seen ${num(d.knownForDays)} days ago`}>
+        {d.mac}
+      </span>
+      <span className="device-seen">{since(d.lastSeenAgo)}</span>
+    </li>
   )
 }
 
@@ -244,369 +377,6 @@ function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
   if (code.startsWith('4')) return 'warn'
   return 'bad'
 }
-
-/**
- * Inbound: how a request reaches a service here, from wherever it started.
- *
- * Three ways in, not two, and the third is the one that is easy to forget:
- * most requests are from a device sitting on the LAN, which never touches the
- * router's WAN side at all. It gets here because Pi-hole answers every
- * *.toscanini.me with 192.168.0.2 — so the resolver is genuinely upstream of
- * traefik for the majority of traffic, and it hangs off the house zone.
- *
- * Authentication is drawn as ONE dependency rather than a branch of the
- * service tree, because that is what it is. traefik's forward-auth middleware
- * and an app's own OIDC login are two different mechanisms that both end at
- * Pocket ID — the difference is only who performs the redirect.
- */
-function inboundStages(data: General): TopoStage[] {
-  const { tunnel, wireguard, proxy, dns } = data
-  const live = tunnel.status === 'healthy'
-  const peersUp = wireguard.connected !== null && wireguard.connected > 0
-  const busy = proxy.rpm !== null && proxy.rpm > 0
-
-  return [
-    {
-      id: 'outside',
-      title: 'Where it starts',
-      zone: 'the internet',
-      nodes: [
-        {
-          id: 'cf',
-          label: 'Cloudflare edge',
-          sub: tunnel.edges.map((e) => e.colo).join(' · ') || 'no edge reported',
-          icon: '☁',
-          tone: live ? 'ok' : 'bad',
-          live,
-          facts: [
-            { k: 'status', v: tunnel.status ?? DASH },
-            { k: 'conns', v: num(tunnel.connections) },
-            { k: 'req/h', v: num(tunnel.requestsPerHour, 1) },
-          ],
-        },
-        {
-          id: 'wgpeer',
-          label: 'WireGuard peers',
-          sub: 'phones and laptops off-LAN',
-          icon: '⚿',
-          tone: peersUp ? 'ok' : 'muted',
-          idle: !peersUp,
-          live: peersUp,
-          facts: [{ k: 'connected', v: `${num(wireguard.connected)} of ${num(wireguard.total)}` }],
-        },
-      ],
-    },
-    {
-      id: 'house',
-      title: 'This house',
-      zone: 'this house',
-      nodes: [
-        {
-          id: 'router',
-          label: 'Router',
-          sub: '192.168.0.1 — forwards two UDP ports and nothing else',
-          icon: '⌗',
-          tone: 'info',
-          href: 'http://192.168.0.1',
-          facts: [
-            // The tunnel's origin address IS this house's WAN address: the CF
-            // edge records where the connection came from, and nothing on this
-            // side of the NAT can see it.
-            { k: 'WAN', v: tunnel.originIp ?? DASH },
-            { k: 'forwarded', v: 'wg + factorio' },
-          ],
-        },
-        {
-          id: 'lan',
-          label: 'LAN devices',
-          sub: 'laptops, phones, the TV — most of the traffic',
-          icon: '▤',
-          tone: 'accent',
-          live: busy,
-        },
-      ],
-      aside: [
-        {
-          label: 'how a LAN device finds this box at all',
-          tone: 'ok',
-          node: {
-            id: 'pihole',
-            label: 'Pi-hole',
-            sub: 'answers every *.toscanini.me with 192.168.0.2',
-            icon: '◎',
-            tone: 'ok',
-            href: 'https://pihole.toscanini.me',
-            live: dns.queries !== null && dns.queries > 0,
-            facts: [
-              { k: 'queries', v: num(dns.queries) },
-              { k: 'blocked', v: dns.blockedPct === null ? DASH : `${dns.blockedPct.toFixed(1)}%` },
-            ],
-          },
-        },
-      ],
-    },
-    {
-      id: 'ingress',
-      title: 'Ingress',
-      zone: 'this box',
-      nodes: [
-        {
-          id: 'cloudflared',
-          label: 'cloudflared',
-          sub: `holds the tunnel open · ${tunnel.clientVersion ?? 'client'}`,
-          icon: '⇥',
-          tone: live ? 'ok' : 'bad',
-          live,
-          facts: [{ k: 'held', v: since(tunnel.heldForSeconds).replace(' ago', '') }],
-        },
-        {
-          id: 'wgeasy',
-          label: 'wg-easy',
-          sub: 'UDP 51820 — the one forwarded TCP-less way in',
-          icon: '⚿',
-          tone: peersUp ? 'ok' : 'muted',
-          href: 'https://wg-easy.toscanini.me',
-          idle: !peersUp,
-        },
-      ],
-    },
-    {
-      id: 'proxy',
-      title: 'Proxy',
-      zone: 'this box',
-      nodes: [
-        {
-          id: 'traefik',
-          label: 'traefik',
-          sub: 'TLS terminates here · one wildcard cert',
-          icon: '⇄',
-          tone: 'accent',
-          href: 'https://traefik.toscanini.me',
-          live: busy,
-          facts: [
-            { k: 'req/min', v: num(proxy.rpm) },
-            { k: 'routers', v: num(proxy.routers) },
-            // Certificate expiry was a third fact here. It is a number about
-            // the proxy, not about the shape of the path, and it has a panel
-            // of its own on the Gateway tab now.
-          ],
-        },
-      ],
-      aside: [
-        {
-          // Both auth paths end here. The middleware redirects for a gated
-          // app; a native-OIDC app redirects itself. Same IdP either way.
-          label: 'every login, both ways',
-          tone: 'warn',
-          node: {
-            id: 'pocketid',
-            label: 'Pocket ID',
-            sub: 'passkeys · 32 clients',
-            icon: '⛨',
-            tone: 'warn',
-            href: 'https://id.toscanini.me',
-          },
-        },
-      ],
-    },
-    {
-      id: 'services',
-      title: 'Services',
-      zone: 'this box',
-      nodes: [
-        {
-          id: 'gated',
-          label: 'Forward-auth apps',
-          sub: 'traefik redirects before the app is dialled',
-          icon: '⛨',
-          tone: 'warn',
-        },
-        {
-          id: 'native',
-          label: 'Native-OIDC apps',
-          sub: 'the app does its own redirect to Pocket ID',
-          icon: '◈',
-          tone: 'info',
-        },
-        {
-          id: 'open',
-          label: 'Open upstreams',
-          sub: 'health paths, APIs with their own keys',
-          icon: '▦',
-          tone: 'muted',
-          // No count: the one that was here was traefik's total service
-          // count, which is every upstream on the box rather than the open
-          // ones. The Gateway tab counts them properly, by protection.
-        },
-      ],
-    },
-  ]
-}
-
-function inboundEdges(data: General): TopoEdge[] {
-  const { tunnel, wireguard, proxy } = data
-  const live = tunnel.status === 'healthy'
-  const peersUp = wireguard.connected !== null && wireguard.connected > 0
-  const busy = proxy.rpm !== null && proxy.rpm > 0
-
-  return [
-    { from: 'cf', to: 'router', label: 'rides the open tunnel', tone: 'ok', active: live },
-    {
-      from: 'wgpeer',
-      to: 'router',
-      label: 'UDP 51820',
-      tone: 'info',
-      active: peersUp,
-      dashed: !peersUp,
-    },
-    { from: 'router', to: 'cloudflared', label: 'no port forward', tone: 'ok', active: live },
-    {
-      from: 'router',
-      to: 'wgeasy',
-      label: 'forwarded',
-      tone: 'info',
-      active: peersUp,
-      dashed: !peersUp,
-    },
-    // A LAN device never leaves the house: it resolves to 192.168.0.2 and
-    // dials traefik straight on 443.
-    { from: 'lan', to: 'cloudflared', label: '', tone: 'muted', dashed: true },
-    { from: 'cloudflared', to: 'traefik', label: 'cfweb :8888', tone: 'ok', active: live },
-    { from: 'wgeasy', to: 'traefik', label: 'then as a LAN client', tone: 'info', dashed: !peersUp },
-    { from: 'traefik', to: 'gated', label: 'redirected first', tone: 'warn', active: busy },
-    { from: 'traefik', to: 'native', label: 'proxied straight', tone: 'info', active: busy },
-    { from: 'traefik', to: 'open', label: `${num(proxy.rpm)}/min`, tone: 'accent', active: busy },
-  ]
-}
-
-/**
- * Egress: which exit a container's traffic leaves by.
- *
- * Two lanes that never touch, which is the point — the split is a network
- * NAMESPACE fact, not a routing rule. A bridged container has its own
- * interfaces and leaves by the house line; the download stack has none at all
- * and borrows gluetun's, so "it goes through the VPN" is structural rather
- * than something that could be misconfigured into leaking.
- */
-function egressStages(data: General): TopoStage[] {
-  const { vpn, tunnel, dns } = data
-  const vpnUp = vpn.up === true
-
-  return [
-    {
-      id: 'origin',
-      title: 'Traffic',
-      zone: 'this box',
-      nodes: [
-        {
-          id: 'bridged',
-          label: 'Bridged containers',
-          sub: 'traefik-net, monitoring, app-db …',
-          icon: '▦',
-          tone: 'info',
-        },
-        {
-          id: 'netns',
-          label: 'Download stack',
-          sub: 'qBittorrent, NZBGet, the *arrs, FlareSolverr',
-          icon: '⛨',
-          tone: vpnUp ? 'ok' : 'bad',
-        },
-      ],
-      aside: [
-        {
-          label: 'resolves for the whole house first',
-          tone: 'ok',
-          node: {
-            id: 'pihole-out',
-            label: 'Pi-hole',
-            sub: 'upstream to Google DNS over TLS',
-            icon: '◎',
-            tone: 'ok',
-            facts: [{ k: 'blocklist', v: num(dns.gravity) }],
-          },
-        },
-      ],
-    },
-    {
-      id: 'stack',
-      title: 'Network namespace',
-      zone: 'this box',
-      nodes: [
-        {
-          id: 'hostns',
-          label: 'Own interfaces',
-          sub: 'one veth pair per bridge',
-          icon: '⌗',
-          tone: 'info',
-        },
-        {
-          id: 'gluetun',
-          label: 'gluetun',
-          sub: 'owns the namespace they all share',
-          icon: '◈',
-          tone: vpnUp ? 'ok' : 'bad',
-          live: vpnUp,
-          facts: [{ k: 'kill switch', v: vpnUp ? 'armed' : 'TUNNEL DOWN' }],
-        },
-      ],
-    },
-    {
-      id: 'out',
-      title: 'Seen from outside as',
-      zone: 'the internet',
-      nodes: [
-        {
-          id: 'house',
-          label: 'House connection',
-          sub: 'this address is the household',
-          icon: '⌂',
-          tone: 'info',
-          facts: [{ k: 'IP', v: tunnel.originIp ?? DASH }],
-        },
-        {
-          id: 'proton',
-          label: 'ProtonVPN',
-          sub: vpn.city === null ? 'exit node' : `${flag(vpn.country)} · ${vpn.city}`,
-          icon: '◆',
-          tone: vpnUp ? 'ok' : 'bad',
-          live: vpnUp,
-          facts: [
-            { k: 'IP', v: vpn.ip ?? DASH },
-            // A tunnel that is up but lost its forwarded port looks healthy
-            // and cannot seed — worth its own slot rather than a footnote.
-            { k: 'fwd port', v: vpn.port === null ? 'none' : String(vpn.port) },
-          ],
-        },
-      ],
-    },
-  ]
-}
-
-function egressEdges(data: General): TopoEdge[] {
-  const vpnUp = data.vpn.up === true
-  return [
-    { from: 'bridged', to: 'hostns', label: 'pasta / bridge', tone: 'info', active: true },
-    {
-      from: 'netns',
-      to: 'gluetun',
-      label: '--network=container:',
-      tone: vpnUp ? 'ok' : 'bad',
-      active: vpnUp,
-    },
-    { from: 'hostns', to: 'house', label: 'NAT', tone: 'info', active: true },
-    {
-      from: 'gluetun',
-      to: 'proton',
-      label: 'WireGuard',
-      tone: vpnUp ? 'ok' : 'bad',
-      active: vpnUp,
-      dashed: !vpnUp,
-    },
-  ]
-}
-
-type General = Extract<NetworkData, { tab: 'general' }>
 
 // ── Coming in ──────────────────────────────────────────────────────────────
 
