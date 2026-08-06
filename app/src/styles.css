@@ -2224,9 +2224,13 @@ h2 {
 }
 
 /* Opted in by `<Board fill>` — see the note there. The board grows to the row
-   height and its body distributes the extra room, so the caption sits on the
-   floor of the panel instead of leaving a strip of empty background under a
-   short list next to a tall diagram. */
+   height so the pair shares one bottom edge, and the content stays where it
+   was: the extra room collects UNDER the caption, inside the border, as space
+   in a panel rather than a hole between panels.
+
+   Deliberately no `margin-top: auto` on the caption. Pinning it to the floor
+   put a two-row list at the top of a tall box and its explanation at the
+   bottom, with nothing in between — which read as a rendering fault. */
 .board-fill {
   align-self: stretch;
   display: flex;
@@ -2234,9 +2238,6 @@ h2 {
 }
 .board-fill .board-body {
   flex: 1;
-}
-.board-fill .board-body > .board-foot:last-child {
-  margin-top: auto;
 }
 
 /* Boards are laid out on a 12-column grid at desktop width, collapse to two
@@ -5400,4 +5401,46 @@ h2 {
 /* The one state worth interrupting the wall of names for. */
 .lan-name.is-broken {
   box-shadow: inset 0 0 0 1px var(--bad);
+}
+
+/* ── DHCP reservations ──────────────────────────────────────────────────── */
+
+/* Address, name, hardware address. Wrapping columns rather than one tall list:
+   nine rows in a two-thirds-width board is a column of text with a page of
+   nothing beside it, and these rows are read by scanning the addresses. */
+.dhcp {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  gap: 0.22rem 0.7rem;
+}
+.dhcp li {
+  display: grid;
+  grid-template-columns: 7.2rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.22rem 0.5rem;
+  border-radius: 7px;
+  background: var(--panel-2);
+  font-size: 0.75rem;
+  min-width: 0;
+}
+.dhcp-ip {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.dhcp-name {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The identifier the reservation is actually keyed on, and the least readable
+   thing in the row — present because it is what you compare against a device,
+   recessive because you only ever look at one of them. */
+.dhcp-mac {
+  color: var(--dim);
+  font-size: 0.66rem;
 }

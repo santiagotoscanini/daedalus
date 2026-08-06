@@ -2480,6 +2480,7 @@ function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] 
           title="The names we declare"
           icon="⌂"
           span={8}
+          fill
           aside={
             <span className="board-note">
               {lan.length} entries · {lan.filter((n) => n.public).length} also public
@@ -2555,6 +2556,7 @@ function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] 
           title="Traffic"
           icon="⌁"
           span={8}
+          fill
           aside={<span className="board-note">an hour per column</span>}
         >
           <Columns
@@ -2644,7 +2646,94 @@ function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] 
           </details>
         </Board>
 
+        <Board
+          title="Addresses we hand out"
+          icon="⊞"
+          span={8}
+          fill
+          aside={
+            <span className="board-note">
+              {d.dhcp.active ? `${d.dhcp.start} – ${d.dhcp.end}` : 'DHCP is off'}
+            </span>
+          }
+        >
+          <ul className="dhcp">
+            {d.dhcp.reservations.map((r) => (
+              <li key={r.mac}>
+                <span className="dhcp-ip mono">{r.ip}</span>
+                <span className="dhcp-name">{r.name}</span>
+                <span className="dhcp-mac mono">{r.mac}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="board-foot">
+            The resolver is the DHCP server too, so addresses on this LAN are decided here rather
+            than by the router. These {d.dhcp.reservations.length} are fixed in nix — a device with
+            a reservation is one something else on this box is allowed to name by address, which is
+            why they are declared and not clicked in. Everything else gets whatever is free in{' '}
+            <span className="mono">
+              {d.dhcp.start} – {d.dhcp.end}
+            </span>{' '}
+            for {d.dhcp.leaseTime} at a time, with{' '}
+            <span className="mono">{d.dhcp.router}</span> as its gateway.
+          </p>
+        </Board>
+
+        <Board
+          title="Leases"
+          icon="⇌"
+          span={4}
+          aside={<span className="board-note">since FTL started</span>}
+        >
+          <Facts
+            rows={[
+              { k: 'Offers made', v: num(d.dhcp.counters.offers) },
+              { k: 'Accepted', v: num(d.dhcp.counters.acks) },
+              {
+                k: 'Declined',
+                v:
+                  d.dhcp.counters.declines === null ? DASH
+                  : d.dhcp.counters.declines === 0 ?
+                    <span className="ok-text">0</span>
+                  : <span className="warn-text">{num(d.dhcp.counters.declines)}</span>,
+              },
+              {
+                k: 'Refused',
+                v:
+                  d.dhcp.counters.nak === null ? DASH
+                  : d.dhcp.counters.nak === 0 ?
+                    <span className="ok-text">0</span>
+                  : <span className="warn-text">{num(d.dhcp.counters.nak)}</span>,
+              },
+            ]}
+          />
+          <p className="board-foot">
+            Offers vastly outnumber acceptances and that is normal — a device wakes, is offered an
+            address, and often already has one it is happy with. The two to watch are the bottom
+            pair: a <b>decline</b> means a client found the address already in use, a{' '}
+            <b>refusal</b> means it asked for one this server would not give it. Both are zero on a
+            LAN with one DHCP server, and non-zero is usually a second one.
+          </p>
+        </Board>
+
         <Changelog gap={d.gap} span={12} />
+
+        <Board title="Logs" icon="≣" span={12}>
+          <GrafanaLogs
+            source={{ unit: "pihole-ftl.service" }}
+            title="pihole-FTL logs"
+            foot={
+              <p className="board-foot">
+                Not the journal. FTL is the one service on this box that keeps its own log file,
+                and the only journal lines about the unit come from systemd — so these are shipped
+                out of <span className="mono">/var/log/pihole/FTL.log</span> by alloy. Startup,
+                gravity runs, DHCP leases, NTP and upstream trouble. Individual queries are not
+                here and deliberately never will be: that log is two gigabytes of every domain
+                every device in the house asked for.
+              </p>
+            }
+          />
+        </Board>
       </BoardGrid>
     </>
   )
