@@ -66,6 +66,22 @@ export type CategorySpec = {
      */
     tileGroups?: number
     /**
+     * Draw a rule before this tab.
+     *
+     * For a category holding two subjects that share nothing but a name. Media
+     * is the case: everything up to Housekeeping is one pipeline — a title is
+     * requested, searched for, downloaded, subtitled and played — and Books is
+     * a second, smaller pipeline that shares none of those services, none of
+     * that storage and none of those failure modes.
+     *
+     * A rule rather than a second category, because "media" is genuinely what
+     * both are and a Books category holding two tabs would be a rail entry
+     * that is almost always the wrong one to click. A rule rather than nothing,
+     * because without it Books reads as the sixth stage of the pipeline to its
+     * left.
+     */
+    dividerBefore?: boolean
+    /**
      * A COMPUTED status, for a tab gatus cannot probe.
      *
      * `probe` covers anything that answers HTTP. A VPN egress tunnel answers
@@ -177,13 +193,6 @@ export const CATEGORIES: CategorySpec[] = [
         boardSpans: [8, 4, 4, 8],
         statBand: false,
       },
-      {
-        id: 'books',
-        label: 'Books',
-        probes: ['calibre-web', 'shelfmark'],
-        boardSpans: [8, 4, 12],
-        statBand: false,
-      },
       // Only Cleanuparr answers HTTP. Janitorr and Recyclarr are timers with
       // nothing to probe — Recyclarr is not even a running process between
       // runs — so one probe here would report a third of the page and the other
@@ -194,6 +203,18 @@ export const CATEGORIES: CategorySpec[] = [
         probe: 'cleanuparr',
         boardSpans: [8, 4, 12],
         statBand: false,
+      },
+      // Past the rule: a second library that shares nothing with the six tabs
+      // to its left. Different services, different pool dataset, different
+      // failure modes — the only thing it has in common with them is the word
+      // "media".
+      {
+        id: 'books',
+        label: 'Books',
+        probes: ['calibre-web', 'shelfmark'],
+        boardSpans: [8, 4, 12],
+        statBand: false,
+        dividerBefore: true,
       },
     ],
   },

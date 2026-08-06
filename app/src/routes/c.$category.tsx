@@ -1,3 +1,5 @@
+import { Fragment } from 'react'
+
 import { Await, createFileRoute, Link, notFound } from '@tanstack/react-router'
 
 import { AiView } from '../components/category/ai'
@@ -64,9 +66,14 @@ export const Route = createFileRoute('/c/$category')({
       tab,
       boards: fetchCategoryBoards({ data: { category, tab } }),
       tiles: fetchCategoryTiles({ data: { category, tab } }),
-      // Only where a tab actually wears a dot — see CategorySpec.tabs.
+      // Only where a tab actually wears a dot — see CategorySpec.tabs. All
+      // three ways of declaring one count; testing `probe` alone would skip
+      // the request for a category whose tabs each hold several services, and
+      // then draw grey dots over health it had chosen not to fetch.
       tabStatus:
-        spec.tabs.some((t) => t.probe !== undefined) ?
+        spec.tabs.some(
+          (t) => t.probe !== undefined || t.probes !== undefined || t.health !== undefined,
+        ) ?
           fetchTabStatus({ data: { category } })
         : null,
     }
@@ -149,30 +156,35 @@ function TabNav({
       {spec.tabs.map((t) => {
         const up = status?.[t.id] ?? null
         return (
-          <Link
-            key={t.id}
-            to="/c/$category"
-            params={{ category }}
-            search={{ tab: t.id }}
-            className={t.id === tab ? 'active' : ''}
-            replace
-          >
-            {dotted && (
-              <span
-                className={`dot dot-${up === null ? 'unknown' : up ? 'running' : 'attention'}`}
-                role="img"
-                aria-label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
-                title={
-                  t.probe === undefined && t.probes === undefined && t.health === undefined ?
-                    'nothing probes this yet'
-                  : up === null ? 'no reading from gatus'
-                  : up ? 'answering'
-                  : 'nothing has answered in the last few minutes'
-                }
-              />
-            )}
-            {t.label}
-          </Link>
+          <Fragment key={t.id}>
+            {/* Not a border on the tab itself: the row's own underline runs
+                through every item, and a left border would sit on top of it
+                rather than across it. */}
+            {t.dividerBefore === true && <span className="tabs-rule" aria-hidden="true" />}
+            <Link
+              to="/c/$category"
+              params={{ category }}
+              search={{ tab: t.id }}
+              className={t.id === tab ? 'active' : ''}
+              replace
+            >
+              {dotted && (
+                <span
+                  className={`dot dot-${up === null ? 'unknown' : up ? 'running' : 'attention'}`}
+                  role="img"
+                  aria-label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
+                  title={
+                    t.probe === undefined && t.probes === undefined && t.health === undefined ?
+                      'nothing probes this yet'
+                    : up === null ? 'no reading from gatus'
+                    : up ? 'answering'
+                    : 'nothing has answered in the last few minutes'
+                  }
+                />
+              )}
+              {t.label}
+            </Link>
+          </Fragment>
         )
       })}
     </nav>
