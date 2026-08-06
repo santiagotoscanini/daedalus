@@ -222,6 +222,30 @@ let
     '';
   };
 
+  # Where each running container's image labels are published. Public metadata
+  # rather than secrets — see the header of image-snapshot.sh — but /run for
+  # the same reason: derived state that should not outlive a reboot.
+  imageDir = "/run/daedalus-images";
+
+  imageSnapshotScript = pkgs.writeShellApplication {
+    name = "daedalus-image-snapshot";
+    runtimeInputs = [
+      pkgs.podman
+      pkgs.util-linux # setpriv
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      OUT_DIR=${lib.escapeShellArg imageDir}
+      SETPRIV=${pkgs.util-linux}/bin/setpriv
+      ENV_BIN=${pkgs.coreutils}/bin/env
+      PODMAN=${pkgs.podman}/bin/podman
+      JQ=${pkgs.jq}/bin/jq
+
+      ${builtins.readFile ./host/image-snapshot.sh}
+    '';
+  };
+
   # What Nix currently believes, handed to the container as one read-only
   # store file. Two parts, because they have different provenance:
   #
@@ -548,6 +572,10 @@ in
       # new reads this instead, so a page that wants to report what a service
       # is running costs no nix edit and no rebuild. See `imageTags`.
       IMAGE_TAGS = builtins.toJSON imageTags;
+      # ...and where the OTHER half of that answer is published: the labels
+      # baked into the images actually on disk, for the services whose pin is
+      # a moving tag and therefore carries no version at all.
+      IMAGE_LABELS_PATH = "/images/labels.json";
       # The VPN tunnels, as JSON. One variable rather than a variable per
       # tunnel per field, because the whole point is that the set grows: a
       # third gluetun instance appears on the Network page with no change
@@ -609,6 +637,10 @@ in
     # The DIRECTORY, not the files: the snapshot rewrites each one, and a
     # single-file bind would pin the old inode.
     "${envDir}:/env-snapshot:ro"
+    # Running image labels, published by daedalus-image-snapshot. The
+    # DIRECTORY, not the file, for the same reason as above: the snapshot is
+    # replaced by rename and a single-file bind would pin the old inode.
+    "${imageDir}:/images:ro"
     # Per-repo CI state (runners, the running job and its steps, recent runs),
     # published by gha-ci-snapshot in stacks/gha-runner. Read-only, and it is
     # the OUTPUT rather than the credential: the GitHub PAT has
@@ -630,6 +662,33 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${envSnapshotScript}/bin/daedalus-env-snapshot";
+    };
+  };
+
+  # The running images' OCI labels — where a service pinned to a moving tag
+  # states the version its pin cannot. Ordered before daedalus like the env
+  # snapshot, so a fresh boot has one before the first render.
+  systemd.services.daedalus-image-snapshot = {
+    description = "Publish running container image labels for daedalus";
+    after = [ "linger-users.service" ];
+    wants = [ "linger-users.service" ];
+    before = [ "podman-app-daedalus.service" ];
+    wantedBy = [ "podman-app-daedalus.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${imageSnapshotScript}/bin/daedalus-image-snapshot";
+    };
+  };
+
+  # Fifteen minutes, not two: an image label changes only when an image does,
+  # which means a rebuild or a deploy pull — both of which restart the
+  # container and re-run this via the ordering above. The timer is the
+  # backstop for the third case, an out-of-band `podman pull`.
+  systemd.timers.daedalus-image-snapshot = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "3min";
+      OnUnitActiveSec = "15min";
     };
   };
 
