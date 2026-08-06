@@ -1493,10 +1493,10 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
  */
 function IdpView({ d }: { d: Gateway['idp'] }) {
   const { window: w } = d
-  const used = d.clients.filter((c) => c.used > 0)
-  const idle = d.clients.filter((c) => c.used === 0)
   const dupes = d.clients.filter((c) => c.duplicate)
-  const max = used[0]?.used ?? 1
+  const idle = d.clients.filter((c) => c.used === 0).length
+  // The bar's scale. Not the list's order — see the note on the loader.
+  const max = Math.max(...d.clients.map((c) => c.used), 1)
 
   return (
     <>
@@ -1586,74 +1586,12 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
             </p>
           )}
 
-          <div className="idp-split">
-            <section>
-              <h4 className="board-sub">Which applications</h4>
-              {used.length === 0 ?
-                <p className="viz-empty">nothing was opened in the window</p>
-              : <ul className="ranks">
-                  {used.map((c) => (
-                    <li className="rank" key={c.id}>
-                      <span className="rank-name">
-                        <span title={c.host ?? c.name}>{c.name}</span>
-                        {!c.restricted && (
-                          <em title="Open to every account, not a named group">any account</em>
-                        )}
-                        {c.duplicate && (
-                          <em title="A second registration claims the same hostname — the audit log records only the name, so this count covers both">
-                            duplicate
-                          </em>
-                        )}
-                      </span>
-                      <span className="rank-track">
-                        <span
-                          className="rank-fill"
-                          style={{ width: `${String(Math.max(1.5, (c.used / max) * 100))}%` }}
-                        />
-                      </span>
-                      <span className="rank-n">{num(c.used)}</span>
-                      <span className="rank-meta">
-                        <span>{c.lastAgo ?? DASH}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              }
-            </section>
-
-            <section>
-              {/* The complement, not a second copy: these are the events the
-                  ranking cannot contain, because a passkey is presented to the
-                  IdP rather than to any one application. */}
-              <h4 className="board-sub">Credentials presented</h4>
-              {d.events.length === 0 ?
-                <p className="viz-empty">nobody signed in during the window</p>
-              : <ul className="itemlist">
-                  {d.events.map((e) => (
-                    <li key={e.id} title={e.where}>
-                      <Chip tone={eventTone(e.event)}>{eventLabel(e.event)}</Chip>
-                      <span className="item-main">{e.username}</span>
-                      <span className="item-side">{e.device}</span>
-                      <span className="item-side">{e.ago}</span>
-                    </li>
-                  ))}
-                </ul>
-              }
-            </section>
-          </div>
-
-          {idle.length > 0 && (
-            <p className="board-foot">
-              {/* Not framed as cruft: for a forward-auth app the client is
-                  what the MIDDLEWARE authenticates with, so "not opened" says
-                  nobody visited the app, not that the registration is dead. */}
-              <b>{num(idle.length)}</b>{' '}
-              {idle.length === 1 ? 'application was' : 'applications were'} not opened in the
-              window: {idle.map((c) => c.name).join(', ')}. For the ones behind the proxy gate that
-              means nobody visited them — their registration is what the middleware itself signs in
-              with, and is doing its job either way.
-            </p>
-          )}
+          <h4 className="board-sub">Every registration, most recently used first</h4>
+          <ul className="idp-apps">
+            {d.clients.map((c) => (
+              <AppRow key={c.id} c={c} max={max} />
+            ))}
+          </ul>
 
           {dupes.length > 0 && (
             <p className="rejected">
@@ -1661,20 +1599,19 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
               {[...new Set(dupes.map((c) => c.host ?? c.name))].join(', ')}. The convergence job
               creates a client per <code>fleet.ssoClients</code> entry and never deletes one, so a
               rename leaves the old registration behind, live and still trusted. They cannot be told
-              apart on the left: the audit log records only the name, so a shared one counts twice.
+              apart above: the audit log records only the name, so a shared one counts twice.
             </p>
           )}
 
           <p className="board-foot">
-            The two sides are the same fortnight from its two ends, and the difference between them
-            is the whole value of single sign-on: <b>{num(w.signIns)} credentials presented</b>{' '}
-            against{' '}
-            <b>{num(w.authorizations)} applications opened</b> is {num(w.authorizations - w.signIns)}{' '}
-            logins that did not have to happen. Applications are counted by the name in the audit
-            log, which is all it records, so one renamed inside the window reads as unopened. The
-            sign-ins are listed raw rather than grouped — the device and the hour are the reason to
-            read them. Requests arrive over the bridge with no usable source address, so everything
-            from the house reads as one place.
+            The measures are the value of single sign-on stated as a subtraction:{' '}
+            <b>{num(w.signIns)} passkey sign-ins</b> against{' '}
+            <b>{num(w.authorizations)} applications opened</b> is{' '}
+            {num(w.authorizations - w.signIns)} logins that did not have to happen. Ordered by when
+            each was last used rather than by volume, so a registration nobody has opened sinks to
+            the bottom — {num(idle)} of them are down there, which for a proxy-gated app means
+            nobody visited it rather than that the registration is dead. Open a row for who went in
+            and from what; the full log is in Pocket ID.
             {d.truncated && ' The window is longer than the pages read, so these are a lower bound.'}
           </p>
         </Board>
@@ -1716,12 +1653,34 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
             ))}
           </ul>
 
-          {/* A quarter of the width, so this says the two things that change
-              what the list above means and stops. */}
+          {/* Grouped, not listed: a passkey belongs to a device, so this is
+              the inventory of things that can authenticate as somebody. The
+              raw stream of when each one did is a log, and Pocket ID's own
+              audit page is the place for that. */}
+          <h4 className="board-sub">Devices that signed in</h4>
+          {d.devices.length === 0 ?
+            <p className="viz-empty">nobody signed in during the window</p>
+          : <ul className="itemlist">
+              {d.devices.map((v) => (
+                <li key={v.name}>
+                  <span className="item-main" title={v.name}>
+                    {v.name}
+                  </span>
+                  <span className="item-side">{v.lastAgo}</span>
+                  <span className="item-n">{num(v.signIns)}</span>
+                </li>
+              ))}
+            </ul>
+          }
+
+          {/* A quarter of the width, so this says the things that change what
+              the three lists above mean, and stops. */}
           <p className="board-foot">
             A group is what an application restricts itself to, so an empty one is an application
-            nobody can reach through it. Sign-ups are <b>{d.signups ?? 'unknown'}</b>, read back
-            from the IdP rather than restated here.
+            nobody can reach through it. A passkey belongs to a device, so the devices are the
+            credentials — one appearing that you do not recognise is the thing to notice here.
+            Sign-ups are <b>{d.signups ?? 'unknown'}</b>, read back from the IdP rather than
+            restated here.
           </p>
         </Board>
 
@@ -1764,34 +1723,82 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
   )
 }
 
-/** Pocket ID's event names, as a person would say them. */
-function eventLabel(event: string): string {
-  switch (event) {
-    case 'SIGN_IN':
-      return 'signed in'
-    case 'TOKEN_SIGN_IN':
-      return 'token sign-in'
-    case 'CLIENT_AUTHORIZATION':
-      return 'opened'
-    case 'NEW_CLIENT_AUTHORIZATION':
-      return 'first time'
-    case 'PASSKEY_ADDED':
-      return 'passkey added'
-    default:
-      return event.toLowerCase().replace(/_/g, ' ')
-  }
+/**
+ * One registered application, with its accesses folded behind it.
+ *
+ * A `<details>` rather than two panels, because the two questions are nested
+ * rather than parallel: "which of these is still in use" is asked of the whole
+ * list at a glance, and "who went into THAT one, from what" is asked of one
+ * row you are already looking at. Side by side, the second one was a column of
+ * near-identical lines that read as a log — and this page is not trying to be
+ * one. Pocket ID's own audit page is.
+ *
+ * A never-opened registration still gets a row, and still opens: it says so,
+ * which is the answer.
+ */
+function AppRow({ c, max }: { c: Gateway['idp']['clients'][number]; max: number }) {
+  const idle = c.used === 0
+
+  return (
+    <li>
+      <details className="idp-app">
+        <summary>
+          <span className="idp-app-name">
+            <span title={c.host ?? c.name}>{c.name}</span>
+            {!c.restricted && <em title="Open to every account, not a named group">any account</em>}
+            {c.duplicate && (
+              <em title="A second registration claims the same hostname — the audit log records only the name, so this count covers both">
+                duplicate
+              </em>
+            )}
+          </span>
+          {/* The bar carries the magnitude the ORDER no longer does. Muted
+              for a row with nothing in it, so the tail of the list reads as
+              a tail rather than as forty empty tracks. */}
+          <span className={idle ? 'rank-track is-idle' : 'rank-track'}>
+            {!idle && (
+              <span
+                className="rank-fill"
+                style={{ width: `${String(Math.max(1.5, (c.used / max) * 100))}%` }}
+              />
+            )}
+          </span>
+          <span className="rank-n">{idle ? DASH : num(c.used)}</span>
+          <span className="idp-app-when">{c.lastAgo ?? 'not in the window'}</span>
+        </summary>
+
+        <div className="idp-app-body">
+          {c.opens.length === 0 ?
+            <p className="viz-empty">
+              Nobody opened this in the window. For an app behind the proxy gate that means nobody
+              visited it — the registration is what the middleware itself signs in with.
+            </p>
+          : <ul className="itemlist">
+              {c.opens.map((o) => (
+                <li key={o.id}>
+                  {o.first && <Chip tone="info">first time</Chip>}
+                  <span className="item-main">{o.username}</span>
+                  <span className="item-side">{o.device}</span>
+                  <span className="item-side">{o.ago}</span>
+                </li>
+              ))}
+            </ul>
+          }
+          {c.used > c.opens.length && (
+            <p className="board-foot">
+              The {num(c.opens.length)} most recent of {num(c.used)}. The rest are in Pocket ID.
+            </p>
+          )}
+        </div>
+      </details>
+    </li>
+  )
 }
 
-/**
- * A passkey being used is the event worth spotting; an app accepting an
- * existing session is the routine one. Status colours are reserved, so these
- * are the neutral pair — nothing here is a fault.
- */
-function eventTone(event: string): Tone {
-  if (event === 'SIGN_IN' || event === 'TOKEN_SIGN_IN') return 'accent'
-  if (event === 'PASSKEY_ADDED') return 'info'
-  return 'muted'
-}
+/* The audit log's event names were translated here — "signed in", "opened",
+   "first time" — for a raw stream that no longer exists. Nothing renders a
+   verb now: the aggregates say which verb they counted, and the only events
+   still shown are one kind, inside the row they belong to. */
 
 /** Same three answers the AI tabs give, for the same reason — see ai.tsx. */
 function verdictOf(gap: VersionGap): { label: string; tone: Tone } {
