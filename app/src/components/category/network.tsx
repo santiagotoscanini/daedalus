@@ -1699,27 +1699,40 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
               read, which is the bar — and when a redirect URI is wrong after a
               rebuild, this is the log that says why. */}
           <LogDetails
-            summary="Client convergence — what put the applications above there"
+            summary={
+              <>
+                <code>pocket-id-clients.service</code> — what put the applications there
+              </>
+            }
             source={{ unit: 'pocket-id-clients.service' }}
             title="pocket-id-clients"
             foot={
               <p className="board-foot">
-                Runs on every rebuild and upserts one OIDC client per{' '}
-                <code>fleet.ssoClients</code> entry — name, redirect URIs, allowed groups. It
-                creates and updates; it never deletes, which is where the duplicates above come
-                from.
+                A systemd oneshot on the host, not a container — journal lines rather than container
+                logs. Defined in <code>stacks/pocket-id/clients.nix</code>, ordered after the IdP,
+                and run on every rebuild: it upserts one OIDC client per{' '}
+                <code>fleet.ssoClients</code> entry — name, redirect URIs, allowed groups — with a
+                full PUT of the body whether or not anything changed, which is what drops everyone’s
+                stored consent. It creates and updates; it never deletes.
               </p>
             }
           />
           <LogDetails
-            summary="Client secrets — where each app’s credential comes from"
+            summary={
+              <>
+                <code>sso-client-secrets.service</code> — where each app’s credential comes from
+              </>
+            }
             source={{ unit: 'sso-client-secrets.service' }}
             title="sso-client-secrets"
             foot={
               <p className="board-foot">
-                Generates the client secret for every SSO app on the box and keeps it out of the nix
-                store. An app that suddenly cannot complete a login, having been fine, is usually
-                this having handed it a secret the IdP no longer holds.
+                The other host oneshot from the same file, and the one that runs first. It generates
+                a client secret per <code>fleet.ssoClients</code> entry into a gitignored file on
+                disk, so the credential never enters the nix store — which is also why it cannot be
+                a container: it writes host state the IdP is then told about. An app that suddenly
+                cannot complete a login, having been fine, is usually this having handed it a secret
+                the IdP no longer holds.
               </p>
             }
           />
