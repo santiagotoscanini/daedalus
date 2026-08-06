@@ -32,15 +32,8 @@ export function ServiceHead({
   lede,
   actions,
 }: {
-  /**
-   * A path under public/, or null when the project publishes no artwork.
-   *
-   * Null draws a monogram rather than borrowing a neighbour's mark. Shelfmark
-   * is the only case left, and it shares a tab with Calibre-Web, which DOES
-   * have a logo — so a borrowed one would not read as "no icon available", it
-   * would read as the other service.
-   */
-  logo: string | null
+  /** A path under public/. */
+  logo: string
   name: string
   /** What is running. Null renders an em dash — "we could not ask". */
   version: string | null
@@ -55,11 +48,7 @@ export function ServiceHead({
 }) {
   return (
     <div className="svc-head">
-      {logo === null ?
-        <span className="svc-logo svc-logo-mark" aria-hidden="true">
-          {name.slice(0, 1)}
-        </span>
-      : <img className="svc-logo" src={logo} alt="" width={44} height={44} />}
+      <img className="svc-logo" src={logo} alt="" width={44} height={44} />
       <div className="svc-ident">
         <h2>{name}</h2>
         {/* The version, attached to the name it is the version OF, with its
