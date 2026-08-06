@@ -5071,3 +5071,26 @@ h2 {
   align-items: center;
   gap: 0.45rem;
 }
+
+/* Two readings of one fortnight, side by side inside a full-width board: the
+   applications that were opened, and the credentials that were presented.
+   Weighted 2:1 because the left side is a ranking with a bar and a caption per
+   row, and the right is four short columns. They stack on a laptop — below
+   that the ranking's bar has nothing left to compare with. */
+.idp-split {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.1rem 1.6rem;
+  align-items: start;
+}
+.idp-split > section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+@media (max-width: 62rem) {
+  .idp-split {
+    grid-template-columns: 1fr;
+  }
+}

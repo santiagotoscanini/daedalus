@@ -375,7 +375,7 @@ export function Board({
   icon?: string
   aside?: ReactNode
   /** Columns of the 12-wide category grid. Defaults to 6 (half width). */
-  span?: 3 | 4 | 6 | 8 | 12
+  span?: 3 | 4 | 6 | 8 | 9 | 12
   /**
    * Grow to the height of the tallest board beside it, rather than to the
    * height of its own content.

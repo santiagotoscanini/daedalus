@@ -1543,12 +1543,21 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
       />
 
       <BoardGrid>
+        {/* One board, not two. "Signing in" and "Applications" were the same
+            audit log read twice — the chronological copy and the aggregate —
+            and on a box where the control plane re-authorises on a timer, the
+            chronological one spent ten of its twelve rows saying "opened
+            Daedalus". What survives the merge is the half no aggregate covers:
+            a credential actually being presented, and from what. */}
         <Board
           title="Signing in"
           icon="⚿"
-          span={8}
-          fill
-          aside={<span className="board-note">{w.days} days</span>}
+          span={12}
+          aside={
+            <span className="board-note">
+              {w.days} days · {d.clients.length} applications registered
+            </span>
+          }
         >
           <Measures
             items={[
@@ -1577,37 +1586,100 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
             </p>
           )}
 
-          <h4 className="board-sub">Most recent</h4>
-          {d.events.length === 0 ?
-            <p className="viz-empty">nothing in the window</p>
-          : <ul className="itemlist">
-              {d.events.map((e) => (
-                <li key={e.id} title={e.where}>
-                  <Chip tone={eventTone(e.event)}>{eventLabel(e.event)}</Chip>
-                  <span className="item-main">
-                    {e.client ?? e.username}
-                    {e.times > 1 && <span className="muted"> ×{e.times}</span>}
-                    {e.client !== null && <span className="muted"> · {e.username}</span>}
-                  </span>
-                  <span className="item-side">{e.device}</span>
-                  <span className="item-side">{e.ago}</span>
-                </li>
-              ))}
-            </ul>
-          }
+          <div className="idp-split">
+            <section>
+              <h4 className="board-sub">Which applications</h4>
+              {used.length === 0 ?
+                <p className="viz-empty">nothing was opened in the window</p>
+              : <ul className="ranks">
+                  {used.map((c) => (
+                    <li className="rank" key={c.id}>
+                      <span className="rank-name">
+                        <span title={c.host ?? c.name}>{c.name}</span>
+                        {!c.restricted && (
+                          <em title="Open to every account, not a named group">any account</em>
+                        )}
+                        {c.duplicate && (
+                          <em title="A second registration claims the same hostname — the audit log records only the name, so this count covers both">
+                            duplicate
+                          </em>
+                        )}
+                      </span>
+                      <span className="rank-track">
+                        <span
+                          className="rank-fill"
+                          style={{ width: `${String(Math.max(1.5, (c.used / max) * 100))}%` }}
+                        />
+                      </span>
+                      <span className="rank-n">{num(c.used)}</span>
+                      <span className="rank-meta">
+                        <span>{c.lastAgo ?? DASH}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              }
+            </section>
+
+            <section>
+              {/* The complement, not a second copy: these are the events the
+                  ranking cannot contain, because a passkey is presented to the
+                  IdP rather than to any one application. */}
+              <h4 className="board-sub">Credentials presented</h4>
+              {d.events.length === 0 ?
+                <p className="viz-empty">nobody signed in during the window</p>
+              : <ul className="itemlist">
+                  {d.events.map((e) => (
+                    <li key={e.id} title={e.where}>
+                      <Chip tone={eventTone(e.event)}>{eventLabel(e.event)}</Chip>
+                      <span className="item-main">{e.username}</span>
+                      <span className="item-side">{e.device}</span>
+                      <span className="item-side">{e.ago}</span>
+                    </li>
+                  ))}
+                </ul>
+              }
+            </section>
+          </div>
+
+          {idle.length > 0 && (
+            <p className="board-foot">
+              {/* Not framed as cruft: for a forward-auth app the client is
+                  what the MIDDLEWARE authenticates with, so "not opened" says
+                  nobody visited the app, not that the registration is dead. */}
+              <b>{num(idle.length)}</b>{' '}
+              {idle.length === 1 ? 'application was' : 'applications were'} not opened in the
+              window: {idle.map((c) => c.name).join(', ')}. For the ones behind the proxy gate that
+              means nobody visited them — their registration is what the middleware itself signs in
+              with, and is doing its job either way.
+            </p>
+          )}
+
+          {dupes.length > 0 && (
+            <p className="rejected">
+              <b>{num(dupes.length)}</b> registrations share a hostname —{' '}
+              {[...new Set(dupes.map((c) => c.host ?? c.name))].join(', ')}. The convergence job
+              creates a client per <code>fleet.ssoClients</code> entry and never deletes one, so a
+              rename leaves the old registration behind, live and still trusted. They cannot be told
+              apart on the left: the audit log records only the name, so a shared one counts twice.
+            </p>
+          )}
 
           <p className="board-foot">
-            Two different events, and the difference is the whole value of single sign-on:{' '}
-            <b>signed in</b> is a passkey being used, <b>opened</b> is an application accepting the
-            session that already existed. A day of one sign-in and nine opens is nine logins that
-            did not happen. A <b>×n</b> is the same thing repeated back to back — mostly a service
-            re-authorising on a timer. Requests arrive over the bridge with no usable source
-            address, so everything from the house reads as one place.
+            The two sides are the same fortnight from its two ends, and the difference between them
+            is the whole value of single sign-on: <b>{num(w.signIns)} credentials presented</b>{' '}
+            against{' '}
+            <b>{num(w.authorizations)} applications opened</b> is {num(w.authorizations - w.signIns)}{' '}
+            logins that did not have to happen. Applications are counted by the name in the audit
+            log, which is all it records, so one renamed inside the window reads as unopened. The
+            sign-ins are listed raw rather than grouped — the device and the hour are the reason to
+            read them. Requests arrive over the bridge with no usable source address, so everything
+            from the house reads as one place.
             {d.truncated && ' The window is longer than the pages read, so these are a lower bound.'}
           </p>
         </Board>
 
-        <Board title="Who" icon="◑" span={4} fill>
+        <Board title="Who" icon="◑" span={3} fill>
           <ul className="itemlist">
             {d.users.map((u) => (
               <li key={u.username} title={u.groups.join(', ')}>
@@ -1644,82 +1716,16 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
             ))}
           </ul>
 
+          {/* A quarter of the width, so this says the two things that change
+              what the list above means and stops. */}
           <p className="board-foot">
-            Groups are what an application is restricted to, so an empty one is an application
-            nobody can reach through it. Sign-ups are{' '}
-            <b>{d.signups ?? 'unknown'}</b> — read back from the IdP rather than restated here, so
-            it cannot go stale. An account is created by an admin, and it is worth nothing until a
-            passkey is registered on it.
+            A group is what an application restricts itself to, so an empty one is an application
+            nobody can reach through it. Sign-ups are <b>{d.signups ?? 'unknown'}</b>, read back
+            from the IdP rather than restated here.
           </p>
         </Board>
 
-        <Board
-          title="Applications"
-          icon="⌗"
-          span={6}
-          fill
-          aside={<span className="board-note">{d.clients.length} registered</span>}
-        >
-          {used.length === 0 ?
-            <p className="viz-empty">nothing was opened in the window</p>
-          : <ul className="ranks">
-              {used.map((c) => (
-                <li className="rank" key={c.id}>
-                  <span className="rank-name">
-                    <span title={c.host ?? c.name}>{c.name}</span>
-                    {!c.restricted && <em title="Open to every account, not a named group">any account</em>}
-                    {c.duplicate && (
-                      <em title="A second registration claims the same hostname — the audit log records only the name, so this count covers both">
-                        duplicate
-                      </em>
-                    )}
-                  </span>
-                  <span className="rank-track">
-                    <span
-                      className="rank-fill"
-                      style={{ width: `${String(Math.max(1.5, (c.used / max) * 100))}%` }}
-                    />
-                  </span>
-                  <span className="rank-n">{num(c.used)}</span>
-                  <span className="rank-meta">
-                    <span>{c.lastAgo ?? DASH}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          }
-
-          {idle.length > 0 && (
-            <p className="board-foot">
-              {/* Not framed as cruft: for a forward-auth app the client is
-                  what the MIDDLEWARE authenticates with, so "not opened" says
-                  nobody visited the app, not that the registration is dead. */}
-              <b>{num(idle.length)}</b>{' '}
-              {idle.length === 1 ? 'application was' : 'applications were'} not opened in the
-              window: {idle.map((c) => c.name).join(', ')}. For the ones behind the proxy gate that
-              means nobody visited them — their registration is what the middleware itself signs in
-              with, and is doing its job either way.
-            </p>
-          )}
-
-          {dupes.length > 0 && (
-            <p className="rejected">
-              <b>{num(dupes.length)}</b> registrations share a hostname —{' '}
-              {[...new Set(dupes.map((c) => c.host ?? c.name))].join(', ')}. The convergence job
-              creates a client per <code>fleet.ssoClients</code> entry and never deletes one, so a
-              rename leaves the old registration behind, live and still trusted. They cannot be told
-              apart above: the audit log records only the name, so a shared one counts for both.
-            </p>
-          )}
-
-          <p className="board-foot">
-            Counted by the name in the audit log, which is all it records — so a client renamed
-            inside the window reads as unopened, and its history stays with the name it had. Ranked
-            by how many times a session was handed to it.
-          </p>
-        </Board>
-
-        <Changelog gap={d.gap} span={6} />
+        <Changelog gap={d.gap} span={9} />
 
         <Board title="Logs" icon="≡" span={12}>
           <GrafanaLogs source={{ container: 'pocket-id' }} title="Pocket ID logs" />
