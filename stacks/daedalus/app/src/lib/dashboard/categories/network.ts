@@ -2062,7 +2062,7 @@ type LanName = {
   public: boolean
 }
 
-type DnsData = { resolver: ResolverData; zone: ZoneData; lan: LanName[] }
+type DnsData = { resolver: ResolverData; zone: ZoneData; lan: LanName[]; admin: string | null }
 
 /**
  * The other half of what this box does for the LAN.
@@ -2076,25 +2076,52 @@ type DnsData = { resolver: ResolverData; zone: ZoneData; lan: LanName[] }
  * Loaded on its own rather than out of `loadResolver`, so the tab costs the
  * one metrics call it actually reads instead of the nine that page makes.
  */
-type DhcpData = { dhcp: Dhcp; devices: Device[] }
+type DhcpData = {
+  dhcp: Dhcp
+  devices: Device[]
+  /** The service behind both halves — see `piholeAdmin`. */
+  version: string | null
+  admin: string | null
+}
 
 async function loadDhcp(): Promise<DhcpData> {
   const base = PIHOLE()
-  const sid = await piholeSid(base)
+  const [sid, admin] = await Promise.all([piholeSid(base), piholeAdmin()])
   const metrics = await getJson<{
     metrics?: { dhcp?: { offer?: number; ack?: number; decline?: number; nak?: number } }
   }>(`${base}/api/info/metrics`, sid === null ? {} : { headers: { sid } })
 
   const dhcp = dhcpConfig(metrics?.metrics?.dhcp)
-  return { dhcp, devices: await loadDevices(dhcp.reservations) }
+  return {
+    dhcp,
+    devices: await loadDevices(dhcp.reservations),
+    version: process.env.PIHOLE_VERSION || null,
+    admin,
+  }
+}
+
+/**
+ * Where pi-hole's own admin is, from the manifest.
+ *
+ * The hostname is a nix fact and guessing it produces a link that 404s, which
+ * is exactly what the hand-written one here used to do — for a second reason
+ * as well: this installation serves the interface from the site ROOT, not from
+ * `/admin/`. `/admin/` answers 404 and `/settings-dhcp` answers 200, so the
+ * paths below are the verified ones rather than the ones the docs describe for
+ * the Docker image.
+ */
+async function piholeAdmin(): Promise<string | null> {
+  const host = (await webAppHosts()).pihole
+  return host === undefined ? null : `https://${host}`
 }
 
 async function loadDns(ctx: { base: (app: string) => string }): Promise<DnsData> {
-  const [resolver, zone, hosts, served] = await Promise.all([
+  const [resolver, zone, hosts, served, admin] = await Promise.all([
     loadResolver(ctx.base('pihole')),
     loadZone(),
     lanHosts(),
     servedHosts(),
+    piholeAdmin(),
   ])
 
   const published = new Set(zone.names.map((n) => n.fqdn))
@@ -2102,6 +2129,7 @@ async function loadDns(ctx: { base: (app: string) => string }): Promise<DnsData>
   return {
     resolver,
     zone,
+    admin,
     lan: hosts.map((h) => {
       const elsewhere = h.ip !== LAN_IP
       return {
