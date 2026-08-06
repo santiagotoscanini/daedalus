@@ -1328,7 +1328,7 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
         <Board
           title="Traffic"
           icon="◇"
-          span={8}
+          span={9}
           fill
           aside={
             <span className="board-live">
@@ -1385,45 +1385,11 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
         </Board>
 
         <Board
-          title="Where it goes"
-          icon="⌗"
-          span={4}
-          fill
-          aside={<span className="board-note">requests/min, 1h</span>}
-        >
-          <BarList
-            items={traffic.byService.map((s) => ({
-              label: s.label,
-              value: s.value,
-              display: s.value.toFixed(1),
-            }))}
-            empty="no traffic"
-          />
-          <h4 className="board-sub">Response codes, 24h</h4>
-          <BarList
-            items={traffic.byCode.map((c) => ({
-              label: c.label === '0' ? 'no reply' : c.label,
-              value: c.value,
-              display: compact(c.value),
-              tone: codeTone(c.label),
-            }))}
-            empty="no traffic"
-          />
-          <p className="board-foot">
-            {/* 401 is the gate working, not a fault, and on a box where half
-                the routers forward-auth it is one of the commonest codes. */}
-            A 401 here is usually the gate doing its job — a request arriving without a session, on
-            its way to the login. <code>no reply</code> is traefik&rsquo;s code for a client that
-            hung up before an answer was written.
-          </p>
-        </Board>
-
-        <Board
           title="Certificates"
           icon="⌸"
-          span={6}
+          span={3}
           fill
-          aside={<span className="board-note">traefik&rsquo;s own store</span>}
+          aside={<span className="board-note">the store</span>}
         >
           <ul className="certs">
             {d.certs.map((c) => (
@@ -1466,24 +1432,44 @@ function TraefikView({ d }: { d: Gateway['traefik'] }) {
             />
           )}
 
+          {/* A quarter of the width now, so this keeps the two facts that
+              change how the list is read and drops the tour. */}
           <p className="board-foot">
-            Read out of the running proxy rather than probed from outside, so this is the store, not
-            a sample: <b>every</b> certificate this box serves HTTPS with is here. One wildcard
-            covers every published name — <code>*.toscanini.me</code> — which is why the list is
-            this short and why they renew together. Issued over DNS-01 against Cloudflare, so
-            nothing has to be reachable from the internet for a renewal to work.{' '}
+            The store, not a probe — <b>every</b> certificate this box serves HTTPS with is here,
+            and one wildcard is why that is a short list. Issued over DNS-01 against Cloudflare, so
+            a renewal needs nothing reachable from the internet.{' '}
             {d.certs.some((c) => c.covers === 0) && (
               <>
-                A certificate covering nothing is a leftover: only one domain pair is declared
-                (<code>entrypoints.websecure.http.tls.domains</code> in stacks/traefik), and traefik
-                renews whatever it already holds rather than what is asked for — so an old one stays
-                in <code>acme.json</code>, and stays renewed, until it is removed from there.
+                One covering nothing is a leftover: traefik renews what it holds rather than what is
+                declared, so an old certificate stays in <code>acme.json</code> until it is taken
+                out.
               </>
             )}
           </p>
         </Board>
 
-        <Changelog gap={d.gap} span={6} />
+        <Board
+          title="Where it goes"
+          icon="⌗"
+          span={3}
+          // Deliberately not `fill`. Its caption now lives inside the fold, so
+          // there is nothing to pin to the bottom — stretching it beside a tall
+          // changelog would just move the hole from the page into the panel,
+          // which is the shape being fixed here.
+          aside={<span className="board-note">req/min, 1h</span>}
+        >
+          <BarList
+            items={traffic.byService.map((s) => ({
+              label: s.label,
+              value: s.value,
+              display: s.value.toFixed(1),
+            }))}
+            empty="no traffic"
+          />
+          <CodeBreakdown codes={traffic.byCode} />
+        </Board>
+
+        <Changelog gap={d.gap} span={9} />
 
         {/* No neighbours. cloudflared dials the cfweb entrypoint and is the
             obvious candidate, but it has its own page one tab over — and a
@@ -1763,6 +1749,68 @@ function IdpView({ d }: { d: Gateway['idp'] }) {
         </Board>
       </BoardGrid>
     </>
+  )
+}
+
+/**
+ * Response codes: one line by default, seventeen bars on request.
+ *
+ * Seventeen distinct codes in a day is normal for a proxy in front of forty
+ * services, and as a bar list it was three times the height of the panel
+ * beside it — which is where the hole under the traffic chart came from, since
+ * the grid stretches a `fill`ed pair to the taller one.
+ *
+ * The summary is not a teaser for the list, it is the answer: the question
+ * anybody brings to a status-code panel is "is anything broken", and that is
+ * the class totals. The individual codes matter once the answer is yes, and
+ * that is what opening it is for.
+ */
+function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] }) {
+  if (codes.length === 0) return <p className="viz-empty">no traffic</p>
+
+  const classes = (['2', '3', '4', '5'] as const).map((c) => ({
+    c,
+    total: codes.filter((x) => x.label.startsWith(c)).reduce((n, x) => n + x.value, 0),
+  }))
+  // Code 0 is traefik's "the client hung up before an answer was written",
+  // which is neither a success nor a server fault and belongs in neither bucket.
+  const dropped = codes.filter((x) => x.label === '0').reduce((n, x) => n + x.value, 0)
+
+  return (
+    <details className="codes">
+      <summary>
+        <span className="board-sub">Response codes, 24h</span>
+        <span className="codes-digest">
+          {classes
+            .filter((x) => x.total > 0)
+            .map((x) => (
+              <span key={x.c} className={`code-${x.c}xx`}>
+                {x.c}xx <b>{compact(x.total)}</b>
+              </span>
+            ))}
+          {dropped > 0 && (
+            <span className="code-0" title="Client hung up before an answer was written">
+              no reply <b>{compact(dropped)}</b>
+            </span>
+          )}
+        </span>
+      </summary>
+      <BarList
+        items={codes.map((c) => ({
+          label: c.label === '0' ? 'no reply' : c.label,
+          value: c.value,
+          display: compact(c.value),
+          tone: codeTone(c.label),
+        }))}
+        empty="no traffic"
+      />
+      <p className="board-foot">
+        {/* 401 is the gate working, not a fault, and on a box where half the
+            routers forward-auth it is one of the commonest codes. */}
+        A 401 is usually the gate doing its job — a request arriving without a session, on its way
+        to the login.
+      </p>
+    </details>
   )
 }
 
