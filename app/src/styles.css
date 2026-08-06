@@ -5160,3 +5160,55 @@ h2 {
   padding: 0.18rem 0.5rem;
   font-size: 0.7rem;
 }
+
+/* ── response codes, folded ──────────────────────────────────────────────── */
+
+/* Seventeen codes is normal for a proxy in front of forty services, and as a
+   bar list it is three times the height of the panel beside it — which is how
+   a `fill`ed pair ends up with a hole under the shorter one. The summary IS
+   the answer ("is anything broken"); the list is for once it is yes. */
+.codes {
+  margin-top: 0.5rem;
+}
+.codes > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.25rem 0.35rem;
+  margin: 0 -0.35rem;
+  border-radius: 7px;
+}
+.codes > summary::-webkit-details-marker {
+  display: none;
+}
+.codes > summary:hover,
+.codes[open] > summary {
+  background: var(--panel-2);
+}
+.codes > summary .board-sub {
+  margin: 0;
+  display: block;
+}
+/* The digest wraps rather than scrolls: it is four short pairs, and at a
+   quarter of the grid it lands on two lines, which is fine. Numbers keep the
+   text tokens; only the tiny class label carries the status colour, so this
+   stays inside the rule that colour never IS the information. */
+.codes-digest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.7rem;
+  font-size: 0.72rem;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.codes-digest b {
+  color: var(--text);
+  font-weight: 600;
+}
+.codes-digest .code-2xx { color: var(--ok); }
+.codes-digest .code-3xx { color: #5b8dd9; }
+.codes-digest .code-4xx { color: var(--warn); }
+.codes-digest .code-5xx { color: var(--bad); }
+.codes-digest .code-0 { color: var(--dim); }
