@@ -60,6 +60,36 @@
       BAZARR_URL = "http://host.containers.internal:6767";
       JELLYSEERR_URL = "http://seerr:5055";
       JELLYFIN_URL = "http://jellyfin:8096";
+
+      # Four services polled every two minutes instead of scraparr's 30s
+      # default, and the reason is the transport rather than the data.
+      #
+      # These four are dialed at a port published out of the ROOTLESS network
+      # namespace (gluetun owns the netns; only it can publish). Opening a new
+      # connection to one of those occasionally hangs on the SYN and recovers
+      # only after the kernel's retransmit ladder, ~10.5s — see the long note
+      # on `getJson` in stacks/daedalus/app/src/lib/dashboard/clients.ts, which
+      # rides it out with a retry ladder. scraparr cannot: every request it
+      # makes carries a hardcoded `timeout=10` with no retry and no setting to
+      # change either, so each stall lands just inside the timeout and becomes
+      # a failed scrape — 4,951 error lines in seven days, and a
+      # `scraparr_services_up` that dips to 0 on the Media dashboard while the
+      # service is perfectly healthy.
+      #
+      # Nothing here fixes that; the fix is a timeout above ~10.5s, which needs
+      # an upstream change or a patched image. What an interval DOES control is
+      # how many new connections get opened at all, so four times fewer polls is
+      # four times fewer stalls. The cost is resolution these numbers do not
+      # need: a library count and a queue depth at two-minute grain are the same
+      # answer, and the dashboards reading them are five-minute grain anyway.
+      #
+      # Jellyfin and Seerr keep the default — they are reached by container DNS
+      # over a bridge, which does not have this failure mode at all (1 and 0
+      # errors over the same week, against ~1,200 each for the four above).
+      SONARR_INTERVAL = "120";
+      RADARR_INTERVAL = "120";
+      PROWLARR_INTERVAL = "120";
+      BAZARR_INTERVAL = "120";
     };
 
     environmentFiles = [ config.sops.secrets."scraparr-env".path ];
