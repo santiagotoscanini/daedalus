@@ -5103,6 +5103,55 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+/* The router: its photograph beside what it says it is.
+   The picture earns its space by being the one panel on this page whose
+   subject is a physical object in the house — everything else here is a
+   counter. Sized to the type beside it rather than to the artwork, and it
+   shrinks first when the column narrows: the model and firmware are the
+   reading, the photo is recognition. */
+.router {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding-bottom: 0.4rem;
+}
+.router-photo {
+  width: clamp(72px, 34%, 132px);
+  height: auto;
+  flex: none;
+  object-fit: contain;
+}
+.router-id {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.router-model {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  color: var(--text);
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+/* The hardware revision is part of the identity and never the thing you are
+   looking for, so it rides the model at the size of a footnote. */
+.router-rev {
+  color: var(--dim);
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+.router-product {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+.router-open {
+  margin-top: 0.15rem;
+}
+
 /* Per-container traffic: one track with two fills, in then out.
    Two stacked bars per row would double the height of a ten-row list to say
    something the split already says, and ranking by the sum keeps a service
@@ -5152,10 +5201,17 @@ h2 {
 /* Devices. Dimmed unless the thing has asked for a name today, which is the
    whole difference between "on the network" and "was, once" — and the reason
    the inactive ones are still printed rather than filtered out. */
+/* Sixty-odd rows of four short fields. Wrapping columns rather than one tall
+   list, for the same reason the DHCP reservations wrap: a full-width board
+   holding a single column of 9rem-wide content is a page of nothing on the
+   right, and these rows are read by scanning down the addresses. */
 .devices {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
+  column-gap: 1.6rem;
 }
 .device {
   display: grid;
@@ -5165,8 +5221,6 @@ h2 {
   padding: 0.26rem 0;
   font-size: 0.74rem;
   color: var(--dim);
-}
-.device + .device {
   border-top: 1px solid var(--border-soft);
 }
 .device-name {

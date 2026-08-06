@@ -4,14 +4,12 @@ import {
   BarList,
   Board,
   BoardGrid,
-  BigStat,
   Chip,
   Columns,
   Facts,
   Measures,
   Progress,
   Pulse,
-  StatBand,
   Trend,
 } from '../viz'
 import { GrafanaLogs, LogDetails } from '../logs'
@@ -78,38 +76,11 @@ function GeneralView({ data }: { data: General }) {
 
   return (
     <>
-      <StatBand>
-        <BigStat
-          label="Receiving"
-          value={num(wire.inMbps, 1)}
-          unit="Mbps"
-          spark={wire.inHistory}
-          sub={`${bytes(wire.inDay)} in 24h`}
-        />
-        <BigStat
-          label="Sending"
-          value={num(wire.outMbps, 1)}
-          unit="Mbps"
-          tone="info"
-          spark={wire.outHistory}
-          sub={`${bytes(wire.outDay)} in 24h`}
-        />
-        <BigStat
-          label="Round trip"
-          value={internet?.rttMs === null || internet === undefined ? DASH : num(internet.rttMs, 1)}
-          unit="ms"
-          tone={internet?.up === false ? 'bad' : 'accent'}
-          spark={internet?.history ?? []}
-          sub={`${rtt(gateway?.rttMs ?? null)} to the router`}
-        />
-        <BigStat
-          label="Devices"
-          value={num(online.length)}
-          tone="ok"
-          sub={`of ${num(devices.length)} ever seen here`}
-        />
-      </StatBand>
-
+      {/* No headline band. Every figure one would have carried is the lead
+          reading of a board below it — the two rates head the chart they are
+          drawn from, the round trip sits with the probe that measured it, the
+          device count is the panel's own aside. Four cards restating them
+          would be the same numbers twice, one scroll apart. */}
       <BoardGrid>
         <Board
           title="What crosses the cable"
@@ -127,6 +98,8 @@ function GeneralView({ data }: { data: General }) {
           <Trend values={wire.outHistory} tone="info" height={56} />
           <Measures
             items={[
+              { k: 'In now', v: `${num(wire.inMbps, 1)} Mbps` },
+              { k: 'Out now', v: `${num(wire.outMbps, 1)} Mbps` },
               { k: 'In, 24h', v: bytes(wire.inDay) },
               { k: 'Out, 24h', v: bytes(wire.outDay) },
               { k: 'Peak in', v: `${num(Math.max(...wire.inHistory, 0), 1)} Mbps` },
@@ -170,7 +143,7 @@ function GeneralView({ data }: { data: General }) {
           </ul>
           <Facts
             rows={[
-              { k: 'Router', v: <a href={router.url}>{router.gateway}</a> },
+              { k: 'Default route', v: <span className="mono">{router.gateway}</span> },
               { k: 'This box', v: <span className="mono">{router.lan}</span> },
               {
                 k: 'Link',
@@ -179,11 +152,72 @@ function GeneralView({ data }: { data: General }) {
             ]}
           />
           <p className="board-foot">
-            Everything here is measured from this side, because the router serves no API to ask.
             Two probes a minute rather than one: the router answering while the far side does not
             is the ISP, and neither answering is this box’s own link. The public address is the
             one fact that cannot be measured from inside — behind NAT nothing here can see it, so
             it is read back from the edge the tunnel dials out to.
+          </p>
+        </Board>
+
+        <Board
+          title="The router"
+          icon="⌗"
+          span={4}
+          aside={
+            <span className="board-note">
+              {router.firmware === null ? 'not answering' : `firmware ${router.firmware}`}
+            </span>
+          }
+        >
+          <div className="router">
+            <img className="router-photo" src="/router-axe75.png" alt="" width={150} height={150} />
+            <div className="router-id">
+              <strong className="router-model">
+                {router.model ?? 'Unknown'}
+                {router.hardware !== null && <span className="router-rev">{router.hardware}</span>}
+              </strong>
+              <span className="router-product">{router.product}</span>
+              <a
+                className="btn btn-primary router-open"
+                href={`${router.url}/webpages/index.html#networkMap`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open the admin ↗
+              </a>
+            </div>
+          </div>
+          <Facts
+            rows={[
+              { k: 'Firmware', v: <span className="mono">{router.firmware ?? DASH}</span> },
+              { k: 'Built', v: router.built ?? DASH },
+              { k: 'Address', v: <span className="mono">{router.gateway}</span> },
+              { k: 'Round trip', v: rtt(gateway?.rttMs ?? null) },
+            ]}
+          />
+          <p className="board-foot">
+            Read from the router, not typed here. It answers every configuration call with a login
+            page — there is no API — but that page carries a build stamp in a meta tag, and the
+            model, hardware revision, firmware and build date all come out of it. So a firmware
+            update appears here on its own. The one thing the stamp does not carry is the name on
+            the box, which is the only part of this panel that is declared.
+          </p>
+        </Board>
+
+        <Board
+          title="Which services move the bytes"
+          icon="▦"
+          span={8}
+          aside={<span className="board-note">{bytes(moved)} over 24 hours</span>}
+        >
+          <TrafficList rows={services} />
+          <p className="board-foot">
+            Counted inside each container’s own network namespace, so this is traffic the app
+            itself moved rather than a share of the total guessed from anything. Two kinds are
+            absent by construction and not by omission: a container on the host’s network has no
+            figures separable from the box, and the ten sharing <b>gluetun</b>’s namespace have
+            none separable from each other — gluetun’s row is the download stack entire, counted
+            as it crossed the wire encrypted.
           </p>
         </Board>
 
@@ -208,33 +242,22 @@ function GeneralView({ data }: { data: General }) {
               historically taken LAN DNS down with it — worth knowing when a
               gap in another chart lines up with the top of an hour. */}
           <p className="board-foot">
-            What the connection can do rather than what it is doing. MySpeed runs on the hour and
-            briefly saturates the link while it measures, so a gap at the top of an hour in any
-            other chart on this page is this test rather than an outage.
-          </p>
-        </Board>
-
-        <Board
-          title="Which services move the bytes"
-          icon="▦"
-          span={8}
-          aside={<span className="board-note">{bytes(moved)} over 24 hours</span>}
-        >
-          <TrafficList rows={services} />
-          <p className="board-foot">
-            Counted inside each container’s own network namespace, so this is traffic the app
-            itself moved rather than a share of the total guessed from anything. Two kinds are
-            absent by construction and not by omission: a container on the host’s network has no
-            figures separable from the box, and the ten sharing <b>gluetun</b>’s namespace have
-            none separable from each other — gluetun’s row is the download stack entire, counted
-            as it crossed the wire encrypted.
+            What the connection can do rather than what it is doing, measured hourly by{' '}
+            {line.url === null ?
+              'MySpeed'
+            : <a href={line.url} target="_blank" rel="noreferrer">
+                MySpeed
+              </a>
+            }
+            . It briefly saturates the link while it measures, so a gap at the top of an hour in
+            any other chart on this page is this test rather than an outage.
           </p>
         </Board>
 
         <Board
           title="What this house asks for"
           icon="◈"
-          span={6}
+          span={8}
           aside={<span className="board-note">{compact(dns.queries)} lookups today</span>}
         >
           <BarList items={dns.topDomains} tone="accent" empty="no queries recorded" />
@@ -250,7 +273,7 @@ function GeneralView({ data }: { data: General }) {
         <Board
           title="Devices on the network"
           icon="▤"
-          span={6}
+          span={12}
           aside={
             <span className="board-note">
               {online.length} active · {devices.length} known
@@ -334,8 +357,8 @@ function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceilin
 function DeviceList({ devices }: { devices: General['devices'] }) {
   if (devices.length === 0) return <p className="viz-empty">no devices recorded</p>
 
-  const shown = devices.slice(0, 12)
-  const rest = devices.slice(12)
+  const shown = devices.slice(0, 16)
+  const rest = devices.slice(16)
 
   return (
     <>
@@ -2553,6 +2576,13 @@ function ZoneView({ d }: { d: Domains['zone'] }) {
       <LinkRow
         links={[
           ...(reg.registrarUrl === null ? [] : [{ label: 'Registrar', href: reg.registrarUrl }]),
+          // The registrar's control panel for THIS domain, which is where a
+          // nameserver or transfer-lock change is actually made — RDAP gives
+          // the registrar's front page, which is a different place.
+          {
+            label: 'Registrar panel',
+            href: `https://ap.www.namecheap.com/Domains/DomainControlPanel/${d.domain}/advancedns`,
+          },
           { label: 'RDAP record', href: `https://rdap.identitydigital.services/rdap/domain/${d.domain}` },
         ]}
       />

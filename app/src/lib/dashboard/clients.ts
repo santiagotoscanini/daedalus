@@ -150,6 +150,28 @@ export function getJson<T>(
   return p
 }
 
+/**
+ * The same fetch, without the JSON.
+ *
+ * For the one upstream here that is not an API: the router, which answers
+ * every question with a login page and states what it is in a meta tag on it.
+ * Sharing `attempt`'s retry ladder matters as much as for the JSON callers —
+ * this is a first connection to an address off the bridge, which is exactly
+ * the case that stalls.
+ */
+export async function getText(url: string, attempts: number[] = ATTEMPT_MS): Promise<string | null> {
+  for (const ms of attempts) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(ms), redirect: 'manual' })
+      if (!res.ok) return null
+      return await res.text()
+    } catch {
+      // fall through to the next, longer attempt; the last one returns null
+    }
+  }
+  return null
+}
+
 async function attempt<T>(url: string, init: RequestInit, attempts: number[]): Promise<T | null> {
   for (const ms of attempts) {
     try {
