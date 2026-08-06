@@ -1,47 +1,64 @@
-import { Board, BoardGrid, Chip, Facts, Measures, Progress, Pulse, RankRow, Ring, Trend } from '../viz'
+import { useState } from 'react'
+
+import {
+  Board,
+  BoardGrid,
+  Chip,
+  Facts,
+  Measures,
+  Progress,
+  Pulse,
+  RankRow,
+  Ring,
+  Trend,
+  type Tone,
+} from '../viz'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
 import { ServiceHead, verdictOf, type CompareRow } from '../service-head'
-import { DASH, bytes, flag, num, rate, until } from '../../lib/dashboard/format'
+import { Segmented } from '../ui'
+import { DASH, bytes, flag, num, rate, since, until } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { MediaData } from '../../server/category'
 
-// The Media pages — one per service, chosen by the sub-tab.
+// The Media pages — a tab per job, and a switch inside the page for the
+// services that share one.
 //
-// Same opening as the AI and Gaming tabs, and for the same reason: artwork, the
+// Every service page opens the way the AI and Gaming tabs do: artwork, the
 // name, the version running, the verdict on whether that version is current,
 // one sentence saying where this service sits in the chain, and the link you
-// came to click. Nine services whose UIs look nothing alike become nine pages
+// came to click. Sixteen containers whose UIs look nothing alike become pages
 // that are read the same way.
 //
-// Underneath, each is its own thing, and the differences are the point. The
-// *arrs are about work that is stuck; Prowlarr is about which indexer is
-// carrying the search; the downloaders are about what is moving right now;
-// Cleanup is about three timers nobody watches. Forcing those into a shared
-// layout is what the tile directory did, and it is why every service got three
-// numbers that answered no question anybody actually had.
+// ── why some tabs hold three services ─────────────────────────────────────
+//
+// Because the split between them is the software's, not the reader's. Seerr,
+// Sonarr and Radarr answer one question — what should be here that isn't —
+// and a tab each meant reassembling that answer from three pages. The switch
+// is the same one Network uses for its three ways in, down to the health dot
+// riding the button that selects each option, which is the only place that dot
+// can be read without first selecting the thing it belongs to.
 
 export function MediaView({ data }: { data: MediaData }) {
   switch (data.tab) {
     case 'jellyfin':
       return <JellyfinView d={data} />
-    case 'seerr':
-      return <SeerrView d={data} />
-    case 'sonarr':
-    case 'radarr':
-      return <ArrView d={data} />
+    case 'wanted':
+      return <WantedView d={data} />
     case 'prowlarr':
       return <ProwlarrView d={data} />
     case 'bazarr':
       return <BazarrView d={data} />
-    case 'downloads':
-      return <DownloadsView d={data} />
+    case 'downloaders':
+      return <DownloadersView d={data} />
     case 'books':
       return <BooksView d={data} />
-    case 'cleanup':
-      return <CleanupView d={data} />
+    case 'housekeeping':
+      return <HousekeepingView d={data} />
   }
 }
+
+/* ── shared ───────────────────────────────────────────────────────────── */
 
 /**
  * The working behind a version verdict, shown on hover.
@@ -63,6 +80,34 @@ function compareOf(gap: VersionGap, note: string): CompareRow[] {
     },
     { k: 'Running', v: gap.installed, note },
   ]
+}
+
+/**
+ * A tri-state health as a dot tone.
+ *
+ * `null` is "could not be read", which is grey — deliberately not the same
+ * claim as down, and the state a service lands in when the thing that would
+ * answer for it is itself unreachable.
+ */
+function tone(ok: boolean | null): Tone | null {
+  return ok === null ? null : ok ? 'ok' : 'bad'
+}
+
+/** The switch above a tab that holds more than one service. */
+function ServiceBar<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; label: string; dot?: Tone | null }[]
+}) {
+  return (
+    <div className="tunnel-bar">
+      <Segmented value={value} onChange={onChange} options={options} />
+    </div>
+  )
 }
 
 /** Whole days as a phrase. Computed on the server — see `daysSince`. */
@@ -125,6 +170,15 @@ function HealthChecks({
   )
 }
 
+/** The button every service head carries. */
+function Open({ name, host }: { name: string; host: string }) {
+  return (
+    <a className="btn btn-primary" href={`https://${host}.toscanini.me`} target="_blank" rel="noreferrer">
+      Open {name} ↗
+    </a>
+  )
+}
+
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */
 
 /** Idle longer than this and an account is worth noticing rather than listing. */
@@ -154,11 +208,7 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
             playing something at home does not go out through Switzerland and back.
           </>
         }
-        actions={
-          <a className="btn btn-primary" href="https://jellyfin.toscanini.me" target="_blank" rel="noreferrer">
-            Open Jellyfin ↗
-          </a>
-        }
+        actions={<Open name="Jellyfin" host="jellyfin" />}
       />
 
       <BoardGrid>
@@ -248,7 +298,13 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
               {d.people.map((p) => (
                 <li key={p.name} className="who-row">
                   <span className="who-name">{p.name}</span>
-                  <span className={p.lastSeenDays !== null && p.lastSeenDays > STALE_DAYS ? 'who-when is-muted' : 'who-when'}>
+                  <span
+                    className={
+                      p.lastSeenDays !== null && p.lastSeenDays > STALE_DAYS ?
+                        'who-when is-muted'
+                      : 'who-when'
+                    }
+                  >
                     {ago(p.lastSeenDays)}
                   </span>
                 </li>
@@ -277,9 +333,51 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
   )
 }
 
-/* ── Seerr ────────────────────────────────────────────────────────────── */
+/* ── Wanted: Seerr, Sonarr, Radarr ────────────────────────────────────── */
 
-function SeerrView({ d }: { d: Extract<MediaData, { tab: 'seerr' }> }) {
+/**
+ * scraparr is what turns the *arrs into prometheus series, and it has no page
+ * anywhere: it serves only /metrics. It belongs under these three because a
+ * gap in the *arr graphs on the Monitoring page is nearly always this
+ * container having stopped, not the *arr.
+ */
+const WANTED_NEIGHBOURS: readonly LogNeighbour[] = [
+  {
+    container: 'scraparr',
+    label: 'Scraparr',
+    role: 'the exporter behind the *arr graphs',
+    note: 'Polls Sonarr, Radarr and Prowlarr on a timer and republishes what they say as prometheus metrics. Nothing on this tab reads it — every number here comes from the *arrs directly — but the dashboards on the Monitoring page do, so a flat line there starts here.',
+  },
+]
+
+type Wanted = Extract<MediaData, { tab: 'wanted' }>
+
+function WantedView({ d }: { d: Wanted }) {
+  // Seerr first: it is where a title enters the system, and the other two are
+  // what happens to it afterwards. Reading them in that order is reading them
+  // in the order the work actually flows.
+  const [who, setWho] = useState<'seerr' | 'sonarr' | 'radarr'>('seerr')
+
+  return (
+    <>
+      <ServiceBar
+        value={who}
+        onChange={setWho}
+        options={[
+          { value: 'seerr', label: 'Seerr', dot: tone(d.seerr.version !== null) },
+          { value: 'sonarr', label: 'Sonarr', dot: tone(d.sonarr.version !== null) },
+          { value: 'radarr', label: 'Radarr', dot: tone(d.radarr.version !== null) },
+        ]}
+      />
+
+      {who === 'seerr' ?
+        <SeerrPage d={d.seerr} />
+      : <ArrPage d={who === 'sonarr' ? d.sonarr : d.radarr} />}
+    </>
+  )
+}
+
+function SeerrPage({ d }: { d: Wanted['seerr'] }) {
   const { counts } = d
   const maxRequests = Math.max(...d.people.map((p) => p.requests), 1)
 
@@ -295,14 +393,10 @@ function SeerrView({ d }: { d: Extract<MediaData, { tab: 'seerr' }> }) {
         lede={
           <>
             The front door. Somebody asks for a film or a series here, and if it is approved Seerr
-            hands it to Radarr or Sonarr — everything else on this page is what happens next.
+            hands it straight to Radarr or Sonarr — the two services beside it on this tab.
           </>
         }
-        actions={
-          <a className="btn btn-primary" href="https://seerr.toscanini.me" target="_blank" rel="noreferrer">
-            Open Seerr ↗
-          </a>
-        }
+        actions={<Open name="Seerr" host="seerr" />}
       />
 
       <BoardGrid>
@@ -335,7 +429,11 @@ function SeerrView({ d }: { d: Extract<MediaData, { tab: 'seerr' }> }) {
         <Board title="Where they are" icon="◷" span={4}>
           <Measures
             items={[
-              { k: 'Pending', v: num(counts.pending), tone: (counts.pending ?? 0) > 0 ? 'warn' : undefined },
+              {
+                k: 'Pending',
+                v: num(counts.pending),
+                tone: (counts.pending ?? 0) > 0 ? 'warn' : undefined,
+              },
               { k: 'Approved', v: num(counts.approved) },
               { k: 'Processing', v: num(counts.processing) },
               { k: 'Available', v: num(counts.available) },
@@ -375,16 +473,18 @@ function SeerrView({ d }: { d: Extract<MediaData, { tab: 'seerr' }> }) {
           }
         />
 
-        <LogBoard source={{ container: 'seerr' }} title="Seerr logs" />
+        <LogBoard
+          source={{ container: 'seerr' }}
+          title="Seerr logs"
+          neighbours={WANTED_NEIGHBOURS}
+        />
       </BoardGrid>
     </>
   )
 }
 
-/* ── Sonarr and Radarr ────────────────────────────────────────────────── */
-
 /**
- * The words that differ between the two, and nothing else.
+ * The words that differ between Sonarr and Radarr, and nothing else.
  *
  * Everything else on this page is identical because the software is identical —
  * see the note on `ArrData`. Keeping the differences in one table rather than in
@@ -395,7 +495,6 @@ const ARR_COPY = {
     name: 'Sonarr',
     logo: '/icon-sonarr.svg',
     unit: 'Series',
-    url: 'https://sonarr.toscanini.me',
     lede: 'Watches series for new episodes, asks Prowlarr where to find them, and hands what it finds to a downloader. What arrives is renamed into /s2/tv and Jellyfin picks it up.',
     upcoming: 'Airing next',
   },
@@ -403,13 +502,12 @@ const ARR_COPY = {
     name: 'Radarr',
     logo: '/icon-radarr.svg',
     unit: 'Movies',
-    url: 'https://radarr.toscanini.me',
     lede: 'The same program as Sonarr, pointed at films. Same indexers, same downloaders, same folder — the difference is that a film has a release date rather than a schedule.',
     upcoming: 'Releasing next',
   },
 } as const
 
-function ArrView({ d }: { d: Extract<MediaData, { tab: 'sonarr' | 'radarr' }> }) {
+function ArrPage({ d }: { d: Wanted['sonarr'] }) {
   const copy = ARR_COPY[d.app]
   const { counts } = d
   const reachable = d.version !== null
@@ -424,11 +522,7 @@ function ArrView({ d }: { d: Extract<MediaData, { tab: 'sonarr' | 'radarr' }> })
         verdict={verdictOf(d.gap)}
         compare={compareOf(d.gap, 'from /api/v3/system/status')}
         lede={copy.lede}
-        actions={
-          <a className="btn btn-primary" href={copy.url} target="_blank" rel="noreferrer">
-            Open {copy.name} ↗
-          </a>
-        }
+        actions={<Open name={copy.name} host={d.app} />}
       />
 
       <BoardGrid>
@@ -460,10 +554,16 @@ function ArrView({ d }: { d: Extract<MediaData, { tab: 'sonarr' | 'radarr' }> })
             <div key={disk.path}>
               <h4 className="board-sub">{disk.path}</h4>
               <Progress
-                pct={disk.totalBytes > 0 ? ((disk.totalBytes - disk.freeBytes) / disk.totalBytes) * 100 : null}
+                pct={
+                  disk.totalBytes > 0 ?
+                    ((disk.totalBytes - disk.freeBytes) / disk.totalBytes) * 100
+                  : null
+                }
                 tone="info"
               />
-              <p className="board-foot">{bytes(disk.freeBytes)} free of {bytes(disk.totalBytes)}</p>
+              <p className="board-foot">
+                {bytes(disk.freeBytes)} free of {bytes(disk.totalBytes)}
+              </p>
             </div>
           ))}
         </Board>
@@ -472,7 +572,11 @@ function ArrView({ d }: { d: Extract<MediaData, { tab: 'sonarr' | 'radarr' }> })
           title="Queue"
           icon="⇣"
           span={8}
-          aside={<span className="board-note">{num(counts.queued)} item{counts.queued === 1 ? '' : 's'}</span>}
+          aside={
+            <span className="board-note">
+              {num(counts.queued)} item{counts.queued === 1 ? '' : 's'}
+            </span>
+          }
         >
           {d.queue.length === 0 ?
             <p className="viz-empty">
@@ -550,7 +654,11 @@ function ArrView({ d }: { d: Extract<MediaData, { tab: 'sonarr' | 'radarr' }> })
 
         <Changelog gap={d.gap} span={12} />
 
-        <LogBoard source={{ container: d.app }} title={`${copy.name} logs`} />
+        <LogBoard
+          source={{ container: d.app }}
+          title={`${copy.name} logs`}
+          neighbours={WANTED_NEIGHBOURS}
+        />
       </BoardGrid>
     </>
   )
@@ -592,11 +700,7 @@ function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'prowlarr' }> }) {
             them. Nothing here downloads anything — it finds the release and hands back a link.
           </>
         }
-        actions={
-          <a className="btn btn-primary" href="https://prowlarr.toscanini.me" target="_blank" rel="noreferrer">
-            Open Prowlarr ↗
-          </a>
-        }
+        actions={<Open name="Prowlarr" host="prowlarr" />}
       />
 
       <BoardGrid>
@@ -699,11 +803,7 @@ function BazarrView({ d }: { d: Extract<MediaData, { tab: 'bazarr' }> }) {
             missing words.
           </>
         }
-        actions={
-          <a className="btn btn-primary" href="https://bazarr.toscanini.me" target="_blank" rel="noreferrer">
-            Open Bazarr ↗
-          </a>
-        }
+        actions={<Open name="Bazarr" host="bazarr" />}
       />
 
       <BoardGrid>
@@ -774,73 +874,115 @@ function BazarrView({ d }: { d: Extract<MediaData, { tab: 'bazarr' }> }) {
   )
 }
 
-/* ── Downloads ────────────────────────────────────────────────────────── */
+/* ── Downloaders: qBittorrent, NZBGet, MeTube ─────────────────────────── */
 
-const DOWNLOAD_NEIGHBOURS: readonly LogNeighbour[] = [
-  {
-    container: 'nzbget',
-    label: 'NZBGet',
-    role: 'the usenet half',
-    note: 'Failures here are article-level and silent: a post that has been incompletely retained downloads to 99% and then fails to assemble, which the *arrs record only as an import that never happened.',
-  },
-  {
-    container: 'metube',
-    label: 'MeTube',
-    role: 'yt-dlp, by hand',
-    note: 'The only downloader here nothing else drives. Almost every failure is yt-dlp being out of date against a site that changed, which looks like a broken URL until you read it.',
-  },
-]
+type Downloaders = Extract<MediaData, { tab: 'downloaders' }>
 
-function DownloadsView({ d }: { d: Extract<MediaData, { tab: 'downloads' }> }) {
-  const { qbt, nzb, metube, vpn } = d
-  const moving = (qbt.down ?? 0) + (qbt.up ?? 0) + (nzb.rate ?? 0) > 0
+function DownloadersView({ d }: { d: Downloaders }) {
+  // qBittorrent first: it is the one the *arrs reach for by default and the
+  // only one of the three whose state changes minute to minute.
+  const [which, setWhich] = useState<'qbt' | 'nzb' | 'metube'>('qbt')
+
+  return (
+    <>
+      <ServiceBar
+        value={which}
+        onChange={setWhich}
+        options={[
+          { value: 'qbt', label: 'qBittorrent', dot: tone(d.qbt.reachable) },
+          { value: 'nzb', label: 'NZBGet', dot: tone(d.nzb.version !== null) },
+          { value: 'metube', label: 'MeTube', dot: tone(d.metube.done !== null) },
+        ]}
+      />
+
+      {which === 'qbt' ?
+        <QbtPage d={d} />
+      : which === 'nzb' ?
+        <NzbPage d={d} />
+      : <MetubePage d={d.metube} />}
+    </>
+  )
+}
+
+/**
+ * The tunnel, as three facts rather than a panel.
+ *
+ * It has a page of its own on Network › Going out, and the only part that
+ * belongs on a downloader page is the part that silently changes what the page
+ * is reporting: a tunnel that is up but has lost its forwarded port looks
+ * perfectly healthy and cannot seed.
+ */
+function TunnelBoard({ vpn, span }: { vpn: Downloaders['vpn']; span: 4 | 6 }) {
+  return (
+    <Board title="The tunnel" icon="⛨" span={span}>
+      <div className="vpn-state">
+        <Pulse on={vpn.up === true} tone={vpn.up === true ? 'ok' : 'bad'} />
+        <strong>{vpn.up === null ? 'unknown' : vpn.up ? 'connected' : 'down'}</strong>
+      </div>
+      <Facts
+        rows={[
+          { k: 'Exit', v: flag(vpn.country) },
+          {
+            k: 'Forwarded port',
+            v:
+              vpn.port === null ?
+                <span className="text-bad">not forwarded</span>
+              : <span className="mono">{vpn.port}</span>,
+          },
+        ]}
+      />
+      <p className="board-foot">
+        Every downloader on this tab shares gluetun&rsquo;s network namespace, so every byte crossed
+        this tunnel. The full picture is on Network › Going out; what is here is what changes the
+        meaning of the panels beside it.
+      </p>
+    </Board>
+  )
+}
+
+function QbtPage({ d }: { d: Downloaders }) {
+  const { qbt } = d
 
   return (
     <>
       <ServiceHead
         logo="/icon-qbittorrent.svg"
-        name="Downloads"
+        name="qBittorrent"
         version={qbt.version}
-        versionNote="qBittorrent"
+        versionNote="reported by the app"
         verdict={verdictOf(qbt.gap)}
         compare={compareOf(qbt.gap, 'from /api/v2/app/version')}
         lede={
           <>
-            Three downloaders doing one job. qBittorrent and NZBGet are fed by the *arrs and land in
-            the same folder; MeTube is the manual one. All three run inside gluetun&rsquo;s network
-            namespace, so every byte on this page crossed the ProtonVPN tunnel.
+            The torrent half, and what the *arrs reach for first. Runs inside gluetun&rsquo;s
+            network namespace, which is also why its forwarded port is a fact worth watching:
+            without one it can download and never seed.
           </>
         }
-        actions={
-          <a className="btn btn-primary" href="https://qbittorrent.toscanini.me" target="_blank" rel="noreferrer">
-            Open qBittorrent ↗
-          </a>
-        }
+        actions={<Open name="qBittorrent" host="qbittorrent" />}
       />
 
       <BoardGrid>
         <Board
-          title="Moving now"
+          title="Transfers"
           icon="⇣"
           span={8}
           aside={
             <span className="board-note">
-              <Pulse on={moving} tone="accent" />
+              <Pulse on={(qbt.down ?? 0) + (qbt.up ?? 0) > 0} tone="accent" />
               {qbt.connection ?? DASH}
-              {nzb.paused && ' · usenet paused'}
             </span>
           }
         >
           <Measures
             items={[
-              { k: 'Torrent down', v: rate(qbt.down) },
-              { k: 'Torrent up', v: rate(qbt.up) },
-              { k: 'Usenet', v: rate(nzb.rate) },
+              { k: 'Down', v: rate(qbt.down) },
+              { k: 'Up', v: rate(qbt.up) },
               { k: 'Session', v: `${bytes(qbt.sessionDown)} in · ${bytes(qbt.sessionUp)} out` },
               { k: 'Free', v: bytes(qbt.freeBytes) },
             ]}
           />
-          {qbt.transfers.length === 0 && nzb.groups.length === 0 ?
+          {qbt.transfers.length === 0 ?
             <p className="viz-empty">
               {qbt.reachable ?
                 'Nothing downloading. Completed torrents are removed after import.'
@@ -863,6 +1005,96 @@ function DownloadsView({ d }: { d: Extract<MediaData, { tab: 'downloads' }> }) {
                   <Progress pct={t.pct} tone={t.active ? 'accent' : 'muted'} active={t.active} />
                 </li>
               ))}
+            </ul>
+          }
+        </Board>
+
+        <TunnelBoard vpn={d.vpn} span={4} />
+
+        <Board title="The swarm" icon="⁘" span={4}>
+          <Facts
+            rows={[
+              { k: 'Downloading', v: num(qbt.counts.leeching) },
+              { k: 'Seeding', v: num(qbt.counts.seeding) },
+              {
+                k: 'Stalled',
+                v:
+                  qbt.counts.stalled === 0 ?
+                    num(0)
+                  : <span className="text-warn">{num(qbt.counts.stalled)}</span>,
+              },
+              {
+                k: 'Errored',
+                v:
+                  qbt.counts.errored === 0 ?
+                    num(0)
+                  : <span className="text-bad">{num(qbt.counts.errored)}</span>,
+              },
+            ]}
+          />
+          <p className="board-foot">
+            Stalled is the state that needs reading in context: with a forwarded port it usually
+            means no seeders, and without one it means every torrent will end up here.
+          </p>
+        </Board>
+
+        <Changelog gap={qbt.gap} span={8} aside={<span className="board-note">qbittorrent</span>} />
+
+        <LogBoard source={{ container: 'qbittorrent' }} title="qBittorrent logs" />
+      </BoardGrid>
+    </>
+  )
+}
+
+function NzbPage({ d }: { d: Downloaders }) {
+  const { nzb } = d
+  const inactive = nzb.servers.filter((s) => !s.active).length
+  const total = nzb.freeBytes
+
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-nzbget.svg"
+        name="NZBGet"
+        version={nzb.version}
+        versionNote="reported by the app"
+        verdict={verdictOf(nzb.gap)}
+        compare={compareOf(nzb.gap, 'from /jsonrpc/version')}
+        lede={
+          <>
+            The usenet half. Faster than a torrent when the post is fully retained and useless when
+            it is not — which is a property of the provider rather than of the release, and the
+            reason the news-server list below is on this page.
+          </>
+        }
+        actions={<Open name="NZBGet" host="nzbget" />}
+      />
+
+      <BoardGrid>
+        <Board
+          title="Downloading"
+          icon="⇣"
+          span={8}
+          aside={
+            <span className="board-note">
+              <Pulse on={(nzb.rate ?? 0) > 0} tone="accent" />
+              {nzb.paused ? 'paused'
+              : nzb.standby ? 'idle'
+              : 'active'}
+            </span>
+          }
+        >
+          <Measures
+            items={[
+              { k: 'Rate', v: rate(nzb.rate) },
+              { k: 'Remaining', v: bytes(nzb.remainingBytes) },
+              { k: 'Today', v: bytes(nzb.dayBytes) },
+              { k: 'This month', v: bytes(nzb.monthBytes) },
+            ]}
+          />
+          {nzb.groups.length === 0 ?
+            <p className="viz-empty">Nothing in the queue.</p>
+          : <ul className="transfers">
               {nzb.groups.map((g) => (
                 <li key={g.name} className="transfers-row">
                   <div className="transfers-head">
@@ -880,88 +1112,86 @@ function DownloadsView({ d }: { d: Extract<MediaData, { tab: 'downloads' }> }) {
           }
         </Board>
 
-        <Board title="The tunnel" icon="⛨" span={4}>
-          <div className="vpn-state">
-            <Pulse on={vpn.up === true} tone={vpn.up === true ? 'ok' : 'bad'} />
-            <strong>{vpn.up === null ? 'unknown' : vpn.up ? 'connected' : 'down'}</strong>
-          </div>
-          <Facts
-            rows={[
-              { k: 'Exit', v: flag(vpn.country) },
-              {
-                k: 'Forwarded port',
-                // A tunnel that is up but has lost its forward looks perfectly
-                // healthy and cannot seed, which is why this is called out
-                // rather than shown as a zero.
-                v:
-                  vpn.port === null ?
-                    <span className="text-bad">not forwarded</span>
-                  : <span className="mono">{vpn.port}</span>,
-              },
-              {
-                k: 'Torrents',
-                v: `${num(qbt.counts.leeching)} down · ${num(qbt.counts.seeding)} seeding`,
-              },
-              {
-                k: 'Stalled',
-                v:
-                  qbt.counts.stalled + qbt.counts.errored === 0 ?
-                    num(0)
-                  : <span className="text-warn">
-                      {num(qbt.counts.stalled)}
-                      {qbt.counts.errored > 0 && ` · ${num(qbt.counts.errored)} errored`}
-                    </span>,
-              },
-            ]}
-          />
-          <p className="board-foot">
-            Three facts, not a panel: the tunnel has a page of its own on Network › Going out. What
-            belongs here is the part that silently changes what this tab reports.
-          </p>
-        </Board>
+        <TunnelBoard vpn={d.vpn} span={4} />
 
         <Board
-          title="Usenet"
-          icon="⁙"
-          span={6}
+          title="News servers"
+          icon="⛁"
+          span={4}
           aside={
-            nzb.version === null ?
-              <span className="board-note">not answering</span>
-            : <span className="board-note mono">{nzb.version}</span>
+            inactive === 0 ?
+              <span className="board-note">all active</span>
+            : <span className="board-note text-bad">{num(inactive)} inactive</span>
           }
         >
-          <Measures
-            items={[
-              { k: 'Rate', v: rate(nzb.rate) },
-              { k: 'Remaining', v: bytes(nzb.remainingBytes) },
-              { k: 'Downloaded', v: bytes(nzb.downloadedBytes) },
-              {
-                k: 'Failed articles',
-                v: num(nzb.articleFailures),
-                tone: (nzb.articleFailures ?? 0) > 0 ? 'warn' : undefined,
-              },
+          {nzb.servers.length === 0 ?
+            <p className="viz-empty">could not read the server list</p>
+          : <ul className="provs">
+              {nzb.servers.map((s) => (
+                <li key={s.id} className="prov">
+                  <Chip tone={s.active ? 'ok' : 'bad'}>{s.active ? 'active' : 'inactive'}</Chip>
+                  <span className="prov-name mono">server {s.id}</span>
+                </li>
+              ))}
+            </ul>
+          }
+          <Facts
+            rows={[
+              { k: 'Uptime', v: since(nzb.uptimeSeconds) },
+              { k: 'Spent downloading', v: since(nzb.downloadSeconds) },
+              { k: 'Free where it writes', v: bytes(total) },
             ]}
           />
           <p className="board-foot">
-            Failed articles are the number that explains a usenet download which reached 99% and
-            then vanished: the post was incompletely retained, and no amount of retrying fixes it.
+            A provider whose subscription lapses goes inactive and everything simply stops being
+            found — which from Sonarr&rsquo;s side is indistinguishable from the release not
+            existing.
           </p>
         </Board>
 
+        <Changelog gap={nzb.gap} span={8} aside={<span className="board-note">nzbgetcom/nzbget</span>} />
+
+        <LogBoard source={{ container: 'nzbget' }} title="NZBGet logs" />
+      </BoardGrid>
+    </>
+  )
+}
+
+function MetubePage({ d }: { d: Downloaders['metube'] }) {
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-metube.svg"
+        name="MeTube"
+        version={d.version}
+        versionNote="from the tag the flake pins"
+        verdict={verdictOf(d.gap)}
+        compare={compareOf(d.gap, 'the image tag — MeTube serves no version')}
+        lede={
+          <>
+            yt-dlp with a web form in front of it, and the only downloader here that nothing else
+            drives — you point it at a URL yourself. Also inside the VPN namespace, which is
+            occasionally why a site refuses it.
+          </>
+        }
+        actions={<Open name="MeTube" host="metube" />}
+      />
+
+      <BoardGrid>
         <Board
-          title="MeTube"
-          icon="▷"
-          span={6}
+          title="Queue"
+          icon="⇣"
+          span={8}
           aside={
             <span className="board-note">
-              {num(metube.queued)} queued · {num(metube.done)} done
+              {num(d.queued)} queued · {num(d.pending)} pending
             </span>
           }
         >
-          {metube.recent.length === 0 ?
-            <p className="viz-empty">nothing downloaded yet</p>
+          {d.recent.length === 0 ?
+            <p className="viz-empty">Nothing downloaded yet.</p>
           : <ul className="feed">
-              {metube.recent.map((r, i) => (
+              {d.recent.map((r, i) => (
                 <li key={`${r.title}-${String(i)}`} className="feed-row">
                   <span className={r.status === 'finished' ? 'feed-event' : 'feed-event text-bad'}>
                     {r.status}
@@ -973,46 +1203,35 @@ function DownloadsView({ d }: { d: Extract<MediaData, { tab: 'downloads' }> }) {
               ))}
             </ul>
           }
+          <p className="board-foot">
+            The most recent finished items. MeTube keeps its history in the browser session as well
+            as on the server, so this list and the one in its own UI can differ.
+          </p>
+        </Board>
+
+        <Board title="All time" icon="▦" span={4}>
+          <Measures
+            items={[
+              { k: 'Completed', v: num(d.done) },
+              { k: 'Queued', v: num(d.queued) },
+              { k: 'Pending', v: num(d.pending) },
+            ]}
+          />
         </Board>
 
         <Changelog
-          gap={nzb.gap}
-          span={6}
-          title={
-            nzb.gap.behind.length === 0 ?
-              'NZBGet — current'
-            : `NZBGet — ${String(nzb.gap.behind.length)} behind`
-          }
-          aside={<span className="board-note">nzbgetcom/nzbget</span>}
-        />
-        <Changelog
-          gap={metube.gap}
-          span={6}
-          title={
-            metube.gap.behind.length === 0 ?
-              'MeTube — current'
-            : `MeTube — ${String(metube.gap.behind.length)} behind`
-          }
-          aside={
-            metube.version === null ?
-              <span className="board-note">version unknown</span>
-            : <span className="board-note mono">{metube.version}</span>
-          }
+          gap={d.gap}
+          span={12}
           foot={
             <p className="board-foot">
-              MeTube ships a new dated build most weeks, and almost all of them are a yt-dlp bump —
-              which is exactly what fixes a site that suddenly stopped downloading.
+              MeTube ships a new dated build most weeks and almost all of them are a yt-dlp bump —
+              which is exactly what fixes a site that suddenly stopped downloading. It is the one
+              service on this page where being behind is usually the whole explanation.
             </p>
           }
         />
 
-        <Changelog gap={qbt.gap} span={12} aside={<span className="board-note">qBittorrent</span>} />
-
-        <LogBoard
-          source={{ container: 'qbittorrent' }}
-          title="qBittorrent logs"
-          neighbours={DOWNLOAD_NEIGHBOURS}
-        />
+        <LogBoard source={{ container: 'metube' }} title="MeTube logs" />
       </BoardGrid>
     </>
   )
@@ -1020,39 +1239,105 @@ function DownloadsView({ d }: { d: Extract<MediaData, { tab: 'downloads' }> }) {
 
 /* ── Books ────────────────────────────────────────────────────────────── */
 
-const BOOK_NEIGHBOURS: readonly LogNeighbour[] = [
-  {
-    container: 'shelfmark',
-    label: 'Shelfmark',
-    role: 'the search and download half',
-    note: 'Searches Anna’s Archive through the downloads stack’s VPN and drops finished files where Calibre-Web-Automated ingests them. A book that never appears has usually failed here, not in the library.',
-  },
-]
+type Books = Extract<MediaData, { tab: 'books' }>
 
-function BooksView({ d }: { d: Extract<MediaData, { tab: 'books' }> }) {
-  const { calibre, shelfmark, disk } = d
-  const counts = shelfmark.counts
+function BooksView({ d }: { d: Books }) {
+  // Shelfmark first would be the pipeline order, but the shelf is the thing
+  // anybody actually opens — the downloader is where you go when a book did
+  // not arrive.
+  const [which, setWhich] = useState<'calibre' | 'shelfmark'>('calibre')
+
+  return (
+    <>
+      <ServiceBar
+        value={which}
+        onChange={setWhich}
+        options={[
+          { value: 'calibre', label: 'Calibre-Web', dot: tone(d.calibre.books !== null) },
+          { value: 'shelfmark', label: 'Shelfmark', dot: tone(d.shelfmark.counts !== null) },
+        ]}
+      />
+
+      {which === 'calibre' ? <CalibrePage d={d} /> : <ShelfmarkPage d={d} />}
+    </>
+  )
+}
+
+function CalibrePage({ d }: { d: Books }) {
+  const { calibre, disk } = d
 
   return (
     <>
       <ServiceHead
         logo="/icon-calibre-web.svg"
-        name="Books"
+        name="Calibre-Web"
         version={calibre.version}
-        versionNote="Calibre-Web-Automated"
+        versionNote="from the tag the flake pins"
         verdict={verdictOf(calibre.gap)}
-        compare={compareOf(calibre.gap, 'from the tag the flake pins')}
+        compare={compareOf(calibre.gap, 'the image tag — the app serves no version')}
         lede={
           <>
-            Two halves of one shelf: Shelfmark finds and downloads, Calibre-Web-Automated ingests and
-            serves. Everything lives under <span className="mono">/s2/books</span>.
+            The shelf itself: Calibre-Web-Automated ingests whatever lands in{' '}
+            <span className="mono">/s2/books</span> and serves it to readers over OPDS and the web.
           </>
         }
-        actions={
-          <a className="btn btn-primary" href="https://calibre.toscanini.me" target="_blank" rel="noreferrer">
-            Open Calibre-Web ↗
-          </a>
+        actions={<Open name="Calibre-Web" host="calibre" />}
+      />
+
+      <BoardGrid>
+        <Board title="The shelf" icon="❏" span={8}>
+          <Facts
+            rows={[
+              { k: 'Books', v: num(calibre.books) },
+              { k: 'Authors', v: num(calibre.authors) },
+              { k: 'Series', v: num(calibre.series) },
+              { k: 'Categories', v: num(calibre.categories) },
+            ]}
+          />
+          <p className="board-foot">
+            Read through the OPDS catalogue with its own credentials — the same endpoint an e-reader
+            uses, which is also the one path on this app that skips the Pocket ID gate.
+          </p>
+        </Board>
+
+        <Board title="Disk" icon="▦" span={4}>
+          <Measures
+            items={[
+              { k: 'On disk', v: bytes(disk.usedBytes) },
+              { k: 'Free', v: bytes(disk.freeBytes) },
+            ]}
+          />
+        </Board>
+
+        <Changelog gap={calibre.gap} span={12} />
+
+        <LogBoard source={{ container: 'calibre-web' }} title="Calibre-Web logs" />
+      </BoardGrid>
+    </>
+  )
+}
+
+function ShelfmarkPage({ d }: { d: Books }) {
+  const { shelfmark } = d
+  const counts = shelfmark.counts
+
+  return (
+    <>
+      <ServiceHead
+        logo={null}
+        name="Shelfmark"
+        version={shelfmark.version}
+        versionNote="pinned by digest to :latest"
+        verdict={verdictOf(shelfmark.gap)}
+        compare={compareOf(shelfmark.gap, 'a moving tag — nothing here can say')}
+        lede={
+          <>
+            The half that goes and gets things: searches Anna&rsquo;s Archive through the downloads
+            stack&rsquo;s VPN and drops finished files where Calibre-Web ingests them. A book that
+            never appeared usually failed here, not on the shelf.
+          </>
         }
+        actions={<Open name="Shelfmark" host="shelfmark" />}
       />
 
       <BoardGrid>
@@ -1062,7 +1347,7 @@ function BooksView({ d }: { d: Extract<MediaData, { tab: 'books' }> }) {
           span={8}
           aside={
             counts === null ?
-              <span className="board-note">Shelfmark did not answer</span>
+              <span className="board-note">did not answer</span>
             : <span className="board-note">
                 {num(counts.done)} completed · {num(counts.errors)} failed
               </span>
@@ -1092,22 +1377,14 @@ function BooksView({ d }: { d: Extract<MediaData, { tab: 'books' }> }) {
           }
         </Board>
 
-        <Board title="The shelf" icon="❏" span={4}>
-          <Facts
-            rows={[
-              { k: 'Books', v: num(calibre.books) },
-              { k: 'Authors', v: num(calibre.authors) },
-              { k: 'Series', v: num(calibre.series) },
-              { k: 'Categories', v: num(calibre.categories) },
-              { k: 'On disk', v: bytes(disk.usedBytes) },
-              { k: 'Free', v: bytes(disk.freeBytes) },
-            ]}
-          />
-          {counts !== null && (
-            <Measures
+        <Board title="Queue" icon="◷" span={4}>
+          {counts === null ?
+            <p className="viz-empty">no reading</p>
+          : <Measures
               items={[
                 { k: 'Downloading', v: num(counts.downloading) },
                 { k: 'Queued', v: num(counts.queued) },
+                { k: 'Completed', v: num(counts.done) },
                 {
                   k: 'Errors',
                   v: num(counts.errors),
@@ -1115,80 +1392,86 @@ function BooksView({ d }: { d: Extract<MediaData, { tab: 'books' }> }) {
                 },
               ]}
             />
-          )}
+          }
         </Board>
 
-        <Changelog gap={calibre.gap} span={6} aside={<span className="board-note">Calibre-Web</span>} />
         <Changelog
           gap={shelfmark.gap}
-          span={6}
+          span={12}
           title="Shelfmark releases"
           aside={<span className="board-note">version unknown</span>}
           foot={
             <p className="board-foot">
-              Shelfmark is pinned by digest to a moving <span className="mono">:latest</span>, so
-              nothing here can say which of these it is running — only what has shipped. Its
-              container is restarted by a re-pull, not by a version bump.
+              Pinned by digest to a moving <span className="mono">:latest</span>, so nothing here can
+              say which of these it is running — only what has shipped. Its container is restarted by
+              a re-pull, not by a version bump.
             </p>
           }
         />
 
-        <LogBoard
-          source={{ container: 'calibre-web' }}
-          title="Calibre-Web logs"
-          neighbours={BOOK_NEIGHBOURS}
-        />
+        <LogBoard source={{ container: 'shelfmark' }} title="Shelfmark logs" />
       </BoardGrid>
     </>
   )
 }
 
-/* ── Cleanup ──────────────────────────────────────────────────────────── */
+/* ── Housekeeping: Cleanuparr, Janitorr, Recyclarr ────────────────────── */
 
-const CLEANUP_NEIGHBOURS: readonly LogNeighbour[] = [
-  {
-    container: 'janitorr',
-    label: 'Janitorr',
-    role: 'retention, in dry-run',
-    note: 'Configured to delete nothing. Every line about a deletion is what it WOULD have removed, which makes this log the whole of its output — there is no other evidence it ran.',
-  },
-  {
-    container: 'recyclarr',
-    label: 'Recyclarr',
-    role: 'TRaSH quality profiles, on a timer',
-    note: 'Writes custom formats and scoring into Sonarr and Radarr on a schedule. When a profile mysteriously changes back after you edited it by hand, this is what did it.',
-  },
-]
+type Housekeeping = Extract<MediaData, { tab: 'housekeeping' }>
 
-function CleanupView({ d }: { d: Extract<MediaData, { tab: 'cleanup' }> }) {
-  const { cleanuparr, janitorr, recyclarr } = d
+function HousekeepingView({ d }: { d: Housekeeping }) {
+  const [which, setWhich] = useState<'cleanuparr' | 'janitorr' | 'recyclarr'>('cleanuparr')
+
+  return (
+    <>
+      <ServiceBar
+        value={which}
+        onChange={setWhich}
+        options={[
+          { value: 'cleanuparr', label: 'Cleanuparr', dot: tone(d.cleanuparr.removed !== null) },
+          { value: 'janitorr', label: 'Janitorr', dot: tone(d.janitorr.version !== null) },
+          {
+            value: 'recyclarr',
+            label: 'Recyclarr',
+            dot: d.recyclarr.lastRun === null ? null : tone(d.recyclarr.lastRun.ok),
+          },
+        ]}
+      />
+
+      {which === 'cleanuparr' ?
+        <CleanuparrPage d={d} />
+      : which === 'janitorr' ?
+        <JanitorrPage d={d} />
+      : <RecyclarrPage d={d} />}
+    </>
+  )
+}
+
+function CleanuparrPage({ d }: { d: Housekeeping }) {
+  const { cleanuparr } = d
   const window = `last ${String(d.days)} days`
 
   return (
     <>
       <ServiceHead
         logo="/icon-cleanuparr.png"
-        name="Housekeeping"
+        name="Cleanuparr"
         version={cleanuparr.version}
-        versionNote="Cleanuparr"
+        versionNote="from the tag the flake pins"
         verdict={verdictOf(cleanuparr.gap)}
-        compare={compareOf(cleanuparr.gap, 'from the tag the flake pins')}
+        compare={compareOf(cleanuparr.gap, 'the image tag — the API that reported it is closed')}
         lede={
           <>
-            Three timers that act on the library rather than filling it: Cleanuparr unsticks the
-            download queues, Janitorr watches retention, Recyclarr keeps the quality profiles
-            honest. None of them has a screen you would open unprompted, which is why they are here.
+            Unsticks the download queues: strikes items that stop progressing, blocks the ones that
+            keep coming back, and asks the *arr for a replacement. It is why the queues on the
+            Wanted tab are usually empty rather than full of dead entries.
           </>
         }
-        actions={
-          <a className="btn btn-primary" href="https://cleanuparr.toscanini.me" target="_blank" rel="noreferrer">
-            Open Cleanuparr ↗
-          </a>
-        }
+        actions={<Open name="Cleanuparr" host="cleanuparr" />}
       />
 
       <BoardGrid>
-        <Board title="Cleanuparr" icon="⌫" span={8} aside={<span className="board-note">{window}</span>}>
+        <Board title="What it did" icon="⌫" span={8} aside={<span className="board-note">{window}</span>}>
           <Measures
             items={[
               { k: 'Stuck items removed', v: num(cleanuparr.removed) },
@@ -1206,65 +1489,172 @@ function CleanupView({ d }: { d: Extract<MediaData, { tab: 'cleanup' }> }) {
           </p>
         </Board>
 
-        <Board
-          title="Janitorr"
-          icon="⌦"
-          span={4}
-          aside={
-            janitorr.version === null ?
-              <span className="board-note">version unknown</span>
-            : <span className="board-note mono">{janitorr.version}</span>
-          }
-        >
-          <Measures items={[{ k: `Would delete, ${window}`, v: num(janitorr.wouldDelete) }]} />
+        <Board title="Why it is here" icon="◈" span={4}>
           <p className="board-foot">
-            Dry-run — nothing is deleted, so this is what it decided it would remove if it were
-            armed. The image is pinned to a moving <span className="mono">jvm-stable</span>, which
-            carries no version; the number beside the title is the one Janitorr itself printed when
-            it last started.
+            A download that stalls does not fail — it sits in the queue at 97% forever, and the
+            *arr goes on believing the episode is handled. Nothing else on this box notices that.
+            Cleanuparr strikes it, removes it, blocks the release and asks for another one.
           </p>
         </Board>
 
+        <Changelog gap={cleanuparr.gap} span={12} />
+
+        <LogBoard source={{ container: 'cleanuparr' }} title="Cleanuparr logs" />
+      </BoardGrid>
+    </>
+  )
+}
+
+function JanitorrPage({ d }: { d: Housekeeping }) {
+  const { janitorr } = d
+  const armed = janitorr.schedules.filter((s) => s.enabled).length
+
+  return (
+    <>
+      <ServiceHead
+        logo={null}
+        name="Janitorr"
+        version={janitorr.version}
+        versionNote="printed at startup"
+        verdict={verdictOf(janitorr.gap)}
+        compare={compareOf(janitorr.gap, 'from its own log — the tag is a channel')}
+        lede={
+          <>
+            Retention: deletes what nobody has watched, on a schedule. Running in dry-run, so it
+            decides and then does nothing — which makes its log the whole of its output.
+          </>
+        }
+        actions={
+          <Chip tone={armed === 0 ? 'muted' : 'warn'}>
+            {armed === 0 ? 'dry-run' : `${String(armed)} armed`}
+          </Chip>
+        }
+      />
+
+      <BoardGrid>
         <Board
-          title="Recyclarr"
-          icon="⟳"
-          span={4}
-          aside={
-            recyclarr.lastRun === null ?
-              <span className="board-note">no run recorded</span>
-            : <span className={recyclarr.lastRun.ok ? 'board-note' : 'board-note text-bad'}>
-                {recyclarr.lastRun.ok ? 'last run ok' : 'last run failed'}
-              </span>
-          }
+          title="Schedules"
+          icon="◷"
+          span={8}
+          aside={<span className="board-note">as it reports them hourly</span>}
         >
+          {janitorr.schedules.length === 0 ?
+            <p className="viz-empty">nothing in the last day&rsquo;s log</p>
+          : <ul className="provs">
+              {janitorr.schedules.map((s) => (
+                <li key={s.name} className="prov">
+                  <Chip tone={s.enabled ? 'warn' : 'muted'}>{s.enabled ? 'enabled' : 'off'}</Chip>
+                  <span className="prov-name">{s.name} based cleanup</span>
+                </li>
+              ))}
+            </ul>
+          }
+          <p className="board-foot">
+            The schedules that announce themselves — every hour, whether or not they do anything.
+            Off here is what a deliberately disarmed retention service looks like, and without this
+            panel it is indistinguishable from a broken one. It is not a list of everything Janitorr
+            can do: its media-based cleanup says nothing either way on this box, which is why the
+            count beside this one is the backstop.
+          </p>
+        </Board>
+
+        <Board title="Would delete" icon="⌦" span={4}>
+          <Measures items={[{ k: `Last ${String(d.days)} days`, v: num(janitorr.wouldDelete) }]} />
+          <p className="board-foot">
+            Dry-run — nothing is removed, so this is what it decided it would take if it were armed.
+            The image is pinned to a moving <span className="mono">jvm-stable</span>, which carries
+            no version; the one in the header is what Janitorr itself printed when it last started.
+          </p>
+        </Board>
+
+        <Changelog gap={janitorr.gap} span={12} aside={<span className="board-note">Schaka/janitorr</span>} />
+
+        <LogBoard source={{ container: 'janitorr' }} title="Janitorr logs" />
+      </BoardGrid>
+    </>
+  )
+}
+
+function RecyclarrPage({ d }: { d: Housekeeping }) {
+  const { recyclarr } = d
+
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-recyclarr.svg"
+        name="Recyclarr"
+        version={null}
+        versionNote="pinned to a bare major"
+        verdict={{ label: 'unknown', tone: 'muted' }}
+        compare={[
+          { k: 'Latest', v: recyclarr.gap.latest, note: 'the newest published release' },
+          { k: 'Running', v: null, note: 'no banner, no API, no flag — genuinely unknowable' },
+        ]}
+        lede={
+          <>
+            Syncs the TRaSH Guides into Sonarr and Radarr every night: custom formats, their scores,
+            and the quality-definition sizes. When a profile changes back after you edited it by
+            hand, this is what did it.
+          </>
+        }
+        actions={
+          recyclarr.lastRun === null ?
+            <Chip tone="muted">no run recorded</Chip>
+          : <Chip tone={recyclarr.lastRun.ok ? 'ok' : 'bad'}>
+              {recyclarr.lastRun.ok ? 'last run ok' : 'last run failed'}
+            </Chip>
+        }
+      />
+
+      <BoardGrid>
+        <Board
+          title="Last sync"
+          icon="⟳"
+          span={8}
+          aside={<span className="board-note">{recyclarr.lastRun?.day ?? DASH}</span>}
+        >
+          {recyclarr.synced.length === 0 ?
+            <p className="viz-empty">no sync recorded in the window</p>
+          : <ul className="hchecks">
+              {recyclarr.synced.map((s) => (
+                <li key={s.instance} className="hcheck">
+                  <span className="hcheck-src">{s.instance}</span>
+                  <span className="hcheck-msg">
+                    {s.updated === 0 ?
+                      'nothing changed'
+                    : <strong>
+                        {num(s.updated)} custom format{s.updated === 1 ? '' : 's'} updated
+                      </strong>
+                    }
+                    {' · '}
+                    {num(s.skipped)} already current
+                  </span>
+                </li>
+              ))}
+            </ul>
+          }
+          <p className="board-foot">
+            The last run&rsquo;s numbers, not a total: a nightly job that changed two formats every
+            night for a week did not change fourteen. Read out of its log, because Recyclarr has no
+            API, no metrics and no interface.
+          </p>
+        </Board>
+
+        <Board title="Health" icon="⚠" span={4}>
           <Measures
             items={[
-              { k: 'Last sync', v: recyclarr.lastRun?.day ?? DASH },
               {
-                k: `Errors, ${window}`,
+                k: `Errors, last ${String(d.days)} days`,
                 v: num(recyclarr.errors),
                 tone: (recyclarr.errors ?? 0) > 0 ? 'warn' : undefined,
               },
             ]}
           />
           <p className="board-foot">
-            Runs nightly and writes TRaSH custom formats and scoring straight into Sonarr and
-            Radarr. It has no API, no metrics and no interface, so whether it ran is read out of the
-            one line its cron wrapper logs.
+            It runs once a day and exits. There is no process to probe between runs, so the only
+            evidence it is working is the line its cron wrapper writes when it finishes.
           </p>
         </Board>
-
-        <Changelog gap={cleanuparr.gap} span={6} aside={<span className="board-note">Cleanuparr</span>} />
-        <Changelog
-          gap={janitorr.gap}
-          span={6}
-          title={
-            janitorr.gap.behind.length === 0 ?
-              'Janitorr — current'
-            : `Janitorr — ${String(janitorr.gap.behind.length)} behind`
-          }
-          aside={<span className="board-note">Schaka/janitorr</span>}
-        />
 
         <Changelog
           gap={recyclarr.gap}
@@ -1281,13 +1671,8 @@ function CleanupView({ d }: { d: Extract<MediaData, { tab: 'cleanup' }> }) {
           }
         />
 
-        <LogBoard
-          source={{ container: 'cleanuparr' }}
-          title="Cleanuparr logs"
-          neighbours={CLEANUP_NEIGHBOURS}
-        />
+        <LogBoard source={{ container: 'recyclarr' }} title="Recyclarr logs" />
       </BoardGrid>
     </>
   )
 }
-

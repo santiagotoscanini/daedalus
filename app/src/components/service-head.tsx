@@ -32,8 +32,15 @@ export function ServiceHead({
   lede,
   actions,
 }: {
-  /** A path under public/. */
-  logo: string
+  /**
+   * A path under public/, or null when the project publishes no artwork.
+   *
+   * Null draws a monogram rather than borrowing a neighbour's mark. Janitorr
+   * and Shelfmark are the cases, and both share a tab with a service that DOES
+   * have a logo — so a borrowed one would not read as "no icon available", it
+   * would read as the other service.
+   */
+  logo: string | null
   name: string
   /** What is running. Null renders an em dash — "we could not ask". */
   version: string | null
@@ -48,7 +55,11 @@ export function ServiceHead({
 }) {
   return (
     <div className="svc-head">
-      <img className="svc-logo" src={logo} alt="" width={44} height={44} />
+      {logo === null ?
+        <span className="svc-logo svc-logo-mark" aria-hidden="true">
+          {name.slice(0, 1)}
+        </span>
+      : <img className="svc-logo" src={logo} alt="" width={44} height={44} />}
       <div className="svc-ident">
         <h2>{name}</h2>
         {/* The version, attached to the name it is the version OF, with its
