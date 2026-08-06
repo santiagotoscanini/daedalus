@@ -94,6 +94,31 @@ export const fetchCategoryBoards = createServerFn()
 export type TabStatus = Record<string, boolean | null>
 
 /**
+ * How long a probe has to have been failing before a dot calls it down.
+ *
+ * gatus runs every 60s and its gauge is the LAST result, so reading it
+ * instantaneously makes one timed-out request a red dot for a minute. That is
+ * not a hypothetical here: traefik dials the *arrs at a port published out of
+ * gluetun's rootless network namespace, where a new connection stalls ~10.5s
+ * about one time in forty (measured — see stacks/scraparr for the same fault
+ * hitting the exporter). gatus times out at 10s, so roughly 2% of probes for
+ * those endpoints fail against a service that is perfectly healthy, and Sonarr
+ * and Radarr spent ~30 minutes of the last day reported down between them
+ * while answering every request anybody actually made.
+ *
+ * `max_over_time` over three windows means down requires that NOTHING answered
+ * in three minutes — a real outage, not one lost SYN. The cost is detection
+ * latency: a service that dies is drawn red up to two minutes later than
+ * before. For a dot on a dashboard that is a good trade; the alerting that
+ * pages is Grafana's, and it has its own thresholds.
+ *
+ * This matters most on a tab that ANDs several probes, which multiplies the
+ * flap rate — Wanted holds three, so it was red several percent of the time
+ * with all three services up.
+ */
+const PROBE_WINDOW = '3m'
+
+/**
  * The dots on the sub-tab row.
  *
  * Its own entry point rather than a field on the boards payload, because the
@@ -110,7 +135,7 @@ export const fetchTabStatus = createServerFn()
 
     const { promVector } = await import('../lib/dashboard/clients')
     const [probes, egress, uplink] = await Promise.all([
-      promVector('gatus_results_endpoint_success'),
+      promVector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`),
       // Only when a tab actually asks for it — this is two more prometheus
       // queries and every category pays for this handler.
       spec.tabs.some((t) => t.health === 'vpn-egress') ? vpnEgressHealth() : Promise.resolve(null),
@@ -287,7 +312,13 @@ async function loadTiles(
   // public URL from outside. `container_up` would answer a different question
   // — the unit being active does not mean the service is answering, and every
   // Type=oneshot podman unit on this box can be green over a dead container.
-  const probes = await m.promVector('gatus_results_endpoint_success')
+  //
+  // Debounced over the same window as the tab dots, for the same reason: these
+  // are the same gauge, and a tile that goes red on one lost SYN is reporting
+  // a fault that had already healed before the page finished loading.
+  const probes = await m.promVector(
+    `max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`,
+  )
   const health = new Map(
     probes.map((p) => [(p.metric.key ?? '').replace(/^web-apps_/, ''), p.value[1] === '1']),
   )

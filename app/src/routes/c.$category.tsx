@@ -137,7 +137,12 @@ function TabNav({
   tab: string
   status: TabStatus | null
 }) {
-  const dotted = spec.tabs.some((t) => t.probe !== undefined)
+  // `probes` counts as much as `probe`. A category whose tabs all hold several
+  // services would otherwise render no dots at all — the tab knows its health
+  // and silently declines to show it.
+  const dotted = spec.tabs.some(
+    (t) => t.probe !== undefined || t.probes !== undefined || t.health !== undefined,
+  )
 
   return (
     <nav className="tabs">
@@ -158,10 +163,11 @@ function TabNav({
                 role="img"
                 aria-label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
                 title={
-                  t.probe === undefined ? 'nothing probes this yet'
+                  t.probe === undefined && t.probes === undefined && t.health === undefined ?
+                    'nothing probes this yet'
                   : up === null ? 'no reading from gatus'
                   : up ? 'answering'
-                  : 'not answering'
+                  : 'nothing has answered in the last few minutes'
                 }
               />
             )}
