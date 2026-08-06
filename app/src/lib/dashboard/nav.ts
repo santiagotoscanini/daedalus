@@ -218,10 +218,23 @@ export const CATEGORIES: CategorySpec[] = [
       // this box hangs off. The probe is pi-hole's; nothing gatus can reach
       // says anything about a zone at Cloudflare.
       {
-        id: 'domains',
-        label: 'Domains',
+        id: 'dns',
+        label: 'DNS',
         probe: 'pihole',
         boardSpans: [8, 4, 8, 4],
+        statBand: false,
+      },
+      // The other server inside the same process, and a separate tab because
+      // sharing FTL is a fact about the software rather than about the
+      // subject: one page answers what a name points at, this one answers
+      // which device holds which address. Same probe — there is one process
+      // to be up — and the same reason it can answer at all, which is that
+      // everything in the house resolves through this box.
+      {
+        id: 'dhcp',
+        label: 'DHCP',
+        probe: 'pihole',
+        boardSpans: [6, 6, 12],
         statBand: false,
       },
       // No gatus probe: it checks HTTP endpoints, and a VPN egress tunnel
