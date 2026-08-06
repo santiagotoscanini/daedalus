@@ -19,6 +19,8 @@
 
 import type { ReactNode } from 'react'
 
+import { num } from '../lib/dashboard/format'
+
 export type Tone = 'accent' | 'ok' | 'warn' | 'bad' | 'info' | 'muted'
 
 /* ── headline numbers ─────────────────────────────────────────────────── */
@@ -162,6 +164,69 @@ export function BarList({
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * One row of a ranking, in two lines.
+ *
+ * The bar carries the comparison — the whole question a ranking answers is
+ * which of these is the big one — and the line under it carries everything the
+ * bar cannot: what it cost, how slowly it went, when it was last seen. A bar
+ * list alone said only "n8n is the big one", which was true on the first read
+ * and had nothing to add on any later one.
+ *
+ * Shared by the gateway's callers, n8n's workflows and Prowlarr's indexers
+ * because they are the same object: a named thing, a count worth comparing, and
+ * a few facts that only make sense next to it.
+ *
+ * `note` is the answer to "what IS this row" — a bare hash, a name that turns
+ * out to be six services sharing one credential — and it hangs off the name
+ * rather than the caption, where it would have to be written once per case and
+ * read every time. `badges` are for the states that change what the numbers
+ * mean: a key the gateway no longer holds, a schedule that has stopped firing,
+ * an indexer that is answering but failing every grab. A list rather than one,
+ * because those are independent — a workflow can be both stalled and
+ * unpublished, and picking one to show would hide the other.
+ */
+export function RankRow({
+  name,
+  note = null,
+  badges = [],
+  value,
+  max,
+  meta,
+}: {
+  name: string
+  note?: string | null
+  badges?: readonly { text: string; tone: 'warn' | 'muted'; why?: string }[]
+  value: number
+  max: number
+  meta: ReactNode
+}) {
+  return (
+    <li className="rank">
+      <span className={note === null ? 'rank-name' : 'rank-name rank-noted'}>
+        <span title={note ?? name}>{name}</span>
+        {badges.map((b) => (
+          <em
+            key={b.text}
+            className={b.tone === 'muted' ? 'is-muted' : undefined}
+            title={b.why ?? note ?? undefined}
+          >
+            {b.text}
+          </em>
+        ))}
+      </span>
+      <span className="rank-track">
+        <span
+          className="rank-fill"
+          style={{ width: `${String(Math.max(1.5, (value / max) * 100))}%` }}
+        />
+      </span>
+      <span className="rank-n">{num(value)}</span>
+      <span className="rank-meta">{meta}</span>
+    </li>
   )
 }
 

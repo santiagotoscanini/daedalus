@@ -32,9 +32,8 @@ import {
   lokiScalar,
   promScalar,
   promScalars,
-  qbtCookie,
 } from './clients'
-import { DASH, bytes, flag, key, num, rate, text } from './format'
+import { DASH, bytes, key, num, text } from './format'
 
 export type Stat = { label: string; value: string }
 
@@ -66,9 +65,11 @@ export type GroupName =
   // No 'Network' either, and for the same reason: five of its nine tiles were
   // a service that now has a tab, and the other four were bare links that
   // belong on the tab whose subject they are.
+  // No 'Media' or 'Books': thirteen tiles, every one of them a service that is
+  // now a tab. A tile could hold three numbers and a link, which was never
+  // enough to answer either question anybody had about these — what version is
+  // running, and what does the service itself say is wrong.
   | 'Home'
-  | 'Media'
-  | 'Books'
   | 'Monitoring'
 
 export type CategoryName =
@@ -85,8 +86,10 @@ export type CategoryName =
  * Group → the category page it belongs to, and (where the category has
  * sub-tabs) which one.
  *
- * A group with no `tab` shows on every tab of its category. Only Media has
- * sub-tabs today, and its two groups map one-to-one onto them.
+ * A group with no `tab` shows on every tab of its category. Neither surviving
+ * group is in a category with sub-tabs, so the field is unused today — it is
+ * kept because the loader still honours it and the next directory to be scoped
+ * to one tab should not have to reintroduce it.
  */
 export const GROUPS: {
   name: GroupName
@@ -95,39 +98,12 @@ export const GROUPS: {
   icon: string
 }[] = [
   { name: 'Home', category: 'home', icon: '⌂' },
-  { name: 'Media', category: 'media', tab: 'tv', icon: '▶' },
-  { name: 'Books', category: 'media', tab: 'books', icon: '❏' },
   { name: 'Monitoring', category: 'monitoring', icon: '◎' },
 ]
 
 // Value formatting is shared with the category boards — see ./format.
 function stat(label: string, value: string): Stat {
   return { label, value }
-}
-
-// ── shared shapes ──────────────────────────────────────────────────────────
-
-type GluetunIp = { public_ip?: string; region?: string; country?: string; city?: string }
-
-/** Both gluetun instances read identically; only the control port differs. */
-async function gluetunStats(port: number, withPort: boolean) {
-  const base = `http://host.containers.internal:${String(port)}`
-  const [ip, fw] = await Promise.all([
-    getJson<GluetunIp>(`${base}/v1/publicip/ip`),
-    // /v1/portforward, not /v1/openvpn/portforwarded: that path is a 301 now,
-    // and `redirect: 'manual'` (correctly) does not chase redirects, so the
-    // old path would silently read nothing.
-    withPort ? getJson<{ port?: number }>(`${base}/v1/portforward`) : null,
-  ])
-  const stats = [
-    stat('Public IP', text(ip?.public_ip)),
-    stat('Region', text(ip?.region)),
-    stat('Country', flag(ip?.country)),
-  ]
-  // The forwarded port is the signal that torrents can actually seed — a
-  // tunnel that is up but lost its port forward looks healthy and is not.
-  if (withPort) stats.push(stat('Fwd port', fw?.port ? String(fw.port) : DASH))
-  return { stats, note: ip?.city ? `Exit: ${ip.city}` : undefined }
 }
 
 // ── the catalogue ──────────────────────────────────────────────────────────
@@ -311,378 +287,6 @@ export const TILES: TileDef[] = [
         `${ctx.base('stirling-pdf')}/api/v1/info/status`,
       )
       return { stats: [stat('Status', text(b?.status)), stat('Version', text(b?.version))] }
-    },
-  },
-
-  // ══ Media ════════════════════════════════════════════════════════════════
-  {
-    key: 'seerr',
-    name: 'Seerr',
-    group: 'Media',
-    description: 'Media requests & discovery',
-    link: { app: 'seerr' },
-    gatus: 'seerr',
-    load: async (ctx) => {
-      const c = await getJson<{
-        pending?: number
-        approved?: number
-        available?: number
-        processing?: number
-      }>(`${ctx.base('seerr')}/api/v1/request/count`, {
-        headers: { 'X-Api-Key': key('SEERR_API_KEY') },
-      })
-      return {
-        stats: [
-          stat('Pending', num(c?.pending)),
-          stat('Approved', num(c?.approved)),
-          stat('Available', num(c?.available)),
-          stat('Processing', num(c?.processing)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'jellyfin',
-    name: 'Jellyfin',
-    group: 'Media',
-    description: 'Movies, TV, music — household media server',
-    link: { app: 'jellyfin' },
-    gatus: 'jellyfin',
-    load: async (ctx) => {
-      const h = { headers: { 'X-Emby-Token': key('JELLYFIN_API_KEY') } }
-      const base = ctx.base('jellyfin')
-      const [counts, sessions] = await Promise.all([
-        getJson<{ MovieCount?: number; SeriesCount?: number; EpisodeCount?: number }>(
-          `${base}/Items/Counts`,
-          h,
-        ),
-        getJson<
-          {
-            UserName?: string
-            NowPlayingItem?: { Name?: string; SeriesName?: string }
-            PlayState?: { IsPaused?: boolean }
-          }[]
-        >(`${base}/Sessions`, h),
-      ])
-      // Only sessions actually playing something. Every poller that has ever
-      // asked Jellyfin a question holds an idle session for a while, so
-      // `sessions.length` would report an audience that is not there.
-      const playing = (sessions ?? []).filter((s) => s.NowPlayingItem !== undefined)
-      return {
-        stats: [
-          stat('Movies', num(counts?.MovieCount)),
-          stat('Series', num(counts?.SeriesCount)),
-          stat('Episodes', num(counts?.EpisodeCount)),
-          stat('Playing', num(playing.length)),
-        ],
-        note:
-          playing.length === 0 ? undefined : (
-            playing
-              .map((s) => {
-                const item = s.NowPlayingItem
-                const title =
-                  item?.SeriesName === undefined ? item?.Name : `${item.SeriesName} — ${item.Name}`
-                return `${s.UserName ?? 'someone'}: ${title ?? 'something'}${
-                  s.PlayState?.IsPaused === true ? ' (paused)' : ''
-                }`
-              })
-              .join(' · ')
-          ),
-      }
-    },
-  },
-  {
-    key: 'sonarr',
-    name: 'Sonarr',
-    group: 'Media',
-    description: 'TV shows',
-    link: { app: 'sonarr' },
-    gatus: 'sonarr',
-    load: async (ctx) => {
-      // gluetun owns the netns, so only gluetun publishes ports — the *arrs
-      // are reachable at the host port and nowhere else.
-      const base = `${ctx.hc}:8989/api/v3`
-      const k = `apikey=${key('SONARR_API_KEY')}`
-      const [wanted, queue, series] = await Promise.all([
-        getJson<{ totalRecords?: number }>(`${base}/wanted/missing?pageSize=1&${k}`),
-        getJson<{ totalRecords?: number }>(`${base}/queue?${k}`),
-        getJson<unknown[]>(`${base}/series?${k}`),
-      ])
-      return {
-        stats: [
-          stat('Wanted', num(wanted?.totalRecords)),
-          stat('Queued', num(queue?.totalRecords)),
-          stat('Series', num(series?.length)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'radarr',
-    name: 'Radarr',
-    group: 'Media',
-    description: 'Movies',
-    link: { app: 'radarr' },
-    gatus: 'radarr',
-    load: async (ctx) => {
-      const base = `${ctx.hc}:7878/api/v3`
-      const k = `apikey=${key('RADARR_API_KEY')}`
-      const [wanted, queue, movies] = await Promise.all([
-        getJson<{ totalRecords?: number }>(`${base}/wanted/missing?pageSize=1&${k}`),
-        getJson<{ totalRecords?: number }>(`${base}/queue?${k}`),
-        getJson<unknown[]>(`${base}/movie?${k}`),
-      ])
-      return {
-        stats: [
-          stat('Wanted', num(wanted?.totalRecords)),
-          stat('Queued', num(queue?.totalRecords)),
-          stat('Movies', num(movies?.length)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'prowlarr',
-    name: 'Prowlarr',
-    group: 'Media',
-    description: 'Indexer aggregator',
-    link: { app: 'prowlarr' },
-    gatus: 'prowlarr',
-    load: async (ctx) => {
-      const base = `${ctx.hc}:9696/api/v1`
-      const k = `apikey=${key('PROWLARR_API_KEY')}`
-      type IndexerStat = {
-        numberOfQueries?: number
-        numberOfGrabs?: number
-        numberOfFailedQueries?: number
-        numberOfFailedGrabs?: number
-      }
-      const [stats, indexers] = await Promise.all([
-        getJson<{ indexers?: IndexerStat[] }>(`${base}/indexerstats?${k}`),
-        getJson<{ enable: boolean }[]>(`${base}/indexer?${k}`),
-      ])
-      // indexerstats is per-indexer; the tile wants the fleet-wide totals.
-      const sum = (f: (i: IndexerStat) => number | undefined): number | null =>
-        stats?.indexers === undefined ?
-          null
-        : stats.indexers.reduce((acc, i) => acc + (f(i) ?? 0), 0)
-      return {
-        stats: [
-          stat('Indexers', num(indexers?.filter((i) => i.enable).length)),
-          stat('Queries', num(sum((i) => i.numberOfQueries))),
-          stat('Grabs', num(sum((i) => i.numberOfGrabs))),
-          stat('Fail queries', num(sum((i) => i.numberOfFailedQueries))),
-        ],
-      }
-    },
-  },
-  {
-    key: 'metube',
-    name: 'MeTube',
-    group: 'Media',
-    description: 'yt-dlp web UI',
-    link: { app: 'metube' },
-    gatus: 'metube',
-    load: async (ctx) => {
-      // Through traefik on a scoped bypass (`GET /history`, stacks/metube):
-      // metube is on traefik-net only, and daedalus is deliberately not.
-      const h = await getJson<{ queue?: unknown[]; pending?: unknown[]; done?: unknown[] }>(
-        `${ctx.base('metube')}/history`,
-      )
-      return {
-        stats: [
-          stat('Queued', num(h?.queue?.length)),
-          stat('Pending', num(h?.pending?.length)),
-          stat('Done', num(h?.done?.length)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'qbittorrent',
-    name: 'qBittorrent',
-    group: 'Media',
-    description: 'BitTorrent (via gluetun/ProtonVPN)',
-    link: { app: 'qbittorrent' },
-    gatus: 'qbittorrent',
-    load: async (ctx) => {
-      const base = `${ctx.hc}:8090`
-      const cookie = await qbtCookie(base)
-      if (cookie === null) return { stats: [] }
-      const h = { headers: { Cookie: cookie } }
-      const [transfer, torrents] = await Promise.all([
-        getJson<{ dl_info_speed?: number; up_info_speed?: number }>(
-          `${base}/api/v2/transfer/info`,
-          h,
-        ),
-        getJson<{ state: string }[]>(`${base}/api/v2/torrents/info`, h),
-      ])
-      const inState = (re: RegExp) => (torrents ?? []).filter((t) => re.test(t.state)).length
-      return {
-        stats: [
-          stat('Leech', torrents === null ? DASH : num(inState(/downl|stalledDL|metaDL/i))),
-          stat('Seed', torrents === null ? DASH : num(inState(/upl|stalledUP/i))),
-          stat('Download', rate(transfer?.dl_info_speed)),
-          stat('Upload', rate(transfer?.up_info_speed)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'nzbget',
-    name: 'NZBGet',
-    group: 'Media',
-    description: 'Usenet downloader (via gluetun)',
-    link: { app: 'nzbget' },
-    gatus: 'nzbget',
-    load: async (ctx) => {
-      // /jsonrpc is already on nzbget's forward-auth bypass (stacks/tv).
-      const b = await getJson<{
-        result?: {
-          DownloadRate?: number
-          RemainingSizeMB?: number
-          DownloadedSizeMB?: number
-          DownloadPaused?: boolean
-        }
-      }>(`${ctx.base('nzbget')}/jsonrpc/status`)
-      const r = b?.result
-      return {
-        stats: [
-          stat('Rate', rate(r?.DownloadRate)),
-          stat('Remaining', r?.RemainingSizeMB === undefined ? DASH : bytes(r.RemainingSizeMB * 1024 * 1024)),
-          stat(
-            'Downloaded',
-            r?.DownloadedSizeMB === undefined ? DASH : bytes(r.DownloadedSizeMB * 1024 * 1024),
-          ),
-        ],
-        note: r?.DownloadPaused === true ? 'Paused' : undefined,
-      }
-    },
-  },
-  {
-    key: 'gluetun',
-    name: 'Gluetun',
-    group: 'Media',
-    description: 'ProtonVPN WireGuard tunnel',
-    link: { url: 'https://grafana.toscanini.me/d/s2-network' },
-    load: () => gluetunStats(8000, true),
-  },
-  {
-    key: 'bazarr',
-    name: 'Bazarr',
-    group: 'Media',
-    description: 'Subtitles',
-    link: { app: 'bazarr' },
-    gatus: 'bazarr',
-    load: async (ctx) => {
-      const h = { headers: { 'X-API-KEY': key('BAZARR_API_KEY') } }
-      const base = `${ctx.hc}:6767/api`
-      const [eps, movies] = await Promise.all([
-        getJson<{ total?: number }>(`${base}/episodes/wanted`, h),
-        getJson<{ total?: number }>(`${base}/movies/wanted`, h),
-      ])
-      return {
-        stats: [
-          stat('Missing episodes', num(eps?.total)),
-          stat('Missing movies', num(movies?.total)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'cleanuparr',
-    name: 'Cleanuparr',
-    group: 'Media',
-    description: 'Download-queue cleanup & malware blocking',
-    link: { app: 'cleanuparr' },
-    gatus: 'cleanuparr',
-    load: async () => {
-      // Counted out of its own log lines: cleanuparr publishes no metrics, and
-      // 2.10.1 closed the API that used to report this.
-      const over = (needle: string) =>
-        lokiScalar(
-          `sum(count_over_time({container="cleanuparr"} |= \`${needle}\` [7d])) or vector(0)`,
-        )
-      const [removed, blocked, searches] = await Promise.all([
-        over('Removing item with max strikes'),
-        over('blocked item keeps coming back'),
-        over('Replacement search triggered'),
-      ])
-      return {
-        stats: [
-          stat('Removed 7d', num(removed)),
-          stat('Blocked 7d', num(blocked)),
-          stat('Searches 7d', num(searches)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'janitorr',
-    name: 'Janitorr',
-    group: 'Media',
-    description: 'Media retention (dry-run) — log review',
-    link: {
-      url: 'https://grafana.toscanini.me/a/grafana-lokiexplore-app/explore?from=now-7d&to=now&var-ds=loki-default&var-filters=container%7C%3D%7Cjanitorr',
-    },
-    load: async () => {
-      const n = await lokiScalar(
-        'sum(count_over_time({container="janitorr"} |= `Deleting` [7d])) or vector(0)',
-      )
-      return { stats: [stat('Would delete 7d', num(n))], note: 'Dry-run — nothing is deleted' }
-    },
-  },
-
-  // ══ Books ════════════════════════════════════════════════════════════════
-  {
-    key: 'calibre-web',
-    name: 'Calibre-Web',
-    group: 'Books',
-    description: 'Ebook library',
-    link: { app: 'calibre-web' },
-    gatus: 'calibre-web',
-    load: async (ctx) => {
-      // /opds is on calibre-web's forward-auth bypass and takes its own basic
-      // auth (stacks/calibre-web), so this reads it with those credentials.
-      const b = await getJson<{
-        books?: number
-        authors?: number
-        categories?: number
-        series?: number
-      }>(`${ctx.base('calibre-web')}/opds/stats`, {
-        headers: { Authorization: basicAuth(key('CALIBREWEB_USER'), key('CALIBREWEB_PASS')) },
-      })
-      return {
-        stats: [
-          stat('Books', num(b?.books)),
-          stat('Authors', num(b?.authors)),
-          stat('Categories', num(b?.categories)),
-          stat('Series', num(b?.series)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'shelfmark',
-    name: 'Shelfmark',
-    group: 'Books',
-    description: "Book downloader (Anna's Archive, via VPN)",
-    link: { app: 'shelfmark' },
-    gatus: 'shelfmark',
-    load: async (ctx) => {
-      // Shares the downloads stack's gluetun netns → host port, like the *arrs.
-      const s = await getJson<Record<string, Record<string, unknown>>>(
-        `${ctx.hc}:8084/api/status`,
-      )
-      const n = (k: string) => (s === null ? DASH : num(Object.keys(s[k] ?? {}).length))
-      return {
-        stats: [
-          stat('Downloading', n('downloading')),
-          stat('Queued', n('queued')),
-          stat('Done', n('complete')),
-          stat('Errors', n('error')),
-        ],
-      }
     },
   },
 

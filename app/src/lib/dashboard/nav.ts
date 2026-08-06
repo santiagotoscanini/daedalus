@@ -136,12 +136,42 @@ export const CATEGORIES: CategorySpec[] = [
     id: "media",
     label: 'Media',
     icon: '▶',
-    lede: 'What is playing, what is downloading, and what the library has become.',
-    boardSpans: [12, 8, 4, 6],
-    tileGroups: 1,
+    lede: 'The chain that fills the library, one service at a time — and what each of them says about itself.',
+    // Shaped to Jellyfin, the tab that opens by default.
+    boardSpans: [8, 4, 4, 8],
+    // No tile directory. It held eleven tiles, each three numbers and a link,
+    // and every one of those services is now a tab with a page — the same name,
+    // dot and link, plus the version verdict, the health checks and the log a
+    // tile had no room for.
+    tileGroups: 0,
+    // A tab per service, in the order a file travels: it is asked for, the
+    // indexers are searched, something downloads it, an *arr imports it, Bazarr
+    // subtitles it, Jellyfin plays it. Jellyfin leads anyway, because it is the
+    // one somebody else in the house notices when it breaks.
     tabs: [
-      { id: 'tv', label: 'TV & Film' },
-      { id: 'books', label: 'Books' },
+      { id: 'jellyfin', label: 'Jellyfin', probe: 'jellyfin', boardSpans: [8, 4, 4, 8], statBand: false },
+      { id: 'seerr', label: 'Seerr', probe: 'seerr', boardSpans: [8, 4, 4, 8], statBand: false },
+      // Sonarr and Radarr are the same program pointed at different content, so
+      // they get the same page shape from the same component — see `ArrData`.
+      { id: 'sonarr', label: 'Sonarr', probe: 'sonarr', boardSpans: [8, 4, 8, 4], statBand: false },
+      { id: 'radarr', label: 'Radarr', probe: 'radarr', boardSpans: [8, 4, 8, 4], statBand: false },
+      { id: 'prowlarr', label: 'Prowlarr', probe: 'prowlarr', boardSpans: [12, 12, 12], statBand: false },
+      { id: 'bazarr', label: 'Bazarr', probe: 'bazarr', boardSpans: [8, 4, 12], statBand: false },
+      // Three downloaders on one tab because they are one job. Both probes must
+      // be green: either one down means half the queue is not moving, and
+      // picking one to represent the pair would draw a dot over the broken half.
+      {
+        id: 'downloads',
+        label: 'Downloads',
+        probes: ['qbittorrent', 'nzbget'],
+        boardSpans: [8, 4, 6, 6],
+        statBand: false,
+      },
+      { id: 'books', label: 'Books', probe: 'calibre-web', boardSpans: [8, 4, 6, 6], statBand: false },
+      // No probe: Cleanuparr has one, but the other two services on this tab
+      // are timers with nothing to answer an HTTP request, so a green dot here
+      // would report a third of the page.
+      { id: 'cleanup', label: 'Housekeeping', boardSpans: [8, 4, 4, 8], statBand: false },
     ],
   },
   {
