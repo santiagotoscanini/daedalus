@@ -256,7 +256,8 @@ type GeneralData = {
     lan: string
     /** This house's public address — see the note on the fetch. */
     wan: string | null
-    url: string
+    /** Where a person goes to configure it — HTTPS; see the note in nix. */
+    adminUrl: string
     /** What the router says it is. Null when it did not answer. */
     model: string | null
     hardware: string | null
@@ -275,7 +276,6 @@ type GeneralData = {
     fromBox: number | null
     topDomains: { label: string; value: number }[]
   }
-  devices: Device[]
 }
 
 type Hop = {
@@ -286,19 +286,32 @@ type Hop = {
   history: number[]
 }
 
+/**
+ * One thing on the LAN.
+ *
+ * Two sources merged on the hardware address, because between them they answer
+ * a question neither does alone. pi-hole's network table knows everything that
+ * has ever asked for a name — including machines with static addresses that
+ * never took a lease. Nix knows the nine addresses this house FIXES. A device
+ * in the first and not the second got whatever was free; one in the second and
+ * not the first is declared and has not been switched on.
+ */
 type Device = {
   name: string | null
   ip: string
   mac: string
-  iface: string
   queries: number
   /**
-   * Ages in seconds, resolved here rather than timestamps resolved in the
-   * browser: the page is streamed, so a clock read on the client would differ
-   * from the one the server rendered and hydration would fault.
+   * Ages in seconds, resolved on the server rather than timestamps resolved in
+   * the browser: the page is streamed, so a clock read on the client would
+   * differ from the one the server rendered and hydration would fault.
+   *
+   * Null for a reservation the resolver has never seen answer.
    */
-  lastSeenAgo: number
-  knownForDays: number
+  lastSeenAgo: number | null
+  knownForDays: number | null
+  /** Given a fixed address in nix, rather than whatever the pool had free. */
+  reserved: boolean
 }
 
 export async function loadNetwork(
@@ -338,7 +351,6 @@ async function loadGeneral(): Promise<GeneralData> {
     rpmSpark,
     pihole,
     services,
-    devices,
     router,
     hosts,
     tunnel,
@@ -374,7 +386,6 @@ async function loadGeneral(): Promise<GeneralData> {
       promSeries('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
       loadAsked(),
       loadServiceTraffic(),
-      loadDevices(),
       loadRouter(),
       webAppHosts(),
       // Cloudflare's own view of the tunnel, for exactly one field. cloudflared
@@ -418,12 +429,11 @@ async function loadGeneral(): Promise<GeneralData> {
       gateway: process.env.GATEWAY_IP ?? DASH_IP,
       lan: LAN_IP,
       wan: tunnel?.result?.connections?.[0]?.origin_ip ?? null,
-      url: process.env.ROUTER_URL ?? '',
+      adminUrl: process.env.ROUTER_ADMIN_URL ?? '',
     },
     proxy: { rpm, routers: overview?.http?.routers?.total ?? null, spark: rpmSpark },
     services,
     dns: pihole,
-    devices,
   }
 }
 
@@ -593,19 +603,27 @@ type FtlDevice = {
 }
 
 /**
- * Every device pi-hole has ever seen on the LAN.
+ * Everything on the LAN: what the resolver has seen, and what nix fixes.
  *
- * The nearest thing this house has to the router's own client list, and it
- * arrives by a different route: the router serves no API, but everything on
- * the network resolves through this box, so FTL's network table has a row for
- * anything that ever asked for a name. A device with a static address and no
- * DHCP lease is in here too, which is why this is not the lease list.
+ * The observed half is the nearest thing this house has to the router's own
+ * client list, and it arrives by a different route entirely — the router
+ * serves no API, but everything on the network resolves through this box, so
+ * FTL's network table has a row for anything that ever asked for a name. A
+ * machine with a static address and no DHCP lease is in there too, which is
+ * why this is not the lease list.
+ *
+ * The declared half is merged in on the hardware address rather than shown
+ * beside it, because the two lists are the same subject: a reservation IS a
+ * device, and the fact worth seeing is which devices have one. A reservation
+ * whose MAC never appears is kept and marked never seen — declaring an address
+ * for something that has not existed in months is exactly the drift a separate
+ * panel of nine rows would never surface.
  *
  * The loopback row is dropped: it is this box talking to itself, it is the
  * single busiest "device" by two orders of magnitude, and leaving it in makes
  * every real device's share round to zero.
  */
-async function loadDevices(): Promise<Device[]> {
+async function loadDevices(reservations: Dhcp['reservations']): Promise<Device[]> {
   const base = PIHOLE()
   const sid = await piholeSid(base)
   const body = await getJson<{ devices?: FtlDevice[] }>(
@@ -614,7 +632,9 @@ async function loadDevices(): Promise<Device[]> {
   )
 
   const now = Date.now() / 1000
-  return (body?.devices ?? [])
+  const fixed = new Map(reservations.map((r) => [r.mac.toLowerCase(), r]))
+
+  const seen: Device[] = (body?.devices ?? [])
     .filter((d) => d.interface !== 'lo')
     .map((d) => {
       // One row per device, not per address: a phone that held three leases
@@ -622,17 +642,41 @@ async function loadDevices(): Promise<Device[]> {
       // one it is reachable at now.
       const ips = (d.ips ?? []).filter((a) => a.ip !== undefined && !a.ip.includes(':'))
       const best = [...ips].sort((a, b) => (b.lastSeen ?? 0) - (a.lastSeen ?? 0))[0]
+      const mac = (d.hwaddr ?? '?').toLowerCase()
+      const res = fixed.get(mac)
       return {
-        name: best?.name !== undefined && best.name !== null && best.name !== '' ? best.name : null,
+        // The declared name wins where there is one: it is what this house
+        // calls the thing, while FTL's is whatever the device announced to
+        // DHCP — and half of them announce nothing at all.
+        name:
+          res?.name ??
+          (best?.name !== undefined && best.name !== null && best.name !== '' ? best.name : null),
         ip: best?.ip ?? '?',
-        mac: d.hwaddr ?? '?',
-        iface: d.interface ?? '?',
+        mac,
         queries: d.numQueries ?? 0,
         lastSeenAgo: now - (d.lastQuery ?? 0),
         knownForDays: (now - (d.firstSeen ?? now)) / 86400,
+        reserved: res !== undefined,
       }
     })
-    .sort((a, b) => a.lastSeenAgo - b.lastSeenAgo)
+
+  const known = new Set(seen.map((d) => d.mac))
+  const unseen: Device[] = reservations
+    .filter((r) => !known.has(r.mac.toLowerCase()))
+    .map((r) => ({
+      name: r.name,
+      ip: r.ip,
+      mac: r.mac.toLowerCase(),
+      queries: 0,
+      lastSeenAgo: null,
+      knownForDays: null,
+      reserved: true,
+    }))
+
+  // Never-seen last within their section; otherwise most recent first.
+  return [...seen, ...unseen].sort(
+    (a, b) => (a.lastSeenAgo ?? Infinity) - (b.lastSeenAgo ?? Infinity),
+  )
 }
 
 type CfTunnel = {
@@ -2016,7 +2060,13 @@ type LanName = {
   public: boolean
 }
 
-type DomainsData = { resolver: ResolverData; zone: ZoneData; lan: LanName[] }
+type DomainsData = {
+  resolver: ResolverData
+  zone: ZoneData
+  lan: LanName[]
+  /** Every device on the LAN — see `loadDevices` for why it lives here. */
+  devices: Device[]
+}
 
 async function loadDomains(ctx: { base: (app: string) => string }): Promise<DomainsData> {
   const [resolver, zone, hosts, served] = await Promise.all([
@@ -2026,11 +2076,16 @@ async function loadDomains(ctx: { base: (app: string) => string }): Promise<Doma
     servedHosts(),
   ])
 
+  // After the resolver, not beside it: the reservations come out of the same
+  // load and are what the device list is merged against.
+  const devices = await loadDevices(resolver.dhcp.reservations)
+
   const published = new Set(zone.names.map((n) => n.fqdn))
 
   return {
     resolver,
     zone,
+    devices,
     lan: hosts.map((h) => {
       const elsewhere = h.ip !== LAN_IP
       return {

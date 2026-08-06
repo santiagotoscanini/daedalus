@@ -67,11 +67,10 @@ const ACTIVE = 24 * 3600
  * boards for that reason, never one chart with two lines on it.
  */
 function GeneralView({ data }: { data: General }) {
-  const { wire, line, hops, router, services, dns, devices } = data
+  const { wire, line, hops, router, services, dns } = data
 
   const gateway = hops.find((h) => h.id === 'gateway')
   const internet = hops.find((h) => h.id === 'internet')
-  const online = devices.filter((d) => d.lastSeenAgo < ACTIVE)
   const moved = services.reduce((n, s) => n + s.in + s.out, 0)
 
   return (
@@ -179,7 +178,7 @@ function GeneralView({ data }: { data: General }) {
               <span className="router-product">{router.product}</span>
               <a
                 className="btn btn-primary router-open"
-                href={`${router.url}/webpages/index.html#networkMap`}
+                href={router.adminUrl}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -270,25 +269,9 @@ function GeneralView({ data }: { data: General }) {
           </p>
         </Board>
 
-        <Board
-          title="Devices on the network"
-          icon="▤"
-          span={12}
-          aside={
-            <span className="board-note">
-              {online.length} active · {devices.length} known
-            </span>
-          }
-        >
-          <DeviceList devices={devices} />
-          <p className="board-foot">
-            Everything that has ever asked this box for a name, which is the nearest thing to the
-            router’s own client list and arrives by a different route entirely — the router will
-            not say, but every device on the LAN resolves through here. A machine with a static
-            address and no lease is in this list too, which is what makes it more than the DHCP
-            leases on <b>Domains</b>. <b>active</b> means it looked something up in the last day.
-          </p>
-        </Board>
+        {/* The device list was here and is on Domains now, beside the resolver
+            that knows them and merged with the reservations that name them.
+            What is on the LAN is a DHCP fact, not a throughput one. */}
       </BoardGrid>
     </>
   )
@@ -354,25 +337,55 @@ function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceilin
   )
 }
 
-function DeviceList({ devices }: { devices: General['devices'] }) {
+type Device = Domains['devices'][number]
+
+/**
+ * The LAN, in two sections that are one list.
+ *
+ * Split by whether the address is ours to decide rather than by how recently
+ * the thing was seen, because that is the distinction a reader is here for:
+ * the fixed ones are a nix file and changing one is a rebuild, everything else
+ * took whatever the pool had. Ranking them together and marking the difference
+ * would bury the nine among sixty-three.
+ *
+ * Within each section, most recently seen first, and the quiet tail folds. A
+ * reservation that has never been seen sorts last and says so — a declared
+ * address for a device that has not existed in months is the one thing in here
+ * worth acting on.
+ */
+function LanDevices({ devices }: { devices: Device[] }) {
   if (devices.length === 0) return <p className="viz-empty">no devices recorded</p>
 
-  const shown = devices.slice(0, 16)
-  const rest = devices.slice(16)
+  const fixed = devices.filter((d) => d.reserved)
+  const rest = devices.filter((d) => !d.reserved)
+  const recent = rest.filter((d) => d.lastSeenAgo !== null && d.lastSeenAgo < ACTIVE)
+  const quiet = rest.filter((d) => d.lastSeenAgo === null || d.lastSeenAgo >= ACTIVE)
 
   return (
     <>
+      {fixed.length > 0 && (
+        <>
+          <h4 className="board-sub">Fixed here — {fixed.length} declared in nix</h4>
+          <ul className="devices">
+            {fixed.map((d) => (
+              <DeviceRow key={d.mac} d={d} />
+            ))}
+          </ul>
+        </>
+      )}
+
+      <h4 className="board-sub">Given whatever was free — {rest.length} seen</h4>
       <ul className="devices">
-        {shown.map((d) => (
-          <DeviceRow key={d.mac + d.ip} d={d} />
+        {recent.map((d) => (
+          <DeviceRow key={d.mac} d={d} />
         ))}
       </ul>
-      {rest.length > 0 && (
+      {quiet.length > 0 && (
         <details className="more">
-          <summary>{rest.length} not seen today</summary>
+          <summary>{quiet.length} not seen today</summary>
           <ul className="devices">
-            {rest.map((d) => (
-              <DeviceRow key={d.mac + d.ip} d={d} />
+            {quiet.map((d) => (
+              <DeviceRow key={d.mac} d={d} />
             ))}
           </ul>
         </details>
@@ -381,15 +394,25 @@ function DeviceList({ devices }: { devices: General['devices'] }) {
   )
 }
 
-function DeviceRow({ d }: { d: General['devices'][number] }) {
+function DeviceRow({ d }: { d: Device }) {
+  const active = d.lastSeenAgo !== null && d.lastSeenAgo < ACTIVE
   return (
-    <li className={d.lastSeenAgo < ACTIVE ? 'device is-active' : 'device'}>
+    <li className={active ? 'device is-active' : 'device'}>
       <span className="device-name">{d.name ?? <span className="muted">unnamed</span>}</span>
       <span className="device-ip mono">{d.ip}</span>
-      <span className="device-mac mono" title={`first seen ${num(d.knownForDays)} days ago`}>
+      <span
+        className="device-mac mono"
+        title={d.knownForDays === null ? 'never seen' : `first seen ${num(d.knownForDays)} days ago`}
+      >
         {d.mac}
       </span>
-      <span className="device-seen">{since(d.lastSeenAgo)}</span>
+      <span className="device-seen">
+        {d.lastSeenAgo === null ?
+          <span className="warn-text" title="declared in nix, but the resolver has never seen this address answer">
+            never
+          </span>
+        : since(d.lastSeenAgo)}
+      </span>
     </li>
   )
 }
@@ -2170,7 +2193,7 @@ function DomainsView({ data }: { data: Domains }) {
 
       {side === 'zone' ?
         <ZoneView d={zone} />
-      : <ResolverView d={resolver} lan={data.lan} />}
+      : <ResolverView d={resolver} lan={data.lan} devices={data.devices} />}
     </>
   )
 }
@@ -2185,7 +2208,15 @@ const SOURCES = [
   { k: 'blocked' as const, label: 'Blocked', tone: 'warn' as Tone },
 ]
 
-function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] }) {
+function ResolverView({
+  d,
+  lan,
+  devices,
+}: {
+  d: Domains['resolver']
+  lan: Domains['lan']
+  devices: Domains['devices']
+}) {
   const { answered, queries } = d
   const sum = answered.cached + answered.local + answered.forwarded + answered.blocked
   const share = (n: number) => (sum === 0 ? null : (n / sum) * 100)
@@ -2414,41 +2445,38 @@ function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] 
         </Board>
 
         <Board
-          title="Addresses we hand out"
+          title="Everything on the LAN"
           icon="⊞"
-          span={8}
+          span={12}
           aside={
             <span className="board-note">
-              {d.dhcp.active ? `${d.dhcp.start} – ${d.dhcp.end}` : 'DHCP is off'}
+              {devices.filter((v) => v.lastSeenAgo !== null && v.lastSeenAgo < ACTIVE).length} active ·{' '}
+              {devices.length} known · {devices.filter((v) => v.reserved).length} fixed
             </span>
           }
         >
-          <ul className="dhcp">
-            {d.dhcp.reservations.map((r) => (
-              <li key={r.mac}>
-                <span className="dhcp-ip mono">{r.ip}</span>
-                <span className="dhcp-name">{r.name}</span>
-                <span className="dhcp-mac mono">{r.mac}</span>
-              </li>
-            ))}
-          </ul>
+          <LanDevices devices={devices} />
           <p className="board-foot">
             The resolver is the DHCP server too, so addresses on this LAN are decided here rather
-            than by the router. These {d.dhcp.reservations.length} are fixed in nix — a device with
-            a reservation is one something else on this box is allowed to name by address, which is
-            why they are declared and not clicked in. Everything else gets whatever is free in{' '}
+            than by the router — and it is also the reason this list can exist at all: everything
+            in the house resolves through this box, so anything that ever asked for a name has a
+            row, whether or not it ever took a lease. The <b>fixed</b> ones are declared in nix,
+            because a reservation is what lets something else on this box name a device by address.
+            Everything else gets whatever is free in{' '}
             <span className="mono">
               {d.dhcp.start} – {d.dhcp.end}
             </span>{' '}
-            for {d.dhcp.leaseTime} at a time, with{' '}
-            <span className="mono">{d.dhcp.router}</span> as its gateway.
+            for {d.dhcp.leaseTime} at a time, with <span className="mono">{d.dhcp.router}</span> as
+            its gateway. <b>active</b> means it looked something up in the last day.
           </p>
         </Board>
+
+        <Changelog gap={d.gap} span={9} />
 
         <Board
           title="Leases"
           icon="⇌"
-          span={4}
+          span={3}
           aside={<span className="board-note">since FTL started</span>}
         >
           <Facts
@@ -2481,8 +2509,6 @@ function ResolverView({ d, lan }: { d: Domains['resolver']; lan: Domains['lan'] 
             LAN with one DHCP server, and non-zero is usually a second one.
           </p>
         </Board>
-
-        <Changelog gap={d.gap} span={12} />
 
         <Board title="Logs" icon="≣" span={12}>
           <GrafanaLogs
