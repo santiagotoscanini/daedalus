@@ -34,11 +34,12 @@ import {
 import { webAppHosts } from '../../nix-manifest'
 import { key, since } from '../format'
 
-export type NetworkTab = 'general' | 'wireguard' | 'outbound'
+export type NetworkTab = 'general' | 'wireguard' | 'gateway' | 'outbound'
 
 export type NetworkData =
   | ({ tab: 'general' } & GeneralData)
   | ({ tab: 'wireguard' } & InboundData)
+  | ({ tab: 'gateway' } & GatewayData)
   | ({ tab: 'outbound' } & OutboundData)
 
 /**
@@ -212,15 +213,14 @@ type GeneralData = {
     upHistory: number[]
     pingHistory: number[]
   }
-  proxy: {
-    rpm: number | null
-    routers: number | null
-    services: number | null
-    openConnections: number | null
-    byService: { label: string; value: number }[]
-    byCode: { label: string; value: number }[]
-    spark: number[]
-  }
+  /**
+   * The headline only — one rate and one count.
+   *
+   * The breakdown that used to be here (top services, response codes, open
+   * connections) lives on the Gateway tab now, beside the routing table those
+   * numbers are about. This page is the map; that one is the proxy.
+   */
+  proxy: { rpm: number | null; routers: number | null; spark: number[] }
   dns: {
     queries: number | null
     blocked: number | null
@@ -255,7 +255,6 @@ type GeneralData = {
     city: string | null
     port: number | null
   }
-  certs: { soonestDays: number | null; expiring: { name: string; days: number }[] }
 }
 
 export async function loadNetwork(
@@ -265,6 +264,8 @@ export async function loadNetwork(
   switch (tab) {
     case 'wireguard':
       return { tab: 'wireguard', ...(await loadInbound(ctx)) }
+    case 'gateway':
+      return { tab: 'gateway', ...(await loadGateway(ctx)) }
     case 'outbound':
       return { tab: 'outbound', ...(await loadOutbound(ctx)) }
     default:
@@ -282,10 +283,8 @@ async function loadGeneral(ctx: {
   const [
     speed,
     speedHistory,
-    proxy,
+    rpm,
     overview,
-    byService,
-    byCode,
     rpmSpark,
     pihole,
     tunnel,
@@ -294,7 +293,6 @@ async function loadGeneral(ctx: {
     vpnIp,
     vpnPort,
     vpnUp,
-    certs,
     tunnelRph,
   ] = await Promise.all([
     promScalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
@@ -305,19 +303,11 @@ async function loadGeneral(ctx: {
       promSeries('myspeed_upload', 7 * 24 * 60, 3600),
       promSeries('myspeed_ping', 7 * 24 * 60, 3600),
     ]),
-    promScalars({
-      rpm: 'sum(rate(traefik_service_requests_total[10m])) * 60',
-      connections: 'sum(traefik_open_connections)',
-    }),
-    getJson<{ http?: { routers?: { total?: number }; services?: { total?: number } } }>(
-      'http://traefik:8080/api/overview',
-    ),
-    promBars(
-      'topk(8, sum by (service) (rate(traefik_service_requests_total[10m]) * 60))',
-      'service',
-      (s) => s.replace(/-svc@file$/, ''),
-    ),
-    promBars('sum by (code) (rate(traefik_service_requests_total[10m]) * 60)', 'code'),
+    promScalar('sum(rate(traefik_service_requests_total[10m])) * 60'),
+    // One number wanted out of it — the router count under the headline — and
+    // it is a call to a container on the next bridge over, so it costs less
+    // than the prometheus query that would half-answer it.
+    getJson<{ http?: { routers?: { total?: number } } }>('http://traefik:8080/api/overview'),
     promSeries('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
     loadPihole(ctx.base('pihole')),
     // Cloudflare's own view of the tunnel, which is the only place the origin
@@ -343,17 +333,11 @@ async function loadGeneral(ctx: {
     ),
     getJson<{ port?: number }>(`${ctx.hc}:8000/v1/portforward`),
     promScalar('gluetun_vpn_status'),
-    promVector('gatus_results_certificate_expiration_seconds'),
     // Per HOUR over six, not per minute over ten: off-LAN traffic to this box
     // is a couple of dozen requests a day, and a per-minute rate of that is
     // indistinguishable from a tunnel carrying nothing at all.
     promScalar('sum(rate(cloudflared_tunnel_total_requests[6h])) * 3600'),
   ])
-
-  const expiring: { name: string; days: number }[] = certs
-    .map((c) => ({ name: c.metric.name ?? '?', days: Number(c.value[1]) / 86400 }))
-    .filter((c) => Number.isFinite(c.days))
-    .sort((a, b) => a.days - b.days)
 
   return {
     wan: {
@@ -364,15 +348,7 @@ async function loadGeneral(ctx: {
       upHistory: speedHistory[1] ?? [],
       pingHistory: speedHistory[2] ?? [],
     },
-    proxy: {
-      rpm: proxy.rpm,
-      routers: overview?.http?.routers?.total ?? null,
-      services: overview?.http?.services?.total ?? null,
-      openConnections: proxy.connections,
-      byService,
-      byCode,
-      spark: rpmSpark,
-    },
+    proxy: { rpm, routers: overview?.http?.routers?.total ?? null, spark: rpmSpark },
     dns: pihole,
     tunnel: summariseTunnel(tunnel?.result, tunnelRph),
     wireguard: { connected: wg.connected, enabled: wg.enabled, total: wg.total, peers },
@@ -382,13 +358,6 @@ async function loadGeneral(ctx: {
       country: vpnIp?.country ?? null,
       city: vpnIp?.city ?? null,
       port: vpnPort?.port ?? null,
-    },
-    certs: {
-      // One number for the whole estate: a single entrypoint-level wildcard
-      // covers every hostname (see CLAUDE.md), so these all move together and
-      // the soonest one IS the expiry date.
-      soonestDays: expiring[0]?.days ?? null,
-      expiring: expiring.slice(0, 5),
     },
   }
 }
@@ -760,6 +729,621 @@ async function loadTunnel(
 
 /** `YYYY-MM-DD` in the box's timezone, so a column is the day you lived. */
 const localDay = (ms: number): string => new Date(ms).toLocaleDateString('en-CA')
+
+// ── Gateway: the proxy and the gate ────────────────────────────────────────
+
+/** How a published hostname is protected, from the GATEWAY's point of view. */
+export type Protection =
+  /** traefik forward-auths it — nothing reaches the app unauthenticated. */
+  | 'gate'
+  /** The app authenticates against the IdP itself; traefik just routes. */
+  | 'client'
+  /** Neither. Whatever the app does about a login is the app's business. */
+  | 'app'
+
+type RouteRow = {
+  host: string
+  /** Also answered through the Cloudflare tunnel, i.e. from off-LAN. */
+  remote: boolean
+  protection: Protection
+  /** The forward-auth middleware doing the gating, when one is. */
+  via: string | null
+  /**
+   * Requests across every router on this host, over the window.
+   *
+   * Null rather than zero when prometheus has no series for the router at all,
+   * which is a different claim — the traefik dashboard's own router carries no
+   * request labels, and printing "0" beside it says nobody has opened it.
+   */
+  requests: number | null
+  /** A router traefik parsed but refused to enable. */
+  disabled: boolean
+}
+
+type TraefikData = {
+  /** What the process reports, not what the flake pinned — see /api/version. */
+  version: string | null
+  codename: string | null
+  gap: VersionGap
+  /**
+   * How long the process has been up, in seconds.
+   *
+   * Seconds rather than the instant it started, and that is a hydration
+   * decision rather than a formatting one: a duration rendered from
+   * `Date.now()` in the browser disagrees with the one the server rendered,
+   * and React tears the tree down over it. A number is the same on both sides.
+   */
+  upSeconds: number | null
+  counts: {
+    routers: number | null
+    services: number | null
+    middlewares: number | null
+    /** Routers + services + middlewares traefik could not build. */
+    errors: number
+  }
+  /** How long ago the config was last read successfully, and how often. */
+  config: { reloadedAgo: number | null; reloads: number | null }
+  traffic: {
+    rpm: number | null
+    open: number | null
+    /** Requests over the window, per entrypoint — LAN against the tunnel. */
+    byEntrypoint: { label: string; value: number }[]
+    byService: { label: string; value: number }[]
+    byCode: { label: string; value: number }[]
+    daily: { date: string; requests: number }[]
+    /** Backend p95 over the last hour, in ms. Mostly the APP, not the proxy. */
+    p95Ms: number | null
+  }
+  routes: RouteRow[]
+  /** How far back `daily`, `byEntrypoint` and each route's count reach. */
+  windowDays: number
+  /** Every certificate in the store, with days left. */
+  certs: { cn: string; sans: string[]; days: number }[]
+  /** Share of requests per negotiated TLS version, since traefik started. */
+  tls: { version: string; share: number }[]
+}
+
+/** One OIDC client, and whether anybody has actually used it. */
+type IdpClient = {
+  id: string
+  name: string
+  /** Where it lives, parsed from its launch or callback URLs. */
+  host: string | null
+  /** Authorizations in the window. */
+  used: number
+  /** Already rendered — see `TraefikData.upSeconds` for why, not how. */
+  lastAgo: string | null
+  /** Restricted to named groups, rather than open to every account. */
+  restricted: boolean
+  /** Another client claims the same host — a rename that left the old one. */
+  duplicate: boolean
+}
+
+type IdpUser = {
+  username: string
+  displayName: string
+  admin: boolean
+  disabled: boolean
+  /**
+   * The principal behind STATIC_API_KEY, not a person.
+   *
+   * Pocket ID materialises the static API key as a real admin account, so it
+   * appears in the user list and would otherwise make a one-person box read
+   * as two. Worth showing rather than filtering — it IS an admin account, and
+   * one nobody would think to look for — but not worth counting as somebody.
+   */
+  service: boolean
+  groups: string[]
+  signIns: number
+  lastSignInAgo: string | null
+}
+
+type IdpData = {
+  version: string | null
+  gap: VersionGap
+  clients: IdpClient[]
+  users: IdpUser[]
+  groups: { name: string; members: number }[]
+  /**
+   * Newest first, with consecutive repeats of the same thing folded together.
+   *
+   * Raw, this list is unreadable on a box with one user: the control plane
+   * re-authorises on a timer, so twelve rows came back as ten identical
+   * "opened Daedalus" lines and the sign-in that mattered fell off the
+   * bottom. Folding a RUN rather than deduplicating outright keeps the
+   * chronology — which is the only thing this list has that the ranking above
+   * does not.
+   */
+  events: {
+    id: string
+    ago: string
+    event: string
+    username: string
+    client: string | null
+    device: string
+    where: string
+    /** How many identical events this row stands for. 1 for most. */
+    times: number
+  }[]
+  /** Authorizations per day, oldest first. */
+  daily: { date: string; authorizations: number }[]
+  window: {
+    days: number
+    signIns: number
+    authorizations: number
+    firstTime: number
+    /** People, so not the static-API-key principal. */
+    people: number
+  }
+  /** Whether anyone can create an account. Read back, not restated. */
+  signups: string | null
+  /** The audit log went back further than the pages we were willing to read. */
+  truncated: boolean
+}
+
+type GatewayData = { traefik: TraefikData; idp: IdpData }
+
+/**
+ * The proxy and the gate, which only make sense together.
+ *
+ * traefik decides where a request goes; Pocket ID decides whether it goes at
+ * all. Neither one can answer "what on this box can be reached, and by whom" —
+ * the routing table knows every published name and nothing about identity, and
+ * the IdP knows every identity and nothing about the forty-odd names that
+ * never ask it anything. Joined here, they answer it in one table.
+ *
+ * The client list is fetched ONCE and handed to both halves: it is what tells
+ * the routing table that an unmiddlewared router is an app doing its own OIDC
+ * rather than an open door, and it is the subject of the IdP's own panel.
+ */
+async function loadGateway(ctx: { base: (app: string) => string }): Promise<GatewayData> {
+  const idpBase = ctx.base('pocket-id')
+  // Started, not awaited — see loadInbound. Both halves want it and it is one
+  // request; awaiting it here would put it in front of everything else.
+  const clients = idpClients(idpBase)
+  const [traefik, idp] = await Promise.all([loadTraefik(clients), loadIdp(idpBase, clients)])
+  return { traefik, idp }
+}
+
+type PocketClient = {
+  id?: string
+  name?: string
+  launchURL?: string
+  callbackURLs?: string[]
+  isGroupRestricted?: boolean
+}
+
+async function idpClients(base: string): Promise<PocketClient[]> {
+  const body = await getJson<{ data?: PocketClient[] }>(
+    // 100 against a box that has 33: one page, and a second page would be a
+    // second round trip to discover there was nothing on it.
+    `${base}/api/oidc/clients?pagination[limit]=100`,
+    { headers: { 'X-API-KEY': key('POCKETID_KEY') } },
+  )
+  return body?.data ?? []
+}
+
+/** The hostname a client is for, from whichever URL it published. */
+function clientHost(c: PocketClient): string | null {
+  const url = c.launchURL ?? c.callbackURLs?.[0] ?? ''
+  try {
+    return new URL(url).hostname
+  } catch {
+    // A native app's callback is a custom scheme (`app.immich:///oauth-callback`)
+    // with no hostname at all. Not a fault — it just cannot name a route.
+    return null
+  }
+}
+
+type TraefikRouter = {
+  name?: string
+  rule?: string
+  status?: string
+  provider?: string
+  entryPoints?: string[]
+  middlewares?: string[]
+}
+
+/**
+ * traefik, from its own API and from what prometheus scraped off it.
+ *
+ * The API is the only source for the routing table — the configuration
+ * traefik actually built, as opposed to the one the flake asked for — and it
+ * is reachable because daedalus shares a private bridge with traefik. The
+ * numbers come from prometheus, which is scraping the same process.
+ */
+async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikData> {
+  const api = 'http://traefik:8080/api'
+
+  const [version, overview, routers, clients, live, byEntrypoint, byService, byCode, daily, p95, certs, tls, reload] =
+    await Promise.all([
+      getJson<{ Version?: string; Codename?: string; startDate?: string }>(`${api}/version`),
+      getJson<{
+        http?: Record<string, { total?: number; errors?: number }>
+        tcp?: Record<string, { errors?: number }>
+      }>(`${api}/overview`),
+      getJson<TraefikRouter[]>(`${api}/http/routers`),
+      clientsP,
+      promScalars({
+        rpm: 'sum(rate(traefik_entrypoint_requests_total[10m])) * 60',
+        open: 'sum(traefik_open_connections)',
+      }),
+      // Counts over the window rather than a rate: the tunnel carries a few
+      // hundred requests a day against the LAN's six figures, and at a
+      // per-minute rate it rounds to zero and reads as broken.
+      promBars(
+        `sum by (entrypoint) (increase(traefik_entrypoint_requests_total[${DAYS}d]))`,
+        'entrypoint',
+      ),
+      promBars(
+        'topk(8, sum by (service) (rate(traefik_service_requests_total[1h]) * 60))',
+        'service',
+        (s) => s.replace(/-svc@file$/, ''),
+      ),
+      promBars('sum by (code) (increase(traefik_service_requests_total[24h]))', 'code'),
+      promPoints(
+        'sum(increase(traefik_entrypoint_requests_total[1d]))',
+        DAYS * 24 * 60,
+        86400,
+      ),
+      promScalar(
+        'histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket[1h])))',
+      ),
+      promVector('traefik_tls_certs_not_after'),
+      promBars('sum by (tls_version) (traefik_entrypoint_requests_tls_total)', 'tls_version'),
+      promScalars({
+        at: 'traefik_config_last_reload_success',
+        n: 'traefik_config_reloads_total',
+      }),
+    ])
+
+  const requests = await promVector(
+    `sum by (router) (increase(traefik_router_requests_total[${DAYS}d]))`,
+  )
+  const perRouter = new Map(requests.map((r) => [r.metric.router ?? '', Number(r.value[1])]))
+
+  const nativeHosts = new Set(
+    clients.map(clientHost).filter((h): h is string => h !== null),
+  )
+
+  const version3 = version?.Version ?? null
+  const http = overview?.http ?? {}
+  const errors = ['routers', 'services', 'middlewares'].reduce(
+    (n, k) => n + (http[k]?.errors ?? 0),
+    0,
+  )
+  const tlsTotal = tls.reduce((n, t) => n + t.value, 0)
+
+  return {
+    version: version3,
+    codename: version?.Codename ?? null,
+    gap: await versionGap('traefik/traefik', version3),
+    upSeconds:
+      version?.startDate === undefined ? null : (
+        (Date.now() - Date.parse(version.startDate)) / 1000
+      ),
+    counts: {
+      routers: http.routers?.total ?? null,
+      services: http.services?.total ?? null,
+      middlewares: http.middlewares?.total ?? null,
+      errors,
+    },
+    // The metric is an epoch, in seconds. What the panel wants is an age.
+    config: {
+      reloadedAgo: reload.at === null ? null : Date.now() / 1000 - reload.at,
+      reloads: reload.n,
+    },
+    traffic: {
+      rpm: live.rpm,
+      open: live.open,
+      byEntrypoint,
+      byService,
+      byCode,
+      daily: daily.map((p) => ({ date: localDay(p.t * 1000), requests: p.v })),
+      p95Ms: p95 === null ? null : p95 * 1000,
+    },
+    routes: buildRoutes(routers ?? [], perRouter, nativeHosts),
+    windowDays: DAYS,
+    certs: certs
+      .map((c) => ({
+        cn: c.metric.cn ?? '?',
+        // The SANs are the whole point of the wildcard: `*.toscanini.me`
+        // covering every name on the box is why there is one certificate here
+        // and not forty.
+        sans: (c.metric.sans ?? '').split(',').filter((s) => s !== ''),
+        days: (Number(c.value[1]) * 1000 - Date.now()) / 86400_000,
+      }))
+      .filter((c) => Number.isFinite(c.days))
+      .sort((a, b) => a.days - b.days),
+    tls:
+      tlsTotal === 0 ?
+        []
+      : tls.map((t) => ({ version: t.label, share: (t.value / tlsTotal) * 100 })),
+  }
+}
+
+/**
+ * The routing table, one row per published hostname.
+ *
+ * Per HOSTNAME rather than per router, because a name published both on the
+ * LAN and through the tunnel is two routers for one thing — and the pair is
+ * what the reader wants to see, since "reachable from outside" is a property
+ * of the name rather than of either router.
+ *
+ * The protection is read from what traefik actually built. A forward-auth
+ * middleware is unambiguous: nothing reaches the app without passing the IdP.
+ * Absent one, a Pocket ID client for the same hostname means the app does its
+ * own OIDC, which the gateway cannot see and does not enforce. Everything else
+ * is `app` — deliberately not called "open", because Jellyfin and Plane have
+ * their own logins and this page has no way to know that. What it CAN say is
+ * that the gateway is not the thing checking.
+ */
+function buildRoutes(
+  routers: TraefikRouter[],
+  perRouter: Map<string, number>,
+  nativeHosts: Set<string>,
+): RouteRow[] {
+  const rows = new Map<string, RouteRow>()
+
+  for (const r of routers) {
+    // `provider === 'internal'` is traefik's own api@internal / ping — real
+    // routers, but not published names, and they carry no Host rule anyway.
+    const host = /Host\(`([^`]+)`\)/.exec(r.rule ?? '')?.[1]
+    if (host === undefined) continue
+
+    const oidc = (r.middlewares ?? []).find((m) => /^oidc-/.test(m))
+    const row = rows.get(host) ?? {
+      host,
+      remote: false,
+      protection: nativeHosts.has(host) ? ('client' as const) : ('app' as const),
+      via: null,
+      requests: null,
+      disabled: false,
+    }
+
+    row.remote ||= (r.entryPoints ?? []).includes('cfweb')
+    const seen = perRouter.get(r.name ?? '')
+    if (seen !== undefined) row.requests = (row.requests ?? 0) + seen
+    row.disabled ||= r.status !== undefined && r.status !== 'enabled'
+    if (oidc !== undefined) {
+      row.protection = 'gate'
+      // Strip the provider suffix and the `-strip` companion's prefix: the
+      // reader wants the app's name, not traefik's internal one.
+      row.via = oidc.replace(/@file$/, '')
+    }
+    rows.set(host, row)
+  }
+
+  const order: Record<Protection, number> = { app: 0, gate: 1, client: 2 }
+  return [...rows.values()].sort(
+    (a, b) => order[a.protection] - order[b.protection] || a.host.localeCompare(b.host),
+  )
+}
+
+// ── Gateway: who gets in ───────────────────────────────────────────────────
+
+type AuditEvent = {
+  id?: string
+  createdAt?: string
+  event?: string
+  username?: string
+  device?: string
+  city?: string
+  country?: string
+  data?: { clientName?: string }
+}
+
+/**
+ * The audit log, back as far as the window.
+ *
+ * Paged because Pocket ID caps a page at a hundred and this box logs a couple
+ * of hundred a fortnight. Bounded at six pages rather than "until the window
+ * is covered": an instance that suddenly logs thousands a day should slow this
+ * page down by nothing, and a truncated count that says so is better than a
+ * complete one that arrives late.
+ */
+async function auditLog(base: string, sinceMs: number): Promise<{ events: AuditEvent[]; truncated: boolean }> {
+  const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
+  const events: AuditEvent[] = []
+
+  for (let page = 1; page <= 6; page++) {
+    const body = await getJson<{ data?: AuditEvent[]; pagination?: { totalPages?: number } }>(
+      `${base}/api/audit-logs/all?pagination[limit]=100&pagination[page]=${String(page)}` +
+        `&sort[column]=createdAt&sort[direction]=desc`,
+      h,
+    )
+    const rows = body?.data ?? []
+    events.push(...rows)
+    if (rows.length === 0) return { events, truncated: false }
+    if (page >= (body?.pagination?.totalPages ?? page)) return { events, truncated: false }
+    // The page we just read reaches past the window, so nothing older matters.
+    const oldest = Date.parse(rows[rows.length - 1]?.createdAt ?? '')
+    if (Number.isFinite(oldest) && oldest < sinceMs) return { events, truncated: false }
+  }
+  return { events, truncated: true }
+}
+
+/**
+ * Pocket ID: every account, every registered application, and who used what.
+ *
+ * The audit log is the whole panel, and it is the only place on this box that
+ * records a sign-in at all — traefik's access log sees a 302 to the IdP and a
+ * 200 afterwards, and cannot tell which human that was. Everything else here
+ * (clients, users, groups) is configuration, and it is worth showing next to
+ * the log for one reason: the difference between the two. A registered client
+ * nobody has ever authorised is a redirect URI still trusted for an app that
+ * may not exist.
+ */
+async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise<IdpData> {
+  const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
+  const windowStart = Date.now() - DAYS * 86400_000
+  const version = process.env.POCKET_ID_VERSION || null
+
+  const [clients, users, groups, log, config, gap] = await Promise.all([
+    clientsP,
+    getJson<{ data?: PocketUser[] }>(`${base}/api/users?pagination[limit]=100`, h),
+    getJson<{ data?: { name?: string; friendlyName?: string; userCount?: number }[] }>(
+      `${base}/api/user-groups?pagination[limit]=100`,
+      h,
+    ),
+    auditLog(base, windowStart),
+    getJson<{ key?: string; value?: string }[]>(`${base}/api/application-configuration`, h),
+    versionGap('pocket-id/pocket-id', version),
+  ])
+
+  const recent = log.events
+    .map((e) => ({ ...e, at: Date.parse(e.createdAt ?? '') }))
+    .filter((e) => Number.isFinite(e.at) && e.at >= windowStart)
+
+  const AUTHORIZED = new Set(['CLIENT_AUTHORIZATION', 'NEW_CLIENT_AUTHORIZATION'])
+  const SIGNED_IN = new Set(['SIGN_IN', 'TOKEN_SIGN_IN'])
+
+  // Keyed by client NAME, because the name is all the audit log records. A
+  // client that was renamed therefore reads as unused, which is the honest
+  // answer — its old authorizations belong to a name that no longer exists.
+  const used = new Map<string, { n: number; last: number }>()
+  for (const e of recent) {
+    const name = e.data?.clientName
+    if (name === undefined || !AUTHORIZED.has(e.event ?? '')) continue
+    const hit = used.get(name) ?? { n: 0, last: 0 }
+    used.set(name, { n: hit.n + 1, last: Math.max(hit.last, e.at) })
+  }
+
+  const byHost = new Map<string, number>()
+  for (const c of clients) {
+    const host = clientHost(c)
+    if (host !== null) byHost.set(host, (byHost.get(host) ?? 0) + 1)
+  }
+
+  const signIns = new Map<string, { n: number; last: number }>()
+  for (const e of recent) {
+    if (!SIGNED_IN.has(e.event ?? '')) continue
+    const who = e.username ?? ''
+    const hit = signIns.get(who) ?? { n: 0, last: 0 }
+    signIns.set(who, { n: hit.n + 1, last: Math.max(hit.last, e.at) })
+  }
+
+  const byDay = new Map<string, number>()
+  for (let i = DAYS - 1; i >= 0; i--) byDay.set(localDay(Date.now() - i * 86400_000), 0)
+  for (const e of recent) {
+    if (!AUTHORIZED.has(e.event ?? '')) continue
+    const day = localDay(e.at)
+    if (byDay.has(day)) byDay.set(day, (byDay.get(day) ?? 0) + 1)
+  }
+
+  // Pocket ID gives the static-API-key principal the all-zero UUID, which is
+  // the only thing distinguishing it from a person — its username is generated
+  // and its display name is whatever the release happened to call it.
+  const people = (users?.data ?? []).filter(
+    (u) => u.id !== '00000000-0000-0000-0000-000000000000',
+  )
+
+  return {
+    version,
+    gap,
+    clients: clients
+      .map((c) => {
+        const name = c.name ?? '?'
+        const hit = used.get(name)
+        const host = clientHost(c)
+        return {
+          id: c.id ?? name,
+          name,
+          host,
+          used: hit?.n ?? 0,
+          lastAgo: hit === undefined ? null : since((Date.now() - hit.last) / 1000),
+          restricted: c.isGroupRestricted === true,
+          duplicate: host !== null && (byHost.get(host) ?? 0) > 1,
+        }
+      })
+      .sort((a, b) => b.used - a.used || a.name.localeCompare(b.name)),
+    users: (users?.data ?? [])
+      .map((u) => {
+        const hit = signIns.get(u.username ?? '')
+        return {
+          username: u.username ?? '?',
+          displayName: u.displayName ?? u.username ?? '?',
+          admin: u.isAdmin === true,
+          disabled: u.disabled === true,
+          service: u.id === '00000000-0000-0000-0000-000000000000',
+          groups: (u.userGroups ?? []).map((g) => g.friendlyName ?? g.name ?? '?'),
+          signIns: hit?.n ?? 0,
+          lastSignInAgo: hit === undefined ? null : since((Date.now() - hit.last) / 1000),
+          // Sort key only. Kept off the type so nothing renders it and
+          // reintroduces the clock the strings above exist to avoid.
+          sortAt: hit?.last ?? 0,
+        }
+      })
+      .sort((a, b) => b.sortAt - a.sortAt)
+      .map(({ sortAt: _sortAt, ...u }) => u),
+    groups: (groups?.data ?? []).map((g) => ({
+      name: g.friendlyName ?? g.name ?? '?',
+      members: g.userCount ?? 0,
+    })),
+    events: foldRuns(recent).slice(0, 12),
+    daily: [...byDay].map(([date, authorizations]) => ({ date, authorizations })),
+    window: {
+      days: DAYS,
+      signIns: recent.filter((e) => SIGNED_IN.has(e.event ?? '')).length,
+      authorizations: recent.filter((e) => AUTHORIZED.has(e.event ?? '')).length,
+      firstTime: recent.filter((e) => e.event === 'NEW_CLIENT_AUTHORIZATION').length,
+      people: people.length,
+    },
+    signups: (config ?? []).find((c) => c.key === 'allowUserSignups')?.value ?? null,
+    truncated: log.truncated,
+  }
+}
+
+/**
+ * Collapse consecutive identical events into one row carrying a count.
+ *
+ * Identical means the same verb, the same application and the same person —
+ * the device is deliberately not part of the key, because two phones opening
+ * the same app back to back is one thing happening, not two.
+ *
+ * The timestamp kept is the NEWEST of the run, so the column still reads as
+ * "when did this last happen".
+ */
+function foldRuns(recent: (AuditEvent & { at: number })[]): IdpData['events'] {
+  const out: IdpData['events'] = []
+
+  for (const e of recent) {
+    const event = e.event ?? '?'
+    const username = e.username ?? '?'
+    const client = e.data?.clientName ?? null
+    const last = out[out.length - 1]
+
+    if (last !== undefined && last.event === event && last.client === client && last.username === username) {
+      last.times += 1
+      continue
+    }
+
+    out.push({
+      id: e.id ?? `${String(e.at)}-${String(out.length)}`,
+      ago: since((Date.now() - e.at) / 1000),
+      event,
+      username,
+      client,
+      device: (e.device ?? '').trim() || 'unknown device',
+      // "Internal Network / LAN" for everything that came from the house,
+      // which so far is everything — Pocket ID geolocates the source address
+      // and a bridge address has nowhere to be.
+      where: [e.city, e.country].filter((s) => s !== undefined && s !== '').join(', '),
+      times: 1,
+    })
+  }
+
+  return out
+}
+
+type PocketUser = {
+  id?: string
+  username?: string
+  displayName?: string
+  isAdmin?: boolean
+  disabled?: boolean
+  userGroups?: { name?: string; friendlyName?: string }[]
+}
 
 // ── Coming in: the Cloudflare tunnel ───────────────────────────────────────
 

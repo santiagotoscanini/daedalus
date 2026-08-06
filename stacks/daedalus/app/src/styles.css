@@ -5045,3 +5045,29 @@ h2 {
 .segmented button .pulse {
   margin-right: -0.08rem;
 }
+
+/* ── the routing table ───────────────────────────────────────────────────── */
+
+/* Forty-odd hostnames down a single column is a scroll, not a table. Columns
+   as wide as the longest name and as many as fit, so the whole set is one
+   glance — which is the only reading that answers "is anything unprotected". */
+.routes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.22rem 0.5rem;
+}
+.routes-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.routes-group + .routes-group {
+  margin-top: 0.9rem;
+}
+/* The count belongs to the heading, so it sits on the baseline with it rather
+   than pushing the row taller. */
+.routes-group .board-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}

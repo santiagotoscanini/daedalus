@@ -120,10 +120,17 @@ export const fetchTabStatus = createServerFn()
     // tab should not have to care which list its subject is on.
     const health = new Map(probes.map((p) => [p.metric.name ?? '', p.value[1] === '1']))
 
+    /** All green, or null the moment one of them cannot be read. */
+    const all = (names: string[]): boolean | null => {
+      const seen = names.map((n) => health.get(n) ?? null)
+      return seen.includes(null) ? null : seen.every(Boolean)
+    }
+
     return Object.fromEntries(
       spec.tabs.map((t) => [
         t.id,
         t.health === 'vpn-egress' ? egress
+        : t.probes !== undefined ? all(t.probes)
         : t.probe === undefined ? null
         : (health.get(t.probe) ?? null),
       ]),

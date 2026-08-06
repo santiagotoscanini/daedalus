@@ -460,6 +460,12 @@ in
       # wg-easy serves its version nowhere a read-only caller can reach it
       # (v2's API is behind a TOTP session), so the pin IS the version.
       WG_EASY_VERSION = tagOf "wg-easy";
+      # Pocket ID has no /api/version and prints none on /healthz, so the pin
+      # is again the only answer. Traefik is the opposite case and gets no
+      # variable at all — it serves /api/version on the internal entrypoint,
+      # which reports what the process is actually running rather than what
+      # the flake asked for.
+      POCKET_ID_VERSION = tagOf "pocket-id";
       # The two containers standing beside LiteLLM whose version is knowable
       # from the flake. The third — searxng — is a digest-pinned `:latest`, and
       # states its build in its own startup banner instead, which daedalus
