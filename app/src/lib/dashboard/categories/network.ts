@@ -845,25 +845,26 @@ type IdpData = {
   users: IdpUser[]
   groups: { name: string; members: number }[]
   /**
-   * Newest first, with consecutive repeats of the same thing folded together.
+   * Passkeys being used, newest first — NOT every audit event.
    *
-   * Raw, this list is unreadable on a box with one user: the control plane
-   * re-authorises on a timer, so twelve rows came back as ten identical
-   * "opened Daedalus" lines and the sign-in that mattered fell off the
-   * bottom. Folding a RUN rather than deduplicating outright keeps the
-   * chronology — which is the only thing this list has that the ranking above
-   * does not.
+   * The "opened" events are excluded because the client ranking IS those
+   * events, aggregated: a chronological copy beside it said the same thing
+   * twice, and on a box where the control plane re-authorises on a timer it
+   * said "opened Daedalus" ten times before reaching anything else.
+   *
+   * What is left is the half no aggregate covers — a credential being
+   * presented, from which device, when — and it is short enough to list raw:
+   * seventeen in a fortnight. Nothing is folded here, deliberately. Two
+   * sign-ins are two authentications even when they look alike, and the
+   * device and the hour are the whole reason to read the list.
    */
   events: {
     id: string
     ago: string
     event: string
     username: string
-    client: string | null
     device: string
     where: string
-    /** How many identical events this row stands for. 1 for most. */
-    times: number
   }[]
   /** Authorizations per day, oldest first. */
   daily: { date: string; authorizations: number }[]
@@ -1280,7 +1281,20 @@ async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise
       name: g.friendlyName ?? g.name ?? '?',
       members: g.userCount ?? 0,
     })),
-    events: foldRuns(recent).slice(0, 12),
+    events: recent
+      .filter((e) => !AUTHORIZED.has(e.event ?? ''))
+      .slice(0, 10)
+      .map((e, i) => ({
+        id: e.id ?? `${String(e.at)}-${String(i)}`,
+        ago: since((Date.now() - e.at) / 1000),
+        event: e.event ?? '?',
+        username: e.username ?? '?',
+        device: (e.device ?? '').trim() || 'unknown device',
+        // "Internal Network / LAN" for everything that came from the house,
+        // which so far is everything — Pocket ID geolocates the source address
+        // and a bridge address has nowhere to be.
+        where: [e.city, e.country].filter((s) => s !== undefined && s !== '').join(', '),
+      })),
     daily: [...byDay].map(([date, authorizations]) => ({ date, authorizations })),
     window: {
       days: DAYS,
@@ -1292,48 +1306,6 @@ async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise
     signups: (config ?? []).find((c) => c.key === 'allowUserSignups')?.value ?? null,
     truncated: log.truncated,
   }
-}
-
-/**
- * Collapse consecutive identical events into one row carrying a count.
- *
- * Identical means the same verb, the same application and the same person —
- * the device is deliberately not part of the key, because two phones opening
- * the same app back to back is one thing happening, not two.
- *
- * The timestamp kept is the NEWEST of the run, so the column still reads as
- * "when did this last happen".
- */
-function foldRuns(recent: (AuditEvent & { at: number })[]): IdpData['events'] {
-  const out: IdpData['events'] = []
-
-  for (const e of recent) {
-    const event = e.event ?? '?'
-    const username = e.username ?? '?'
-    const client = e.data?.clientName ?? null
-    const last = out[out.length - 1]
-
-    if (last !== undefined && last.event === event && last.client === client && last.username === username) {
-      last.times += 1
-      continue
-    }
-
-    out.push({
-      id: e.id ?? `${String(e.at)}-${String(out.length)}`,
-      ago: since((Date.now() - e.at) / 1000),
-      event,
-      username,
-      client,
-      device: (e.device ?? '').trim() || 'unknown device',
-      // "Internal Network / LAN" for everything that came from the house,
-      // which so far is everything — Pocket ID geolocates the source address
-      // and a bridge address has nowhere to be.
-      where: [e.city, e.country].filter((s) => s !== undefined && s !== '').join(', '),
-      times: 1,
-    })
-  }
-
-  return out
 }
 
 type PocketUser = {

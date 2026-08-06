@@ -115,7 +115,7 @@ export function Changelog({
   gap?: VersionGap | null
   build?: CommitGap | null
   title?: string
-  span?: 6 | 8 | 12
+  span?: 6 | 8 | 9 | 12
   aside?: ReactNode
   foot?: ReactNode
 }) {
