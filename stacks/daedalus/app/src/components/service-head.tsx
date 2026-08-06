@@ -35,8 +35,8 @@ export function ServiceHead({
   /**
    * A path under public/, or null when the project publishes no artwork.
    *
-   * Null draws a monogram rather than borrowing a neighbour's mark. Janitorr
-   * and Shelfmark are the cases, and both share a tab with a service that DOES
+   * Null draws a monogram rather than borrowing a neighbour's mark. Shelfmark
+   * is the only case left, and it shares a tab with Calibre-Web, which DOES
    * have a logo — so a borrowed one would not read as "no icon available", it
    * would read as the other service.
    */
