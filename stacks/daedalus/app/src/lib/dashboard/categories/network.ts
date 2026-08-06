@@ -817,6 +817,16 @@ type IdpClient = {
   restricted: boolean
   /** Another client claims the same host — a rename that left the old one. */
   duplicate: boolean
+  /**
+   * The individual authorizations behind `used`, newest first.
+   *
+   * Carried but not shown until a row is opened. The list of every sign-in on
+   * the box is a log, and a log is what Grafana and Pocket ID's own audit page
+   * are for — but "who opened THIS one, from what" is a question you ask about
+   * a row you are already looking at, and paying a page load to answer it
+   * elsewhere is worse than carrying eight rows that are already in memory.
+   */
+  opens: { id: string; ago: string; username: string; device: string; first: boolean }[]
 }
 
 type IdpUser = {
@@ -845,27 +855,16 @@ type IdpData = {
   users: IdpUser[]
   groups: { name: string; members: number }[]
   /**
-   * Passkeys being used, newest first — NOT every audit event.
+   * What holds a key to this house, newest first.
    *
-   * The "opened" events are excluded because the client ranking IS those
-   * events, aggregated: a chronological copy beside it said the same thing
-   * twice, and on a box where the control plane re-authorises on a timer it
-   * said "opened Daedalus" ten times before reaching anything else.
-   *
-   * What is left is the half no aggregate covers — a credential being
-   * presented, from which device, when — and it is short enough to list raw:
-   * seventeen in a fortnight. Nothing is folded here, deliberately. Two
-   * sign-ins are two authentications even when they look alike, and the
-   * device and the hour are the whole reason to read the list.
+   * The raw sign-in stream used to be here and it was the wrong thing: ten
+   * rows of "signed in · santito · Chrome · 24h ago" is a log, and Grafana and
+   * Pocket ID's own audit page already are one. Per DEVICE is the reading this
+   * page can add — a passkey is registered to a device, so this is the list of
+   * things that can authenticate as somebody, which is short, changes rarely,
+   * and is worth noticing when it grows.
    */
-  events: {
-    id: string
-    ago: string
-    event: string
-    username: string
-    device: string
-    where: string
-  }[]
+  devices: { name: string; signIns: number; lastAgo: string }[]
   /** Authorizations per day, oldest first. */
   daily: { date: string; authorizations: number }[]
   window: {
@@ -1202,12 +1201,36 @@ async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise
   // Keyed by client NAME, because the name is all the audit log records. A
   // client that was renamed therefore reads as unused, which is the honest
   // answer — its old authorizations belong to a name that no longer exists.
-  const used = new Map<string, { n: number; last: number }>()
+  //
+  // `opens` keeps the individual events too, capped: they are the drill-down
+  // behind a row, and the eighth one has stopped answering "who has been in
+  // here lately" and started being a log.
+  const used = new Map<string, { n: number; last: number; opens: IdpClient['opens'] }>()
   for (const e of recent) {
     const name = e.data?.clientName
     if (name === undefined || !AUTHORIZED.has(e.event ?? '')) continue
-    const hit = used.get(name) ?? { n: 0, last: 0 }
-    used.set(name, { n: hit.n + 1, last: Math.max(hit.last, e.at) })
+    const hit = used.get(name) ?? { n: 0, last: 0, opens: [] }
+    if (hit.opens.length < 8) {
+      hit.opens.push({
+        id: e.id ?? `${name}-${String(e.at)}`,
+        ago: since((Date.now() - e.at) / 1000),
+        username: e.username ?? '?',
+        device: (e.device ?? '').trim() || 'unknown device',
+        first: e.event === 'NEW_CLIENT_AUTHORIZATION',
+      })
+    }
+    used.set(name, { n: hit.n + 1, last: Math.max(hit.last, e.at), opens: hit.opens })
+  }
+
+  // What can authenticate as somebody. A passkey belongs to a device, so the
+  // device string IS the credential — grouped rather than listed, because the
+  // list is a log and the group is an inventory.
+  const devices = new Map<string, { n: number; last: number }>()
+  for (const e of recent) {
+    if (!SIGNED_IN.has(e.event ?? '')) continue
+    const name = (e.device ?? '').trim() || 'unknown device'
+    const hit = devices.get(name) ?? { n: 0, last: 0 }
+    devices.set(name, { n: hit.n + 1, last: Math.max(hit.last, e.at) })
   }
 
   const byHost = new Map<string, number>()
@@ -1242,6 +1265,11 @@ async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise
   return {
     version,
     gap,
+    // Ordered by RECENCY, not by volume. The question a registration list
+    // answers is "is this still a thing" — the live ones surface, the stale
+    // ones sink, and the never-opened land at the bottom where they read as
+    // the tail of one list rather than as a sentence somewhere else. Volume
+    // is on the row; it is not what the order is for.
     clients: clients
       .map((c) => {
         const name = c.name ?? '?'
@@ -1255,9 +1283,12 @@ async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise
           lastAgo: hit === undefined ? null : since((Date.now() - hit.last) / 1000),
           restricted: c.isGroupRestricted === true,
           duplicate: host !== null && (byHost.get(host) ?? 0) > 1,
+          opens: hit?.opens ?? [],
+          sortAt: hit?.last ?? 0,
         }
       })
-      .sort((a, b) => b.used - a.used || a.name.localeCompare(b.name)),
+      .sort((a, b) => b.sortAt - a.sortAt || a.name.localeCompare(b.name))
+      .map(({ sortAt: _sortAt, ...c }) => c),
     users: (users?.data ?? [])
       .map((u) => {
         const hit = signIns.get(u.username ?? '')
@@ -1281,20 +1312,15 @@ async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise
       name: g.friendlyName ?? g.name ?? '?',
       members: g.userCount ?? 0,
     })),
-    events: recent
-      .filter((e) => !AUTHORIZED.has(e.event ?? ''))
-      .slice(0, 10)
-      .map((e, i) => ({
-        id: e.id ?? `${String(e.at)}-${String(i)}`,
-        ago: since((Date.now() - e.at) / 1000),
-        event: e.event ?? '?',
-        username: e.username ?? '?',
-        device: (e.device ?? '').trim() || 'unknown device',
-        // "Internal Network / LAN" for everything that came from the house,
-        // which so far is everything — Pocket ID geolocates the source address
-        // and a bridge address has nowhere to be.
-        where: [e.city, e.country].filter((s) => s !== undefined && s !== '').join(', '),
-      })),
+    devices: [...devices]
+      .map(([name, d]) => ({
+        name,
+        signIns: d.n,
+        lastAgo: since((Date.now() - d.last) / 1000),
+        sortAt: d.last,
+      }))
+      .sort((a, b) => b.sortAt - a.sortAt)
+      .map(({ sortAt: _sortAt, ...d }) => d),
     daily: [...byDay].map(([date, authorizations]) => ({ date, authorizations })),
     window: {
       days: DAYS,
