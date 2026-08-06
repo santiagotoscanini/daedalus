@@ -265,11 +265,24 @@ let
   # manifest carries what Nix knows — and this belongs on that side.
   operatorSecretApps = lib.attrNames (import ../apps/operator-secrets-lib.nix { inherit lib; });
 
+  # Names pi-hole answers from its own hosts file instead of forwarding.
+  #
+  # The hostname half of each `fleet.dnsHosts` line ("<ip> <fqdn>"), which is
+  # what makes a published name resolve to this box on the LAN and to
+  # Cloudflare's edge everywhere else. Nothing else on the box states that
+  # split, and it is the whole of the difference between how a name behaves at
+  # home and how it behaves from a phone on mobile data — so the page joins on
+  # it rather than inferring it from the presence of a tunnel CNAME, which is a
+  # different fact that usually agrees.
+  lanHosts = lib.sort (a: b: a < b) (
+    map (e: lib.elemAt (lib.splitString " " e) 1) config.fleet.dnsHosts
+  );
+
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
     builtins.toJSON {
       schemaVersion = 1;
       nixManaged.daedalus = self;
-      inherit takenHostnames webAppHosts operatorSecretApps;
+      inherit takenHostnames webAppHosts operatorSecretApps lanHosts;
     }
   );
 
@@ -442,6 +455,7 @@ in
       # public dashboard URLs anyway.
       CF_ACCOUNT_ID = config.fleet.cloudflare.accountId;
       CF_TUNNEL_ID = config.fleet.cloudflare.tunnelId;
+      CF_ZONE_ID = config.fleet.cloudflare.zoneId;
       # Off-box, so it cannot come from webAppHosts. One binding here rather
       # than a literal per Lemonade tile.
       LEMONADE_URL = "http://gaming-pc.local.${config.fleet.baseDomain}:13305";
@@ -489,6 +503,19 @@ in
       DDNS_HOST = lib.head (config.services.ddclient.domains ++ [ "" ]);
       DDNS_INTERVAL = config.services.ddclient.interval;
       DDCLIENT_VERSION = config.services.ddclient.package.version;
+
+      # The resolver is a NixOS service rather than a pinned image, so the
+      # package IS the running version — and FTL's own /api/info/version reads
+      # /etc/pihole/versions, a file the Docker image writes and this
+      # installation has never had (it answers `internal_error`). Read from the
+      # package the service actually runs, not restated.
+      PIHOLE_VERSION = config.services.pihole-ftl.package.version;
+      # The two upstream resolvers every name that is not answered locally goes
+      # to. Read from the same setting dnsmasq is configured with, so the page
+      # cannot claim a resolver that stopped being used a rebuild ago; FTL
+      # reports per-upstream counts and timings by IP, and this is what turns
+      # those into a list with an order.
+      DNS_UPSTREAMS = builtins.toJSON config.services.pihole-ftl.settings.dns.upstreams;
     };
   };
 
@@ -741,6 +768,17 @@ in
           "PLANE_KEY=$(grep -m1 '^PLANE_API_KEY=' ${
             config.sops.secrets."plane-env".path
           } | cut -d= -f2- || true)"
+          # Reading the zone needs a DIFFERENT Cloudflare token from the one in
+          # service-keys.sops: that one is account-scoped for the tunnel and
+          # answers `Unauthorized` on /zones (verified). The zone-scoped token
+          # that already exists is the one lego and route-sync use, so this
+          # reads that file rather than minting a third credential — the same
+          # single-source rule the litellm master key follows. It is
+          # DNS-edit-capable and daedalus only ever GETs with it; narrowing
+          # that would mean a fourth token to rotate with the other three.
+          "CF_DNS_TOKEN=$(grep -m1 '^CF_DNS_API_TOKEN=' ${
+            config.sops.secrets."cloudflared-env".path
+          } | cut -d= -f2- | tr -d '\"' || true)"
           # The GHCR pull credential, reused to authenticate the dashboard's
           # GitHub API reads. Two consumers: the release-notes panels, which
           # only want rate-limit headroom (60 requests an hour per IP
@@ -775,6 +813,7 @@ in
           "DASH_POCKETID_KEY=\${POCKETID_KEY}"
           "DASH_PLANE_KEY=\${PLANE_KEY}"
           "DASH_GITHUB_TOKEN=\${GHTOKEN}"
+          "DASH_CF_DNS_TOKEN=\${CF_DNS_TOKEN}"
         ]
       );
     };

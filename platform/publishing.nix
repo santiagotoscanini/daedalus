@@ -164,6 +164,17 @@ in
           `accountId` — one binding, several consumers.
         '';
       };
+      zoneId = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          The `baseDomain` zone, as Cloudflare ids it. The one zone
+          CF_DNS_API_TOKEN is scoped to, which is what makes it a
+          single value rather than a set: every published hostname is
+          one label under `baseDomain` (see the assertion on
+          `fleet.apps.*.hostname`), so a second zone would need its own
+          token, cert and tunnel config before it needed an option.
+        '';
+      };
     };
 
     cloudflareRoutes = lib.mkOption {

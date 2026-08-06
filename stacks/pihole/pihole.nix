@@ -40,10 +40,13 @@ in
     healthPath = "/api/info/login";
     # daedalus reads the query counts through traefik on the public
     # hostname, so those read-only calls skip the OIDC gate: GET
-    # stats/info (non-sensitive) plus the POST /api/auth handshake
-    # (returns a blank-password session, no state change). Control
-    # endpoints (/api/dns/blocking, config, …) stay gated.
-    authBypassRule = "(Method(`GET`) && (PathPrefix(`/api/stats`) || PathPrefix(`/api/info`))) || (Method(`POST`) && Path(`/api/auth`))";
+    # stats/info/history (aggregate counts — no domains, no clients)
+    # plus the POST /api/auth handshake (returns a blank-password
+    # session, no state change). Control endpoints (config, gravity,
+    # the teleporter, …) stay gated, and so does every method that
+    # writes: `/api/dns/blocking` is listed for GET only, which is what
+    # separates "is blocking currently paused" from turning it off.
+    authBypassRule = "(Method(`GET`) && (PathPrefix(`/api/stats`) || PathPrefix(`/api/info`) || PathPrefix(`/api/history`) || Path(`/api/dns/blocking`))) || (Method(`POST`) && Path(`/api/auth`))";
   };
   # Consent screen and Pocket ID's My Apps page.
   fleet.ssoClients.pihole = {

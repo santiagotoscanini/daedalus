@@ -56,6 +56,9 @@ let
   };
 
   # toscanini.me zone (the only zone in scope for CF_DNS_API_TOKEN).
+  # Published on `fleet.cloudflare.zoneId` below — the reconciler writes
+  # these records, daedalus reads them back, and a literal in each place
+  # is a literal that can disagree with itself.
   zoneId = "4e41da370f4833a54256624842524f38";
 
   # Stamped on every CNAME we create; the sweep ONLY touches records
@@ -115,7 +118,7 @@ in
     }
   ];
 
-  fleet.cloudflare = { inherit accountId tunnelId; };
+  fleet.cloudflare = { inherit accountId tunnelId zoneId; };
 
   virtualisation.oci-containers.containers.cloudflared = mkRootlessContainer {
     image = "docker.io/cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf";
