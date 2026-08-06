@@ -202,6 +202,21 @@ export const CATEGORIES: CategorySpec[] = [
         statBand: false,
         tileGroups: 0,
       },
+      // How a name becomes an address, on both sides of the front door: the
+      // resolver every device in the house asks, and the zone the internet
+      // asks. One tab because the interesting facts are the ones where the
+      // two disagree — and because the registration underneath them is the
+      // single expiry date every hostname, certificate and redirect URI on
+      // this box hangs off. The probe is pi-hole's; nothing gatus can reach
+      // says anything about a zone at Cloudflare.
+      {
+        id: 'domains',
+        label: 'Domains',
+        probe: 'pihole',
+        boardSpans: [8, 4, 4, 4],
+        statBand: false,
+        tileGroups: 0,
+      },
       // No gatus probe: it checks HTTP endpoints, and a VPN egress tunnel
       // answers nothing — it is a network namespace. Its dot is computed from
       // every declared tunnel's state and its containers instead.

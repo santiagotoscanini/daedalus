@@ -77,6 +77,16 @@ export type NixManifest = {
    * what daedalus decides, this manifest carries what Nix found.
    */
   operatorSecretApps: string[]
+  /**
+   * Names pi-hole answers itself instead of forwarding.
+   *
+   * The hostname half of every `fleet.dnsHosts` line. Nearly the same set as
+   * `takenHostnames` and deliberately not derived from it: this one is what
+   * makes a name resolve to this box on the LAN and to Cloudflare's edge
+   * everywhere else, and the whole point of showing it is the case where the
+   * two disagree.
+   */
+  lanHosts: string[]
 }
 
 /**
@@ -96,6 +106,7 @@ let cachedManaged: NixManifest['nixManaged'] | null = null
 let cachedTaken: string[] | null = null
 let cachedHosts: Record<string, string> | null = null
 let cachedSecretApps: string[] | null = null
+let cachedLanHosts: string[] | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {
   const managedPath = process.env.NIX_MANIFEST_PATH
@@ -114,13 +125,15 @@ export async function readNixManifest(): Promise<NixManifest> {
     cachedManaged === null ||
     cachedTaken === null ||
     cachedHosts === null ||
-    cachedSecretApps === null
+    cachedSecretApps === null ||
+    cachedLanHosts === null
   ) {
     const parsed = JSON.parse(await readFile(managedPath, 'utf8')) as NixManifest
     cachedManaged = parsed.nixManaged
     cachedTaken = parsed.takenHostnames
     cachedHosts = parsed.webAppHosts
     cachedSecretApps = parsed.operatorSecretApps ?? []
+    cachedLanHosts = parsed.lanHosts ?? []
   }
 
   // The committed registry is NOT cached. It lives at a fixed path that
@@ -137,6 +150,7 @@ export async function readNixManifest(): Promise<NixManifest> {
     takenHostnames: cachedTaken,
     webAppHosts: cachedHosts,
     operatorSecretApps: cachedSecretApps,
+    lanHosts: cachedLanHosts,
   }
 }
 
@@ -148,6 +162,11 @@ export async function operatorSecretApps(): Promise<string[]> {
 /** Published hostnames, keyed by webApp name. See `NixManifest.webAppHosts`. */
 export async function webAppHosts(): Promise<Record<string, string>> {
   return (await readNixManifest()).webAppHosts
+}
+
+/** Names pi-hole answers from its own hosts file. See `NixManifest.lanHosts`. */
+export async function lanHosts(): Promise<string[]> {
+  return (await readNixManifest()).lanHosts
 }
 
 /**
