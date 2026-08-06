@@ -5489,3 +5489,15 @@ h2 {
   font-size: 1.15rem;
   font-weight: 600;
 }
+
+/* A break between two subjects sharing one category's tab row.
+   A standalone element rather than a border on the tab: the row carries its
+   own underline through every item, and a left border would sit on top of that
+   line instead of across it. Inset top and bottom so it reads as a divider
+   between labels rather than as a second, shorter border. */
+.tabs-rule {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.45rem 0.6rem 0.5rem;
+  background: var(--border);
+}
