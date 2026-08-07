@@ -28,8 +28,6 @@ import { promBars, promScalar, promScalars, promSeries, promVector } from '../cl
 import { bytes } from '../format'
 import { hostFacts, type DatasetFacts, type HostFacts, type ReplicationPair, type SmartDisk, type ZpoolFacts } from '../host-facts'
 
-export type SystemTab = 'host' | 'memory' | 'disks' | 'pools' | 'database' | 'backups'
-
 export type SystemData =
   | ({ tab: 'host' } & HostData)
   | ({ tab: 'memory' } & MemoryData)

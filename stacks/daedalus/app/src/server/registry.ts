@@ -505,22 +505,6 @@ export const saveApp = createServerFn({ method: 'POST' })
     return { ok: true }
   })
 
-export const saveEnvVar = createServerFn({ method: 'POST' })
-  .inputValidator((i: { name: string; key: string; value: string; note: string | null }) => i)
-  .handler(async ({ data }) => {
-    const { setEnvVar } = await import('../lib/repo/apps')
-    await setEnvVar(data.name, data.key, data.value, data.note)
-    return { ok: true }
-  })
-
-export const removeEnvVar = createServerFn({ method: 'POST' })
-  .inputValidator((i: { name: string; key: string }) => i)
-  .handler(async ({ data }) => {
-    const { deleteEnvVar } = await import('../lib/repo/apps')
-    await deleteEnvVar(data.name, data.key)
-    return { ok: true }
-  })
-
 /**
  * Publish an apply request: export the whole registry, describe what moved,
  * drop it in the bind mount for the host agent.

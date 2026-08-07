@@ -32,21 +32,6 @@ const BASE = () => process.env.LEMONADE_URL ?? ''
 export type ModelActionResult = { ok: boolean; message: string }
 
 /**
- * Load a model into VRAM, optionally pinning it there.
- *
- * `pinned` is the whole point of the warm button: without it the model is
- * evicted again the moment something else needs the card, which for a 12B chat
- * model means the next request pays a cold load. `save_options` is left off so
- * a pin from here is for this session and does not rewrite the server's
- * persisted per-model defaults.
- */
-export const loadLemonadeModel = createServerFn({ method: 'POST' })
-  .inputValidator((input: { model: string; pinned: boolean }) => input)
-  .handler(async ({ data }): Promise<ModelActionResult> => {
-    return call('/api/v1/load', { model_name: data.model, pinned: data.pinned })
-  })
-
-/**
  * Evict a model, freeing its VRAM and releasing its file handle.
  *
  * The file-handle half matters more often than the VRAM half: a model that is

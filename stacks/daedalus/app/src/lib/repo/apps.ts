@@ -274,46 +274,6 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
     .where(eq(apps.name, name))
 }
 
-export async function setEnvVar(
-  name: string,
-  key: string,
-  value: string,
-  note: string | null,
-): Promise<void> {
-  const record = await getApp(name)
-  if (!record) throw new Error(`no app named ${name}`)
-  if (record.managedInNix) throw new Error(`${name} is read-only here`)
-
-  const existing = record.envVars.find((e) => e.key === key)
-  if (existing) {
-    await db
-      .update(appEnvVars)
-      .set({ value, note })
-      .where(eq(appEnvVars.id, existing.id))
-  } else {
-    await db.insert(appEnvVars).values({
-      appId: record.id,
-      key,
-      value,
-      note,
-      position: record.envVars.length,
-    })
-  }
-  await db.update(apps).set({ updatedAt: new Date() }).where(eq(apps.id, record.id))
-}
-
-export async function deleteEnvVar(name: string, key: string): Promise<void> {
-  const record = await getApp(name)
-  if (!record) throw new Error(`no app named ${name}`)
-  if (record.managedInNix) throw new Error(`${name} is read-only here`)
-
-  const existing = record.envVars.find((e) => e.key === key)
-  if (!existing) return
-
-  await db.delete(appEnvVars).where(eq(appEnvVars.id, existing.id))
-  await db.update(apps).set({ updatedAt: new Date() }).where(eq(apps.id, record.id))
-}
-
 function toRow(entry: ManifestEntry) {
   return {
     name: entry.name,
