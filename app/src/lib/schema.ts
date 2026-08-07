@@ -187,6 +187,11 @@ export const deployments = pgTable(
   (t) => [uniqueIndex('deployments_app_digest_started_idx').on(t.appId, t.digest, t.startedAt)],
 )
 
+// The three `relations` blocks below look unreferenced to any search for their
+// names, and are not: `lib/db.ts` does `import * as schema` and hands the whole
+// module to drizzle, which is what makes the relational query API work — the
+// `with: { envVars: … }` in lib/repo/apps.ts is these. Deleting them as dead
+// code compiles cleanly and breaks every app page at runtime.
 export const appsRelations = relations(apps, ({ many }) => ({
   envVars: many(appEnvVars),
   deployments: many(deployments),

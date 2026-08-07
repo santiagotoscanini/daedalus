@@ -376,43 +376,6 @@ export function Progress({
   )
 }
 
-/* ── pipeline ─────────────────────────────────────────────────────────── */
-
-export type FlowStep = { label: string; value: string; hint?: string; active?: boolean }
-
-/**
- * A left-to-right pipeline: indexers → downloader → importer → library.
- *
- * The connectors animate only between two stages that both have work in them,
- * which turns the row into a live read of where the queue is actually sitting.
- * A stalled import shows as a still connector with a non-zero count behind it.
- */
-export function Flow({ steps }: { steps: FlowStep[] }) {
-  return (
-    <ol className="flow">
-      {steps.map((s, i) => (
-        <li key={s.label} className={s.active === true ? 'flow-step flow-step-live' : 'flow-step'}>
-          <div className="flow-node">
-            <strong>{s.value}</strong>
-            <span>{s.label}</span>
-            {s.hint !== undefined && <em>{s.hint}</em>}
-          </div>
-          {i < steps.length - 1 && (
-            <span
-              className={
-                s.active === true && steps[i + 1]?.active === true ?
-                  'flow-link flow-link-live'
-                : 'flow-link'
-              }
-              aria-hidden="true"
-            />
-          )}
-        </li>
-      ))}
-    </ol>
-  )
-}
-
 /* ── small parts ──────────────────────────────────────────────────────── */
 
 export function Pulse({ on, tone = 'ok' }: { on: boolean; tone?: Tone }) {

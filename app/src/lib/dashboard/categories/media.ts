@@ -61,14 +61,6 @@ import { imageTag, imageVersion, type RunningVersion } from '../images'
  * its log. flaresolverr, subgen and scraparr have no reachable API at all, so
  * they stay folded under the log of the tab they serve.
  */
-export type MediaTab =
-  | 'jellyfin'
-  | 'calibre'
-  | 'wanted'
-  | 'indexer'
-  | 'downloaders'
-  | 'cleanup'
-
 export type MediaData =
   | ({ tab: 'jellyfin' } & JellyfinData)
   | ({ tab: 'calibre' } & CalibreData)

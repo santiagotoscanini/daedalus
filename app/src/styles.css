@@ -201,8 +201,7 @@ h2 {
 .cat-lede,
 .footnote,
 .panel-note,
-.exposure-note,
-.alerts-summary {
+.exposure-note {
   max-width: 74ch;
 }
 
@@ -1072,22 +1071,6 @@ h2 {
 .log .lvl {
   color: var(--dim);
 }
-.log-error,
-.log-err {
-  background: color-mix(in srgb, var(--bad) 9%, transparent);
-}
-.log-error .lvl,
-.log-err .lvl {
-  color: var(--bad);
-}
-.log-warn .lvl,
-.log-warning .lvl {
-  color: var(--warn);
-}
-.log-info .lvl {
-  color: #6f9bd1;
-}
-
 /* ── deploy ─────────────────────────────────────────────────────────────── */
 
 .redeploy {
@@ -1951,121 +1934,6 @@ h2 {
    flatter than the app panels: this page is scanned, not worked in, and ~20
    cards per tab only reads as a dashboard if a card costs a glance.          */
 
-.tile-group {
-  margin-top: 1.9rem;
-}
-.tile-group:first-of-type {
-  margin-top: 0.4rem;
-}
-
-.tile-group-head {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  margin: 0 0 0.85rem;
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--dim);
-  font-weight: 600;
-}
-.tile-group-head span {
-  color: var(--accent-dim);
-  font-size: 0.95rem;
-  line-height: 1;
-}
-
-.tile-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(15.5rem, 100%), 1fr));
-  gap: 0.7rem;
-}
-
-.tile {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--panel);
-  padding: 0.75rem 0.9rem 0.8rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  min-width: 0;
-}
-/* Only "down" gets a colour. A tile that is up is the normal case, and
-   painting the normal case teaches nothing — the eye should land on the two
-   cards that are wrong, not swim through twenty that are right. */
-.tile-down {
-  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
-  background: color-mix(in srgb, var(--bad) 5%, var(--panel));
-}
-
-.tile > header {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-width: 0;
-}
-.tile > header a {
-  color: var(--text);
-  font-weight: 560;
-  font-size: 0.93rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tile > header a:hover {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.tile-desc {
-  margin: 0;
-  color: var(--dim);
-  font-size: 0.76rem;
-  line-height: 1.4;
-}
-
-/* Two columns of label/value. `auto-fit` rather than a fixed 2 so a tile with
-   three stats fills its row instead of leaving a hole. */
-.tile-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
-  gap: 0.1rem 0.7rem;
-  margin: 0.15rem 0 0;
-}
-.tile-stats > div {
-  min-width: 0;
-}
-.tile-stats dt {
-  color: var(--dim);
-  font-size: 0.67rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tile-stats dd {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 550;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.tile-note {
-  margin: 0.1rem 0 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.tile-alarm {
-  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
-  color: var(--text);
-}
-
 /* ── route progress ─────────────────────────────────────────────────────────
    Two-part animation on one element: the bar sweeps in from the left while a
    loader runs, decelerating so it never reaches the right edge — arriving
@@ -2378,15 +2246,6 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.metric-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.6rem;
-}
-.metric-pair-3 {
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-}
-
 /* ── ring ───────────────────────────────────────────────────────────────── */
 
 .ring {
@@ -2679,96 +2538,6 @@ h2 {
   }
   to {
     background-position: -140% 0;
-  }
-}
-
-/* ── flow ───────────────────────────────────────────────────────────────── */
-
-.flow {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-}
-.flow-step {
-  display: flex;
-  align-items: center;
-  flex: 1 1 0;
-  min-width: 0;
-}
-.flow-node {
-  flex: 1 1 auto;
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: var(--panel-2);
-  padding: 0.6rem 0.7rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-  text-align: center;
-}
-.flow-step-live .flow-node {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent) 7%, var(--panel-2));
-}
-.flow-node strong {
-  font-size: 1.25rem;
-  font-weight: 620;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-}
-.flow-node span {
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.flow-node em {
-  font-style: normal;
-  font-size: 0.68rem;
-  color: var(--dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.flow-link {
-  flex: 0 0 1.6rem;
-  height: 2px;
-  background: var(--border);
-  position: relative;
-}
-/* Only animates between two stages that BOTH have work in them, which turns
-   the row into a live read of where the queue is actually sitting. */
-.flow-link-live {
-  background: linear-gradient(
-    90deg,
-    var(--accent-dim) 0 45%,
-    transparent 45% 100%
-  );
-  background-size: 14px 100%;
-  animation: flow-march 700ms linear infinite;
-}
-
-@keyframes flow-march {
-  to {
-    background-position: 14px 0;
-  }
-}
-
-@media (max-width: 48rem) {
-  .flow {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  .flow-step {
-    flex: 1 1 8rem;
-  }
-  .flow-link {
-    display: none;
   }
 }
 
@@ -3362,9 +3131,6 @@ h2 {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.temps-hot strong {
-  color: var(--warn);
-}
 .temps-item em {
   font-style: normal;
   font-size: 0.67rem;
@@ -3378,32 +3144,6 @@ h2 {
 .peers {
   gap: 0.25rem;
 }
-.peers-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.3rem 0.45rem;
-  border-radius: 7px;
-  background: var(--panel-2);
-  font-size: 0.8rem;
-  min-width: 0;
-}
-.peers-name {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.peers-when,
-.peers-bytes {
-  color: var(--dim);
-  font-size: 0.72rem;
-  white-space: nowrap;
-}
-
 .certs {
   gap: 0.35rem;
 }
@@ -3429,32 +3169,6 @@ h2 {
 .pools {
   gap: 0.7rem;
 }
-.pools-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-.pools-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.6rem;
-  min-width: 0;
-}
-.pools-name {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-weight: 550;
-  font-size: 0.88rem;
-}
-.pools-meta {
-  color: var(--dim);
-  font-size: 0.73rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .playing {
   gap: 0.8rem;
 }
@@ -3531,19 +3245,6 @@ h2 {
   font-size: 0.95rem;
 }
 
-/* A stat band nested inside a board — same cards, no outer margin, and a
-   smaller floor so three fit across half the grid. */
-.statband-inline {
-  margin-bottom: 0.9rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr));
-}
-.statband-inline .bigstat {
-  padding: 0.6rem 0.7rem 0.65rem;
-}
-.statband-inline .bigstat-value {
-  font-size: 1.4rem;
-}
-
 /* ── monitoring ─────────────────────────────────────────────────────────── */
 
 .alerts {
@@ -3554,44 +3255,6 @@ h2 {
   padding: 0;
   margin: 0;
 }
-.alerts-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.45rem 0.6rem;
-  border-radius: 8px;
-  background: var(--panel-2);
-  /* The severity reads off the left edge before any text is parsed. */
-  border-left: 2px solid var(--border);
-}
-.alerts-bad {
-  border-left-color: var(--bad);
-}
-.alerts-warn {
-  border-left-color: var(--warn);
-}
-.alerts-info {
-  border-left-color: var(--accent);
-}
-.alerts-head {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-  font-size: 0.84rem;
-}
-.alerts-head em {
-  color: var(--dim);
-  font-style: normal;
-  font-size: 0.72rem;
-  margin-left: auto;
-}
-.alerts-summary {
-  color: var(--dim);
-  font-size: 0.75rem;
-  line-height: 1.45;
-}
-
 .targets {
   display: flex;
   flex-direction: column;
@@ -3600,37 +3263,6 @@ h2 {
   padding: 0;
   margin: 0;
 }
-.targets-row {
-  display: grid;
-  grid-template-columns: minmax(5rem, auto) minmax(6rem, auto) 1fr;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.3rem 0.45rem;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--bad) 8%, var(--panel-2));
-  font-size: 0.78rem;
-  min-width: 0;
-}
-.targets-name {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-.targets-instance {
-  color: var(--muted);
-  font-size: 0.72rem;
-  white-space: nowrap;
-}
-.targets-error {
-  color: var(--dim);
-  font-size: 0.72rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
 .checks {
   display: flex;
   flex-direction: column;
@@ -3639,44 +3271,6 @@ h2 {
   padding: 0;
   margin: 0;
 }
-.checks-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto auto;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.3rem 0.45rem;
-  border-radius: 7px;
-  background: var(--panel-2);
-  font-size: 0.8rem;
-  min-width: 0;
-}
-.checks-bad {
-  background: color-mix(in srgb, var(--bad) 10%, var(--panel-2));
-}
-.checks-warn {
-  background: color-mix(in srgb, var(--warn) 10%, var(--panel-2));
-}
-.checks-name {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.checks-when,
-.checks-due,
-.checks-pings {
-  color: var(--dim);
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.checks-pings {
-  min-width: 5rem;
-  text-align: right;
-}
-
 /* ── cloudflare origin ──────────────────────────────────────────────────── */
 
 /* The one number on the Network page that cannot be read anywhere else on the
@@ -3838,22 +3432,6 @@ h2 {
   border-color: var(--accent);
   transform: translateY(-1px);
 }
-.cta-main {
-  font-size: 0.86rem;
-  font-weight: 600;
-}
-.cta-sub {
-  grid-column: 1;
-  font-size: 0.68rem;
-  color: var(--dim);
-}
-.cta-arrow {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  font-size: 1rem;
-  color: var(--accent);
-}
-
 /* The controls above an embedded panel: our own range picker, because
    d-solo deliberately ships without one. */
 .logs-bar {
@@ -4527,7 +4105,6 @@ h2 {
   .barlist-fill,
   .columns-bar,
   .pulse-on,
-  .flow-link-live,
   .progress-active .progress-fill {
     animation: none;
   }

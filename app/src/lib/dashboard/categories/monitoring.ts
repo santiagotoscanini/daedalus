@@ -36,8 +36,6 @@ import { key } from '../format'
 
 type Ctx = { base: (app: string) => string }
 
-export type MonitoringTab = 'alerts' | 'probes' | 'metrics' | 'logs' | 'jobs'
-
 export type MonitoringData =
   | ({ tab: 'alerts' } & AlertsData)
   | ({ tab: 'probes' } & ProbesData)

@@ -37,8 +37,6 @@ import { lanHosts, webAppHosts } from '../../nix-manifest'
 import { BASE_DOMAIN } from '../../hostname'
 import { key, localDay, since } from '../format'
 
-export type NetworkTab = 'general' | 'wireguard' | 'proxy' | 'outbound' | 'dns' | 'dhcp'
-
 export type NetworkData =
   | ({ tab: 'general' } & GeneralData)
   | ({ tab: 'wireguard' } & InboundData)

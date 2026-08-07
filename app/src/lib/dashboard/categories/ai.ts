@@ -31,8 +31,6 @@ import { getJson, lokiLatest, promBars, promScalar, promVector } from '../client
 import { commitsSince, versionGap, type CommitGap, type VersionGap } from '../github'
 import { DASH, key, since } from '../format'
 
-export type AiTab = 'lemonade' | 'litellm' | 'open-webui' | 'n8n'
-
 export type AiData =
   | ({ tab: 'lemonade' } & LemonadeData)
   | ({ tab: 'litellm' } & LitellmData)

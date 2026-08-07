@@ -30,16 +30,6 @@ import { loadIdp, idpClients, type IdpData } from '../idp'
 
 type Ctx = { base: (app: string) => string; hc: string }
 
-export type HomeTab =
-  | 'house'
-  | 'photos'
-  | 'files'
-  | 'pantry'
-  | 'signin'
-  | 'projects'
-  | 'finance'
-  | 'tools'
-
 export type HomeData =
   | ({ tab: 'house' } & HouseData)
   | ({ tab: 'photos' } & PhotosData)

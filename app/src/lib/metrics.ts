@@ -418,45 +418,6 @@ export const NO_VPN: AppVpn = {
 export type LogLine = { ts: Date; level: string | null; line: string }
 
 /**
- * Recent log lines from Loki. alloy labels every `app-<name>` container with
- * service_name=<name> (stacks/logging), so no per-app config is needed.
- */
-export async function recentLogs(name: string, limit = 50, days = 7): Promise<LogLine[]> {
-  const query = `{service_name="${name}"}`
-  const end = Date.now() * 1e6
-  // 7 days, not hours. A quiet app is normal here — anansi logs its migrations
-  // and "listening on", then nothing until it is restarted. A short window
-  // made that look like a broken log pipeline ("Nothing in Loki") when the
-  // lines were sitting in Loki the whole time, three days old. The `limit`
-  // already bounds the result, so a wide window costs nothing for a chatty app
-  // and is the difference between history and a blank panel for a silent one.
-  const start = (Date.now() - days * 24 * 60 * 60 * 1000) * 1e6
-  const url =
-    `${LOKI()}/loki/api/v1/query_range?query=${encodeURIComponent(query)}` +
-    `&start=${String(start)}&end=${String(end)}&limit=${String(limit)}&direction=backward`
-
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) })
-    if (!res.ok) return []
-    const body = (await res.json()) as {
-      data?: { result?: { stream: Record<string, string>; values: [string, string][] }[] }
-    }
-    return (body.data?.result ?? [])
-      .flatMap((s) =>
-        s.values.map(([ns, line]) => ({
-          ts: new Date(Number(BigInt(ns) / 1_000_000n)),
-          level: s.stream.level ?? null,
-          line,
-        })),
-      )
-      .sort((a, b) => a.ts.getTime() - b.ts.getTime())
-      .slice(-limit)
-  } catch {
-    return []
-  }
-}
-
-/**
  * Log lines in the last hour. LogQL, so this goes to Loki's own instant-query
  * endpoint — Prometheus would reject the stream selector outright.
  */

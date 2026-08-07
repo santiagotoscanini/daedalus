@@ -87,14 +87,3 @@ export async function readCiSnapshot(app: string): Promise<CiSnapshot> {
     return NONE
   }
 }
-
-/** Step currently executing, and how far through the job it is. */
-export function currentStep(job: ActiveJob): { step: JobStep | null; done: number; total: number } {
-  const total = job.steps.length
-  const done = job.steps.filter((s) => s.status === 'completed').length
-  return {
-    step: job.steps.find((s) => s.status === 'in_progress') ?? null,
-    done,
-    total,
-  }
-}
