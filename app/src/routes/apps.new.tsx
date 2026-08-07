@@ -73,7 +73,6 @@ function Wizard({ options }: { options: Options }) {
   const [search, setSearch] = useState('')
 
   const [description, setDescription] = useState('')
-  const [icon, setIcon] = useState('mdi-cube-outline-#94a3b8')
   const [stage, setStage] = useState<'off' | 'lab' | 'live'>('lab')
   const [postgres, setPostgres] = useState(false)
   const [storage, setStorage] = useState(false)
@@ -193,7 +192,6 @@ function Wizard({ options }: { options: Options }) {
         app: {
           name,
           description: description.trim(),
-          icon,
           stage,
           postgres,
           storage,
@@ -326,13 +324,10 @@ function Wizard({ options }: { options: Options }) {
                   hint="Shown in the app list, on its page, and on the Pocket ID consent screen if it is ever gated."
                   onChange={setDescription}
                 />
-                <Field
-                  label="Icon"
-                  value={icon}
-                  placeholder="mdi-cube-outline-#94a3b8"
-                  hint="mdi-<icon>-#<hex>, the dashboard tile convention."
-                  onChange={setIcon}
-                />
+                {/* No icon field: the app publishes its own and daedalus
+                    reads it from there (lib/app-icon.ts). Until the first
+                    image is built there is nothing serving one, and the list
+                    shows a monogram in the meantime. */}
               </Board>
 
               <Board title="Platform" icon="◱" span={4}>

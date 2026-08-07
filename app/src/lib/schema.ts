@@ -103,8 +103,12 @@ export const apps = pgTable(
 
     // How the app is named to a person: its row in the list, its detail
     // page, and its entry on the Pocket ID consent screen.
+    //
+    // There is no icon column to go with it. Every app already publishes its
+    // own icon — it is what the browser tab shows — so a column here could
+    // only agree or disagree with that, and the disagreements were the whole
+    // problem. lib/app-icon.ts reads it from the app.
     description: text('description').notNull().default(''),
-    icon: text('icon').notNull().default('mdi-cube-outline-#94a3b8'),
 
     // Free-form rationale keyed by area: app, auth, storage, egress, stage,
     // secrets. jsonb rather than columns because the set of things worth

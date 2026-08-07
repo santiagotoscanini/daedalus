@@ -2,7 +2,7 @@ import { Await, createFileRoute, Link } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
 import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
-import { Segmented, StateDot, type AppState } from '../components/ui'
+import { AppIcon, Segmented, StateDot, type AppState } from '../components/ui'
 import { BarList, Board, BoardGrid, Chip, Facts, Pulse, Spark } from '../components/viz'
 import { fetchApps, fetchRegistries } from '../server/registry'
 
@@ -303,6 +303,7 @@ function AppRow({ row }: { row: Row }) {
         className="app-row"
       >
         <StateDot state={row.status.state} />
+        <AppIcon name={row.name} hasIcon={row.hasIcon} />
 
         <div className="app-id">
           <div className="app-name">

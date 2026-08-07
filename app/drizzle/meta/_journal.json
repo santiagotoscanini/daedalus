@@ -43,6 +43,13 @@
       "when": 1785948686852,
       "tag": "0005_daily_madelyne_pryor",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786072154249,
+      "tag": "0006_complex_miracleman",
+      "breakpoints": true
     }
   ]
 }
