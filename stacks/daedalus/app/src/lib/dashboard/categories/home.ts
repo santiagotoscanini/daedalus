@@ -484,49 +484,94 @@ async function loadPantry(ctx: Ctx): Promise<PantryData> {
 /* ── Projects: Plane ──────────────────────────────────────────────────── */
 
 /**
- * Plane, read from the one endpoint that answers without a credential.
+ * Plane, read from two APIs with different rules.
  *
  * `/api/instances/` is the instance's own description of itself — version,
- * edition, and which sign-in methods are switched on — and it needs no key,
- * which is the only reason this tab has numbers at all. The workspace API
- * (projects, cycles, work items) is per-workspace and needs a token generated
- * from inside Plane; `PLANE_API_KEY` in the service-keys store is still empty,
- * so the page says what would appear rather than pretending the section is
- * broken.
+ * edition, and which sign-in methods are switched on — and it needs no
+ * credential at all. Everything INSIDE a workspace needs a token generated
+ * from Plane's own settings, and that token is scoped to one workspace: the
+ * public API publishes no endpoint that lists them (`/api/v1/workspaces/` is a
+ * 404), so the slug travels beside the key rather than being derived from it.
  *
  * Community edition has no OIDC, which is why this one app on the box is not
  * behind the Pocket ID gate — `is_email_password_enabled` below is that
  * decision, read back rather than restated.
  */
+
+/** How many work items are read per project to tally the state breakdown. */
+const ISSUES_SCANNED = 100
+
+type PlaneProject = {
+  id: string
+  name: string
+  /** The prefix on every work item's key — `VOYRA-7`. */
+  identifier: string | null
+  members: number | null
+  /** Work items per state GROUP, in board order. */
+  states: { label: string; value: number }[]
+  items: number | null
+  /**
+   * How many were actually read, when that is fewer than `items`.
+   *
+   * Null when the scan covered everything, so the caption appears only where
+   * it is true. Carried rather than restated in the view: a second copy of
+   * the cap is how a page comes to claim a sample size it did not take.
+   */
+  scanned: number | null
+  cycles: {
+    name: string
+    startDate: string | null
+    endDate: string | null
+    total: number
+    completed: number
+    started: number
+    /** Running now, by its own dates. */
+    current: boolean
+  }[]
+  modules: number | null
+}
+
 type ProjectsData = {
   version: string | null
   latest: string | null
   gap: VersionGap
   instanceName: string | null
   edition: string | null
-  /** Whether this box holds a workspace API token yet. */
-  hasApiKey: boolean
   signIn: { signup: boolean | null; magicLink: boolean | null; emailPassword: boolean | null }
   smtp: boolean | null
-  changelogUrl: string | null
+  /** Null when there is no token, which is a different state from none found. */
+  workspace: { slug: string; projects: PlaneProject[] } | null
 }
 
+/**
+ * Plane's five state groups, in the order its own board shows them.
+ *
+ * Groups rather than states: the names are per-project and renameable, the
+ * groups are Plane's own fixed vocabulary, so counting by group is the one
+ * tally that survives somebody renaming "Todo".
+ */
+const STATE_GROUPS = ['backlog', 'unstarted', 'started', 'completed', 'cancelled'] as const
+
 async function loadProjects(ctx: Ctx): Promise<ProjectsData> {
-  const body = await getJson<{
-    config?: {
-      enable_signup?: boolean
-      is_magic_login_enabled?: boolean
-      is_email_password_enabled?: boolean
-      is_smtp_configured?: boolean
-      instance_changelog_url?: string
-    }
-    instance?: {
-      instance_name?: string
-      current_version?: string
-      latest_version?: string
-      edition?: string
-    }
-  }>(`${ctx.base('plane')}/api/instances/`)
+  const base = ctx.base('plane')
+
+  const [body, workspace] = await Promise.all([
+    getJson<{
+      config?: {
+        enable_signup?: boolean
+        is_magic_login_enabled?: boolean
+        is_email_password_enabled?: boolean
+        is_smtp_configured?: boolean
+      }
+      instance?: {
+        instance_name?: string
+        current_version?: string
+        latest_version?: string
+        edition?: string
+      }
+    }>(`${base}/api/instances/`),
+    loadWorkspace(base),
+  ])
 
   // Plane reports its own `latest_version` too, but it phones home to do it —
   // the same GitHub comparison every other tab makes is both consistent and
@@ -539,15 +584,102 @@ async function loadProjects(ctx: Ctx): Promise<ProjectsData> {
     gap: await versionGap('makeplane/plane', version),
     instanceName: body?.instance?.instance_name ?? null,
     edition: body?.instance?.edition ?? null,
-    hasApiKey: key('PLANE_KEY') !== '',
     signIn: {
       signup: body?.config?.enable_signup ?? null,
       magicLink: body?.config?.is_magic_login_enabled ?? null,
       emailPassword: body?.config?.is_email_password_enabled ?? null,
     },
     smtp: body?.config?.is_smtp_configured ?? null,
-    changelogUrl: body?.config?.instance_changelog_url ?? null,
+    workspace,
   }
+}
+
+async function loadWorkspace(base: string): Promise<ProjectsData['workspace']> {
+  const token = key('PLANE_KEY')
+  const slug = key('PLANE_WORKSPACE')
+  if (token === '' || slug === '') return null
+
+  const h = { headers: { 'X-API-Key': token } }
+  const ws = `${base}/api/v1/workspaces/${slug}`
+
+  const list = await getJson<{ results?: { id?: string; name?: string; identifier?: string; total_members?: number; total_modules?: number }[] }>(
+    `${ws}/projects/`,
+    h,
+  )
+  if (list === null) return null
+
+  const projects = await Promise.all(
+    (list.results ?? []).map(async (p): Promise<PlaneProject> => {
+      const id = p.id ?? ''
+      const [states, issues, cycles] = await Promise.all([
+        getJson<{ id?: string; group?: string }[] | { results?: { id?: string; group?: string }[] }>(
+          `${ws}/projects/${id}/states/`,
+          h,
+        ),
+        getJson<{ total_count?: number; results?: { state?: string }[] }>(
+          `${ws}/projects/${id}/issues/?per_page=${String(ISSUES_SCANNED)}`,
+          h,
+        ),
+        getJson<{ results?: PlaneCycle[] } | PlaneCycle[]>(`${ws}/projects/${id}/cycles/`, h),
+      ])
+
+      // Both endpoints answer either bare or paginated depending on the
+      // release; unwrapping here keeps that out of every call site.
+      const stateRows = Array.isArray(states) ? states : (states?.results ?? [])
+      const groupOf = new Map(stateRows.map((s) => [s.id ?? '', s.group ?? '']))
+
+      const tally = new Map<string, number>()
+      for (const i of issues?.results ?? []) {
+        const g = groupOf.get(i.state ?? '') ?? 'unstarted'
+        tally.set(g, (tally.get(g) ?? 0) + 1)
+      }
+
+      const cycleRows = Array.isArray(cycles) ? cycles : (cycles?.results ?? [])
+      const now = Date.now()
+
+      return {
+        id,
+        name: p.name ?? '?',
+        identifier: p.identifier ?? null,
+        members: p.total_members ?? null,
+        modules: p.total_modules ?? null,
+        items: issues?.total_count ?? null,
+        scanned: (issues?.total_count ?? 0) > ISSUES_SCANNED ? ISSUES_SCANNED : null,
+        // Every group, including the empty ones — a board with nothing in
+        // progress says that by having a zero there, not by omitting the row.
+        states: STATE_GROUPS.map((g) => ({ label: g, value: tally.get(g) ?? 0 })),
+        cycles: cycleRows
+          .map((c) => {
+            const start = Date.parse(c.start_date ?? '')
+            const end = Date.parse(c.end_date ?? '')
+            return {
+              name: c.name ?? '?',
+              startDate: c.start_date?.slice(0, 10) ?? null,
+              endDate: c.end_date?.slice(0, 10) ?? null,
+              total: c.total_issues ?? 0,
+              completed: c.completed_issues ?? 0,
+              started: c.started_issues ?? 0,
+              current:
+                Number.isFinite(start) && Number.isFinite(end) && now >= start && now <= end,
+              sortAt: Number.isFinite(start) ? start : 0,
+            }
+          })
+          .sort((a, b) => a.sortAt - b.sortAt)
+          .map(({ sortAt: _sortAt, ...c }) => c),
+      }
+    }),
+  )
+
+  return { slug, projects }
+}
+
+type PlaneCycle = {
+  name?: string
+  start_date?: string
+  end_date?: string
+  total_issues?: number
+  completed_issues?: number
+  started_issues?: number
 }
 
 /* ── Finance: Wealthfolio ─────────────────────────────────────────────── */

@@ -632,20 +632,41 @@ function ProjectsView({ d }: { d: Projects }) {
           </p>
         </Board>
 
-        {!d.hasApiKey && (
-          <Board title="Projects, cycles, work items" icon="◫" span={12}>
-            <p className="viz-empty">
-              No workspace API token yet — this section stays empty until one exists.
-            </p>
-            <p className="board-foot">
-              Plane&rsquo;s instance endpoint above needs no credential, but everything <em>inside</em>{' '}
-              a workspace does, and the token is generated from Plane&rsquo;s own settings rather
-              than declared in nix. <span className="mono">PLANE_API_KEY</span> in the service-keys
-              store is empty, so this is a missing key rather than a broken panel — with one, this
-              becomes the open work items per project and where each cycle stands.
-            </p>
-          </Board>
-        )}
+        <Board
+          title="Work"
+          icon="◫"
+          span={12}
+          aside={
+            d.workspace === null ?
+              undefined
+            : <span className="board-note">workspace {d.workspace.slug}</span>
+          }
+        >
+          {d.workspace === null ?
+            <>
+              <p className="viz-empty">No workspace API token — this section needs one.</p>
+              <p className="board-foot">
+                Plane&rsquo;s instance endpoint above needs no credential, but everything{' '}
+                <em>inside</em> a workspace does, and the token is generated from Plane&rsquo;s own
+                settings rather than declared in nix. A missing key rather than a broken panel.
+              </p>
+            </>
+          : d.workspace.projects.length === 0 ?
+            <p className="viz-empty">No projects in this workspace.</p>
+          : <>
+              {d.workspace.projects.map((p) => (
+                <PlaneProjectRows key={p.id} p={p} />
+              ))}
+              <p className="board-foot">
+                Counted by state <b>group</b> rather than by state: the names are per-project and
+                anybody can rename &ldquo;Todo&rdquo;, but the five groups are Plane&rsquo;s own
+                fixed vocabulary, so this tally survives that. A cycle is time-boxed — the bar is
+                how much of it is done, and one that has ended with work still in it is the thing
+                this panel is for.
+              </p>
+            </>
+          }
+        </Board>
 
         <Changelog gap={d.gap} span={12} />
 
@@ -668,6 +689,65 @@ function ProjectsView({ d }: { d: Projects }) {
           }
         />
       </BoardGrid>
+    </>
+  )
+}
+
+type PlaneProject = NonNullable<Projects['workspace']>['projects'][number]
+
+/** One project: its board in five numbers, then its cycles. */
+function PlaneProjectRows({ p }: { p: PlaneProject }) {
+  return (
+    <>
+      <h4 className="board-sub">
+        {p.name}
+        {p.identifier !== null && <span className="muted"> · {p.identifier}</span>}
+      </h4>
+
+      <Measures
+        items={[
+          ...p.states.map((s) => ({ k: s.label, v: num(s.value) })),
+          { k: 'members', v: num(p.members) },
+        ]}
+      />
+
+      {p.cycles.length === 0 ?
+        <p className="viz-empty">no cycles</p>
+      : <ul className="itemlist">
+          {p.cycles.map((c) => (
+            <li key={c.name}>
+              <span className="item-main">
+                {c.name}
+                {c.current && (
+                  <>
+                    {' '}
+                    <Chip tone="ok">running</Chip>
+                  </>
+                )}
+              </span>
+              <span className="item-side">
+                {c.startDate ?? DASH} → {c.endDate ?? DASH}
+              </span>
+              <span className="item-side">
+                {/* Completed against total, because a cycle's whole point is
+                    that it ends whether or not the work did. */}
+                {num(c.completed)} / {num(c.total)} done
+              </span>
+              <span className="item-n">{pct(c.total === 0 ? null : (c.completed / c.total) * 100)}</span>
+            </li>
+          ))}
+        </ul>
+      }
+
+      {p.scanned !== null && (
+        // Said out loud rather than silently capped: a breakdown of the first
+        // hundred of four hundred reads exactly like a breakdown of all of
+        // them, and the difference is the whole point of the numbers.
+        <p className="board-foot">
+          {num(p.items)} work items, of which the breakdown above counts the first{' '}
+          {num(p.scanned)} — the total is complete, the split is a sample.
+        </p>
+      )}
     </>
   )
 }

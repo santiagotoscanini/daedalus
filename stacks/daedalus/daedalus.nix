@@ -914,7 +914,16 @@ in
           "POCKETID_KEY=$(grep -m1 '^STATIC_API_KEY=' ${
             config.sops.secrets."pocket-id-env".path
           } | cut -d= -f2- || true)"
+          # Plane's public API is workspace-scoped and publishes NO endpoint
+          # that lists workspaces — `/api/v1/workspaces/` is a 404, and a
+          # token is only valid for the one it was minted in. So the slug is
+          # not derivable from the credential and has to travel with it; it
+          # lives in the same file for that reason rather than because it is
+          # secret (it is not — it is in every URL of the UI).
           "PLANE_KEY=$(grep -m1 '^PLANE_API_KEY=' ${
+            config.sops.secrets."plane-env".path
+          } | cut -d= -f2- || true)"
+          "PLANE_WORKSPACE=$(grep -m1 '^PLANE_WORKSPACE=' ${
             config.sops.secrets."plane-env".path
           } | cut -d= -f2- || true)"
           # Reading the zone needs a DIFFERENT Cloudflare token from the one in
@@ -961,6 +970,7 @@ in
         ++ [
           "DASH_POCKETID_KEY=\${POCKETID_KEY}"
           "DASH_PLANE_KEY=\${PLANE_KEY}"
+          "DASH_PLANE_WORKSPACE=\${PLANE_WORKSPACE}"
           "DASH_GITHUB_TOKEN=\${GHTOKEN}"
           "DASH_CF_DNS_TOKEN=\${CF_DNS_TOKEN}"
         ]
