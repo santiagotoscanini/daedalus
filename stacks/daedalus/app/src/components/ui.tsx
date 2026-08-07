@@ -22,73 +22,6 @@ export function StatePill({ state }: { state: AppState }) {
   )
 }
 
-/**
- * Requests/min over the last hour, as a filled area.
- *
- * Inline SVG rather than a chart library: it is one path, and the container's
- * whole design is to start fast and reload faster — a charting dependency
- * would be the largest thing in node_modules by an order of magnitude.
- *
- * An empty series renders "no data", never a flat line at zero. "Nothing is
- * being recorded" and "there is no traffic" are different claims and a zero
- * line asserts the second one.
- */
-export function AreaChart({
-  values,
-  state = 'running',
-  width = 300,
-  height = 64,
-}: {
-  values: number[]
-  state?: AppState
-  width?: number
-  height?: number
-}) {
-  if (values.length < 2) return <p className="chart-empty">no data</p>
-
-  const max = Math.max(...values, 0.0001)
-  const step = width / (values.length - 1)
-  const pts = values.map((v, i) => [i * step, height - (v / max) * (height - 4) - 2] as const)
-
-  const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
-  const area = `M0,${String(height)} L${line.split(' ').join(' L')} L${String(width)},${String(height)} Z`
-  const id = `grad-${state}`
-
-  return (
-    <svg
-      className={`chart chart-${state}`}
-      viewBox={`0 0 ${String(width)} ${String(height)}`}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" className="grad-top" />
-          <stop offset="100%" className="grad-bottom" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill={`url(#${id})`} stroke="none" />
-      <polyline points={line} fill="none" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-    </svg>
-  )
-}
-
-export function Sparkline({ values, state }: { values: number[]; state: AppState }) {
-  if (values.length < 2) return <span className="spark-empty">no data</span>
-
-  const w = 88
-  const h = 24
-  const max = Math.max(...values, 0.0001)
-  const step = w / (values.length - 1)
-  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`)
-
-  return (
-    <svg className={`spark spark-${state}`} width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
-      <polyline points={pts.join(' ')} fill="none" strokeWidth="1.5" />
-    </svg>
-  )
-}
-
 export function Bytes({ value }: { value: number | null }) {
   if (value === null) return <>—</>
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -102,61 +35,6 @@ export function Bytes({ value }: { value: number | null }) {
     <>
       {v.toFixed(v >= 10 || u === 0 ? 0 : 1)} {units[u]}
     </>
-  )
-}
-
-export function Metric({
-  label,
-  value,
-  unit,
-  children,
-}: {
-  label: string
-  value: ReactNode
-  unit?: string
-  children?: ReactNode
-}) {
-  return (
-    <section className="metric">
-      <h3>{label}</h3>
-      <p className="metric-value">
-        {value}
-        {unit && <span className="metric-unit">{unit}</span>}
-      </p>
-      {children}
-    </section>
-  )
-}
-
-export function Panel({
-  title,
-  action,
-  wide,
-  children,
-}: {
-  title: string
-  action?: ReactNode
-  /** Span every column of the enclosing grid — for content that needs the width. */
-  wide?: boolean
-  children: ReactNode
-}) {
-  return (
-    <section className={wide === true ? 'panel panel-wide' : 'panel'}>
-      <header>
-        <h3>{title}</h3>
-        {action}
-      </header>
-      <div className="panel-body">{children}</div>
-    </section>
-  )
-}
-
-export function Row({ k, v, mono }: { k: string; v: ReactNode; mono?: boolean }) {
-  return (
-    <div className="row">
-      <span className="row-k">{k}</span>
-      <span className={mono ? 'row-v mono' : 'row-v'}>{v}</span>
-    </div>
   )
 }
 
@@ -210,29 +88,6 @@ export function Segmented<T extends string>({
 }
 
 /**
- * Usage against a ceiling. Renders nothing when there is no ceiling — a bar
- * needs a denominator, and inventing one (host RAM, "100%") would make an
- * uncapped container look nearly idle or nearly full depending on the choice.
- */
-export function Meter({
-  value,
-  max,
-  tone,
-}: {
-  value: number | null
-  max: number | null
-  tone: 'cpu' | 'mem' | 'pids'
-}) {
-  if (value === null || max === null || max <= 0) return null
-  const pct = Math.min(100, (value / max) * 100)
-  return (
-    <div className={`meter meter-${tone}${pct >= 90 ? ' meter-hot' : ''}`}>
-      <span style={{ width: `${String(pct)}%` }} />
-    </div>
-  )
-}
-
-/**
  * A resource ceiling.
  *
  * The minimum position means *uncapped*, not zero — a zero-core or zero-byte
@@ -265,7 +120,17 @@ export function Slider({
   // position rather than a checkbox next to the slider.
   const OFF = min - step
   return (
-    <div className={disabled === true ? 'slider disabled' : 'slider'}>
+    <div
+      className={[
+        'slider',
+        disabled === true ? 'disabled' : '',
+        // At the sentinel there is no ceiling, so the thumb is drawn hollow
+        // rather than as a value the operator chose.
+        value === null ? 'slider-off' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <div className="slider-text">
         {label}
         {hint !== undefined && <small>{hint}</small>}

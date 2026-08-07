@@ -67,31 +67,16 @@ export function BoardsSkeleton({ spans = [8, 4, 6, 6] }: { spans?: number[] }) {
   )
 }
 
-/** The metric row at the top of an app detail tab. */
-export function MetricsSkeleton({ count = 4 }: { count?: number }) {
+/** The strip of live readings at the top of an app detail tab. */
+export function StripSkeleton({ count = 6 }: { count?: number }) {
   return (
-    <div className="metrics">
+    <div className="strip">
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="metric sk-card">
-          <Bar w="40%" h={9} />
-          <Bar w="55%" h={22} />
-          <Bar w="100%" h={30} />
+        <div key={i} className="stat">
+          <Bar w="55%" h={9} />
+          <Bar w="70%" h={20} />
+          <Bar w="85%" h={10} />
         </div>
-      ))}
-    </div>
-  )
-}
-
-export function PanelsSkeleton({ count = 3, rows = 4 }: { count?: number; rows?: number }) {
-  return (
-    <div className="panels">
-      {Array.from({ length: count }, (_, i) => (
-        <section key={i} className="panel sk-card">
-          <Bar w="30%" h={11} />
-          {Array.from({ length: rows }, (_, r) => (
-            <Bar key={r} w={`${String(95 - r * 7)}%`} h={11} />
-          ))}
-        </section>
       ))}
     </div>
   )

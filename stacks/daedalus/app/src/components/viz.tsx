@@ -335,6 +335,112 @@ export function Trend({
   )
 }
 
+/**
+ * A short series as a bare line, scaled to its own band.
+ *
+ * The band, not zero, is the whole point. A container resting at a steady
+ * 83 MB drawn against zero is a filled rectangle — a shape that says "full"
+ * about a number that means "unchanged". Against the series' own minimum and
+ * maximum the same numbers are a flat line, which is the true statement.
+ *
+ * A band narrower than 2% of its midpoint is drawn dead flat rather than
+ * stretched to fill the box: below that the shape is quantisation noise on a
+ * resting value, and magnifying it into a mountain range invents movement
+ * that is not there. Stroke only — a fill reads as a quantity, and this is a
+ * shape.
+ */
+export function Spark({
+  values,
+  tone = 'muted',
+  width = 64,
+  height = 18,
+}: {
+  values: number[]
+  tone?: Tone
+  width?: number
+  height?: number
+}) {
+  if (values.length < 2) return null
+
+  const lo = Math.min(...values)
+  const hi = Math.max(...values)
+  const mid = (lo + hi) / 2
+  const flat = mid === 0 || (hi - lo) / Math.abs(mid) < 0.02
+  const step = width / (values.length - 1)
+  const pts = values.map((v, i) => {
+    const y = flat ? height / 2 : height - 1.5 - ((v - lo) / (hi - lo)) * (height - 3)
+    return `${(i * step).toFixed(1)},${y.toFixed(1)}`
+  })
+
+  return (
+    <svg
+      className={`spark2 spark2-${tone}`}
+      viewBox={`0 0 ${String(width)} ${String(height)}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polyline points={pts.join(' ')} fill="none" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    </svg>
+  )
+}
+
+/**
+ * The row of live readings at the top of a page — one bordered strip with
+ * hairline dividers, not a grid of cards.
+ *
+ * One element rather than N is what keeps the row honest at any count and any
+ * width: the cells share a baseline because they share a grid row, and the
+ * divider is the 1px gap showing the container through, so it lands correctly
+ * however they wrap. A card per number cannot promise either — an auto-fitting
+ * grid of six leaves an orphan on the second row, and a card carrying a chart
+ * stands at twice the height of one carrying a caption.
+ */
+export function StatStrip({ children }: { children: ReactNode }) {
+  return <div className="strip">{children}</div>
+}
+
+/**
+ * One reading in a `StatStrip`.
+ *
+ * `sub` and `spark` are alternatives rather than a stack: the slot under the
+ * value is one line tall, which is what keeps every cell in the strip the same
+ * height. A cell wanting both is a cell that should be a board.
+ */
+export function Stat({
+  label,
+  value,
+  unit,
+  tone,
+  spark,
+  sub,
+  title,
+}: {
+  label: string
+  value: ReactNode
+  unit?: string
+  /** Colours the value. For a reading that can be a FAULT, not for decoration. */
+  tone?: Tone
+  spark?: number[]
+  sub?: ReactNode
+  /** The working behind the number, on hover. */
+  title?: string
+}) {
+  return (
+    <div className={tone === undefined ? 'stat' : `stat stat-${tone}`} title={title}>
+      <span className="stat-k">{label}</span>
+      <span className="stat-v">
+        {value}
+        {unit !== undefined && <em>{unit}</em>}
+      </span>
+      {spark !== undefined && spark.length > 1 ?
+        <Spark values={spark} tone={tone ?? 'muted'} />
+      : sub !== undefined ?
+        <span className="stat-sub">{sub}</span>
+      : null}
+    </div>
+  )
+}
+
 function MicroSpark({ values, tone }: { values: number[]; tone: Tone }) {
   const w = 100
   const h = 20
@@ -458,10 +564,19 @@ export function Measures({
   )
 }
 
-/** Key/value rows inside a board — denser than the app pages' `Row`. */
-export function Facts({ rows }: { rows: { k: string; v: ReactNode }[] }) {
+/**
+ * Key/value rows inside a board.
+ *
+ * Two shapes, because the content genuinely has two shapes. The default packs
+ * short readings into an auto-fitting grid with the label above the value —
+ * right for four numbers read across. `list` puts one pair per line, label
+ * left and value right, which is what a settings or connection panel wants:
+ * the values there are identifiers, not quantities, and a hostname or an image
+ * reference in a 9rem column is a wrapped mess.
+ */
+export function Facts({ rows, list }: { rows: { k: string; v: ReactNode }[]; list?: boolean }) {
   return (
-    <dl className="facts">
+    <dl className={list === true ? 'facts facts-list' : 'facts'}>
       {rows.map((r) => (
         <div key={r.k}>
           <dt>{r.k}</dt>
