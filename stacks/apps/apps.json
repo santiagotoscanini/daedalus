@@ -19,8 +19,7 @@
         "healthPath": "/api/healthz"
       },
       "presentation": {
-        "description": "Anansi — task-tracking experiment",
-        "icon": "mdi-spider-#f59e0b"
+        "description": "Anansi — task-tracking experiment"
       },
       "resources": {
         "cpus": null,
@@ -81,8 +80,7 @@
         "healthPath": "/favicon.ico"
       },
       "presentation": {
-        "description": "ipcrawl — exposed-webcam catalogue",
-        "icon": "mdi-cctv-#38bdf8"
+        "description": "ipcrawl — exposed-webcam catalogue"
       },
       "resources": {
         "cpus": null,
@@ -113,8 +111,7 @@
         "mode": "native"
       },
       "presentation": {
-        "description": "Voyra app",
-        "icon": "mdi-cube-outline-#94a3b8"
+        "description": "Voyra app"
       },
       "resources": {
         "cpus": null,

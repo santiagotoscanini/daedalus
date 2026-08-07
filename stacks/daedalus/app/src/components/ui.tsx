@@ -8,6 +8,58 @@ export function StateDot({ state }: { state: AppState }) {
   return <span className={`dot dot-${state}`} aria-label={state} title={state} />
 }
 
+/**
+ * An app's own icon, or a monogram when it does not serve one.
+ *
+ * `hasIcon` is resolved on the server and passed in rather than discovered
+ * here with an `onError` handler: these pages are server-rendered, and an
+ * <img> that 404s would flash a broken-image glyph before any client code
+ * could swap it out. The monogram is then the first thing drawn, not a repair.
+ *
+ * The monogram's hue is derived from the name, so an app without an icon still
+ * gets a stable colour to recognise it by — and gets it without anyone typing
+ * one in.
+ */
+export function AppIcon({
+  name,
+  hasIcon,
+  size = 22,
+}: {
+  name: string
+  hasIcon: boolean
+  size?: number
+}) {
+  if (!hasIcon) {
+    return (
+      <span
+        className="appicon appicon-mono"
+        style={{ width: size, height: size, ['--mono-hue' as string]: String(hue(name)) }}
+        aria-hidden="true"
+      >
+        {name.slice(0, 1).toUpperCase()}
+      </span>
+    )
+  }
+  return (
+    <img
+      className="appicon"
+      src={`/api/app-icon/${encodeURIComponent(name)}`}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      decoding="async"
+    />
+  )
+}
+
+/** A stable hue per name. Any spread over the wheel will do; this one is cheap. */
+function hue(name: string): number {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360
+  return h
+}
+
 export function StatePill({ state }: { state: AppState }) {
   const label =
     state === 'running' ? 'running'

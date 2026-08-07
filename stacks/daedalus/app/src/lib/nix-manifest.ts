@@ -47,7 +47,7 @@ export type ManifestApp = {
     allowedGroups?: string[] | null
     bypassRule?: string | null
   }
-  presentation: { description: string; icon: string }
+  presentation: { description: string }
   /** Optional so an apps.json predating the field still parses. */
   resources?: ManifestResources
   notes?: Record<string, string>

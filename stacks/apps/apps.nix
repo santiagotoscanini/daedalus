@@ -1094,16 +1094,15 @@ in
 
             # How the app is named to a person: its row in daedalus, and
             # its entry on the Pocket ID consent screen.
+            #
+            # No icon here. Every app publishes its own — it is what the
+            # browser tab shows — so daedalus reads it from the app rather
+            # than from a second copy that has to be kept in agreement.
             presentation = {
               description = lib.mkOption {
                 type = lib.types.str;
                 default = "";
                 description = "One-line subtitle under the app name.";
-              };
-              icon = lib.mkOption {
-                type = lib.types.str;
-                default = "mdi-cube-outline-#94a3b8";
-                description = "Icon, in Material Design Icons syntax (`mdi-<n>-<#rrggbb>`).";
               };
             };
 

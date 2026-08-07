@@ -23,20 +23,28 @@ export const fetchApps = createServerFn().handler(async () => {
   const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
   // appStatuses degrades per-app rather than rejecting, so a prometheus
   // outage costs the status column, not the page.
-  const [statuses, applyStatus] = await Promise.all([
+  const { appIcon } = await import('../lib/app-icon')
+  const [statuses, applyStatus, icons] = await Promise.all([
     appStatuses(records.map((r) => r.name)),
     readApplyStatus(),
+    // Resolved per app, in parallel, and cached for an hour in that module —
+    // so this costs one round of probes after a restart and nothing after.
+    Promise.all(
+      records.map(async (r) =>
+        (await appIcon(r.name, effectiveHostname(r.name, r.hostname), r.stage !== 'off')) !== null,
+      ),
+    ),
   ])
 
   return {
     applyStatus,
-    apps: records.map((r) => ({
+    apps: records.map((r, i) => ({
       name: r.name,
       stage: r.stage,
       managedInNix: r.managedInNix,
       sourceMode: r.sourceMode,
       description: r.description,
-      icon: r.icon,
+      hasIcon: icons[i] ?? false,
       hostname: effectiveHostname(r.name, r.hostname),
       authMode: r.authMode,
       postgres: r.postgres,
@@ -128,7 +136,12 @@ export const fetchApp = createServerFn()
         hostname: record.hostname,
         effectiveHostname: effectiveHostname(record.name, record.hostname),
         description: record.description,
-        icon: record.icon,
+        hasIcon:
+          (await (await import('../lib/app-icon')).appIcon(
+            record.name,
+            effectiveHostname(record.name, record.hostname),
+            record.stage !== 'off',
+          )) !== null,
         postgres: record.postgres,
         storage: record.storage,
         litellm: record.litellm,

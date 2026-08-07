@@ -419,10 +419,10 @@ let
   # daedalus's own registry entry, in the manifest's shape.
   #
   # Defined ONCE and consumed twice: by `fleet.apps.daedalus` below, and by the
-  # manifest the container reads. It was briefly two literals, and the icon
-  # drifted between them within the hour — the app list rendered one colour
-  # while the detail page reported another. Restating this is exactly the class
-  # of bug daedalus exists to catch, so it does not get to have it.
+  # manifest the container reads. As two literals these drift within the hour —
+  # the app list rendering one description while the detail page reports
+  # another. Restating this is exactly the class of bug daedalus exists to
+  # catch, so it does not get to have it.
   #
   # NOT read back out of `config.fleet.apps.daedalus`, which would be the other
   # way to deduplicate: this value feeds a volume on the container that
@@ -447,7 +447,6 @@ let
     };
     presentation = {
       description = "S2 control plane";
-      icon = "mdi-server-network-#e2795a";
     };
     # Uncapped on purpose: this is a Vite dev server that typechecks and
     # bundles on demand, so its working set is spiky and unlike a built app's.

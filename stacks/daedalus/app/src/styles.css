@@ -279,7 +279,7 @@ h2 {
 
 .app-row {
   display: grid;
-  grid-template-columns: auto minmax(9rem, 1fr) auto auto auto;
+  grid-template-columns: auto auto minmax(9rem, 1fr) auto auto auto;
   align-items: center;
   gap: 1.1rem;
   padding: 0.8rem 1.1rem;
@@ -2093,6 +2093,33 @@ h2 {
 
 .text-bad { color: var(--bad); }
 .text-warn { color: var(--warn); }
+
+/* ── app icon ───────────────────────────────────────────────────────────── */
+
+/* Served from the app itself (lib/app-icon.ts). `contain` rather than `cover`
+   so a non-square icon is shown whole instead of cropped — these are logos,
+   and a cropped logo is a different logo. */
+.appicon {
+  flex: none;
+  border-radius: 5px;
+  object-fit: contain;
+  display: block;
+}
+
+/* The fallback for an app that serves no icon. A letter on its own tinted
+   ground, hue derived from the name — recognisable and stable without anyone
+   choosing it. */
+.appicon-mono {
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  font-size: 0.72em;
+  font-weight: 650;
+  line-height: 1;
+  color: hsl(var(--mono-hue) 55% 72%);
+  background: hsl(var(--mono-hue) 45% 12%);
+  box-shadow: inset 0 0 0 1px hsl(var(--mono-hue) 40% 22%);
+}
 
 /* ── stat strip ─────────────────────────────────────────────────────────── */
 

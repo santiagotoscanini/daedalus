@@ -90,7 +90,6 @@ export async function importFromNix(): Promise<{ imported: string[] }> {
 export type NewApp = {
   name: string
   description: string
-  icon: string
   stage: 'off' | 'lab' | 'live'
   postgres: boolean
   storage: boolean
@@ -149,7 +148,6 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
     prometheus: input.prometheus,
     authMode: 'none',
     description: input.description.trim(),
-    icon: input.icon.trim() || 'mdi-cube-outline-#94a3b8',
     notes: {},
   })
 
@@ -198,7 +196,6 @@ export const EDITABLE_FIELDS = [
   'image',
   'hostname',
   'description',
-  'icon',
   'postgres',
   'storage',
   'litellm',
@@ -297,7 +294,6 @@ function toRow(entry: ManifestEntry) {
     limitMemoryMb: entry.resources?.memoryMb ?? null,
     limitPids: entry.resources?.pids ?? null,
     description: entry.presentation.description,
-    icon: entry.presentation.icon,
     notes: entry.notes ?? {},
   }
 }
@@ -330,7 +326,6 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     limitMemoryMb: record.limitMemoryMb,
     limitPids: record.limitPids,
     description: record.description,
-    icon: record.icon,
     env: record.envVars.map((e) => `${e.key}=${e.value}`).join('\n'),
   }
 
@@ -352,7 +347,6 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     limitMemoryMb: manifest.resources?.memoryMb ?? null,
     limitPids: manifest.resources?.pids ?? null,
     description: manifest.presentation.description,
-    icon: manifest.presentation.icon,
     env: manifest.env.map((e) => `${e.key}=${e.value}`).join('\n'),
   }
 
@@ -401,7 +395,7 @@ export function toRegistryExport(records: AppRecord[]): {
               ...(r.authAllowedGroups ? { allowedGroups: r.authAllowedGroups } : {}),
               ...(r.authBypassRule ? { bypassRule: r.authBypassRule } : {}),
             },
-            presentation: { description: r.description, icon: r.icon },
+            presentation: { description: r.description },
             // Always emitted in full, nulls included, rather than omitted when
             // uncapped: the exported file is what a human reads to see what a
             // container is allowed to use, and an absent key reads as "nobody

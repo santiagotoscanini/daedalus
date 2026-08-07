@@ -120,7 +120,7 @@ let
       };
 
       presentation = {
-        inherit (a.presentation) description icon;
+        inherit (a.presentation) description;
       };
 
       # cgroup caps. Read with `or` defaults so an apps.json predating this

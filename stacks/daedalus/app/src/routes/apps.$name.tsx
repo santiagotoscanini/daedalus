@@ -1,7 +1,7 @@
 import { Await, createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ApplyBar } from '../components/apply-bar'
-import { Bytes, Segmented, Slider, StatePill, Toggle } from '../components/ui'
+import { AppIcon, Bytes, Segmented, Slider, StatePill, Toggle } from '../components/ui'
 import {
   BarList,
   Board,
@@ -169,8 +169,11 @@ function AppDetail() {
       </p>
 
       <section className="hero">
-        <div className="hero-icon" data-state={state} aria-hidden="true">
-          {state === 'running' ? '✓' : state === 'attention' ? '!' : '○'}
+        {/* The app's own icon, in a frame that keeps carrying state. Identity
+            and health are different questions and the frame answers the second
+            without spending the slot that answers the first. */}
+        <div className="hero-icon" data-state={state}>
+          <AppIcon name={app.name} hasIcon={app.hasIcon} size={34} />
         </div>
 
         <div className="hero-main">
@@ -723,14 +726,9 @@ function AppDetail() {
                 patch({ description: v })
               }}
             />
-            <TextField
-              label="Icon"
-              value={app.icon}
-              disabled={readOnly}
-              onSave={(v) => {
-                patch({ icon: v })
-              }}
-            />
+            {/* No icon field: the app publishes one and daedalus reads it. See
+                lib/app-icon.ts — a column here could only ever agree or
+                disagree with what the browser tab already shows. */}
             <TextField
               label="Image override"
               value={app.image ?? ''}
