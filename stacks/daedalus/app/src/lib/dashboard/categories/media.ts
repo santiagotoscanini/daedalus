@@ -63,47 +63,52 @@ import { imageTag, imageVersion, type RunningVersion } from '../images'
  */
 export type MediaTab =
   | 'jellyfin'
+  | 'calibre'
   | 'wanted'
-  | 'prowlarr'
-  | 'bazarr'
+  | 'indexer'
   | 'downloaders'
-  | 'books'
-  | 'housekeeping'
+  | 'cleanup'
 
 export type MediaData =
   | ({ tab: 'jellyfin' } & JellyfinData)
-  | { tab: 'wanted'; seerr: SeerrData; sonarr: ArrData; radarr: ArrData }
-  | ({ tab: 'prowlarr' } & ProwlarrData)
-  | ({ tab: 'bazarr' } & BazarrData)
+  | ({ tab: 'calibre' } & CalibreData)
+  | {
+      tab: 'wanted'
+      seerr: SeerrData
+      sonarr: ArrData
+      radarr: ArrData
+      recyclarr: RecyclarrData
+      bazarr: BazarrData
+    }
+  | ({ tab: 'indexer' } & ProwlarrData)
   | ({ tab: 'downloaders' } & DownloadsData)
-  | ({ tab: 'books' } & BooksData)
-  | ({ tab: 'housekeeping' } & HousekeepingData)
+  | ({ tab: 'cleanup' } & CleanupData)
 
 type Ctx = { base: (app: string) => string; hc: string }
 
 export async function loadMedia(tab: string, ctx: Ctx): Promise<MediaData> {
   switch (tab) {
+    case 'calibre':
+      return { tab: 'calibre', ...(await loadCalibre(ctx)) }
     case 'wanted': {
-      // All three, because all three are on the page — the switch chooses what
+      // All five, because all five are on the page — the switch chooses what
       // is SHOWN, not what is fetched. Fetching on selection would put a
       // spinner behind a button that is meant to feel like a toggle.
-      const [seerr, sonarr, radarr] = await Promise.all([
+      const [seerr, sonarr, radarr, recyclarr, bazarr] = await Promise.all([
         loadSeerr(ctx.base('seerr')),
         loadArr('sonarr', ctx),
         loadArr('radarr', ctx),
+        loadRecyclarr(),
+        loadBazarr(ctx),
       ])
-      return { tab: 'wanted', seerr, sonarr, radarr }
+      return { tab: 'wanted', seerr, sonarr, radarr, recyclarr, bazarr }
     }
-    case 'prowlarr':
-      return { tab: 'prowlarr', ...(await loadProwlarr(ctx)) }
-    case 'bazarr':
-      return { tab: 'bazarr', ...(await loadBazarr(ctx)) }
+    case 'indexer':
+      return { tab: 'indexer', ...(await loadProwlarr(ctx)) }
     case 'downloaders':
       return { tab: 'downloaders', ...(await loadDownloads(ctx)) }
-    case 'books':
-      return { tab: 'books', ...(await loadBooks(ctx)) }
-    case 'housekeeping':
-      return { tab: 'housekeeping', ...(await loadHousekeeping()) }
+    case 'cleanup':
+      return { tab: 'cleanup', ...(await loadCleanup()) }
     default:
       return { tab: 'jellyfin', ...(await loadJellyfin(ctx.base('jellyfin'))) }
   }
@@ -832,6 +837,26 @@ type DownloadsData = {
     recent: { title: string; status: string }[]
   }
   /**
+   * The fourth downloader, and the reason it is here rather than beside the
+   * shelf it fills: it is a downloader. Pairing it with Calibre-Web put one
+   * downloader on the far side of the tab row's rule from the other three,
+   * which made "where do I look when something is not arriving" depend on
+   * whether the thing was a book.
+   */
+  shelfmark: {
+    /**
+     * From the image's own OCI label, because the pin cannot say.
+     *
+     * Shelfmark is pinned by digest to a moving `:latest`, so the tag names a
+     * channel. The image itself carries `org.opencontainers.image.version`,
+     * which is a fact about the artefact on disk — see lib/dashboard/images.ts.
+     */
+    running: RunningVersion
+    gap: VersionGap
+    jobs: { title: string; state: string; pct: number | null }[]
+    counts: { downloading: number; queued: number; done: number; errors: number } | null
+  }
+  /**
    * The tunnel every torrent and article goes through.
    *
    * Three facts, not a panel: the tunnel has a page of its own on Network ›
@@ -846,8 +871,18 @@ async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
   const qbtBase = `${ctx.hc}:8090`
   const nzbBase = `${ctx.hc}:6789`
 
-  const [qbt, nzbVersion, nzbStatus, nzbGroups, metubeHistory, vpnIp, vpnPort, vpnUp] =
-    await Promise.all([
+  const [
+    qbt,
+    nzbVersion,
+    nzbStatus,
+    nzbGroups,
+    metubeHistory,
+    vpnIp,
+    vpnPort,
+    vpnUp,
+    shelfmarkStatus,
+    shelfmark,
+  ] = await Promise.all([
       loadQbt(qbtBase),
       getJson<{ result?: string }>(`${nzbBase}/jsonrpc/version`),
       getJson<{
@@ -878,19 +913,32 @@ async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
       getJson<{ country?: string }>(`${ctx.hc}:8000/v1/publicip/ip`),
       getJson<{ port?: number }>(`${ctx.hc}:8000/v1/portforward`),
       promScalars({ up: 'gluetun_vpn_status' }),
+      // Keyed by state, then by job id — see stacks/shelfmark. The inner
+      // records are loosely typed on purpose: the fields vary by state and
+      // only the title and progress are ever present.
+      getJson<Record<string, Record<string, { title?: string; progress?: number }>>>(
+        `${ctx.hc}:8084/api/status`,
+      ),
+      // Pinned by digest to a moving `:latest`, so only the image knows.
+      imageVersion('shelfmark'),
     ])
 
   const nzbVer = nzbVersion?.result ?? null
   const metubeVer = imageTag('metube')
   const r = nzbStatus?.result
 
-  const [qbtGap, nzbGap, metubeGap] = await Promise.all([
+  const [qbtGap, nzbGap, metubeGap, shelfmarkGap] = await Promise.all([
     versionGap('qbittorrent/qBittorrent', qbt.version, { tag: /^release-(\d+\.\d+\.\d+)$/ }),
     versionGap('nzbgetcom/nzbget', nzbVer, { tag: /^v?(\d+\.\d+(?:\.\d+)?)$/ }),
     versionGap('alexta69/metube', metubeVer, { tag: /^(\d{4}\.\d{2}\.\d{2})$/ }),
+    // A real gap now that the label supplies a version. `notesWhenUnknown`
+    // stays as the fallback for the day a publisher stops setting the label:
+    // the panel then shows what has shipped rather than going blank.
+    versionGap('calibrain/shelfmark', shelfmark.version, { notesWhenUnknown: true }),
   ])
 
   const done = metubeHistory?.done ?? []
+  const bucket = (state: string) => Object.values(shelfmarkStatus?.[state] ?? {})
 
   return {
     qbt: { ...qbt, gap: qbtGap },
@@ -931,6 +979,28 @@ async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
         .slice(-6)
         .reverse()
         .map((d) => ({ title: d.title ?? '?', status: d.status ?? 'finished' })),
+    },
+    shelfmark: {
+      running: shelfmark,
+      gap: shelfmarkGap,
+      jobs: ['downloading', 'resolving', 'locating', 'queued', 'error']
+        .flatMap((state) =>
+          bucket(state).map((j) => ({
+            title: j.title ?? 'untitled',
+            state,
+            pct: typeof j.progress === 'number' ? j.progress : null,
+          })),
+        )
+        .slice(0, 12),
+      counts:
+        shelfmarkStatus === null ? null : (
+          {
+            downloading: bucket('downloading').length,
+            queued: bucket('queued').length + bucket('resolving').length + bucket('locating').length,
+            done: bucket('complete').length,
+            errors: bucket('error').length,
+          }
+        ),
     },
     vpn: {
       up: vpnUp.up === null ? null : vpnUp.up === 1,
@@ -1033,40 +1103,30 @@ async function loadQbt(base: string): Promise<Omit<DownloadsData['qbt'], 'gap'>>
   }
 }
 
-/* ── Books ────────────────────────────────────────────────────────────── */
+/* ── Calibre ──────────────────────────────────────────────────────────── */
 
-type BooksData = {
-  calibre: {
-    version: string | null
-    gap: VersionGap
-    books: number | null
-    authors: number | null
-    series: number | null
-    categories: number | null
-  }
-  shelfmark: {
-    /**
-     * From the image's own OCI label, because the pin cannot say.
-     *
-     * Shelfmark is pinned by digest to a moving `:latest`, so the tag names a
-     * channel. The image itself carries `org.opencontainers.image.version`,
-     * which is a fact about the artefact on disk — see lib/dashboard/images.ts.
-     */
-    running: RunningVersion
-    gap: VersionGap
-    jobs: { title: string; state: string; pct: number | null }[]
-    counts: { downloading: number; queued: number; done: number; errors: number } | null
-  }
+/**
+ * The book shelf, beside Jellyfin rather than in a "Books" section.
+ *
+ * Both are the END of a pipeline — the thing a person actually opens — and
+ * everything after the rule on the tab row is machinery that fills them. Books
+ * used to be its own tab pairing the shelf with its downloader, which put a
+ * downloader on the far side of that line from every other downloader.
+ */
+type CalibreData = {
+  version: string | null
+  gap: VersionGap
+  books: number | null
+  authors: number | null
+  series: number | null
+  categories: number | null
   disk: { usedBytes: number | null; freeBytes: number | null }
 }
 
-async function loadBooks(ctx: Ctx): Promise<BooksData> {
-  const calibreVersion = imageTag('calibre-web')
-  // Pinned by digest to a moving `:latest`, so the tag names a channel and the
-  // image's own label is the only thing that knows.
-  const shelfmark = await imageVersion('shelfmark')
+async function loadCalibre(ctx: Ctx): Promise<CalibreData> {
+  const version = imageTag('calibre-web')
 
-  const [stats, status, disk, calibreGap, shelfmarkGap] = await Promise.all([
+  const [stats, disk, gap] = await Promise.all([
     // /opds is on calibre-web's forward-auth bypass and takes its own basic
     // auth (stacks/calibre-web), so this reads it with those credentials.
     getJson<{ books?: number; authors?: number; categories?: number; series?: number }>(
@@ -1079,58 +1139,22 @@ async function loadBooks(ctx: Ctx): Promise<BooksData> {
         },
       },
     ),
-    // Keyed by state, then by job id — see stacks/shelfmark. The inner records
-    // are loosely typed on purpose: the fields vary by state and only the title
-    // and progress are ever present.
-    getJson<Record<string, Record<string, { title?: string; progress?: number }>>>(
-      `${ctx.hc}:8084/api/status`,
-    ),
     promScalars({
       size: 'node_filesystem_size_bytes{mountpoint="/s2/books"}',
       avail: 'node_filesystem_avail_bytes{mountpoint="/s2/books"}',
     }),
-    versionGap('crocodilestick/Calibre-Web-Automated', calibreVersion, {
+    versionGap('crocodilestick/Calibre-Web-Automated', imageTag('calibre-web'), {
       tag: /^[Vv]?(\d+\.\d+\.\d+)$/,
     }),
-    // A real gap now that the label supplies a version. `notesWhenUnknown`
-    // stays as the fallback for the day a publisher stops setting the label:
-    // the panel then shows what has shipped rather than going blank.
-    versionGap('calibrain/shelfmark', shelfmark.version, { notesWhenUnknown: true }),
   ])
 
-  const bucket = (state: string) => Object.values(status?.[state] ?? {})
-
   return {
-    calibre: {
-      version: calibreVersion,
-      gap: calibreGap,
-      books: stats?.books ?? null,
-      authors: stats?.authors ?? null,
-      series: stats?.series ?? null,
-      categories: stats?.categories ?? null,
-    },
-    shelfmark: {
-      running: shelfmark,
-      gap: shelfmarkGap,
-      jobs: ['downloading', 'resolving', 'locating', 'queued', 'error']
-        .flatMap((state) =>
-          bucket(state).map((j) => ({
-            title: j.title ?? 'untitled',
-            state,
-            pct: typeof j.progress === 'number' ? j.progress : null,
-          })),
-        )
-        .slice(0, 12),
-      counts:
-        status === null ? null : (
-          {
-            downloading: bucket('downloading').length,
-            queued: bucket('queued').length + bucket('resolving').length + bucket('locating').length,
-            done: bucket('complete').length,
-            errors: bucket('error').length,
-          }
-        ),
-    },
+    version,
+    gap,
+    books: stats?.books ?? null,
+    authors: stats?.authors ?? null,
+    series: stats?.series ?? null,
+    categories: stats?.categories ?? null,
     disk: {
       usedBytes: disk.size !== null && disk.avail !== null ? disk.size - disk.avail : null,
       freeBytes: disk.avail,
@@ -1148,7 +1172,43 @@ async function loadBooks(ctx: Ctx): Promise<BooksData> {
  * evidence any of them is alive is a log line. Two publish no numbers at all,
  * so the counts here are counted out of Loki — which is why the panel says so.
  */
-type HousekeepingData = {
+/**
+ * Recyclarr, which lives with Sonarr and Radarr rather than with the cleaners.
+ *
+ * It was grouped with Cleanuparr and Janitorr on the grounds that all three are
+ * timers nobody watches — true, and the wrong axis. What Recyclarr actually
+ * DOES is write custom formats and scoring into the two *arrs, so its output
+ * is their configuration and the page you want it next to is theirs. The
+ * cleaners act on the download queue and the library instead.
+ */
+type RecyclarrData = {
+  /**
+   * From the image label, and it took a snapshot to get there.
+   *
+   * Recyclarr is pinned to a bare major (`:8`) — a channel — prints no banner,
+   * exposes no API and logs no version, so this was reported as genuinely
+   * unknowable. That was wrong: the image says 8.7.0 in
+   * `org.opencontainers.image.version`, which is a fact about the artefact on
+   * disk and needed nothing but somewhere to read it from.
+   */
+  running: RunningVersion
+  gap: VersionGap
+  /** How its last scheduled run ended, and when. */
+  lastRun: { ok: boolean; day: string } | null
+  errors: number | null
+  /**
+   * What the last sync actually changed, per *arr instance.
+   *
+   * The number that makes this service legible: "updated 2, skipped 59" is the
+   * difference between a job that ran and a job that did something — including
+   * the something that silently reverted a profile somebody edited by hand.
+   */
+  synced: { instance: string; updated: number; skipped: number }[]
+  /** The window `errors` is counted over. */
+  days: number
+}
+
+type CleanupData = {
   cleanuparr: {
     version: string | null
     gap: VersionGap
@@ -1171,39 +1231,13 @@ type HousekeepingData = {
      */
     schedules: { name: string; enabled: boolean }[]
   }
-  recyclarr: {
-    /**
-     * From the image label, and it took a snapshot to get there.
-     *
-     * Recyclarr is pinned to a bare major (`:8`) — a channel — prints no
-     * banner, exposes no API and logs no version, so this was reported as
-     * genuinely unknowable. That was wrong: the image says 8.7.0 in
-     * `org.opencontainers.image.version`, which is a fact about the artefact
-     * on disk and needed nothing but somewhere to read it from.
-     */
-    running: RunningVersion
-    gap: VersionGap
-    /** How its last scheduled run ended, and when. */
-    lastRun: { ok: boolean; day: string } | null
-    errors: number | null
-    /**
-     * What the last sync actually changed, per *arr instance.
-     *
-     * The number that makes this service legible: Recyclarr writes TRaSH custom
-     * formats and scoring straight into Sonarr and Radarr on a timer, and
-     * "updated 2, skipped 59" is the difference between a job that ran and a
-     * job that did something — including the something that silently reverted
-     * a profile somebody edited by hand.
-     */
-    synced: { instance: string; updated: number; skipped: number }[]
-  }
-  /** The window all three counts are over. */
+  /** The window both counts are over. */
   days: number
 }
 
 const CLEANUP_DAYS = 7
 
-async function loadHousekeeping(): Promise<HousekeepingData> {
+async function loadCleanup(): Promise<CleanupData> {
   const window = `${String(CLEANUP_DAYS)}d`
   const over = (container: string, needle: string) =>
     lokiScalar(
@@ -1215,20 +1249,39 @@ async function loadHousekeeping(): Promise<HousekeepingData> {
   // label a fallback rather than the primary. See lib/dashboard/images.ts.
   const cleanuparrVersion = imageTag('cleanuparr')
 
-  const [
-    removed,
-    blocked,
-    searches,
-    wouldDelete,
-    recyclarrRun,
-    recyclarrErrors,
-    janitorr,
-    recyclarr,
-  ] = await Promise.all([
+  const [removed, blocked, searches, wouldDelete, janitorr] = await Promise.all([
     over('cleanuparr', 'Removing item with max strikes'),
     over('cleanuparr', 'blocked item keeps coming back'),
     over('cleanuparr', 'Replacement search triggered'),
     over('janitorr', 'Deleting'),
+    // Pinned to the channel `jvm-stable`, so the version comes off the image's
+    // own OCI label. It used to be scraped out of Janitorr's startup banner in
+    // Loki, which worked only while the container had restarted inside the
+    // retention window; past 30 days Loki refuses the range outright and the
+    // version silently became "unknown". The label has no such expiry.
+    imageVersion('janitorr'),
+  ])
+
+  const schedules = await janitorrSchedules()
+
+  const [cleanuparrGap, janitorrGap] = await Promise.all([
+    versionGap('Cleanuparr/Cleanuparr', cleanuparrVersion),
+    versionGap('Schaka/janitorr', janitorr.version),
+  ])
+
+  return {
+    cleanuparr: { version: cleanuparrVersion, gap: cleanuparrGap, removed, blocked, searches },
+    janitorr: { running: janitorr, gap: janitorrGap, wouldDelete, schedules },
+    days: CLEANUP_DAYS,
+  }
+}
+
+/* ── Recyclarr ────────────────────────────────────────────────────────── */
+
+async function loadRecyclarr(): Promise<RecyclarrData> {
+  const window = `${String(CLEANUP_DAYS)}d`
+
+  const [lastRunLine, errors, running, synced] = await Promise.all([
     // How the last scheduled sync ended. Recyclarr has no API, no metrics and
     // no UI, and "did it run, did it succeed" is the only question anybody has
     // about a nightly job.
@@ -1236,43 +1289,23 @@ async function loadHousekeeping(): Promise<HousekeepingData> {
     lokiScalar(
       `sum(count_over_time({container="recyclarr"} |~ \`\\[ERR\\]|job failed\` [${window}])) or vector(0)`,
     ),
-    // Both pinned to a channel — `jvm-stable` and a bare `8` — so both read
-    // their version off the image's own OCI label.
-    //
-    // Janitorr's used to be scraped out of its startup banner in Loki, which
-    // worked only while the container had restarted inside the retention
-    // window; past 30 days Loki refuses the range outright and the version
-    // silently became "unknown". The label has no such expiry.
-    imageVersion('janitorr'),
+    // Pinned to a bare major, which is a channel — the image label is the only
+    // thing that knows the version.
     imageVersion('recyclarr'),
-  ])
-
-  const [schedules, synced] = await Promise.all([
-    janitorrSchedules(),
     recyclarrSynced(CLEANUP_DAYS),
   ])
 
-  const runStamp = /time="([^"T]+)/.exec(recyclarrRun ?? '')?.[1] ?? null
-
-  const [cleanuparrGap, janitorrGap, recyclarrGap] = await Promise.all([
-    versionGap('Cleanuparr/Cleanuparr', cleanuparrVersion),
-    versionGap('Schaka/janitorr', janitorr.version),
-    versionGap('recyclarr/recyclarr', recyclarr.version, { notesWhenUnknown: true }),
-  ])
+  const runStamp = /time="([^"T]+)/.exec(lastRunLine ?? '')?.[1] ?? null
 
   return {
-    cleanuparr: { version: cleanuparrVersion, gap: cleanuparrGap, removed, blocked, searches },
-    janitorr: { running: janitorr, gap: janitorrGap, wouldDelete, schedules },
-    recyclarr: {
-      running: recyclarr,
-      gap: recyclarrGap,
-      lastRun:
-        runStamp === null ? null : (
-          { ok: (recyclarrRun ?? '').includes('job succeeded'), day: runStamp }
-        ),
-      errors: recyclarrErrors,
-      synced,
-    },
+    running,
+    gap: await versionGap('recyclarr/recyclarr', running.version, { notesWhenUnknown: true }),
+    lastRun:
+      runStamp === null ? null : (
+        { ok: (lastRunLine ?? '').includes('job succeeded'), day: runStamp }
+      ),
+    errors,
+    synced,
     days: CLEANUP_DAYS,
   }
 }
@@ -1291,7 +1324,7 @@ async function loadHousekeeping(): Promise<HousekeepingData> {
  * quietly deleting. The `wouldDelete` count beside this is what covers that
  * case: it counts decisions, whichever schedule reached them.
  */
-async function janitorrSchedules(): Promise<HousekeepingData['janitorr']['schedules']> {
+async function janitorrSchedules(): Promise<CleanupData['janitorr']['schedules']> {
   const kinds = [
     { name: 'Tag', match: 'Tag based cleanup' },
     { name: 'Episode', match: 'Episode based cleanup' },
@@ -1308,7 +1341,7 @@ async function janitorrSchedules(): Promise<HousekeepingData['janitorr']['schedu
 }
 
 /** `radarr-main: Updated 2 Existing Custom Formats` and its Skipped sibling. */
-async function recyclarrSynced(days: number): Promise<HousekeepingData['recyclarr']['synced']> {
+async function recyclarrSynced(days: number): Promise<RecyclarrData['synced']> {
   const entries = await lokiEntries(
     `{container="recyclarr"} |~ \`(Updated|Skipped) [0-9]+ .*Custom Formats\``,
     days * 24 * 60,
@@ -1367,10 +1400,11 @@ function mb(v: number | undefined): number | null {
 export type {
   ArrData,
   BazarrData,
-  BooksData,
+  CalibreData,
+  CleanupData,
   DownloadsData,
-  HousekeepingData,
   JellyfinData,
   ProwlarrData,
+  RecyclarrData,
   SeerrData,
 }
