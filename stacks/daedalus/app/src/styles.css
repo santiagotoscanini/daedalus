@@ -223,6 +223,7 @@ h2 {
 .tallies {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem 1.6rem;
   font-size: 0.88rem;
   color: var(--muted);
@@ -3364,6 +3365,12 @@ h2 {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.74rem;
 }
+/* Pull-through copies of upstream images: present, but not something built
+   here, so they read as background against the app repositories. */
+.reg-repo.is-muted {
+  color: var(--dim);
+  background: transparent;
+}
 
 /* An artwork rail icon. Sized to the glyph box so the labels stay aligned
    whichever kind a category uses, and slightly desaturated at rest so one
@@ -3986,6 +3993,14 @@ h2 {
 
 /* Right-aligned in the page head, which is a baseline-aligned flex row. */
 .page-head-action {
+  margin-left: auto;
+  text-decoration: none;
+}
+
+/* The one action on the Apps tab, parked at the end of the tally line rather
+   than in the page header — the header is shared by all three tabs now, and
+   adding an app is only one of them. */
+.tallies-action {
   margin-left: auto;
   text-decoration: none;
 }

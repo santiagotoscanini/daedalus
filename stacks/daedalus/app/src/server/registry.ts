@@ -61,18 +61,26 @@ export const fetchApps = createServerFn().handler(async () => {
 })
 
 /**
- * zot and verdaccio, separately from the app list.
+ * The container registry tab.
  *
- * Its own entry point because it is the slow half of that page — two upstreams
- * through traefik against a list that comes out of Postgres in milliseconds —
- * and the two share nothing. The route streams this in behind a skeleton
- * rather than holding the app rows for it.
+ * Its own entry point, and separate from the npm one, because each is a tab
+ * that should render as soon as ITS upstream answers. Hostnames come from the
+ * nix manifest rather than being derived from the service name — daedalus
+ * sits on a private bridge (auth.isolated) and reaches both through traefik.
  */
-export const fetchRegistries = createServerFn().handler(async () => {
-  const { loadRegistries } = await import('../lib/registries')
+export const fetchImagesTab = createServerFn().handler(async () => {
+  const { loadImages } = await import('../lib/registries')
   const { webAppHosts } = await import('../lib/nix-manifest')
   const hosts = await webAppHosts()
-  return loadRegistries((app) => `https://${hosts[app] ?? app}`)
+  return loadImages((app) => `https://${hosts[app] ?? app}`)
+})
+
+/** The npm registry tab. See above for why it is not folded into that one. */
+export const fetchPackagesTab = createServerFn().handler(async () => {
+  const { loadPackages } = await import('../lib/registries')
+  const { webAppHosts } = await import('../lib/nix-manifest')
+  const hosts = await webAppHosts()
+  return loadPackages((app) => `https://${hosts[app] ?? app}`)
 })
 
 /**

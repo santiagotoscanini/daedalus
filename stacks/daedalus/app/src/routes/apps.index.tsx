@@ -2,20 +2,45 @@ import { Await, createFileRoute, Link } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
 import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
+import { ImagesView, PackagesView } from '../components/registries'
 import { AppIcon, Segmented, StateDot, type AppState } from '../components/ui'
-import { BarList, Board, BoardGrid, Chip, Facts, Pulse, Spark } from '../components/viz'
-import { fetchApps, fetchRegistries } from '../server/registry'
+import { Spark } from '../components/viz'
+import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
 
 // The app list. Every row joins three sources: the registry (Postgres — what
 // daedalus believes), the Nix manifest (what the box was actually built from,
 // hence drift), and Prometheus (what is happening right now).
+
+// Three tabs, the same shape every category page uses: what this box runs, and
+// the two registries it is built out of.
 //
-// Two loads, neither awaited: the rows come out of Postgres in milliseconds,
-// the registries are two upstreams through traefik. Holding the list for them
-// would mean the fast half of the page waits on the slow half for no reason.
+// The registries were boards at the foot of the app list. They are services —
+// containers with release cycles, logs and neighbours — and as a footer they
+// got a handful of numbers and no room for any of that. A tab each gives them
+// the header, version verdict, changelog and log every other service here has,
+// and it takes the app list back to being one thing.
+const TABS = [
+  { id: 'apps', label: 'Apps' },
+  { id: 'images', label: 'Container registry' },
+  { id: 'packages', label: 'npm packages' },
+] as const
+
+type Tab = (typeof TABS)[number]['id']
 
 export const Route = createFileRoute('/apps/')({
-  loader: () => ({ list: fetchApps(), registries: fetchRegistries() }),
+  validateSearch: (search: Record<string, unknown>): { tab?: Tab } => ({
+    tab: TABS.some((t) => t.id === search.tab) ? (search.tab as Tab) : undefined,
+  }),
+  loaderDeps: ({ search }) => ({ tab: search.tab ?? ('apps' as const) }),
+  // Only the open tab's data is fetched. The registries are two upstreams
+  // through traefik plus a GitHub release lookup each, and the app list is a
+  // Postgres read — pairing them cost the fast one every time.
+  loader: ({ deps }) => ({
+    tab: deps.tab,
+    list: deps.tab === 'apps' ? fetchApps() : null,
+    images: deps.tab === 'images' ? fetchImagesTab() : null,
+    packages: deps.tab === 'packages' ? fetchPackagesTab() : null,
+  }),
   component: AppsPage,
 })
 
@@ -23,33 +48,48 @@ type ListData = Awaited<ReturnType<typeof fetchApps>>
 type Row = ListData['apps'][number]
 
 function AppsPage() {
-  const { list, registries } = Route.useLoaderData()
+  const { tab, list, images, packages } = Route.useLoaderData()
 
-  return (
-    <>
-      <Await promise={list} fallback={<ListSkeleton />}>
-        {(data) => <AppsList data={data} />}
-      </Await>
-
-      <h2 className="section-head">
-        Shared registries
-        <small>every app above is built out of these</small>
-      </h2>
-      <Await promise={registries} fallback={<BoardsSkeleton spans={[6, 6]} />}>
-        {(data) => <Registries data={data} />}
-      </Await>
-    </>
-  )
-}
-
-/** The header and filters are part of the shape, so they are in the skeleton. */
-function ListSkeleton() {
   return (
     <>
       <header className="page-head">
         <h1>Apps</h1>
       </header>
-      <RowsSkeleton count={3} />
+      <p className="lede cat-lede">
+        What this box runs of its own, and the two registries every one of them is built out of.
+      </p>
+
+      <nav className="tabs">
+        {TABS.map((t) => (
+          <Link
+            key={t.id}
+            to="/apps"
+            search={{ tab: t.id }}
+            className={t.id === tab ? 'active' : ''}
+            replace
+          >
+            {t.label}
+          </Link>
+        ))}
+      </nav>
+
+      {list !== null && (
+        <Await promise={list} fallback={<RowsSkeleton count={4} />}>
+          {(data) => <AppsList data={data} />}
+        </Await>
+      )}
+
+      {images !== null && (
+        <Await promise={images} fallback={<BoardsSkeleton spans={[8, 4, 8, 4]} />}>
+          {(data) => <ImagesView d={data} />}
+        </Await>
+      )}
+
+      {packages !== null && (
+        <Await promise={packages} fallback={<BoardsSkeleton spans={[6, 6, 12]} />}>
+          {(data) => <PackagesView d={data} />}
+        </Await>
+      )}
     </>
   )
 }
@@ -88,20 +128,6 @@ export function AppsList({ data }: { data: ListData }) {
 
   return (
     <>
-      <header className="page-head">
-        <h1>Apps</h1>
-        {/* Counts what daedalus manages, not what it renders — the control
-            plane below is not one of them. */}
-        <span className="count-badge">{apps.filter((a) => !a.managedInNix).length}</span>
-        {/* The create flow is a page rather than a dialog: it makes a GitHub
-            round trip per repo it checks, and a checklist you can leave open
-            in a tab while you go fix a workflow is worth more than one that
-            closes when you click outside it. */}
-        <Link to="/apps/new" className="btn btn-primary page-head-action">
-          Add an app
-        </Link>
-      </header>
-
       <div className="tallies">
         <span>
           <StateDot state="running" /> <b>{counts.running}</b> running
@@ -112,6 +138,13 @@ export function AppsList({ data }: { data: ListData }) {
         <span>
           <StateDot state="stopped" /> <b>{counts.stopped}</b> stopped
         </span>
+        {/* The create flow is a page rather than a dialog: it makes a GitHub
+            round trip per repo it checks, and a checklist you can leave open
+            in a tab while you go fix a workflow is worth more than one that
+            closes when you click outside it. */}
+        <Link to="/apps/new" className="btn btn-primary tallies-action">
+          Add an app
+        </Link>
       </div>
 
       <div className="filters">
@@ -176,119 +209,6 @@ export function AppsList({ data }: { data: ListData }) {
   )
 }
 
-/**
- * The two registries every app above is assembled from.
- *
- * Here rather than on a category page because they are not a subject — they
- * are shared plumbing for exactly the things listed above this section, and
- * when a deploy stops moving one of them is usually the reason.
- */
-function Registries({ data }: { data: Awaited<ReturnType<typeof fetchRegistries>> }) {
-  const { images, packages } = data
-
-  return (
-    <>
-      <BoardGrid>
-        <Board
-          title="Container images"
-          icon="◲"
-          span={6}
-          aside={
-            images.reachable ?
-              <Chip tone="ok">zot {images.version ?? ''}</Chip>
-            : <Chip tone="bad">unreachable</Chip>
-          }
-        >
-          <div className="reg-repos">
-            {images.repositories.map((r) => (
-              <span key={r} className="reg-repo">
-                <Pulse on={false} tone="ok" />
-                {r}
-              </span>
-            ))}
-            {images.repositories.length === 0 && (
-              <p className="viz-empty">
-                {images.reachable ? 'no repositories published yet' : 'could not read the catalogue'}
-              </p>
-            )}
-          </div>
-          <Facts
-            rows={[
-              { k: 'App repositories', v: String(images.repositories.length) },
-              // The cache/* repos are the upstream base images the builds pull
-              // through zot, not anything built here.
-              { k: 'Upstream cached', v: String(images.cached) },
-              { k: 'On disk', v: images.storageBytes === null ? '—' : fmtBytes(images.storageBytes) },
-              { k: 'Pushes', v: images.pushes === null ? '—' : images.pushes.toLocaleString('en-US') },
-              {
-                k: 'Requests',
-                v:
-                  images.requestsPerHour === null ?
-                    '—'
-                  : `${images.requestsPerHour.toFixed(0)}/hour`,
-              },
-            ]}
-          />
-          <h4 className="board-sub">Storage by repository</h4>
-          <BarList items={images.byRepo} tone="info" empty="nothing stored" />
-          <h4 className="board-sub">Pulls since zot last started</h4>
-          <BarList items={images.pulls} empty="no pulls recorded" />
-          {/* The deploy timer pulls by tag every two minutes and only restarts
-              when the digest actually moved — so these counters climb steadily
-              on a box where nothing is being deployed. */}
-          <p className="board-foot">
-            Each app’s deploy timer pulls every 2 minutes and restarts only when the digest moved,
-            so the pull count climbs even when nothing ships.
-          </p>
-        </Board>
-
-        <Board
-          title="npm packages"
-          icon="◳"
-          span={6}
-          aside={
-            packages.reachable ?
-              <Chip tone="ok">verdaccio</Chip>
-            : <Chip tone="bad">unreachable</Chip>
-          }
-        >
-          <Facts
-            rows={[
-              { k: 'Published here', v: packages.published === null ? '—' : String(packages.published) },
-              { k: 'Cached from npmjs', v: fmtNum(packages.cached) },
-              { k: 'Versions held', v: fmtNum(packages.versions) },
-              // Resolving a dependency tree caches a MANIFEST even when no
-              // tarball is ever fetched, so "cached" runs ahead of what is
-              // genuinely on disk. This is the stricter reading.
-              { k: 'With a tarball', v: fmtNum(packages.withTarball) },
-              { k: 'Holding several versions', v: fmtNum(packages.multiVersion) },
-            ]}
-          />
-          <p className="board-foot">
-            LAN-only, and a pull-through cache first: a package counts as cached the moment its
-            manifest is resolved, which is why that number leads the tarball count. Publishing here
-            is opt-in — nothing does it yet.
-          </p>
-        </Board>
-      </BoardGrid>
-    </>
-  )
-}
-
-function fmtNum(v: number | null): string {
-  return v === null ? '—' : v.toLocaleString('en-US')
-}
-
-function fmtBytes(v: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let n = v
-  let u = 0
-  while (n >= 1024 && u < units.length - 1) {
-    n /= 1024
-    u++
-  }
-  return `${n.toFixed(n >= 10 || u === 0 ? 0 : 1)} ${units[u] ?? 'B'}`
-}
 
 function AppRow({ row }: { row: Row }) {
   return (
