@@ -44,18 +44,16 @@ export function MediaView({ data }: { data: MediaData }) {
   switch (data.tab) {
     case 'jellyfin':
       return <JellyfinView d={data} />
+    case 'calibre':
+      return <CalibreView d={data} />
     case 'wanted':
       return <WantedView d={data} />
-    case 'prowlarr':
+    case 'indexer':
       return <ProwlarrView d={data} />
-    case 'bazarr':
-      return <BazarrView d={data} />
     case 'downloaders':
       return <DownloadersView d={data} />
-    case 'books':
-      return <BooksView d={data} />
-    case 'housekeeping':
-      return <HousekeepingView d={data} />
+    case 'cleanup':
+      return <CleanupView d={data} />
   }
 }
 
@@ -367,7 +365,7 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
   )
 }
 
-/* ── Wanted: Seerr, Sonarr, Radarr ────────────────────────────────────── */
+/* ── Wanted: Seerr, Sonarr, Radarr, Recyclarr, Bazarr ─────────────────── */
 
 /**
  * scraparr is what turns the *arrs into prometheus series, and it has no page
@@ -390,7 +388,7 @@ function WantedView({ d }: { d: Wanted }) {
   // Seerr first: it is where a title enters the system, and the other two are
   // what happens to it afterwards. Reading them in that order is reading them
   // in the order the work actually flows.
-  const [who, setWho] = useState<'seerr' | 'sonarr' | 'radarr'>('seerr')
+  const [who, setWho] = useState<'seerr' | 'sonarr' | 'radarr' | 'recyclarr' | 'bazarr'>('seerr')
 
   return (
     <>
@@ -401,11 +399,24 @@ function WantedView({ d }: { d: Wanted }) {
           { value: 'seerr', label: 'Seerr', dot: tone(d.seerr.version !== null) },
           { value: 'sonarr', label: 'Sonarr', dot: tone(d.sonarr.version !== null) },
           { value: 'radarr', label: 'Radarr', dot: tone(d.radarr.version !== null) },
+          // Recyclarr sits with the two it configures rather than with the
+          // cleaners. Its dot is its last run, not its reachability — it is
+          // not a running process between runs, so there is nothing to reach.
+          {
+            value: 'recyclarr',
+            label: 'Recyclarr',
+            dot: d.recyclarr.lastRun === null ? null : tone(d.recyclarr.lastRun.ok),
+          },
+          { value: 'bazarr', label: 'Bazarr', dot: tone(d.bazarr.version !== null) },
         ]}
       />
 
       {who === 'seerr' ?
         <SeerrPage d={d.seerr} />
+      : who === 'recyclarr' ?
+        <RecyclarrPage d={d.recyclarr} />
+      : who === 'bazarr' ?
+        <BazarrPage d={d.bazarr} />
       : <ArrPage d={who === 'sonarr' ? d.sonarr : d.radarr} />}
     </>
   )
@@ -698,7 +709,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
   )
 }
 
-/* ── Prowlarr ─────────────────────────────────────────────────────────── */
+/* ── Indexer: Prowlarr ────────────────────────────────────────────────── */
 
 /**
  * flaresolverr has no page anywhere and no API this box can reach — it lives
@@ -715,7 +726,7 @@ const PROWLARR_NEIGHBOURS: readonly LogNeighbour[] = [
   },
 ]
 
-function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'prowlarr' }> }) {
+function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> }) {
   const maxQueries = Math.max(...d.indexers.map((i) => i.queries), 1)
   const reachable = d.version !== null
 
@@ -807,7 +818,7 @@ function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'prowlarr' }> }) {
   )
 }
 
-/* ── Bazarr ───────────────────────────────────────────────────────────── */
+/* ── Bazarr — reached from the Wanted switch above ────────────────────── */
 
 const BAZARR_NEIGHBOURS: readonly LogNeighbour[] = [
   {
@@ -818,7 +829,7 @@ const BAZARR_NEIGHBOURS: readonly LogNeighbour[] = [
   },
 ]
 
-function BazarrView({ d }: { d: Extract<MediaData, { tab: 'bazarr' }> }) {
+function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
   const throttled = d.providers.filter((p) => !p.ok)
 
   return (
@@ -908,14 +919,14 @@ function BazarrView({ d }: { d: Extract<MediaData, { tab: 'bazarr' }> }) {
   )
 }
 
-/* ── Downloaders: qBittorrent, NZBGet, MeTube ─────────────────────────── */
+/* ── Downloaders: qBittorrent, NZBGet, MeTube, Shelfmark ──────────────── */
 
 type Downloaders = Extract<MediaData, { tab: 'downloaders' }>
 
 function DownloadersView({ d }: { d: Downloaders }) {
   // qBittorrent first: it is the one the *arrs reach for by default and the
-  // only one of the three whose state changes minute to minute.
-  const [which, setWhich] = useState<'qbt' | 'nzb' | 'metube'>('qbt')
+  // only one of the four whose state changes minute to minute.
+  const [which, setWhich] = useState<'qbt' | 'nzb' | 'metube' | 'shelfmark'>('qbt')
 
   return (
     <>
@@ -926,6 +937,11 @@ function DownloadersView({ d }: { d: Downloaders }) {
           { value: 'qbt', label: 'qBittorrent', dot: tone(d.qbt.reachable) },
           { value: 'nzb', label: 'NZBGet', dot: tone(d.nzb.version !== null) },
           { value: 'metube', label: 'MeTube', dot: tone(d.metube.done !== null) },
+          // Shelfmark is here rather than beside the shelf it fills, because
+          // what it IS is a downloader — and the question "why has this not
+          // arrived" should not be answered in a different part of the tab row
+          // depending on whether the thing is a book.
+          { value: 'shelfmark', label: 'Shelfmark', dot: tone(d.shelfmark.counts !== null) },
         ]}
       />
 
@@ -933,6 +949,8 @@ function DownloadersView({ d }: { d: Downloaders }) {
         <QbtPage d={d} />
       : which === 'nzb' ?
         <NzbPage d={d} />
+      : which === 'shelfmark' ?
+        <ShelfmarkPage d={d} />
       : <MetubePage d={d.metube} />}
     </>
   )
@@ -1271,87 +1289,8 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
   )
 }
 
-/* ── Books ────────────────────────────────────────────────────────────── */
 
-type Books = Extract<MediaData, { tab: 'books' }>
-
-function BooksView({ d }: { d: Books }) {
-  // Shelfmark first would be the pipeline order, but the shelf is the thing
-  // anybody actually opens — the downloader is where you go when a book did
-  // not arrive.
-  const [which, setWhich] = useState<'calibre' | 'shelfmark'>('calibre')
-
-  return (
-    <>
-      <ServiceBar
-        value={which}
-        onChange={setWhich}
-        options={[
-          { value: 'calibre', label: 'Calibre-Web', dot: tone(d.calibre.books !== null) },
-          { value: 'shelfmark', label: 'Shelfmark', dot: tone(d.shelfmark.counts !== null) },
-        ]}
-      />
-
-      {which === 'calibre' ? <CalibrePage d={d} /> : <ShelfmarkPage d={d} />}
-    </>
-  )
-}
-
-function CalibrePage({ d }: { d: Books }) {
-  const { calibre, disk } = d
-
-  return (
-    <>
-      <ServiceHead
-        logo="/icon-calibre-web.svg"
-        name="Calibre-Web"
-        version={calibre.version}
-        versionNote="from the tag the flake pins"
-        verdict={verdictOf(calibre.gap)}
-        compare={compareOf(calibre.gap, 'the image tag — the app serves no version')}
-        lede={
-          <>
-            The shelf itself: Calibre-Web-Automated ingests whatever lands in{' '}
-            <span className="mono">/s2/books</span> and serves it to readers over OPDS and the web.
-          </>
-        }
-        actions={<Open name="Calibre-Web" host="calibre" />}
-      />
-
-      <BoardGrid>
-        <Board title="The shelf" icon="❏" span={8}>
-          <Facts
-            rows={[
-              { k: 'Books', v: num(calibre.books) },
-              { k: 'Authors', v: num(calibre.authors) },
-              { k: 'Series', v: num(calibre.series) },
-              { k: 'Categories', v: num(calibre.categories) },
-            ]}
-          />
-          <p className="board-foot">
-            Read through the OPDS catalogue with its own credentials — the same endpoint an e-reader
-            uses, which is also the one path on this app that skips the Pocket ID gate.
-          </p>
-        </Board>
-
-        <Board title="Disk" icon="▦" span={4}>
-          <Measures
-            items={[
-              { k: 'On disk', v: bytes(disk.usedBytes) },
-              { k: 'Free', v: bytes(disk.freeBytes) },
-            ]}
-          />
-        </Board>
-
-        <Changelog gap={calibre.gap} span={12} />
-
-        <LogBoard source={{ container: 'calibre-web' }} title="Calibre-Web logs" />
-      </BoardGrid>
-    </>
-  )
-}
-
-function ShelfmarkPage({ d }: { d: Books }) {
+function ShelfmarkPage({ d }: { d: Downloaders }) {
   const { shelfmark } = d
   const counts = shelfmark.counts
 
@@ -1463,13 +1402,78 @@ function ShelfmarkPage({ d }: { d: Books }) {
     </>
   )
 }
+/* ── Calibre ──────────────────────────────────────────────────────────── */
 
-/* ── Housekeeping: Cleanuparr, Janitorr, Recyclarr ────────────────────── */
+type Calibre = Extract<MediaData, { tab: 'calibre' }>
 
-type Housekeeping = Extract<MediaData, { tab: 'housekeeping' }>
+/**
+ * The shelf, next to Jellyfin rather than paired with its downloader.
+ *
+ * Both are where a pipeline ENDS — the thing a person opens — which is what
+ * the rule on the tab row divides. Pairing Calibre with Shelfmark instead put
+ * one downloader on the far side of that line from the other three.
+ */
+function CalibreView({ d }: { d: Calibre }) {
+  const calibre = d
+  const { disk } = d
 
-function HousekeepingView({ d }: { d: Housekeeping }) {
-  const [which, setWhich] = useState<'cleanuparr' | 'janitorr' | 'recyclarr'>('cleanuparr')
+  return (
+    <>
+      <ServiceHead
+        logo="/icon-calibre-web.svg"
+        name="Calibre"
+        version={calibre.version}
+        versionNote="from the tag the flake pins"
+        verdict={verdictOf(calibre.gap)}
+        compare={compareOf(calibre.gap, 'the image tag — the app serves no version')}
+        lede={
+          <>
+            The shelf itself: Calibre-Web-Automated ingests whatever lands in{' '}
+            <span className="mono">/s2/books</span> and serves it to readers over OPDS and the web.
+          </>
+        }
+        actions={<Open name="Calibre" host="calibre" />}
+      />
+
+      <BoardGrid>
+        <Board title="The shelf" icon="❏" span={8}>
+          <Facts
+            rows={[
+              { k: 'Books', v: num(calibre.books) },
+              { k: 'Authors', v: num(calibre.authors) },
+              { k: 'Series', v: num(calibre.series) },
+              { k: 'Categories', v: num(calibre.categories) },
+            ]}
+          />
+          <p className="board-foot">
+            Read through the OPDS catalogue with its own credentials — the same endpoint an e-reader
+            uses, which is also the one path on this app that skips the Pocket ID gate.
+          </p>
+        </Board>
+
+        <Board title="Disk" icon="▦" span={4}>
+          <Measures
+            items={[
+              { k: 'On disk', v: bytes(disk.usedBytes) },
+              { k: 'Free', v: bytes(disk.freeBytes) },
+            ]}
+          />
+        </Board>
+
+        <Changelog gap={calibre.gap} span={12} />
+
+        <LogBoard source={{ container: 'calibre-web' }} title="Calibre-Web logs" />
+      </BoardGrid>
+    </>
+  )
+}
+
+/* ── Cleanup: Cleanuparr, Janitorr ────────────────────────────────────── */
+
+type Cleanup = Extract<MediaData, { tab: 'cleanup' }>
+
+function CleanupView({ d }: { d: Cleanup }) {
+  const [which, setWhich] = useState<'cleanuparr' | 'janitorr'>('cleanuparr')
 
   return (
     <>
@@ -1485,24 +1489,15 @@ function HousekeepingView({ d }: { d: Housekeeping }) {
           // which is present whether or not the container ever runs. Janitorr
           // announces its schedules hourly, so silence for a day is the signal.
           { value: 'janitorr', label: 'Janitorr', dot: tone(d.janitorr.schedules.length > 0) },
-          {
-            value: 'recyclarr',
-            label: 'Recyclarr',
-            dot: d.recyclarr.lastRun === null ? null : tone(d.recyclarr.lastRun.ok),
-          },
         ]}
       />
 
-      {which === 'cleanuparr' ?
-        <CleanuparrPage d={d} />
-      : which === 'janitorr' ?
-        <JanitorrPage d={d} />
-      : <RecyclarrPage d={d} />}
+      {which === 'cleanuparr' ? <CleanuparrPage d={d} /> : <JanitorrPage d={d} />}
     </>
   )
 }
 
-function CleanuparrPage({ d }: { d: Housekeeping }) {
+function CleanuparrPage({ d }: { d: Cleanup }) {
   const { cleanuparr } = d
   const window = `last ${String(d.days)} days`
 
@@ -1560,7 +1555,7 @@ function CleanuparrPage({ d }: { d: Housekeeping }) {
   )
 }
 
-function JanitorrPage({ d }: { d: Housekeeping }) {
+function JanitorrPage({ d }: { d: Cleanup }) {
   const { janitorr } = d
   const armed = janitorr.schedules.filter((s) => s.enabled).length
 
@@ -1639,8 +1634,8 @@ function JanitorrPage({ d }: { d: Housekeeping }) {
   )
 }
 
-function RecyclarrPage({ d }: { d: Housekeeping }) {
-  const { recyclarr } = d
+function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
+  const recyclarr = d
 
   return (
     <>

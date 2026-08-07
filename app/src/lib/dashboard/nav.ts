@@ -68,17 +68,11 @@ export type CategorySpec = {
     /**
      * Draw a rule before this tab.
      *
-     * For a category holding two subjects that share nothing but a name. Media
-     * is the case: everything up to Housekeeping is one pipeline — a title is
-     * requested, searched for, downloaded, subtitled and played — and Books is
-     * a second, smaller pipeline that shares none of those services, none of
-     * that storage and none of those failure modes.
-     *
-     * A rule rather than a second category, because "media" is genuinely what
-     * both are and a Books category holding two tabs would be a rail entry
-     * that is almost always the wrong one to click. A rule rather than nothing,
-     * because without it Books reads as the sixth stage of the pipeline to its
-     * left.
+     * For a category whose tabs answer two different KINDS of question. Media
+     * is the case: Jellyfin and Calibre are where a pipeline ends — the
+     * libraries a person opens — and everything after the rule is machinery
+     * that fills them. Without it the two read as the first two stages of the
+     * chain rather than as its destination.
      */
     dividerBefore?: boolean
     /**
@@ -152,7 +146,7 @@ export const CATEGORIES: CategorySpec[] = [
     id: "media",
     label: 'Media',
     icon: '▶',
-    lede: 'The chain that fills the library, one service at a time — and what each of them says about itself.',
+    lede: 'Two libraries, and the chain that fills them — with what each service says about itself.',
     // Shaped to Jellyfin, the tab that opens by default.
     boardSpans: [8, 4, 4, 8],
     // No tile directory. It held eleven tiles, each three numbers and a link,
@@ -160,16 +154,17 @@ export const CATEGORIES: CategorySpec[] = [
     // dot and link, plus the version verdict, the health checks and the log a
     // tile had no room for.
     tileGroups: 0,
-    // A tab per JOB, in the order a file travels: it is asked for and pursued,
-    // the indexers are searched, something downloads it, Bazarr subtitles it,
-    // Jellyfin plays it. Jellyfin leads anyway, because it is the one somebody
-    // else in the house notices when it breaks.
+    // Split by what a thing IS, and the rule is the split: the two tabs to its
+    // left are where a pipeline ENDS — the libraries a person actually opens —
+    // and everything to its right is machinery that fills them.
     //
     // Four of these hold more than one service, picked by a switch inside the
-    // page — the same shape Network uses for its three ways in. The split
-    // between Seerr, Sonarr and Radarr is the software's, not the reader's:
-    // they answer one question between them, and a tab each meant reassembling
-    // that answer from three pages.
+    // page — the same shape Network uses for its three ways in. The grouping
+    // follows the job rather than the software: Recyclarr sits with the two
+    // *arrs whose configuration it writes, Bazarr with the other fetchers, and
+    // Shelfmark with the other downloaders rather than beside the shelf it
+    // fills, so "why has this not arrived" is answered in one place whether or
+    // not the thing is a book.
     //
     // `probes` on those tabs rather than `probe`: every service behind the
     // switch has to be green, because picking one to represent the group would
@@ -177,44 +172,32 @@ export const CATEGORIES: CategorySpec[] = [
     // unknown, which is the honest answer to a partial reading.
     tabs: [
       { id: 'jellyfin', label: 'Jellyfin', probe: 'jellyfin', boardSpans: [8, 4, 4, 8], statBand: false },
+      { id: 'calibre', label: 'Calibre', probe: 'calibre-web', boardSpans: [8, 4, 12], statBand: false },
+      // Past the rule: everything that fills the two libraries above.
       {
         id: 'wanted',
         label: 'Wanted',
-        probes: ['seerr', 'sonarr', 'radarr'],
+        probes: ['seerr', 'sonarr', 'radarr', 'bazarr'],
         boardSpans: [8, 4, 4, 8],
         statBand: false,
+        dividerBefore: true,
       },
-      { id: 'prowlarr', label: 'Prowlarr', probe: 'prowlarr', boardSpans: [12, 12, 12], statBand: false },
-      { id: 'bazarr', label: 'Bazarr', probe: 'bazarr', boardSpans: [8, 4, 12], statBand: false },
+      { id: 'indexer', label: 'Indexer', probe: 'prowlarr', boardSpans: [12, 12, 12], statBand: false },
       {
         id: 'downloaders',
         label: 'Downloaders',
-        probes: ['qbittorrent', 'nzbget', 'metube'],
+        probes: ['qbittorrent', 'nzbget', 'metube', 'shelfmark'],
         boardSpans: [8, 4, 4, 8],
         statBand: false,
       },
-      // Only Cleanuparr answers HTTP. Janitorr and Recyclarr are timers with
-      // nothing to probe — Recyclarr is not even a running process between
-      // runs — so one probe here would report a third of the page and the other
-      // two carry their health inside, on the switch.
+      // Only Cleanuparr answers HTTP; Janitorr is a timer with nothing to
+      // probe, and carries its health inside on the switch instead.
       {
-        id: 'housekeeping',
-        label: 'Housekeeping',
+        id: 'cleanup',
+        label: 'Cleanup',
         probe: 'cleanuparr',
         boardSpans: [8, 4, 12],
         statBand: false,
-      },
-      // Past the rule: a second library that shares nothing with the six tabs
-      // to its left. Different services, different pool dataset, different
-      // failure modes — the only thing it has in common with them is the word
-      // "media".
-      {
-        id: 'books',
-        label: 'Books',
-        probes: ['calibre-web', 'shelfmark'],
-        boardSpans: [8, 4, 12],
-        statBand: false,
-        dividerBefore: true,
       },
     ],
   },
