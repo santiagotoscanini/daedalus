@@ -6,10 +6,19 @@
 // stopped accepting writes and a healthchecks slug nobody pings all leave the
 // System page looking perfect.
 //
-// So the page is deliberately built around the gaps: targets that are DOWN get
-// named, endpoints are ranked by their WORST uptime rather than their average,
-// and every dead-man's-switch is listed with how overdue it is. The green
-// numbers are context; the list of things not reporting is the content.
+// So every tab here is deliberately built around the GAPS: targets that are
+// down get named, endpoints are ranked by their worst uptime rather than their
+// average, and every dead-man's-switch is listed with how overdue it is. The
+// green numbers are context; the list of things not reporting is the content.
+//
+// ── a tab per watcher, because they fail separately ───────────────────────
+//
+// One page had all five stacked, which read as one system with five panels. It
+// is five systems: Grafana evaluates rules and knows nothing about whether
+// prometheus is scraping; prometheus scrapes and knows nothing about whether
+// Loki is ingesting; gatus probes from outside and knows nothing about either.
+// The one thing they share is that when one stops, the others keep looking
+// fine — which is exactly why they should not share a scroll.
 
 import {
   basicAuth,
@@ -25,153 +34,44 @@ import {
 } from '../clients'
 import { key } from '../format'
 
-export type MonitoringData = {
-  alerts: {
-    rules: number | null
-    firing: number | null
-    pending: number | null
-    /** Every rule currently firing, named — a count sends you hunting. */
-    active: { name: string; folder: string; severity: string; summary: string }[]
-    byFolder: { label: string; value: number }[]
+type Ctx = { base: (app: string) => string }
+
+export type MonitoringTab = 'alerts' | 'probes' | 'metrics' | 'logs' | 'jobs'
+
+export type MonitoringData =
+  | ({ tab: 'alerts' } & AlertsData)
+  | ({ tab: 'probes' } & ProbesData)
+  | ({ tab: 'metrics' } & MetricsData)
+  | ({ tab: 'logs' } & LogsData)
+  | ({ tab: 'jobs' } & JobsData)
+
+export async function loadMonitoring(tab: string, ctx: Ctx): Promise<MonitoringData> {
+  switch (tab) {
+    case 'probes':
+      return { tab: 'probes', ...(await loadProbes()) }
+    case 'metrics':
+      return { tab: 'metrics', ...(await loadMetrics()) }
+    case 'logs':
+      return { tab: 'logs', ...(await loadLogs()) }
+    case 'jobs':
+      return { tab: 'jobs', ...(await loadJobs(ctx)) }
+    default:
+      return { tab: 'alerts', ...(await loadAlerts()) }
   }
-  prometheus: {
-    targetsUp: number | null
-    targetsDown: number | null
-    /** The targets that are not answering, with whatever they said about it. */
-    down: { job: string; instance: string; error: string }[]
-    series: number | null
-    samplesPerSec: number | null
-    storageBytes: number | null
-    seriesTrend: number[]
-    slowestScrapes: { label: string; value: number; display: string }[]
-  }
-  loki: {
-    lines1h: number | null
-    ingestRate: number | null
-    byLevel: { label: string; value: number }[]
-    volumeHistory: number[]
-    errorHistory: number[]
-    noisiest: { label: string; value: number }[]
-  }
-  probes: {
-    up: number | null
-    down: number | null
-    uptime24h: number | null
-    /** Slowest to answer right now. */
-    slowest: { label: string; value: number; display: string }[]
-    /** Lowest 7-day uptime — ascending, because the bottom is the point. */
-    worst: { name: string; uptime: number }[]
-    certSoonestDays: number | null
-  }
-  checks: {
-    up: number
-    down: number
-    late: number
-    list: {
-      name: string
-      status: string
-      lastPingAgo: number | null
-      dueIn: number | null
-      pings: number
-    }[]
-  } | null
-  grafana: { dashboards: number | null; datasources: number | null; alertRules: number | null }
 }
 
-export async function loadMonitoring(ctx: { base: (app: string) => string }): Promise<MonitoringData> {
-  const [
-    rules,
-    grafana,
-    targets,
-    tsdb,
-    seriesTrend,
-    slowestScrapes,
-    logs,
-    byLevel,
-    volumeHistory,
-    errorHistory,
-    noisiest,
-    ingestRate,
-    gatus,
-    slowest,
-    worst,
-    certs,
-    checks,
-  ] = await Promise.all([
-    loadRules(),
-    getJson<{ dashboards?: number; datasources?: number; alerts?: number }>(
-      'http://grafana:3000/api/admin/stats',
-      { headers: { Authorization: basicAuth(key('GRAFANA_USER'), key('GRAFANA_PASS')) } },
-    ),
-    loadTargets(),
-    promScalars({
-      series: 'prometheus_tsdb_head_series',
-      // Only the float stream: the histogram appender is a second series that
-      // is flat zero here and would double the headline for no reason.
-      samples: 'sum(rate(prometheus_tsdb_head_samples_appended_total{type="float"}[10m]))',
-      storage: 'sum(prometheus_tsdb_storage_blocks_bytes)',
-    }),
-    promSeries('prometheus_tsdb_head_series', 7 * 24 * 60, 3600),
-    promBars('topk(6, scrape_duration_seconds)', 'job'),
-    loadLogVolume(),
-    lokiVector('sum by (level) (count_over_time({level=~".+"}[1h]))', 'level'),
-    lokiSeries('sum(count_over_time({level=~".+"}[1h]))', 24 * 60, 3600),
-    lokiSeries('sum(count_over_time({level="error"}[1h]))', 24 * 60, 3600),
-    lokiVector('topk(6, sum by (container) (count_over_time({level="error"}[24h])))', 'container'),
-    promScalar('sum(rate(loki_distributor_bytes_received_total[10m]))'),
-    promScalars({
-      up: 'count(gatus_results_endpoint_success == 1) or vector(0)',
-      down: 'count(gatus_results_endpoint_success == 0) or vector(0)',
-      uptime: '100 * avg(avg_over_time(gatus_results_endpoint_success[24h]))',
-    }),
-    promBars('topk(6, gatus_results_duration_seconds)', 'name'),
-    promVector('bottomk(6, 100 * avg_over_time(gatus_results_endpoint_success[7d]))'),
-    promScalar('min(gatus_results_certificate_expiration_seconds) / 86400'),
-    getJson<{ checks?: HcCheck[] }>(`${ctx.base('healthchecks')}/api/v1/checks/`, {
-      headers: { 'X-Api-Key': key('HEALTHCHECKS_API_KEY') },
-    }),
-  ])
+/* ── Alerts ───────────────────────────────────────────────────────────── */
 
-  return {
-    alerts: rules,
-    prometheus: {
-      targetsUp: targets.up,
-      targetsDown: targets.down,
-      down: targets.list,
-      series: tsdb.series,
-      samplesPerSec: tsdb.samples,
-      storageBytes: tsdb.storage,
-      seriesTrend,
-      slowestScrapes: slowestScrapes.map((s) => ({ ...s, display: `${(s.value * 1000).toFixed(0)} ms` })),
-    },
-    loki: {
-      lines1h: logs,
-      ingestRate,
-      byLevel,
-      volumeHistory,
-      errorHistory,
-      noisiest: noisiest.map((n) => (n.label === '?' ? { ...n, label: 'host units' } : n)),
-    },
-    probes: {
-      up: gatus.up,
-      down: gatus.down,
-      uptime24h: gatus.uptime,
-      slowest: slowest.map((s) => ({ ...s, display: `${(s.value * 1000).toFixed(0)} ms` })),
-      // Re-sorted ascending: promVector preserves prometheus's order, and the
-      // whole reason for a bottomk is to read the bad end first.
-      worst: worst
-        .map((r) => ({ name: r.metric.name ?? '?', uptime: Number(r.value[1]) }))
-        .filter((r) => Number.isFinite(r.uptime))
-        .sort((a, b) => a.uptime - b.uptime),
-      certSoonestDays: certs,
-    },
-    checks: summariseChecks(checks?.checks),
-    grafana: {
-      dashboards: grafana?.dashboards ?? null,
-      datasources: grafana?.datasources ?? null,
-      alertRules: grafana?.alerts ?? null,
-    },
-  }
+type AlertsData = {
+  rules: number | null
+  firing: number | null
+  pending: number | null
+  /** Every rule currently firing or pending, named — a count sends you hunting. */
+  active: { name: string; folder: string; severity: string; summary: string }[]
+  byFolder: { label: string; value: number }[]
+  grafana: { dashboards: number | null; datasources: number | null; version: string | null }
+  /** Where a firing alert actually goes. */
+  delivery: { contactPoints: number | null; mail: boolean }
 }
 
 type GrafanaRule = {
@@ -182,22 +82,26 @@ type GrafanaRule = {
 }
 
 /**
- * Grafana's ruler, not prometheus's — every alert rule on this box is a
- * Grafana-managed one (stacks/monitoring provisions them from files), so
- * prometheus's own /rules endpoint is empty and would report "0 alerts" on a
- * box with thirty.
+ * Grafana's ruler, not prometheus's.
+ *
+ * Every alert rule on this box is a Grafana-managed one — stacks/monitoring
+ * provisions them from files — so prometheus's own /rules endpoint is empty
+ * and would report "0 alerts" on a box with thirty.
  */
-async function loadRules(): Promise<MonitoringData['alerts']> {
-  const body = await getJson<{
-    data?: { groups?: { file?: string; name?: string; rules?: GrafanaRule[] }[] }
-  }>('http://grafana:3000/api/prometheus/grafana/api/v1/rules', {
-    headers: { Authorization: basicAuth(key('GRAFANA_USER'), key('GRAFANA_PASS')) },
-  })
-  if (body === null) {
-    return { rules: null, firing: null, pending: null, active: [], byFolder: [] }
-  }
+async function loadAlerts(): Promise<AlertsData> {
+  const h = { headers: { Authorization: basicAuth(key('GRAFANA_USER'), key('GRAFANA_PASS')) } }
 
-  const groups = body.data?.groups ?? []
+  const [body, stats, contacts, health] = await Promise.all([
+    getJson<{ data?: { groups?: { file?: string; name?: string; rules?: GrafanaRule[] }[] } }>(
+      'http://grafana:3000/api/prometheus/grafana/api/v1/rules',
+      h,
+    ),
+    getJson<{ dashboards?: number; datasources?: number }>('http://grafana:3000/api/admin/stats', h),
+    getJson<unknown[]>('http://grafana:3000/api/v1/provisioning/contact-points', h),
+    getJson<{ version?: string }>('http://grafana:3000/api/health', h),
+  ])
+
+  const groups = body?.data?.groups ?? []
   // `file` is the folder title in Grafana's ruler response; `name` is the
   // evaluation group inside it. The folder is the useful grouping — it is what
   // the sidebar shows and what the provisioning files are organised by.
@@ -207,21 +111,131 @@ async function loadRules(): Promise<MonitoringData['alerts']> {
   for (const { folder } of flat) byFolder.set(folder, (byFolder.get(folder) ?? 0) + 1)
 
   return {
-    rules: flat.length,
-    firing: flat.filter((r) => r.rule.state === 'firing').length,
-    pending: flat.filter((r) => r.rule.state === 'pending').length,
+    rules: body === null ? null : flat.length,
+    firing: body === null ? null : flat.filter((r) => r.rule.state === 'firing').length,
+    pending: body === null ? null : flat.filter((r) => r.rule.state === 'pending').length,
     active: flat
       .filter((r) => r.rule.state === 'firing' || r.rule.state === 'pending')
       .map(({ folder, rule }) => ({
         name: rule.name ?? '?',
         folder,
-        // Severity is a label on the generated alert instance, not on the rule
-        // — an inactive rule has no instances at all, which is why this is only
-        // read for the firing ones.
+        // Severity is a label on the generated alert INSTANCE, not on the rule
+        // — an inactive rule has no instances at all, which is why this is
+        // only read for the active ones.
         severity: rule.alerts?.[0]?.labels?.severity ?? 'unknown',
         summary: rule.annotations?.summary ?? rule.annotations?.description ?? '',
       })),
-    byFolder: [...byFolder].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
+    byFolder: [...byFolder]
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value),
+    grafana: {
+      dashboards: stats?.dashboards ?? null,
+      datasources: stats?.datasources ?? null,
+      version: health?.version ?? null,
+    },
+    delivery: { contactPoints: contacts?.length ?? null, mail: true },
+  }
+}
+
+/* ── Probes ───────────────────────────────────────────────────────────── */
+
+type ProbesData = {
+  up: number | null
+  down: number | null
+  uptime24h: number | null
+  /** Not answering right now, named. */
+  failing: string[]
+  /** Lowest 7-day uptime — ascending, because the bottom is the point. */
+  worst: { name: string; uptime: number }[]
+  slowest: { label: string; value: number; display: string }[]
+  /** Soonest certificate expiry, and which hostname it belongs to. */
+  cert: { days: number | null; host: string | null }
+}
+
+async function loadProbes(): Promise<ProbesData> {
+  const [totals, current, worst, slowest, certs] = await Promise.all([
+    promScalars({
+      up: 'count(gatus_results_endpoint_success == 1) or vector(0)',
+      down: 'count(gatus_results_endpoint_success == 0) or vector(0)',
+      uptime: '100 * avg(avg_over_time(gatus_results_endpoint_success[24h]))',
+    }),
+    promVector('gatus_results_endpoint_success == 0'),
+    promVector('bottomk(8, 100 * avg_over_time(gatus_results_endpoint_success[7d]))'),
+    promBars('topk(8, gatus_results_duration_seconds)', 'name'),
+    promVector('bottomk(1, gatus_results_certificate_expiration_seconds)'),
+  ])
+
+  const soonest = certs[0]
+
+  return {
+    up: totals.up,
+    down: totals.down,
+    uptime24h: totals.uptime,
+    failing: current.map((c) => c.metric.name ?? '?').sort((a, b) => a.localeCompare(b)),
+    // Re-sorted ascending: promVector preserves prometheus's order, and the
+    // whole reason for a bottomk is to read the bad end first.
+    worst: worst
+      .map((r) => ({ name: r.metric.name ?? '?', uptime: Number(r.value[1]) }))
+      .filter((r) => Number.isFinite(r.uptime))
+      .sort((a, b) => a.uptime - b.uptime),
+    slowest: slowest.map((s) => ({ ...s, display: `${(s.value * 1000).toFixed(0)} ms` })),
+    cert: {
+      days: soonest === undefined ? null : Number(soonest.value[1]) / 86400,
+      host: soonest?.metric.name ?? null,
+    },
+  }
+}
+
+/* ── Metrics ──────────────────────────────────────────────────────────── */
+
+type MetricsData = {
+  targetsUp: number | null
+  targetsDown: number | null
+  /** The targets that are not answering, with whatever they said about it. */
+  down: { job: string; instance: string; error: string }[]
+  series: number | null
+  samplesPerSec: number | null
+  storageBytes: number | null
+  seriesTrend: number[]
+  slowestScrapes: { label: string; value: number; display: string }[]
+  /** How much of the retention window is actually in the TSDB. */
+  retention: { days: number | null; oldestDays: number | null }
+}
+
+async function loadMetrics(): Promise<MetricsData> {
+  const [targets, tsdb, seriesTrend, slowestScrapes, oldest] = await Promise.all([
+    loadTargets(),
+    promScalars({
+      series: 'prometheus_tsdb_head_series',
+      // Only the float stream: the histogram appender is a second series that
+      // is flat zero here and would double the headline for no reason.
+      samples: 'sum(rate(prometheus_tsdb_head_samples_appended_total{type="float"}[10m]))',
+      storage: 'sum(prometheus_tsdb_storage_blocks_bytes)',
+      retention: 'prometheus_tsdb_retention_limit_seconds',
+    }),
+    promSeries('prometheus_tsdb_head_series', 7 * 24 * 60, 3600),
+    promBars('topk(8, scrape_duration_seconds)', 'job'),
+    promScalar('prometheus_tsdb_lowest_timestamp_seconds'),
+  ])
+
+  return {
+    targetsUp: targets.up,
+    targetsDown: targets.down,
+    down: targets.list,
+    series: tsdb.series,
+    samplesPerSec: tsdb.samples,
+    storageBytes: tsdb.storage,
+    seriesTrend,
+    slowestScrapes: slowestScrapes.map((s) => ({
+      ...s,
+      display: `${(s.value * 1000).toFixed(0)} ms`,
+    })),
+    retention: {
+      days: tsdb.retention === null ? null : tsdb.retention / 86400,
+      // How far back data ACTUALLY goes, which is the number that says whether
+      // the configured window is being reached or the disk cap bit first.
+      oldestDays: oldest === null ? null : (Date.now() / 1000 - oldest) / 86400,
+    },
   }
 }
 
@@ -263,36 +277,152 @@ async function loadTargets(): Promise<{
   }
 }
 
+/* ── Logs ─────────────────────────────────────────────────────────────── */
+
+type LogsData = {
+  lines1h: number | null
+  ingestRate: number | null
+  byLevel: { label: string; value: number }[]
+  volumeHistory: number[]
+  errorHistory: number[]
+  noisiest: { label: string; value: number }[]
+  /** Which stack label each line lands under — the coverage question. */
+  byStack: { label: string; value: number }[]
+  /** Containers whose lines land under no registered stack. */
+  unregistered: number | null
+}
+
 function loadLogVolume(): Promise<number | null> {
   return lokiScalar('sum(count_over_time({level=~".+"}[1h])) or vector(0)')
 }
 
+async function loadLogs(): Promise<LogsData> {
+  const [lines1h, ingestRate, byLevel, volumeHistory, errorHistory, noisiest, byStack, adhoc] =
+    await Promise.all([
+      loadLogVolume(),
+      promScalar('sum(rate(loki_distributor_bytes_received_total[10m]))'),
+      lokiVector('sum by (level) (count_over_time({level=~".+"}[1h]))', 'level'),
+      lokiSeries('sum(count_over_time({level=~".+"}[1h]))', 24 * 60, 3600),
+      lokiSeries('sum(count_over_time({level="error"}[1h]))', 24 * 60, 3600),
+      lokiVector('topk(8, sum by (container) (count_over_time({level="error"}[24h])))', 'container'),
+      lokiVector('topk(10, sum by (stack) (count_over_time({stack=~".+"}[24h])))', 'stack'),
+      lokiScalar('sum(count_over_time({stack="adhoc"}[24h])) or vector(0)'),
+    ])
+
+  return {
+    lines1h,
+    ingestRate,
+    byLevel,
+    volumeHistory,
+    errorHistory,
+    // Lines from the host journal carry `unit`, not `container`, so they group
+    // under an empty label. Naming that group beats rendering a bare "?" as
+    // though a container were missing.
+    noisiest: noisiest.map((n) => (n.label === '?' ? { ...n, label: 'host units' } : n)),
+    byStack,
+    unregistered: adhoc,
+  }
+}
+
+/* ── Jobs ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Every scheduled job, and whether anything would notice it stopping.
+ *
+ * This is the tab that gains most from the split, because the two halves of
+ * the answer used to live on different pages: healthchecks' roster was a tile
+ * here, and the registry that says which jobs were MEANT to be watched was
+ * nowhere at all. Joined, the interesting row is a job declared with a
+ * healthchecks slug that healthchecks has never heard of — a dead-man's-switch
+ * that was armed in nix and never fired once.
+ *
+ * The distinction the registry carries and neither system knows:
+ *   - `email`  → a run that FAILS sends mail.
+ *   - `slug`   → a run that stops HAPPENING pages through healthchecks.
+ * A job with mail and no slug cannot report that it was never started, which
+ * is the failure mode a timer actually has.
+ */
+type JobsData = {
+  checks: {
+    name: string
+    status: string
+    lastPingAgo: number | null
+    dueIn: number | null
+    pings: number
+  }[]
+  summary: { up: number; down: number; late: number } | null
+  jobs: {
+    unit: string
+    email: boolean
+    slug: string | null
+    /** Its healthchecks row, when the slug resolves to one. */
+    status: string | null
+    lastPingAgo: number | null
+  }[]
+  /** Declared with a slug that healthchecks does not know. */
+  orphaned: string[]
+  /** Watched by mail only — cannot report never having run. */
+  emailOnly: number
+}
+
 type HcCheck = {
   name?: string
+  slug?: string
   status?: string
   last_ping?: string | null
   next_ping?: string | null
   n_pings?: number
 }
 
-/**
- * The dead-man's-switch roster.
- *
- * Ages are computed HERE rather than shipped as timestamps: a relative time
- * derived from the browser's clock renders differently during SSR and during
- * hydration, which React reports as a mismatch and then silently re-renders.
- */
-function summariseChecks(checks: HcCheck[] | undefined): MonitoringData['checks'] {
-  if (checks === undefined) return null
+async function loadJobs(ctx: Ctx): Promise<JobsData> {
+  const { monitoredJobs } = await import('../../nix-manifest')
+
+  const [body, registry] = await Promise.all([
+    getJson<{ checks?: HcCheck[] }>(`${ctx.base('healthchecks')}/api/v1/checks/`, {
+      headers: { 'X-Api-Key': key('HEALTHCHECKS_API_KEY') },
+    }),
+    monitoredJobs(),
+  ])
+
   const now = Date.now()
   const ageOf = (iso: string | null | undefined): number | null =>
     iso === null || iso === undefined ? null : (now - Date.parse(iso)) / 1000
 
+  const checks = body?.checks
+  // Keyed by slug AND by name: healthchecks derives a slug from the name, and
+  // the registry declares the slug, so matching on either survives a check
+  // whose display name was edited in the UI.
+  const bySlug = new Map<string, HcCheck>()
+  for (const c of checks ?? []) {
+    if (c.slug !== undefined) bySlug.set(c.slug, c)
+    if (c.name !== undefined) bySlug.set(c.name, c)
+  }
+
+  const jobs = [...registry]
+    .map((j) => {
+      const hit = j.slug === null ? undefined : bySlug.get(j.slug)
+      return {
+        unit: j.unit,
+        email: j.email,
+        slug: j.slug,
+        status: hit?.status ?? null,
+        lastPingAgo: ageOf(hit?.last_ping),
+      }
+    })
+    // Jobs with a live dead-man's-switch first, then the mail-only ones —
+    // which is the order of how much is actually known about each.
+    .sort((a, b) => Number(b.slug !== null) - Number(a.slug !== null) || a.unit.localeCompare(b.unit))
+
   return {
-    up: checks.filter((c) => c.status === 'up').length,
-    down: checks.filter((c) => c.status === 'down').length,
-    late: checks.filter((c) => c.status === 'grace').length,
-    list: checks
+    summary:
+      checks === undefined ?
+        null
+      : {
+          up: checks.filter((c) => c.status === 'up').length,
+          down: checks.filter((c) => c.status === 'down').length,
+          late: checks.filter((c) => c.status === 'grace').length,
+        },
+    checks: (checks ?? [])
       .map((c) => ({
         name: c.name ?? '?',
         status: c.status ?? 'unknown',
@@ -300,9 +430,10 @@ function summariseChecks(checks: HcCheck[] | undefined): MonitoringData['checks'
         // Negative means the window has already passed — the check is overdue
         // but still inside its grace period, which is precisely the state
         // worth seeing before it turns into an alert.
-        dueIn: c.next_ping === null || c.next_ping === undefined ? null : (
-          (Date.parse(c.next_ping) - now) / 1000
-        ),
+        dueIn:
+          c.next_ping === null || c.next_ping === undefined ?
+            null
+          : (Date.parse(c.next_ping) - now) / 1000,
         pings: c.n_pings ?? 0,
       }))
       // Anything not "up" first, then soonest due — the order you would read
@@ -311,5 +442,8 @@ function summariseChecks(checks: HcCheck[] | undefined): MonitoringData['checks'
         const rank = (s: string) => (s === 'down' ? 0 : s === 'grace' ? 1 : 2)
         return rank(a.status) - rank(b.status) || (a.dueIn ?? Infinity) - (b.dueIn ?? Infinity)
       }),
+    orphaned: jobs.filter((j) => j.slug !== null && j.status === null).map((j) => j.unit),
+    emailOnly: jobs.filter((j) => j.slug === null).length,
+    jobs,
   }
 }

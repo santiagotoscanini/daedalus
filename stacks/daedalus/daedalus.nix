@@ -370,11 +370,31 @@ let
       map parse config.services.pihole-ftl.settings.dns.hosts
     );
 
+  # Every scheduled job that has been declared as worth noticing, and HOW it is
+  # noticed. The two are different guarantees and the registry is the only
+  # place they are stated together: `email` means a run that FAILS sends mail,
+  # `slug` means a run that stops happening at all pages through healthchecks.
+  #
+  # A job with email and no slug cannot report that it was never started, which
+  # is exactly the failure a timer has — so the pair is what the Jobs tab
+  # exists to show. healthchecks knows about half of these and systemd knows
+  # about all of them; neither knows which was intended.
+  monitoredJobs = lib.mapAttrsToList (unit: j: {
+    inherit unit;
+    inherit (j) email slug;
+  }) config.fleet.monitoredJobs;
+
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
     builtins.toJSON {
       schemaVersion = 1;
       nixManaged.daedalus = self;
-      inherit takenHostnames webAppHosts operatorSecretApps lanHosts;
+      inherit
+        takenHostnames
+        webAppHosts
+        operatorSecretApps
+        lanHosts
+        monitoredJobs
+        ;
     }
   );
 

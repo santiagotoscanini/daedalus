@@ -7,8 +7,7 @@ import type { HomeData } from '../lib/dashboard/categories/home'
 import type { MonitoringData } from '../lib/dashboard/categories/monitoring'
 import type { NetworkData } from '../lib/dashboard/categories/network'
 import type { SystemData } from '../lib/dashboard/categories/system'
-import { CATEGORIES } from '../lib/dashboard/nav'
-import type { CategoryName } from '../lib/dashboard/tiles'
+import { CATEGORIES, type CategoryName } from '../lib/dashboard/nav'
 
 // The loaders behind every category page.
 //
@@ -22,42 +21,27 @@ import type { CategoryName } from '../lib/dashboard/tiles'
 // showing a fifth of them, on a box where several of those upstreams are
 // services that charge real seconds for a cold connection.
 //
-// ── two functions, not one ────────────────────────────────────────────────
+// ── two entry points, not one ─────────────────────────────────────────────
 //
-// A category page is two independent fan-outs: the boards (this category's own
-// panels) and the tiles (the per-service directory beneath them). They share
-// nothing, they finish at different times, and the route streams each in
-// behind its own skeleton — so they are separate entry points rather than one
-// call the page has to wait out. The page's own frame (title, lede, sub-tabs)
-// needs neither: it comes from the static CATEGORIES table on the client and
-// is on screen before either request is answered.
+// The boards and the sub-tab dots are separate server functions. The dots are
+// one prometheus query and land almost immediately; the boards fan out across
+// a dozen services and do not. Hanging the dots off the boards payload would
+// hold the whole tab row hostage to the slowest upstream on the page, in order
+// to draw a circle. The page's own frame — title, lede, tab labels — waits for
+// neither: it comes from the static CATEGORIES table on the client.
+//
+// There used to be a third, for a directory of per-service cards under every
+// page. It is gone: every service on this box has a tab now, so the cards were
+// restating three of a page's own numbers one scroll below it.
 
 export type {
-AiData,
+  AiData,
   GamingData,
   HomeData,
   MediaData,
   MonitoringData,
   NetworkData,
   SystemData,
-}
-
-/** The service directory that sits under every category's own panels. */
-export type Tile = {
-  key: string
-  name: string
-  group: string
-  description: string
-  href: string
-  up: boolean | null
-  stats: { label: string; value: string }[]
-  note: string | null
-}
-
-export type CategoryTiles = {
-  groups: { name: string; icon: string; tiles: Tile[] }[]
-  /** Services in this category that gatus says are not answering. */
-  down: string[]
 }
 
 export type CategoryPayload = Body
@@ -222,20 +206,6 @@ async function uplinkHealth(): Promise<boolean | null> {
   return worst === 1
 }
 
-export const fetchCategoryTiles = createServerFn()
-  .inputValidator((input: { category: CategoryName; tab: string }) => input)
-  .handler(async ({ data }): Promise<CategoryTiles> => {
-    const { GROUPS, TILES } = await import('../lib/dashboard/tiles')
-    const { pool, promVector } = await import('../lib/dashboard/clients')
-    return loadTiles(data.category, resolveTab(data.category, data.tab), {
-      GROUPS,
-      TILES,
-      pool,
-      promVector,
-      ctx: await makeCtx(),
-    })
-  })
-
 type Body =
   | { kind: 'ai'; data: AiData }
   | { kind: 'media'; data: MediaData }
@@ -273,7 +243,7 @@ async function loadCategory(
     }
     case 'monitoring': {
       const { loadMonitoring } = await import('../lib/dashboard/categories/monitoring')
-      return { kind: 'monitoring', data: await loadMonitoring(ctx) }
+      return { kind: 'monitoring', data: await loadMonitoring(tab, ctx) }
     }
     case 'gaming': {
       const { loadGaming } = await import('../lib/dashboard/categories/gaming')
@@ -282,70 +252,3 @@ async function loadCategory(
   }
 }
 
-type TileModules = {
-  GROUPS: typeof import('../lib/dashboard/tiles')['GROUPS']
-  TILES: typeof import('../lib/dashboard/tiles')['TILES']
-  pool: typeof import('../lib/dashboard/clients')['pool']
-  promVector: typeof import('../lib/dashboard/clients')['promVector']
-  ctx: { base: (app: string) => string; hc: string }
-}
-
-async function loadTiles(
-  category: CategoryName,
-  tab: string,
-  m: TileModules,
-): Promise<CategoryTiles> {
-  const groups = m.GROUPS.filter(
-    (g) => g.category === category && (g.tab === undefined || g.tab === tab),
-  )
-  const names = new Set(groups.map((g) => g.name))
-  const wanted = m.TILES.filter((t) => names.has(t.group))
-
-  // Status comes from gatus, in one query for every tile: it probes the real
-  // public URL from outside. `container_up` would answer a different question
-  // — the unit being active does not mean the service is answering, and every
-  // Type=oneshot podman unit on this box can be green over a dead container.
-  //
-  // Debounced over the same window as the tab dots, for the same reason: these
-  // are the same gauge, and a tile that goes red on one lost SYN is reporting
-  // a fault that had already healed before the page finished loading.
-  const probes = await m.promVector(
-    `max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`,
-  )
-  const health = new Map(
-    probes.map((p) => [(p.metric.key ?? '').replace(/^web-apps_/, ''), p.value[1] === '1']),
-  )
-
-  const loaded = await m.pool(
-    wanted.map((t) => async () => {
-      // The catch is the backstop for a `load` that throws despite the
-      // helpers: one bad upstream must not blank the page, because "which one
-      // is broken" is the whole reason to look at this.
-      const result =
-        t.load === undefined ? { stats: [], note: undefined } : (
-          await t.load(m.ctx).catch(() => ({ stats: [], note: undefined }))
-        )
-      return {
-        key: t.key,
-        name: t.name,
-        group: t.group as string,
-        description: t.description,
-        href: 'url' in t.link ? t.link.url : `${m.ctx.base(t.link.app)}${t.link.path ?? ''}`,
-        // null = nothing probes this (the off-box services, and the link-only
-        // bookmarks). Rendered as "no probe", not as down.
-        up: t.gatus === undefined ? null : (health.get(t.gatus) ?? null),
-        stats: result.stats,
-        note: result.note ?? null,
-      }
-    }),
-  )
-
-  return {
-    groups: groups.map((g) => ({
-      name: g.name,
-      icon: g.icon,
-      tiles: loaded.filter((t) => t.group === g.name),
-    })),
-    down: loaded.filter((t) => t.up === false).map((t) => t.name),
-  }
-}

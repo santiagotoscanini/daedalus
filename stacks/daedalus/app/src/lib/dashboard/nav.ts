@@ -5,7 +5,23 @@
 // (and the shape of everything it imports) into the browser bundle for the
 // sake of five labels.
 
-import type { CategoryName } from './tiles'
+/**
+ * The categories, and the only list of them.
+ *
+ * It lived in the tile catalogue until that catalogue emptied: every service
+ * on this box now has a TAB, so a directory of cards restating three of its
+ * numbers one scroll below its own page had nothing left to hold. The last
+ * five were Grafana, Loki, Prometheus, Gatus and Healthchecks — which is the
+ * Monitoring tab row exactly.
+ */
+export type CategoryName =
+  | 'ai'
+  | 'media'
+  | 'home'
+  | 'gaming'
+  | 'network'
+  | 'system'
+  | 'monitoring'
 
 export type CategorySpec = {
   id: CategoryName
@@ -58,14 +74,6 @@ export type CategorySpec = {
     boardSpans?: number[]
     statBand?: boolean
     /**
-     * How many tile groups this tab shows, when it differs from the category's.
-     *
-     * A tile GROUP is scoped to a tab in `tiles.ts`; this is the skeleton's
-     * copy of that fact, and `0` is the one that matters — it stops a
-     * placeholder appearing for a directory the tab does not have.
-     */
-    tileGroups?: number
-    /**
      * Draw a rule before this tab.
      *
      * For a category whose tabs answer two different KINDS of question. Media
@@ -99,17 +107,6 @@ export type CategorySpec = {
    * boards — so this is not a mirror of the whole layout, just its opening.
    */
   boardSpans: number[]
-  /**
-   * How many tile groups sit under this category, for the placeholder.
-   * Zero is a real answer — Gaming and System are covered entirely by their
-   * boards — and without it the skeleton draws group headings that resolve
-   * into nothing, which flashes a section that never arrives.
-   *
-   * Restated here rather than derived from GROUPS because that lives in
-   * tiles.ts, whose imports reach the server clients; pulling it into the
-   * sidebar would drag all of that into the browser bundle.
-   */
-  tileGroups: number
 }
 
 export const CATEGORIES: CategorySpec[] = [
@@ -124,7 +121,6 @@ export const CATEGORIES: CategorySpec[] = [
     // No tile directory. It held one tile per service, and each of those is
     // now a tab on this page — the same name, dot, description and link, one
     // scroll further down.
-    tileGroups: 0,
     // A tab per service, in the order a prompt travels: the thing that holds
     // the weights, the gateway in front of it, then the two callers. Lemonade
     // leads because it is the one that is off this box and the one whose state
@@ -153,7 +149,6 @@ export const CATEGORIES: CategorySpec[] = [
     // and every one of those services is now a tab with a page — the same name,
     // dot and link, plus the version verdict, the health checks and the log a
     // tile had no room for.
-    tileGroups: 0,
     // Split by what a thing IS, and the rule is the split: the two tabs to its
     // left are where a pipeline ENDS — the libraries a person actually opens —
     // and everything to its right is machinery that fills them.
@@ -212,7 +207,6 @@ export const CATEGORIES: CategorySpec[] = [
     // on this box got four numbers and a link each — no version, no verdict on
     // whether that version is current, and no log. Every one of them is a tab
     // now, carrying the same name, dot and link.
-    tileGroups: 0,
     // The rule divides WHOSE data it is. To its left, what the whole house
     // shares: the automation, the photo library, the file sync, the pantry,
     // and the directory of who can open any of them. To its right, what one
@@ -249,7 +243,6 @@ export const CATEGORIES: CategorySpec[] = [
     icon: '⛶',
     lede: "The game servers: which build each one runs, and whether the people on the sofa can still join.",
     boardSpans: [6, 6, 12],
-    tileGroups: 0,
     tabs: [
       // ofsm answering is the closest thing to a liveness check this server
       // has: the game itself speaks UDP straight to a forwarded port and
@@ -269,7 +262,6 @@ export const CATEGORIES: CategorySpec[] = [
     // each a service already given a whole tab, restating three of its numbers
     // one screen below the panel that explains them, plus four bare links —
     // and every one of those links now lives on the tab whose subject it is.
-    tileGroups: 0,
     // Split by DIRECTION, because that is the only axis on which these two
     // are alike: both are WireGuard, both are tunnels, and everything else
     // about them is opposite. One lets a phone reach the house from a hotel;
@@ -354,7 +346,6 @@ export const CATEGORIES: CategorySpec[] = [
     lede: 'The machine itself: what it is running on, what it is storing, and what survives it.',
     // Shaped to Host, the tab that opens by default.
     boardSpans: [8, 4, 4, 4],
-    tileGroups: 0,
     // No dots anywhere on this row. Every other category's tabs are services,
     // and gatus probes services; these are layers of one machine, and the page
     // you are reading is running on it. A row of permanently grey circles
@@ -386,9 +377,34 @@ export const CATEGORIES: CategorySpec[] = [
     id: 'monitoring',
     label: 'Monitoring',
     icon: '◎',
-    lede: 'The watchers: what is firing, what is being collected, and what has gone quiet.',
-    boardSpans: [6, 6, 8, 4],
-    tileGroups: 1,
-    tabs: [],
+    lede: 'The watchers — and whether each of them would still tell you.',
+    // Shaped to Alerts, the tab that opens by default.
+    boardSpans: [8, 4, 4, 8],
+    // No tile directory. Its five tiles were Grafana, Loki, Prometheus, Gatus
+    // and Healthchecks — which is this tab row exactly, one scroll further
+    // down and with three numbers each instead of a page.
+    // A tab per watcher, because they fail SEPARATELY. Grafana evaluates rules
+    // and knows nothing about whether prometheus is scraping; prometheus
+    // scrapes and knows nothing about whether Loki is ingesting; gatus probes
+    // from outside and knows nothing about either. What they share is that
+    // when one stops, the rest keep looking fine.
+    //
+    // Probed like any other service — these are containers with hostnames, so
+    // unlike System the dots here are real. Alerts wears Grafana's.
+    tabs: [
+      { id: 'alerts', label: 'Alerts', probe: 'grafana', boardSpans: [8, 4, 4, 8], statBand: false },
+      { id: 'probes', label: 'Probes', probe: 'gatus', boardSpans: [8, 4, 4, 12], statBand: false },
+      {
+        id: 'metrics',
+        label: 'Metrics',
+        probe: 'prometheus',
+        boardSpans: [8, 4, 8, 4],
+        statBand: false,
+      },
+      // Loki publishes no gatus endpoint — it is reached over the monitoring
+      // bridge and has no published hostname to probe from outside.
+      { id: 'logs', label: 'Logs', boardSpans: [8, 4, 4, 8], statBand: false },
+      { id: 'jobs', label: 'Jobs', probe: 'healthchecks', boardSpans: [8, 4, 12], statBand: false },
+    ],
   },
 ]
