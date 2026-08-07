@@ -246,6 +246,46 @@ let
     '';
   };
 
+  # What only the host can answer about this machine — SMART, self-test
+  # history, scrub state, snapshot usage, replication lag, boot generations.
+  # See host/system-snapshot.sh for why each of those has no other route in.
+  systemDir = "/run/daedalus-system";
+
+  systemSnapshotScript = pkgs.writeShellApplication {
+    name = "daedalus-system-snapshot";
+    # SC2016 is "expressions don't expand in single quotes", which is exactly
+    # what every jq program in this script relies on: `$dev`, `$status` and
+    # friends are jq's own variables, bound with --arg, and letting the shell
+    # near them is the bug the check is warning about in reverse. Same for the
+    # one awk program's `$1`/`$2`.
+    excludeShellChecks = [ "SC2016" ];
+    runtimeInputs = [
+      pkgs.smartmontools
+      pkgs.zfs
+      pkgs.coreutils
+      pkgs.gnused
+      pkgs.gnugrep
+      pkgs.gawk
+      pkgs.nix
+      pkgs.jq
+    ];
+    text = ''
+      OUT_DIR=${lib.escapeShellArg systemDir}
+      SMARTCTL=${pkgs.smartmontools}/bin/smartctl
+      ZPOOL=${pkgs.zfs}/bin/zpool
+      ZFS=${pkgs.zfs}/bin/zfs
+      LSBLK=${pkgs.util-linux}/bin/lsblk
+      NIX_ENV=${pkgs.nix}/bin/nix-env
+      UNAME=${pkgs.coreutils}/bin/uname
+      SED=${pkgs.gnused}/bin/sed
+      GREP=${pkgs.gnugrep}/bin/grep
+      AWK=${pkgs.gawk}/bin/awk
+      JQ=${pkgs.jq}/bin/jq
+
+      ${builtins.readFile ./host/system-snapshot.sh}
+    '';
+  };
+
   # What Nix currently believes, handed to the container as one read-only
   # store file. Two parts, because they have different provenance:
   #
@@ -576,6 +616,7 @@ in
       # baked into the images actually on disk, for the services whose pin is
       # a moving tag and therefore carries no version at all.
       IMAGE_LABELS_PATH = "/images/labels.json";
+      HOST_FACTS_PATH = "/system/system.json";
       # The VPN tunnels, as JSON. One variable rather than a variable per
       # tunnel per field, because the whole point is that the set grows: a
       # third gluetun instance appears on the Network page with no change
@@ -641,6 +682,10 @@ in
     # DIRECTORY, not the file, for the same reason as above: the snapshot is
     # replaced by rename and a single-file bind would pin the old inode.
     "${imageDir}:/images:ro"
+    # SMART, pools, snapshots, replication and generations, published by
+    # daedalus-system-snapshot. Read-only, and no secret in it — the closest
+    # thing is a drive serial, which is printed on the drive.
+    "${systemDir}:/system:ro"
     # Per-repo CI state (runners, the running job and its steps, recent runs),
     # published by gha-ci-snapshot in stacks/gha-runner. Read-only, and it is
     # the OUTPUT rather than the credential: the GitHub PAT has
@@ -692,6 +737,38 @@ in
   # what is wanted.
   fleet.monitoredJobs.daedalus-image-snapshot = { };
   fleet.monitoredJobs.daedalus-env-snapshot = { };
+
+  # The host facts behind three System tabs. Runs as ROOT and unprivileged
+  # nowhere: smartctl needs a raw device, and `zpool status` needs the pool.
+  # No setpriv drop like its two siblings — there is no rootless store to
+  # reach into here, only root-only tools.
+  systemd.services.daedalus-system-snapshot = {
+    description = "Publish SMART, ZFS and generation facts for daedalus";
+    before = [ "podman-app-daedalus.service" ];
+    wantedBy = [ "podman-app-daedalus.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${systemSnapshotScript}/bin/daedalus-system-snapshot";
+    };
+  };
+
+  # Same argument as the image snapshot: it fails silently from the reader's
+  # side. A stale file does not blank the Disks tab, it shows yesterday's
+  # temperatures as though they were now — which is worse than an empty panel,
+  # because it looks like an answer.
+  fleet.monitoredJobs.daedalus-system-snapshot = { };
+
+  # Ten minutes. Everything in it moves in hours at best — a scrub runs
+  # monthly, a self-test weekly, snapshot usage grows over days — and the one
+  # genuinely live number, drive temperature, is not worth a shorter interval
+  # on a box whose alerting has its own thresholds.
+  systemd.timers.daedalus-system-snapshot = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "4min";
+      OnUnitActiveSec = "10min";
+    };
+  };
 
   # Fifteen minutes, not two: an image label changes only when an image does,
   # which means a rebuild or a deploy pull — both of which restart the

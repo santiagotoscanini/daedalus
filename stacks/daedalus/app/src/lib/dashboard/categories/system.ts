@@ -1,150 +1,123 @@
-// The System category: the box itself, and whether anything on it is unhappy.
+// The System category: the machine itself, a tab per layer.
 //
-// Everything here is prometheus except the healthchecks roster — this is the
-// one category where no service has a better answer than the scrape does, and
-// where the interesting numbers (per-container memory, cgroup pressure, pool
-// capacity) exist nowhere else.
+// It was one page trying to be six. Host vitals, container memory, pool
+// capacity, log volume and probe counts all shared a scroll, which meant none
+// of them had room to say anything and two of them did not belong there at all
+// — "is anything failing to report" is Monitoring's question, not this page's.
 //
-// A note on container memory, because it looks alarming and usually is not:
+// ── where each tab's numbers come from ────────────────────────────────────
+//
+// Host, Memory and Database are pure prometheus: node_exporter, the cgroup
+// reader in host-liveness-exporter, and postgres_exporter respectively. There
+// is nothing to publish for them because they are already scraped every 60s.
+//
+// Disks, Pools and Backups are the opposite: SMART, self-test history, scrub
+// state, `usedbysnapshots` and replication lag have NO prometheus collector on
+// this box, and three of them need root and a raw device. Those come from the
+// host snapshot — see ../host-facts and the script it documents.
+//
+// ── a note on container memory, because it looks alarming and is not ──────
+//
 // `container_memory_usage_bytes` is cgroup v2's memory.current, which INCLUDES
 // page cache. A container doing file I/O sits at its limit forever and is
 // perfectly healthy — the cache is reclaimed under pressure. The signal that a
 // cap is genuinely too tight is container_oom_kills_total moving, which is why
 // that counter is on the page and "percent of limit" is not.
 
-import {
-  basicAuth,
-  getJson,
-  lokiScalar,
-  lokiSeries,
-  lokiVector,
-  promBars,
-  promScalar,
-  promScalars,
-  promSeries,
-  promVector,
-} from '../clients'
-import { bytes, key } from '../format'
+import { promBars, promScalar, promScalars, promSeries, promVector } from '../clients'
+import { bytes } from '../format'
+import { hostFacts, type DatasetFacts, type HostFacts, type ReplicationPair, type SmartDisk, type ZpoolFacts } from '../host-facts'
 
-export type SystemData = {
-  host: {
-    cpuPct: number | null
-    cpuSpark: number[]
-    memUsed: number | null
-    memTotal: number | null
-    load1: number | null
-    load5: number | null
-    load15: number | null
-    uptimeSeconds: number | null
-    cores: number | null
-    zramUsed: number | null
+export type SystemTab = 'host' | 'memory' | 'disks' | 'pools' | 'database' | 'backups'
+
+export type SystemData =
+  | ({ tab: 'host' } & HostData)
+  | ({ tab: 'memory' } & MemoryData)
+  | ({ tab: 'disks' } & DisksData)
+  | ({ tab: 'pools' } & PoolsData)
+  | ({ tab: 'database' } & DatabaseData)
+  | ({ tab: 'backups' } & BackupsData)
+
+export async function loadSystem(tab: string): Promise<SystemData> {
+  switch (tab) {
+    case 'memory':
+      return { tab: 'memory', ...(await loadMemory()) }
+    case 'disks':
+      return { tab: 'disks', ...(await loadDisks()) }
+    case 'pools':
+      return { tab: 'pools', ...(await loadPools()) }
+    case 'database':
+      return { tab: 'database', ...(await loadDatabase()) }
+    case 'backups':
+      return { tab: 'backups', ...(await loadBackups()) }
+    default:
+      return { tab: 'host', ...(await loadHost()) }
   }
-  temps: { label: string; value: number }[]
-  pools: { name: string; usedBytes: number; totalBytes: number; healthy: boolean | null }[]
-  containers: {
-    total: number | null
-    down: string[]
-    topMemory: { label: string; value: number; display: string }[]
-    topCpu: { label: string; value: number; display: string }[]
-    oomKills: number | null
-  }
-  health: {
-    failedUnits: number | null
-    firingAlerts: number | null
-    probesUp: number | null
-    probesDown: number | null
-    uptime24h: number | null
-    checks: { up: number; down: number; late: number } | null
-  }
-  logs: {
-    lines1h: number | null
-    warn1h: number | null
-    errors1h: number | null
-    /** 24 hourly buckets of error lines. */
-    errorHistory: number[]
-    /** Which containers are producing the errors. */
-    noisiest: { label: string; value: number }[]
-  }
-  databases: { label: string; value: number; display: string }[]
 }
 
-export async function loadSystem(ctx: { base: (app: string) => string }): Promise<SystemData> {
-  const [
-    host,
-    cpuSpark,
-    temps,
-    poolSizes,
-    poolAvail,
-    poolHealth,
-    containerUp,
-    topMemory,
-    topCpu,
-    oom,
-    failedUnits,
-    alerts,
-    probes,
-    checks,
-    logs,
-    errorHistory,
-    noisiest,
-    databases,
-  ] = await Promise.all([
+/* ── Host ─────────────────────────────────────────────────────────────── */
+
+type HostData = {
+  cpuPct: number | null
+  cpuSpark: number[]
+  cores: number | null
+  load: { m1: number | null; m5: number | null; m15: number | null }
+  uptimeSeconds: number | null
+  kernel: string | null
+  temps: { label: string; value: number }[]
+  /**
+   * Pressure-stall: the share of the last ten seconds in which SOMETHING was
+   * waiting on cpu, io or memory.
+   *
+   * The number load average was always a proxy for, and a better one — load
+   * counts runnable tasks, which on a 16-thread box says nothing without
+   * knowing what they were waiting for. Everything here is normally zero;
+   * these panels exist for the day one of them is not.
+   */
+  pressure: { cpu: number | null; io: number | null; memory: number | null }
+  containers: { total: number | null; down: string[] }
+  failedUnits: number | null
+  /**
+   * Every boot generation on the box.
+   *
+   * `configurationLimit = 10` bounds the BOOT MENU, not the profile — a
+   * distinction nothing on this box surfaced, and the count below is usually
+   * the surprise.
+   */
+  generations: { id: number; date: string; current: boolean }[]
+}
+
+async function loadHost(): Promise<HostData> {
+  const [vitals, cpuSpark, temps, pressure, containerUp, failedUnits, facts] = await Promise.all([
     promScalars({
       cpu: '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))',
-      memTotal: 'node_memory_MemTotal_bytes',
-      memAvailable: 'node_memory_MemAvailable_bytes',
       load1: 'node_load1',
       load5: 'node_load5',
       load15: 'node_load15',
       uptime: 'node_time_seconds - node_boot_time_seconds',
       cores: 'count(count by (cpu) (node_cpu_seconds_total))',
-      // zram is this box's only swap; bytes in it are memory pressure that
-      // already happened, which no instantaneous gauge shows.
-      swapUsed: 'node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes',
     }),
     promSeries('100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))', 6 * 60, 120),
     promVector('node_hwmon_temp_celsius'),
-    promVector('node_filesystem_size_bytes{fstype="zfs"}'),
-    promVector('node_filesystem_avail_bytes{fstype="zfs"}'),
-    promVector('node_zfs_zpool_state{state="online"}'),
-    promVector('container_up'),
-    promBars('topk(8, container_memory_usage_bytes)', 'name'),
-    promBars('topk(8, rate(container_cpu_usage_seconds_total[5m]))', 'name'),
-    promScalar('sum(container_oom_kills_total)'),
-    promScalar('systemd_failed_units'),
-    loadAlerts(),
     promScalars({
-      up: 'count(gatus_results_endpoint_success == 1) or vector(0)',
-      down: 'count(gatus_results_endpoint_success == 0) or vector(0)',
-      uptime: '100 * avg(avg_over_time(gatus_results_endpoint_success[24h]))',
+      cpu: '100 * rate(node_pressure_cpu_waiting_seconds_total[5m])',
+      io: '100 * rate(node_pressure_io_waiting_seconds_total[5m])',
+      memory: '100 * rate(node_pressure_memory_waiting_seconds_total[5m])',
     }),
-    getJson<{ checks?: { status: string }[] }>(`${ctx.base('healthchecks')}/api/v1/checks/`, {
-      headers: { 'X-Api-Key': key('HEALTHCHECKS_API_KEY') },
-    }),
-    loadLogVolume(),
-    loadErrorHistory(),
-    loadNoisiest(),
-    promBars('topk(8, pg_database_size_bytes)', 'datname'),
+    promVector('container_up'),
+    promScalar('systemd_failed_units'),
+    hostFacts(),
   ])
 
   return {
-    host: {
-      cpuPct: host.cpu,
-      cpuSpark,
-      memUsed:
-        host.memTotal !== null && host.memAvailable !== null ? host.memTotal - host.memAvailable : (
-          null
-        ),
-      memTotal: host.memTotal,
-      load1: host.load1,
-      load5: host.load5,
-      load15: host.load15,
-      uptimeSeconds: host.uptime,
-      cores: host.cores,
-      zramUsed: host.swapUsed,
-    },
-    // Labelled by chip because the sensor names alone (`temp1`, `temp3`) say
-    // nothing about what is being measured.
+    cpuPct: vitals.cpu,
+    cpuSpark,
+    cores: vitals.cores,
+    load: { m1: vitals.load1, m5: vitals.load5, m15: vitals.load15 },
+    uptimeSeconds: vitals.uptime,
+    kernel: facts.kernel,
+    // Labelled by chip: the sensor names alone (`temp1`, `temp3`) say nothing
+    // about what is being measured.
     temps: temps
       .map((t) => ({
         label: `${(t.metric.chip ?? '?').replace(/^platform_/, '').replace(/_/g, ' ')} ${
@@ -155,112 +128,308 @@ export async function loadSystem(ctx: { base: (app: string) => string }): Promis
       .filter((t) => Number.isFinite(t.value) && t.value > 0)
       .sort((a, b) => b.value - a.value)
       .slice(0, 6),
-    pools: summarisePools(poolSizes, poolAvail, poolHealth),
+    pressure: { cpu: pressure.cpu, io: pressure.io, memory: pressure.memory },
     containers: {
       total: containerUp.length === 0 ? null : containerUp.length,
       down: containerUp.filter((c) => c.value[1] !== '1').map((c) => c.metric.name ?? '?'),
-      topMemory: topMemory.map((m) => ({ ...m, display: bytes(m.value) })),
-      topCpu: topCpu.map((m) => ({ ...m, display: `${(m.value * 100).toFixed(0)}%` })),
-      oomKills: oom,
     },
-    health: {
-      failedUnits,
-      firingAlerts: alerts,
-      probesUp: probes.up,
-      probesDown: probes.down,
-      uptime24h: probes.uptime,
-      checks:
-        checks?.checks === undefined ? null : (
-          {
-            up: checks.checks.filter((c) => c.status === 'up').length,
-            down: checks.checks.filter((c) => c.status === 'down').length,
-            late: checks.checks.filter((c) => c.status === 'grace').length,
-          }
-        ),
-    },
-    logs: { ...logs, errorHistory, noisiest },
-    databases: databases.map((d) => ({ ...d, display: bytes(d.value) })),
+    failedUnits,
+    generations: facts.generations,
   }
 }
+
+/* ── Memory ───────────────────────────────────────────────────────────── */
+
+type MemoryData = {
+  total: number | null
+  used: number | null
+  available: number | null
+  cached: number | null
+  dirty: number | null
+  /**
+   * ZFS's adaptive replacement cache, and the reason "used" looks high.
+   *
+   * ARC is charged to the kernel rather than to any process, so a box with
+   * 64 GiB and 40 GiB of ARC reads as nearly full while having tens of
+   * gigabytes it will hand back on demand. Nothing on this dashboard showed
+   * it, which made the memory number unreadable.
+   */
+  arc: { size: number | null; max: number | null; min: number | null; hitRate: number | null }
+  /** zram is this box's only swap — bytes in it are pressure that happened. */
+  zram: { used: number | null; total: number | null }
+  topMemory: { label: string; value: number; display: string }[]
+  /** Containers with a cgroup cap, and what it is. */
+  capped: { name: string; limitBytes: number; usageBytes: number | null }[]
+  uncapped: number | null
+  oomKills: number | null
+}
+
+async function loadMemory(): Promise<MemoryData> {
+  const [mem, arc, arcHits, topMemory, limits, usage, oom, containers] = await Promise.all([
+    promScalars({
+      total: 'node_memory_MemTotal_bytes',
+      available: 'node_memory_MemAvailable_bytes',
+      cached: 'node_memory_Cached_bytes',
+      dirty: 'node_memory_Dirty_bytes',
+      swapTotal: 'node_memory_SwapTotal_bytes',
+      swapFree: 'node_memory_SwapFree_bytes',
+    }),
+    promScalars({
+      size: 'node_zfs_arc_size',
+      max: 'node_zfs_arc_c_max',
+      min: 'node_zfs_arc_c_min',
+    }),
+    promScalar(
+      '100 * rate(node_zfs_arc_hits[30m]) / (rate(node_zfs_arc_hits[30m]) + rate(node_zfs_arc_misses[30m]))',
+    ),
+    promBars('topk(10, container_memory_usage_bytes)', 'name'),
+    promVector('container_memory_limit_bytes'),
+    promVector('container_memory_usage_bytes'),
+    promScalar('sum(container_oom_kills_total)'),
+    promScalar('count(container_up)'),
+  ])
+
+  const usageBy = new Map(usage.map((u) => [u.metric.name ?? '', Number(u.value[1])]))
+
+  return {
+    total: mem.total,
+    used: mem.total !== null && mem.available !== null ? mem.total - mem.available : null,
+    available: mem.available,
+    cached: mem.cached,
+    dirty: mem.dirty,
+    arc: { size: arc.size, max: arc.max, min: arc.min, hitRate: arcHits },
+    zram: {
+      used: mem.swapTotal !== null && mem.swapFree !== null ? mem.swapTotal - mem.swapFree : null,
+      total: mem.swapTotal,
+    },
+    topMemory: topMemory.map((m) => ({ ...m, display: bytes(m.value) })),
+    // The series is OMITTED for an uncapped container rather than reported as
+    // infinity, so the length of this list IS the count of capped ones.
+    capped: limits
+      .map((l) => ({
+        name: l.metric.name ?? '?',
+        limitBytes: Number(l.value[1]),
+        usageBytes: usageBy.get(l.metric.name ?? '') ?? null,
+      }))
+      .sort((a, b) => a.limitBytes - b.limitBytes),
+    uncapped: containers === null ? null : containers - limits.length,
+    oomKills: oom,
+  }
+}
+
+/* ── Disks ────────────────────────────────────────────────────────────── */
+
+type DisksData = {
+  disks: SmartDisk[]
+  /** Per device, from node_exporter — SMART says nothing about throughput. */
+  io: {
+    device: string
+    readBytes: number | null
+    writtenBytes: number | null
+    utilPct: number | null
+  }[]
+  /** When smartd's own timers last ran, so a silent scheduler is visible. */
+  smartdActive: boolean | null
+}
+
+async function loadDisks(): Promise<DisksData> {
+  const [facts, reads, writes, util, smartd] = await Promise.all([
+    hostFacts(),
+    promVector('rate(node_disk_read_bytes_total[5m])'),
+    promVector('rate(node_disk_written_bytes_total[5m])'),
+    promVector('100 * rate(node_disk_io_time_seconds_total[5m])'),
+    promScalar('systemd_unit_state{name="smartd.service",state="active"}'),
+  ])
+
+  const by = (rows: { metric: Record<string, string>; value: [number, string] }[]) =>
+    new Map(rows.map((r) => [r.metric.device ?? '', Number(r.value[1])]))
+  const r = by(reads)
+  const w = by(writes)
+  const u = by(util)
+
+  return {
+    disks: facts.disks,
+    io: facts.disks.map((d) => ({
+      device: d.device,
+      readBytes: r.get(d.device) ?? null,
+      writtenBytes: w.get(d.device) ?? null,
+      utilPct: u.get(d.device) ?? null,
+    })),
+    smartdActive: smartd === null ? null : smartd === 1,
+  }
+}
+
+/* ── Pools ────────────────────────────────────────────────────────────── */
+
+type PoolsData = {
+  pools: ZpoolFacts[]
+  datasets: DatasetFacts[]
+  /** Total snapshot bytes across every dataset — the growth to watch. */
+  snapshotBytes: number
+  snapshots: number
+}
+
+async function loadPools(): Promise<PoolsData> {
+  const facts = await hostFacts()
+  // Only the datasets that are their own thing: a pool root reports its
+  // children's usage as well, so including it double-counts every number
+  // beside it.
+  const datasets = facts.datasets.filter((d) => d.name.includes('/'))
+
+  return {
+    pools: facts.pools,
+    datasets: [...datasets].sort((a, b) => b.usedBytes - a.usedBytes),
+    snapshotBytes: datasets.reduce((n, d) => n + d.snapshotBytes, 0),
+    snapshots: datasets.reduce((n, d) => n + d.snapshots, 0),
+  }
+}
+
+/* ── Database ─────────────────────────────────────────────────────────── */
 
 /**
- * ZFS filesystems, folded back into the two pools they belong to.
+ * The shared Postgres cluster, which every app on this box is a tenant of.
  *
- * node_exporter reports one row per mounted dataset and every dataset in a
- * pool reports the SAME free space — that is how ZFS works, they share it. So
- * "used" has to be summed per dataset (size minus avail) while "free" is taken
- * once, from any of them. Summing the sizes instead would report a 4 TB NVMe
- * as 15 TB.
+ * postgres_exporter already publishes all of this and nothing read it — the
+ * old page showed the top eight databases by size and stopped, which answers
+ * "what is big" and none of the questions you actually have about a cluster:
+ * whether it is serving from cache, whether anything is stuck in a
+ * transaction, whether a tenant is rolling back more than it commits.
  */
-function summarisePools(
-  sizes: { metric: Record<string, string>; value: [number, string] }[],
-  avail: { metric: Record<string, string>; value: [number, string] }[],
-  online: { metric: Record<string, string>; value: [number, string] }[],
-): SystemData['pools'] {
-  const poolOf = (device: string) => device.split('/')[0] ?? device
-  const availByMount = new Map(avail.map((a) => [a.metric.mountpoint ?? '', Number(a.value[1])]))
-  const healthy = new Map(online.map((o) => [o.metric.zpool ?? '', o.value[1] === '1']))
-
-  const pools = new Map<string, { used: number; free: number }>()
-  for (const s of sizes) {
-    const mount = s.metric.mountpoint ?? ''
-    // /nix and /nix/store are the same dataset mounted twice; counting both
-    // would double that dataset's usage.
-    if (mount === '/nix/store') continue
-    const pool = poolOf(s.metric.device ?? '')
-    const size = Number(s.value[1])
-    const free = availByMount.get(mount) ?? 0
-    const acc = pools.get(pool) ?? { used: 0, free }
-    acc.used += Math.max(0, size - free)
-    acc.free = free
-    pools.set(pool, acc)
+type DatabaseData = {
+  databases: {
+    name: string
+    sizeBytes: number
+    connections: number | null
+    /** Buffer-cache hit rate. Below ~99% on a box this size means seeks. */
+    cacheHitPct: number | null
+    commits: number | null
+    rollbacks: number | null
+    deadlocks: number | null
+  }[]
+  totals: {
+    sizeBytes: number
+    connections: number | null
+    maxConnections: number | null
+    /** Longest running transaction, seconds. The stuck-query signal. */
+    longestTxSeconds: number | null
+    locks: number | null
+    tempBytes: number | null
   }
-
-  return [...pools]
-    .map(([name, p]) => ({
-      name,
-      usedBytes: p.used,
-      totalBytes: p.used + p.free,
-      healthy: healthy.get(name) ?? null,
-    }))
-    .sort((a, b) => b.totalBytes - a.totalBytes)
+  version: string | null
+  up: boolean | null
 }
 
-async function loadAlerts(): Promise<number | null> {
-  const body = await getJson<{ data?: { groups?: { rules?: { state?: string }[] }[] } }>(
-    'http://grafana:3000/api/prometheus/grafana/api/v1/rules',
-    { headers: { Authorization: basicAuth(key('GRAFANA_USER'), key('GRAFANA_PASS')) } },
-  )
-  if (body === null) return null
-  return (body.data?.groups ?? []).flatMap((g) => g.rules ?? []).filter((r) => r.state === 'firing')
-    .length
-}
-
-async function loadLogVolume(): Promise<{
-  lines1h: number | null
-  warn1h: number | null
-  errors1h: number | null
-}> {
-  const [lines1h, warn1h, errors1h] = await Promise.all([
-    lokiScalar('sum(count_over_time({level=~".+"}[1h])) or vector(0)'),
-    lokiScalar('sum(count_over_time({level="warning"}[1h])) or vector(0)'),
-    lokiScalar('sum(count_over_time({level="error"}[1h])) or vector(0)'),
+async function loadDatabase(): Promise<DatabaseData> {
+  const [sizes, conns, hits, reads, commits, rollbacks, deadlocks, totals, up] = await Promise.all([
+    promVector('pg_database_size_bytes'),
+    promVector('pg_stat_database_numbackends'),
+    promVector('pg_stat_database_blks_hit'),
+    promVector('pg_stat_database_blks_read'),
+    promVector('pg_stat_database_xact_commit'),
+    promVector('pg_stat_database_xact_rollback'),
+    promVector('pg_stat_database_deadlocks'),
+    promScalars({
+      connections: 'sum(pg_stat_activity_count)',
+      maxConnections: 'pg_settings_max_connections',
+      longestTx: 'max(pg_stat_activity_max_tx_duration)',
+      locks: 'sum(pg_locks_count)',
+      temp: 'sum(pg_stat_database_temp_bytes)',
+    }),
+    promScalar('pg_up'),
   ])
-  return { lines1h, warn1h, errors1h }
+
+  const by = (rows: { metric: Record<string, string>; value: [number, string] }[]) =>
+    new Map(rows.map((r) => [r.metric.datname ?? '', Number(r.value[1])]))
+  const c = by(conns)
+  const h = by(hits)
+  const rd = by(reads)
+  const cm = by(commits)
+  const rb = by(rollbacks)
+  const dl = by(deadlocks)
+
+  const databases = sizes
+    .map((s) => {
+      const name = s.metric.datname ?? '?'
+      const hit = h.get(name)
+      const read = rd.get(name)
+      return {
+        name,
+        sizeBytes: Number(s.value[1]),
+        connections: c.get(name) ?? null,
+        cacheHitPct:
+          hit === undefined || read === undefined || hit + read === 0 ?
+            null
+          : (hit / (hit + read)) * 100,
+        commits: cm.get(name) ?? null,
+        rollbacks: rb.get(name) ?? null,
+        deadlocks: dl.get(name) ?? null,
+      }
+    })
+    // Postgres's own three are real databases and appear in every metric, but
+    // they are not tenants and their presence at the top of a size-ordered
+    // list is noise.
+    .filter((d) => !['template0', 'template1'].includes(d.name))
+    .sort((a, b) => b.sizeBytes - a.sizeBytes)
+
+  return {
+    databases,
+    totals: {
+      sizeBytes: databases.reduce((n, d) => n + d.sizeBytes, 0),
+      connections: totals.connections,
+      maxConnections: totals.maxConnections,
+      longestTxSeconds: totals.longestTx,
+      locks: totals.locks,
+      tempBytes: totals.temp,
+    },
+    version: await pgVersion(),
+    up: up === null ? null : up === 1,
+  }
 }
 
-/** One hourly bucket of error lines per point, a day wide. */
-function loadErrorHistory(): Promise<number[]> {
-  return lokiSeries('sum(count_over_time({level="error"}[1h]))', 24 * 60, 3600)
+async function pgVersion(): Promise<string | null> {
+  const rows = await promVector('pg_static')
+  const v = rows[0]?.metric.short_version ?? rows[0]?.metric.version ?? null
+  return v === null ? null : v.split(' ').slice(0, 2).join(' ')
 }
 
-async function loadNoisiest(): Promise<{ label: string; value: number }[]> {
-  const rows = await lokiVector(
-    'topk(6, sum by (container) (count_over_time({level="error"}[24h])))',
-    'container',
-  )
-  // Lines from the host journal carry `unit`, not `container`, so they group
-  // under an empty label. Naming that group beats rendering a bare "?" as
-  // though a container were missing.
-  return rows.map((r) => (r.label === '?' ? { ...r, label: 'host units' } : r))
+/* ── Backups ──────────────────────────────────────────────────────────── */
+
+/**
+ * What survives this machine, and what does not.
+ *
+ * The second half is the point and is the reason this is a tab rather than a
+ * panel on Pools. Replication is easy to show and easy to believe: syncoid
+ * exits 0 on a run that copied nothing, the replica MIRRORS the source rather
+ * than archiving it, and both pools are in the same box on the same shelf. The
+ * list of things no snapshot covers is the honest other half.
+ */
+type BackupsData = {
+  pairs: ReplicationPair[]
+  /** Datasets enrolled in snapshots, and those deliberately not. */
+  coverage: { name: string; snapshots: number; usedBytes: number }[]
+  unsnapshotted: { name: string; usedBytes: number }[]
+  totalReplicatedBytes: number
 }
+
+async function loadBackups(): Promise<BackupsData> {
+  const facts = await hostFacts()
+  const datasets = facts.datasets.filter((d) => d.name.includes('/'))
+
+  return {
+    pairs: facts.replication,
+    coverage: datasets
+      .filter((d) => d.snapshots > 0)
+      .map((d) => ({ name: d.name, snapshots: d.snapshots, usedBytes: d.usedBytes }))
+      .sort((a, b) => b.usedBytes - a.usedBytes),
+    unsnapshotted: datasets
+      .filter((d) => d.snapshots === 0)
+      .map((d) => ({ name: d.name, usedBytes: d.usedBytes }))
+      .sort((a, b) => b.usedBytes - a.usedBytes),
+    totalReplicatedBytes: facts.replication.reduce((n, p) => {
+      const target = facts.datasets.find((d) => d.name === p.target)
+      return n + (target?.usedBytes ?? 0)
+    }, 0),
+  }
+}
+
+export type { HostFacts }

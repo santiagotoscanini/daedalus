@@ -351,10 +351,36 @@ export const CATEGORIES: CategorySpec[] = [
     id: "system",
     label: 'System',
     icon: '◔',
-    lede: 'The machine itself, and whether anything running on it is unhappy.',
-    boardSpans: [6, 6, 6, 6],
+    lede: 'The machine itself: what it is running on, what it is storing, and what survives it.',
+    // Shaped to Host, the tab that opens by default.
+    boardSpans: [8, 4, 4, 4],
     tileGroups: 0,
-    tabs: [],
+    // No dots anywhere on this row. Every other category's tabs are services,
+    // and gatus probes services; these are layers of one machine, and the page
+    // you are reading is running on it. A row of permanently grey circles
+    // would be eight claims that nothing is being checked, which is false —
+    // the checking is on the page.
+    //
+    // The rule separates the state of the machine NOW from what outlives it.
+    // Everything left of it is gone the moment the box is; Backups is the only
+    // tab here answering a question about tomorrow.
+    tabs: [
+      { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4], statBand: false },
+      { id: 'memory', label: 'Memory', boardSpans: [8, 4, 4, 8], statBand: false },
+      // Physical, then logical. SMART and throughput belong to a device;
+      // capacity and snapshots belong to a pool, and one page holding both
+      // was the same paragraph answering two questions.
+      { id: 'disks', label: 'Disks', boardSpans: [6, 6, 12], statBand: false },
+      { id: 'pools', label: 'Pools', boardSpans: [6, 6, 12], statBand: false },
+      { id: 'database', label: 'Database', boardSpans: [8, 4, 12], statBand: false },
+      {
+        id: 'backups',
+        label: 'Backups',
+        boardSpans: [8, 4, 8, 4],
+        statBand: false,
+        dividerBefore: true,
+      },
+    ],
   },
   {
     id: 'monitoring',

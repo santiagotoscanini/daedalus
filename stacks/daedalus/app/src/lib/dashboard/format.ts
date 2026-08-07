@@ -93,6 +93,22 @@ export function ms(v: number | null | undefined): string {
   return `${String(Math.floor(total / 60))}m ${String(total % 60)}s`
 }
 
+/**
+ * A length of time that is not a distance from now.
+ *
+ * `since` places a moment in the past and says "ago"; this measures a span —
+ * how long a scrub took, how far a replica trails its source, how long the box
+ * has been up. Same one-unit rule, because every caller is a glance.
+ */
+export function duration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return DASH
+  if (seconds < 60) return `${String(Math.round(seconds))}s`
+  if (seconds < 5400) return `${String(Math.round(seconds / 60))} min`
+  if (seconds < 172800) return `${String(Math.round(seconds / 3600))}h`
+  if (seconds < 63072000) return `${String(Math.round(seconds / 86400))}d`
+  return `${String(Math.round(seconds / 31536000))}y`
+}
+
 /** A countdown, same one-unit rule as `since`. */
 export function until(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return DASH

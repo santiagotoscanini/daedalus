@@ -269,7 +269,7 @@ async function loadCategory(
     }
     case 'system': {
       const { loadSystem } = await import('../lib/dashboard/categories/system')
-      return { kind: 'system', data: await loadSystem(ctx) }
+      return { kind: 'system', data: await loadSystem(tab) }
     }
     case 'monitoring': {
       const { loadMonitoring } = await import('../lib/dashboard/categories/monitoring')
