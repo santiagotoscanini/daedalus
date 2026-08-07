@@ -4,6 +4,9 @@
 // every page, and importing it from the server module would drag that module
 // (and the shape of everything it imports) into the browser bundle for the
 // sake of five labels.
+//
+// No icon on the spec: the rail draws one per `id` (components/nav-icon.tsx),
+// and naming it here as well was the same fact written twice.
 
 /**
  * The categories, and the only list of them.
@@ -26,13 +29,7 @@ export type CategoryName =
 export type CategorySpec = {
   id: CategoryName
   label: string
-  icon: string
   lede: string
-  /**
-   * A path under public/ instead of a glyph, for the one category whose
-   * subject has real artwork. Rendered at the same box size as a glyph.
-   */
-  iconImage?: string
   /**
    * Empty when the category has no sub-tabs.
    *
@@ -113,7 +110,6 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'ai',
     label: 'AI',
-    icon: '◈',
     lede: 'The local model server, the gateway in front of it, and what is driving traffic through it.',
     // Shaped to Lemonade, the tab that opens by default: the model list and
     // the release notes side by side, then the logs across the bottom.
@@ -141,7 +137,6 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: "media",
     label: 'Media',
-    icon: '▶',
     lede: 'Two libraries, and the chain that fills them — with what each service says about itself.',
     // Shaped to Jellyfin, the tab that opens by default.
     boardSpans: [8, 4, 4, 8],
@@ -199,7 +194,6 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'home',
     label: 'Home',
-    icon: '⌂',
     lede: 'The household’s own things — what the house shares, and what one person keeps here.',
     // Shaped to the House tab, which opens by default.
     boardSpans: [8, 4, 4, 8],
@@ -240,7 +234,6 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: "gaming",
     label: 'Gaming',
-    icon: '⛶',
     lede: "The game servers: which build each one runs, and whether the people on the sofa can still join.",
     boardSpans: [6, 6, 12],
     tabs: [
@@ -255,7 +248,6 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: "network",
     label: 'Network',
-    icon: '⇄',
     lede: 'Everything between a packet and this box — the link, the ways in, the proxy, the resolver.',
     boardSpans: [12, 12, 8, 4],
     // No tiles on any tab here. The nine that used to sit under General were
@@ -342,7 +334,6 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: "system",
     label: 'System',
-    icon: '◔',
     lede: 'The machine itself: what it is running on, what it is storing, and what survives it.',
     // Shaped to Host, the tab that opens by default.
     boardSpans: [8, 4, 4, 4],
@@ -376,7 +367,6 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'monitoring',
     label: 'Monitoring',
-    icon: '◎',
     lede: 'The watchers — and whether each of them would still tell you.',
     // Shaped to Alerts, the tab that opens by default.
     boardSpans: [8, 4, 4, 8],
