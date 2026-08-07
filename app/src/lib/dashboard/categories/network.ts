@@ -32,7 +32,7 @@ import {
   type CommitGap,
   type VersionGap,
 } from '../github'
-import { clientHost, idpClients, type PocketClient } from './security'
+import { clientHost, idpClients, type PocketClient } from '../idp'
 import { lanHosts, webAppHosts } from '../../nix-manifest'
 import { BASE_DOMAIN } from '../../hostname'
 import { key, localDay, since } from '../format'

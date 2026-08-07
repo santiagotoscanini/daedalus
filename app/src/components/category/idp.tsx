@@ -1,28 +1,30 @@
-// The Security category.
+// Home › Sign-in: Pocket ID.
 //
-// One page today, and it was the second half of the proxy's until now. The
-// argument for splitting is the same one the loader makes: traefik is
-// infrastructure, this is the account every person in the house signs in
-// with, and the audit log below is the only record on this box of a human
-// being doing anything. They shared a tab because the routing table joins
-// them, and that join is still drawn — on the proxy's page, where the routes
-// are.
+// Its own file rather than a section of home.tsx because it is the longest of
+// that category's tabs by a wide margin — the audit log carries a list of
+// registrations, a list of people, a list of devices and a drill-down behind
+// every row — and folding it in would bury seven short tabs under one long
+// one.
+//
+// It was a category of its own until now, and before that the second half of
+// the proxy's page. The argument that split it from traefik still holds: that
+// is infrastructure with a release cycle, this is the account every person in
+// the house signs in with. What it is NOT is a subject of its own — beside the
+// automation, the photos and the files it is plainly one of the household's
+// things, and the join it keeps with the proxy is one column on a table about
+// routing.
 
 import { useState } from 'react'
 
 import { Board, BoardGrid, Chip, Columns, Measures } from '../viz'
-
-/** How many registrations the list shows before it is asked for the rest. */
-const APPS_SHOWN = 5
 import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../service-head'
 import { GrafanaLogs, LogDetails } from '../logs'
 import { DASH, num } from '../../lib/dashboard/format'
-import type { SecurityData } from '../../lib/dashboard/categories/security'
+import type { IdpData } from '../../lib/dashboard/idp'
 
-export function SecurityView({ data }: { data: SecurityData }) {
-  return <IdpView d={data} />
-}
+/** How many registrations the list shows before it is asked for the rest. */
+const APPS_SHOWN = 5
 
 /**
  * Pocket ID: who can get in, and who did.
@@ -32,7 +34,7 @@ export function SecurityView({ data }: { data: SecurityData }) {
  * tell you which human that was — and it is also the only way to find out
  * which of the registered applications anybody actually uses.
  */
-function IdpView({ d }: { d: SecurityData }) {
+export function IdpView({ d }: { d: IdpData }) {
   const { window: w } = d
   const shared = d.clients.filter((c) => c.sharesHost)
   const idle = d.clients.filter((c) => c.used === 0).length
@@ -291,7 +293,7 @@ function IdpView({ d }: { d: SecurityData }) {
  * so the top of it IS the recent activity — and the rest is one click away
  * for the times the question is about the tail.
  */
-function AppList({ clients, max }: { clients: SecurityData['clients']; max: number }) {
+function AppList({ clients, max }: { clients: IdpData['clients']; max: number }) {
   const [all, setAll] = useState(false)
   const shown = all ? clients : clients.slice(0, APPS_SHOWN)
   const rest = clients.length - APPS_SHOWN
@@ -334,7 +336,7 @@ function AppList({ clients, max }: { clients: SecurityData['clients']; max: numb
  * A never-opened registration still gets a row, and still opens: it says so,
  * which is the answer.
  */
-function AppRow({ c, max }: { c: SecurityData['clients'][number]; max: number }) {
+function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
   const idle = c.used === 0
 
   return (
