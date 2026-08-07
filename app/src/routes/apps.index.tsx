@@ -2,8 +2,8 @@ import { Await, createFileRoute, Link } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
 import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
-import { Segmented, Sparkline, StateDot, type AppState } from '../components/ui'
-import { BarList, Board, BoardGrid, Chip, Facts, Pulse } from '../components/viz'
+import { Segmented, StateDot, type AppState } from '../components/ui'
+import { BarList, Board, BoardGrid, Chip, Facts, Pulse, Spark } from '../components/viz'
 import { fetchApps, fetchRegistries } from '../server/registry'
 
 // The app list. Every row joins three sources: the registry (Postgres — what
@@ -336,7 +336,15 @@ function AppRow({ row }: { row: Row }) {
         </span>
 
         <div className="app-spark">
-          <Sparkline values={row.status.spark} state={row.status.state} />
+          {/* Neutral unless the app is in trouble: the dot at the head of the
+              row already carries state, and a green line on every healthy app
+              would make the one red line harder to find, not easier. */}
+          <Spark
+            values={row.status.spark}
+            tone={row.status.state === 'attention' ? 'bad' : 'muted'}
+            width={88}
+            height={20}
+          />
           <span className="rpm">
             {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)} rpm`}
           </span>

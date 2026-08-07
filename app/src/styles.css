@@ -200,7 +200,7 @@ h2 {
 .lede,
 .cat-lede,
 .footnote,
-.panel-note,
+.strip-foot,
 .exposure-note {
   max-width: 74ch;
 }
@@ -260,13 +260,21 @@ h2 {
   border-color: var(--accent-dim);
 }
 
+/* One bordered list with hairline separators, not a stack of cards with gaps
+   between them. Twelve independently-bordered cards draw twelve rectangles for
+   a set of rows that are all the same kind of thing; the rule between them is
+   enough, and it lets the rows sit closer without running together. */
 .app-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+.app-list > li + li {
+  border-top: 1px solid var(--border-soft);
 }
 
 .app-row {
@@ -274,15 +282,11 @@ h2 {
   grid-template-columns: auto minmax(9rem, 1fr) auto auto auto;
   align-items: center;
   gap: 1.1rem;
-  padding: 0.95rem 1.15rem;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--panel);
+  padding: 0.8rem 1.1rem;
   color: inherit;
 }
 .app-row:hover {
   background: var(--panel-2);
-  border-color: var(--border);
   text-decoration: none;
 }
 
@@ -386,58 +390,6 @@ h2 {
   color: var(--bad);
   border-color: color-mix(in srgb, var(--bad) 35%, transparent);
   background: color-mix(in srgb, var(--bad) 8%, transparent);
-}
-
-/* ── charts ─────────────────────────────────────────────────────────────── */
-
-.spark polyline {
-  stroke: var(--dim);
-}
-.spark-running polyline {
-  stroke: var(--accent);
-}
-.spark-attention polyline {
-  stroke: var(--bad);
-}
-.spark-empty,
-.chart-empty {
-  color: var(--dim);
-  font-size: 0.72rem;
-  margin: 0;
-}
-.spark-empty {
-  width: 88px;
-  display: inline-block;
-  text-align: center;
-}
-
-.chart {
-  width: 100%;
-  height: 64px;
-  display: block;
-  margin-top: 0.6rem;
-}
-.chart polyline {
-  stroke: var(--accent);
-}
-.chart-attention polyline {
-  stroke: var(--bad);
-}
-.chart .grad-top {
-  stop-color: var(--accent);
-  stop-opacity: 0.28;
-}
-.chart .grad-bottom {
-  stop-color: var(--accent);
-  stop-opacity: 0;
-}
-.chart-attention .grad-top {
-  stop-color: var(--bad);
-  stop-opacity: 0.28;
-}
-.chart-attention .grad-bottom {
-  stop-color: var(--bad);
-  stop-opacity: 0;
 }
 
 /* ── detail ─────────────────────────────────────────────────────────────── */
@@ -550,140 +502,6 @@ h2 {
   width: 0.46rem;
   height: 0.46rem;
 }
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
-  gap: 0.85rem;
-}
-
-.metric {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--panel);
-  padding: 1rem 1.15rem 0.9rem;
-}
-.metric h3 {
-  margin: 0;
-  font-size: 0.66rem;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--dim);
-  font-weight: 600;
-}
-.metric-value {
-  margin: 0.35rem 0 0;
-  font-size: 1.9rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-}
-.metric-unit {
-  font-size: 0.8rem;
-  color: var(--dim);
-  margin-left: 0.35rem;
-  font-weight: 400;
-}
-.metric-note {
-  margin: 0.5rem 0 0;
-  font-size: 0.76rem;
-  color: var(--dim);
-}
-
-/* ── usage-against-a-ceiling bar ────────────────────────────────────────── */
-
-.meter {
-  height: 3px;
-  border-radius: 2px;
-  background: var(--border);
-  margin: 0.7rem 0 0.1rem;
-  overflow: hidden;
-}
-.meter span {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--accent);
-  transition: width 0.3s ease;
-}
-.meter-cpu span {
-  background: #5b8dd6;
-}
-.meter-mem span {
-  background: var(--ok);
-}
-/* Only at the top of the range: a bar that is always red teaches nothing. */
-.meter-hot span {
-  background: #d1594f;
-}
-
-.panels {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr));
-  gap: 0.85rem;
-  margin-top: 1.5rem;
-}
-
-.panel {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--panel);
-  overflow: hidden;
-}
-/* The action slot holds anything from a button to a sentence ("read from the
-   container 3m ago"), so it wraps under the title rather than being squeezed
-   into a two-line column beside it. */
-.panel > header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem 1rem;
-  padding: 0.8rem 1.15rem;
-  border-bottom: 1px solid var(--border-soft);
-}
-.panel > header h3 {
-  margin: 0;
-  font-size: 0.66rem;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--dim);
-  font-weight: 600;
-}
-.panel-body {
-  padding: 0.9rem 1.15rem 1.05rem;
-}
-.panel-empty {
-  color: var(--dim);
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-.row {
-  display: flex;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding: 0.3rem 0;
-  font-size: 0.86rem;
-}
-.row-k {
-  color: var(--dim);
-  white-space: nowrap;
-}
-.row-v {
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.settings {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(21rem, 100%), 1fr));
-  gap: 0.85rem;
-  align-items: start;
-}
-.panel-wide {
-  grid-column: 1 / -1;
-}
-
 /* ── controls ───────────────────────────────────────────────────────────── */
 
 .segmented {
@@ -782,17 +600,28 @@ h2 {
 
 /* ── resource sliders ───────────────────────────────────────────────────── */
 
-/* Sized so the label column can never collapse to the point where the hint
-   wraps one word per line — which is what happens with a plain `1fr` when the
-   panel is a narrow grid cell. The panel is `wide`, but the floor matters
-   more than the panel: it is what keeps this readable if it is ever moved. */
+/* Stacked by default — label and value on one line, the track full width
+   underneath — and only laid out in three columns when the board it sits in is
+   genuinely wide enough for the label column to hold its hint without wrapping
+   one word per line. Stacked is the safe shape at any width, so it is the base
+   rather than the exception. */
 .slider {
   display: grid;
-  grid-template-columns: minmax(15rem, 1fr) minmax(10rem, 1.5fr) 6.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.5rem 1.5rem;
+  gap: 0.4rem 1rem;
   padding: 0.7rem 0;
   border-bottom: 1px solid var(--border-soft);
+}
+@container board (min-width: 34rem) {
+  .slider {
+    grid-template-columns: minmax(15rem, 1fr) minmax(10rem, 1.5fr) 6.5rem;
+    gap: 0.5rem 1.5rem;
+  }
+  .slider input[type="range"] {
+    grid-column: auto;
+    margin-top: 0;
+  }
 }
 .slider:last-of-type {
   border-bottom: 0;
@@ -824,6 +653,13 @@ h2 {
 .slider.disabled {
   opacity: 0.5;
 }
+/* At the sentinel the control is OFF, not at zero. Drawn as a solid thumb on
+   a full track it would read as a slider that failed to load its value rather
+   than as a ceiling nobody set. */
+.slider-value .muted {
+  color: var(--dim);
+  font-size: 0.86rem;
+}
 
 /* Track and thumb need explicit styling in both vendor spellings — the
    `::-webkit-` and `::-moz-` selectors cannot be combined in one rule, since
@@ -834,6 +670,10 @@ h2 {
   width: 100%;
   background: transparent;
   cursor: pointer;
+  /* Full width under the label in the stacked shape; the container query above
+     puts it back in its own column when there is room. */
+  grid-column: 1 / -1;
+  margin-top: 0.3rem;
 }
 .slider input[type="range"]:disabled {
   cursor: not-allowed;
@@ -867,17 +707,15 @@ h2 {
   border: 3px solid var(--panel);
   box-shadow: 0 0 0 1px var(--accent);
 }
-
-/* Below this the three columns cannot all hold their minimum, so stack:
-   label + value on one line, the track full width underneath. */
-@media (max-width: 56rem) {
-  .slider {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .slider input[type="range"] {
-    grid-column: 1 / -1;
-    margin-top: 0.3rem;
-  }
+/* Hollow at the sentinel — the two spellings cannot share a rule, since a
+   browser drops the whole rule on a selector it does not know. */
+.slider-off input[type="range"]::-webkit-slider-thumb {
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--dim);
+}
+.slider-off input[type="range"]::-moz-range-thumb {
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--dim);
 }
 
 .field {
@@ -1035,8 +873,17 @@ h2 {
   margin: 0.35rem 0 0;
 }
 
+/* Columns rather than one stack: these are several short rationales, not one
+   long document, and full-width paragraphs in a 12-span board leave most of
+   the row empty. */
+.notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.9rem 1.8rem;
+  margin: 0;
+}
 .notes div {
-  margin-bottom: 1.05rem;
+  min-width: 0;
 }
 .notes dt {
   color: var(--dim);
@@ -1051,26 +898,6 @@ h2 {
   color: var(--muted);
 }
 
-.logs {
-  margin: -0.9rem -1.15rem -1.05rem;
-  overflow-x: auto;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.76rem;
-  max-height: 32rem;
-  overflow-y: auto;
-}
-.log {
-  display: grid;
-  grid-template-columns: 9rem 4rem 1fr;
-  gap: 0.8rem;
-  padding: 0.22rem 1.15rem;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.log time,
-.log .lvl {
-  color: var(--dim);
-}
 /* ── deploy ─────────────────────────────────────────────────────────────── */
 
 .redeploy {
@@ -1197,16 +1024,6 @@ h2 {
   color: var(--dim);
 }
 
-.panel-note {
-  margin: 0 0 0.75rem;
-  padding: 0.5rem 0.7rem;
-  border-radius: 8px;
-  background: var(--panel-2);
-  border: 1px solid var(--border-soft);
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
 /* ── control-plane section ──────────────────────────────────────────────── */
 
 .section-head {
@@ -1230,7 +1047,9 @@ h2 {
   font-size: 0.76rem;
 }
 
-.app-list-platform .app-row {
+/* The control plane is not one of the things being managed, so its list is
+   drawn as an aside rather than as more of the same. */
+.app-list-platform {
   background: transparent;
   border-style: dashed;
 }
@@ -1528,22 +1347,17 @@ h2 {
     overflow-wrap: anywhere;
   }
 
-  .metric-value {
-    font-size: 1.55rem;
+  .stat-v {
+    font-size: 1.15rem;
   }
 
-  .panel-body {
-    padding: 0.85rem 1rem 1rem;
-  }
-
-  /* The timestamp column was 9rem of a ~20rem screen. Level moves onto the
+  /* The timestamp column was 9rem of a ~20rem screen. Source moves onto the
      same line as the time, and the message gets the full width beneath. */
-  .log {
+  .act {
     grid-template-columns: auto 1fr;
     gap: 0.15rem 0.6rem;
-    padding: 0.35rem 1rem;
   }
-  .log .msg {
+  .act-msg {
     grid-column: 1 / -1;
   }
 
@@ -1569,35 +1383,23 @@ h2 {
   opacity: 0.8;
 }
 
-.runners {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr));
-  gap: 0.7rem;
-}
-
+/* No card around the runner: it is the only thing in its board, so a second
+   border inside the first was drawing a box around a box. Only the busy one
+   gets a tint — idle is the resting state of an ephemeral runner, and
+   colouring it would make the normal case look like an event. */
 .runner {
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--panel-2);
-  padding: 0.8rem 0.95rem;
+  min-width: 0;
 }
-/* Only the busy one is highlighted. Idle is the resting state of an ephemeral
-   runner, so colouring it would make the normal case look like an event. */
 .runner-busy {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: color-mix(in srgb, var(--accent) 6%, var(--panel-2));
+  border-left: 2px solid var(--accent);
+  padding-left: 0.6rem;
+  margin-left: -0.1rem;
 }
-
-.runner-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem 0.7rem;
-}
-.runner-head code {
-  font-size: 0.84rem;
+.runner-name {
+  display: block;
+  font-size: 0.82rem;
   overflow-wrap: anywhere;
+  color: var(--muted);
 }
 
 .runner-labels {
@@ -1638,24 +1440,93 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.runners-sub {
-  margin: 1.5rem 0 0.6rem;
-  font-size: 0.66rem;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--dim);
-  font-weight: 600;
+/* ── remove ─────────────────────────────────────────────────────────────── */
+
+/* The explanation and the control side by side rather than stacked: what is
+   NOT removed is the part worth reading, and it has to be in view at the
+   moment the name is being typed rather than scrolled past to reach the box. */
+.danger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 20rem);
+  gap: 1.5rem;
+  align-items: start;
+}
+.danger-text p {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.danger-text .board-foot {
+  margin: 0;
+}
+.danger-act {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: stretch;
+}
+.danger-act .field {
+  padding: 0;
+}
+@media (max-width: 50rem) {
+  .danger {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-.logs-activity {
-  max-height: 22rem;
+/* ── build & deploy activity ────────────────────────────────────────────── */
+
+/* Scrolls inside its own bordered box, and takes no negative margins to bleed
+   to the board's edges: a caption follows it, and margins that pull outward
+   would pull that caption up over the last rows. */
+.acts {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  max-height: 20rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--bg);
+}
+
+.act {
+  display: grid;
+  grid-template-columns: 6.5rem 3.6rem 1fr auto;
+  gap: 0.7rem;
+  align-items: baseline;
+  padding: 0.26rem 0.7rem;
+  border-top: 1px solid var(--border-soft);
+}
+.act:first-child {
+  border-top: 0;
+}
+.act time {
+  color: var(--dim);
+  white-space: nowrap;
+}
+.act-src {
+  color: var(--dim);
 }
 /* The two halves of the pipeline read differently, so they look different. */
-.log-src-build .lvl {
+.act-build .act-src {
   color: #6f9bd1;
 }
-.log-src-deploy .lvl {
+.act-msg {
+  color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* The repeat count for a folded run. Right-aligned in its own column so the
+   messages stay on one left edge. */
+.act-n {
   color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 0 0.25rem;
+  border-radius: 5px;
+  background: var(--panel-2);
 }
 
 /* ── secrets tab ────────────────────────────────────────────────────────── */
@@ -1706,22 +1577,21 @@ h2 {
   color: var(--muted);
 }
 
-/* Panels rendered as plain siblings rather than inside .panels/.settings,
-   which are grids that supply their own gap. */
-.panel-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-
 /* ── Access tab ────────────────────────────────────────────────────────────
-   Sections are plain siblings here (a metrics grid, a panel grid, a wide
-   panel), so the column supplies the gap between them the way .panel-stack
-   does for the secrets tab. */
+   The strip, the board grid and the range picker are plain siblings here, so
+   the column supplies the gap between them. */
 .access {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+}
+/* The strip and its caption carry their own margins for normal flow; here the
+   column's gap is already doing that job, so they would otherwise add up. */
+.access > .strip {
+  margin-bottom: 0;
+}
+.access > .strip-foot {
+  margin: 0;
 }
 .access-head {
   display: flex;
@@ -2166,11 +2036,20 @@ h2 {
   white-space: nowrap;
 }
 
+/* A query container, so controls inside a board lay themselves out from the
+   width they actually got rather than from the viewport's. A board's span and
+   the breakpoints above mean one viewport width gives a board anywhere from a
+   quarter of the page to all of it, so a viewport media query is answering the
+   wrong question: a multi-column control would overflow a half-width board on
+   a wide screen and stack on a full-width one on a narrow screen. Containment
+   changes no clipping here — `.board` is already overflow:hidden. */
 .board-body {
   padding: 0.85rem 0.95rem 0.95rem;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
+  container-type: inline-size;
+  container-name: board;
 }
 
 .board-sub {
@@ -2215,6 +2094,111 @@ h2 {
 .text-bad { color: var(--bad); }
 .text-warn { color: var(--warn); }
 
+/* ── stat strip ─────────────────────────────────────────────────────────── */
+
+/* One bordered strip rather than a card per number. The 1px grid gap IS the
+   divider — the container's border colour showing through — so the rule lands
+   correctly however the cells wrap, which a per-cell border-left does not. */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 1px;
+  background: var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 0.8rem;
+}
+
+.stat {
+  background: var(--panel);
+  padding: 0.7rem 0.9rem 0.75rem;
+  min-width: 0;
+  /* Every cell reserves the slot under the value, so a strip mixing cells
+     that have a sparkline with cells that have a caption — or neither — keeps
+     one baseline instead of stepping. */
+  display: grid;
+  grid-template-rows: auto auto 1rem;
+  align-content: start;
+  gap: 0.15rem;
+}
+.stat-k {
+  font-size: 0.62rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-v {
+  font-size: 1.3rem;
+  font-weight: 550;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.stat-v em {
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--dim);
+  margin-left: 0.3rem;
+}
+.stat-sub {
+  font-size: 0.7rem;
+  color: var(--dim);
+  line-height: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Reserved for a reading that is a fault — an OOM count, a down probe. If
+   every cell could take a colour the strip would be decoration. */
+.stat-bad .stat-v {
+  color: var(--bad);
+}
+.stat-warn .stat-v {
+  color: var(--warn);
+}
+.stat-ok .stat-v {
+  color: var(--ok);
+}
+
+.spark2 {
+  width: 100%;
+  height: 1rem;
+  align-self: end;
+  stroke: var(--dim);
+}
+.spark2-accent {
+  stroke: var(--accent);
+}
+.spark2-ok {
+  stroke: var(--ok);
+}
+.spark2-warn {
+  stroke: var(--warn);
+}
+.spark2-bad {
+  stroke: var(--bad);
+}
+.spark2-info {
+  stroke: #6f9bd1;
+}
+
+/* The one line of prose a strip is allowed. Dim, unboxed, and directly under
+   the numbers it qualifies: a caption in its own bordered panel competes with
+   the readings for the same glance and usually wins on area. */
+.strip-foot {
+  margin: -0.35rem 0 1.4rem;
+  color: var(--dim);
+  font-size: 0.73rem;
+  line-height: 1.5;
+}
+
 /* ── facts ──────────────────────────────────────────────────────────────── */
 
 .facts {
@@ -2244,6 +2228,38 @@ h2 {
   font-weight: 550;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
+}
+
+/* One pair per line, label left and value right — for identifiers rather than
+   quantities. Hairline separators instead of a box per row: at eight rows the
+   boxes were most of what the panel drew. */
+.facts-list {
+  display: block;
+}
+.facts-list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 0.42rem 0;
+  border-top: 1px solid var(--border-soft);
+}
+.facts-list > div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.facts-list dt {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.82rem;
+  color: var(--dim);
+  flex: none;
+}
+.facts-list dd {
+  font-size: 0.84rem;
+  font-weight: 450;
+  text-align: right;
+  min-width: 0;
 }
 
 /* ── ring ───────────────────────────────────────────────────────────────── */

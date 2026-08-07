@@ -1,6 +1,7 @@
 import { Await, createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
-import { Panel, Segmented, Toggle } from '../components/ui'
+import { Segmented, Toggle } from '../components/ui'
+import { Board, BoardGrid } from '../components/viz'
 import { RowsSkeleton } from '../components/skeleton'
 import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import type { Check, Repo } from '../lib/github-repos'
@@ -301,8 +302,8 @@ function Wizard({ options }: { options: Options }) {
 
             {nameErr !== null && <p className="banner">{nameErr}</p>}
 
-            <div className="settings">
-              <Panel title="Identity">
+            <BoardGrid>
+              <Board title="Identity" icon="✦" span={4}>
                 <Field
                   label="Name"
                   value={name}
@@ -332,9 +333,9 @@ function Wizard({ options }: { options: Options }) {
                   hint="mdi-<icon>-#<hex>, the dashboard tile convention."
                   onChange={setIcon}
                 />
-              </Panel>
+              </Board>
 
-              <Panel title="Platform">
+              <Board title="Platform" icon="◱" span={4}>
                 <Toggle
                   checked={postgres}
                   onChange={setPostgres}
@@ -359,7 +360,7 @@ function Wizard({ options }: { options: Options }) {
                   label="Prometheus scrape"
                   hint="Only once the app actually serves /metrics — otherwise it is a permanently-down target."
                 />
-                <p className="panel-note">
+                <p className="board-foot">
                   Not here, on purpose. <b>SSO</b> is a second, deliberate step on the app’s own
                   page — its client secret is generated on the box, so there is nothing to author
                   first. <b>Operator secrets</b> have no switch at all: commit a{' '}
@@ -367,9 +368,9 @@ function Wizard({ options }: { options: Options }) {
                   rebuild loads it. <b>VPN egress</b> is the one thing that still needs the flake —
                   it wants a gluetun instance to exist before anything can join its netns.
                 </p>
-              </Panel>
+              </Board>
 
-              <Panel title="Exposure">
+              <Board title="Exposure" icon="↗" span={4}>
                 <Segmented
                   value={stage}
                   onChange={setStage}
@@ -379,7 +380,7 @@ function Wizard({ options }: { options: Options }) {
                     { value: 'live', label: 'External', icon: '↗' },
                   ]}
                 />
-                <p className="panel-note">
+                <p className="board-foot">
                   {stage === 'off' ?
                     'No traefik router, no DNS, no probe — but the container still runs and still deploys.'
                   : stage === 'lab' ?
@@ -406,8 +407,8 @@ function Wizard({ options }: { options: Options }) {
                   hint="Empty uses the box's own registry, which is what CI publishes to. Set this for a fork, another registry, or a pinned digest."
                   onChange={setImage}
                 />
-              </Panel>
-            </div>
+              </Board>
+            </BoardGrid>
           </section>
 
           <section className="wizard-step">
