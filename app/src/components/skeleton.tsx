@@ -67,30 +67,6 @@ export function BoardsSkeleton({ spans = [8, 4, 6, 6] }: { spans?: number[] }) {
   )
 }
 
-/** The per-service directory under a category's own panels. */
-export function TilesSkeleton({ groups = 1, tiles = 5 }: { groups?: number; tiles?: number }) {
-  return (
-    <>
-      {Array.from({ length: groups }, (_, g) => (
-        <section key={g} className="tile-group">
-          <h2 className="tile-group-head">
-            <Bar w="9rem" h={12} />
-          </h2>
-          <div className="tile-grid">
-            {Array.from({ length: tiles }, (_, i) => (
-              <article key={i} className="tile sk-card">
-                <Bar w="55%" h={13} />
-                <Bar w="80%" h={10} />
-                <Bar w="100%" h={30} />
-              </article>
-            ))}
-          </div>
-        </section>
-      ))}
-    </>
-  )
-}
-
 /** The metric row at the top of an app detail tab. */
 export function MetricsSkeleton({ count = 4 }: { count?: number }) {
   return (

@@ -88,6 +88,17 @@ export type NixManifest = {
    * where the two disagree.
    */
   lanHosts: { ip: string; host: string }[]
+  /**
+   * Every scheduled job declared worth noticing, and HOW it is noticed.
+   *
+   * `email` means a run that FAILS sends mail; `slug` means a run that stops
+   * happening at all pages through healthchecks. They are different
+   * guarantees — a job with mail and no slug cannot report that it was never
+   * started, which is the failure a timer actually has — and this registry is
+   * the only place the pair is stated. healthchecks knows about half of them,
+   * systemd about all of them, and neither knows which was intended.
+   */
+  monitoredJobs: { unit: string; email: boolean; slug: string | null }[]
 }
 
 /**
@@ -108,6 +119,7 @@ let cachedTaken: string[] | null = null
 let cachedHosts: Record<string, string> | null = null
 let cachedSecretApps: string[] | null = null
 let cachedLanHosts: NixManifest["lanHosts"] | null = null
+let cachedJobs: NixManifest['monitoredJobs'] | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {
   const managedPath = process.env.NIX_MANIFEST_PATH
@@ -127,7 +139,8 @@ export async function readNixManifest(): Promise<NixManifest> {
     cachedTaken === null ||
     cachedHosts === null ||
     cachedSecretApps === null ||
-    cachedLanHosts === null
+    cachedLanHosts === null ||
+    cachedJobs === null
   ) {
     const parsed = JSON.parse(await readFile(managedPath, 'utf8')) as NixManifest
     cachedManaged = parsed.nixManaged
@@ -135,6 +148,7 @@ export async function readNixManifest(): Promise<NixManifest> {
     cachedHosts = parsed.webAppHosts
     cachedSecretApps = parsed.operatorSecretApps ?? []
     cachedLanHosts = parsed.lanHosts ?? []
+    cachedJobs = parsed.monitoredJobs ?? []
   }
 
   // The committed registry is NOT cached. It lives at a fixed path that
@@ -152,7 +166,13 @@ export async function readNixManifest(): Promise<NixManifest> {
     webAppHosts: cachedHosts,
     operatorSecretApps: cachedSecretApps,
     lanHosts: cachedLanHosts,
+    monitoredJobs: cachedJobs,
   }
+}
+
+/** Scheduled jobs and how each is watched. See `NixManifest.monitoredJobs`. */
+export async function monitoredJobs(): Promise<NixManifest['monitoredJobs']> {
+  return (await readNixManifest()).monitoredJobs
 }
 
 /** Apps with a tracked operator-secrets file. See `NixManifest.operatorSecretApps`. */
