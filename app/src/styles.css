@@ -97,12 +97,14 @@ h2 {
   min-height: 100vh;
 }
 
-/* The three pieces that only exist on a phone. Declared away here rather than
-   only declared into existence at the breakpoint, so a desktop never has to
-   evaluate them and nothing depends on source order to stay hidden. */
+/* The three pieces that only exist on a phone.
+   `.iconbtn.nav-close` rather than `.nav-close`: the close button wears both
+   classes, and `.iconbtn` below sets a display of its own. At equal
+   specificity the later rule wins, so the single class hid nothing — it put a
+   38px button in a 64px collapsed rail and pushed the logo off the edge. */
 .topbar,
 .scrim,
-.nav-close {
+.iconbtn.nav-close {
   display: none;
 }
 
@@ -1427,7 +1429,7 @@ h2 {
     transition-delay: 0s;
   }
 
-  .nav-close {
+  .iconbtn.nav-close {
     display: inline-flex;
   }
   /* Collapsing is meaningless for a drawer — it is already collapsed to
