@@ -205,10 +205,43 @@ export const CATEGORIES: CategorySpec[] = [
     id: 'home',
     label: 'Home',
     icon: '⌂',
-    lede: 'The household: automation, photos, files, the pantry, and who can sign in.',
-    boardSpans: [8, 4, 6, 6],
-    tileGroups: 1,
-    tabs: [],
+    lede: 'The household’s own things — what the house shares, and what one person keeps here.',
+    // Shaped to the House tab, which opens by default.
+    boardSpans: [8, 4, 4, 8],
+    // No tile directory. It held eight tiles, and the two biggest data stores
+    // on this box got four numbers and a link each — no version, no verdict on
+    // whether that version is current, and no log. Every one of them is a tab
+    // now, carrying the same name, dot and link.
+    tileGroups: 0,
+    // The rule divides WHOSE data it is. To its left, what the whole house
+    // shares: the automation, the photo library, the file sync, the pantry,
+    // and the directory of who can open any of them. To its right, what one
+    // person keeps here. It is the only axis on which Wealthfolio and
+    // Nextcloud differ — every other reading of "home" puts them together.
+    //
+    // Sign-in sits last on the shared side rather than first: it is the
+    // household's list of people, but it is the answer to a question you ask
+    // about the others, not one you open the category to see.
+    tabs: [
+      { id: 'house', label: 'House', probe: 'home-assistant', boardSpans: [8, 4, 4, 8], statBand: false },
+      { id: 'photos', label: 'Photos', probe: 'immich', boardSpans: [8, 4, 4, 8], statBand: false },
+      { id: 'files', label: 'Files', probe: 'nextcloud', boardSpans: [8, 4, 4, 4], statBand: false },
+      { id: 'pantry', label: 'Pantry', probe: 'grocy', boardSpans: [8, 4, 12], statBand: false },
+      // Pocket ID, which had a category of its own until now — see the note in
+      // components/category/idp.tsx for why it stopped deserving one.
+      { id: 'signin', label: 'Sign-in', probe: 'pocket-id', boardSpans: [6, 6, 3, 9], statBand: false },
+      // Past the rule: one person's, not the household's.
+      {
+        id: 'projects',
+        label: 'Projects',
+        probe: 'plane',
+        boardSpans: [6, 6, 12],
+        statBand: false,
+        dividerBefore: true,
+      },
+      { id: 'finance', label: 'Finance', probe: 'wealthfolio', boardSpans: [12, 12, 12], statBand: false },
+      { id: 'tools', label: 'Tools', probe: 'stirling-pdf', boardSpans: [12, 12, 12], statBand: false },
+    ],
   },
   {
     id: "gaming",
@@ -308,19 +341,12 @@ export const CATEGORIES: CategorySpec[] = [
       },
     ],
   },
-  {
-    id: 'security',
-    label: 'Security',
-    icon: '⛨',
-    lede: 'Who can sign in to this house, with what, and to which of its applications.',
-    boardSpans: [8, 4, 3, 3],
-    tileGroups: 0,
-    // One tab, and it is a tab rather than a tabless page because the things
-    // that belong beside it — what is exposed, where the secrets are, what
-    // holds a certificate — are the same subject and none of them is
-    // networking, which is where this half used to live.
-    tabs: [{ id: 'oidc', label: 'OIDC', probe: 'pocket-id', statBand: false }],
-  },
+  // No Security category. It held exactly one tab — Pocket ID — and the
+  // argument that gave it one was an argument against living on Network: an
+  // IdP is not infrastructure with a release cycle, it is the account every
+  // person in the house signs in with. True, and it does not make it a
+  // subject of its own. Beside the automation, the photos and the files it is
+  // plainly one of the household's things, so it is Home › Sign-in now.
   {
     id: "system",
     label: 'System',

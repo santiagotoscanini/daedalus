@@ -6,7 +6,6 @@ import type { MediaData } from '../lib/dashboard/categories/media'
 import type { HomeData } from '../lib/dashboard/categories/home'
 import type { MonitoringData } from '../lib/dashboard/categories/monitoring'
 import type { NetworkData } from '../lib/dashboard/categories/network'
-import type { SecurityData } from '../lib/dashboard/categories/security'
 import type { SystemData } from '../lib/dashboard/categories/system'
 import { CATEGORIES } from '../lib/dashboard/nav'
 import type { CategoryName } from '../lib/dashboard/tiles'
@@ -34,13 +33,12 @@ import type { CategoryName } from '../lib/dashboard/tiles'
 // is on screen before either request is answered.
 
 export type {
-  AiData,
+AiData,
   GamingData,
   HomeData,
   MediaData,
   MonitoringData,
   NetworkData,
-  SecurityData,
   SystemData,
 }
 
@@ -243,7 +241,6 @@ type Body =
   | { kind: 'media'; data: MediaData }
   | { kind: 'home'; data: HomeData }
   | { kind: 'network'; data: NetworkData }
-  | { kind: 'security'; data: SecurityData }
   | { kind: 'system'; data: SystemData }
   | { kind: 'monitoring'; data: MonitoringData }
   | { kind: 'gaming'; data: GamingData }
@@ -264,15 +261,11 @@ async function loadCategory(
     }
     case 'home': {
       const { loadHome } = await import('../lib/dashboard/categories/home')
-      return { kind: 'home', data: await loadHome(ctx) }
+      return { kind: 'home', data: await loadHome(tab, ctx) }
     }
     case 'network': {
       const { loadNetwork } = await import('../lib/dashboard/categories/network')
       return { kind: 'network', data: await loadNetwork(tab, ctx) }
-    }
-    case 'security': {
-      const { loadSecurity } = await import('../lib/dashboard/categories/security')
-      return { kind: 'security', data: await loadSecurity(tab, ctx) }
     }
     case 'system': {
       const { loadSystem } = await import('../lib/dashboard/categories/system')

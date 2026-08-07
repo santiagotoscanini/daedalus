@@ -1,39 +1,24 @@
-// The Security category: who can sign in, and to what.
+// Pocket ID: who can sign in to this house, and to what.
 //
-// Split out of the proxy's page, where it lived because the two share a
-// question — what can be reached, and by whom — and the routing table there
-// is the join. That is still true, and it is still where the join is drawn:
-// the proxy imports the client list from here to say which of its routes are
-// gated. What was not true is that they are one subject. traefik is
-// infrastructure with a release cycle; the IdP is the account every person in
-// this house signs in with, and its audit log is the only place on the box
-// that records a human being doing something.
+// A shared library rather than a category of its own, because two pages need
+// it and neither owns it. Home's Sign-in tab is the subject — the IdP is the
+// account every person here signs in with, and its audit log is the only place
+// on the box that records a human being doing something. The proxy's page
+// borrows the client list to say which of its routes are gated, which is one
+// column on a table about routing.
 //
-// One tab today. It is a category rather than a tab on Network because the
-// next things that belong beside it — secrets, certificates, what is exposed
-// — are not networking either.
+// It WAS a category, back when it was the second half of the proxy's page and
+// the argument was that neither half belonged to the other. That argument was
+// about traefik. Against the rest of Home — the automation, the photos, the
+// files, the pantry — this is plainly one of the household's own things: it is
+// the list of people, and of what each of them can open.
 
-import { getJson } from '../clients'
-import { versionGap, type VersionGap } from '../github'
-import { key, localDay, since } from '../format'
+import { getJson } from './clients'
+import { versionGap, type VersionGap } from './github'
+import { key, localDay, since } from './format'
 
 /** How far back the activity columns go. A column per day, as on the AI tabs. */
 const DAYS = 14
-
-export type SecurityTab = 'oidc'
-
-export type SecurityData = { tab: 'oidc' } & IdpData
-
-export async function loadSecurity(
-  tab: string,
-  ctx: { base: (app: string) => string },
-): Promise<SecurityData> {
-  // One tab, and the parameter is here so adding the second one is an edit to
-  // this switch rather than to every caller.
-  void tab
-  const base = ctx.base('pocket-id')
-  return { tab: 'oidc', ...(await loadIdp(base, idpClients(base))) }
-}
 
 /** One OIDC client, and whether anybody has actually used it. */
 type IdpClient = {
@@ -113,7 +98,7 @@ type IdpUser = {
   lastSignInAgo: string | null
 }
 
-type IdpData = {
+export type IdpData = {
   version: string | null
   gap: VersionGap
   clients: IdpClient[]
@@ -247,7 +232,7 @@ async function auditLog(base: string, sinceMs: number): Promise<{ events: AuditE
  * nobody has ever authorised is a redirect URI still trusted for an app that
  * may not exist.
  */
-async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise<IdpData> {
+export async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise<IdpData> {
   const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
   const windowStart = Date.now() - DAYS * 86400_000
   const version = process.env.POCKET_ID_VERSION || null

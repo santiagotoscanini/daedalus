@@ -33,7 +33,7 @@ import {
   promScalar,
   promScalars,
 } from './clients'
-import { DASH, bytes, key, num, text } from './format'
+import { DASH, key, num } from './format'
 
 export type Stat = { label: string; value: string }
 
@@ -69,7 +69,9 @@ export type GroupName =
   // now a tab. A tile could hold three numbers and a link, which was never
   // enough to answer either question anybody had about these — what version is
   // running, and what does the service itself say is wrong.
-  | 'Home'
+  // No 'Home' either: eight tiles, and the two biggest data stores on the box
+  // — the photo library and the file sync — got four numbers and a link each.
+  // Every one of them is a tab on the Home page now.
   | 'Monitoring'
 
 export type CategoryName =
@@ -78,7 +80,6 @@ export type CategoryName =
   | 'home'
   | 'gaming'
   | 'network'
-  | 'security'
   | 'system'
   | 'monitoring'
 
@@ -97,7 +98,6 @@ export const GROUPS: {
   tab?: string
   icon: string
 }[] = [
-  { name: 'Home', category: 'home', icon: '⌂' },
   { name: 'Monitoring', category: 'monitoring', icon: '◎' },
 ]
 
@@ -109,187 +109,6 @@ function stat(label: string, value: string): Stat {
 // ── the catalogue ──────────────────────────────────────────────────────────
 
 export const TILES: TileDef[] = [
-  // ══ Home ═════════════════════════════════════════════════════════════════
-  {
-    key: 'pocket-id',
-    name: 'Pocket ID',
-    group: 'Home',
-    description: 'OIDC provider — passkey SSO for all web UIs',
-    link: { app: 'pocket-id' },
-    gatus: 'pocket-id',
-    load: async (ctx) => {
-      const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
-      const base = ctx.base('pocket-id')
-      type Paged = { pagination?: { totalItems?: number } }
-      const [clients, users] = await Promise.all([
-        getJson<Paged>(`${base}/api/oidc/clients`, h),
-        getJson<Paged>(`${base}/api/users`, h),
-      ])
-      return {
-        stats: [
-          stat('SSO clients', num(clients?.pagination?.totalItems)),
-          stat('Users', num(users?.pagination?.totalItems)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'immich',
-    name: 'Immich',
-    group: 'Home',
-    description: 'Photo + video backup',
-    link: { app: 'immich' },
-    gatus: 'immich',
-    load: async (ctx) => {
-      const s = await getJson<{
-        photos?: number
-        videos?: number
-        usage?: number
-        usageByUser?: unknown[]
-      }>(`${ctx.base('immich')}/api/server/statistics`, {
-        headers: { 'x-api-key': key('IMMICH_API_KEY') },
-      })
-      return {
-        stats: [
-          stat('Users', num(s?.usageByUser?.length)),
-          stat('Photos', num(s?.photos)),
-          stat('Videos', num(s?.videos)),
-          // Library size, not disk free: /api/server/storage needs the
-          // `server.storage` permission this API key does not carry, and an
-          // invented denominator would be worse than the real numerator.
-          stat('Library', bytes(s?.usage)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'nextcloud',
-    name: 'Nextcloud',
-    group: 'Home',
-    description: 'Files, calendar, contacts — primary household sync',
-    link: { app: 'nextcloud' },
-    gatus: 'nextcloud',
-    load: async (ctx) => {
-      const body = await getJson<{
-        ocs?: {
-          data?: {
-            nextcloud?: {
-              system?: { freespace?: number }
-              storage?: { num_files?: number }
-              shares?: { num_shares?: number }
-            }
-            activeUsers?: { last5minutes?: number }
-          }
-        }
-      }>(`${ctx.base('nextcloud')}/ocs/v2.php/apps/serverinfo/api/v1/info?format=json`, {
-        headers: { 'NC-Token': key('NEXTCLOUD_KEY'), 'OCS-APIRequest': 'true' },
-      })
-      const nc = body?.ocs?.data?.nextcloud
-      return {
-        stats: [
-          stat('Free space', bytes(nc?.system?.freespace)),
-          stat('Active users', num(body?.ocs?.data?.activeUsers?.last5minutes)),
-          stat('Files', num(nc?.storage?.num_files)),
-          stat('Shares', num(nc?.shares?.num_shares)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'home-assistant',
-    name: 'Home Assistant',
-    group: 'Home',
-    description: 'Home automation hub',
-    // Host netns (mDNS/SSDP discovery) — :8123 is firewall-closed but reachable
-    // from a container as host.containers.internal, which is how this dials it.
-    link: { app: 'home-assistant' },
-    gatus: 'home-assistant',
-    load: async (ctx) => {
-      const states = await getJson<{ entity_id: string; state: string }[]>(
-        `${ctx.hc}:8123/api/states`,
-        { headers: { Authorization: `Bearer ${key('HASS_API_KEY')}` } },
-      )
-      if (states === null) return { stats: [] }
-      const on = (prefix: string, want: string) =>
-        states.filter((s) => s.entity_id.startsWith(prefix) && s.state === want).length
-      return {
-        stats: [
-          stat('People home', num(on('person.', 'home'))),
-          stat('Lights on', num(on('light.', 'on'))),
-          stat('Switches on', num(on('switch.', 'on'))),
-          stat('Entities', num(states.length)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'grocy',
-    name: 'Grocy',
-    group: 'Home',
-    description: 'Household inventory & chores',
-    link: { app: 'grocy' },
-    gatus: 'grocy',
-    load: async (ctx) => {
-      const v = await getJson<{
-        missing_products?: unknown[]
-        due_products?: unknown[]
-        overdue_products?: unknown[]
-        expired_products?: unknown[]
-      }>(`${ctx.base('grocy')}/api/stock/volatile?days=3`, {
-        headers: { 'GROCY-API-KEY': key('GROCY_API_KEY') },
-      })
-      return {
-        stats: [
-          stat('Missing', num(v?.missing_products?.length)),
-          stat('Due', num(v?.due_products?.length)),
-          stat('Overdue', num(v?.overdue_products?.length)),
-          stat('Expired', num(v?.expired_products?.length)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'plane',
-    name: 'Plane',
-    group: 'Home',
-    description: 'Projects, cycles and work items',
-    link: { app: 'plane' },
-    gatus: 'plane',
-    load: async (ctx) => {
-      const b = await getJson<{
-        instance?: { current_version?: string; latest_version?: string }
-      }>(`${ctx.base('plane')}/api/instances/`)
-      return {
-        stats: [
-          stat('Version', text(b?.instance?.current_version)),
-          stat('Latest', text(b?.instance?.latest_version)),
-        ],
-      }
-    },
-  },
-  {
-    key: 'wealthfolio',
-    name: 'Wealthfolio',
-    group: 'Home',
-    description: 'Personal finance',
-    link: { app: 'wealthfolio', path: '/api/v1/auth/oidc/login' },
-    gatus: 'wealthfolio',
-  },
-  {
-    key: 'stirling-pdf',
-    name: 'Stirling-PDF',
-    group: 'Home',
-    description: 'PDF toolbox (split, merge, OCR)',
-    link: { app: 'stirling-pdf' },
-    gatus: 'stirling-pdf',
-    load: async (ctx) => {
-      const b = await getJson<{ status?: string; version?: string }>(
-        `${ctx.base('stirling-pdf')}/api/v1/info/status`,
-      )
-      return { stats: [stat('Status', text(b?.status)), stat('Version', text(b?.version))] }
-    },
-  },
-
   // ══ Monitoring ═══════════════════════════════════════════════════════════
   {
     key: 'grafana',
