@@ -81,6 +81,21 @@ export type CategorySpec = {
      */
     dividerBefore?: boolean
     /**
+     * Whether this tab opens with a `ServiceHead`. Default true.
+     *
+     * Almost every tab on this dashboard does: its subject is a service, so it
+     * gets artwork, the name, the version running, the verdict on whether that
+     * version is current, and the link you came to click. The exceptions are
+     * the tabs whose subject is not a service at all — the System layers, and
+     * Network's General, which is the wire.
+     *
+     * Declared here rather than left implicit in the view, because the
+     * SKELETON has to know it before the data exists. A page that streams a
+     * header in above a grid that was already drawn pushes the whole grid down
+     * at the moment you have started reading it.
+     */
+    head?: boolean
+    /**
      * A COMPUTED status, for a tab gatus cannot probe.
      *
      * `probe` covers anything that answers HTTP. A VPN egress tunnel answers
@@ -269,7 +284,16 @@ export const CATEGORIES: CategorySpec[] = [
       // this page meaningless are the router being unreachable and the
       // internet being down, and both are measured every minute, so the dot
       // is computed from them instead of left permanently grey.
-      { id: 'general', label: 'General', boardSpans: [8, 4, 4, 8], statBand: false, health: 'uplink' },
+      // The one tab in this category with no service head: its subject is the
+      // cable, which has no version and nothing to open.
+      {
+        id: 'general',
+        label: 'General',
+        boardSpans: [8, 4, 4, 8],
+        statBand: false,
+        head: false,
+        health: 'uplink',
+      },
       // Three ways in — WireGuard, the Cloudflare tunnel, and the address
       // itself — chosen by a switch inside the page. The probe is wg-easy's
       // because it is the only one of the three gatus can check.
@@ -346,20 +370,28 @@ export const CATEGORIES: CategorySpec[] = [
     // The rule separates the state of the machine NOW from what outlives it.
     // Everything left of it is gone the moment the box is; Backups is the only
     // tab here answering a question about tomorrow.
+    //
+    // `head: false` on all but one, and it is the same argument as the dots:
+    // these are layers of a machine, and a header saying "version 6.12.93,
+    // current, Open ↗" is a claim about a service that is not there. Database
+    // is the exception and a real one — a tab whose subject is postgres, which
+    // has a version, a release cycle and security fixes in its minors like any
+    // other service here.
     tabs: [
-      { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4], statBand: false },
-      { id: 'memory', label: 'Memory', boardSpans: [8, 4, 4, 8], statBand: false },
+      { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4], statBand: false, head: false },
+      { id: 'memory', label: 'Memory', boardSpans: [8, 4, 4, 8], statBand: false, head: false },
       // Physical, then logical. SMART and throughput belong to a device;
       // capacity and snapshots belong to a pool, and one page holding both
       // was the same paragraph answering two questions.
-      { id: 'disks', label: 'Disks', boardSpans: [6, 6, 12], statBand: false },
-      { id: 'pools', label: 'Pools', boardSpans: [6, 6, 12], statBand: false },
+      { id: 'disks', label: 'Disks', boardSpans: [6, 6, 12], statBand: false, head: false },
+      { id: 'pools', label: 'Pools', boardSpans: [6, 6, 12], statBand: false, head: false },
       { id: 'database', label: 'Database', boardSpans: [8, 4, 12], statBand: false },
       {
         id: 'backups',
         label: 'Backups',
         boardSpans: [8, 4, 8, 4],
         statBand: false,
+        head: false,
         dividerBefore: true,
       },
     ],
@@ -381,6 +413,12 @@ export const CATEGORIES: CategorySpec[] = [
     //
     // Probed like any other service — these are containers with hostnames, so
     // unlike System the dots here are real. Alerts wears Grafana's.
+    //
+    // And read like any other service, which they were not: these five are
+    // five pinned images with five release cycles, and the pages carried a log
+    // and nothing else — no artwork, no version, no verdict, no notes. The
+    // monitoring stack was the one part of this box whose own upgrades were
+    // invisible from the dashboard that watches everything else's.
     tabs: [
       { id: 'alerts', label: 'Alerts', probe: 'grafana', boardSpans: [8, 4, 4, 8], statBand: false },
       { id: 'probes', label: 'Probes', probe: 'gatus', boardSpans: [8, 4, 4, 12], statBand: false },

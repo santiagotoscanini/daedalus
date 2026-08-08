@@ -19,6 +19,22 @@
 // Loki is ingesting; gatus probes from outside and knows nothing about either.
 // The one thing they share is that when one stops, the others keep looking
 // fine — which is exactly why they should not share a scroll.
+//
+// ── these are services, and used not to be read as any ────────────────────
+//
+// Every tab here carried a log and nothing else: no artwork, no version, no
+// verdict on whether that version is current, no release notes. That was the
+// odd one out on this dashboard — Media, Home, AI, Gaming and Network all open
+// with a service head and carry a changelog — and it was odd in the direction
+// that matters least defensibly, because these five ARE five pinned images
+// with five release cycles. The monitoring stack was the one part of this box
+// whose own upgrades were invisible from the dashboard that watches
+// everything else's.
+//
+// Three of them report a version about themselves and two do not. That
+// difference is carried through to the page rather than smoothed over: a
+// number the running process stated is a measurement, and a number read off
+// the tag the flake pins is only true while the tag names a release.
 
 import {
   basicAuth,
@@ -33,8 +49,24 @@ import {
   promVector,
 } from '../clients'
 import { key } from '../format'
+import { versionGap, type VersionGap } from '../github'
+import { imageVersion, type RunningVersion } from '../images'
 
 type Ctx = { base: (app: string) => string }
+
+/**
+ * healthchecks numbers its releases with two segments — `v4.2`, `v4.1.1` — so
+ * the default three-segment pattern matches none of them and would report a
+ * project with 60 published releases as having none at all.
+ */
+const TWO_OR_THREE = /^v?(\d+\.\d+(?:\.\d+)?)$/
+
+/**
+ * Prometheus's own HTTP API, for the two things PromQL cannot answer: which
+ * targets are failing and WHY, and what version the binary is. It publishes no
+ * host port, so this is container DNS on the monitoring bridge.
+ */
+const promBase = () => process.env.PROMETHEUS_URL ?? 'http://prometheus:9090'
 
 export type MonitoringData =
   | ({ tab: 'alerts' } & AlertsData)
@@ -70,6 +102,7 @@ type AlertsData = {
   grafana: { dashboards: number | null; datasources: number | null; version: string | null }
   /** Where a firing alert actually goes. */
   delivery: { contactPoints: number | null; mail: boolean }
+  gap: VersionGap
 }
 
 type GrafanaRule = {
@@ -108,7 +141,14 @@ async function loadAlerts(): Promise<AlertsData> {
   const byFolder = new Map<string, number>()
   for (const { folder } of flat) byFolder.set(folder, (byFolder.get(folder) ?? 0) + 1)
 
+  // sameMajor, because Grafana maintains several release lines at once and
+  // publishes them interleaved by date: 13.1.3, then 13.0.6, then 12.4.8. A box
+  // on 13.x compared against the flat list is told it is behind a 12.x patch,
+  // which is not an upgrade in any sense.
+  const gap = await versionGap('grafana/grafana', health?.version ?? null, { sameMajor: true })
+
   return {
+    gap,
     rules: body === null ? null : flat.length,
     firing: body === null ? null : flat.filter((r) => r.rule.state === 'firing').length,
     pending: body === null ? null : flat.filter((r) => r.rule.state === 'pending').length,
@@ -148,10 +188,20 @@ type ProbesData = {
   slowest: { label: string; value: number; display: string }[]
   /** Soonest certificate expiry, and which hostname it belongs to. */
   cert: { days: number | null; host: string | null }
+  /**
+   * From the image, because gatus serves no version anywhere.
+   *
+   * `/api/v1/config` is the only unauthenticated endpoint it publishes and it
+   * answers with three booleans about the login form. So the pin is the whole
+   * answer here, and the page says so rather than presenting it as a reading.
+   */
+  running: RunningVersion
+  gap: VersionGap
 }
 
 async function loadProbes(): Promise<ProbesData> {
-  const [totals, current, worst, slowest, certs] = await Promise.all([
+  const running = await imageVersion('gatus')
+  const [totals, current, worst, slowest, certs, gap] = await Promise.all([
     promScalars({
       up: 'count(gatus_results_endpoint_success == 1) or vector(0)',
       down: 'count(gatus_results_endpoint_success == 0) or vector(0)',
@@ -161,11 +211,14 @@ async function loadProbes(): Promise<ProbesData> {
     promVector('bottomk(8, 100 * avg_over_time(gatus_results_endpoint_success[7d]))'),
     promBars('topk(8, gatus_results_duration_seconds)', 'name'),
     promVector('bottomk(1, gatus_results_certificate_expiration_seconds)'),
+    versionGap('TwiN/gatus', running.version),
   ])
 
   const soonest = certs[0]
 
   return {
+    running,
+    gap,
     up: totals.up,
     down: totals.down,
     uptime24h: totals.uptime,
@@ -198,10 +251,13 @@ type MetricsData = {
   slowestScrapes: { label: string; value: number; display: string }[]
   /** How much of the retention window is actually in the TSDB. */
   retention: { days: number | null; oldestDays: number | null }
+  /** What the running binary says it is, from `/api/v1/status/buildinfo`. */
+  version: string | null
+  gap: VersionGap
 }
 
 async function loadMetrics(): Promise<MetricsData> {
-  const [targets, tsdb, seriesTrend, slowestScrapes, oldest] = await Promise.all([
+  const [targets, tsdb, seriesTrend, slowestScrapes, oldest, build] = await Promise.all([
     loadTargets(),
     promScalars({
       series: 'prometheus_tsdb_head_series',
@@ -214,9 +270,18 @@ async function loadMetrics(): Promise<MetricsData> {
     promSeries('prometheus_tsdb_head_series', 7 * 24 * 60, 3600),
     promBars('topk(8, scrape_duration_seconds)', 'job'),
     promScalar('prometheus_tsdb_lowest_timestamp_seconds'),
+    getJson<{ data?: { version?: string } }>(`${promBase()}/api/v1/status/buildinfo`),
   ])
 
+  const version = build?.data?.version ?? null
+
   return {
+    version,
+    // No sameMajor. Prometheus also maintains an LTS line — v3.5.x releases
+    // land between the 3.13.x ones — but both are major 3, so the filter would
+    // not touch them; what keeps them out is that they sort BELOW what is
+    // running and so are simply not "behind".
+    gap: await versionGap('prometheus/prometheus', version),
     targetsUp: targets.up,
     targetsDown: targets.down,
     down: targets.list,
@@ -258,7 +323,7 @@ async function loadTargets(): Promise<{
         scrapePool?: string
       }[]
     }
-  }>(`${process.env.PROMETHEUS_URL ?? 'http://prometheus:9090'}/api/v1/targets?state=any`)
+  }>(`${promBase()}/api/v1/targets?state=any`)
 
   const targets = body?.data?.activeTargets
   if (targets === undefined) return { up: null, down: null, list: [] }
@@ -288,15 +353,40 @@ type LogsData = {
   byStack: { label: string; value: number }[]
   /** Containers whose lines land under no registered stack. */
   unregistered: number | null
+  /**
+   * Two versions, because this tab has two subjects.
+   *
+   * Loki stores and answers; alloy tails journald and ships. They are separate
+   * projects on separate release cycles, and the usual failure — lines stop
+   * arriving — is as likely to be one as the other. Naming only the store
+   * would leave the half that actually touches the journal unversioned.
+   */
+  loki: { version: string | null; gap: VersionGap }
+  alloy: { running: RunningVersion; gap: VersionGap }
 }
 
 function loadLogVolume(): Promise<number | null> {
   return lokiScalar('sum(count_over_time({level=~".+"}[1h])) or vector(0)')
 }
 
+/** Loki's own base URL — bridge-only, like prometheus. */
+const lokiBase = () => process.env.LOKI_URL ?? 'http://loki:3100'
+
 async function loadLogs(): Promise<LogsData> {
-  const [lines1h, ingestRate, byLevel, volumeHistory, errorHistory, noisiest, byStack, adhoc] =
-    await Promise.all([
+  const alloyRunning = await imageVersion('alloy')
+
+  const [
+    lines1h,
+    ingestRate,
+    byLevel,
+    volumeHistory,
+    errorHistory,
+    noisiest,
+    byStack,
+    adhoc,
+    lokiBuild,
+    alloyGap,
+  ] = await Promise.all([
       loadLogVolume(),
       promScalar('sum(rate(loki_distributor_bytes_received_total[10m]))'),
       lokiVector('sum by (level) (count_over_time({level=~".+"}[1h]))', 'level'),
@@ -305,9 +395,21 @@ async function loadLogs(): Promise<LogsData> {
       lokiVector('topk(8, sum by (container) (count_over_time({level="error"}[24h])))', 'container'),
       lokiVector('topk(10, sum by (stack) (count_over_time({stack=~".+"}[24h])))', 'stack'),
       lokiScalar('sum(count_over_time({stack="adhoc"}[24h])) or vector(0)'),
+      getJson<{ version?: string }>(`${lokiBase()}/loki/api/v1/status/buildinfo`),
+      versionGap('grafana/alloy', alloyRunning.version),
     ])
 
+  const lokiVersion = lokiBuild?.version ?? null
+
   return {
+    loki: {
+      version: lokiVersion,
+      // Same interleaved release lines as Grafana's own repo — 3.7.x and
+      // 3.6.x are cut alternately — but both share a major, so sameMajor
+      // buys nothing here and cmp() orders them correctly on its own.
+      gap: await versionGap('grafana/loki', lokiVersion),
+    },
+    alloy: { running: alloyRunning, gap: alloyGap },
     lines1h,
     ingestRate,
     byLevel,
@@ -361,6 +463,9 @@ type JobsData = {
   orphaned: string[]
   /** Watched by mail only — cannot report never having run. */
   emailOnly: number
+  /** From the image: healthchecks' API is about checks, not about itself. */
+  running: RunningVersion
+  gap: VersionGap
 }
 
 type HcCheck = {
@@ -374,12 +479,14 @@ type HcCheck = {
 
 async function loadJobs(ctx: Ctx): Promise<JobsData> {
   const { monitoredJobs } = await import('../../nix-manifest')
+  const running = await imageVersion('healthchecks')
 
-  const [body, registry] = await Promise.all([
+  const [body, registry, gap] = await Promise.all([
     getJson<{ checks?: HcCheck[] }>(`${ctx.base('healthchecks')}/api/v1/checks/`, {
       headers: { 'X-Api-Key': key('HEALTHCHECKS_API_KEY') },
     }),
     monitoredJobs(),
+    versionGap('healthchecks/healthchecks', running.version, { tag: TWO_OR_THREE }),
   ])
 
   const now = Date.now()
@@ -412,6 +519,8 @@ async function loadJobs(ctx: Ctx): Promise<JobsData> {
     .sort((a, b) => Number(b.slug !== null) - Number(a.slug !== null) || a.unit.localeCompare(b.unit))
 
   return {
+    running,
+    gap,
     summary:
       checks === undefined ?
         null

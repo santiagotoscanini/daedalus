@@ -7,12 +7,11 @@ import { useRouter } from '@tanstack/react-router'
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../viz'
 import { GrafanaLogs, LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
-import { LinkRow, ServiceHead, type CompareRow } from '../service-head'
+import { latestRow, LinkRow, ServiceHead, verdictOf, type CompareRow } from '../service-head'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
 import { compact, DASH, ms, num, pct, until } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
 import type { AiData } from '../../server/category'
-import type { Tone } from '../viz'
 
 // The AI pages — one per service, chosen by the sub-tab.
 //
@@ -42,31 +41,17 @@ export function AiView({ data }: { data: AiData }) {
 }
 
 /**
- * The version verdict, from the release gap.
+ * The working, paired with the PIN rather than with the running version.
  *
- * One function rather than four copies because the phrasing is the argument:
- * "3 behind" is a fact you can act on, "update available" is a nag, and
- * "unknown" is what to say when GitHub would not answer rather than quietly
- * claiming to be current.
+ * The one place this dashboard departs from the shared `compareOf`, and on
+ * purpose: on these four the running number and the pin are different facts.
+ * Lemonade is installed on Windows and is in no flake at all; LiteLLM and Open
+ * WebUI are digests pinned against a moving tag. "Running" would restate the
+ * number already sitting two centimetres to the left; "pinned by" is the thing
+ * you would have to go and edit.
  */
-function verdictOf(gap: VersionGap): { label: string; tone: Tone } {
-  if (gap.installed === null || gap.latest === null) return { label: 'unknown', tone: 'muted' }
-  if (gap.behind.length === 0) return { label: 'current', tone: 'ok' }
-  return { label: `${String(gap.behind.length)} behind`, tone: 'warn' }
-}
-
 function compareOf(gap: VersionGap, note: string): CompareRow[] {
-  return [
-    {
-      k: 'Latest',
-      v: gap.latest,
-      note:
-        gap.latest === null ? 'GitHub did not answer'
-        : gap.behind.length === 0 ? 'this is what is running'
-        : `${String(gap.behind.length)} release${gap.behind.length === 1 ? '' : 's'} between them`,
-    },
-    { k: 'Pinned by', v: null, note },
-  ]
+  return [latestRow(gap), { k: 'Pinned by', v: null, note }]
 }
 
 // `ReleaseBoard` is gone: it was `Changelog` with one of its two shapes, and

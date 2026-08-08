@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Chip, type Tone } from './viz'
 import { DASH } from '../lib/dashboard/format'
 import type { VersionGap } from '../lib/dashboard/github'
+import type { RunningVersion } from '../lib/dashboard/images'
 
 // The header a page gets when its subject is one identifiable SERVICE.
 //
@@ -111,6 +112,85 @@ export function verdictOf(gap: VersionGap): { label: string; tone: Tone } {
   if (gap.installed === null || gap.latest === null) return { label: 'unknown', tone: 'muted' }
   if (gap.behind.length === 0) return { label: 'current', tone: 'ok' }
   return { label: `${String(gap.behind.length)} behind`, tone: 'warn' }
+}
+
+/**
+ * The upstream half of the working: what is current, and how far away it is.
+ *
+ * Split out because the OTHER half is not the same question everywhere. Most
+ * pages pair it with the running version and say where that reading came from;
+ * the AI tabs pair it with what the flake PINS, because on those the running
+ * number and the pin are genuinely different facts. Sharing this row is what
+ * stops two tabs from wording "3 releases between them" differently.
+ *
+ * Three cases, not two. Nothing pending does NOT imply the two numbers agree:
+ * an image is often built from a git tag days before the release note for it
+ * is published — healthchecks runs 4.3 against a newest release of 4.2 — and
+ * printing "this is what is running" beside a different number is the one
+ * thing a version panel must never do.
+ */
+export function latestRow(gap: VersionGap): CompareRow {
+  const ahead = gap.installed !== null && gap.installed !== gap.latest
+
+  return {
+    k: 'Latest',
+    v: gap.latest,
+    note:
+      gap.latest === null ? 'GitHub did not answer'
+      : gap.behind.length > 0 ?
+        `${String(gap.behind.length)} release${gap.behind.length === 1 ? '' : 's'} between them`
+      : ahead ? 'the newest published release — this box is on a tag ahead of it'
+      : 'this is what is running',
+  }
+}
+
+/**
+ * The working behind a version verdict, shown on hover.
+ *
+ * `note` says where the running number came from, which is what decides how
+ * much the verdict is worth: a version the service reported about itself is a
+ * measurement, one read off the image is a claim the publisher made.
+ */
+export function compareOf(gap: VersionGap, note: string): CompareRow[] {
+  return [latestRow(gap), { k: 'Running', v: gap.installed, note }]
+}
+
+/**
+ * Where a running version came from, in the four words the header has room for.
+ *
+ * Not decoration: the three sources carry different weight. A version the
+ * service reported about itself is a measurement. One read off the tag the
+ * flake pins is reproducible from git but only true while the tag names a
+ * release. One read off the image's OCI label is a claim the publisher made
+ * about an artefact that a re-pull could silently replace — which is exactly
+ * the case for every service pinned to a moving tag, and the reason those
+ * pages used to say nothing at all.
+ */
+export const SOURCE_NOTE: Record<RunningVersion['source'], string> = {
+  pin: 'from the tag the flake pins',
+  label: 'from the image’s own label',
+  unknown: 'unknown — the pin names a channel',
+}
+
+/**
+ * The button every service head carries.
+ *
+ * `host` is the PUBLISHED label, not the webApp key — several differ
+ * (`home-assistant` is served at `homeassistant`, `pocket-id` at `id`,
+ * `open-webui` at `chat`) and deriving one from the other is how a dashboard
+ * grows links that 404.
+ */
+export function Open({ name, host }: { name: string; host: string }) {
+  return (
+    <a
+      className="btn btn-primary"
+      href={`https://${host}.toscanini.me`}
+      target="_blank"
+      rel="noreferrer"
+    >
+      Open {name} ↗
+    </a>
+  )
 }
 
 /** A row of related links, for the ones worth one click but not a button. */

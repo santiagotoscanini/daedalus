@@ -12,10 +12,8 @@ import {
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'
 import { IdpView } from './idp'
-import { ServiceHead, verdictOf, type CompareRow } from '../service-head'
+import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
 import { DASH, bytes, num, pct } from '../../lib/dashboard/format'
-import type { VersionGap } from '../../lib/dashboard/github'
-import type { RunningVersion } from '../../lib/dashboard/images'
 import type { HomeData } from '../../server/category'
 
 // The Home pages — a tab per household subject.
@@ -47,55 +45,6 @@ export function HomeView({ data }: { data: HomeData }) {
     case 'tools':
       return <ToolsView d={data} />
   }
-}
-
-/* ── shared ───────────────────────────────────────────────────────────── */
-
-/**
- * The working behind a version verdict, shown on hover.
- *
- * `note` says where the running number came from, which is what decides how
- * much the verdict is worth: a version the service reported about itself is a
- * measurement, one read off the image is a claim the publisher made.
- */
-function compareOf(gap: VersionGap, note: string): CompareRow[] {
-  return [
-    {
-      k: 'Latest',
-      v: gap.latest,
-      note:
-        gap.latest === null ? 'GitHub did not answer'
-        : gap.behind.length === 0 ? 'this is what is running'
-        : `${String(gap.behind.length)} release${gap.behind.length === 1 ? '' : 's'} between them`,
-    },
-    { k: 'Running', v: gap.installed, note },
-  ]
-}
-
-const SOURCE_NOTE: Record<RunningVersion['source'], string> = {
-  pin: 'from the tag the flake pins',
-  label: 'from the image’s own label',
-  unknown: 'unknown — the pin names a channel',
-}
-
-/**
- * The button every service head carries.
- *
- * `host` is the published label, NOT the webApp key — two of the eight differ
- * (`home-assistant` is served at `homeassistant`, `pocket-id` at `id`) and
- * deriving one from the other is how a dashboard grows links that 404.
- */
-function Open({ name, host }: { name: string; host: string }) {
-  return (
-    <a
-      className="btn btn-primary"
-      href={`https://${host}.toscanini.me`}
-      target="_blank"
-      rel="noreferrer"
-    >
-      Open {name} ↗
-    </a>
-  )
 }
 
 /* ── House: Home Assistant ────────────────────────────────────────────── */

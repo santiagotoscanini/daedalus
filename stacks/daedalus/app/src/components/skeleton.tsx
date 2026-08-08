@@ -26,6 +26,32 @@ export function Bar({ w = '100%', h = 12 }: { w?: string; h?: number }) {
   return <span className="sk" style={{ width: w, height: h }} />
 }
 
+/**
+ * The service header: artwork, name, version, lede, and the button.
+ *
+ * Reserved rather than left to arrive, for the first rule above. Nearly every
+ * tab on this dashboard opens with a `ServiceHead`, and without a placeholder
+ * the whole board grid renders at the top of the page and is then pushed down
+ * by ~80px the moment the loader resolves — at exactly the moment you have
+ * started reading the first board.
+ *
+ * Which tabs get one is declared on the tab (`CategorySpec.tabs[].head`), not
+ * guessed here: the placeholder has to know before the data exists, and the
+ * System layers genuinely have no service to head.
+ */
+export function ServiceHeadSkeleton() {
+  return (
+    <div className="svc-head">
+      <span className="sk svc-logo" />
+      <div className="sk-ident">
+        <Bar w="22%" h={18} />
+        <Bar w="34%" h={11} />
+        <Bar w="72%" h={12} />
+      </div>
+    </div>
+  )
+}
+
 export function StatBandSkeleton({ count = 4 }: { count?: number }) {
   return (
     <div className="statband">

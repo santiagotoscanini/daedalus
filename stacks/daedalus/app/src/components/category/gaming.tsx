@@ -1,5 +1,5 @@
 import { Board, BoardGrid, Chip, Facts } from '../viz'
-import { GrafanaLogs } from '../logs'
+import { LogBoard } from '../logs'
 import { ReleaseNotes, UpgradeChain } from '../release-notes'
 import { ServiceHead } from '../service-head'
 import type { GamingData } from '../../server/category'
@@ -167,9 +167,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
         {/* Grafana itself rather than a log viewer of our own — see the note
             in components/logs.tsx and stacks/monitoring, which already allows
             this exact frame-ancestor. */}
-        <Board title="Logs" icon="≡" span={12}>
-          <GrafanaLogs source={{ container: 'factorio' }} title="Factorio logs" />
-        </Board>
+        <LogBoard source={{ container: 'factorio' }} title="Factorio logs" />
       </BoardGrid>
     </>
   )
