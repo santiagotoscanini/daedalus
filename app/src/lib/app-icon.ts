@@ -19,8 +19,11 @@
 //                       IdP's HTML, which `looksLikeImage` is what rejects.
 //
 // An app that answers on neither renders a monogram in the UI. That is a real
-// state, not a failure — ipcrawl is in gluetun's netns (no container address)
-// and its /favicon.ico is a 1×1 placeholder that exists to be a health probe.
+// state, not a failure. It is also why a forward-auth'd app has to name its
+// icon paths in `auth.bypassRule` — Argus (the app keyed `ipcrawl`) reaches
+// here only through traefik, since it lives in gluetun's netns and has no
+// container address, so without the bypass every path below answers with the
+// IdP's HTML and the app renders as a monogram.
 
 import { Buffer } from 'node:buffer'
 
