@@ -123,25 +123,35 @@ in
   };
 
   # *arr databases on the shared app-db cluster: one role per app, main +
-  # log database each (the *arrs keep logs in a separate db). The apps
-  # dial host.containers.internal:5433 (= 169.254.1.2, the pasta host
-  # address; plain-TCP host port on pg) since the gluetun netns can't join
-  # app-db-net; connection settings live in each app's config.xml (mutable
-  # state, not in the rebuild trail).
+  # log database each (the *arrs keep logs in a separate db).
+  #
+  # `reach = "hostPort"` because these share gluetun's netns, which has no
+  # bridge interface, so the container DNS name `pg` does not resolve there —
+  # they dial the plain-TCP host port instead. Saying it here is what makes
+  # the generated DATABASE_URL true for them; left at the "bridge" default it
+  # named a host they cannot reach, which was harmless only because the *arrs
+  # read config.xml (mutable state, not in the rebuild trail) rather than the
+  # env file, and misleading to anyone who looked.
   fleet.appDatabases = {
     sonarr = {
       extraDatabases = [ "sonarr_log" ];
       consumers = [ "sonarr" ];
+      reach = "hostPort";
     };
     radarr = {
       extraDatabases = [ "radarr_log" ];
       consumers = [ "radarr" ];
+      reach = "hostPort";
     };
     prowlarr = {
       extraDatabases = [ "prowlarr_log" ];
       consumers = [ "prowlarr" ];
+      reach = "hostPort";
     };
-    bazarr.consumers = [ "bazarr" ];
+    bazarr = {
+      consumers = [ "bazarr" ];
+      reach = "hostPort";
+    };
   };
 
   # Netns tenants have no bridge (`[ ]`, which still earns the Type=oneshot
@@ -250,12 +260,17 @@ in
       "/s2/tv/media:/data/media"
     ];
 
-    # Database on the shared app-db cluster (bazarr reads POSTGRES_*
-    # env natively; POSTGRES_PASSWORD rides the bootstrap env file).
+    # Database on the shared app-db cluster. bazarr reads POSTGRES_* natively
+    # but wants its own spellings (_USERNAME/_DATABASE, not the _USER/_DB the
+    # bootstrap file emits), so those two are named here; the password rides
+    # the bootstrap env file. Host and port are READ from the registry rather
+    # than restated — they are decided by `reach` above, and a second copy
+    # here is a copy that can disagree with the connection string the
+    # bootstrap writes.
     environment = {
       POSTGRES_ENABLED = "true";
-      POSTGRES_HOST = "host.containers.internal";
-      POSTGRES_PORT = "5433";
+      POSTGRES_HOST = config.fleet.appDatabases.bazarr.dbHost;
+      POSTGRES_PORT = toString config.fleet.appDatabases.bazarr.dbPort;
       POSTGRES_DATABASE = "bazarr";
       POSTGRES_USERNAME = "bazarr";
     };
