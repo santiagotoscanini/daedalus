@@ -16,6 +16,33 @@
   ...
 }:
 
+let
+  # Script body lives at assets/autoupgrade.sh (pure Bash, shellcheckable
+  # standalone). This wrapper sets the two parameters it expects as env vars,
+  # then concatenates the body so writeShellApplication runs it all in one
+  # shell with shellcheck across the whole. Same shape as
+  # cloudflared-route-sync and the app-db bootstrap.
+  #
+  # runtimeInputs is what lets the body call `git`/`ssh`/`setpriv`/`flock` by
+  # name instead of interpolating store paths into it — which is what made the
+  # old inline version unreadable and un-lintable.
+  upgradeScript = pkgs.writeShellApplication {
+    name = "flake-autoupgrade";
+    runtimeInputs = [
+      pkgs.git
+      pkgs.openssh
+      pkgs.util-linux
+      pkgs.coreutils
+    ];
+    text = ''
+      REBUILD_LOCK=${lib.escapeShellArg config.fleet.rebuildLock}
+      GITHUB_SSH_KEY=${lib.escapeShellArg config.sops.secrets."github-ssh-key".path}
+
+      ${builtins.readFile ./assets/autoupgrade.sh}
+    '';
+  };
+in
+
 {
   # The one lock every rebuild takes.
   #
@@ -60,47 +87,10 @@
       "network-online.target"
       "pihole-ready.service"
     ];
-    serviceConfig.Type = "oneshot";
-    # System nix (not pkgs.nix): the running nix honors /etc/gitconfig
-    # safe.directory for the santiago-owned repo; a mismatched pkgs.nix
-    # trips the libgit2 ownership check and the unit fails.
-    path = [ pkgs.git ];
-    # The repo is santiago-owned and builds go through the nix daemon,
-    # so only `nixos-rebuild boot` needs root: the lock update, commit,
-    # and push all run as santiago via setpriv (no PAM session,
-    # matching stacks/apps) — .git never grows root-owned objects.
-    # Offline must not fail the upgrade: the lock is already committed
-    # locally, so a failed push is swallowed and the next run carries
-    # it forward.
-    script = ''
-      cd /etc/nixos
-      as_santiago() {
-        ${pkgs.util-linux}/bin/setpriv --reuid santiago --regid users --init-groups \
-          ${pkgs.coreutils}/bin/env HOME=/home/santiago "$@"
-      }
-
-      # Serialise against daedalus's apply (fleet.rebuildLock). Waits rather
-      # than failing: this is a weekly unattended job with no one watching, and
-      # an apply finishes in minutes. If it somehow cannot get the lock in 30
-      # minutes, skip this run entirely — the timer is Persistent and next
-      # week's run carries the update forward, which is much better than
-      # rebuilding on top of someone else's half-applied change.
-      exec 9>${lib.escapeShellArg config.fleet.rebuildLock}
-      if ! ${pkgs.util-linux}/bin/flock -w 1800 9; then
-        echo "flake-autoupgrade: another rebuild holds ${config.fleet.rebuildLock}; skipping this run"
-        exit 0
-      fi
-
-      as_santiago /run/current-system/sw/bin/nix flake update --commit-lock-file
-      /run/current-system/sw/bin/nixos-rebuild boot --flake /etc/nixos
-
-      as_santiago \
-        ${pkgs.coreutils}/bin/env GIT_SSH_COMMAND="${pkgs.openssh}/bin/ssh -i ${
-          config.sops.secrets."github-ssh-key".path
-        } -o BatchMode=yes -o IdentitiesOnly=yes" \
-        ${pkgs.git}/bin/git push origin main \
-        || echo "flake-autoupgrade: git push failed (offline?); lock committed locally, retrying next run"
-    '';
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = lib.getExe upgradeScript;
+    };
   };
 
   config.systemd.timers.flake-autoupgrade = {
