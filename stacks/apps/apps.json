@@ -9,7 +9,6 @@
       "storage": false,
       "litellm": false,
       "prometheus": false,
-      "operatorSecrets": false,
       "image": null,
       "hostname": null,
       "egress": null,
@@ -32,11 +31,10 @@
     },
     "argus": {
       "stage": "lab",
-      "postgres": false,
+      "postgres": true,
       "storage": true,
       "litellm": false,
       "prometheus": false,
-      "operatorSecrets": true,
       "image": null,
       "hostname": null,
       "egress": {
@@ -103,7 +101,6 @@
       "storage": false,
       "litellm": true,
       "prometheus": false,
-      "operatorSecrets": true,
       "image": null,
       "hostname": null,
       "egress": null,
