@@ -45,6 +45,25 @@ fail() {
   exit 1
 }
 
+# What to show the operator when a rebuild fails.
+#
+# MUST be captured BEFORE rollback() runs. rollback appends its own
+# `nixos-rebuild switch` to this same log, and that one succeeds — so a tail
+# taken afterwards shows the rollback finishing with "Done. The new
+# configuration is /nix/store/…" and the real error scrolled out of the
+# window. That is exactly what happened to the argus/postgres apply: the panel
+# reported a failure whose text read like a success, and the assertion that
+# actually stopped it was 14 kB earlier in the file.
+#
+# The `--sdnotify=conmon` eval warnings are dropped for the same reason: there
+# is one per rootless container (~40 of them, two lines each), they are
+# cosmetic — see the note in platform/podman.nix — and left in they fill the
+# whole window on their own.
+errtail() {
+  grep -vE '^(evaluation warning: Podman container|[[:space:]]+with `--sdnotify=conmon)' "$LOGFILE" |
+    tail -c 1200
+}
+
 [ -f "$REQ" ] || exit 0
 
 REQ_ID="$(jq -r '.id // ""' "$REQ")"
@@ -158,8 +177,9 @@ write_status running building ""
 : >"$LOGFILE"
 chown santiago:users "$LOGFILE"
 if ! nixos-rebuild build --flake "$FLAKE#$HOSTNAME" >>"$LOGFILE" 2>&1; then
+  build_error="$(errtail)"
   rollback
-  fail building "$(tail -c 1200 "$LOGFILE")"
+  fail building "$build_error"
 fi
 
 # --- switch ---------------------------------------------------------------
@@ -175,8 +195,9 @@ if ! nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" >>"$LOGFILE" 2>&1; then
   echo "switch failed once — retrying in 20s before rolling back" >>"$LOGFILE"
   sleep 20
   if ! nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" >>"$LOGFILE" 2>&1; then
+    switch_error="$(errtail)"
     rollback
-    fail switching "$(tail -c 1200 "$LOGFILE")"
+    fail switching "$switch_error"
   fi
   echo "switch succeeded on retry (first failure was transient)" >>"$LOGFILE"
 fi
