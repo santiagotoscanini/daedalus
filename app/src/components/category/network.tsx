@@ -12,7 +12,7 @@ import {
   Pulse,
   Trend,
 } from '../viz'
-import { GrafanaLogs, LogDetails } from '../logs'
+import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../service-head'
 import { Segmented } from '../ui'
@@ -55,6 +55,29 @@ const rtt = (v: number | null) => (v === null ? DASH : `${num(v, v < 10 ? 2 : 0)
 
 /** A device that has asked for a name today is a device that is switched on. */
 const ACTIVE = 24 * 3600
+
+/**
+ * The two things that measure this tab's subject.
+ *
+ * Neither is a service anybody opens and neither will ever have a page, which
+ * is exactly the case `LogNeighbour` exists for: a reading here that has
+ * quietly stopped moving is indistinguishable from a quiet network, and one of
+ * these two logs is the only place that difference is visible.
+ */
+const UPLINK_READERS: readonly LogNeighbour[] = [
+  {
+    source: { unit: 'host-liveness-exporter.service' },
+    label: 'host-liveness-exporter',
+    role: 'the round trips, and the dot on this tab',
+    note: 'Pings the gateway and the internet every 60s and publishes network_hop_up / network_hop_rtt_seconds — the two hops charted above, and the pair this tab’s status dot is computed from, since there is no one service here for gatus to probe. It also walks the rootless cgroup tree for the per-container byte counters in the traffic panel.',
+  },
+  {
+    source: { container: 'node-exporter' },
+    label: 'node-exporter',
+    role: 'the NIC counters themselves',
+    note: 'Everything the cable chart is drawn from. It runs on --network=host precisely so it sees enp3s0 rather than a container’s virtual interface — which is also why the bytes it reports are all LAN traffic included, and are not comparable to the line capacity measured next door.',
+  },
+]
 
 /**
  * The house network: the cable, the line behind it, and who is using both.
@@ -273,6 +296,26 @@ function GeneralView({ data }: { data: General }) {
         {/* The device list was here. It is on DHCP now, merged with the
             reservations that name those devices — what is on the LAN is a
             lease fact, not a throughput one. */}
+
+        {/* This tab had no log at all, which made it the only page here whose
+            numbers could not be checked against the thing that produced them.
+            Its subject is the wire and the wire keeps no log — but the three
+            processes that MEASURE it do, and every reading above comes from
+            one of them. MySpeed leads because it is the only one of the three
+            that is a service rather than plumbing, and the only one whose
+            failure is visible as a wrong number rather than a missing one. */}
+        <LogBoard
+          source={{ container: 'myspeed' }}
+          title="MySpeed logs"
+          neighbours={UPLINK_READERS}
+          foot={
+            <p className="board-foot">
+              The hourly speed test behind the capacity chart. It saturates the link while it runs,
+              which is why nothing network-heavy is ever scheduled on the hour on this box — a test
+              at :00 once took DNS down for two minutes for the whole house.
+            </p>
+          }
+        />
       </BoardGrid>
     </>
   )
@@ -649,9 +692,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
 
         {/* No neighbours: wg-easy runs the tunnel, the web UI and the exporter
             in one container, and nothing else on the box is part of it. */}
-        <Board title="Logs" icon="≡" span={12}>
-          <GrafanaLogs source={{ container: 'wg-easy' }} title="wg-easy logs" />
-        </Board>
+        <LogBoard source={{ container: 'wg-easy' }} title="wg-easy logs" />
       </BoardGrid>
     </>
   )
@@ -926,26 +967,22 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           </p>
         </Board>
 
-        <Board title="Logs" icon="≡" span={12}>
-          <GrafanaLogs source={{ container: t.container }} title={`${t.container} logs`} />
-          {/* The one container genuinely tied to this tunnel and nothing else:
-              it exists solely to poll this gluetun's control API, it shares
-              its namespace, and it is where "the VPN alerts went quiet"
-              is answered. */}
-          <LogDetails
-            summary="Exporter — the process the VPN alerts read"
-            source={{ container: t.exporter }}
-            title={`${t.exporter} logs`}
-            foot={
-              <p className="board-foot">
-                Polls this tunnel’s control API every 30 seconds and serves the{' '}
-                <code>gluetun_vpn_status</code> and forwarded-port metrics behind the chart above
-                and the VPN-down alert. If those go stale while the tunnel is fine, the answer is
-                here.
-              </p>
-            }
-          />
-        </Board>
+        {/* The exporter is the one container genuinely tied to this tunnel and
+            nothing else: it exists solely to poll this gluetun's control API,
+            it shares its namespace, and it is where "the VPN alerts went
+            quiet" is answered. */}
+        <LogBoard
+          source={{ container: t.container }}
+          title={`${t.container} logs`}
+          neighbours={[
+            {
+              source: { container: t.exporter },
+              label: 'Exporter',
+              role: 'the process the VPN alerts read',
+              note: 'Polls this tunnel’s control API every 30 seconds and serves the gluetun_vpn_status and forwarded-port metrics behind the chart above and the VPN-down alert. If those go stale while the tunnel is fine, the answer is here — a wedged gluetun reads as "Up 4 days" with its ports listed while nothing is listening.',
+            },
+          ]}
+        />
       </BoardGrid>
     </>
   )
@@ -1247,20 +1284,17 @@ function TraefikView({ d }: { d: Proxy }) {
         {/* No neighbours. cloudflared dials the cfweb entrypoint and is the
             obvious candidate, but it has its own page one tab over — and a
             second copy of a log stream is not a second source. */}
-        <Board title="Logs" icon="≡" span={12}>
-          <GrafanaLogs
-            source={{ container: 'traefik' }}
-            title="Traefik logs"
-            foot={
-              <p className="board-foot">
-                The service log, not the access log: startup, certificate renewals, configuration
-                reloads and the errors behind a router that refused to build. Per-request lines go
-                to the access log, which is not shipped here — the metrics above are what that
-                answers.
-              </p>
-            }
-          />
-        </Board>
+        <LogBoard
+          source={{ container: 'traefik' }}
+          title="Traefik logs"
+          foot={
+            <p className="board-foot">
+              The service log, not the access log: startup, certificate renewals, configuration
+              reloads and the errors behind a router that refused to build. Per-request lines go to
+              the access log, which is not shipped here — the metrics above are what that answers.
+            </p>
+          }
+        />
       </BoardGrid>
     </>
   )
@@ -1487,9 +1521,18 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
 
         <Changelog gap={t.gap} />
 
-        <Board title="Logs" icon="≡" span={12}>
-          <GrafanaLogs source={{ container: 'cloudflared' }} title="cloudflared logs" />
-        </Board>
+        <LogBoard
+          source={{ container: 'cloudflared' }}
+          title="cloudflared logs"
+          neighbours={[
+            {
+              source: { unit: 'cloudflared-route-sync.service' },
+              label: 'Route sync',
+              role: 'what puts the public names in the zone',
+              note: 'A oneshot that upserts one CNAME per fleet.cloudflareRoutes entry into the Cloudflare zone. The tunnel coming up proves nothing about whether a hostname resolves to it — a route declared in nix whose CNAME was never written is this unit having failed, and it is invisible from the tunnel’s own log.',
+            },
+          ]}
+        />
       </BoardGrid>
     </>
   )
@@ -1665,20 +1708,18 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
 
         <Changelog gap={d.gap} span={6} />
 
-        <Board title="Logs" icon="≡" span={12}>
-          <GrafanaLogs
-            source={{ unit: 'ddclient.service' }}
-            title="ddclient logs"
-            foot={
-              <p className="board-foot">
-                A systemd unit rather than a container — ddclient is host plumbing, so these are
-                journal lines. It runs every{' '}
-                {d.intervalSeconds === null ? 'five minutes' : until(d.intervalSeconds)} and says
-                nothing at all on a successful run that changed nothing, which is most of them.
-              </p>
-            }
-          />
-        </Board>
+        <LogBoard
+          source={{ unit: 'ddclient.service' }}
+          title="ddclient logs"
+          foot={
+            <p className="board-foot">
+              A systemd unit rather than a container — ddclient is host plumbing, so these are
+              journal lines. It runs every{' '}
+              {d.intervalSeconds === null ? 'five minutes' : until(d.intervalSeconds)} and says
+              nothing at all on a successful run that changed nothing, which is most of them.
+            </p>
+          }
+        />
       </BoardGrid>
     </>
   )
@@ -1924,6 +1965,27 @@ function DhcpView({ data }: { data: Dhcp }) {
           <b>active</b> means it looked something up in the last day.
         </p>
       </Board>
+
+      {/* The same file the DNS tab reads, and worth repeating rather than
+          leaving this tab as the one page with a header and no log: one
+          process serves both, so the lease that was never handed out and the
+          name that never resolved are the same log line, and a reader chasing
+          a device should not have to know they share a binary to find it.
+          There is deliberately no changelog here — see the note on the header
+          above, and the panel that carries it one tab over. */}
+      <LogBoard
+        source={{ unit: 'pihole-ftl.service' }}
+        title="pihole-FTL logs"
+        foot={
+          <p className="board-foot">
+            Shipped out of <span className="mono">/var/log/pihole/FTL.log</span> rather than the
+            journal — FTL keeps its own file, and the unit&rsquo;s journal lines are systemd&rsquo;s
+            rather than its own. Every lease offered, acknowledged and declined is in here by
+            hardware address, which is the only place the counters above can be turned back into
+            &ldquo;which device&rdquo;.
+          </p>
+        }
+      />
       </BoardGrid>
     </>
   )
@@ -2175,22 +2237,20 @@ function ResolverView({
 
         <Changelog gap={d.gap} span={12} />
 
-        <Board title="Logs" icon="≣" span={12}>
-          <GrafanaLogs
-            source={{ unit: "pihole-ftl.service" }}
-            title="pihole-FTL logs"
-            foot={
-              <p className="board-foot">
-                Not the journal. FTL is the one service on this box that keeps its own log file,
-                and the only journal lines about the unit come from systemd — so these are shipped
-                out of <span className="mono">/var/log/pihole/FTL.log</span> by alloy. Startup,
-                gravity runs, DHCP leases, NTP and upstream trouble. Individual queries are not
-                here and deliberately never will be: that log is two gigabytes of every domain
-                every device in the house asked for.
-              </p>
-            }
-          />
-        </Board>
+        <LogBoard
+          source={{ unit: 'pihole-ftl.service' }}
+          title="pihole-FTL logs"
+          foot={
+            <p className="board-foot">
+              Not the journal. FTL is the one service on this box that keeps its own log file, and
+              the only journal lines about the unit come from systemd — so these are shipped out of{' '}
+              <span className="mono">/var/log/pihole/FTL.log</span> by alloy. Startup, gravity
+              runs, DHCP leases, NTP and upstream trouble. Individual queries are not here and
+              deliberately never will be: that log is two gigabytes of every domain every device in
+              the house asked for.
+            </p>
+          }
+        />
       </BoardGrid>
     </>
   )

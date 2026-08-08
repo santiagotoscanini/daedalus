@@ -9,7 +9,7 @@ import { GamingView } from '../components/category/gaming'
 import { MonitoringView } from '../components/category/monitoring'
 import { NetworkView } from '../components/category/network'
 import { SystemView } from '../components/category/system'
-import { BoardsSkeleton, StatBandSkeleton } from '../components/skeleton'
+import { BoardsSkeleton, ServiceHeadSkeleton, StatBandSkeleton } from '../components/skeleton'
 import { CATEGORIES, type CategoryName, type CategorySpec } from '../lib/dashboard/nav'
 import {
   fetchCategoryBoards,
@@ -177,17 +177,25 @@ function TabNav({
 }
 
 /**
- * The headline band plus the grid, sized to the page that is arriving.
+ * The service header, the headline band and the grid, sized to the page that
+ * is arriving.
  *
  * Sized per TAB where a tab says so: the category's own spans describe its
  * default tab, and a sibling laid out differently would reflow on arrival —
  * worst of all a band of stat cards that the page turns out not to have.
+ *
+ * The header is the same argument one level up. Almost every tab opens with
+ * one, and without a placeholder for it the boards render at the top of the
+ * page and are then pushed down by its height the instant the loader resolves.
+ * `head: false` is the honest opt-out for the tabs whose subject is not a
+ * service — see `CategorySpec.tabs[].head`.
  */
 function BoardsPlaceholder({ spec, tab }: { spec: CategorySpec; tab: string }) {
   const t = spec.tabs.find((x) => x.id === tab)
 
   return (
     <>
+      {t?.head !== false && <ServiceHeadSkeleton />}
       {t?.statBand !== false && <StatBandSkeleton />}
       <BoardsSkeleton spans={t?.boardSpans ?? spec.boardSpans} />
     </>

@@ -26,6 +26,8 @@
 
 import { promBars, promScalar, promScalars, promSeries, promVector } from '../clients'
 import { bytes } from '../format'
+import type { VersionGap } from '../github'
+import { postgresGap } from '../postgres'
 import { hostFacts, type DatasetFacts, type HostFacts, type ReplicationPair, type SmartDisk, type ZpoolFacts } from '../host-facts'
 
 export type SystemData =
@@ -315,6 +317,15 @@ type DatabaseData = {
   }
   version: string | null
   up: boolean | null
+  /**
+   * The release gap, from postgresql.org rather than GitHub.
+   *
+   * The mirror at postgres/postgres carries tags and publishes no releases, so
+   * the usual `versionGap` would report the one service on this box whose
+   * minors are almost purely security fixes as having no notes at all. See
+   * ../postgres.ts.
+   */
+  gap: VersionGap
 }
 
 async function loadDatabase(): Promise<DatabaseData> {
@@ -335,6 +346,8 @@ async function loadDatabase(): Promise<DatabaseData> {
     }),
     promScalar('pg_up'),
   ])
+
+  const version = await pgVersion()
 
   const by = (rows: { metric: Record<string, string>; value: [number, string] }[]) =>
     new Map(rows.map((r) => [r.metric.datname ?? '', Number(r.value[1])]))
@@ -379,7 +392,8 @@ async function loadDatabase(): Promise<DatabaseData> {
       locks: totals.locks,
       tempBytes: totals.temp,
     },
-    version: await pgVersion(),
+    version,
+    gap: await postgresGap(version),
     up: up === null ? null : up === 1,
   }
 }

@@ -4174,6 +4174,19 @@ h2 {
   animation: sk-sweep 1.35s ease-in-out infinite;
 }
 
+/* The service header's three stacked lines — name, version, lede. It borrows
+   `.svc-head` and `.svc-logo` so the reserved box is the real one; only the
+   inner column needs its own rhythm, since the real thing gets that from the
+   margins on an h2 and two paragraphs. */
+.sk-ident {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.15rem 0 0;
+}
+
 /* ── add-an-app wizard ──────────────────────────────────────────────────── */
 
 /* Right-aligned in the page head, which is a baseline-aligned flex row. */

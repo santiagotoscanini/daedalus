@@ -15,11 +15,9 @@ import {
 } from '../viz'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
-import { ServiceHead, verdictOf, type CompareRow } from '../service-head'
+import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
 import { Segmented } from '../ui'
 import { DASH, bytes, flag, num, rate, since, until } from '../../lib/dashboard/format'
-import type { VersionGap } from '../../lib/dashboard/github'
-import type { RunningVersion } from '../../lib/dashboard/images'
 import type { MediaData } from '../../server/category'
 
 // The Media pages — a tab per job, and a switch inside the page for the
@@ -58,45 +56,6 @@ export function MediaView({ data }: { data: MediaData }) {
 }
 
 /* ── shared ───────────────────────────────────────────────────────────── */
-
-/**
- * Where a running version came from, in the four words the header has room for.
- *
- * Not decoration: the three sources carry different weight. A version the
- * service reported about itself is a measurement. One read off the tag the
- * flake pins is reproducible from git but only true while the tag names a
- * release. One read off the image's OCI label is a claim the publisher made
- * about an artefact that a re-pull could silently replace — which is exactly
- * the case for every service pinned to a moving tag, and the reason those
- * pages used to say nothing at all.
- */
-const SOURCE_NOTE: Record<RunningVersion['source'], string> = {
-  pin: 'from the tag the flake pins',
-  label: 'from the image’s own label',
-  unknown: 'unknown — the pin names a channel',
-}
-
-/**
- * The working behind a version verdict, shown on hover.
- *
- * `note` says where the running number came from, which is the fact that
- * decides how much the verdict is worth: a version the service reported about
- * itself is a measurement, and a version read off the tag the flake pins is an
- * assumption that holds only while the tag does.
- */
-function compareOf(gap: VersionGap, note: string): CompareRow[] {
-  return [
-    {
-      k: 'Latest',
-      v: gap.latest,
-      note:
-        gap.latest === null ? 'GitHub did not answer'
-        : gap.behind.length === 0 ? 'this is what is running'
-        : `${String(gap.behind.length)} release${gap.behind.length === 1 ? '' : 's'} between them`,
-    },
-    { k: 'Running', v: gap.installed, note },
-  ]
-}
 
 /**
  * A tri-state health as a dot tone.
@@ -200,15 +159,6 @@ const VERSION_SNAPSHOT: LogNeighbour = {
   label: 'Version snapshot',
   role: 'where this version comes from',
   note: 'Reads the OCI labels off every running image and publishes them for this dashboard, since the pin on these three names a channel rather than a release. One line per run with the counts; if the version above says “unknown”, this says whether the snapshot ran at all. Its failures also send mail — see fleet.monitoredJobs in stacks/daedalus.',
-}
-
-/** The button every service head carries. */
-function Open({ name, host }: { name: string; host: string }) {
-  return (
-    <a className="btn btn-primary" href={`https://${host}.toscanini.me`} target="_blank" rel="noreferrer">
-      Open {name} ↗
-    </a>
-  )
 }
 
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */
@@ -359,7 +309,18 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
           }
         />
 
-        <LogBoard source={{ container: 'jellyfin' }} title="Jellyfin logs" />
+        <LogBoard
+          source={{ container: 'jellyfin' }}
+          title="Jellyfin logs"
+          neighbours={[
+            {
+              source: { container: 'intel-gpu-exporter' },
+              label: 'intel-gpu-exporter',
+              role: 'what the iGPU is actually doing',
+              note: 'The only reader of the render node Jellyfin transcodes on, and the only container on this box with no page of its own — its metrics (gpumon_engine_usage, gpumon_power) are scraped and nothing here draws them yet. When a transcode is slow and Jellyfin’s own log says only that ffmpeg took a while, this is where "was the GPU busy or was it not being used at all" is answered. i915 is force-probed via a kernel param; a driver that failed to bind shows up here first.',
+            },
+          ]}
+        />
       </BoardGrid>
     </>
   )

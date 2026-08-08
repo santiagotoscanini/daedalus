@@ -9,14 +9,25 @@ import {
   Trend,
 } from '../viz'
 import { LogBoard, type LogNeighbour } from '../logs'
+import { Changelog } from '../release-notes'
+import { compareOf, ServiceHead, verdictOf } from '../service-head'
 import { DASH, bytes, duration, num, pct, since } from '../../lib/dashboard/format'
 import type { SystemData } from '../../server/category'
 
 // The System pages — a tab per layer of the machine.
 //
-// No ServiceHead on any of them, unlike Media and Home: there is no service
-// here to name, no version to compare and no UI to open. The subject is the
+// No ServiceHead on five of the six, unlike Media and Home: there is no
+// service to name, no version to compare and no UI to open. The subject is the
 // box, so each tab opens straight into the panel that answers its question.
+// That is declared per tab in lib/dashboard/nav.ts (`head: false`) rather than
+// merely omitted here, because the SKELETON has to know it before the data
+// exists — see the note there.
+//
+// Database is the exception, and a real one rather than an inconsistency: its
+// subject is postgres, which has a version, a release cycle, and minors that
+// are almost entirely security and data-corruption fixes. Treating the one
+// process every app on this box depends on as a "layer of the machine" is what
+// kept the cluster's own upgrade state off this dashboard entirely.
 //
 // Half the tabs read prometheus and half read a snapshot the host publishes,
 // and the pages say which where it matters — a SMART temperature is at most
@@ -55,6 +66,29 @@ const SYSTEM_SNAPSHOT: LogNeighbour = {
   role: 'where these numbers come from',
   note: 'Runs smartctl, zpool and zfs as root every ten minutes and publishes the result, because this dashboard is a container and none of those three can be run from one. One line per run with the counts. It fails silently from the reader’s side — a stale file shows yesterday’s temperatures as though they were now — so its failures also send mail; see fleet.monitoredJobs in stacks/daedalus.',
 }
+
+/**
+ * The two readers behind Host and Memory.
+ *
+ * Same argument as `SYSTEM_SNAPSHOT` and the same gap: every number on those
+ * two tabs comes from one of these, and until now neither one's log was
+ * reachable from anywhere in this dashboard — so a gauge that had quietly
+ * stopped moving looked exactly like a machine that had quietly gone idle.
+ */
+const HOST_READERS: readonly LogNeighbour[] = [
+  {
+    source: { container: 'node-exporter' },
+    label: 'node-exporter',
+    role: 'the host’s own numbers',
+    note: 'CPU, load, memory, pressure stall, filesystems, hwmon temperatures and the NIC counters. It runs on --network=host because it reads the real /proc, /sys and interfaces — a bridge namespace would show it the container’s, which is why this is one of the few containers here with a published port rather than a traefik-net address.',
+  },
+  {
+    source: { unit: 'host-liveness-exporter.service' },
+    label: 'host-liveness-exporter',
+    role: 'per-container CPU, memory and OOM kills',
+    note: 'A timer, not a daemon: every 60s it walks the rootless cgroup tree under user@1000.service that no packaged exporter can see, and writes the result as a textfile for node-exporter to serve. That 60s tick is also why the per-container numbers here are quantised — a short rate window over them is reading the timer, not the workload. A container that vanishes from these panels is usually this not having run.',
+  },
+]
 
 /** Seconds → a date, computed server-side is not needed: this is a duration. */
 function hours(h: number | null): string {
@@ -175,6 +209,7 @@ function HostView({ d }: { d: Host }) {
       <LogBoard
         source={{ unit: 'init.scope' }}
         title="Host journal"
+        neighbours={HOST_READERS}
         foot={
           <p className="board-foot">
             PID 1&rsquo;s own stream — unit starts, stops and failures for the whole box. Systemd
@@ -318,6 +353,27 @@ function MemoryView({ d }: { d: Memory }) {
           silently-capped app is one that dies at 3am for a reason nobody wrote down.
         </p>
       </Board>
+
+      {/* This was the one tab in the whole dashboard with no log at all, which
+          made it the one page whose numbers could not be checked against
+          anything. The kernel is the right stream: an OOM kill, a zram
+          allocation failure and ZFS shrinking the ARC under pressure are all
+          kernel lines and appear in no container's log — including the log of
+          the container that was killed. */}
+      <LogBoard
+        source={{ stack: 'kernel' }}
+        title="Kernel"
+        neighbours={HOST_READERS}
+        foot={
+          <p className="board-foot">
+            Kernel lines carry no unit and no container, so alloy labels them{' '}
+            <span className="mono">stack=kernel</span> — this is the stream an OOM kill actually
+            lands in. The counter on the panel above says one happened; this says which cgroup was
+            chosen, how much it was holding, and what the machine was doing at the time, none of
+            which survives in the killed container&rsquo;s own log.
+          </p>
+        }
+      />
     </BoardGrid>
   )
 }
@@ -646,7 +702,26 @@ function DatabaseView({ d }: { d: Database }) {
     .sort((a, b) => (a.cacheHitPct ?? 0) - (b.cacheHitPct ?? 0))[0]
 
   return (
-    <BoardGrid>
+    <>
+      <ServiceHead
+        logo="/icon-postgres.svg"
+        name="PostgreSQL"
+        version={d.gap.installed ?? d.version}
+        versionNote="reported by the cluster itself"
+        verdict={verdictOf(d.gap)}
+        compare={compareOf(d.gap, 'from pg_static, via the exporter')}
+        lede={
+          <>
+            One cluster, every app a tenant with its own role and database — the consolidation that
+            replaced a postgres container per stack. That makes this the single process the most of
+            this box depends on, and the reason its minor releases are worth reading: they are
+            almost entirely security and data-corruption fixes, and applying one is a restart that
+            every tenant feels.
+          </>
+        }
+      />
+
+      <BoardGrid>
       <Board
         title="The cluster"
         icon="◱"
@@ -728,6 +803,25 @@ function DatabaseView({ d }: { d: Database }) {
         </p>
       </Board>
 
+      <Changelog
+        gap={d.gap}
+        span={12}
+        aside={<span className="board-note">postgresql.org</span>}
+        foot={
+          <p className="board-foot">
+            Not from GitHub, unlike every other changelog here: the{' '}
+            <span className="mono">postgres/postgres</span> mirror carries tags and publishes no
+            releases at all, so the usual reader reports the one service on this box whose minors
+            are pure security fixes as having nothing to show. These come from{' '}
+            <span className="mono">postgresql.org/docs/release</span> instead. Only the running
+            MAJOR is counted — a major upgrade is a pg_upgrade with every tenant offline, which is
+            not what &ldquo;behind&rdquo; means anywhere else on this dashboard. Read the{' '}
+            <b>Migration</b> section first: it is the one paragraph that says whether the restart
+            is all it takes.
+          </p>
+        }
+      />
+
       <LogBoard
         source={{ stack: 'app-db' }}
         title="Cluster logs"
@@ -740,7 +834,8 @@ function DatabaseView({ d }: { d: Database }) {
           },
         ]}
       />
-    </BoardGrid>
+      </BoardGrid>
+    </>
   )
 }
 

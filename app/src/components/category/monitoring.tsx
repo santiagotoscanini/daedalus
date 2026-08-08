@@ -1,5 +1,7 @@
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../viz'
-import { LogBoard } from '../logs'
+import { LogBoard, type LogNeighbour } from '../logs'
+import { Changelog } from '../release-notes'
+import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
 import { DASH, bytes, compact, num, pct, since, until } from '../../lib/dashboard/format'
 import type { MonitoringData } from '../../server/category'
 
@@ -13,6 +15,15 @@ import type { MonitoringData } from '../../server/category'
 //
 // Every tab leads with the gap rather than the total. "38 endpoints up" is
 // context; "which one is down, and which has the worst week" is the content.
+//
+// ── read like every other service page ────────────────────────────────────
+//
+// Artwork, the name, the version running, the verdict on whether that version
+// is current, one sentence saying what this watcher is FOR, the link you came
+// to click — then the boards, the changelog and the log. Identical to Media,
+// Home, AI and Gaming, and these five were the exception: they carried a log
+// and nothing else, so the only part of this box whose upgrades you could not
+// see from the dashboard was the part that does the watching.
 
 export function MonitoringView({ data }: { data: MonitoringData }) {
   switch (data.tab) {
@@ -44,7 +55,27 @@ type Alerts = Extract<MonitoringData, { tab: 'alerts' }>
 
 function AlertsView({ d }: { d: Alerts }) {
   return (
-    <BoardGrid>
+    <>
+      <ServiceHead
+        logo="/icon-grafana.svg"
+        name="Grafana"
+        version={d.grafana.version}
+        versionNote="reported by /api/health"
+        verdict={verdictOf(d.gap)}
+        compare={compareOf(d.gap, 'from /api/health — what the running process says')}
+        lede={
+          <>
+            Every alert rule on this box is Grafana-managed and provisioned from files, so this is
+            both the thing that draws the graphs and the thing that decides when one of them is
+            worth an email. Its own state — users, service accounts, alert history — lives in the{' '}
+            <span className="mono">grafana</span> database on the shared cluster, which is the half
+            of it that is not in the rebuild trail.
+          </>
+        }
+        actions={<Open name="Grafana" host="grafana" />}
+      />
+
+      <BoardGrid>
       <Board
         title={d.active.length === 0 ? 'Nothing firing' : 'Firing now'}
         icon="⚑"
@@ -117,6 +148,8 @@ function AlertsView({ d }: { d: Alerts }) {
         </p>
       </Board>
 
+      <Changelog gap={d.gap} span={12} />
+
       <LogBoard
         source={{ container: 'grafana' }}
         title="Grafana logs"
@@ -128,7 +161,8 @@ function AlertsView({ d }: { d: Alerts }) {
           </p>
         }
       />
-    </BoardGrid>
+      </BoardGrid>
+    </>
   )
 }
 
@@ -138,7 +172,32 @@ type Probes = Extract<MonitoringData, { tab: 'probes' }>
 
 function ProbesView({ d }: { d: Probes }) {
   return (
-    <BoardGrid>
+    <>
+      <ServiceHead
+        logo="/icon-gatus.svg"
+        name="Gatus"
+        version={d.running.version}
+        versionNote={SOURCE_NOTE[d.running.source]}
+        verdict={verdictOf(d.gap)}
+        compare={compareOf(
+          d.gap,
+          'the image tag — gatus publishes no version of its own anywhere',
+        )}
+        lede={
+          <>
+            The only watcher that looks at this box from OUTSIDE it: every check here is a real
+            HTTPS request through traefik and the forward-auth gate, on the same path a browser
+            takes. That is what makes it the one system able to notice a certificate, a router or
+            an IdP failing, and none of those is visible from a metric scraped on the inside.
+          </>
+        }
+        // `status`, not `gatus`: the published label differs from the attribute
+        // name here, as it does for Pocket ID and Open WebUI. Deriving one from
+        // the other is how this dashboard grows links that 404.
+        actions={<Open name="Gatus" host="status" />}
+      />
+
+      <BoardGrid>
       <Board
         title={d.failing.length === 0 ? 'Everything answering' : 'Not answering'}
         icon="◎"
@@ -206,6 +265,8 @@ function ProbesView({ d }: { d: Probes }) {
         </p>
       </Board>
 
+      <Changelog gap={d.gap} span={12} />
+
       <LogBoard
         source={{ container: 'gatus' }}
         title="Gatus logs"
@@ -218,7 +279,8 @@ function ProbesView({ d }: { d: Probes }) {
           </p>
         }
       />
-    </BoardGrid>
+      </BoardGrid>
+    </>
   )
 }
 
@@ -226,9 +288,55 @@ function ProbesView({ d }: { d: Probes }) {
 
 type Metrics = Extract<MonitoringData, { tab: 'metrics' }>
 
+/**
+ * The two things that produce most of what prometheus stores.
+ *
+ * Neither has a page anywhere and neither ever will — they are exporters, not
+ * services anybody opens — but both are exactly the "you would come looking
+ * here when the panel above went wrong" case that `LogNeighbour` is for. Half
+ * of the System category is drawn from node-exporter and the other half from
+ * host-liveness-exporter, and until this existed neither one's log was
+ * reachable from anywhere in this dashboard.
+ */
+const SCRAPE_NEIGHBOURS: readonly LogNeighbour[] = [
+  {
+    source: { container: 'node-exporter' },
+    label: 'node-exporter',
+    role: 'the host’s own numbers',
+    note: 'CPU, memory, filesystems, the NIC counters and the pressure stall figures — everything the System › Host and Memory tabs draw. It runs on --network=host because it reads the real /proc, /sys and interfaces, which is also why it is the one target here published on a port rather than dialled over a bridge.',
+  },
+  {
+    source: { unit: 'host-liveness-exporter.service' },
+    label: 'host-liveness-exporter',
+    role: 'per-container metrics, and the uplink probe',
+    note: 'A timer, not a daemon: every 60s it walks the rootless cgroup tree that no packaged exporter can see (container CPU, memory, PIDs and OOM kills for all ~75 containers), pings the gateway and the internet for the Network › General dot, and writes a textfile for node-exporter to pick up. A metric here that stops moving is this not having run, and it looks identical to a container that is idle.',
+  },
+]
+
 function MetricsView({ d }: { d: Metrics }) {
   return (
-    <BoardGrid>
+    <>
+      <ServiceHead
+        logo="/icon-prometheus.svg"
+        name="Prometheus"
+        version={d.version}
+        versionNote="reported by /api/v1/status/buildinfo"
+        verdict={verdictOf(d.gap)}
+        compare={compareOf(d.gap, 'from /api/v1/status/buildinfo')}
+        lede={
+          <>
+            Every number on this dashboard that is a rate, a trend or a
+            seven-day anything came from here. It publishes no host port and runs without{' '}
+            <span className="mono">--web.enable-lifecycle</span>, and its scrape list is generated
+            from nix — each stack contributes its own{' '}
+            <span className="mono">fleet.prometheusScrapes</span>, so a target that is missing is a
+            stack that never declared one rather than a file somebody forgot to edit.
+          </>
+        }
+        actions={<Open name="Prometheus" host="prometheus" />}
+      />
+
+      <BoardGrid>
       <Board
         title={d.down.length === 0 ? 'Every target reporting' : 'Targets not reporting'}
         icon="◉"
@@ -300,8 +408,15 @@ function MetricsView({ d }: { d: Metrics }) {
         </p>
       </Board>
 
-      <LogBoard source={{ container: 'prometheus' }} title="Prometheus logs" />
-    </BoardGrid>
+      <Changelog gap={d.gap} span={12} />
+
+      <LogBoard
+        source={{ container: 'prometheus' }}
+        title="Prometheus logs"
+        neighbours={SCRAPE_NEIGHBOURS}
+      />
+      </BoardGrid>
+    </>
   )
 }
 
@@ -311,7 +426,26 @@ type Logs = Extract<MonitoringData, { tab: 'logs' }>
 
 function LogsView({ d }: { d: Logs }) {
   return (
-    <BoardGrid>
+    <>
+      <ServiceHead
+        logo="/icon-loki.svg"
+        name="Loki"
+        version={d.loki.version}
+        versionNote="reported by /loki/api/v1/status/buildinfo"
+        verdict={verdictOf(d.loki.gap)}
+        compare={compareOf(d.loki.gap, 'from /loki/api/v1/status/buildinfo')}
+        lede={
+          <>
+            Where every log panel on this dashboard gets its lines, including the one at the bottom
+            of this page. Alloy tails journald and ships here; this stores and answers. It publishes
+            no hostname of its own — it is reached over the monitoring bridge — which is why this
+            tab&rsquo;s dot is the one grey circle on the row: there is nothing here for gatus to
+            probe from outside, which is a different claim from down.
+          </>
+        }
+      />
+
+      <BoardGrid>
       <Board
         title="Volume"
         icon="≡"
@@ -367,18 +501,48 @@ function LogsView({ d }: { d: Logs }) {
         </p>
       </Board>
 
-      <LogBoard
-        source={{ stack: 'logging' }}
-        title="Loki + Alloy"
+      {/* Two, because this tab has two subjects on two release cycles. The
+          same shape the Downloaders and Cleanup tabs use for the services
+          they hold side by side. */}
+      <Changelog gap={d.loki.gap} span={6} aside={<span className="board-note">grafana/loki</span>} />
+      <Changelog
+        gap={d.alloy.gap}
+        span={6}
+        aside={
+          <span className="board-note">grafana/alloy · {d.alloy.running.version ?? DASH}</span>
+        }
         foot={
           <p className="board-foot">
-            Alloy tails journald and ships to Loki; both log here. Note that Loki refuses a query
-            longer than about thirty days — a wider range on any log panel in this dashboard returns
-            an error rather than fewer results.
+            The collector, on its own release cycle. Its version is read{' '}
+            {SOURCE_NOTE[d.alloy.running.source]} rather than from the process — alloy shares a
+            stack with Loki here and publishes no hostname, so there is nothing to ask.
           </p>
         }
       />
-    </BoardGrid>
+
+      <LogBoard
+        source={{ container: 'loki' }}
+        title="Loki logs"
+        neighbours={[
+          {
+            source: { container: 'alloy' },
+            label: 'Alloy',
+            role: 'the collector that fills it',
+            note: 'Tails journald, applies the relabel rules generated from fleet.logStacks, and pushes to Loki. This is the half that touches the journal, so “lines stopped arriving” is answered here rather than next door — a rejected push, a dropped stream or a relabel rule that stopped matching all appear in this log and in no other.',
+          },
+        ]}
+        foot={
+          <p className="board-foot">
+            Loki&rsquo;s own stream, with the collector one disclosure below it — they were one
+            panel under the shared <span className="mono">stack=logging</span> label, which
+            interleaved two services whose failures mean opposite things. Note that Loki refuses a
+            query longer than about thirty days: a wider range on any log panel in this dashboard
+            returns an error rather than fewer results.
+          </p>
+        }
+      />
+      </BoardGrid>
+    </>
   )
 }
 
@@ -388,7 +552,27 @@ type Jobs = Extract<MonitoringData, { tab: 'jobs' }>
 
 function JobsView({ d }: { d: Jobs }) {
   return (
-    <BoardGrid>
+    <>
+      <ServiceHead
+        logo="/icon-healthchecks.svg"
+        name="Healthchecks"
+        version={d.running.version}
+        versionNote={SOURCE_NOTE[d.running.source]}
+        verdict={verdictOf(d.gap)}
+        compare={compareOf(d.gap, 'the image tag — its API is about checks, not about itself')}
+        lede={
+          <>
+            The only watcher here that reports the ABSENCE of an event. Everything else on this box
+            notices something going wrong; this notices something that stopped happening, which is
+            the failure a scheduled job actually has — a timer that was disabled, never fired, or
+            whose service was renamed.
+          </>
+        }
+        // `hc`, not `healthchecks` — see the note on Gatus above.
+        actions={<Open name="Healthchecks" host="hc" />}
+      />
+
+      <BoardGrid>
       <Board
         title="Scheduled jobs"
         icon="⏲"
@@ -494,6 +678,21 @@ function JobsView({ d }: { d: Jobs }) {
         </Board>
       )}
 
+      <Changelog
+        gap={d.gap}
+        span={12}
+        foot={
+          <p className="board-foot">
+            Its releases are numbered with two segments — <span className="mono">v4.2</span>, not{' '}
+            <span className="mono">v4.2.0</span> — so this panel matches them with its own pattern;
+            the shared three-segment one would report a project with sixty releases as having none.
+            A tag ahead of the newest RELEASE is normal here and is why the verdict can read
+            &ldquo;current&rdquo; against an empty list: the image is built from the git tag, and
+            the release note follows it by a few days.
+          </p>
+        }
+      />
+
       <LogBoard
         source={{ container: 'healthchecks' }}
         title="Healthchecks logs"
@@ -506,6 +705,7 @@ function JobsView({ d }: { d: Jobs }) {
           },
         ]}
       />
-    </BoardGrid>
+      </BoardGrid>
+    </>
   )
 }
