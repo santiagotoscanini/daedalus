@@ -3652,7 +3652,7 @@
     {
       "id": 906,
       "type": "row",
-      "title": "Gluetun (ipcrawl VPN)",
+      "title": "Gluetun (Argus VPN)",
       "gridPos": {
         "x": 0,
         "y": 153,
@@ -3679,7 +3679,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "gluetun_vpn_status{job=\"gluetun-ipcrawl\"}",
+          "expr": "gluetun_vpn_status{job=\"gluetun-argus\"}",
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
@@ -3758,7 +3758,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(gluetun_forwarded_ports_total{job=\"gluetun-ipcrawl\"})",
+          "expr": "sum(gluetun_forwarded_ports_total{job=\"gluetun-argus\"})",
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
@@ -3807,7 +3807,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "gluetun_vpn_infos{job=\"gluetun-ipcrawl\"}",
+          "expr": "gluetun_vpn_infos{job=\"gluetun-argus\"}",
           "format": "table",
           "instant": true,
           "datasource": {
@@ -4110,7 +4110,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "gluetun_vpn_infos{job=\"gluetun-ipcrawl\"}",
+          "expr": "gluetun_vpn_infos{job=\"gluetun-argus\"}",
           "format": "table",
           "instant": true,
           "datasource": {
@@ -4167,7 +4167,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "gluetun_vpn_infos{job=\"gluetun-ipcrawl\"}",
+          "expr": "gluetun_vpn_infos{job=\"gluetun-argus\"}",
           "format": "table",
           "instant": true,
           "datasource": {

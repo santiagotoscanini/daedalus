@@ -69,7 +69,7 @@
 #
 #   "proxy"  — traefik's forward-auth middleware gates the router; the
 #              app never learns there is an IdP. For apps with no user
-#              model of their own (ipcrawl). Zero app-side work.
+#              model of their own (argus). Zero app-side work.
 #   "native" — the app IS the OIDC client: it gets OIDC_ISSUER_URL,
 #              OIDC_CLIENT_ID, OIDC_REDIRECT_URI, OIDC_PROVIDER_ID,
 #              OIDC_SCOPES in its environment and OIDC_CLIENT_SECRET in
@@ -206,7 +206,7 @@ let
         ++ lib.optional (app.resources.pids != null) "--pids-limit=${toString app.resources.pids}";
 
       # VPN egress: borrow a gluetun container's netns for ALL traffic
-      # instead of joining traefik-net (see stacks/ipcrawl-vpn/). The
+      # instead of joining traefik-net (see stacks/argus-vpn/). The
       # incompatibilities (postgres, prometheus, missing hostPort) are
       # enforced via `assertions` below.
       egressEnabled = app.egress.container != null;
@@ -712,7 +712,7 @@ in
                 Ignored entirely when `source.mode = "local"` — that image is
                 built on the box from `source.contextDir`.
               '';
-              example = "registry.toscanini.me/ipcrawl:sha-89dfc4456f8b2c4531f84790cce5e179bdaeae6a";
+              example = "registry.toscanini.me/argus:sha-89dfc4456f8b2c4531f84790cce5e179bdaeae6a";
             };
 
             cmd = lib.mkOption {
@@ -787,7 +787,7 @@ in
             };
 
             # VPN egress via a gluetun (or other netns-owning) container. See
-            # stacks/ipcrawl-vpn/. When set, the app borrows that container's
+            # stacks/argus-vpn/. When set, the app borrows that container's
             # network namespace for ALL traffic instead of joining traefik-net:
             # outbound exits the VPN (fail-closed), and traefik reaches the UI via
             # the host port the netns owner publishes
@@ -803,7 +803,7 @@ in
                   whose network namespace this app joins via
                   `--network=container:<name>`. null = normal traefik-net.
                 '';
-                example = "gluetun-ipcrawl";
+                example = "gluetun-argus";
               };
               hostPort = lib.mkOption {
                 type = lib.types.nullOr lib.types.port;
@@ -886,7 +886,7 @@ in
                   "proxy" — traefik's generated `oidc-<name>`
                   forward-auth middleware gates the router(s); the app
                   is never reached unauthenticated and needs no code.
-                  For apps with no user model (ipcrawl). Requires
+                  For apps with no user model (argus). Requires
                   `auth.healthPath` (the middleware would otherwise 302
                   every gatus probe to the IdP).
 

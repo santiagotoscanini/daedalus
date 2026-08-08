@@ -10,12 +10,12 @@
 #
 # Two instances live today, deliberately separate tunnels: stacks/downloads
 # (torrent + book-downloader egress, with ProtonVPN port forwarding) and
-# stacks/ipcrawl-vpn (scanner egress). One WireGuard key cannot run two live
+# stacks/argus-vpn (scanner egress). One WireGuard key cannot run two live
 # sessions, and their traffic must not mix.
 #
 # Host-port convention: the TV instance owns host 8000 (control API) +
 # 8001 (exporter); each further instance publishes the same in-netns
-# ports at +2 (ipcrawl: 8002/8003; a third takes 8004/8005).
+# ports at +2 (argus: 8002/8003; a third takes 8004/8005).
 #
 # Usage (in a stack module):
 #   inherit (import ../../platform/gluetun-lib.nix {
@@ -86,7 +86,7 @@ rec {
   # A third VPN netns is one call plus a wg0.conf.sops + auth asset.
   mkGluetunInstance =
     {
-      name, # netns-owner container name ("gluetun", "gluetun-ipcrawl")
+      name, # netns-owner container name ("gluetun", "gluetun-argus")
       exporterName ? "${name}-exporter", # exporter container name
       secretName ? "${name}-wg0", # sops secret key for the wg config
       wgConfSops, # ./wg0.conf.sops (sops-encrypted binary, IN the rebuild trail)
