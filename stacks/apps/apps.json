@@ -32,7 +32,7 @@
     },
     "argus": {
       "stage": "lab",
-      "postgres": false,
+      "postgres": true,
       "storage": true,
       "litellm": false,
       "prometheus": false,

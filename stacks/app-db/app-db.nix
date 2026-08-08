@@ -107,6 +107,8 @@ let
     export ENV_BASE=${lib.escapeShellArg envBase}
     export CLUSTER_ENV=${lib.escapeShellArg clusterEnv}
     export APP_ENV_FILE=${lib.escapeShellArg (appEnvFile name)}
+    export DB_HOST=${lib.escapeShellArg cfg.${name}.dbHost}
+    export DB_PORT=${lib.escapeShellArg (toString cfg.${name}.dbPort)}
 
     ${builtins.readFile ./assets/bootstrap.sh}
   '';
@@ -154,6 +156,46 @@ in
               fits the apps platform (container `app-<name>`); stack
               tenants set their own container name(s).
             '';
+          };
+          options.reach = lib.mkOption {
+            type = lib.types.enum [
+              "bridge"
+              "hostPort"
+            ];
+            default = "bridge";
+            description = ''
+              How this tenant dials the cluster, which is what the
+              generated DATABASE_URL says.
+
+              "bridge" — `pg:5432` by container DNS over app-db-net.
+              The default, and the only one that stays on a private
+              bridge.
+
+              "hostPort" — `host.containers.internal:5433`, the
+              plain-TCP host port. For tenants that share another
+              container's network namespace (the gluetun-netns *arrs,
+              and any `fleet.apps` entry using `egress`): a netns has
+              no bridge interface, so `pg` does not resolve there.
+              The netns owner must also allow egress to the pasta host
+              alias, or gluetun's kill switch drops the connection —
+              `mkGluetunInstance`'s `hostEgress` does that.
+            '';
+          };
+          # Derived, so no tenant restates the host or the port. bazarr
+          # and the *arrs used to carry both as literals in their own
+          # module; a second copy of a fact the cluster already knows is
+          # a copy that can disagree with it.
+          options.dbHost = lib.mkOption {
+            type = lib.types.str;
+            readOnly = true;
+            default = if config.fleet.appDatabases.${name}.reach == "bridge" then "pg" else "host.containers.internal";
+            description = "Host this tenant reaches the cluster on. Derived from `reach`.";
+          };
+          options.dbPort = lib.mkOption {
+            type = lib.types.port;
+            readOnly = true;
+            default = if config.fleet.appDatabases.${name}.reach == "bridge" then 5432 else 5433;
+            description = "Port this tenant reaches the cluster on. Derived from `reach`.";
           };
           options.envFile = lib.mkOption {
             type = lib.types.str;

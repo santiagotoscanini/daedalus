@@ -24,6 +24,13 @@
 #   ...
 #   config = lib.mkMerge [ (mkGluetunInstance { ... }) { ... } ];
 
+let
+  # pasta's host alias, as seen from inside a rootless network namespace.
+  # `host.containers.internal` resolves to this. Stated once here because
+  # both the kill-switch hole below and the app-db `reach = "hostPort"`
+  # tenants are talking about the same address.
+  pastaHostAlias = "169.254.1.2";
+in
 {
   config,
   lib,
@@ -99,6 +106,16 @@ rec {
       runbookPath, # file whose header holds the renewal runbook
       ports, # host-publish list — ALL netns tenants' ports live here
       environment ? { }, # instance-specific gluetun env (kill-switch holes, port forwarding)
+      # Punch the kill switch open for the HOST ONLY, so tenants in this
+      # netns can dial a host-published port — in practice the shared
+      # postgres cluster on :5433, which no netns tenant can reach over
+      # a bridge (`fleet.appDatabases.<name>.reach = "hostPort"`).
+      #
+      # The address is pasta's host alias, not the LAN IP: pasta copies
+      # the host's address into the namespace, so 192.168.0.2 from in
+      # here is the namespace itself. A /32 so opening this reaches the
+      # host and nothing else on the network.
+      hostEgress ? false,
       provider ? "ProtonVPN", # whose network this exits on — see fleet.vpnEgress
       scrapeJob ? name, # prometheus job_name for the exporter
       scrapeTarget, # exporter target ("host.containers.internal:<port>")
@@ -245,6 +262,7 @@ rec {
           VPN_SERVICE_PROVIDER = "custom";
           VPN_TYPE = "wireguard";
         }
+        // (lib.optionalAttrs hostEgress { FIREWALL_OUTBOUND_SUBNETS = "${pastaHostAlias}/32"; })
         // environment;
 
         extraOptions = [

@@ -73,6 +73,14 @@ in
       # from the TV gluetun's job="gluetun" for the Grafana panels.
       scrapeTarget = "host.containers.internal:8003";
 
+      # Argus keeps its catalogue in the shared postgres cluster, and a
+      # container in this netns has no bridge to reach `pg` on — it dials
+      # the plain-TCP host port instead (`appDatabases.argus.reach =
+      # "hostPort"`, derived from the app's `egress`). Without this the
+      # kill switch drops that connection and the app boots to an empty
+      # catalogue. Scanner traffic still exits through the tunnel.
+      hostEgress = true;
+
     })
     {
       fleet.logStacks.argus-vpn = [

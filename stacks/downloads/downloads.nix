@@ -156,13 +156,14 @@ in
         "8001:8001" # gluetun-exporter (shares this netns)
       ];
 
+      # Direct (non-VPN) egress to the host ONLY — the *arrs dial the
+      # shared app-db cluster at host.containers.internal:5433, which no
+      # netns tenant can reach over a bridge. The address itself lives in
+      # gluetun-lib; see `hostEgress` there for why it is pasta's alias
+      # and not the LAN IP.
+      hostEgress = true;
+
       environment = {
-        # Direct (non-VPN) egress to the host ONLY — the *arrs dial the
-        # shared app-db cluster at host.containers.internal:5433. Under
-        # pasta the host is 169.254.1.2 (the LAN IP 192.168.0.2 refers
-        # back to the container itself); a /32 so the VPN netns can't
-        # reach anything else.
-        FIREWALL_OUTBOUND_SUBNETS = "169.254.1.2/32";
         # gluetun's DNS-over-TLS blocklist (BLOCK_MALICIOUS) flags shadow-
         # library domains (Anna's Archive) as "malicious" and NXDOMAINs
         # them, breaking shelfmark's release search. AA rotates domains

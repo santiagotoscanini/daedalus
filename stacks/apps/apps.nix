@@ -281,10 +281,6 @@ let
     {
       assertions = [
         {
-          assertion = !(egressEnabled && postgresEnabled);
-          message = "fleet.apps.${name}: `egress` cannot combine with `postgres.enable` — a container sharing gluetun's netns can't also join the app-db-net bridge.";
-        }
-        {
           assertion = !(egressEnabled && app.egress.hostPort == null);
           message = "fleet.apps.${name}: `egress.container` is set but `egress.hostPort` is null — set the host port the netns owner publishes for this app.";
         }
@@ -368,8 +364,15 @@ let
       # presence of the key triggers role + database creation and the
       # per-app env file. LAN access is the single shared
       # `postgres.toscanini.me:5432` TCP/SNI route (stacks/app-db).
+      #
+      # `reach` is DERIVED from egress rather than asked for: an app in
+      # gluetun's netns has no bridge interface, so `pg` cannot resolve
+      # there and it must use the plain-TCP host port. That is the same
+      # path the TV stack's *arrs already take. Asking the operator to
+      # state it as well would be a second fact that can disagree with
+      # the first.
       fleet.appDatabases = lib.optionalAttrs postgresEnabled {
-        "${name}" = { };
+        "${name}".reach = if egressEnabled then "hostPort" else "bridge";
       };
 
       # Register in bridgeMemberships either way — that's what earns the
@@ -388,7 +391,7 @@ let
       # mandatory Type=oneshot override.
       fleet.bridgeMemberships."${cName}" =
         lib.optional (exposed && !egressEnabled && !isolatedAuth) "traefik"
-        ++ lib.optional postgresEnabled "app-db";
+        ++ lib.optional (postgresEnabled && !egressEnabled) "app-db";
 
       # Web exposure — hardcoded internal port 3000. Bridge-routed by default
       # (serviceName on traefik-net). In egress mode the app can't ride
