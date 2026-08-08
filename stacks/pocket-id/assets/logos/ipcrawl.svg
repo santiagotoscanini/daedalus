@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Argus">
+  <!-- The ocellus: the eyespot Hera set into the peacock's tail after Argus
+       Panoptes, the hundred-eyed watchman, was put to sleep and killed. It is
+       the app in one glyph — an eye that is always open, on something that was
+       never meant to be looked at.
+
+       Concentric rings rather than an almond eye shape on purpose: this renders
+       at 20px in a daedalus list row, where an eye outline collapses into a
+       smudge but rings still read.
+
+       Kept in sync by hand with the inline mark in src/components/ArgusLogo.tsx.
+       That one is drawn from CSS custom properties so it re-tints with the
+       theme; this one is standalone (a browser tab and daedalus both fetch it
+       cold, with no stylesheet), so the colours are literal. -->
+  <defs>
+    <linearGradient id="sheen" x1="5" y1="5" x2="27" y2="27" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00d4aa" />
+      <stop offset=".52" stop-color="#29b6ff" />
+      <stop offset="1" stop-color="#7c5cff" />
+    </linearGradient>
+    <radialGradient id="pupil" cx="16" cy="16" r="6" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c5cff" />
+      <stop offset="1" stop-color="#150d31" />
+    </radialGradient>
+  </defs>
+
+  <rect width="32" height="32" rx="7" fill="#060908" />
+
+  <!-- Outer halo — texture at large sizes, a soft edge at small ones. -->
+  <circle cx="16" cy="16" r="11.3" fill="none" stroke="url(#sheen)" stroke-width="1.5" opacity=".5" />
+  <!-- The iris ring carries the teal→violet iridescence. -->
+  <circle cx="16" cy="16" r="8.2" fill="none" stroke="url(#sheen)" stroke-width="2.1" />
+  <circle cx="16" cy="16" r="4.9" fill="url(#pupil)" stroke="#00d4aa" stroke-width="1.3" />
+  <!-- Catchlight: what makes it read as an eye rather than a target. -->
+  <circle cx="14.3" cy="14.3" r="1.15" fill="#eafffa" />
+</svg>

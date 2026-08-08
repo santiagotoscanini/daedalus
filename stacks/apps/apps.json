@@ -38,7 +38,7 @@
       "prometheus": false,
       "operatorSecrets": true,
       "image": null,
-      "hostname": null,
+      "hostname": "argus.toscanini.me",
       "egress": {
         "container": "gluetun-ipcrawl",
         "hostPort": 3100
@@ -71,16 +71,17 @@
         },
         {
           "key": "PUBLIC_SITE_URL",
-          "value": "https://ipcrawl.toscanini.me",
+          "value": "https://argus.toscanini.me",
           "note": "The app reads its own canonical origin from this, not from the APP_PUBLIC_URL the apps module injects."
         }
       ],
       "auth": {
         "mode": "proxy",
-        "healthPath": "/favicon.ico"
+        "healthPath": "/favicon.ico",
+        "bypassRule": "Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`)"
       },
       "presentation": {
-        "description": "ipcrawl — exposed-webcam catalogue"
+        "description": "Argus — exposed-webcam catalogue"
       },
       "resources": {
         "cpus": null,
@@ -88,11 +89,11 @@
         "pids": null
       },
       "notes": {
-        "app": "Fork of github.com/alectrocute/ipcrawl (MIT). Upstream has no Dockerfile and deploys as systemd+nginx on a VPS; the fork adds the Dockerfile + .github/workflows/image.yml that publishes registry.toscanini.me/ipcrawl:latest, so the `image` default applies unchanged. Rebase the fork on upstream to pick up changes.",
-        "auth": "Forward-auth: ipcrawl has no user model, so the gate belongs in front of it rather than inside it. No app-side change, and no identity headers — nothing downstream would read them. /favicon.ico is the bypass: harmless unauthenticated, and it comes from the app itself, so gatus and the deploy check certify the upstream instead of the middleware's 302.",
+        "app": "Called Argus; the repo, and therefore the image path (registry.toscanini.me/ipcrawl) and the zot layer-cache repo, keep the old name because CI derives both from the GitHub repo name. Fork of github.com/alectrocute/ipcrawl (MIT), rebranded and since migrated to TanStack Start. Upstream has no Dockerfile and deploys as systemd+nginx on a VPS; the fork adds the Dockerfile + .github/workflows/image.yml, so the `image` default applies unchanged. Rebase the fork on upstream to pick up changes.",
+        "auth": "Forward-auth: Argus has no user model, so the gate belongs in front of it rather than inside it. No app-side change, and no identity headers — nothing downstream would read them. /favicon.ico is the health path and therefore the primary bypass: harmless unauthenticated, and it comes from the app itself, so gatus and the deploy check certify the upstream instead of the middleware's 302. authBypassRule adds the three icon paths for the same reason daedalus needs them — a gated /icon.svg answers the IdP's HTML, so the app list would show a monogram instead of the mark (and iOS a letter tile instead of the home-screen icon).",
         "stage": "LAN-only. This is a catalogue of other people's exposed webcams; publishing it on a CNAME under our own domain is a decision to make deliberately, not a default.",
         "egress": "All outbound (camera live-probes + the daily Shodan pull) exits through the dedicated ProtonVPN tunnel in stacks/ipcrawl-vpn/ instead of the house WAN IP. The app leaves traefik-net and rides gluetun-ipcrawl's netns; traefik reaches the UI via the host port gluetun publishes.",
-        "secrets": "NUXT_SHODAN_API_KEY + NUXT_VOTER_PEPPER + NUXT_CAM_ID_PEPPER come from the tracked stacks/apps/ipcrawl-env.sops (operatorSecrets). Without a Shodan key the app still boots and serves; the catalogue is just empty. The machine-generated secrets/ipcrawl/env keeps only the bootstrap AUTH_SECRET.",
+        "secrets": "SHODAN_API_KEY + VOTER_PEPPER + CAM_ID_PEPPER come from the tracked stacks/apps/ipcrawl-env.sops (operatorSecrets). Without a Shodan key the app still boots and serves; the catalogue is just empty. The machine-generated secrets/ipcrawl/env keeps only the bootstrap AUTH_SECRET.",
         "storage": "SQLite + an fs-backed screenshot/SWR cache, no Postgres. Schema is created in-process on boot (src/server/db.ts ensureSchema), so there's no migration step to run — the migrations/ dir upstream is for their Cloudflare D1 path, not this one. SQLITE_PATH is baked into the image (=/app/data/explore.sqlite, i.e. inside the storage bind mount) — deliberately not restated here, so there's one source of truth for it."
       }
     },
