@@ -9,7 +9,6 @@
       "storage": false,
       "litellm": false,
       "prometheus": false,
-      "operatorSecrets": false,
       "image": null,
       "hostname": null,
       "egress": null,
@@ -36,7 +35,6 @@
       "storage": true,
       "litellm": false,
       "prometheus": false,
-      "operatorSecrets": true,
       "image": null,
       "hostname": null,
       "egress": {
@@ -94,7 +92,7 @@
         "stage": "LAN-only. This is a catalogue of other people's exposed webcams; publishing it on a CNAME under our own domain is a decision to make deliberately, not a default.",
         "egress": "All outbound (camera live-probes + the daily Shodan pull) exits through the dedicated ProtonVPN tunnel in stacks/argus-vpn/ instead of the house WAN IP. The app leaves traefik-net and rides gluetun-argus's netns; traefik reaches the UI via the host port gluetun publishes.",
         "secrets": "SHODAN_API_KEY + VOTER_PEPPER + CAM_ID_PEPPER come from the tracked stacks/apps/argus-env.sops (operatorSecrets). Without a Shodan key the app still boots and serves; the catalogue is just empty. The machine-generated secrets/argus/env keeps only the bootstrap AUTH_SECRET.",
-        "storage": "SQLite + an fs-backed screenshot/SWR cache, no Postgres. Schema is created in-process on boot (src/server/db.ts ensureSchema), so there's no migration step to run — the migrations/ dir upstream is for their Cloudflare D1 path, not this one. SQLITE_PATH is baked into the image (=/app/data/explore.sqlite, i.e. inside the storage bind mount) — deliberately not restated here, so there's one source of truth for it."
+        "storage": "The catalogue is in the shared pg cluster (migrated off SQLite 2026-08-08); the `storage` bind mount now holds only camera stills and a few fs-backed status records, joined to rows by cams.id + cams.screenshot_mime. Schema is applied by Drizzle migrations at container start (start.mjs), which exits non-zero rather than serving against a schema that doesn't match the code. Because this app rides gluetun's netns it has no bridge to reach `pg` on, so its DATABASE_URL points at the cluster's plain-TCP host port — see appDatabases.argus.reach, derived from `egress`."
       }
     },
     "voyra": {
@@ -103,7 +101,6 @@
       "storage": false,
       "litellm": true,
       "prometheus": false,
-      "operatorSecrets": true,
       "image": null,
       "hostname": null,
       "egress": null,
