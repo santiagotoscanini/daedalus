@@ -106,7 +106,7 @@ export type CategorySpec = {
      * this file is imported into the browser bundle for five labels and must
      * stay data.
      */
-    health?: 'vpn-egress' | 'uplink'
+    health?: 'vpn-egress' | 'uplink' | 'log-pipeline'
   }[]
   /**
    * Column spans of this page's boards, for the skeleton that stands in while
@@ -256,7 +256,11 @@ export const CATEGORIES: CategorySpec[] = [
       // has: the game itself speaks UDP straight to a forwarded port and
       // nothing on this box can ask it a question.
       { id: "factorio", label: "Factorio", probe: "factorio-admin" },
-      // No server, so no probe — grey, and correctly so.
+      // Still no probe, but for the opposite reason to Factorio's: a probe is
+      // a webApp answering HTTP, and Minecraft publishes no HTTP at all. It
+      // answers the question better than a dot could anyway — the page reads
+      // the game's own status ping, which is the game replying rather than a
+      // container existing.
       { id: "minecraft", label: "Minecraft" },
     ],
   },
@@ -383,8 +387,16 @@ export const CATEGORIES: CategorySpec[] = [
       // Physical, then logical. SMART and throughput belong to a device;
       // capacity and snapshots belong to a pool, and one page holding both
       // was the same paragraph answering two questions.
-      { id: 'disks', label: 'Disks', boardSpans: [6, 6, 12], statBand: false, head: false },
+      // Three thirds and a footer: one board per drive in this box, which is
+      // the count the skeleton has to guess at because the disks are data.
+      { id: 'disks', label: 'Disks', boardSpans: [4, 4, 4, 12], statBand: false, head: false },
       { id: 'pools', label: 'Pools', boardSpans: [6, 6, 12], statBand: false, head: false },
+      // The parts, as opposed to the layers. Every other tab in this row
+      // answers "how is it behaving"; this one answers "what is it", which is
+      // the question you cannot look up when you are in front of the open
+      // case with a screwdriver. Four thirds and a wide row — the components
+      // are peers, so none of them gets to be the big panel.
+      { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 12], statBand: false, head: false },
       { id: 'database', label: 'Database', boardSpans: [8, 4, 12], statBand: false },
       {
         id: 'backups',
@@ -430,8 +442,15 @@ export const CATEGORIES: CategorySpec[] = [
         statBand: false,
       },
       // Loki publishes no gatus endpoint — it is reached over the monitoring
-      // bridge and has no published hostname to probe from outside.
-      { id: 'logs', label: 'Logs', boardSpans: [8, 4, 4, 8], statBand: false },
+      // bridge and has no published hostname to probe from outside. That left
+      // this the one tab in the row wearing a permanent grey dot, which read
+      // as "nothing is checking the logs" beside four green ones; the truth
+      // was that the check exists and the dot could not see it. Prometheus
+      // scrapes both halves of the pipeline over that same bridge, so the
+      // status is assembled from `up` instead of published for the sake of
+      // being probed — a hostname for Loki would be new ingress bought to
+      // colour a circle.
+      { id: 'logs', label: 'Logs', health: 'log-pipeline', boardSpans: [8, 4, 4, 8], statBand: false },
       { id: 'jobs', label: 'Jobs', probe: 'healthchecks', boardSpans: [8, 4, 12], statBand: false },
     ],
   },

@@ -263,6 +263,7 @@ let
       pkgs.smartmontools
       pkgs.zfs
       pkgs.coreutils
+      pkgs.dmidecode
       pkgs.gnused
       pkgs.gnugrep
       pkgs.gawk
@@ -272,6 +273,7 @@ let
     text = ''
       OUT_DIR=${lib.escapeShellArg systemDir}
       SMARTCTL=${pkgs.smartmontools}/bin/smartctl
+      DMIDECODE=${pkgs.dmidecode}/bin/dmidecode
       ZPOOL=${pkgs.zfs}/bin/zpool
       ZFS=${pkgs.zfs}/bin/zfs
       LSBLK=${pkgs.util-linux}/bin/lsblk

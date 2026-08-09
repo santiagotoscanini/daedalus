@@ -256,15 +256,139 @@ generations_json() {
         | { id: (.id | tonumber), date: .date, current: (.cur != null and .cur != "") } ]'
 }
 
+# ── hardware ──────────────────────────────────────────────────────────────
+#
+# What the machine IS, as opposed to what it is doing. None of it changes
+# between reboots, and all of it was invisible: the dashboard could show the
+# cpu at 40% without being able to say which cpu, or 64 GB in use without
+# being able to say what is in the slots or how many are left.
+#
+# Two sources, chosen per fact rather than per convenience:
+#
+#   /sys/class/dmi/id/*  — board, BIOS and chassis identity. World-readable,
+#                          no tool, no root. Everything here that CAN come
+#                          from sysfs does.
+#   dmidecode            — the memory modules (SMBIOS type 17) and the cpu's
+#                          own record (type 4). These are structured tables
+#                          rather than flat strings, sysfs does not decode
+#                          them, and /sys/firmware/dmi/tables/DMI is 0400 —
+#                          so this is the one part that genuinely needs both
+#                          the tool and root.
+#
+# The BIOS version is read and not compared against anything. MSI publishes
+# no machine-readable feed, so a "2 behind" verdict would mean scraping a
+# vendor page that will change shape without warning — and a version panel
+# that lies is worse than one that only states what is installed.
+dmi() { [ -r "/sys/class/dmi/id/$1" ] && tr -d '\n' <"/sys/class/dmi/id/$1" || true; }
+
+# One line per memory slot, fields tab-joined. Records are delimited by
+# `Handle`, which is why the parser flushes on it AND at END — the last block
+# in the table has no following handle to trigger it.
+memory_table() {
+  "$DMIDECODE" -t 17 2>/dev/null | "$AWK" '
+    /^Handle/ { flush(); next }
+    /^Memory Device$/ { inblk = 1; delete f; next }
+    inblk && /^\t[A-Z]/ {
+      line = $0; sub(/^\t/, "", line)
+      k = line; sub(/:.*/, "", k)
+      v = line; sub(/^[^:]*:[ \t]*/, "", v); gsub(/[ \t]+$/, "", v)
+      f[k] = v
+    }
+    END { flush() }
+    function flush() {
+      if (!inblk) return
+      inblk = 0
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", f["Locator"], f["Size"], f["Type"], \
+        f["Speed"], f["Manufacturer"], f["Part Number"], f["Rank"]
+    }'
+}
+
+# Memory: every populated slot, plus how many there are in total. "2 of 4
+# filled, 128 GB maximum" is the fact an upgrade decision needs and no
+# `free -h` anywhere can answer.
+memory_json() {
+  local slots max
+  slots=$("$DMIDECODE" -t 16 2>/dev/null | "$GREP" -m1 'Number Of Devices' | "$SED" 's/.*: *//')
+  max=$("$DMIDECODE" -t 16 2>/dev/null | "$GREP" -m1 'Maximum Capacity' | "$SED" 's/.*: *//')
+
+  memory_table |
+    "$AWK" -F'\t' '$2 ~ /^[0-9]/' |
+    "$JQ" -R -s --arg slots "''${slots:-}" --arg max "''${max:-}" '
+      def n: (try (capture("(?<v>[0-9]+)").v | tonumber) catch null);
+      [ split("\n")[] | select(length > 0) | split("\t")
+        | { locator:     .[0],
+            sizeGb:      (.[1] | n),
+            type:        .[2],
+            speedMts:    (.[3] | n),
+            manufacturer: .[4],
+            partNumber:  (.[5] | sub("\\s+$"; "")),
+            rank:        (.[6] | n) } ]
+      | { slots: ($slots | n), maxCapacityGb: ($max | n),
+          populated: length, totalGb: (map(.sizeGb // 0) | add),
+          modules: . }'
+}
+
+# The cpu's own SMBIOS record. `nproc` already tells the app how many threads
+# there are; what it cannot tell it is that ten cores produce sixteen threads,
+# which on Alder Lake is six of them having no hyperthread rather than an
+# accident — the distinction the per-core temperature list on Host is showing.
+cpu_json() {
+  "$DMIDECODE" -t 4 2>/dev/null |
+    "$AWK" '
+      /^\t(Version|Socket Designation|Core Count|Thread Count|Max Speed):/ {
+        line = $0; sub(/^\t/, "", line)
+        k = line; sub(/:.*/, "", k)
+        v = line; sub(/^[^:]*:[ \t]*/, "", v)
+        printf "%s\t%s\n", k, v
+      }' |
+    "$JQ" -R -s '
+      def n: (try (capture("(?<v>[0-9]+)").v | tonumber) catch null);
+      [ split("\n")[] | select(length > 0) | split("\t")
+        | { key: .[0], value: .[1] } ] | from_entries
+      | { model:   .Version,
+          socket:  ."Socket Designation",
+          cores:   (.["Core Count"] | n),
+          threads: (.["Thread Count"] | n),
+          maxMhz:  (.["Max Speed"] | n) }'
+}
+
+# Fans, voltages and board temperatures are deliberately NOT here.
+#
+# They arrive through hwmon, which node-exporter already reads and labels —
+# `node_hwmon_fan_rpm{sensor="fan1"}` with `node_hwmon_sensor_label` naming it
+# "CPU Fan". Reading them here as well would be a second source for one fact,
+# sampled on a different timer, that could disagree with the first. This file
+# is for what prometheus CANNOT see; the moment the nct6687 driver bound, fan
+# speed stopped being in that category.
+hardware_json() {
+  "$JQ" -n \
+    --argjson memory "$(memory_json)" \
+    --argjson cpu "$(cpu_json)" \
+    --arg boardVendor "$(dmi board_vendor)" \
+    --arg boardModel "$(dmi board_name)" \
+    --arg boardVersion "$(dmi board_version)" \
+    --arg biosVendor "$(dmi bios_vendor)" \
+    --arg biosVersion "$(dmi bios_version)" \
+    --arg biosDate "$(dmi bios_date)" \
+    --arg chassisVendor "$(dmi chassis_vendor)" \
+    '{ board: { vendor: $boardVendor, model: $boardModel, version: $boardVersion,
+                bios: { vendor: $biosVendor, version: $biosVersion, date: $biosDate } },
+       chassis: { vendor: $chassisVendor },
+       cpu: $cpu, memory: $memory }
+     | walk(if type == "string" and . == "" then null else . end)'
+}
+
 "$JQ" -n \
   --argjson disks "$(disks_json)" \
   --argjson pools "$(pools_json)" \
   --argjson datasets "$(datasets_json)" \
   --argjson replication "$(replication_json)" \
   --argjson generations "$(generations_json)" \
+  --argjson hardware "$(hardware_json)" \
   --arg kernel "$("$UNAME" -r)" \
   '{ disks: $disks, pools: $pools, datasets: $datasets,
-     replication: $replication, generations: $generations, kernel: $kernel }' >"$tmp"
+     replication: $replication, generations: $generations,
+     hardware: $hardware, kernel: $kernel }' >"$tmp"
 
 # Validate before publishing, for the same reason image-snapshot does: a
 # half-written file would blank three tabs at once, and the previous snapshot

@@ -116,12 +116,15 @@ export const fetchTabStatus = createServerFn()
     if (spec === undefined) return {}
 
     const { promVector } = await import('../lib/dashboard/clients')
-    const [probes, egress, uplink] = await Promise.all([
+    const [probes, egress, uplink, logs] = await Promise.all([
       promVector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`),
       // Only when a tab actually asks for it — this is two more prometheus
       // queries and every category pays for this handler.
       spec.tabs.some((t) => t.health === 'vpn-egress') ? vpnEgressHealth() : Promise.resolve(null),
       spec.tabs.some((t) => t.health === 'uplink') ? uplinkHealth() : Promise.resolve(null),
+      spec.tabs.some((t) => t.health === 'log-pipeline') ?
+        logPipelineHealth()
+      : Promise.resolve(null),
     ])
     // The `name` label, not `key` — `key` is `<group>_<name>`, so reading it
     // means knowing which group an endpoint was declared in. gatus probes the
@@ -140,6 +143,7 @@ export const fetchTabStatus = createServerFn()
         t.id,
         t.health === 'vpn-egress' ? egress
         : t.health === 'uplink' ? uplink
+        : t.health === 'log-pipeline' ? logs
         : t.probes !== undefined ? all(t.probes)
         : t.probe === undefined ? null
         : (health.get(t.probe) ?? null),
@@ -201,6 +205,34 @@ async function uplinkHealth(): Promise<boolean | null> {
   const [worst, seen] = await Promise.all([
     promScalar('min(network_hop_up)'),
     promScalar('count(network_hop_up)'),
+  ])
+  if (worst === null || seen === null || seen < 2) return null
+  return worst === 1
+}
+
+/**
+ * Is the log pipeline both shipping and storing.
+ *
+ * Neither half publishes a hostname, so gatus has nothing to probe — but
+ * prometheus scrapes both over the monitoring bridge, and a scrape that
+ * succeeded IS the liveness answer: `up` is 1 only when the process accepted
+ * a connection and served its own metrics.
+ *
+ * Both, and the AND is the point. Alloy tails journald and pushes; Loki
+ * stores and answers. Alloy alone up means lines are being collected and
+ * dropped on the floor, Loki alone up means a store nothing is writing to,
+ * and this tab's own text calls them two halves of one pipeline. Reporting
+ * either one as "logs are fine" would be green over a broken half — the same
+ * argument the multi-probe tabs make.
+ *
+ * `count` beside `min` for the reason the other two computed checks have it:
+ * min over an empty set is not a failure, it is no answer.
+ */
+async function logPipelineHealth(): Promise<boolean | null> {
+  const { promScalar } = await import('../lib/dashboard/clients')
+  const [worst, seen] = await Promise.all([
+    promScalar('min(up{job=~"loki|alloy"})'),
+    promScalar('count(up{job=~"loki|alloy"})'),
   ])
   if (worst === null || seen === null || seen < 2) return null
   return worst === 1
