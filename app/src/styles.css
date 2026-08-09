@@ -5318,3 +5318,237 @@ h2 {
   margin: 0.45rem 0.6rem 0.5rem;
   background: var(--border);
 }
+
+/* ── system: the disks ────────────────────────────────────────────────── */
+
+/* Each drive's photograph beside what SMART calls it, on the same argument as
+   `.router`: this is one of the two pages here whose subject is an object in
+   the house rather than a counter, and the panel is read when something is
+   about to be opened, unplugged or ordered. Recognition is the whole job — the
+   model string is what you'd type into a shop, the picture is what you'd match
+   against the thing in your hand. */
+.disk {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding-bottom: 0.5rem;
+}
+.disk-photo {
+  height: auto;
+  flex: none;
+  object-fit: contain;
+}
+/* Two shapes, two sizes, because a 3.5" drive and an M.2 stick share no
+   dimension. Sized to land in the same height band rather than to a common
+   width — at equal width the stick dwarfs the drive it is a fraction of, and
+   at true relative scale it would be a smudge. The platter stays the taller of
+   the two, which is the one honest thing about their proportions.
+
+   Both are a fraction of the board rather than a fixed size, and the fraction
+   is small because the board is a third of the page: the model string beside
+   it is the longest line in the panel, and a picture that took half the width
+   would wrap "Samsung SSD 990 PRO with Heatsink 4TB" over four lines to say
+   something the reader can already see. The maximum caps it on the phone, where
+   every board is full width and a percentage would run away. */
+.disk-photo-platter {
+  width: clamp(52px, 18%, 78px);
+}
+.disk-photo-stick {
+  width: clamp(104px, 33%, 150px);
+}
+.disk-id {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.22rem;
+  min-width: 0;
+}
+.disk-model {
+  color: var(--text);
+  font-size: 0.94rem;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.disk-product {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+/* The serial is the one line here that is never read and always needed: it is
+   what an RMA asks for, so it stays legible and stays out of the way. */
+.disk-serial {
+  color: var(--dim);
+  font-size: 0.7rem;
+}
+
+/* ── system: a part number that explains itself ───────────────────────── */
+
+/* Hover, or focus with a keyboard. `cursor: help` and the dotted underline
+   are the whole affordance — a disclosure nobody can see is a disclosure
+   nobody opens, and there is no room on this board for a button. */
+.decode {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  cursor: help;
+}
+.decode:focus-visible {
+  outline: 1px solid var(--accent-dim);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.decode-string {
+  display: inline;
+  border-bottom: 1px dotted var(--dim);
+  overflow-wrap: anywhere;
+}
+/* Alternating weight, not five hues: see the note on `Segment`. Only the
+   class code is coloured, because it is the only segment that changes what
+   the drive is. */
+.decode-seg-maker,
+.decode-seg-variant {
+  color: var(--muted);
+}
+.decode-seg-capacity,
+.decode-seg-config {
+  color: var(--text);
+}
+.decode-seg-class {
+  color: var(--accent);
+}
+
+/* Inside the board, deliberately — `.board` is overflow:hidden, so a card
+   that escaped it would be cut off rather than float. It overlays the panel
+   below, which is what a tooltip does anyway. */
+.decode-card {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 5;
+  width: max(240px, 100%);
+  max-width: 92cqw;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raise);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 55%);
+  /* `visibility` rather than `display`, so the card is laid out and can be
+     transitioned — and so a screen reader is not handed a permanently
+     rendered duplicate of every part number on the page. */
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 90ms ease;
+}
+.decode:hover .decode-card,
+.decode:focus-visible .decode-card,
+.decode:focus-within .decode-card {
+  visibility: visible;
+  opacity: 1;
+}
+.decode-head {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+.decode-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+/* The code, its name, then what it means — the code column sized to the
+   widest so the names line up and the list reads as a key. */
+.decode-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.05rem 0.5rem;
+}
+.decode-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.74rem;
+}
+.decode-label {
+  color: var(--text);
+  font-size: 0.74rem;
+}
+.decode-note {
+  grid-column: 2;
+  color: var(--dim);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+/* ── system: the build ────────────────────────────────────────────────── */
+
+/* One vocabulary for every component panel, so a page of six parts reads as
+   one inventory rather than six designs. Same shape as `.disk` and `.router`
+   — photo beside identity — because it is the same gesture: a physical object
+   named, pictured, and then measured underneath. */
+.part {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding-bottom: 0.35rem;
+  min-height: 2.6rem;
+}
+.part-photo {
+  width: clamp(78px, 34%, 128px);
+  height: auto;
+  flex: none;
+  object-fit: contain;
+}
+.part-id {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.part-name {
+  color: var(--text);
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.part-detail {
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.4;
+}
+
+/* The full-width case panel: the photo earns real size there, and the specs
+   sit beside it rather than under it — at twelve columns a spec list below a
+   picture leaves half the row empty. */
+.part-wide {
+  align-items: flex-start;
+  gap: 1.4rem;
+}
+.part-wide .part-photo {
+  width: clamp(140px, 26%, 300px);
+}
+.part-wide .facts {
+  margin-top: 0.5rem;
+  width: 100%;
+}
+@container board (max-width: 30rem) {
+  .part-wide {
+    flex-direction: column;
+    align-items: center;
+  }
+  .part-wide .part-photo {
+    width: clamp(140px, 60%, 260px);
+  }
+}
+
+/* A header that is not connected, which is not the same as one reading zero
+   because something stopped. Dimmed rather than coloured — an empty fan
+   header is the normal state of six of the eight on this board. */
+.text-dim {
+  color: var(--dim);
+}

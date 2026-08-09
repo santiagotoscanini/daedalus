@@ -44,6 +44,8 @@ export function SystemView({ data }: { data: SystemData }) {
       return <DisksView d={data} />
     case 'pools':
       return <PoolsView d={data} />
+    case 'build':
+      return <BuildView d={data} />
     case 'database':
       return <DatabaseView d={data} />
     case 'backups':
@@ -152,6 +154,24 @@ function HostView({ d }: { d: Host }) {
         />
       </Board>
 
+      {/* The machine itself, on the tab about the machine itself. It carries
+          no reading and is not trying to: every other panel here is a number
+          that moves, and this is the one thing on the page you could put a
+          hand on. The specification lives on Build — this is recognition, and
+          a link to the rest. */}
+      <Board title="The box" icon="▣" span={4}>
+        <div className="part">
+          <PartPhoto part={PARTS.case} />
+          <div className="part-id">
+            <strong className="part-name">{PARTS.case.name}</strong>
+            <span className="part-detail">
+              {d.kernel === null ? 'kernel unread' : `Linux ${d.kernel}`}, up{' '}
+              {duration(d.uptimeSeconds)}.
+            </span>
+          </div>
+        </div>
+      </Board>
+
       <Board title="Running" icon="▣" span={4}>
         <Facts
           rows={[
@@ -255,6 +275,61 @@ function MemoryView({ d }: { d: Memory }) {
           Read <b>available</b>, not used. Linux spends free memory on cache by design, so a box
           with nothing to do still reports most of its memory in use — and on this one a large share
           of that is ZFS&rsquo;s cache, which is charged to the kernel and handed back on demand.
+        </p>
+      </Board>
+
+      {/* The sticks behind the bar above. Every other number on this tab is
+          bytes in flight; this is what they are flying through, and it is the
+          only panel here that answers "can I add more" — which is the question
+          a memory page gets asked when the bar looks full. */}
+      <Board
+        title="The modules"
+        icon="▤"
+        span={4}
+        aside={
+          <span className="board-note">
+            {d.modules.populated === null || d.modules.slots === null ?
+              DASH
+            : `${num(d.modules.populated)} of ${num(d.modules.slots)} slots`}
+          </span>
+        }
+      >
+        <PartHead part={PARTS.memory} />
+        <Facts
+          rows={[
+            {
+              k: 'Installed',
+              v:
+                d.modules.totalGb === null ? DASH : (
+                  `${num(d.modules.totalGb)} GB ${d.modules.modules[0]?.type ?? ''}`.trim()
+                ),
+            },
+            {
+              k: 'Speed',
+              v:
+                d.modules.modules[0]?.speedMts == null ?
+                  DASH
+                : `${num(d.modules.modules[0].speedMts)} MT/s`,
+            },
+            {
+              k: 'Part',
+              v: <span className="mono">{d.modules.modules[0]?.partNumber ?? DASH}</span>,
+            },
+            {
+              k: 'Room left',
+              v:
+                d.modules.maxCapacityGb === null || d.modules.totalGb === null ?
+                  DASH
+                : `${num(d.modules.maxCapacityGb - d.modules.totalGb)} GB in ${num(
+                    (d.modules.slots ?? 0) - (d.modules.populated ?? 0),
+                  )} slots`,
+            },
+          ]}
+        />
+        <p className="board-foot">
+          Read from SMBIOS rather than counted from bytes — the kernel knows how much memory it
+          has and nothing about how it arrives. Two slots free against a 128 GB ceiling is the
+          headroom this machine actually has, and the full specification is on <b>Build</b>.
         </p>
       </Board>
 
@@ -382,6 +457,170 @@ function MemoryView({ d }: { d: Memory }) {
 
 type Disks = Extract<SystemData, { tab: 'disks' }>
 
+/**
+ * The drive in the picture, matched on the model string SMART reports.
+ *
+ * Same argument as the router's photograph on Network: these panels are about
+ * physical objects in the house, and a 3.5" platter drive and an M.2 stick are
+ * not interchangeable in any way that matters when you are about to open the
+ * case. Nothing infers a photo from `rotationRate` — a stock image of "a hard
+ * disk" would be decoration, and a wrong one would be worse than none, so an
+ * unrecognised model gets no picture and the panel reads exactly as before.
+ *
+ * The intrinsic dimensions are the files' own, so the aspect ratio is reserved
+ * before the image loads and nothing below it jumps.
+ */
+type DiskPhoto = { src: string; width: number; height: number; shape: 'platter' | 'stick' }
+
+const DISK_PHOTOS: readonly { model: string; photo: DiskPhoto }[] = [
+  {
+    model: 'ST16000NE000',
+    photo: { src: '/disk-ironwolf-pro.png', width: 480, height: 696, shape: 'platter' },
+  },
+  {
+    model: 'Samsung SSD 990 PRO',
+    photo: { src: '/disk-990-pro.webp', width: 700, height: 346, shape: 'stick' },
+  },
+]
+
+function diskPhoto(model: string | null): DiskPhoto | null {
+  if (model === null) return null
+  return DISK_PHOTOS.find((d) => model.includes(d.model))?.photo ?? null
+}
+
+/**
+ * What Seagate's class code says the drive is.
+ *
+ * The two letters after the capacity are the only part of the part number
+ * that changes what the drive IS, and the difference that matters here is
+ * the workload rate limit: NE and NT are both "IronWolf Pro" on the label
+ * and on the box, and they are rated 300 and 500 TB/year respectively. That
+ * is the number to check a part number against before buying a replacement,
+ * and it is nowhere on this page otherwise.
+ */
+const SEAGATE_CLASSES: Record<string, { line: string; note: string }> = {
+  NE: { line: 'IronWolf Pro', note: 'NAS, rated 300 TB/year of reads and writes' },
+  NT: { line: 'IronWolf Pro', note: 'NAS, rated 500 TB/year — the same label as NE, a higher limit' },
+  VN: { line: 'IronWolf', note: 'NAS, rated 180 TB/year' },
+  NM: { line: 'Exos', note: 'enterprise, rated 550 TB/year' },
+  VX: { line: 'SkyHawk', note: 'surveillance — tuned for many sequential write streams' },
+  DM: { line: 'BarraCuda', note: 'desktop — no NAS vibration handling, no workload rating' },
+}
+
+/**
+ * `key` drives the colour, and the colours are not decorative.
+ *
+ * Everywhere else on this dashboard a colour means a fault, so five rotating
+ * hues over a part number would spend the one signal the palette has on
+ * something that is never wrong. Instead the segments alternate between plain
+ * and dimmed so their boundaries read, and exactly one — the class code —
+ * takes the accent, because it is the only segment whose value changes what
+ * you would buy.
+ */
+type Segment = {
+  key: 'maker' | 'capacity' | 'class' | 'variant' | 'config'
+  text: string
+  label: string
+  note: string
+}
+
+/**
+ * A part number that explains itself on hover.
+ *
+ * The string is the drive's identity and it is unreadable — `ST16000NE000` is
+ * five separate facts run together, and the one that decides whether a
+ * replacement is the same drive (the workload rating) is two letters in the
+ * middle. Colouring the segments makes it legible at a glance; the card makes
+ * it readable.
+ *
+ * Positioned inside the board rather than floating above the page, because
+ * `.board` is `overflow: hidden` and anything escaping it would be clipped
+ * rather than shown. It overlays the panel below it, which is what a tooltip
+ * does anyway, and it needs no positioning library to do it.
+ *
+ * `tabIndex` and `:focus-within` alongside `:hover` so this is reachable
+ * without a pointer — a hover-only disclosure is one that a keyboard, and a
+ * phone, simply cannot open.
+ */
+function ModelDecode({ model, segments }: { model: string; segments: Segment[] }) {
+  return (
+    <span className="decode" tabIndex={0} aria-label={`${model}, decoded`}>
+      <strong className="disk-model decode-string">
+        {segments.map((s, i) => (
+          <span key={`${s.text}-${String(i)}`} className={`decode-seg decode-seg-${s.key}`}>
+            {s.text}
+          </span>
+        ))}
+      </strong>
+      <span className="decode-card" role="tooltip">
+        <span className="decode-head">{model}</span>
+        <ul className="decode-list">
+          {segments.map((s, i) => (
+            <li key={`${s.text}-${String(i)}`}>
+              <code className={`decode-seg decode-seg-${s.key}`}>{s.text}</code>
+              <span className="decode-label">{s.label}</span>
+              <span className="decode-note">{s.note}</span>
+            </li>
+          ))}
+        </ul>
+      </span>
+    </span>
+  )
+}
+
+/**
+ * Split a Seagate part number into the things it is actually saying.
+ *
+ * Derived from the string rather than declared per drive, so a replacement
+ * with a different suffix — or a different line entirely — decodes on its own
+ * instead of silently showing the old drive's explanation. Anything that is
+ * not a Seagate part number returns null and the panel simply does not offer
+ * the reading; a decode that guesses is worse than no decode, because the
+ * whole point of this is checking a number before spending money on it.
+ */
+function decodeSeagate(model: string | null): Segment[] | null {
+  if (model === null) return null
+  const m = /^ST(\d+)([A-Z]{2})(\d+)(?:-(.+))?$/.exec(model)
+  if (m === null) return null
+
+  const [, gb, code, variant, suffix] = m
+  const cls = SEAGATE_CLASSES[code ?? '']
+  const tb = Number(gb) / 1000
+
+  const segments: Segment[] = [
+    { key: 'maker', text: 'ST', label: 'Seagate', note: 'The maker. Every Seagate part number opens with it.' },
+    {
+      key: 'capacity',
+      text: gb ?? '',
+      label: `${tb % 1 === 0 ? tb.toFixed(0) : tb.toFixed(1)} TB`,
+      note: 'Capacity in gigabytes, decimal — which is why the operating system reports less.',
+    },
+    {
+      key: 'class',
+      text: code ?? '',
+      label: cls?.line ?? 'unknown line',
+      note:
+        cls?.note ??
+        'Seagate’s class code. This one is not in the table on this page, so the line is a guess and is not being made.',
+    },
+    {
+      key: 'variant',
+      text: variant ?? '',
+      label: 'variant',
+      note: 'The generation within that line — platter count, cache and internal design. Two drives differing only here are the same product bought a year apart.',
+    },
+  ]
+  if (suffix !== undefined) {
+    segments.push({
+      key: 'config',
+      text: `-${suffix}`,
+      label: 'configuration',
+      note: 'Seagate’s internal suffix: firmware, region and how it was packaged. A retail box and a bare OEM drive of the same model differ here and nowhere else.',
+    })
+  }
+  return segments
+}
+
 function DisksView({ d }: { d: Disks }) {
   const io = new Map(d.io.map((i) => [i.device, i]))
 
@@ -399,23 +638,51 @@ function DisksView({ d }: { d: Disks }) {
         const nvme = disk.percentageUsed !== null
         const stats = io.get(disk.device)
         const failedTest = disk.selfTests.find((t) => !t.passed)
+        const photo = diskPhoto(disk.model)
+        const decoded = decodeSeagate(disk.model)
 
         return (
           <Board
             key={disk.device}
             title={disk.device}
             icon={nvme ? '⚡' : '▦'}
-            span={6}
+            /* A third each, so the machine's three drives are one row and one
+               reading. At a half they were a pair and an orphan, which put the
+               NVMe on a line of its own beside empty grid and read as a second
+               subject — and the comparison this page is for is across all
+               three: which is hottest, which is oldest, which has the counter
+               that moved. Boards stretch to a shared bottom edge, so the row
+               is as tall as the drive with the most to say. */
+            span={4}
             aside={
               disk.passed === null ? <span className="board-note">no SMART</span>
               : disk.passed ? <Chip tone="ok">SMART ok</Chip>
               : <Chip tone="bad">SMART failing</Chip>
             }
           >
-            <p className="board-note">
-              {disk.model ?? '?'}
-              {disk.serial !== null && <span className="mono"> · {disk.serial}</span>}
-            </p>
+            <div className="disk">
+              {photo !== null && (
+                <img
+                  className={`disk-photo disk-photo-${photo.shape}`}
+                  src={photo.src}
+                  alt=""
+                  width={photo.width}
+                  height={photo.height}
+                />
+              )}
+              <div className="disk-id">
+                {decoded === null ?
+                  <strong className="disk-model">{disk.model ?? '?'}</strong>
+                : <ModelDecode model={disk.model ?? '?'} segments={decoded} />}
+                <span className="disk-product">
+                  {disk.family ?? (nvme ? 'solid state' : 'hard disk')}
+                  {disk.sizeBytes !== null && ` · ${bytes(disk.sizeBytes)}`}
+                  {disk.rotationRate !== null && disk.rotationRate > 0 &&
+                    ` · ${num(disk.rotationRate)} rpm`}
+                </span>
+                {disk.serial !== null && <span className="disk-serial mono">{disk.serial}</span>}
+              </div>
+            </div>
 
             <Measures
               items={[
@@ -690,6 +957,390 @@ function PoolsView({ d }: { d: Pools }) {
       />
     </BoardGrid>
   )
+}
+
+/* ── Build ────────────────────────────────────────────────────────────── */
+
+type Build = Extract<SystemData, { tab: 'build' }>
+
+/**
+ * What each part IS, since no interface on the machine will say.
+ *
+ * SMBIOS knows the board, the cpu and the memory modules, and that is where
+ * this page reads them from. It has never heard of the cooler, the case or
+ * the power supply — nothing in a PC reports those — so those three are
+ * written down here, and they are the only declared facts on the tab.
+ *
+ * Written down ONCE, next to the picture, rather than spread through the
+ * markup: when one of them is replaced the edit is this table and nothing
+ * else, and a part whose photo and specification live in the same object
+ * cannot end up showing last year's cooler beside this year's numbers.
+ */
+type Part = {
+  photo: { src: string; width: number; height: number } | null
+  name: string
+  detail: string
+  specs: { k: string; v: string }[]
+}
+
+const PARTS = {
+  case: {
+    photo: { src: '/part-case-jonsbo-n4.png', width: 700, height: 603 },
+    name: 'Jonsbo N4',
+    detail: 'Steel and wood, six 3.5" bays — the reason this box is a NAS shape and not a tower.',
+    specs: [
+      { k: 'Bays', v: '6 × 3.5" + 2 × 2.5"' },
+      { k: 'Board', v: 'ITX / mATX' },
+      { k: 'Size', v: '286 × 300 × 228 mm' },
+      { k: 'Cooler clearance', v: '70 mm' },
+      { k: 'PSU', v: 'SFX, up to 125 mm' },
+    ],
+  },
+  memory: {
+    photo: { src: '/part-ram-vengeance-lpx.png', width: 700, height: 256 },
+    name: 'Corsair Vengeance LPX',
+    detail:
+      'Low-profile heat spreaders, which on a board this small is the specification that matters — a tall kit fouls the cooler.',
+    specs: [],
+  },
+} satisfies Record<string, Part>
+
+function BuildView({ d }: { d: Build }) {
+  const hw = d.hardware
+  const spinning = d.fans.filter((f) => f.rpm > 0)
+  const board = hw.board
+
+  return (
+    <BoardGrid>
+      <Board
+        title="Motherboard"
+        icon="⌗"
+        span={4}
+        aside={
+          <span className="board-note">
+            {board.bios.version === null ? 'no BIOS reading' : `BIOS ${board.bios.version}`}
+          </span>
+        }
+      >
+        <div className="part">
+          <div className="part-id">
+            <strong className="part-name">{board.model ?? DASH}</strong>
+            <span className="part-detail">
+              {board.vendor === null ? 'unknown vendor' : shortVendor(board.vendor)}
+              {board.version !== null && ` · board rev ${board.version}`}
+            </span>
+          </div>
+        </div>
+        <Facts
+          rows={[
+            { k: 'BIOS', v: <span className="mono">{board.bios.version ?? DASH}</span> },
+            { k: 'Built', v: board.bios.date ?? DASH },
+            {
+              k: 'BIOS vendor',
+              v: board.bios.vendor === null ? DASH : shortVendor(board.bios.vendor),
+            },
+            { k: 'Chipset temp', v: temp(d.temps.find((t) => t.label === 'PCH')?.value ?? null) },
+            { k: 'VRM temp', v: temp(d.temps.find((t) => t.label === 'VRM MOS')?.value ?? null) },
+          ]}
+        />
+        <p className="board-foot">
+          Read from SMBIOS, so a BIOS update appears here on its own. It is deliberately not
+          compared against anything: MSI publishes no machine-readable list of releases, and the
+          only way to claim &ldquo;two behind&rdquo; would be to scrape a vendor page that will
+          change shape without warning. A version panel that quietly starts lying is worse than
+          one that only ever states what is installed.
+        </p>
+      </Board>
+
+      <Board
+        title="Processor"
+        icon="◈"
+        span={4}
+        aside={<span className="board-note">{temp(d.cpu.tempC)}</span>}
+      >
+        <div className="part">
+          <div className="part-id">
+            <strong className="part-name">{cpuName(hw.cpu.model)}</strong>
+            <span className="part-detail">
+              {hw.cpu.cores === null || hw.cpu.threads === null ?
+                'core count unread'
+              : `${num(hw.cpu.cores)} cores, ${num(hw.cpu.threads)} threads`}
+              {hw.cpu.maxMhz !== null && ` · up to ${(hw.cpu.maxMhz / 1000).toFixed(1)} GHz`}
+            </span>
+          </div>
+        </div>
+        <Measures
+          items={[
+            { k: 'package', v: temp(d.cpu.tempC) },
+            { k: 'busy', v: pct(d.cpu.usagePct, 1) },
+            {
+              k: 'clock',
+              v: d.cpu.frequencyMhz === null ? DASH : `${num(Math.round(d.cpu.frequencyMhz))} MHz`,
+            },
+            { k: 'socket', v: hw.cpu.socket ?? DASH },
+          ]}
+        />
+        <p className="board-foot">
+          Ten cores and sixteen threads is not an error: six of them are efficiency cores with no
+          hyperthread. That asymmetry is why the per-core temperature list on Host is uneven — the
+          two kinds of core do not run at the same clock and are not meant to.
+        </p>
+      </Board>
+
+      <Board
+        title="Cooling"
+        icon="❋"
+        span={4}
+        aside={
+          <span className="board-note">
+            {spinning.length === 0 ? 'nothing spinning' : `${num(spinning.length)} of ${num(d.fans.length)} headers`}
+          </span>
+        }
+      >
+        <div className="part">
+          <div className="part-id">
+            <strong className="part-name">Noctua NH-L9x65</strong>
+            <span className="part-detail">
+              65 mm tall, chosen against the case&rsquo;s 70 mm ceiling — the whole build turns on
+              this number.
+            </span>
+          </div>
+        </div>
+        <h4 className="board-sub">Fan headers</h4>
+        <ul className="itemlist">
+          {d.fans.map((f) => (
+            <li key={f.label}>
+              <span className="item-main">{f.label}</span>
+              <span className="item-side">
+                {f.rpm > 0 ?
+                  <span className="mono">{num(f.rpm)} rpm</span>
+                : <span className="text-dim">not connected</span>}
+              </span>
+            </li>
+          ))}
+          {d.fans.length === 0 && <p className="viz-empty">no fan sensors — see the note below</p>}
+        </ul>
+        <h4 className="board-sub">Board temperatures</h4>
+        <BarList
+          items={d.temps.map((t) => ({ label: t.label, value: t.value, display: `${t.value.toFixed(0)}°` }))}
+          tone="info"
+          empty="no board sensors"
+        />
+        <p className="board-foot">
+          These readings exist because a driver was added for the board&rsquo;s Nuvoton super-I/O
+          chip; without it Linux sees three sensors and counts no revolutions at all, which on a
+          machine that lives in a cupboard makes a dead fan silent until it is thermal. The headers
+          reading zero are not faults — they are empty.
+        </p>
+      </Board>
+
+      <Board
+        title="Memory"
+        icon="▤"
+        span={4}
+        aside={
+          <span className="board-note">
+            {hw.memory.populated === null || hw.memory.slots === null ?
+              DASH
+            : `${num(hw.memory.populated)} of ${num(hw.memory.slots)} slots`}
+          </span>
+        }
+      >
+        <PartHead part={PARTS.memory} />
+        <Facts
+          rows={[
+            {
+              k: 'Installed',
+              v: hw.memory.totalGb === null ? DASH : `${num(hw.memory.totalGb)} GB`,
+            },
+            { k: 'Type', v: hw.memory.modules[0]?.type ?? DASH },
+            {
+              k: 'Speed',
+              v:
+                hw.memory.modules[0]?.speedMts == null ?
+                  DASH
+                : `${num(hw.memory.modules[0].speedMts)} MT/s`,
+            },
+            {
+              k: 'Part',
+              v: <span className="mono">{hw.memory.modules[0]?.partNumber ?? DASH}</span>,
+            },
+            {
+              k: 'Room left',
+              v:
+                hw.memory.maxCapacityGb === null || hw.memory.totalGb === null ?
+                  DASH
+                : `${num(hw.memory.maxCapacityGb - hw.memory.totalGb)} GB`,
+            },
+          ]}
+        />
+        <h4 className="board-sub">Slots</h4>
+        <ul className="itemlist">
+          {hw.memory.modules.map((m) => (
+            <li key={m.locator ?? '?'}>
+              <span className="item-main">{(m.locator ?? '?').replace('Controller', 'Ch ')}</span>
+              <span className="item-side">{m.sizeGb === null ? DASH : `${num(m.sizeGb)} GB`}</span>
+              <span className="item-side">{m.rank === null ? DASH : `${num(m.rank)}R`}</span>
+            </li>
+          ))}
+          {hw.memory.modules.length === 0 && <p className="viz-empty">no modules read</p>}
+        </ul>
+        <p className="board-foot">
+          Both modules sit in the second slot of each channel, which is the pairing the board wants
+          for dual channel — the empty slots are the two that would break it if filled wrong. Two
+          free slots and a 128 GB ceiling is the upgrade this machine actually has left.
+        </p>
+      </Board>
+
+      <Board
+        title="Graphics"
+        icon="◐"
+        span={4}
+        aside={
+          <span className="board-note">
+            {d.gpu.clients === null ? DASH : `${num(d.gpu.clients)} clients`}
+          </span>
+        }
+      >
+        <div className="part">
+          <div className="part-id">
+            <strong className="part-name">Intel UHD Graphics 770</strong>
+            <span className="part-detail">
+              Integrated in the CPU — there is no card in this machine. It transcodes for Jellyfin
+              and runs Immich&rsquo;s vision models.
+            </span>
+          </div>
+        </div>
+        <Measures
+          items={[
+            {
+              k: 'power',
+              v: d.gpu.powerWatts === null ? DASH : `${d.gpu.powerWatts.toFixed(1)} W`,
+            },
+            {
+              k: 'clock',
+              v:
+                d.gpu.frequencyMhz === null ? DASH : `${num(Math.round(d.gpu.frequencyMhz))} MHz`,
+            },
+            { k: 'busiest', v: d.gpu.busiestEngine?.name ?? DASH },
+            {
+              k: 'package',
+              v: d.gpu.packageWatts === null ? DASH : `${d.gpu.packageWatts.toFixed(1)} W`,
+            },
+          ]}
+        />
+        <p className="board-foot">
+          A parked graphics engine reads zero watts and zero megahertz, and that is the honest
+          number rather than a broken one — it wakes when something asks it to. The package figure
+          beside it is the whole chip including the cpu cores, which is why the two are shown
+          together: on an integrated part they are one piece of silicon and one power budget. The
+          render node is passed into three containers at once — jellyfin for QSV transcoding,
+          immich for OpenVINO, and the exporter these numbers come from.
+        </p>
+      </Board>
+
+      <Board title="Power" icon="⚡" span={4} aside={<span className="board-note">650 W</span>}>
+        <div className="part">
+          <div className="part-id">
+            <strong className="part-name">EVGA SuperNOVA 650 GM</strong>
+            <span className="part-detail">
+              SFX, 80+ Gold, fully modular — the form factor the case dictates.
+            </span>
+          </div>
+        </div>
+        <h4 className="board-sub">Rails, as the board sees them</h4>
+        <ul className="itemlist">
+          {['+12V', '+5V', '+3.3V'].map((rail) => {
+            const v = d.volts.find((x) => x.label === rail)
+            return (
+              <li key={rail}>
+                <span className="item-main">{rail}</span>
+                <span className="item-side mono">
+                  {v === undefined ? DASH : `${v.value.toFixed(3)} V`}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+        <p className="board-foot">
+          The supply itself reports nothing — this model has no monitoring interface, so there is
+          no temperature, no load and no fan speed to show, and none of those will ever appear
+          here. What the board CAN see is what arrives on each rail, which is the next best
+          question: a supply beginning to fail sags before it dies.
+        </p>
+      </Board>
+
+      <Board title="The case" icon="▣" span={12}>
+        <div className="part part-wide">
+          <PartPhoto part={PARTS.case} />
+          <div className="part-id">
+            <strong className="part-name">{PARTS.case.name}</strong>
+            <span className="part-detail">{PARTS.case.detail}</span>
+            <Facts rows={PARTS.case.specs} />
+          </div>
+        </div>
+        <p className="board-foot">
+          Six drive bays with two filled, and a 70 mm cooler ceiling that picked the cooler. This
+          is the one part on the page that nothing in the machine can report — SMBIOS reports the
+          board vendor as the chassis vendor, because a case has no firmware and no way to
+          introduce itself, so this panel is written down rather than read.
+        </p>
+      </Board>
+
+      {/* The snapshot behind the declared-vs-read split: every fact on this
+          page that was READ came through this unit or through node-exporter,
+          and a stale snapshot shows last week's inventory as though it were
+          now. Same neighbour as Disks and Pools, for the same reason. */}
+      <LogBoard
+        source={{ unit: 'daedalus-system-snapshot.service' }}
+        title="System snapshot"
+        neighbours={HOST_READERS}
+      />
+    </BoardGrid>
+  )
+}
+
+/** A part's photo and name, for the panels that have artwork. */
+function PartHead({ part }: { part: Part }) {
+  return (
+    <div className="part">
+      <PartPhoto part={part} />
+      <div className="part-id">
+        <strong className="part-name">{part.name}</strong>
+        <span className="part-detail">{part.detail}</span>
+      </div>
+    </div>
+  )
+}
+
+function PartPhoto({ part }: { part: Part }) {
+  if (part.photo === null) return null
+  return (
+    <img
+      className="part-photo"
+      src={part.photo.src}
+      alt=""
+      width={part.photo.width}
+      height={part.photo.height}
+    />
+  )
+}
+
+/** "Micro-Star International Co., Ltd." is a legal name, not a brand. */
+function shortVendor(v: string): string {
+  return v
+    .replace(/Micro-Star International Co\., Ltd\.?/i, 'MSI')
+    .replace(/American Megatrends International, LLC\.?/i, 'AMI')
+    .replace(/, (Inc|LLC|Ltd)\.?$/i, '')
+}
+
+/** SMBIOS spells it "12th Gen Intel(R) Core(TM) i5-12600K". Nobody says that. */
+function cpuName(v: string | null): string {
+  return v === null ? DASH : v.replace(/\((R|TM)\)/g, '').replace(/\s+/g, ' ').trim()
+}
+
+function temp(c: number | null): string {
+  return c === null ? DASH : `${c.toFixed(0)}°`
 }
 
 /* ── Database ─────────────────────────────────────────────────────────── */
