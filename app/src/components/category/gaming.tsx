@@ -1,17 +1,17 @@
-import { Board, BoardGrid, Chip, Facts } from '../viz'
+import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../viz'
 import { LogBoard } from '../logs'
-import { ReleaseNotes, UpgradeChain } from '../release-notes'
+import { Changelog, ReleaseNotes, UpgradeChain } from '../release-notes'
 import { ServiceHead } from '../service-head'
 import type { GamingData } from '../../server/category'
 
-// The Gaming page. One server today; the shape is meant to take a second.
+// The Gaming page. Two servers, and the shape held.
 //
-// It leads with the version rather than with uptime because that is the fact
+// Both lead with the version rather than with uptime because that is the fact
 // that actually breaks things here: a client on a different build cannot join
 // at all, so "am I current" is the question. Whether it is up is answered by
-// the dot on the sub-tab, one level up — see CategorySpec.tabs — which is
-// also where a second game server's answer will be, so the two are read
-// together rather than one page at a time.
+// the dot on the sub-tab, one level up — see CategorySpec.tabs — except for
+// Minecraft, which has no HTTP endpoint for a probe to read and so answers
+// that question on its own page, from the game's own status ping.
 //
 // ── one number on the page, and its comparisons on demand ─────────────────
 //
@@ -23,44 +23,157 @@ import type { GamingData } from '../../server/category'
 // ("current"), and hovering it shows the working.
 
 export function GamingView({ data }: { data: GamingData }) {
-  if (data.tab === 'minecraft') return <MinecraftView />
+  if (data.tab === 'minecraft') return <MinecraftView data={data} />
   return <FactorioView data={data} />
 }
 
 /**
- * Declared but not deployed.
+ * Paper, and the only tab here whose numbers are live.
  *
- * The tab exists so the shape is settled before the server is — and it says
- * so plainly rather than rendering empty gauges, which would read as a broken
- * server instead of an absent one. It makes no requests: there is nothing
- * there to ask.
+ * It leads with the same fact Factorio does — the version, because a client on
+ * the wrong one cannot join — but everything under it comes from the server
+ * itself, via the status ping. That is deliberate: the ping is part of the
+ * protocol, so it keeps answering across version bumps, where every metrics
+ * PLUGIN would have to be re-vetted on each one.
+ *
+ * "Answering" is therefore a stronger claim than the dot on a sub-tab
+ * elsewhere on this dashboard. Those read a container; this read the game.
  */
-function MinecraftView() {
+function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' }> }) {
+  const { minecraft: mc, builds, events } = data
+  const behind = builds.behind.length
+  // Being behind on BUILDS is routine — Paper cuts several a day. Being behind
+  // on the game is the one that stops people joining, so it is the verdict.
+  const stale = mc.latestVersion !== null && mc.version !== null && mc.latestVersion !== mc.version
+
   return (
     <>
       <ServiceHead
         logo="/icon-minecraft.svg"
         name="Minecraft"
-        version={null}
-        lede="No server yet — nothing to read, so nothing is claimed."
-        actions={<Chip tone="muted">planned</Chip>}
+        version={mc.version}
+        versionNote={mc.build === null ? 'running' : `running · Paper build ${mc.build}`}
+        verdict={
+          mc.version === null ? { label: 'unknown', tone: 'muted' }
+          : stale ? { label: 'behind a release', tone: 'warn' }
+          : { label: 'current', tone: 'ok' }
+        }
+        compare={[
+          {
+            k: 'Latest release',
+            v: mc.latestVersion,
+            note: stale ? 'clients on this cannot join' : 'this is what is running',
+          },
+          {
+            k: 'Server reports',
+            v: mc.reported,
+            note: 'what the ping handshake said — should echo the pin',
+          },
+        ]}
+        lede={
+          <>
+            Paper, near-vanilla. Everyone connects to{' '}
+            <span className="mono">{mc.connect}</span> — the same address at home and away, because
+            pi-hole answers that name with the LAN address and Cloudflare with the public one.
+          </>
+        }
+        actions={
+          mc.healthy === null ?
+            <Chip tone="muted">not scraped</Chip>
+          : mc.healthy ?
+            <Chip tone="ok">answering</Chip>
+          : <Chip tone="bad">not answering</Chip>
+        }
       />
 
+      <StatStrip>
+        <Stat
+          label="Players"
+          value={mc.players ?? '—'}
+          sub={mc.maxPlayers === null ? undefined : `of ${String(mc.maxPlayers)}`}
+          spark={mc.online}
+        />
+        <Stat
+          label="Ping"
+          value={mc.ping === null ? '—' : (mc.ping * 1000).toFixed(0)}
+          unit="ms"
+          // Not decoration: the status ping runs on the main thread, so this
+          // climbing is the first cheap sign of tick pressure — visible here
+          // before anyone in the room says the word lag.
+          tone={mc.ping !== null && mc.ping > 1 ? 'warn' : undefined}
+          title="Round trip of the server-list ping, which the main thread answers."
+        />
+        <Stat
+          label="Paper builds"
+          value={behind === 0 ? 'current' : behind}
+          sub={behind === 0 ? 'nothing new' : 'commits behind'}
+        />
+      </StatStrip>
+
       <BoardGrid>
-        <Board title="What it would take" icon="⚒" span={12}>
-          <Facts
-            rows={[
-              { k: 'Stack', v: 'stacks/minecraft — not written yet' },
-              { k: 'Port', v: 'TCP 25565 — would need a router forward, unlike Factorio’s UDP' },
-              { k: 'Admin', v: 'LAN-only behind traefik, like every other UI here' },
-              { k: 'World', v: 'under /s2, so the ZFS snapshots would cover it' },
-            ]}
-          />
+        <Changelog
+          build={builds}
+          span={6}
+          aside={<span className="board-note">papermc</span>}
+          foot={
+            <p className="board-foot">
+              Commits rather than releases: Paper cuts a build per handful of them, so the count
+              means little and the subjects mean everything. Each links to the real commit — the
+              server jar is downloaded fresh for this version and build on every start, so a bump
+              here is a restart away.
+            </p>
+          }
+        />
+
+        <Board
+          title="Comings and goings"
+          icon="◫"
+          span={6}
+          aside={<span className="board-note">last 7 days</span>}
+        >
+          {events.length === 0 ?
+            <p className="viz-empty">nobody has joined this week</p>
+          : <ul className="news">
+              {events.map((e) => (
+                <li key={`${String(e.at)}-${e.who}`} className="news-row">
+                  <Chip tone={e.kind === 'join' ? 'ok' : 'muted'}>
+                    {e.kind === 'join' ? 'joined' : 'left'}
+                  </Chip>
+                  <span className="news-title">{e.who}</span>
+                  <span className="news-date">
+                    {new Date(e.at).toLocaleString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          }
+          {/* Read out of the server's own log rather than kept as a list here.
+              The log already IS the record; a second one could only disagree
+              with it. */}
           <p className="board-foot">
-            Factorio next door is the template: a build pinned in the flake, the vendor’s idea of
-            current, and the release notes between the two.
+            Parsed from the server’s log in Loki, newest first. The panel below is the whole log,
+            this is the part of it that is about people.
           </p>
         </Board>
+
+        <Board title="How it is run" icon="⚒" span={12}>
+          <Facts
+            rows={[
+              { k: 'Address', v: <span className="mono">{mc.connect}</span> },
+              { k: 'Who gets in', v: 'Mojang session auth, plus an enforced whitelist pinned in nix' },
+              { k: 'Ingress', v: 'TCP 25565 forwarded by the router — no tunnel: Minecraft offers no TLS, so traefik has no SNI to route on' },
+              { k: 'World', v: 'its own ZFS dataset on NVMe, so it can be rolled back without taking every other stack with it' },
+              { k: 'Backups', v: 'nightly RCON-quiesced archive to /s2, on top of 15-minute snapshots and the hourly replica' },
+            ]}
+          />
+        </Board>
+
+        <LogBoard source={{ container: 'minecraft' }} title="Minecraft logs" />
       </BoardGrid>
     </>
   )
