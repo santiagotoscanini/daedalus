@@ -603,6 +603,18 @@ in
       # Read from the stack that pins it rather than restated here, so the
       # tile reports the version the server actually downloads on start.
       FACTORIO_VERSION = config.fleet.factorio.version;
+      # Same argument, twice over: the Minecraft image downloads exactly this
+      # version at this Paper build on every start, so the pin IS what runs.
+      # The page cross-checks both against what the server reports over the
+      # status ping, which is how a container that never restarted after a
+      # bump gives itself away.
+      MINECRAFT_VERSION = config.fleet.minecraft.version;
+      MINECRAFT_PAPER_BUILD = config.fleet.minecraft.paperBuild;
+      # The one address the game servers are reached by — the same string from
+      # the sofa and from a hotel, because pi-hole answers it with the LAN
+      # address and Cloudflare with the WAN one. Bound rather than typed so
+      # the page cannot print a hostname this box no longer maintains.
+      WAN_HOST = config.fleet.wanHost;
       # Same idea, different mechanism. n8n serves no version anywhere — not
       # on its public API, not in /rest/settings — so the tag it is pinned to
       # IS the running version. Parsed out of the pin itself rather than

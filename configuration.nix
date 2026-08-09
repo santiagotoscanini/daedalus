@@ -61,6 +61,7 @@
   fleet = {
     lanIp = "192.168.0.2";
     baseDomain = "toscanini.me";
+    wanHost = "s2.toscanini.me";
     mail = {
       sender = "s2.toscanini.me@gmail.com";
       alertTo = "santiago@toscanini.me";

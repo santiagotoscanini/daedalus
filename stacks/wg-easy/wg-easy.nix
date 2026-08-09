@@ -2,7 +2,9 @@
 #
 # Ports:
 #   - 51820/udp — WireGuard protocol. Host-firewall-opened
-#     (allowedUDPPorts below); reach via s2.toscanini.me:51820.
+#     (allowedUDPPorts below); reach via fleet.wanHost:51820, which pi-hole
+#     also answers with the LAN address — so a profile generated once works
+#     both at home (straight to the box) and away, with no second endpoint.
 #   - 51821/tcp — admin web UI; bridge-routed via traefik (no host port).
 #
 # Caps + sysctls:
@@ -88,7 +90,7 @@
 
     environment = {
       INIT_ENABLED = "true";
-      INIT_HOST = "s2.toscanini.me";
+      INIT_HOST = config.fleet.wanHost;
       INIT_PORT = "51820";
       # Client DNS must be the wg0 address (10.8.0.1), NOT a host IP:
       # - 192.168.0.2 is unreachable from the container netns (pasta

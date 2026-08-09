@@ -62,6 +62,7 @@ _:
   fleet.monitoredJobs = {
     syncoid-rpool-selfhost.slug = "backup-selfhost";
     syncoid-rpool-home.slug = "backup-home";
+    syncoid-rpool-minecraft.slug = "backup-minecraft";
   };
 
   services.syncoid = {
@@ -101,6 +102,10 @@ _:
     commands = {
       "rpool/selfhost".target = "s2-pool/backup/selfhost";
       "rpool/home".target = "s2-pool/backup/home";
+      # Its own job rather than a child of selfhost: the world is a separate
+      # dataset so it can be rolled back alone (see platform/zfs.nix), and a
+      # separate dataset is a separate send.
+      "rpool/minecraft".target = "s2-pool/backup/minecraft";
     };
   };
 }

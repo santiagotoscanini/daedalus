@@ -1,13 +1,35 @@
 # ddclient — dynamic DNS for the LAN public IP.
 #
-# Updates the Cloudflare A record for s2.toscanini.me every 5 minutes
-# if our home public IP changes. The API token lives at
-# cloudflare-token.sops (sops-encrypted; ddclient runs as root).
+# Updates the Cloudflare A record for fleet.wanHost every 5 minutes if our
+# home public IP changes. The API token lives at cloudflare-token.sops
+# (sops-encrypted; ddclient runs as root).
 #
+# ── split horizon ─────────────────────────────────────────────────────────
+#
+# The same name is ALSO answered on the LAN with the box's own address, via
+# the fleet.dnsHosts line below. That is what lets one address work from
+# everywhere: a Minecraft client, a WireGuard profile or a bookmark carrying
+# `s2.toscanini.me` resolves to 192.168.0.2 at home and to the WAN address
+# from a hotel, with nothing to change in between.
+#
+# It also means LAN traffic stops leaving the house and coming back in
+# through the router's NAT hairpin to reach a box on the same switch.
+#
+# Both halves read one option, so the record this job maintains and the
+# override pi-hole serves cannot drift apart. Note that this override is
+# invisible to ddclient itself: `usev4 = "webv4"` reads the current address
+# from cloudflare.com/cdn-cgi/trace and reconciles against the Cloudflare
+# API, never by resolving its own name — so pi-hole answering differently
+# cannot make it flap or go stale.
 
 { config, ... }:
 
+let
+  inherit (config.fleet) wanHost;
+in
 {
+  fleet.dnsHosts = [ "${config.fleet.lanIp} ${wanHost}" ];
+
   # Cloudflare API token, sops-encrypted (cloudflare-token.sops). ddclient runs
   # as root; default root-owned /run/secrets path is correct.
   sops.secrets."ddclient-password" = {
@@ -29,7 +51,7 @@
       webv4=https://cloudflare.com/cdn-cgi/trace
       webv4-skip='ip='
     '';
-    domains = [ "s2.toscanini.me" ];
+    domains = [ wanHost ];
     interval = "300s";
   };
 

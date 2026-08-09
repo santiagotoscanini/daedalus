@@ -283,6 +283,55 @@ groups:
         labels:
           severity: warning
         isPaused: false
+
+      # The game, not the container. container_up says the JVM process
+      # exists; this says it still answers the protocol — which is the
+      # difference between "running" and "playable". mc-monitor's own `up`
+      # is covered by the generic up == 0 rule, and that one would stay
+      # green through exactly the outage this catches.
+      # noDataState: OK — the series is absent whenever the stack is
+      # deliberately removed, and that must not page.
+      - uid: minecraft-not-answering-1
+        title: Minecraft Not Answering
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: max(minecraft_status_healthy)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: The Minecraft server has not answered a status ping for 5 minutes. The container may still be running — check `podman logs minecraft` for a stalled world save or an OOM, not `systemctl status`.
+          summary: Minecraft is not answering the server-list ping
+        labels:
+          severity: warning
+        isPaused: false
   - orgId: 1
     name: Critical Alerts
     folder: System

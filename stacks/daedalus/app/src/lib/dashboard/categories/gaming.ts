@@ -1,9 +1,14 @@
-// The Gaming category — today that is one Factorio server.
+// The Gaming category — two game servers, asked the same three questions.
 //
 // Its own page rather than a corner of Home because the questions are its
 // own: which version is running, can the clients on the sofa still join it,
-// and what has the vendor shipped since. A Minecraft server would land here
-// beside it without changing any of that.
+// and what has the vendor shipped since.
+//
+// The two tabs answer those from opposite ends. Factorio has an admin UI and
+// no way to be asked anything by a machine, so everything here comes from the
+// vendor and the pin. Minecraft has no admin UI at all and answers the
+// server-list ping, so its numbers are live — how many people are on right
+// now, and how long the server took to say so.
 //
 // ── where the version facts come from ─────────────────────────────────────
 //
@@ -25,13 +30,16 @@
 //                                 and Friday Facts, which is the closest thing
 //                                 to a changelog that is machine-readable
 
-import { getJson } from '../clients'
+import { getJson, lokiEntries, promScalars, promSeries, promVector } from '../clients'
+import type { Commit, CommitGap } from '../github'
 
 /**
  * One shape per sub-tab. A union rather than optional fields, so the
  * Minecraft tab cannot accidentally read a Factorio number that is not there.
  */
-export type GamingData = { tab: "factorio" } & FactorioData | { tab: "minecraft" }
+export type GamingData =
+  | ({ tab: 'factorio' } & FactorioData)
+  | ({ tab: 'minecraft' } & MinecraftData)
 
 type FactorioData = {
   factorio: {
@@ -94,14 +102,22 @@ const CHANGELOG_MAX_ITEMS = 10
 
 const PORT = 34197
 
+/**
+ * The name both game servers are reached by, from anywhere.
+ *
+ * Not a literal: pi-hole answers it with the LAN address and Cloudflare with
+ * the WAN one, which is the whole reason there is a single address to print.
+ * See platform/ddclient. Read from the env rather than retyped here, because
+ * a second copy of a hostname is a second copy that goes stale.
+ */
+const wanHost = () => process.env.WAN_HOST ?? ''
+
 export async function loadGaming(
   tab: string,
   ctx: { base: (app: string) => string },
 ): Promise<GamingData> {
-  // Nothing is deployed yet, so there is nothing to read — and a placeholder
-  // that made a request anyway would be pretending.
-  if (tab === "minecraft") return { tab: "minecraft" }
-  return { tab: "factorio", ...(await loadFactorio(ctx)) }
+  if (tab === 'minecraft') return { tab: 'minecraft', ...(await loadMinecraft()) }
+  return { tab: 'factorio', ...(await loadFactorio(ctx)) }
 }
 
 async function loadFactorio(ctx: { base: (app: string) => string }): Promise<FactorioData> {
@@ -133,10 +149,11 @@ async function loadFactorio(ctx: { base: (app: string) => string }): Promise<Fac
       experimental,
       behind,
       // NOT the admin hostname: the game speaks its own UDP protocol straight
-      // to the router-forwarded port and never touches traefik. `s2` is the
-      // DDNS name that tracks this house's WAN address, so it is the thing a
-      // player outside the LAN actually types.
-      connect: `s2.toscanini.me:${String(PORT)}`,
+      // to the router-forwarded port and never touches traefik. The DDNS name
+      // tracks this house's WAN address AND is short-circuited to the LAN
+      // address by pi-hole, so this one string is what every player types,
+      // wherever they are sitting.
+      connect: `${wanHost()}:${String(PORT)}`,
       port: PORT,
       adminUrl: ctx.base("factorio-admin"),
     },
@@ -323,4 +340,200 @@ function clean(s: string): string {
     .replace(/\s*\(\s*more\s*\)\s*$/i, "")
     .replace(/\s*\(\s*\)\s*$/, "")
     .trim()
+}
+
+// ── Minecraft ──────────────────────────────────────────────────────────────
+//
+// Three sources, and which one answers which question is the whole design:
+//
+//   prometheus   what is true right now — mc-monitor speaks the server-list
+//                ping, so `healthy` means the game answered, not that a
+//                container exists. A wedged JVM reads as down here and as up
+//                everywhere else.
+//   fill.papermc what a re-pull would bring. Paper publishes its builds with
+//                the commits in each one, which IS a changelog — and the
+//                commits carry SHAs, so every line links to the real commit
+//                rather than to a page invented from a build number.
+//   launchermeta whether Mojang has moved past the pinned version at all.
+//                Two versions behind Paper's newest BUILD is routine; being
+//                behind on the game is what stops clients joining.
+//
+// The pinned strings come from the container env because the image downloads
+// exactly them on start — so, as with Factorio, the pin is the running
+// version rather than a record of it.
+
+type MinecraftData = {
+  minecraft: {
+    /** Pinned in nix, downloaded on every container start — so, running. */
+    version: string | null
+    build: string | null
+    /**
+     * What the server itself said in the ping handshake. Read separately from
+     * the pin on purpose: the two disagreeing is the shape of a container that
+     * never restarted after the version was bumped.
+     */
+    reported: string | null
+    /** Mojang's newest release, whatever this box is on. */
+    latestVersion: string | null
+    /** Answered the ping. Null when prometheus has no sample at all. */
+    healthy: boolean | null
+    players: number | null
+    maxPlayers: number | null
+    /** Status-ping round trip, seconds. */
+    ping: number | null
+    /** Players online over the last day, for a sparkline. */
+    online: number[]
+    /** The one address that works from anywhere. */
+    connect: string
+  }
+  /** Paper builds newer than the pinned one, as commits. */
+  builds: CommitGap
+  /** Who came and went, newest first. */
+  events: { at: number; who: string; kind: 'join' | 'leave' }[]
+}
+
+const PAPER_API = 'https://fill.papermc.io/v3/projects/paper'
+const PAPER_REPO = 'https://github.com/PaperMC/Paper/commit'
+const MC_PORT = 25565
+
+async function loadMinecraft(): Promise<MinecraftData> {
+  const version = process.env.MINECRAFT_VERSION ?? null
+  const build = process.env.MINECRAFT_PAPER_BUILD ?? null
+
+  const [live, online, reported, latestVersion, builds, events] = await Promise.all([
+    promScalars({
+      healthy: 'max(minecraft_status_healthy)',
+      players: 'max(minecraft_status_players_online_count)',
+      maxPlayers: 'max(minecraft_status_players_max_count)',
+      ping: 'max(minecraft_status_response_time_seconds)',
+    }),
+    // 24h at the exporter's own resolution. Asking for finer just interpolates
+    // the same samples — see promSeries.
+    promSeries('max(minecraft_status_players_online_count)', 24 * 60, 300),
+    reportedVersion(),
+    latestRelease(),
+    paperBuilds(version, build),
+    joinsAndLeaves(),
+  ])
+
+  return {
+    minecraft: {
+      version,
+      build,
+      reported,
+      latestVersion,
+      // A missing series is "we could not ask", which is not the same as "the
+      // server is down" and must not be drawn as it.
+      healthy: live.healthy === null ? null : live.healthy >= 1,
+      players: live.players,
+      maxPlayers: live.maxPlayers,
+      ping: live.ping,
+      online,
+      connect: `${wanHost()}:${String(MC_PORT)}`,
+    },
+    builds,
+    events,
+  }
+}
+
+/**
+ * The version string the server puts in its own ping response.
+ *
+ * mc-monitor carries it as a label rather than a value, so this reads the
+ * series' labels instead of its number. Paper answers with its own
+ * decoration around the version ("Paper 26.2"), which is left alone — it is
+ * what the server said, and tidying it would be inventing a fact.
+ */
+async function reportedVersion(): Promise<string | null> {
+  const r = await promVector('minecraft_status_healthy')
+  return r[0]?.metric['server_version'] ?? null
+}
+
+/** Mojang's own idea of current. One field, from the launcher's manifest. */
+async function latestRelease(): Promise<string | null> {
+  const body = await getJson<{ latest?: { release?: string } }>(
+    'https://launchermeta.mojang.com/mc/game/version_manifest_v2.json',
+  )
+  return body?.latest?.release ?? null
+}
+
+/**
+ * Paper builds published after the one pinned, flattened to their commits.
+ *
+ * Shaped as a CommitGap so it renders through the same Changelog panel the
+ * branch-tracking images use, which is the honest comparison: Paper cuts a
+ * build per handful of commits, so "three builds behind" means nothing on its
+ * own and the commit subjects mean everything.
+ *
+ * Ordered oldest-first to match what that panel expects.
+ */
+async function paperBuilds(version: string | null, build: string | null): Promise<CommitGap> {
+  const empty: CommitGap = { running: build, builtOn: null, behind: [], note: null }
+  if (version === null || build === null) return empty
+
+  const list = await getJson<
+    {
+      id: number
+      time: string
+      channel: string
+      commits?: { sha: string; time: string; message: string }[]
+    }[]
+  >(`${PAPER_API}/versions/${encodeURIComponent(version)}/builds`)
+
+  if (list === null) {
+    return { ...empty, note: 'Could not reach the PaperMC build API.' }
+  }
+
+  const pinned = Number(build)
+  const running = list.find((b) => b.id === pinned)
+
+  const behind: Commit[] = list
+    // STABLE only: experimental builds are not what this server is pinned to
+    // follow, and listing them would count a gap that does not exist.
+    .filter((b) => b.id > pinned && b.channel === 'STABLE')
+    .sort((a, b) => a.id - b.id)
+    .flatMap((b) =>
+      (b.commits ?? []).map((c) => ({
+        sha: c.sha.slice(0, 7),
+        date: c.time.slice(0, 10),
+        // Paper commit messages are a subject line and then a body explaining
+        // it; the subject is the part that fits on a row.
+        subject: c.message.split('\n')[0] ?? '',
+        url: `${PAPER_REPO}/${c.sha}`,
+      })),
+    )
+
+  return {
+    running: build,
+    builtOn: running?.time.slice(0, 10) ?? null,
+    behind,
+    note:
+      running === undefined ?
+        'The pinned build is not in Paper’s list for this version — it may have aged out.'
+      : null,
+  }
+}
+
+/**
+ * Arrivals and departures, from the server's own log.
+ *
+ * Paper writes one line per event in a fixed shape, so this reads Loki rather
+ * than holding a player list of its own — the log is already the record, and a
+ * second one could only be wrong. Failure is empty: this panel is the least
+ * important thing on the page and must not cost it.
+ */
+async function joinsAndLeaves(): Promise<MinecraftData['events']> {
+  const lines = await lokiEntries(
+    '{stack="minecraft"} |~ "(joined|left) the game"',
+    60 * 24 * 7,
+    30,
+  )
+
+  return lines
+    .map(({ at, line }) => {
+      const m = /:\s*(\w{3,16})\s+(joined|left) the game/.exec(line)
+      if (m === null) return null
+      return { at, who: m[1] ?? '', kind: m[2] === 'joined' ? ('join' as const) : ('leave' as const) }
+    })
+    .filter((e): e is MinecraftData['events'][number] => e !== null)
 }

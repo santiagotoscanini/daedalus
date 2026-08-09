@@ -58,6 +58,23 @@ in
       '';
       example = "toscanini.me";
     };
+
+    wanHost = lib.mkOption {
+      type = lib.types.str;
+      description = ''
+        The name that resolves to this house's WAN address, kept current
+        by platform/ddclient. Anything a client outside the LAN dials
+        DIRECTLY rather than through the Cloudflare tunnel uses this:
+        WireGuard, and the game servers.
+
+        pi-hole also answers it with `lanIp`, so the same name works from
+        the sofa without hairpinning back out through the router and in
+        again. That short-circuit is declared in platform/ddclient, beside
+        the record it mirrors, so the two cannot disagree.
+      '';
+      example = "s2.toscanini.me";
+    };
+
     traefikRoutes = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule (_: {

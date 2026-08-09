@@ -82,6 +82,21 @@ let
       };
     };
 
+    # The Minecraft world, off rpool/selfhost on purpose. Griefing recovery is
+    # `zfs rollback`, and rolling the world back must not roll back every
+    # other stack's database with it — which is exactly what would happen if
+    # this lived under selfhost. Same 16K recordsize, for the same reason:
+    # region files take small random rewrites, and a large record turns each
+    # one into a big copy-on-write block and a bigger snapshot delta.
+    "rpool/minecraft" = {
+      mount = "/home/santiago/selfhost/minecraft";
+      properties = snapshotOn // {
+        mountpoint = "legacy";
+        recordsize = "16K";
+        "com.sun:auto-snapshot:weekly" = "false";
+      };
+    };
+
     # s2-pool (HDD) — properties + mount.
 
     "s2-pool" = {
@@ -137,6 +152,18 @@ let
       properties.mountpoint = "legacy";
     };
 
+    # Where the nightly Minecraft archives land. Not snapshotted: each file is
+    # already a point-in-time copy with its own retention, so snapshots would
+    # only hold deleted tarballs open and double the space for nothing. On the
+    # HDD pool because that is what cold, write-once, read-almost-never is for.
+    "s2-pool/minecraft" = {
+      mount = "/s2/minecraft";
+      properties = {
+        mountpoint = "legacy";
+        "com.sun:auto-snapshot" = "false";
+      };
+    };
+
     # Local replication targets (platform/backup.nix). Not mounted
     # (replica, never mounts over the live tree) and NOT snapshotted on
     # the receive side (auto-snapshot=false; its history is whatever the
@@ -159,6 +186,13 @@ let
     };
 
     "s2-pool/backup/home" = {
+      properties = {
+        mountpoint = "none";
+        "com.sun:auto-snapshot" = "false";
+      };
+    };
+
+    "s2-pool/backup/minecraft" = {
       properties = {
         mountpoint = "none";
         "com.sun:auto-snapshot" = "false";
