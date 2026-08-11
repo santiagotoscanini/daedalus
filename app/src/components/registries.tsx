@@ -5,13 +5,13 @@
 // cycles, not summaries of the app list. They sit under Apps rather than in a
 // category of their own because their only consumer is the apps beside them.
 
-import { Changelog } from './release-notes'
-import { LogBoard, type LogNeighbour } from './logs'
-import { ServiceHead, verdictOf, type CompareRow } from './service-head'
-import { BarList, Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 import { DASH, num } from '../lib/dashboard/format'
 import type { VersionGap } from '../lib/dashboard/github'
 import type { ImagesData, PackagesData } from '../lib/registries'
+import { LogBoard, type LogNeighbour } from './logs'
+import { Changelog } from './release-notes'
+import { type CompareRow, ServiceHead, verdictOf } from './service-head'
+import { BarList, Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 
 /* ── container registry ───────────────────────────────────────────────── */
 
@@ -40,7 +40,7 @@ const ZOT_NEIGHBOURS: readonly LogNeighbour[] = [
 ]
 
 export function ImagesView({ d }: { d: ImagesData }) {
-  const total = (d.repositories.length + d.cachedRepos.length) || 0
+  const total = d.repositories.length + d.cachedRepos.length || 0
 
   return (
     <>
@@ -59,7 +59,12 @@ export function ImagesView({ d }: { d: ImagesData }) {
           </>
         }
         actions={
-          <a href="https://registry.toscanini.me" target="_blank" rel="noreferrer" className="btn btn-ghost">
+          <a
+            href="https://registry.toscanini.me"
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-ghost"
+          >
             ↗ Open
           </a>
         }
@@ -78,17 +83,25 @@ export function ImagesView({ d }: { d: ImagesData }) {
           value={String(d.cachedRepos.length)}
           sub="pulled through zot"
         />
-        <Stat label="On disk" value={d.storageBytes === null ? DASH : fmtBytes(d.storageBytes)} sub={`${String(total)} repositories`} />
-        <Stat label="Pushes" value={d.pushes === null ? DASH : num(d.pushes)} sub="since zot started" />
+        <Stat
+          label="On disk"
+          value={d.storageBytes === null ? DASH : fmtBytes(d.storageBytes)}
+          sub={`${String(total)} repositories`}
+        />
+        <Stat
+          label="Pushes"
+          value={d.pushes === null ? DASH : num(d.pushes)}
+          sub="since zot started"
+        />
         <Stat
           label="Requests"
           value={d.requestsPerHour === null ? DASH : d.requestsPerHour.toFixed(0)}
           unit="/hour"
           tone={d.errorsPerHour !== null && d.errorsPerHour >= 1 ? 'warn' : undefined}
           sub={
-            d.errorsPerHour === null || d.errorsPerHour < 1 ?
-              'no 5xx'
-            : `${d.errorsPerHour.toFixed(0)}/hour 5xx`
+            d.errorsPerHour === null || d.errorsPerHour < 1
+              ? 'no 5xx'
+              : `${d.errorsPerHour.toFixed(0)}/hour 5xx`
           }
         />
       </StatStrip>
@@ -202,7 +215,12 @@ export function PackagesView({ d }: { d: PackagesData }) {
           </>
         }
         actions={
-          <a href="https://verdaccio.toscanini.me" target="_blank" rel="noreferrer" className="btn btn-ghost">
+          <a
+            href="https://verdaccio.toscanini.me"
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-ghost"
+          >
             ↗ Open
           </a>
         }
@@ -215,19 +233,35 @@ export function PackagesView({ d }: { d: PackagesData }) {
           tone={d.reachable ? 'ok' : 'bad'}
           sub="via its stats plugin"
         />
-        <Stat label="Published here" value={d.published === null ? DASH : num(d.published)} sub="opt-in; nothing yet" />
-        <Stat label="Cached" value={d.cached === null ? DASH : num(d.cached)} sub="packages from npmjs" />
-        <Stat label="Versions held" value={d.versions === null ? DASH : num(d.versions)} sub="across those packages" />
-        <Stat label="With a tarball" value={d.withTarball === null ? DASH : num(d.withTarball)} sub="actually on disk" />
+        <Stat
+          label="Published here"
+          value={d.published === null ? DASH : num(d.published)}
+          sub="opt-in; nothing yet"
+        />
+        <Stat
+          label="Cached"
+          value={d.cached === null ? DASH : num(d.cached)}
+          sub="packages from npmjs"
+        />
+        <Stat
+          label="Versions held"
+          value={d.versions === null ? DASH : num(d.versions)}
+          sub="across those packages"
+        />
+        <Stat
+          label="With a tarball"
+          value={d.withTarball === null ? DASH : num(d.withTarball)}
+          sub="actually on disk"
+        />
         <Stat
           label="Requests"
           value={d.requestsPerHour === null ? DASH : d.requestsPerHour.toFixed(0)}
           unit="/hour"
           tone={d.errorsPerHour !== null && d.errorsPerHour >= 1 ? 'warn' : undefined}
           sub={
-            d.errorsPerHour === null || d.errorsPerHour < 1 ?
-              'no 5xx'
-            : `${d.errorsPerHour.toFixed(0)}/hour 5xx`
+            d.errorsPerHour === null || d.errorsPerHour < 1
+              ? 'no 5xx'
+              : `${d.errorsPerHour.toFixed(0)}/hour 5xx`
           }
         />
       </StatStrip>

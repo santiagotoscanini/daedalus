@@ -12,9 +12,8 @@
 // deliberate act.
 
 import type { ReactNode } from 'react'
-
-import { Board } from './viz'
 import type { CommitGap, VersionGap } from '../lib/dashboard/github'
+import { Board } from './viz'
 
 export type Release = {
   version: string
@@ -47,19 +46,21 @@ export function ReleaseNotes({
             <span className="rel-count">{rel.sections.map((s) => s.name).join(' · ')}</span>
           </summary>
           <div className="rel-body">
-            {rel.sections.length === 0 ?
+            {rel.sections.length === 0 ? (
               <p className="viz-empty">this release shipped no written notes</p>
-            : rel.sections.map((s) => (
+            ) : (
+              rel.sections.map((s) => (
                 <section key={s.name}>
                   <h5>{s.name}</h5>
                   <ul>
                     {s.items.map((it, n) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: release notes are a static list — items never reorder or update in place.
                       <li key={n}>{it}</li>
                     ))}
                   </ul>
                 </section>
               ))
-            }
+            )}
             <p className="rel-more">
               {rel.truncated && 'Shortened. '}
               <a href={rel.url} target="_blank" rel="noreferrer">
@@ -129,7 +130,7 @@ export function Changelog({
       span={span}
       aside={aside ?? <span className="board-note">github</span>}
     >
-      {gap !== null ?
+      {gap !== null ? (
         <>
           <UpgradeChain behind={gap.behind} />
           <ReleaseNotes
@@ -138,11 +139,12 @@ export function Changelog({
             empty={gap.note ?? 'no published notes for this version'}
           />
         </>
-      : build === null || build.behind.length === 0 ?
+      ) : build === null || build.behind.length === 0 ? (
         <p className="viz-empty">
           {build?.note ?? 'Nothing new on the branch since this image was built.'}
         </p>
-      : <ul className="commits">
+      ) : (
+        <ul className="commits">
           {build.behind.map((c) => (
             <li key={c.sha}>
               <a className="mono" href={c.url} target="_blank" rel="noreferrer">
@@ -153,14 +155,14 @@ export function Changelog({
             </li>
           ))}
         </ul>
-      }
+      )}
       {foot ?? (
         <p className="board-foot">
-          {gap !== null ?
-            behind === 0 ?
-              'What the running version shipped. Parsed from the project’s own GitHub releases and shortened — open one for the detail.'
-            : 'Everything between the running version and the newest release, oldest at the top. Parsed from the project’s own GitHub releases and shortened — open one for the detail, and the link inside goes to the full text.'
-          : 'Commits rather than releases, because this image tracks a branch instead of a tag — so this is what a re-pull would actually bring.'}
+          {gap !== null
+            ? behind === 0
+              ? 'What the running version shipped. Parsed from the project’s own GitHub releases and shortened — open one for the detail.'
+              : 'Everything between the running version and the newest release, oldest at the top. Parsed from the project’s own GitHub releases and shortened — open one for the detail, and the link inside goes to the full text.'
+            : 'Commits rather than releases, because this image tracks a branch instead of a tag — so this is what a re-pull would actually bring.'}
         </p>
       )}
     </Board>

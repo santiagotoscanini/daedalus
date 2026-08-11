@@ -1,10 +1,10 @@
 import { Await, createFileRoute, Link, useRouter } from '@tanstack/react-router'
-import { useEffect, useState, type ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
+import { RowsSkeleton } from '../components/skeleton'
 import { Segmented, Toggle } from '../components/ui'
 import { Board, BoardGrid } from '../components/viz'
-import { RowsSkeleton } from '../components/skeleton'
-import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import type { Check, Repo } from '../lib/github-repos'
+import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import {
   createAppFn,
   fetchAppPreflight,
@@ -113,6 +113,7 @@ function Wizard({ options }: { options: Options }) {
   // Re-check whenever the thing being checked changes. The result is about a
   // (repo, name, image) triple, so keeping a stale one on screen after the
   // image override is edited would be worse than showing none.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `recheck` is not read in the body — it is the manual re-run trigger.
   useEffect(() => {
     if (!repo) {
       setPreflight(null)
@@ -215,7 +216,9 @@ function Wizard({ options }: { options: Options }) {
   }
 
   const visible = options.repos.filter(
-    (r) => search === '' || `${r.name} ${r.description ?? ''}`.toLowerCase().includes(search.toLowerCase()),
+    (r) =>
+      search === '' ||
+      `${r.name} ${r.description ?? ''}`.toLowerCase().includes(search.toLowerCase()),
   )
 
   return (
@@ -235,9 +238,8 @@ function Wizard({ options }: { options: Options }) {
         {options.error === null && !options.authenticated && (
           <p className="banner banner-muted">
             No GitHub token in the container’s environment, so this lists <b>public</b>
-            repositories only and the checks below that need authentication will say so. The
-            fleet’s GitHub credential is rendered by{' '}
-            <code>daedalus-dashboard-keys.service</code>; a{' '}
+            repositories only and the checks below that need authentication will say so. The fleet’s
+            GitHub credential is rendered by <code>daedalus-dashboard-keys.service</code>; a{' '}
             <code>GITHUB_REPO_TOKEN</code> in <code>stacks/daedalus/service-keys.sops</code>
             overrides it.
           </p>
@@ -376,11 +378,11 @@ function Wizard({ options }: { options: Options }) {
                   ]}
                 />
                 <p className="board-foot">
-                  {stage === 'off' ?
-                    'No traefik router, no DNS, no probe — but the container still runs and still deploys.'
-                  : stage === 'lab' ?
-                    'LAN only: HTTPS through traefik with the wildcard certificate, resolved by pi-hole.'
-                  : 'Also published through the Cloudflare tunnel, with a public CNAME. Anyone on the internet can reach it.'}
+                  {stage === 'off'
+                    ? 'No traefik router, no DNS, no probe — but the container still runs and still deploys.'
+                    : stage === 'lab'
+                      ? 'LAN only: HTTPS through traefik with the wildcard certificate, resolved by pi-hole.'
+                      : 'Also published through the Cloudflare tunnel, with a public CNAME. Anyone on the internet can reach it.'}
                 </p>
                 <Field
                   label="Hostname"
@@ -421,22 +423,24 @@ function Wizard({ options }: { options: Options }) {
                     id: 'image',
                     label: 'Image published',
                     state:
-                      preflight.imageState === 'present' ? 'ok'
-                      : preflight.imageState === 'missing' ? 'bad'
-                      : 'unknown',
+                      preflight.imageState === 'present'
+                        ? 'ok'
+                        : preflight.imageState === 'missing'
+                          ? 'bad'
+                          : 'unknown',
                     detail:
-                      preflight.imageState === 'present' ?
-                        `${preflight.effectiveImage} is in the registry`
-                      : preflight.imageState === 'missing' ?
-                        `${preflight.effectiveImage} does not exist yet`
-                      : `${preflight.effectiveImage} is not on this box's registry — cannot be checked from here`,
+                      preflight.imageState === 'present'
+                        ? `${preflight.effectiveImage} is in the registry`
+                        : preflight.imageState === 'missing'
+                          ? `${preflight.effectiveImage} does not exist yet`
+                          : `${preflight.effectiveImage} is not on this box's registry — cannot be checked from here`,
                     fix:
-                      preflight.imageState === 'missing' ?
-                        'Run the image workflow once. Until the image exists, the container would restart-loop from the moment this entry is applied — which is why this is the one check that blocks.'
-                      : undefined,
+                      preflight.imageState === 'missing'
+                        ? 'Run the image workflow once. Until the image exists, the container would restart-loop from the moment this entry is applied — which is why this is the one check that blocks.'
+                        : undefined,
                   }}
                   action={
-                    preflight.imageState === 'missing' && preflight.dispatchable ?
+                    preflight.imageState === 'missing' && preflight.dispatchable ? (
                       <button
                         type="button"
                         className="btn"
@@ -449,16 +453,21 @@ function Wizard({ options }: { options: Options }) {
                           )
                         }}
                       >
-                        {host?.id === 'image' && host.state === 'running' ?
-                          'Dispatching…'
-                        : `Run ${preflight.publishWorkflow ?? 'CI'}`}
+                        {host?.id === 'image' && host.state === 'running'
+                          ? 'Dispatching…'
+                          : `Run ${preflight.publishWorkflow ?? 'CI'}`}
                       </button>
-                    : undefined
+                    ) : undefined
                   }
                   note={
-                    host?.id === 'image' && host.state !== 'running' ? host : (
-                      awaitingImage ? { state: 'running' as const, message: 'building — this row refreshes itself every 20s' } : undefined
-                    )
+                    host?.id === 'image' && host.state !== 'running'
+                      ? host
+                      : awaitingImage
+                        ? {
+                            state: 'running' as const,
+                            message: 'building — this row refreshes itself every 20s',
+                          }
+                        : undefined
                   }
                 />
                 {preflight.checks.map((c) => (
@@ -466,7 +475,7 @@ function Wizard({ options }: { options: Options }) {
                     key={c.id}
                     check={c}
                     action={
-                      c.id === 'registry-secret' && c.state === 'bad' ?
+                      c.id === 'registry-secret' && c.state === 'bad' ? (
                         <button
                           type="button"
                           className="btn"
@@ -477,16 +486,18 @@ function Wizard({ options }: { options: Options }) {
                             )
                           }}
                         >
-                          {host?.id === 'registry-secret' && host.state === 'running' ?
-                            'Setting…'
-                          : 'Set it'}
+                          {host?.id === 'registry-secret' && host.state === 'running'
+                            ? 'Setting…'
+                            : 'Set it'}
                         </button>
-                      : undefined
+                      ) : undefined
                     }
                     note={
-                      c.id === 'registry-secret' && host?.id === 'registry-secret' && host.state !== 'running' ?
-                        host
-                      : undefined
+                      c.id === 'registry-secret' &&
+                      host?.id === 'registry-secret' &&
+                      host.state !== 'running'
+                        ? host
+                        : undefined
                     }
                   />
                 ))}
@@ -506,13 +517,18 @@ function Wizard({ options }: { options: Options }) {
             {error !== null && <p className="banner">{error}</p>}
 
             <div className="wizard-actions">
-              <button type="button" className="btn btn-primary" disabled={!canCreate} onClick={create}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!canCreate}
+                onClick={create}
+              >
                 {busy ? 'Creating…' : 'Create entry'}
               </button>
               <p className="footnote">
-                {imageMissing ?
-                  'Blocked until the image exists. Run CI above — a one-shot runner is started for the repo, since it has no runner of its own until it is an app. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
-                : 'Writes the registry row. Nothing is built, routed or started until you Apply, which commits stacks/apps/apps.json and rebuilds.'}
+                {imageMissing
+                  ? 'Blocked until the image exists. Run CI above — a one-shot runner is started for the repo, since it has no runner of its own until it is an app. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
+                  : 'Writes the registry row. Nothing is built, routed or started until you Apply, which commits stacks/apps/apps.json and rebuilds.'}
               </p>
             </div>
           </section>
@@ -539,10 +555,7 @@ function CheckRow({
   note?: { state: 'running' | 'done' | 'failed'; message: string }
 }) {
   const mark =
-    check.state === 'ok' ? '✓'
-    : check.state === 'bad' ? '✗'
-    : check.state === 'warn' ? '!'
-    : '?'
+    check.state === 'ok' ? '✓' : check.state === 'bad' ? '✗' : check.state === 'warn' ? '!' : '?'
 
   return (
     <li className={`check check-${check.state}`}>
@@ -602,9 +615,11 @@ function Field({
           onChange(e.target.value)
         }}
       />
-      {error !== null ?
+      {error !== null ? (
         <small className="field-error">{error}</small>
-      : hint !== undefined && <small className="field-hint">{hint}</small>}
+      ) : (
+        hint !== undefined && <small className="field-hint">{hint}</small>
+      )}
     </label>
   )
 }

@@ -1,9 +1,9 @@
 import { Await, createFileRoute, Link } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
-import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
 import { ImagesView, PackagesView } from '../components/registries'
-import { AppIcon, Segmented, StateDot, type AppState } from '../components/ui'
+import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
+import { AppIcon, type AppState, Segmented, StateDot } from '../components/ui'
 import { Spark } from '../components/viz'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
 
@@ -209,7 +209,6 @@ export function AppsList({ data }: { data: ListData }) {
   )
 }
 
-
 function AppRow({ row }: { row: Row }) {
   return (
     <li>
@@ -246,14 +245,14 @@ function AppRow({ row }: { row: Row }) {
 
         <span
           className={
-            row.stage === 'live' ? 'chip chip-live'
-            : row.stage === 'off' ? 'chip chip-off'
-            : 'chip chip-lab'
+            row.stage === 'live'
+              ? 'chip chip-live'
+              : row.stage === 'off'
+                ? 'chip chip-off'
+                : 'chip chip-lab'
           }
         >
-          {row.stage === 'live' ? 'external'
-          : row.stage === 'off' ? 'not exposed'
-          : 'internal'}
+          {row.stage === 'live' ? 'external' : row.stage === 'off' ? 'not exposed' : 'internal'}
         </span>
 
         <div className="app-spark">

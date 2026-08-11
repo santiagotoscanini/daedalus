@@ -145,7 +145,12 @@ export type Hardware = {
 }
 
 export const NO_HARDWARE: Hardware = {
-  board: { vendor: null, model: null, version: null, bios: { vendor: null, version: null, date: null } },
+  board: {
+    vendor: null,
+    model: null,
+    version: null,
+    bios: { vendor: null, version: null, date: null },
+  },
   chassis: { vendor: null },
   cpu: { model: null, socket: null, cores: null, threads: null, maxMhz: null },
   memory: { slots: null, maxCapacityGb: null, populated: null, totalGb: null, modules: [] },

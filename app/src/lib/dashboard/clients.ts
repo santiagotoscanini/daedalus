@@ -159,7 +159,10 @@ export function getJson<T>(
  * this is a first connection to an address off the bridge, which is exactly
  * the case that stalls.
  */
-export async function getText(url: string, attempts: number[] = ATTEMPT_MS): Promise<string | null> {
+export async function getText(
+  url: string,
+  attempts: number[] = ATTEMPT_MS,
+): Promise<string | null> {
   for (const ms of attempts) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(ms), redirect: 'manual' })
@@ -303,11 +306,7 @@ export async function lokiVector(
  * all, and a query that mixes them up fails as a parse error rather than as
  * something obviously wrong on screen.
  */
-export async function lokiSeries(
-  query: string,
-  minutes: number,
-  step: number,
-): Promise<number[]> {
+export async function lokiSeries(query: string, minutes: number, step: number): Promise<number[]> {
   const end = Date.now() * 1e6
   const start = end - minutes * 60 * 1e9
   const body = await getJson<{ data?: { result?: MatrixResult[] } }>(
@@ -410,10 +409,12 @@ export async function lokiEntries(
     {},
     LOKI_ATTEMPT_MS,
   )
-  return (body?.data?.result ?? [])
-    .flatMap((s) => s.values)
-    // Loki's timestamps are nanoseconds as a string; milliseconds is what
-    // every consumer here wants and what survives JSON without precision loss.
-    .map(([ns, line]) => ({ at: Number(ns) / 1e6, line }))
-    .sort((a, b) => b.at - a.at)
+  return (
+    (body?.data?.result ?? [])
+      .flatMap((s) => s.values)
+      // Loki's timestamps are nanoseconds as a string; milliseconds is what
+      // every consumer here wants and what survives JSON without precision loss.
+      .map(([ns, line]) => ({ at: Number(ns) / 1e6, line }))
+      .sort((a, b) => b.at - a.at)
+  )
 }

@@ -1,8 +1,8 @@
-import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../viz'
+import type { GamingData } from '../../server/category'
 import { LogBoard } from '../logs'
 import { Changelog, ReleaseNotes, UpgradeChain } from '../release-notes'
 import { ServiceHead } from '../service-head'
-import type { GamingData } from '../../server/category'
+import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../viz'
 
 // The Gaming page. Two servers, and the shape held.
 //
@@ -54,9 +54,11 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
         version={mc.version}
         versionNote={mc.build === null ? 'running' : `running · Paper build ${mc.build}`}
         verdict={
-          mc.version === null ? { label: 'unknown', tone: 'muted' }
-          : stale ? { label: 'behind a release', tone: 'warn' }
-          : { label: 'current', tone: 'ok' }
+          mc.version === null
+            ? { label: 'unknown', tone: 'muted' }
+            : stale
+              ? { label: 'behind a release', tone: 'warn' }
+              : { label: 'current', tone: 'ok' }
         }
         compare={[
           {
@@ -72,17 +74,19 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
         ]}
         lede={
           <>
-            Paper, near-vanilla. Everyone connects to{' '}
-            <span className="mono">{mc.connect}</span> — the same address at home and away, because
-            pi-hole answers that name with the LAN address and Cloudflare with the public one.
+            Paper, near-vanilla. Everyone connects to <span className="mono">{mc.connect}</span> —
+            the same address at home and away, because pi-hole answers that name with the LAN
+            address and Cloudflare with the public one.
           </>
         }
         actions={
-          mc.healthy === null ?
+          mc.healthy === null ? (
             <Chip tone="muted">not scraped</Chip>
-          : mc.healthy ?
+          ) : mc.healthy ? (
             <Chip tone="ok">answering</Chip>
-          : <Chip tone="bad">not answering</Chip>
+          ) : (
+            <Chip tone="bad">not answering</Chip>
+          )
         }
       />
 
@@ -131,9 +135,10 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
           span={6}
           aside={<span className="board-note">last 7 days</span>}
         >
-          {events.length === 0 ?
+          {events.length === 0 ? (
             <p className="viz-empty">nobody has joined this week</p>
-          : <ul className="news">
+          ) : (
+            <ul className="news">
               {events.map((e) => (
                 <li key={`${String(e.at)}-${e.who}`} className="news-row">
                   <Chip tone={e.kind === 'join' ? 'ok' : 'muted'}>
@@ -151,7 +156,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
                 </li>
               ))}
             </ul>
-          }
+          )}
           {/* Read out of the server's own log rather than kept as a list here.
               The log already IS the record; a second one could only disagree
               with it. */}
@@ -165,10 +170,22 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
           <Facts
             rows={[
               { k: 'Address', v: <span className="mono">{mc.connect}</span> },
-              { k: 'Who gets in', v: 'Mojang session auth, plus an enforced whitelist pinned in nix' },
-              { k: 'Ingress', v: 'TCP 25565 forwarded by the router — no tunnel: Minecraft offers no TLS, so traefik has no SNI to route on' },
-              { k: 'World', v: 'its own ZFS dataset on NVMe, so it can be rolled back without taking every other stack with it' },
-              { k: 'Backups', v: 'nightly RCON-quiesced archive to /s2, on top of 15-minute snapshots and the hourly replica' },
+              {
+                k: 'Who gets in',
+                v: 'Mojang session auth, plus an enforced whitelist pinned in nix',
+              },
+              {
+                k: 'Ingress',
+                v: 'TCP 25565 forwarded by the router — no tunnel: Minecraft offers no TLS, so traefik has no SNI to route on',
+              },
+              {
+                k: 'World',
+                v: 'its own ZFS dataset on NVMe, so it can be rolled back without taking every other stack with it',
+              },
+              {
+                k: 'Backups',
+                v: 'nightly RCON-quiesced archive to /s2, on top of 15-minute snapshots and the hourly replica',
+              },
             ]}
           />
         </Board>
@@ -192,9 +209,9 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
         version={factorio.installed}
         versionNote="running · re-downloaded on every start"
         verdict={
-          current ?
-            { label: 'current', tone: 'ok' }
-          : { label: `${String(behind)} behind`, tone: 'warn' }
+          current
+            ? { label: 'current', tone: 'ok' }
+            : { label: `${String(behind)} behind`, tone: 'warn' }
         }
         compare={[
           {
@@ -238,9 +255,9 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
               rather than what logs are — and neither may claim the other's
               job. This one is the record of what changed. */}
           <p className="board-foot">
-            {current ?
-              'What the running build shipped, '
-            : 'Everything between the running build and stable, '}
+            {current
+              ? 'What the running build shipped, '
+              : 'Everything between the running build and stable, '}
             parsed from the wiki’s page source. Open one for the fixes; the link inside goes to the
             full section.
           </p>
@@ -252,9 +269,10 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           span={6}
           aside={<span className="board-note">factorio.com/blog</span>}
         >
-          {news.length === 0 ?
+          {news.length === 0 ? (
             <p className="viz-empty">could not read the feed</p>
-          : <ul className="news">
+          ) : (
+            <ul className="news">
               {news.map((n) => (
                 <li key={n.url} className="news-row">
                   <Chip tone={n.kind === 'release' ? 'ok' : n.kind === 'fff' ? 'info' : 'muted'}>
@@ -267,13 +285,13 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
                 </li>
               ))}
             </ul>
-          }
+          )}
           {/* Was "release posts are the changelog — there is no structured
               one", which was true when this panel stood alone and is now flatly
               contradicted by the structured changelog sitting next to it. */}
           <p className="board-foot">
-            The studio’s own feed, which points forward: Friday Facts are what is being built
-            rather than what has landed. What landed is the panel beside this one.
+            The studio’s own feed, which points forward: Friday Facts are what is being built rather
+            than what has landed. What landed is the panel beside this one.
           </p>
         </Board>
 

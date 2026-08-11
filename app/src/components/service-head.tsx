@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react'
-
-import { Chip, type Tone } from './viz'
 import { DASH } from '../lib/dashboard/format'
 import type { VersionGap } from '../lib/dashboard/github'
 import type { RunningVersion } from '../lib/dashboard/images'
+import { Chip, type Tone } from './viz'
 
 // The header a page gets when its subject is one identifiable SERVICE.
 //
@@ -81,10 +80,17 @@ export function ServiceHead({
  * `title` is deliberately NOT the mechanism: it truncates, it cannot hold
  * labelled rows, and it appears after a delay long enough that nobody waits.
  */
-function VersionCompare({ verdict, rows }: { verdict: { label: string; tone: Tone }; rows: CompareRow[] }) {
+function VersionCompare({
+  verdict,
+  rows,
+}: {
+  verdict: { label: string; tone: Tone }
+  rows: CompareRow[]
+}) {
   if (rows.length === 0) return <Chip tone={verdict.tone}>{verdict.label}</Chip>
 
   return (
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex opens the :focus-within card for keyboard users — the popover pattern this codebase uses instead of title=; becomes the shared InfoHint in the UI-system pass.
     <span className="vercmp" tabIndex={0}>
       <Chip tone={verdict.tone}>{verdict.label}</Chip>
       <span className="vercmp-card" role="tooltip">
@@ -136,11 +142,13 @@ export function latestRow(gap: VersionGap): CompareRow {
     k: 'Latest',
     v: gap.latest,
     note:
-      gap.latest === null ? 'GitHub did not answer'
-      : gap.behind.length > 0 ?
-        `${String(gap.behind.length)} release${gap.behind.length === 1 ? '' : 's'} between them`
-      : ahead ? 'the newest published release — this box is on a tag ahead of it'
-      : 'this is what is running',
+      gap.latest === null
+        ? 'GitHub did not answer'
+        : gap.behind.length > 0
+          ? `${String(gap.behind.length)} release${gap.behind.length === 1 ? '' : 's'} between them`
+          : ahead
+            ? 'the newest published release — this box is on a tag ahead of it'
+            : 'this is what is running',
   }
 }
 

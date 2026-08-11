@@ -158,9 +158,11 @@ async function notesFor(version: string): Promise<ReleaseNote | null> {
       // load-bearing paragraph on the whole page, so it is read from the
       // paragraphs directly rather than dropped for having no bullets.
       const paras =
-        items.length > 0 ? items : (
-          [...chunk.matchAll(/<p>(.*?)<\/p>/g)].map((m) => strip(m[1] ?? '')).filter((s) => s.length > 2)
-        )
+        items.length > 0
+          ? items
+          : [...chunk.matchAll(/<p>(.*?)<\/p>/g)]
+              .map((m) => strip(m[1] ?? ''))
+              .filter((s) => s.length > 2)
 
       if (paras.length === 0) continue
       if (paras.length > MAX_ITEMS) truncated = true
@@ -173,22 +175,24 @@ async function notesFor(version: string): Promise<ReleaseNote | null> {
 
 /** Docs HTML → plain text. Only the markup these pages actually use. */
 function strip(s: string): string {
-  return s
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#8212;/g, '—')
-    .replace(/&quot;/g, '"')
-    // The § that links each change to its commit — a link with no text once
-    // the tags are gone, and it ends every single bullet. A change backed by
-    // several commits carries one per commit, so this strips a RUN of them;
-    // matching a single trailing § leaves "§ § § § § § § §" on the busiest
-    // entries, which are the ones most worth reading.
-    .replace(/(?:\s*§)+\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return (
+    s
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&#8212;/g, '—')
+      .replace(/&quot;/g, '"')
+      // The § that links each change to its commit — a link with no text once
+      // the tags are gone, and it ends every single bullet. A change backed by
+      // several commits carries one per commit, so this strips a RUN of them;
+      // matching a single trailing § leaves "§ § § § § § § §" on the busiest
+      // entries, which are the ones most worth reading.
+      .replace(/(?:\s*§)+\s*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
 }
 
 /**
@@ -231,9 +235,12 @@ export async function postgresGap(reported: string | null): Promise<VersionGap> 
 
   // Oldest first, matching how the upgrade chain reads everywhere else.
   const behind =
-    Number.isFinite(current) && Number.isFinite(running) ?
-      Array.from({ length: Math.max(0, current - running) }, (_, i) => `${major}.${String(running + i + 1)}`)
-    : []
+    Number.isFinite(current) && Number.isFinite(running)
+      ? Array.from(
+          { length: Math.max(0, current - running) },
+          (_, i) => `${major}.${String(running + i + 1)}`,
+        )
+      : []
 
   // The running release is included so the panel says what you last got when
   // there is nothing pending, rather than going blank on a healthy cluster.
@@ -250,10 +257,10 @@ export async function postgresGap(reported: string | null): Promise<VersionGap> 
     // An out-of-support major is the one thing worse than being behind on
     // minors, and it is invisible from a version number alone: 16.10 looks
     // exactly as healthy as 18.4 until you know which lines still get fixes.
-    note:
-      !line.supported ?
-        `PostgreSQL ${major} is out of support — postgresql.org publishes no further fixes for this line`
-      : releases.length > 0 ? null
-      : 'postgresql.org served the version list but not the release notes',
+    note: !line.supported
+      ? `PostgreSQL ${major} is out of support — postgresql.org publishes no further fixes for this line`
+      : releases.length > 0
+        ? null
+        : 'postgresql.org served the version list but not the release notes',
   }
 }

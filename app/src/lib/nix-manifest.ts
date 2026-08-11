@@ -118,7 +118,7 @@ let cachedManaged: NixManifest['nixManaged'] | null = null
 let cachedTaken: string[] | null = null
 let cachedHosts: Record<string, string> | null = null
 let cachedSecretApps: string[] | null = null
-let cachedLanHosts: NixManifest["lanHosts"] | null = null
+let cachedLanHosts: NixManifest['lanHosts'] | null = null
 let cachedJobs: NixManifest['monitoredJobs'] | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {

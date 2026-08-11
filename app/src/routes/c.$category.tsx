@@ -1,20 +1,19 @@
+import { Await, createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { Fragment } from 'react'
 
-import { Await, createFileRoute, Link, notFound } from '@tanstack/react-router'
-
 import { AiView } from '../components/category/ai'
+import { GamingView } from '../components/category/gaming'
 import { HomeView } from '../components/category/home'
 import { MediaView } from '../components/category/media'
-import { GamingView } from '../components/category/gaming'
 import { MonitoringView } from '../components/category/monitoring'
 import { NetworkView } from '../components/category/network'
 import { SystemView } from '../components/category/system'
 import { BoardsSkeleton, ServiceHeadSkeleton, StatBandSkeleton } from '../components/skeleton'
 import { CATEGORIES, type CategoryName, type CategorySpec } from '../lib/dashboard/nav'
 import {
+  type CategoryPayload,
   fetchCategoryBoards,
   fetchTabStatus,
-  type CategoryPayload,
   type TabStatus,
 } from '../server/category'
 
@@ -56,7 +55,9 @@ export const Route = createFileRoute('/c/$category')({
     if (spec === undefined) throw notFound()
 
     const category = params.category as CategoryName
-    const tab = spec.tabs.some((t) => t.id === deps.tab) ? (deps.tab ?? '') : (spec.tabs[0]?.id ?? '')
+    const tab = spec.tabs.some((t) => t.id === deps.tab)
+      ? (deps.tab ?? '')
+      : (spec.tabs[0]?.id ?? '')
 
     return {
       spec,
@@ -66,11 +67,10 @@ export const Route = createFileRoute('/c/$category')({
       // three ways of declaring one count; testing `probe` alone would skip
       // the request for a category whose tabs each hold several services, and
       // then draw grey dots over health it had chosen not to fetch.
-      tabStatus:
-        spec.tabs.some(
-          (t) => t.probe !== undefined || t.probes !== undefined || t.health !== undefined,
-        ) ?
-          fetchTabStatus({ data: { category } })
+      tabStatus: spec.tabs.some(
+        (t) => t.probe !== undefined || t.probes !== undefined || t.health !== undefined,
+      )
+        ? fetchTabStatus({ data: { category } })
         : null,
     }
   },
@@ -89,9 +89,10 @@ function CategoryPage() {
       <p className="lede cat-lede">{spec.lede}</p>
 
       {spec.tabs.length > 0 &&
-        (tabStatus === null ?
+        (tabStatus === null ? (
           <TabNav spec={spec} category={category} tab={tab} status={null} />
-        : // The tabs are drawn immediately either way — navigation is the one
+        ) : (
+          // The tabs are drawn immediately either way — navigation is the one
           // thing on this page that must never wait. The dot arrives in its
           // reserved slot, grey until it is known, so nothing moves.
           <Await
@@ -99,12 +100,12 @@ function CategoryPage() {
             fallback={<TabNav spec={spec} category={category} tab={tab} status={null} />}
           >
             {(status) => <TabNav spec={spec} category={category} tab={tab} status={status} />}
-          </Await>)}
+          </Await>
+        ))}
 
       <Await promise={boards} fallback={<BoardsPlaceholder spec={spec} tab={tab} />}>
         {(payload) => <CategoryBoards payload={payload} />}
       </Await>
-
     </>
   )
 }
@@ -159,11 +160,13 @@ function TabNav({
                   role="img"
                   aria-label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
                   title={
-                    t.probe === undefined && t.probes === undefined && t.health === undefined ?
-                      'nothing probes this yet'
-                    : up === null ? 'no reading from gatus'
-                    : up ? 'answering'
-                    : 'nothing has answered in the last few minutes'
+                    t.probe === undefined && t.probes === undefined && t.health === undefined
+                      ? 'nothing probes this yet'
+                      : up === null
+                        ? 'no reading from gatus'
+                        : up
+                          ? 'answering'
+                          : 'nothing has answered in the last few minutes'
                   }
                 />
               )}

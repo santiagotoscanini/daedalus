@@ -196,7 +196,7 @@ async function releases(repo: string): Promise<GhRelease[] | null> {
  * missing segment counts as zero, so three-part versions compare exactly as
  * they did.
  */
-function cmp(a: string, b: string): number {
+export function cmp(a: string, b: string): number {
   const pa = a.split('.').map(Number)
   const pb = b.split('.').map(Number)
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -268,7 +268,9 @@ export async function versionGap(
       return version === undefined ? null : { ...r, version }
     })
     .filter((r): r is GhRelease & { version: string } => r !== null)
-    .filter((r) => opts.sameMajor !== true || major === undefined || r.version.split('.')[0] === major)
+    .filter(
+      (r) => opts.sameMajor !== true || major === undefined || r.version.split('.')[0] === major,
+    )
     .sort((a, b) => cmp(b.version, a.version))
 
   // Prereleases are dropped from the CANDIDATE set but not from the notes.
@@ -284,18 +286,21 @@ export async function versionGap(
   // Everything strictly above what is running, oldest first — the same reading
   // order as an upgrade path, which is what it is.
   const behind =
-    installed === null ? []
-    : stable
-        .filter((r) => cmp(r.version, installed) > 0)
-        .map((r) => r.version)
-        .reverse()
+    installed === null
+      ? []
+      : stable
+          .filter((r) => cmp(r.version, installed) > 0)
+          .map((r) => r.version)
+          .reverse()
 
   // The running release is included so the panel says what you last got when
   // there is nothing pending, rather than going blank on a healthy service.
   const wanted = new Set(
-    installed !== null ? [...behind, installed]
-    : opts.notesWhenUnknown === true ? stable.slice(0, MAX_RELEASES).map((r) => r.version)
-    : behind,
+    installed !== null
+      ? [...behind, installed]
+      : opts.notesWhenUnknown === true
+        ? stable.slice(0, MAX_RELEASES).map((r) => r.version)
+        : behind,
   )
   const releaseNotes = parsed
     .filter((r) => wanted.has(r.version))
@@ -445,7 +450,11 @@ export async function commitsSince(
   // stalled rootless-netns socket on this box and is far under a round trip to
   // github.com. Through that helper this call failed every time.
   type Compare = {
-    commits?: { sha?: string; html_url?: string; commit?: { author?: { date?: string }; message?: string } }[]
+    commits?: {
+      sha?: string
+      html_url?: string
+      commit?: { author?: { date?: string }; message?: string }
+    }[]
     base_commit?: { commit?: { author?: { date?: string } } }
   }
   let body: Compare | null = null
@@ -461,9 +470,7 @@ export async function commitsSince(
 
   if (body === null) {
     commitCache.set(cacheKey, { at: hit?.at ?? 0, tried: now, gap: hit?.gap ?? null })
-    return (
-      hit?.gap ?? { ...EMPTY_COMMITS, running: sha, note: 'GitHub would not answer' }
-    )
+    return hit?.gap ?? { ...EMPTY_COMMITS, running: sha, note: 'GitHub would not answer' }
   }
 
   const gap: CommitGap = {

@@ -1,13 +1,13 @@
 import { asc, eq } from 'drizzle-orm'
 import { db } from '../db'
 import { appNameError, BASE_DOMAIN, effectiveHostname, hostnameError } from '../hostname'
-import { appEnvVars, apps } from '../schema'
 import {
-  manifestEntries,
   type AppStage,
   type ManifestApp,
   type ManifestEntry,
+  manifestEntries,
 } from '../nix-manifest'
+import { appEnvVars, apps } from '../schema'
 
 // Reads and writes over the app registry, plus the drift comparison against
 // what Nix actually built.

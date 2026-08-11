@@ -28,8 +28,8 @@
 //             from a range query, never from a counter read once.
 
 import { getJson, lokiLatest, promBars, promScalar, promVector } from '../clients'
-import { commitsSince, versionGap, type CommitGap, type VersionGap } from '../github'
 import { DASH, key, since } from '../format'
+import { type CommitGap, commitsSince, type VersionGap, versionGap } from '../github'
 
 export type AiData =
   | ({ tab: 'lemonade' } & LemonadeData)
@@ -108,7 +108,12 @@ type LemonadeData = {
     outputTokens: number | null
   }
   /** Live utilisation of the gaming PC. Nulls are normal — see the note. */
-  live: { cpuPct: number | null; memGb: number | null; gpuPct: number | null; vramGb: number | null }
+  live: {
+    cpuPct: number | null
+    memGb: number | null
+    gpuPct: number | null
+    vramGb: number | null
+  }
   downloads: { model: string; percent: number | null; status: string }[]
   catalog: { total: number; downloaded: number; sizeGb: number }
 }
@@ -315,10 +320,7 @@ type N8nData = {
 /** How far back the gateway charts look. Two weeks fits a column per day. */
 const DAYS = 14
 
-export async function loadAi(
-  tab: string,
-  ctx: { base: (app: string) => string },
-): Promise<AiData> {
+export async function loadAi(tab: string, ctx: { base: (app: string) => string }): Promise<AiData> {
   switch (tab) {
     case 'litellm':
       return { tab: 'litellm', ...(await loadLitellm()) }
@@ -520,9 +522,7 @@ async function loadLemonade(): Promise<LemonadeData> {
     catalog: {
       total: models.length,
       downloaded: models.filter((m) => m.downloaded === true).length,
-      sizeGb: models
-        .filter((m) => m.downloaded === true)
-        .reduce((n, m) => n + (m.size ?? 0), 0),
+      sizeGb: models.filter((m) => m.downloaded === true).reduce((n, m) => n + (m.size ?? 0), 0),
     },
   }
 }
@@ -564,7 +564,12 @@ async function modelStats(): Promise<
 
   const out = new Map<
     string,
-    { type: string; device: string | null; backend: string | null; stats: NonNullable<CatalogModel['stats']> }
+    {
+      type: string
+      device: string | null
+      backend: string | null
+      stats: NonNullable<CatalogModel['stats']>
+    }
   >()
 
   const pick = (rows: typeof requests | undefined, model: string): number | null => {
@@ -618,7 +623,10 @@ function typeFromLabels(labels: string[] | undefined): string {
 }
 
 /** The one recipe_option worth surfacing: which compute backend is serving. */
-function pickBackend(recipe: string | undefined, opts: Record<string, unknown> | undefined): string | null {
+function pickBackend(
+  recipe: string | undefined,
+  opts: Record<string, unknown> | undefined,
+): string | null {
   if (recipe === undefined || opts === undefined) return null
   const v = opts[`${recipe}_backend`] ?? opts.llamacpp_backend
   return typeof v === 'string' ? v : null
@@ -683,60 +691,60 @@ async function loadLitellm(): Promise<LitellmData> {
 
   const [activity, keys, version, inFlight, latSum, latCount, toolLatency, overhead] =
     await Promise.all([
-    getJson<DailyActivity>(
-      `http://litellm:4000/user/daily/activity?start_date=${from}&end_date=${today}` +
-        `&page_size=${String(PAGE_SIZE)}`,
-      auth,
-    ),
-    // Which keys still EXIST, as opposed to which ones have called. The ledger
-    // is history and keys get rotated out of it, so the difference between the
-    // two lists is what turns an unanswerable hash into "this was revoked".
-    //
-    // 100 is the endpoint's hard maximum, not a choice — a larger `size` is a
-    // 422 rather than a clamp. `total_pages` is read below and the revoked
-    // marking is dropped entirely if there is a second page, because a
-    // half-read key list would mark live keys as revoked, and a wrong
-    // accusation is worse here than no annotation.
-    getJson<{ keys?: { token?: string }[]; total_pages?: number }>(
-      'http://litellm:4000/key/list?return_full_object=true&size=100',
-      auth,
-    ),
-    litellmVersion(auth),
-    promScalar('sum(litellm_in_flight_requests)'),
-    // The histogram's own sum and count, kept APART rather than divided in
-    // PromQL. Two keys can share a display name — this box has two virtual keys
-    // both aliased `plane` — and averaging two means is not the mean of the
-    // whole; the totals have to be added before the division, which can only
-    // happen after they are grouped by the name a reader sees.
-    //
-    // Joined on `hashed_api_key` because it is the ledger's own key, literals
-    // and all (`litellm_proxy_master_key`). The `api_key_alias` label would
-    // have to be matched against a name this file invents, and reports "None"
-    // for exactly the keys whose names it invents.
-    promBars(
-      `sum by (hashed_api_key) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))`,
-      'hashed_api_key',
-    ),
-    promBars(
-      `sum by (hashed_api_key) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
-      'hashed_api_key',
-    ),
-    // Tool calls are filed under the `model` label as `MCP: <server>-<tool>`,
-    // alongside the real models — which is why every other query here joins on
-    // `requested_model` instead. Here it is the label wanted.
-    promBars(
-      `sum by (model) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))` +
-        ` / sum by (model) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
-      'model',
-    ),
-    // What the gateway costs, separated from what the model costs. Every other
-    // latency figure on this page is end-to-end and therefore mostly Lemonade;
-    // this is the part that is actually attributable to litellm.
-    promScalar(
-      `sum(increase(litellm_overhead_latency_metric_sum[${RANGE}]))` +
-        ` / sum(increase(litellm_overhead_latency_metric_count[${RANGE}]))`,
-    ),
-  ])
+      getJson<DailyActivity>(
+        `http://litellm:4000/user/daily/activity?start_date=${from}&end_date=${today}` +
+          `&page_size=${String(PAGE_SIZE)}`,
+        auth,
+      ),
+      // Which keys still EXIST, as opposed to which ones have called. The ledger
+      // is history and keys get rotated out of it, so the difference between the
+      // two lists is what turns an unanswerable hash into "this was revoked".
+      //
+      // 100 is the endpoint's hard maximum, not a choice — a larger `size` is a
+      // 422 rather than a clamp. `total_pages` is read below and the revoked
+      // marking is dropped entirely if there is a second page, because a
+      // half-read key list would mark live keys as revoked, and a wrong
+      // accusation is worse here than no annotation.
+      getJson<{ keys?: { token?: string }[]; total_pages?: number }>(
+        'http://litellm:4000/key/list?return_full_object=true&size=100',
+        auth,
+      ),
+      litellmVersion(auth),
+      promScalar('sum(litellm_in_flight_requests)'),
+      // The histogram's own sum and count, kept APART rather than divided in
+      // PromQL. Two keys can share a display name — this box has two virtual keys
+      // both aliased `plane` — and averaging two means is not the mean of the
+      // whole; the totals have to be added before the division, which can only
+      // happen after they are grouped by the name a reader sees.
+      //
+      // Joined on `hashed_api_key` because it is the ledger's own key, literals
+      // and all (`litellm_proxy_master_key`). The `api_key_alias` label would
+      // have to be matched against a name this file invents, and reports "None"
+      // for exactly the keys whose names it invents.
+      promBars(
+        `sum by (hashed_api_key) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))`,
+        'hashed_api_key',
+      ),
+      promBars(
+        `sum by (hashed_api_key) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
+        'hashed_api_key',
+      ),
+      // Tool calls are filed under the `model` label as `MCP: <server>-<tool>`,
+      // alongside the real models — which is why every other query here joins on
+      // `requested_model` instead. Here it is the label wanted.
+      promBars(
+        `sum by (model) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))` +
+          ` / sum by (model) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
+        'model',
+      ),
+      // What the gateway costs, separated from what the model costs. Every other
+      // latency figure on this page is end-to-end and therefore mostly Lemonade;
+      // this is the part that is actually attributable to litellm.
+      promScalar(
+        `sum(increase(litellm_overhead_latency_metric_sum[${RANGE}]))` +
+          ` / sum(increase(litellm_overhead_latency_metric_count[${RANGE}]))`,
+      ),
+    ])
 
   // Order is not read off this list — the chart's axis is `dates` and
   // everything else here is a sum — so it is taken as the API sends it.
@@ -770,13 +778,19 @@ async function loadLitellm(): Promise<LitellmData> {
     // `null` means "could not establish which keys are live" — the gateway did
     // not answer, or answered with more pages than were read. Distinct from an
     // empty set, which would claim every caller is revoked.
-    keys === null || (keys.total_pages ?? 1) > 1 ?
-      null
-    : new Set((keys.keys ?? []).map((k) => k.token ?? '')),
+    keys === null || (keys.total_pages ?? 1) > 1
+      ? null
+      : new Set((keys.keys ?? []).map((k) => k.token ?? '')),
   )
 
   const toolMs = new Map(toolLatency.map((t) => [t.label, t.value * 1000]))
-  const mcp = rank(days, (d) => d.breakdown?.mcp_servers, requestsOf, (k) => k, 10).map((t) => {
+  const mcp = rank(
+    days,
+    (d) => d.breakdown?.mcp_servers,
+    requestsOf,
+    (k) => k,
+    10,
+  ).map((t) => {
     const [server, ...rest] = t.label.split('/')
     const tool = rest.join('/')
     return {
@@ -796,11 +810,21 @@ async function loadLitellm(): Promise<LitellmData> {
     partial: activity?.metadata?.has_more === true,
     inFlight,
     overheadMs: overhead === null ? null : overhead * 1000,
-    endpoints: rank(days, (d) => d.breakdown?.endpoints, requestsOf, (k) => k.replace(/^\//, '')),
+    endpoints: rank(
+      days,
+      (d) => d.breakdown?.endpoints,
+      requestsOf,
+      (k) => k.replace(/^\//, ''),
+    ),
     callers,
     rejected,
     mcp,
-    mcpServers: [...mcp.reduce((m, t) => m.set(t.server, (m.get(t.server) ?? 0) + t.calls), new Map<string, number>())]
+    mcpServers: [
+      ...mcp.reduce(
+        (m, t) => m.set(t.server, (m.get(t.server) ?? 0) + t.calls),
+        new Map<string, number>(),
+      ),
+    ]
       .map(([name, calls]) => ({ name, calls }))
       .sort((a, b) => b.calls - a.calls),
     neighbours: await loadNeighbours(),
@@ -993,7 +1017,8 @@ function callersOf(
   }
 }
 
-const GONE = 'No key with this hash exists on the gateway any more — it was deleted or rotated, which is usually the whole explanation for a caller that succeeded and then failed forever.'
+const GONE =
+  'No key with this hash exists on the gateway any more — it was deleted or rotated, which is usually the whole explanation for a caller that succeeded and then failed forever.'
 
 /**
  * What litellm's own two credentials actually are.
@@ -1131,7 +1156,10 @@ async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
     // itself worth seeing.
     getJson<{ current?: string; latest?: string }>(`${base}/api/version/updates`, auth),
     getJson<{ data?: { id?: string; name?: string }[] }>(`${base}/api/models`, auth),
-    getJson<{ items?: { name?: string; file_count?: number }[] }>(`${base}/api/v1/knowledge/`, auth),
+    getJson<{ items?: { name?: string; file_count?: number }[] }>(
+      `${base}/api/v1/knowledge/`,
+      auth,
+    ),
     getJson<{ name?: string; meta?: { description?: string } }[]>(`${base}/api/v1/tools/`, auth),
   ])
 
@@ -1179,10 +1207,10 @@ async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
     // for any authenticated caller, so it cannot tell an admin key from a
     // useless one.
     note:
-      tools === null ?
-        'Open WebUI refused the admin API. It needs a key from Account → API Keys, in ' +
-        'stacks/daedalus/service-keys.sops as OPENWEBUI_KEY.'
-      : null,
+      tools === null
+        ? 'Open WebUI refused the admin API. It needs a key from Account → API Keys, in ' +
+          'stacks/daedalus/service-keys.sops as OPENWEBUI_KEY.'
+        : null,
   }
 }
 
@@ -1385,7 +1413,9 @@ async function loadN8n(base: string): Promise<N8nData> {
     // is not sorted by its own bar is unreadable. A switched-on workflow that
     // has never fired therefore lands at the bottom, which is why it carries a
     // badge rather than relying on its position to be noticed.
-    flows: flowRows.sort((a, b) => b.runs - a.runs || (a.name ?? a.id).localeCompare(b.name ?? b.id)),
+    flows: flowRows.sort(
+      (a, b) => b.runs - a.runs || (a.name ?? a.id).localeCompare(b.name ?? b.id),
+    ),
     failures: rows
       .filter((e) => FAILED.has(e.status))
       .slice(0, 6)
@@ -1395,18 +1425,17 @@ async function loadN8n(base: string): Promise<N8nData> {
       })),
     partial: execs.partial,
     archived: all.length - live.length,
-    note:
-      execs.refused ?
-        'n8n refused the executions API. The key needs the execution:read scope — make one ' +
+    note: execs.refused
+      ? 'n8n refused the executions API. The key needs the execution:read scope — make one ' +
         'in Settings → n8n API and put it in stacks/daedalus/service-keys.sops as N8N_API_KEY.'
       : null,
     // A different, smaller problem than the one above, and worth saying
     // separately: the runs still count, the rows are just labelled with ids
     // and lose their on/off state.
     nameNote:
-      !execs.refused && flows === null ?
-        'The API key cannot read workflows, so these are ids and their on/off state is unknown. ' +
-        'Re-issue it in Settings → n8n API with the workflow:read scope.'
-      : null,
+      !execs.refused && flows === null
+        ? 'The API key cannot read workflows, so these are ids and their on/off state is unknown. ' +
+          'Re-issue it in Settings → n8n API with the workflow:read scope.'
+        : null,
   }
 }

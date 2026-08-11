@@ -1,6 +1,8 @@
 import { Await, createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
-import { useEffect, useState, type ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
+import { GrafanaLogs } from '../components/logs'
+import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
 import { AppIcon, Bytes, Segmented, Slider, StatePill, Toggle } from '../components/ui'
 import {
   BarList,
@@ -12,28 +14,27 @@ import {
   Stat,
   StatStrip,
 } from '../components/viz'
-import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
-import { DASH } from '../lib/dashboard/format'
-import { GrafanaLogs } from '../components/logs'
 // ./access-window, NOT ./access — same split as env-groups below. The window
 // table is a value the picker and validateSearch both need in the browser;
 // ./access talks to Loki and must never follow it there.
 import {
   ACCESS_WINDOWS,
-  DEFAULT_WINDOW,
-  WINDOW_SPEC,
-  isAccessWindow,
   type AccessWindow,
+  DEFAULT_WINDOW,
+  isAccessWindow,
+  WINDOW_SPEC,
 } from '../lib/access-window'
+import { DASH } from '../lib/dashboard/format'
 import type { DeployStatus } from '../lib/deploy'
 // ./env-groups, NOT ./env-snapshot: this is client code, and env-snapshot
 // imports node:fs/promises. Vite externalises node builtins for the browser,
 // so importing a VALUE from that module — even a lookup table — makes the
 // page throw on load. Type-only imports would be erased and safe; GROUP_LABELS
 // is not.
-import { GROUP_LABELS, type EnvGroup, type EnvOrigin } from '../lib/env-groups'
+import { type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../lib/env-groups'
 import { BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import {
+  type AppTabData,
   deleteAppFn,
   fetchApp,
   fetchAppTab,
@@ -43,7 +44,6 @@ import {
   runCiFn,
   saveApp,
   triggerDeploy,
-  type AppTabData,
 } from '../server/registry'
 
 // Every tab this route can render. Two of them are conditional — `database`
@@ -236,9 +236,7 @@ function AppDetail() {
             ]}
           />
           {app.stage === 'off' && (
-            <p className="exposure-note">
-              No route, DNS or probe. The container still runs.
-            </p>
+            <p className="exposure-note">No route, DNS or probe. The container still runs.</p>
           )}
         </div>
       </section>
@@ -285,198 +283,219 @@ function AppDetail() {
         >
           {(d) =>
             d.kind !== 'overview' ? null : (
-        <>
-          {/* Six readings in the order you would ask them: is it up, is anyone
+              <>
+                {/* Six readings in the order you would ask them: is it up, is anyone
               using it, what is it costing, is it being noisy. */}
-          <StatStrip>
-            {/* The probe, not the container state — the hero above already
+                <StatStrip>
+                  {/* The probe, not the container state — the hero above already
                 carries running/stopped, and a second copy of it here would
                 spend a cell of the strip agreeing with itself. */}
-            <Stat
-              label="Health"
-              value={
-                status?.healthy === undefined || status.healthy === null ? 'not probed'
-                : status.healthy ? 'ok'
-                : 'failing'
-              }
-              tone={
-                status?.healthy === undefined || status.healthy === null ? undefined
-                : status.healthy ? 'ok'
-                : 'bad'
-              }
-              sub={status?.containerUp === false ? 'container down' : 'probed every 60s'}
-              title={`gatus probes ${app.authHealthPath ?? '/'} from outside every 60s. Container liveness: ${fmtBool(status?.containerUp)}.`}
-            />
-            <Stat
-              label="Requests"
-              value={status?.rpm === null || !status ? DASH : status.rpm.toFixed(1)}
-              unit="/min"
-              spark={status?.spark ?? []}
-              sub="last hour"
-            />
-            <Stat
-              label="CPU"
-              value={d.resources.cpu.used === null ? DASH : d.resources.cpu.used.toFixed(2)}
-              unit={
-                d.resources.cpu.limit === null ?
-                  'cores'
-                : `of ${String(d.resources.cpu.limit)}`
-              }
-              spark={d.resources.cpu.spark}
-            />
-            <Stat
-              label="Memory"
-              value={d.resources.memory.used === null ? DASH : fmtMb(d.resources.memory.used)}
-              unit={
-                d.resources.memory.limit === null ?
-                  'MB'
-                : `of ${fmtMb(d.resources.memory.limit)}`
-              }
-              spark={d.resources.memory.spark}
-            />
-            <Stat
-              label="Processes"
-              value={d.resources.pids.used === null ? DASH : String(d.resources.pids.used)}
-              unit={d.resources.pids.limit === null ? '' : `of ${String(d.resources.pids.limit)}`}
-              // The OOM counter is the one reading here that can be a fault,
-              // so it is the one allowed to take a colour — and it replaces
-              // the caption rather than sitting beside it, because "no OOM
-              // kills" is not news and "3 OOM kills" is.
-              tone={
-                d.resources.oomKills !== null && d.resources.oomKills > 0 ? 'bad' : undefined
-              }
-              sub={
-                d.resources.oomKills !== null && d.resources.oomKills > 0 ?
-                  `${String(d.resources.oomKills)} OOM kill${d.resources.oomKills === 1 ? '' : 's'}`
-                : 'no OOM kills'
-              }
-            />
-            <Stat
-              label="Logs"
-              value={d.logs1h === null ? DASH : d.logs1h.toLocaleString('en-US')}
-              unit="/hour"
-              sub="shipped to Loki"
-            />
-          </StatStrip>
+                  <Stat
+                    label="Health"
+                    value={
+                      status?.healthy === undefined || status.healthy === null
+                        ? 'not probed'
+                        : status.healthy
+                          ? 'ok'
+                          : 'failing'
+                    }
+                    tone={
+                      status?.healthy === undefined || status.healthy === null
+                        ? undefined
+                        : status.healthy
+                          ? 'ok'
+                          : 'bad'
+                    }
+                    sub={status?.containerUp === false ? 'container down' : 'probed every 60s'}
+                    title={`gatus probes ${app.authHealthPath ?? '/'} from outside every 60s. Container liveness: ${fmtBool(status?.containerUp)}.`}
+                  />
+                  <Stat
+                    label="Requests"
+                    value={status?.rpm === null || !status ? DASH : status.rpm.toFixed(1)}
+                    unit="/min"
+                    spark={status?.spark ?? []}
+                    sub="last hour"
+                  />
+                  <Stat
+                    label="CPU"
+                    value={d.resources.cpu.used === null ? DASH : d.resources.cpu.used.toFixed(2)}
+                    unit={
+                      d.resources.cpu.limit === null
+                        ? 'cores'
+                        : `of ${String(d.resources.cpu.limit)}`
+                    }
+                    spark={d.resources.cpu.spark}
+                  />
+                  <Stat
+                    label="Memory"
+                    value={d.resources.memory.used === null ? DASH : fmtMb(d.resources.memory.used)}
+                    unit={
+                      d.resources.memory.limit === null
+                        ? 'MB'
+                        : `of ${fmtMb(d.resources.memory.limit)}`
+                    }
+                    spark={d.resources.memory.spark}
+                  />
+                  <Stat
+                    label="Processes"
+                    value={d.resources.pids.used === null ? DASH : String(d.resources.pids.used)}
+                    unit={
+                      d.resources.pids.limit === null ? '' : `of ${String(d.resources.pids.limit)}`
+                    }
+                    // The OOM counter is the one reading here that can be a fault,
+                    // so it is the one allowed to take a colour — and it replaces
+                    // the caption rather than sitting beside it, because "no OOM
+                    // kills" is not news and "3 OOM kills" is.
+                    tone={
+                      d.resources.oomKills !== null && d.resources.oomKills > 0 ? 'bad' : undefined
+                    }
+                    sub={
+                      d.resources.oomKills !== null && d.resources.oomKills > 0
+                        ? `${String(d.resources.oomKills)} OOM kill${d.resources.oomKills === 1 ? '' : 's'}`
+                        : 'no OOM kills'
+                    }
+                  />
+                  <Stat
+                    label="Logs"
+                    value={d.logs1h === null ? DASH : d.logs1h.toLocaleString('en-US')}
+                    unit="/hour"
+                    sub="shipped to Loki"
+                  />
+                </StatStrip>
 
-          <p className="strip-foot">
-            CPU and memory come from cgroup v2 at 60-second resolution — memory is{' '}
-            <code>memory.current</code>, which counts page cache, so an app doing file I/O sits at
-            its limit and is fine. The signal that a cap is too tight is the OOM counter moving.
-          </p>
+                <p className="strip-foot">
+                  CPU and memory come from cgroup v2 at 60-second resolution — memory is{' '}
+                  <code>memory.current</code>, which counts page cache, so an app doing file I/O
+                  sits at its limit and is fine. The signal that a cap is too tight is the OOM
+                  counter moving.
+                </p>
 
-          <BoardGrid>
-            <Board
-              title="Deployment"
-              icon="◲"
-              span={4}
-              aside={
-                app.sourceMode === 'local' ? null : (
-                  <RedeployButton name={app.name} initial={deployStatus} />
-                )
-              }
-            >
-              <Facts
-                list
-                rows={[
-                  { k: 'source', v: app.sourceMode === 'local' ? 'local (hot reload)' : 'registry' },
-                  {
-                    k: 'image',
-                    v: <code title={app.effectiveImage}>{shortImage(app.effectiveImage)}</code>,
-                  },
-                  {
-                    k: 'auto-deploy',
-                    v: app.sourceMode === 'local' ? 'n/a — source is live' : 'every 2 min',
-                  },
-                  ...(lastDeploy ?
-                    [
-                      {
-                        k: 'running digest',
-                        v: <code>{lastDeploy.digest.replace('sha256:', '').slice(0, 12)}</code>,
-                      },
-                      {
-                        k: 'last deploy',
-                        v: (
-                          <span className={lastDeploy.result === 'ok' ? 'ok-text' : 'bad-text'}>
-                            {lastDeploy.result}
-                          </span>
-                        ),
-                      },
-                    ]
-                  : []),
-                  ...(pullBroken ?
-                    [
-                      {
-                        k: 'pulls',
-                        v: <span className="bad-text">failing — check the registry</span>,
-                      },
-                    ]
-                  : []),
-                  { k: 'container', v: <code>app-{app.name}</code> },
-                ]}
-              />
-            </Board>
+                <BoardGrid>
+                  <Board
+                    title="Deployment"
+                    icon="◲"
+                    span={4}
+                    aside={
+                      app.sourceMode === 'local' ? null : (
+                        <RedeployButton name={app.name} initial={deployStatus} />
+                      )
+                    }
+                  >
+                    <Facts
+                      list
+                      rows={[
+                        {
+                          k: 'source',
+                          v: app.sourceMode === 'local' ? 'local (hot reload)' : 'registry',
+                        },
+                        {
+                          k: 'image',
+                          v: (
+                            <code title={app.effectiveImage}>{shortImage(app.effectiveImage)}</code>
+                          ),
+                        },
+                        {
+                          k: 'auto-deploy',
+                          v: app.sourceMode === 'local' ? 'n/a — source is live' : 'every 2 min',
+                        },
+                        ...(lastDeploy
+                          ? [
+                              {
+                                k: 'running digest',
+                                v: (
+                                  <code>
+                                    {lastDeploy.digest.replace('sha256:', '').slice(0, 12)}
+                                  </code>
+                                ),
+                              },
+                              {
+                                k: 'last deploy',
+                                v: (
+                                  <span
+                                    className={lastDeploy.result === 'ok' ? 'ok-text' : 'bad-text'}
+                                  >
+                                    {lastDeploy.result}
+                                  </span>
+                                ),
+                              },
+                            ]
+                          : []),
+                        ...(pullBroken
+                          ? [
+                              {
+                                k: 'pulls',
+                                v: <span className="bad-text">failing — check the registry</span>,
+                              },
+                            ]
+                          : []),
+                        { k: 'container', v: <code>app-{app.name}</code> },
+                      ]}
+                    />
+                  </Board>
 
-            <Board title="Database" icon="◧" span={4}>
-              {app.postgres ?
-                <Facts
-                  list
-                  rows={[
-                    { k: 'cluster', v: 'shared pg' },
-                    { k: 'database', v: <code>{app.name}</code> },
-                    { k: 'size', v: <Bytes value={d.dbSize} /> },
-                    { k: 'host', v: <code>pg:5432</code> },
-                  ]}
-                />
-              : <p className="viz-empty">No database. Enable Postgres in Settings.</p>}
-            </Board>
+                  <Board title="Database" icon="◧" span={4}>
+                    {app.postgres ? (
+                      <Facts
+                        list
+                        rows={[
+                          { k: 'cluster', v: 'shared pg' },
+                          { k: 'database', v: <code>{app.name}</code> },
+                          { k: 'size', v: <Bytes value={d.dbSize} /> },
+                          { k: 'host', v: <code>pg:5432</code> },
+                        ]}
+                      />
+                    ) : (
+                      <p className="viz-empty">No database. Enable Postgres in Settings.</p>
+                    )}
+                  </Board>
 
-            <Board title="Access" icon="⛨" span={4}>
-              <Facts
-                list
-                rows={[
-                  { k: 'auth', v: AUTH_WORD[app.authMode] ?? app.authMode },
-                  { k: 'health path', v: <code>{app.authHealthPath ?? DASH}</code> },
-                  { k: 'isolated', v: app.authIsolated ? 'yes' : 'no' },
-                  { k: 'groups', v: app.authAllowedGroups?.join(', ') ?? 'admins' },
-                  {
-                    k: 'secrets',
-                    v:
-                      app.operatorSecrets ?
-                        <code>{app.name}-env.sops</code>
-                      : <span className="muted">none</span>,
-                  },
-                ]}
-              />
-            </Board>
+                  <Board title="Access" icon="⛨" span={4}>
+                    <Facts
+                      list
+                      rows={[
+                        { k: 'auth', v: AUTH_WORD[app.authMode] ?? app.authMode },
+                        { k: 'health path', v: <code>{app.authHealthPath ?? DASH}</code> },
+                        { k: 'isolated', v: app.authIsolated ? 'yes' : 'no' },
+                        { k: 'groups', v: app.authAllowedGroups?.join(', ') ?? 'admins' },
+                        {
+                          k: 'secrets',
+                          v: app.operatorSecrets ? (
+                            <code>{app.name}-env.sops</code>
+                          ) : (
+                            <span className="muted">none</span>
+                          ),
+                        },
+                      ]}
+                    />
+                  </Board>
 
-            {app.egressContainer && (
-              <Board title="Egress" icon="⇄" span={4}>
-                <Facts
-                  list
-                  rows={[
-                    { k: 'netns', v: <code>{app.egressContainer}</code> },
-                    { k: 'host port', v: <code>{String(app.egressHostPort)}</code> },
-                    { k: 'outbound', v: 'all through the VPN' },
-                  ]}
-                />
-              </Board>
-            )}
+                  {app.egressContainer && (
+                    <Board title="Egress" icon="⇄" span={4}>
+                      <Facts
+                        list
+                        rows={[
+                          { k: 'netns', v: <code>{app.egressContainer}</code> },
+                          { k: 'host port', v: <code>{String(app.egressHostPort)}</code> },
+                          { k: 'outbound', v: 'all through the VPN' },
+                        ]}
+                      />
+                    </Board>
+                  )}
 
-            {notes.length > 0 && (
-              <Board title="Why it is configured this way" icon="✎" span={12}>
-                <dl className="notes">
-                  {notes.map(([k, v]) => (
-                    <div key={k}>
-                      <dt>{k}</dt>
-                      <dd>{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </Board>
-            )}
-          </BoardGrid>
-        </>
+                  {notes.length > 0 && (
+                    <Board title="Why it is configured this way" icon="✎" span={12}>
+                      <dl className="notes">
+                        {notes.map(([k, v]) => (
+                          <div key={k}>
+                            <dt>{k}</dt>
+                            <dd>{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </Board>
+                  )}
+                </BoardGrid>
+              </>
             )
           }
         </Await>
@@ -486,93 +505,95 @@ function AppDetail() {
         <Await promise={tabData} fallback={<BlockSkeleton h={420} />}>
           {(td) =>
             td.kind !== 'deployments' ? null : (
-        <>
-          <p className="deploy-meta">
-            {app.sourceMode === 'local' ? (
               <>
-                <span className="muted">⎇ stacks/{app.name}/app</span>
-                <span className="muted">source is live — nothing to deploy</span>
-              </>
-            ) : (
-              <>
-                <a
-                  href={`https://github.com/santiagotoscanini/${app.name}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  ⎇ santiagotoscanini/{app.name}
-                </a>
-                <span className="muted">builds run on self-hosted runners</span>
-                <span className="deploy-actions">
-                  <RunCiButton repo={app.name} publish={td.publish} />
-                  <a
-                    href={`https://github.com/santiagotoscanini/${app.name}/actions`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn btn-ghost"
-                  >
-                    ↗ GitHub Actions
-                  </a>
-                </span>
-              </>
-            )}
-          </p>
-
-          {app.sourceMode !== 'local' && (
-            <Runners ci={td.ci} activity={td.activity} />
-          )}
-
-          {td.deployments.length === 0 ? (
-            <p className="lede">
-              {app.sourceMode === 'local'
-                ? 'Local-source apps have no deploy history — the running code is the working tree.'
-                : 'No deploys recorded yet. History starts from the first deploy where the image digest actually moved.'}
-            </p>
-          ) : (
-            <>
-              <h2 className="section-head">
-                Deploy history
-                <small>only the runs where the digest actually moved</small>
-              </h2>
-              <ol className="timeline">
-                {td.deployments.map((d) => (
-                  <li key={d.id} className={d.isCurrent ? 'current' : d.result}>
-                    <span className={`node node-${d.isCurrent ? 'current' : d.result}`} />
-                    <div className={d.isCurrent ? 'deploy-card is-current' : 'deploy-card'}>
-                      <div className="deploy-head">
-                        <code className="deploy-rev">{d.shortRevision ?? d.digest.slice(0, 12)}</code>
-                        <span
-                          className={
-                            d.isCurrent ? 'chip chip-warn'
-                            : d.result === 'ok' ? 'chip chip-live'
-                            : 'chip chip-bad'
-                          }
+                <p className="deploy-meta">
+                  {app.sourceMode === 'local' ? (
+                    <>
+                      <span className="muted">⎇ stacks/{app.name}/app</span>
+                      <span className="muted">source is live — nothing to deploy</span>
+                    </>
+                  ) : (
+                    <>
+                      <a
+                        href={`https://github.com/santiagotoscanini/${app.name}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        ⎇ santiagotoscanini/{app.name}
+                      </a>
+                      <span className="muted">builds run on self-hosted runners</span>
+                      <span className="deploy-actions">
+                        <RunCiButton repo={app.name} publish={td.publish} />
+                        <a
+                          href={`https://github.com/santiagotoscanini/${app.name}/actions`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-ghost"
                         >
-                          {d.isCurrent ? 'current' : d.result === 'ok' ? 'success' : 'failed'}
-                        </span>
-                        {d.commitUrl ? (
-                          <a href={d.commitUrl} target="_blank" rel="noreferrer">
-                            view commit ↗
-                          </a>
-                        ) : (
-                          <span className="muted">
-                            {d.shortRevision ? 'no source link' : 'image labels unavailable'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="deploy-sub">
-                        <span>{fmtWhen(d.startedAt)}</span>
-                        <span>{fmtDuration(d.durationMs)}</span>
-                        <code>{d.digest.slice(0, 12)}</code>
-                        {d.httpCode && <span>HTTP {d.httpCode}</span>}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-        </>
+                          ↗ GitHub Actions
+                        </a>
+                      </span>
+                    </>
+                  )}
+                </p>
+
+                {app.sourceMode !== 'local' && <Runners ci={td.ci} activity={td.activity} />}
+
+                {td.deployments.length === 0 ? (
+                  <p className="lede">
+                    {app.sourceMode === 'local'
+                      ? 'Local-source apps have no deploy history — the running code is the working tree.'
+                      : 'No deploys recorded yet. History starts from the first deploy where the image digest actually moved.'}
+                  </p>
+                ) : (
+                  <>
+                    <h2 className="section-head">
+                      Deploy history
+                      <small>only the runs where the digest actually moved</small>
+                    </h2>
+                    <ol className="timeline">
+                      {td.deployments.map((d) => (
+                        <li key={d.id} className={d.isCurrent ? 'current' : d.result}>
+                          <span className={`node node-${d.isCurrent ? 'current' : d.result}`} />
+                          <div className={d.isCurrent ? 'deploy-card is-current' : 'deploy-card'}>
+                            <div className="deploy-head">
+                              <code className="deploy-rev">
+                                {d.shortRevision ?? d.digest.slice(0, 12)}
+                              </code>
+                              <span
+                                className={
+                                  d.isCurrent
+                                    ? 'chip chip-warn'
+                                    : d.result === 'ok'
+                                      ? 'chip chip-live'
+                                      : 'chip chip-bad'
+                                }
+                              >
+                                {d.isCurrent ? 'current' : d.result === 'ok' ? 'success' : 'failed'}
+                              </span>
+                              {d.commitUrl ? (
+                                <a href={d.commitUrl} target="_blank" rel="noreferrer">
+                                  view commit ↗
+                                </a>
+                              ) : (
+                                <span className="muted">
+                                  {d.shortRevision ? 'no source link' : 'image labels unavailable'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="deploy-sub">
+                              <span>{fmtWhen(d.startedAt)}</span>
+                              <span>{fmtDuration(d.durationMs)}</span>
+                              <code>{d.digest.slice(0, 12)}</code>
+                              {d.httpCode && <span>HTTP {d.httpCode}</span>}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </>
+                )}
+              </>
             )
           }
         </Await>
@@ -674,10 +695,11 @@ function AppDetail() {
               rows={[
                 {
                   k: 'operator secrets',
-                  v:
-                    app.operatorSecrets ?
-                      <code>{app.name}-env.sops</code>
-                    : <span className="muted">none</span>,
+                  v: app.operatorSecrets ? (
+                    <code>{app.name}-env.sops</code>
+                  ) : (
+                    <span className="muted">none</span>
+                  ),
                 },
               ]}
             />
@@ -698,9 +720,8 @@ function AppDetail() {
               validate={(v) => hostnameError(v, takenHostnames)}
               hint={
                 <>
-                  Empty uses the default. Must be one level under{' '}
-                  <code>{BASE_DOMAIN}</code> — that is the only domain here with a wildcard
-                  certificate, a Cloudflare tunnel and DNS.
+                  Empty uses the default. Must be one level under <code>{BASE_DOMAIN}</code> — that
+                  is the only domain here with a wildcard certificate, a Cloudflare tunnel and DNS.
                 </>
               }
               onSave={(v) => {
@@ -709,11 +730,10 @@ function AppDetail() {
             />
             <Facts list rows={[{ k: 'published at', v: <code>{app.effectiveHostname}</code> }]} />
             <p className="board-foot">
-              Renaming moves the traefik router, the pi-hole record, the gatus probe, the
-              Cloudflare route and <code>AUTH_URL</code>. The container, the database, the sops
-              file and the GitHub repo stay keyed by <code>{app.name}</code>. An SSO app cannot
-              complete a login for the moment between the rebuild and Pocket ID picking up the new
-              redirect URI.
+              Renaming moves the traefik router, the pi-hole record, the gatus probe, the Cloudflare
+              route and <code>AUTH_URL</code>. The container, the database, the sops file and the
+              GitHub repo stay keyed by <code>{app.name}</code>. An SSO app cannot complete a login
+              for the moment between the rebuild and Pocket ID picking up the new redirect URI.
             </p>
           </Board>
 
@@ -815,21 +835,21 @@ function AppDetail() {
                   // the reason rather than accepted and failed mid-Apply.
                   disabled: app.stage === 'off' || !app.authHealthPath,
                   reason:
-                    app.stage === 'off' ?
-                      'Nothing to gate: the middleware is generated from the ingress, and this app is not exposed.'
-                    : !app.authHealthPath ?
-                      'Set a health path first — it is the unauthenticated path the gate lets through, so the probe tests the app instead of the login redirect.'
-                    : undefined,
+                    app.stage === 'off'
+                      ? 'Nothing to gate: the middleware is generated from the ingress, and this app is not exposed.'
+                      : !app.authHealthPath
+                        ? 'Set a health path first — it is the unauthenticated path the gate lets through, so the probe tests the app instead of the login redirect.'
+                        : undefined,
                 },
                 { value: 'native', label: 'App is the client', icon: '⚿' },
               ]}
             />
             <p className="board-foot">
-              {app.authMode === 'none' ?
-                'No SSO. Whatever login the app ships is the only one — for an app with its own accounts that means its own password form.'
-              : app.authMode === 'proxy' ?
-                'traefik gates the router; the app never learns there is an IdP. For apps with no user model of their own.'
-              : 'The app is the OIDC client: it gets OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_REDIRECT_URI, OIDC_PROVIDER_ID, OIDC_PROVIDER_NAME and OIDC_SCOPES, plus OIDC_CLIENT_SECRET from a rendered file. For apps with accounts of their own, which is what keeps per-user data isolated.'}
+              {app.authMode === 'none'
+                ? 'No SSO. Whatever login the app ships is the only one — for an app with its own accounts that means its own password form.'
+                : app.authMode === 'proxy'
+                  ? 'traefik gates the router; the app never learns there is an IdP. For apps with no user model of their own.'
+                  : 'The app is the OIDC client: it gets OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_REDIRECT_URI, OIDC_PROVIDER_ID, OIDC_PROVIDER_NAME and OIDC_SCOPES, plus OIDC_CLIENT_SECRET from a rendered file. For apps with accounts of their own, which is what keeps per-user data isolated.'}
             </p>
             <TextField
               label="Health path"
@@ -865,7 +885,9 @@ function AppDetail() {
             </p>
           </Board>
 
-          {!readOnly && <RemovePanel name={app.name} postgres={app.postgres} storage={app.storage} />}
+          {!readOnly && (
+            <RemovePanel name={app.name} postgres={app.postgres} storage={app.storage} />
+          )}
         </BoardGrid>
       )}
 
@@ -897,7 +919,6 @@ function AppDetail() {
   )
 }
 
-
 type LoaderData = Awaited<ReturnType<typeof fetchApp>>
 type AppRecord = NonNullable<LoaderData>['app']
 
@@ -916,7 +937,13 @@ type AccessData = Extract<AppTabData, { kind: 'access' }>['access']
  * list would mean handing the control plane a connection to every app's data,
  * which is a real boundary traded for a nicer panel.
  */
-function Database({ app, data }: { app: AppRecord; data: Extract<AppTabData, { kind: 'database' }>['database'] }) {
+function Database({
+  app,
+  data,
+}: {
+  app: AppRecord
+  data: Extract<AppTabData, { kind: 'database' }>['database']
+}) {
   if (!app.postgres) {
     return (
       <p className="lede">
@@ -942,9 +969,9 @@ function Database({ app, data }: { app: AppRecord; data: Extract<AppTabData, { k
           // -1 is postgres's own encoding for "no per-database cap", which is
           // the state every app here is in.
           sub={
-            data.connectionLimit === null || data.connectionLimit < 0 ?
-              'cluster-wide ceiling'
-            : `capped at ${String(data.connectionLimit)}`
+            data.connectionLimit === null || data.connectionLimit < 0
+              ? 'cluster-wide ceiling'
+              : `capped at ${String(data.connectionLimit)}`
           }
         />
         <Stat
@@ -960,15 +987,11 @@ function Database({ app, data }: { app: AppRecord; data: Extract<AppTabData, { k
           value={data.commitsPerSec === null ? DASH : data.commitsPerSec.toFixed(2)}
           unit="/s"
           tone={data.rollbackPct !== null && data.rollbackPct > 5 ? 'bad' : undefined}
-          sub={
-            data.rollbackPct === null ?
-              'idle'
-            : `${data.rollbackPct.toFixed(1)}% rolled back`
-          }
+          sub={data.rollbackPct === null ? 'idle' : `${data.rollbackPct.toFixed(1)}% rolled back`}
           title={
-            data.rollbackPct !== null && data.rollbackPct > 5 ?
-              'A high rollback share means the app is erroring, not the database.'
-            : undefined
+            data.rollbackPct !== null && data.rollbackPct > 5
+              ? 'A high rollback share means the app is erroring, not the database.'
+              : undefined
           }
         />
         <Stat
@@ -1067,9 +1090,7 @@ function Vpn({ app, data }: { app: AppRecord; data: Extract<AppTabData, { kind: 
           label="Tunnel"
           value={data.up === null ? 'unknown' : data.up ? 'connected' : 'down'}
           tone={data.up === null ? 'warn' : data.up ? 'ok' : 'bad'}
-          sub={
-            data.uptime24h === null ? 'no history yet' : `${data.uptime24h.toFixed(2)}% of 24h`
-          }
+          sub={data.uptime24h === null ? 'no history yet' : `${data.uptime24h.toFixed(2)}% of 24h`}
         />
         <Stat label="Exit" value={data.country ?? DASH} sub={data.city ?? 'no location'} />
         <Stat label="Public IP" value={data.ip ?? DASH} sub="what this app appears as" />
@@ -1124,7 +1145,11 @@ function Vpn({ app, data }: { app: AppRecord; data: Extract<AppTabData, { kind: 
 }
 
 function fmtRate(v: number | null): string {
-  return v === null ? '—' : v < 1 ? v.toFixed(2) : v.toLocaleString('en-US', { maximumFractionDigits: 1 })
+  return v === null
+    ? '—'
+    : v < 1
+      ? v.toFixed(2)
+      : v.toLocaleString('en-US', { maximumFractionDigits: 1 })
 }
 
 function fmtBytes(v: number): string {
@@ -1237,8 +1262,17 @@ function Access({
           spark={access.series}
           sub={spec.prose}
         />
-        <Stat label="Unique clients" value={access.clients.toLocaleString('en-US')} unit="IPs" sub="distinct addresses" />
-        <Stat label="Countries" value={access.countries.toLocaleString('en-US')} sub="by edge header" />
+        <Stat
+          label="Unique clients"
+          value={access.clients.toLocaleString('en-US')}
+          unit="IPs"
+          sub="distinct addresses"
+        />
+        <Stat
+          label="Countries"
+          value={access.countries.toLocaleString('en-US')}
+          sub="by edge header"
+        />
         <Stat
           label="Rejected"
           value={access.rejected.toLocaleString('en-US')}
@@ -1546,28 +1580,30 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
         icon="⚙"
         span={4}
         aside={
-          busy ? <Chip tone="warn">busy</Chip>
-          : ci.available && ci.ok ?
+          busy ? (
+            <Chip tone="warn">busy</Chip>
+          ) : ci.available && ci.ok ? (
             <Chip tone="muted">idle</Chip>
-          : null
+          ) : null
         }
       >
-        {!ci.available ?
+        {!ci.available ? (
           <p className="viz-empty">
             No CI snapshot yet — <code>gha-ci-snapshot</code> has not run since boot.
           </p>
-        : !ci.ok ?
+        ) : !ci.ok ? (
           <p className="viz-empty text-bad">
             Could not reach the GitHub API on the last sweep. This is the snapshot from{' '}
             {ci.takenAt ? fmtWhen(ci.takenAt) : 'an earlier run'} — not a statement about the
             runners.
           </p>
-        : ci.runners.length === 0 ?
+        ) : ci.runners.length === 0 ? (
           <p className="viz-empty">
-            None registered. Ephemeral runners de-register between jobs, so this is normal for a
-            few seconds after a build finishes.
+            None registered. Ephemeral runners de-register between jobs, so this is normal for a few
+            seconds after a build finishes.
           </p>
-        : ci.runners.map((r) => (
+        ) : (
+          ci.runners.map((r) => (
             <div key={r.name} className={r.busy ? 'runner runner-busy' : 'runner'}>
               <code className="runner-name">{r.name}</code>
               <div className="runner-labels">
@@ -1580,7 +1616,7 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
               {job && job.runnerName === r.name && <JobProgress job={job} />}
             </div>
           ))
-        }
+        )}
 
         {job && !ci.runners.some((r) => r.name === job.runnerName) && <JobProgress job={job} />}
 
@@ -1596,23 +1632,27 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
         span={8}
         aside={<span className="board-note">last 6 hours</span>}
       >
-        {rolled.length === 0 ?
+        {rolled.length === 0 ? (
           <p className="viz-empty">Nothing in the last 6 hours.</p>
-        : <div className="acts">
+        ) : (
+          <div className="acts">
             {rolled.map((l) => (
               <div key={l.key} className={`act act-${l.source}`}>
                 <time>{fmtLogTime(l.ts)}</time>
                 <span className="act-src">{l.source}</span>
                 <span className="act-msg">{l.line}</span>
                 {l.count > 1 && (
-                  <span className="act-n" title={`Repeated ${String(l.count)} times, most recently at ${fmtLogTime(l.lastTs)}`}>
+                  <span
+                    className="act-n"
+                    title={`Repeated ${String(l.count)} times, most recently at ${fmtLogTime(l.lastTs)}`}
+                  >
                     ×{l.count}
                   </span>
                 )}
               </div>
             ))}
           </div>
-        }
+        )}
         <p className="board-foot">
           The deploy half is the journal — pull, restart, health-check. The build half is only the
           runner announcing a job starting and finishing: it streams step output to GitHub and never
@@ -1655,7 +1695,14 @@ function rollUp(rows: ActivityData): RolledLine[] {
       last.lastTs = r.ts
       continue
     }
-    out.push({ key: `${r.ts}-${String(out.length)}`, ts: r.ts, lastTs: r.ts, line, source: r.source, count: 1 })
+    out.push({
+      key: `${r.ts}-${String(out.length)}`,
+      ts: r.ts,
+      lastTs: r.ts,
+      line,
+      source: r.source,
+      count: 1,
+    })
   }
   return out
 }
@@ -1686,9 +1733,11 @@ function JobProgress({ job }: { job: NonNullable<CiData['activeJobs'][number]> }
         {job.startedAt && <span className="job-elapsed">{fmtElapsed(job.startedAt)}</span>}
       </div>
       <div className="job-step">
-        {job.status === 'queued' ? 'queued — no runner has picked it up yet'
-        : running ? `step ${String(done + 1)}/${String(total)} · ${running.name}`
-        : `${String(done)}/${String(total)} steps`}
+        {job.status === 'queued'
+          ? 'queued — no runner has picked it up yet'
+          : running
+            ? `step ${String(done + 1)}/${String(total)} · ${running.name}`
+            : `${String(done)}/${String(total)} steps`}
       </div>
       {total > 0 && <Progress pct={pct} tone="accent" active={running !== undefined} />}
     </div>
@@ -1758,64 +1807,64 @@ function Secrets({
             ) : null
           }
         >
-        <p className="env-legend">
-          Injected by the apps platform from the toggles on Settings. Read-only here because they
-          are not values so much as consequences: turn Postgres off and the whole database block
-          goes with it. Secret values are withheld until revealed — they are never in this
-          page&apos;s source.
-        </p>
-        {groups.map(({ g, vars }) => (
-          <section key={g} className="env-group">
-            <h4>
-              <span className="env-group-icon" aria-hidden="true">
-                {GROUP_LABELS[g].icon}
-              </span>
-              {GROUP_LABELS[g].title}
-              <span className="env-group-count">{vars.length}</span>
-            </h4>
-            {GROUP_LABELS[g].hint && <p className="env-group-hint">{GROUP_LABELS[g].hint}</p>}
-            <div className="env">
-              {vars.map((v) => (
-                <EnvRow key={v.key} app={app} v={v} />
-              ))}
-            </div>
-          </section>
-        ))}
+          <p className="env-legend">
+            Injected by the apps platform from the toggles on Settings. Read-only here because they
+            are not values so much as consequences: turn Postgres off and the whole database block
+            goes with it. Secret values are withheld until revealed — they are never in this
+            page&apos;s source.
+          </p>
+          {groups.map(({ g, vars }) => (
+            <section key={g} className="env-group">
+              <h4>
+                <span className="env-group-icon" aria-hidden="true">
+                  {GROUP_LABELS[g].icon}
+                </span>
+                {GROUP_LABELS[g].title}
+                <span className="env-group-count">{vars.length}</span>
+              </h4>
+              {GROUP_LABELS[g].hint && <p className="env-group-hint">{GROUP_LABELS[g].hint}</p>}
+              <div className="env">
+                {vars.map((v) => (
+                  <EnvRow key={v.key} app={app} v={v} />
+                ))}
+              </div>
+            </section>
+          ))}
         </Board>
 
-      <EnvSection
-        title="Yours"
-        icon="✎"
-        vars={[...of('registry'), ...of('secrets')]}
-        app={app}
-        empty={
-          hasSecretsFile
-            ? `Nothing beyond what the platform injects. Add values to the registry (they round-trip through Apply) or to ${app}-env.sops.`
-            : `Nothing beyond what the platform injects. Add plain values to the registry, or create ${app}-env.sops for anything secret.`
-        }
-        legend={
-          <>
-            Declared in <code>apps.json</code>, so they round-trip through Apply, or read from{' '}
-            <code>{app}-env.sops</code>. The sops ones are host-managed on purpose: writing
-            encrypted state from a web UI is its own design problem, and it is one that fails
-            closed. Edit them with <code>sops stacks/apps/{app}-env.sops</code>.
-          </>
-        }
-      />
+        <EnvSection
+          title="Yours"
+          icon="✎"
+          vars={[...of('registry'), ...of('secrets')]}
+          app={app}
+          empty={
+            hasSecretsFile
+              ? `Nothing beyond what the platform injects. Add values to the registry (they round-trip through Apply) or to ${app}-env.sops.`
+              : `Nothing beyond what the platform injects. Add plain values to the registry, or create ${app}-env.sops for anything secret.`
+          }
+          legend={
+            <>
+              Declared in <code>apps.json</code>, so they round-trip through Apply, or read from{' '}
+              <code>{app}-env.sops</code>. The sops ones are host-managed on purpose: writing
+              encrypted state from a web UI is its own design problem, and it is one that fails
+              closed. Edit them with <code>sops stacks/apps/{app}-env.sops</code>.
+            </>
+          }
+        />
 
-      <EnvSection
-        title="From the image"
-        icon="◲"
-        vars={of('image')}
-        app={app}
-        empty="Nothing — this image bakes in no environment of its own."
-        legend={
-          <>
-            Baked into the base image or set by podman. Not configuration: these describe the
-            runtime the app happens to be running on. Changing one means changing the image.
-          </>
-        }
-      />
+        <EnvSection
+          title="From the image"
+          icon="◲"
+          vars={of('image')}
+          app={app}
+          empty="Nothing — this image bakes in no environment of its own."
+          legend={
+            <>
+              Baked into the base image or set by podman. Not configuration: these describe the
+              runtime the app happens to be running on. Changing one means changing the image.
+            </>
+          }
+        />
       </BoardGrid>
     </>
   )
@@ -2209,9 +2258,11 @@ function TextField({
           if (e.key === 'Escape') setDraft(value)
         }}
       />
-      {error !== null ?
+      {error !== null ? (
         <small className="field-error">{error}</small>
-      : hint !== undefined && <small className="field-hint">{hint}</small>}
+      ) : (
+        hint !== undefined && <small className="field-hint">{hint}</small>
+      )}
     </label>
   )
 }
@@ -2245,10 +2296,13 @@ function fmtWhen(iso: string): string {
   const then = new Date(iso)
   const mins = Math.round((Date.now() - then.getTime()) / 60000)
   const rel =
-    mins < 1 ? 'just now'
-    : mins < 60 ? `${String(mins)}m ago`
-    : mins < 60 * 24 ? `${String(Math.round(mins / 60))}h ago`
-    : `${String(Math.round(mins / 1440))}d ago`
+    mins < 1
+      ? 'just now'
+      : mins < 60
+        ? `${String(mins)}m ago`
+        : mins < 60 * 24
+          ? `${String(Math.round(mins / 60))}h ago`
+          : `${String(Math.round(mins / 1440))}d ago`
   // Absolute first, relative second: "3d ago" alone is useless when you are
   // trying to correlate a deploy with something else that happened.
   return `${then.toISOString().slice(0, 16).replace('T', ' ')} · ${rel}`

@@ -23,10 +23,10 @@
 // because the proxy's routing table still borrows the client list.
 
 import { getJson, promScalars } from '../clients'
-import { versionGap, type VersionGap } from '../github'
-import { imageVersion, type RunningVersion } from '../images'
 import { key } from '../format'
-import { loadIdp, idpClients, type IdpData } from '../idp'
+import { type VersionGap, versionGap } from '../github'
+import { type IdpData, idpClients, loadIdp } from '../idp'
+import { imageVersion, type RunningVersion } from '../images'
 
 type Ctx = { base: (app: string) => string; hc: string }
 
@@ -146,9 +146,9 @@ async function loadHouse(ctx: Ctx): Promise<HouseData> {
     // `components` lists both integrations and their platforms — `tuya` and
     // `tuya.button` are one integration, and counting rows would treble it.
     integrations:
-      config?.components === undefined ? null : (
-        new Set(config.components.map((c) => c.split('.')[0])).size
-      ),
+      config?.components === undefined
+        ? null
+        : new Set(config.components.map((c) => c.split('.')[0])).size,
   }
 }
 
@@ -180,9 +180,7 @@ function summariseStates(states: HassState[] | null): typeof NO_HOUSE {
   const tally = (rows: HassState[]) => {
     const m = new Map<string, number>()
     for (const s of rows) m.set(domainOf(s.entity_id), (m.get(domainOf(s.entity_id)) ?? 0) + 1)
-    return [...m]
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
+    return [...m].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value)
   }
 
   const lights = inDomain('light')
@@ -196,7 +194,10 @@ function summariseStates(states: HassState[] | null): typeof NO_HOUSE {
     lightsTotal: lights.length,
     switchesOn: inDomain('switch').filter((s) => s.state === 'on').length,
     entities: states.length,
-    automations: { total: automations.length, on: automations.filter((s) => s.state === 'on').length },
+    automations: {
+      total: automations.length,
+      on: automations.filter((s) => s.state === 'on').length,
+    },
     unavailable: dead.length,
     unavailableBy: tally(dead).slice(0, 6),
     domains: tally(states).slice(0, 8),
@@ -222,7 +223,13 @@ type PhotosData = {
   usageBytes: number | null
   usagePhotos: number | null
   usageVideos: number | null
-  users: { name: string; photos: number; videos: number; usageBytes: number; quotaBytes: number | null }[]
+  users: {
+    name: string
+    photos: number
+    videos: number
+    usageBytes: number
+    quotaBytes: number | null
+  }[]
   /** The dataset Immich's library sits on. */
   disk: { usedBytes: number | null; freeBytes: number | null }
 }
@@ -260,8 +267,9 @@ async function loadPhotos(ctx: Ctx): Promise<PhotosData> {
   ])
 
   const version =
-    ver?.major === undefined ? null
-    : `${String(ver.major)}.${String(ver.minor ?? 0)}.${String(ver.patch ?? 0)}`
+    ver?.major === undefined
+      ? null
+      : `${String(ver.major)}.${String(ver.minor ?? 0)}.${String(ver.patch ?? 0)}`
 
   return {
     version,
@@ -279,9 +287,9 @@ async function loadPhotos(ctx: Ctx): Promise<PhotosData> {
       // Zero means "no quota" in Immich's API, which is a different claim
       // from a quota of nothing.
       quotaBytes:
-        u.quotaSizeInBytes === null || u.quotaSizeInBytes === undefined || u.quotaSizeInBytes === 0 ?
-          null
-        : u.quotaSizeInBytes,
+        u.quotaSizeInBytes === null || u.quotaSizeInBytes === undefined || u.quotaSizeInBytes === 0
+          ? null
+          : u.quotaSizeInBytes,
     })),
     disk: {
       usedBytes: disk.size !== null && disk.avail !== null ? disk.size - disk.avail : null,
@@ -348,7 +356,10 @@ async function loadFiles(ctx: Ctx): Promise<FilesData> {
           }
         }
         server?: {
-          php?: { version?: string; opcache?: { opcache_statistics?: { opcache_hit_rate?: number } } }
+          php?: {
+            version?: string
+            opcache?: { opcache_statistics?: { opcache_hit_rate?: number } }
+          }
           database?: { type?: string; version?: string; size?: string | number }
         }
         activeUsers?: {
@@ -448,7 +459,7 @@ async function loadPantry(ctx: Ctx): Promise<PantryData> {
     getJson<{ due_date?: string; done?: number }[]>(`${base}/api/tasks`, h),
   ])
 
-  const overdueBy = <T,>(rows: T[] | null, at: (r: T) => string | undefined) =>
+  const overdueBy = <T>(rows: T[] | null, at: (r: T) => string | undefined) =>
     rows === null ? null : rows.filter((r) => (at(r) ?? '') !== '' && (at(r) ?? '') < today).length
 
   return {
@@ -592,20 +603,24 @@ async function loadWorkspace(base: string): Promise<ProjectsData['workspace']> {
   const h = { headers: { 'X-API-Key': token } }
   const ws = `${base}/api/v1/workspaces/${slug}`
 
-  const list = await getJson<{ results?: { id?: string; name?: string; identifier?: string; total_members?: number; total_modules?: number }[] }>(
-    `${ws}/projects/`,
-    h,
-  )
+  const list = await getJson<{
+    results?: {
+      id?: string
+      name?: string
+      identifier?: string
+      total_members?: number
+      total_modules?: number
+    }[]
+  }>(`${ws}/projects/`, h)
   if (list === null) return null
 
   const projects = await Promise.all(
     (list.results ?? []).map(async (p): Promise<PlaneProject> => {
       const id = p.id ?? ''
       const [states, issues, cycles] = await Promise.all([
-        getJson<{ id?: string; group?: string }[] | { results?: { id?: string; group?: string }[] }>(
-          `${ws}/projects/${id}/states/`,
-          h,
-        ),
+        getJson<
+          { id?: string; group?: string }[] | { results?: { id?: string; group?: string }[] }
+        >(`${ws}/projects/${id}/states/`, h),
         getJson<{ total_count?: number; results?: { state?: string }[] }>(
           `${ws}/projects/${id}/issues/?per_page=${String(ISSUES_SCANNED)}`,
           h,
@@ -649,8 +664,7 @@ async function loadWorkspace(base: string): Promise<ProjectsData['workspace']> {
               total: c.total_issues ?? 0,
               completed: c.completed_issues ?? 0,
               started: c.started_issues ?? 0,
-              current:
-                Number.isFinite(start) && Number.isFinite(end) && now >= start && now <= end,
+              current: Number.isFinite(start) && Number.isFinite(end) && now >= start && now <= end,
               sortAt: Number.isFinite(start) ? start : 0,
             }
           })

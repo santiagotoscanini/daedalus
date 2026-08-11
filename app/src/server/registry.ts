@@ -30,8 +30,10 @@ export const fetchApps = createServerFn().handler(async () => {
     // Resolved per app, in parallel, and cached for an hour in that module —
     // so this costs one round of probes after a restart and nothing after.
     Promise.all(
-      records.map(async (r) =>
-        (await appIcon(r.name, effectiveHostname(r.name, r.hostname), r.stage !== 'off')) !== null,
+      records.map(
+        async (r) =>
+          (await appIcon(r.name, effectiveHostname(r.name, r.hostname), r.stage !== 'off')) !==
+          null,
       ),
     ),
   ])
@@ -145,7 +147,9 @@ export const fetchApp = createServerFn()
         effectiveHostname: effectiveHostname(record.name, record.hostname),
         description: record.description,
         hasIcon:
-          (await (await import('../lib/app-icon')).appIcon(
+          (await (
+            await import('../lib/app-icon')
+          ).appIcon(
             record.name,
             effectiveHostname(record.name, record.hostname),
             record.stage !== 'off',
@@ -200,7 +204,7 @@ export type AppTabData =
     }
   | { kind: 'access'; access: AppAccess }
   | { kind: 'secrets'; env: EnvPayload }
-  | { kind: "logs" }
+  | { kind: 'logs' }
   | { kind: 'database'; database: AppDatabase }
   | { kind: 'vpn'; vpn: AppVpn }
   | { kind: 'settings' }
@@ -280,9 +284,9 @@ export const fetchAppTab = createServerFn()
           // Which workflow to dispatch. Cached for a minute in that module, and
           // skipped entirely for a local-source app: there is no repo of its
           // own to run anything in.
-          record.sourceMode === 'local' ?
-            Promise.resolve({ publishWorkflow: null, dispatchable: false })
-          : repoChecks(name).catch(() => ({ publishWorkflow: null, dispatchable: false })),
+          record.sourceMode === 'local'
+            ? Promise.resolve({ publishWorkflow: null, dispatchable: false })
+            : repoChecks(name).catch(() => ({ publishWorkflow: null, dispatchable: false })),
         ])
         return {
           kind: 'deployments',
@@ -315,12 +319,11 @@ export const fetchAppTab = createServerFn()
         // `stage != live` means there is no cfweb traffic to find, so the ten
         // queries would all be a round trip to confirm zero.
         const access =
-          record.stage === 'live' ?
-            await appAccess(
-              effectiveHostname(record.name, record.hostname),
-              accessWindow,
-            ).catch(() => noAccess(accessWindow))
-          : noAccess(accessWindow)
+          record.stage === 'live'
+            ? await appAccess(effectiveHostname(record.name, record.hostname), accessWindow).catch(
+                () => noAccess(accessWindow),
+              )
+            : noAccess(accessWindow)
         return { kind: 'access', access }
       }
 
@@ -367,8 +370,9 @@ export const fetchAppTab = createServerFn()
         // `pg_database_size_bytes{datname="…"}` matches nothing.
         return {
           kind: 'database',
-          database:
-            record.postgres ? await appDatabase(name).catch(() => NO_DATABASE) : NO_DATABASE,
+          database: record.postgres
+            ? await appDatabase(name).catch(() => NO_DATABASE)
+            : NO_DATABASE,
         }
       }
 
@@ -377,9 +381,9 @@ export const fetchAppTab = createServerFn()
         return {
           kind: 'vpn',
           vpn:
-            record.egressContainer === null ?
-              NO_VPN
-            : await appVpn(record.egressContainer).catch(() => NO_VPN),
+            record.egressContainer === null
+              ? NO_VPN
+              : await appVpn(record.egressContainer).catch(() => NO_VPN),
         }
       }
 
@@ -404,11 +408,7 @@ export const fetchNewAppOptions = createServerFn().handler(async () => {
   const { listApps } = await import('../lib/repo/apps')
   const { manifestEntries } = await import('../lib/nix-manifest')
 
-  const [repos, records, manifest] = await Promise.all([
-    listRepos(),
-    listApps(),
-    manifestEntries(),
-  ])
+  const [repos, records, manifest] = await Promise.all([listRepos(), listApps(), manifestEntries()])
 
   // A name is taken if EITHER source knows it: the database holds what
   // daedalus manages, the manifest additionally holds the hand-written
@@ -443,11 +443,11 @@ export const fetchAppPreflight = createServerFn()
     // reference.
     const local = /^registry\.toscanini\.me\/(?<repo>[^:@]+)(?<ref>[:@].+)?$/.exec(effectiveImage)
     const imageState =
-      local?.groups?.repo === undefined ?
-        ('unverifiable' as const)
-      : await imageInfo(local.groups.repo, (local.groups.ref ?? ':latest').slice(1)).then((info) =>
-          info.digest === null ? ('missing' as const) : ('present' as const),
-        )
+      local?.groups?.repo === undefined
+        ? ('unverifiable' as const)
+        : await imageInfo(local.groups.repo, (local.groups.ref ?? ':latest').slice(1)).then(
+            (info) => (info.digest === null ? ('missing' as const) : ('present' as const)),
+          )
 
     const { checks, workflows, publishWorkflow, dispatchable } = await repoChecks(data.repo)
 

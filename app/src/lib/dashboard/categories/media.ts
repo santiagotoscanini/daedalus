@@ -39,7 +39,7 @@ import {
   qbtCookie,
 } from '../clients'
 import { key } from '../format'
-import { versionGap, type VersionGap } from '../github'
+import { type VersionGap, versionGap } from '../github'
 import { imageTag, imageVersion, type RunningVersion } from '../images'
 
 /**
@@ -105,7 +105,6 @@ export async function loadMedia(tab: string, ctx: Ctx): Promise<MediaData> {
       return { tab: 'jellyfin', ...(await loadJellyfin(ctx.base('jellyfin'))) }
   }
 }
-
 
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */
 
@@ -258,14 +257,16 @@ type SeerrData = {
  * has it, and the interesting distinction there is whether the file has landed
  * — which is the MEDIA's status, not the request's.
  */
-const REQUEST_STATE: Record<number, { label: string; tone: SeerrData['requests'][number]['tone'] }> =
-  {
-    1: { label: 'pending', tone: 'warn' },
-    2: { label: 'approved', tone: 'info' },
-    3: { label: 'declined', tone: 'bad' },
-    4: { label: 'failed', tone: 'bad' },
-    5: { label: 'available', tone: 'ok' },
-  }
+const REQUEST_STATE: Record<
+  number,
+  { label: string; tone: SeerrData['requests'][number]['tone'] }
+> = {
+  1: { label: 'pending', tone: 'warn' },
+  2: { label: 'approved', tone: 'info' },
+  3: { label: 'declined', tone: 'bad' },
+  4: { label: 'failed', tone: 'bad' },
+  5: { label: 'available', tone: 'ok' },
+}
 
 /** How many recent requests get their title looked up. See `titleOf`. */
 const REQUESTS_SHOWN = 8
@@ -333,9 +334,9 @@ async function loadSeerr(base: string): Promise<SeerrData> {
         // The media's own status wins where it is further along: a request can
         // sit "approved" forever while the file it asked for arrived days ago,
         // and "approved" is then the least true thing on the row.
-        ...(r.status === 2 && r.media?.status === 5 ?
-          { status: 'available', tone: 'ok' as const }
-        : { status: state.label, tone: state.tone }),
+        ...(r.status === 2 && r.media?.status === 5
+          ? { status: 'available', tone: 'ok' as const }
+          : { status: state.label, tone: state.tone }),
         by: r.requestedBy?.displayName ?? r.requestedBy?.username ?? 'someone',
         ageDays: daysSince(r.createdAt, now),
       }
@@ -410,7 +411,12 @@ type ArrData = {
   /** Airing or releasing in the next fortnight, soonest first. */
   upcoming: { title: string; sub: string | null; date: string; inDays: number; have: boolean }[]
   /** What it has been doing, newest first. */
-  history: { title: string; event: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; ageDays: number | null }[]
+  history: {
+    title: string
+    event: string
+    tone: 'ok' | 'warn' | 'bad' | 'muted'
+    ageDays: number | null
+  }[]
   /** Where the library lives, as the container sees it. */
   disk: { path: string; freeBytes: number; totalBytes: number }[]
 }
@@ -520,9 +526,7 @@ async function loadArr(app: 'sonarr' | 'radarr', ctx: Ctx): Promise<ArrData> {
       wanted: wanted?.totalRecords ?? null,
       queued: queue?.totalRecords ?? null,
       sizeBytes:
-        library === null ?
-          null
-        : library.reduce((n, i) => n + (i.statistics?.sizeOnDisk ?? 0), 0),
+        library === null ? null : library.reduce((n, i) => n + (i.statistics?.sizeOnDisk ?? 0), 0),
     },
     queue: (queue?.records ?? []).map((r) => {
       const size = r.size ?? 0
@@ -537,9 +541,9 @@ async function loadArr(app: 'sonarr' | 'radarr', ctx: Ctx): Promise<ArrData> {
         issue:
           r.errorMessage ??
           r.statusMessages?.[0]?.title ??
-          (r.trackedDownloadStatus === 'warning' || r.trackedDownloadStatus === 'error' ?
-            r.trackedDownloadStatus
-          : null),
+          (r.trackedDownloadStatus === 'warning' || r.trackedDownloadStatus === 'error'
+            ? r.trackedDownloadStatus
+            : null),
       }
     }),
     upcoming: (calendar ?? [])
@@ -556,9 +560,9 @@ async function loadArr(app: 'sonarr' | 'radarr', ctx: Ctx): Promise<ArrData> {
         if (when === null) return null
         const stamp = Date.parse(when)
         const episode =
-          c.seasonNumber === undefined || c.episodeNumber === undefined ?
-            null
-          : `S${String(c.seasonNumber).padStart(2, '0')}E${String(c.episodeNumber).padStart(2, '0')}`
+          c.seasonNumber === undefined || c.episodeNumber === undefined
+            ? null
+            : `S${String(c.seasonNumber).padStart(2, '0')}E${String(c.episodeNumber).padStart(2, '0')}`
         return {
           title: c.series?.title ?? c.seriesTitle ?? c.title ?? '?',
           sub: episode === null ? null : `${episode} · ${c.title ?? ''}`.trim(),
@@ -721,10 +725,9 @@ async function loadBazarr(ctx: Ctx): Promise<BazarrData> {
   const base = `${ctx.hc}:6767/api`
 
   const [status, eps, movies, providers, subgen] = await Promise.all([
-    getJson<{ data?: { bazarr_version?: string; sonarr_version?: string; radarr_version?: string } }>(
-      `${base}/system/status`,
-      h,
-    ),
+    getJson<{
+      data?: { bazarr_version?: string; sonarr_version?: string; radarr_version?: string }
+    }>(`${base}/system/status`, h),
     getJson<{ total?: number }>(`${base}/episodes/wanted`, h),
     getJson<{ total?: number }>(`${base}/movies/wanted`, h),
     getJson<{ data?: { name?: string; status?: string; retry?: string }[] }>(
@@ -875,45 +878,45 @@ async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
     shelfmarkStatus,
     shelfmark,
   ] = await Promise.all([
-      loadQbt(qbtBase),
-      getJson<{ result?: string }>(`${nzbBase}/jsonrpc/version`),
-      getJson<{
-        result?: {
-          DownloadRate?: number
-          RemainingSizeMB?: number
-          DownloadedSizeMB?: number
-          MonthSizeMB?: number
-          DaySizeMB?: number
-          DownloadPaused?: boolean
-          ServerStandBy?: boolean
-          UpTimeSec?: number
-          DownloadTimeSec?: number
-          FreeDiskSpaceMB?: number
-          NewsServers?: { ID?: number; Active?: boolean }[]
-        }
-      }>(`${nzbBase}/jsonrpc/status`),
-      getJson<{ result?: { NZBName?: string; FileSizeMB?: number; RemainingSizeMB?: number }[] }>(
-        `${nzbBase}/jsonrpc/listgroups`,
-      ),
-      // Through traefik on a scoped bypass (`GET /history`, stacks/metube):
-      // metube is on traefik-net only, and daedalus is deliberately not.
-      getJson<{
-        queue?: { title?: string; status?: string }[]
-        pending?: { title?: string }[]
-        done?: { title?: string; status?: string }[]
-      }>(`${ctx.base('metube')}/history`),
-      getJson<{ country?: string }>(`${ctx.hc}:8000/v1/publicip/ip`),
-      getJson<{ port?: number }>(`${ctx.hc}:8000/v1/portforward`),
-      promScalars({ up: 'gluetun_vpn_status' }),
-      // Keyed by state, then by job id — see stacks/shelfmark. The inner
-      // records are loosely typed on purpose: the fields vary by state and
-      // only the title and progress are ever present.
-      getJson<Record<string, Record<string, { title?: string; progress?: number }>>>(
-        `${ctx.hc}:8084/api/status`,
-      ),
-      // Pinned by digest to a moving `:latest`, so only the image knows.
-      imageVersion('shelfmark'),
-    ])
+    loadQbt(qbtBase),
+    getJson<{ result?: string }>(`${nzbBase}/jsonrpc/version`),
+    getJson<{
+      result?: {
+        DownloadRate?: number
+        RemainingSizeMB?: number
+        DownloadedSizeMB?: number
+        MonthSizeMB?: number
+        DaySizeMB?: number
+        DownloadPaused?: boolean
+        ServerStandBy?: boolean
+        UpTimeSec?: number
+        DownloadTimeSec?: number
+        FreeDiskSpaceMB?: number
+        NewsServers?: { ID?: number; Active?: boolean }[]
+      }
+    }>(`${nzbBase}/jsonrpc/status`),
+    getJson<{ result?: { NZBName?: string; FileSizeMB?: number; RemainingSizeMB?: number }[] }>(
+      `${nzbBase}/jsonrpc/listgroups`,
+    ),
+    // Through traefik on a scoped bypass (`GET /history`, stacks/metube):
+    // metube is on traefik-net only, and daedalus is deliberately not.
+    getJson<{
+      queue?: { title?: string; status?: string }[]
+      pending?: { title?: string }[]
+      done?: { title?: string; status?: string }[]
+    }>(`${ctx.base('metube')}/history`),
+    getJson<{ country?: string }>(`${ctx.hc}:8000/v1/publicip/ip`),
+    getJson<{ port?: number }>(`${ctx.hc}:8000/v1/portforward`),
+    promScalars({ up: 'gluetun_vpn_status' }),
+    // Keyed by state, then by job id — see stacks/shelfmark. The inner
+    // records are loosely typed on purpose: the fields vary by state and
+    // only the title and progress are ever present.
+    getJson<Record<string, Record<string, { title?: string; progress?: number }>>>(
+      `${ctx.hc}:8084/api/status`,
+    ),
+    // Pinned by digest to a moving `:latest`, so only the image knows.
+    imageVersion('shelfmark'),
+  ])
 
   const nzbVer = nzbVersion?.result ?? null
   const metubeVer = imageTag('metube')
@@ -985,14 +988,15 @@ async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
         )
         .slice(0, 12),
       counts:
-        shelfmarkStatus === null ? null : (
-          {
-            downloading: bucket('downloading').length,
-            queued: bucket('queued').length + bucket('resolving').length + bucket('locating').length,
-            done: bucket('complete').length,
-            errors: bucket('error').length,
-          }
-        ),
+        shelfmarkStatus === null
+          ? null
+          : {
+              downloading: bucket('downloading').length,
+              queued:
+                bucket('queued').length + bucket('resolving').length + bucket('locating').length,
+              done: bucket('complete').length,
+              errors: bucket('error').length,
+            },
     },
     vpn: {
       up: vpnUp.up === null ? null : vpnUp.up === 1,
@@ -1293,9 +1297,9 @@ async function loadRecyclarr(): Promise<RecyclarrData> {
     running,
     gap: await versionGap('recyclarr/recyclarr', running.version, { notesWhenUnknown: true }),
     lastRun:
-      runStamp === null ? null : (
-        { ok: (lastRunLine ?? '').includes('job succeeded'), day: runStamp }
-      ),
+      runStamp === null
+        ? null
+        : { ok: (lastRunLine ?? '').includes('job succeeded'), day: runStamp },
     errors,
     synced,
     days: CLEANUP_DAYS,

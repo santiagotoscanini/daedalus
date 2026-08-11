@@ -261,36 +261,36 @@ h2 {
    leave a gap, and arithmetic on rem values does both.                       */
 
 @media (width > 52rem) {
-  :root[data-nav='collapsed'] {
+  :root[data-nav="collapsed"] {
     --sidebar-w: 64px;
   }
 
-  :root[data-nav='collapsed'] .sidebar {
+  :root[data-nav="collapsed"] .sidebar {
     padding-left: 0.55rem;
     padding-right: 0.55rem;
   }
 
-  :root[data-nav='collapsed'] .brand {
+  :root[data-nav="collapsed"] .brand {
     justify-content: center;
     padding: 0.25rem 0;
   }
-  :root[data-nav='collapsed'] .brand > span,
-  :root[data-nav='collapsed'] .nav-label {
+  :root[data-nav="collapsed"] .brand > span,
+  :root[data-nav="collapsed"] .nav-label {
     display: none;
   }
 
-  :root[data-nav='collapsed'] .nav-item,
-  :root[data-nav='collapsed'] .nav-collapse {
+  :root[data-nav="collapsed"] .nav-item,
+  :root[data-nav="collapsed"] .nav-collapse {
     justify-content: center;
     padding-left: 0;
     padding-right: 0;
   }
 
-  :root[data-nav='collapsed'] .nav-collapse .nav-icon {
+  :root[data-nav="collapsed"] .nav-collapse .nav-icon {
     transform: rotate(180deg);
   }
 
-  :root[data-nav='collapsed'] .nav-divider {
+  :root[data-nav="collapsed"] .nav-divider {
     margin-left: 0.35rem;
     margin-right: 0.35rem;
   }
@@ -299,7 +299,7 @@ h2 {
      the cursor, and immediately rather than after the second the native
      `title` tooltip waits — at this width the icon is the only thing naming
      the destination, so the answer has to arrive at hover speed. */
-  :root[data-nav='collapsed'] .nav-item::after {
+  :root[data-nav="collapsed"] .nav-item::after {
     content: attr(data-label);
     position: absolute;
     left: calc(100% + 0.55rem);
@@ -320,8 +320,8 @@ h2 {
     opacity: 0;
     transition: opacity 0.1s ease;
   }
-  :root[data-nav='collapsed'] .nav-item:hover::after,
-  :root[data-nav='collapsed'] .nav-item:focus-visible::after {
+  :root[data-nav="collapsed"] .nav-item:hover::after,
+  :root[data-nav="collapsed"] .nav-item:focus-visible::after {
     opacity: 1;
   }
 }
@@ -726,7 +726,9 @@ h2 {
   height: 14px;
   border-radius: 50%;
   background: var(--muted);
-  transition: transform 0.12s, background 0.12s;
+  transition:
+    transform 0.12s,
+    background 0.12s;
 }
 .toggle input:checked + .track {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
@@ -1339,7 +1341,7 @@ h2 {
 
 @media (max-width: 52rem) {
   :root,
-  :root[data-nav='collapsed'] {
+  :root[data-nav="collapsed"] {
     /* Consumed by .shell's column and .apply-bar's left offset. The rail is
        out of flow here, so it occupies no width at all. */
     --sidebar-w: 0px;
@@ -1395,7 +1397,7 @@ h2 {
       opacity 0.2s ease,
       visibility 0s linear 0.2s;
   }
-  .scrim[data-open='true'] {
+  .scrim[data-open="true"] {
     opacity: 1;
     visibility: visible;
     transition-delay: 0s;
@@ -1423,7 +1425,7 @@ h2 {
       transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
       visibility 0s linear 0.22s;
   }
-  .sidebar[data-open='true'] {
+  .sidebar[data-open="true"] {
     transform: none;
     visibility: visible;
     transition-delay: 0s;
@@ -2095,12 +2097,24 @@ h2 {
   opacity: 0.85;
 }
 
-.bigstat-accent { --stat-tone: var(--accent); }
-.bigstat-ok { --stat-tone: var(--ok); }
-.bigstat-warn { --stat-tone: var(--warn); }
-.bigstat-bad { --stat-tone: var(--bad); }
-.bigstat-info { --stat-tone: #5b8dd9; }
-.bigstat-muted { --stat-tone: var(--dim); }
+.bigstat-accent {
+  --stat-tone: var(--accent);
+}
+.bigstat-ok {
+  --stat-tone: var(--ok);
+}
+.bigstat-warn {
+  --stat-tone: var(--warn);
+}
+.bigstat-bad {
+  --stat-tone: var(--bad);
+}
+.bigstat-info {
+  --stat-tone: #5b8dd9;
+}
+.bigstat-muted {
+  --stat-tone: var(--dim);
+}
 
 .bigstat-label {
   color: var(--dim);
@@ -2183,7 +2197,6 @@ h2 {
 .board-body {
   flex: 1;
 }
-
 
 /* Boards are laid out on a 12-column grid at desktop width, collapse to two
    half-widths on a laptop, and stack completely on a phone. The spans are
@@ -2293,8 +2306,12 @@ h2 {
   text-align: center;
 }
 
-.text-bad { color: var(--bad); }
-.text-warn { color: var(--warn); }
+.text-bad {
+  color: var(--bad);
+}
+.text-warn {
+  color: var(--warn);
+}
 
 /* ── app icon ───────────────────────────────────────────────────────────── */
 
@@ -2516,12 +2533,24 @@ h2 {
   animation: ring-sweep 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.ring-accent { --ring-tone: var(--accent); }
-.ring-ok { --ring-tone: var(--ok); }
-.ring-warn { --ring-tone: var(--warn); }
-.ring-bad { --ring-tone: var(--bad); }
-.ring-info { --ring-tone: #5b8dd9; }
-.ring-muted { --ring-tone: var(--dim); }
+.ring-accent {
+  --ring-tone: var(--accent);
+}
+.ring-ok {
+  --ring-tone: var(--ok);
+}
+.ring-warn {
+  --ring-tone: var(--warn);
+}
+.ring-bad {
+  --ring-tone: var(--bad);
+}
+.ring-info {
+  --ring-tone: #5b8dd9;
+}
+.ring-muted {
+  --ring-tone: var(--dim);
+}
 
 /* Sweeps from empty to the real value once. `--ring-dash` carries the target
    length so the keyframe does not have to know it. */
@@ -2612,12 +2641,24 @@ h2 {
   animation: bar-grow 700ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 
-.barlist-accent { --bar-tone: var(--accent); }
-.barlist-ok { --bar-tone: var(--ok); }
-.barlist-warn { --bar-tone: var(--warn); }
-.barlist-bad { --bar-tone: var(--bad); }
-.barlist-info { --bar-tone: #5b8dd9; }
-.barlist-muted { --bar-tone: var(--dim); }
+.barlist-accent {
+  --bar-tone: var(--accent);
+}
+.barlist-ok {
+  --bar-tone: var(--ok);
+}
+.barlist-warn {
+  --bar-tone: var(--warn);
+}
+.barlist-bad {
+  --bar-tone: var(--bad);
+}
+.barlist-info {
+  --bar-tone: #5b8dd9;
+}
+.barlist-muted {
+  --bar-tone: var(--dim);
+}
 
 .barlist-value {
   font-size: 0.8rem;
@@ -2701,12 +2742,24 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
-.columns-accent { --col-tone: var(--accent); }
-.columns-ok { --col-tone: var(--ok); }
-.columns-warn { --col-tone: var(--warn); }
-.columns-bad { --col-tone: var(--bad); }
-.columns-info { --col-tone: #5b8dd9; }
-.columns-muted { --col-tone: var(--dim); }
+.columns-accent {
+  --col-tone: var(--accent);
+}
+.columns-ok {
+  --col-tone: var(--ok);
+}
+.columns-warn {
+  --col-tone: var(--warn);
+}
+.columns-bad {
+  --col-tone: var(--bad);
+}
+.columns-info {
+  --col-tone: #5b8dd9;
+}
+.columns-muted {
+  --col-tone: var(--dim);
+}
 
 @keyframes col-grow {
   from {
@@ -2732,12 +2785,24 @@ h2 {
   stop-opacity: 0;
 }
 
-.trend-accent { --trend-tone: var(--accent); }
-.trend-ok { --trend-tone: var(--ok); }
-.trend-warn { --trend-tone: var(--warn); }
-.trend-bad { --trend-tone: var(--bad); }
-.trend-info { --trend-tone: #5b8dd9; }
-.trend-muted { --trend-tone: var(--dim); }
+.trend-accent {
+  --trend-tone: var(--accent);
+}
+.trend-ok {
+  --trend-tone: var(--ok);
+}
+.trend-warn {
+  --trend-tone: var(--warn);
+}
+.trend-bad {
+  --trend-tone: var(--bad);
+}
+.trend-info {
+  --trend-tone: #5b8dd9;
+}
+.trend-muted {
+  --trend-tone: var(--dim);
+}
 
 /* ── progress ───────────────────────────────────────────────────────────── */
 
@@ -2756,12 +2821,24 @@ h2 {
   transition: width 400ms ease;
 }
 
-.progress-accent { --prog-tone: var(--accent); }
-.progress-ok { --prog-tone: var(--ok); }
-.progress-warn { --prog-tone: var(--warn); }
-.progress-bad { --prog-tone: var(--bad); }
-.progress-info { --prog-tone: #5b8dd9; }
-.progress-muted { --prog-tone: var(--dim); }
+.progress-accent {
+  --prog-tone: var(--accent);
+}
+.progress-ok {
+  --prog-tone: var(--ok);
+}
+.progress-warn {
+  --prog-tone: var(--warn);
+}
+.progress-bad {
+  --prog-tone: var(--bad);
+}
+.progress-info {
+  --prog-tone: #5b8dd9;
+}
+.progress-muted {
+  --prog-tone: var(--dim);
+}
 
 /* The travelling sheen is the one piece of ambient motion on these pages, and
    it is load-bearing: a paused download and a running one at the same
@@ -2800,12 +2877,24 @@ h2 {
   background: var(--pulse-tone, var(--ok));
   animation: pulse-beat 2s ease-in-out infinite;
 }
-.pulse-ok { --pulse-tone: var(--ok); }
-.pulse-accent { --pulse-tone: var(--accent); }
-.pulse-warn { --pulse-tone: var(--warn); }
-.pulse-bad { --pulse-tone: var(--bad); }
-.pulse-info { --pulse-tone: #5b8dd9; }
-.pulse-muted { --pulse-tone: var(--dim); }
+.pulse-ok {
+  --pulse-tone: var(--ok);
+}
+.pulse-accent {
+  --pulse-tone: var(--accent);
+}
+.pulse-warn {
+  --pulse-tone: var(--warn);
+}
+.pulse-bad {
+  --pulse-tone: var(--bad);
+}
+.pulse-info {
+  --pulse-tone: #5b8dd9;
+}
+.pulse-muted {
+  --pulse-tone: var(--dim);
+}
 
 @keyframes pulse-beat {
   0%,
@@ -2852,7 +2941,6 @@ h2 {
 
 /* ── lists shared by several boards ─────────────────────────────────────── */
 
-
 .runs,
 .people,
 .peers,
@@ -2866,7 +2954,6 @@ h2 {
   display: flex;
   flex-direction: column;
 }
-
 
 /* ── the model widget ───────────────────────────────────────────────────── */
 
@@ -3659,9 +3746,15 @@ h2 {
   border-radius: 9px;
   text-decoration: none;
   color: inherit;
-  background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 16%, var(--panel-2)), var(--panel-2));
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--accent) 16%, var(--panel-2)),
+    var(--panel-2)
+  );
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  transition: border-color 0.12s ease, transform 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    transform 0.12s ease;
 }
 .cta:hover {
   border-color: var(--accent);
@@ -3864,7 +3957,10 @@ h2 {
   opacity: 0;
   visibility: hidden;
   transform: translateY(-3px);
-  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    visibility 0.12s;
 }
 .hfact:hover .hfact-card,
 .hfact:focus-within .hfact-card {
@@ -3944,7 +4040,10 @@ h2 {
   opacity: 0;
   visibility: hidden;
   transform: translateY(-3px);
-  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    visibility 0.12s;
 }
 .vercmp:hover .vercmp-card,
 .vercmp:focus-within .vercmp-card {
@@ -4513,7 +4612,6 @@ h2 {
   gap: 0.45rem;
 }
 
-
 /* ── the registration list ───────────────────────────────────────────────── */
 
 /* One row per registered OIDC client, ordered by recency, each opening onto
@@ -4648,11 +4746,21 @@ h2 {
   color: var(--text);
   font-weight: 600;
 }
-.codes-digest .code-2xx { color: var(--ok); }
-.codes-digest .code-3xx { color: #5b8dd9; }
-.codes-digest .code-4xx { color: var(--warn); }
-.codes-digest .code-5xx { color: var(--bad); }
-.codes-digest .code-0 { color: var(--dim); }
+.codes-digest .code-2xx {
+  color: var(--ok);
+}
+.codes-digest .code-3xx {
+  color: #5b8dd9;
+}
+.codes-digest .code-4xx {
+  color: var(--warn);
+}
+.codes-digest .code-5xx {
+  color: var(--bad);
+}
+.codes-digest .code-0 {
+  color: var(--dim);
+}
 
 /* ── the resolver ───────────────────────────────────────────────────────── */
 
@@ -4784,7 +4892,7 @@ h2 {
 .zone-group > summary::before,
 .zone-ns > summary::before,
 .more > summary::before {
-  content: '▸';
+  content: "▸";
   color: var(--dim);
   font-size: 0.7rem;
   transition: transform 0.12s ease;

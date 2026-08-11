@@ -5,7 +5,9 @@ import { Pulse, type Tone } from './viz'
 export type AppState = 'running' | 'attention' | 'stopped' | 'unknown'
 
 export function StateDot({ state }: { state: AppState }) {
-  return <span className={`dot dot-${state}`} aria-label={state} title={state} />
+  // role="img": a bare <span> has no role, so assistive tech would drop the
+  // aria-label; as an image the dot reads as its state name.
+  return <span className={`dot dot-${state}`} role="img" aria-label={state} title={state} />
 }
 
 /**
@@ -62,10 +64,13 @@ function hue(name: string): number {
 
 export function StatePill({ state }: { state: AppState }) {
   const label =
-    state === 'running' ? 'running'
-    : state === 'attention' ? 'needs attention'
-    : state === 'stopped' ? 'stopped'
-    : 'unknown'
+    state === 'running'
+      ? 'running'
+      : state === 'attention'
+        ? 'needs attention'
+        : state === 'stopped'
+          ? 'stopped'
+          : 'unknown'
   return (
     <span className={`pill pill-${state}`}>
       <StateDot state={state} />
