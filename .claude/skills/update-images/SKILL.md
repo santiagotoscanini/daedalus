@@ -1,4 +1,5 @@
 ---
+name: update-images
 description: Audit digest-pinned container images in /etc/nixos, research updates + changelogs in parallel, let me pick, then apply + rebuild + validate — and report what the new versions let us simplify
 argument-hint: [optional stack filter, e.g. "tv" or "monitoring immich"]
 ---
@@ -8,10 +9,11 @@ argument-hint: [optional stack filter, e.g. "tv" or "monitoring immich"]
 You are updating the digest-pinned OCI images declared in `/etc/nixos` on
 s2-server. Follow CLAUDE.md rules at all times: declarative-only, `git add`
 before rebuild, `nixos-rebuild test` before `switch`, confirm before anything
-destructive. Edit `/etc/nixos` files **only via `sudo sed -i`** (never
-Edit/Write — operator rule).
+destructive. Edit `/etc/nixos` files with the normal Edit tool; never leave
+backup copies inside the repo (`git add -A` would sweep them into the flake —
+git itself is the backup).
 
-This command has **two deliverables**, both required:
+This skill has **two deliverables**, both required:
 
 1. the image updates themselves (Phases 0–5), and
 2. an **adoption review** (Phase 6) — what the new versions let us *change
@@ -59,7 +61,7 @@ Classify every entry into exactly one bucket:
    same report.
 
    **Nextcloud specifically — minor and patch bumps ARE in scope for this
-   command.** `nextcloudVersion` holds only the major (e.g. `"34"`); the
+   skill.** `nextcloudVersion` holds only the major (e.g. `"34"`); the
    actual point release is frozen by `nextcloudBaseDigest`. Re-resolving
    `nextcloud:<major>` to its current digest moves 34.0.1 → 34.0.2 and is a
    normal patch update — apply it here. Read `NEXTCLOUD_VERSION` out of the
@@ -71,8 +73,8 @@ Classify every entry into exactly one bucket:
    a Phase 6 class-D finding; the rebuild does not run those.
 5. **Out of scope — skip and say so in the report**:
    - A Nextcloud **major** bump (see above).
-   - `ghcr.io/santiagotoscanini/*` — the apps platform auto-deploys these
-     every 2 minutes; never touch.
+   - Apps-platform images (the box's own registry / `ghcr.io/santiagotoscanini/*`)
+     — the platform auto-deploys these every 2 minutes; never touch.
 
 Produce a table: container name | stack | file:line | registry/repo | current
 tag | current digest (short) | bucket.
@@ -159,9 +161,9 @@ it changes what the user is agreeing to.
 | Image / group | Warning |
 |---|---|
 | Any `postgres:*` (app-db's pg-pgvector base, immich's `immich-app/postgres`) | Major bump = `pg_upgrade` dance + the 70-vs-105 UID/tmpfiles trap if the alpine/debian base changes. Only ever propose same-major updates here; list newer majors as "available, needs a dedicated migration session". |
-| `nextcloud` base digest | Point releases (34.0.1 → 34.0.2) are ordinary updates — apply them. Sed `nextcloudBaseDigest` only, leaving `nextcloudVersion` alone. The image entrypoint runs `occ upgrade` itself on start, but any `occ db:*` / `maintenance:repair` step the notes name is NOT run by the rebuild — surface it. A major (`nextcloudVersion` change) is out of scope. |
-| `immich-server` / `immich-machine-learning` / `immich-app/postgres` | Server+ML share `immichVersion` — must move in lockstep (one sed on the variable). Check the Immich release notes for a required postgres image bump; Immich majors routinely have breaking migration steps. |
-| `gluetun` (`platform/common.nix` + ipcrawl-vpn) | Owns the netns for the entire TV stack + ipcrawl. Updating it restarts gluetun and every dependent container must be restarted after it. VPN drops during the bounce. |
+| `nextcloud` base digest | Point releases (34.0.1 → 34.0.2) are ordinary updates — apply them. Edit `nextcloudBaseDigest` only, leaving `nextcloudVersion` alone. The image entrypoint runs `occ upgrade` itself on start, but any `occ db:*` / `maintenance:repair` step the notes name is NOT run by the rebuild — surface it. A major (`nextcloudVersion` change) is out of scope. |
+| `immich-server` / `immich-machine-learning` / `immich-app/postgres` | Server+ML share `immichVersion` — must move in lockstep (one edit on the variable). Check the Immich release notes for a required postgres image bump; Immich majors routinely have breaking migration steps. |
+| `gluetun` (`platform/common.nix` + argus-vpn) | Owns the netns for the entire TV stack (+ argus's own instance). Updating it restarts gluetun and every dependent container must be restarted after it. VPN drops during the bounce. |
 | `factorio` (ofsm) | Live players; a version bump can force a save migration. Restart kicks everyone. Always confirm timing. |
 | `traefik` | Fronts EVERYTHING. Majors change config syntax; even minors: re-run the smoke test immediately. |
 | `wg-easy` | v15 had a config-migration; check migration notes on any bump. |
@@ -189,16 +191,11 @@ make sure they do it *knowingly*, not to talk them out of it.
    `podman pull <registry>/<repo>:<tag>@sha256:<newdigest>` — parallelize
    with `&`/`wait` in one Bash call. A pull failure here aborts that image's
    update before anything was edited.
-2. **Edit via sudo sed**, one call per file. Digests are globally unique, so
-   match on the full old `tag@sha256:...` string:
-   ```bash
-   sudo sed -i 's|<oldtag>@sha256:<olddigest>|<newtag>@sha256:<newdigest>|' /etc/nixos/stacks/<s>/<s>.nix
-   ```
-   For immich, sed the `immichVersion` variable plus each digest. **No `.bak`
-   files inside `/etc/nixos`** — `git add -A` would sweep them into the
-   flake; git itself is the backup. Verify every edit with
-   `git -C /etc/nixos diff --stat` + a grep for each new digest (count must
-   equal number of edits).
+2. **Edit each pin with the Edit tool.** Digests are globally unique, so the
+   old `tag@sha256:...` string is a safe unique match; replace it with the
+   new `tag@sha256:...`. For immich, edit the `immichVersion` variable plus
+   each digest. Verify every edit with `git -C /etc/nixos diff --stat` + a
+   grep for each new digest (count must equal number of edits).
 3. `git -C /etc/nixos add -A` (as santiago, no sudo).
 4. `sudo nixos-rebuild test`.
 
@@ -209,15 +206,16 @@ restart on the rebuild. For EACH updated container:
 
 - `podman inspect <name> --format '{{.ImageDigest}}'` → must equal the new
   digest (for gluetun: then restart every netns-dependent unit —
-  `sudo systemctl restart podman-{qbittorrent,nzbget,flaresolverr,prowlarr,radarr,sonarr,bazarr,gluetun-exporter}` — and re-verify).
+  `sudo systemctl restart podman-{qbittorrent,nzbget,flaresolverr,prowlarr,radarr,sonarr,bazarr,subgen,shelfmark,gluetun-exporter}` — and re-verify).
 - `systemctl --failed` must be clean (remember `Type=oneshot` units can sit
   `active (exited)` over a dead container — check `podman ps` too).
-- `journalctl -u podman-<name> --since '-5 min' --no-pager | tail -30` — no
-  crash loops, no migration errors. **Also scan the same journal for the
-  container's own deprecation complaints** — the cheapest, least ambiguous
-  adoption evidence there is, and it only exists in this window:
+- `podman logs --since 5m <name> | tail -30` — no crash loops, no migration
+  errors (container output is NOT in journald — CLAUDE.md Debugging
+  protocol). **Also scan for the container's own deprecation complaints** —
+  the cheapest, least ambiguous adoption evidence there is, and it only
+  exists in this window:
   ```bash
-  journalctl -u podman-<name> --since '-15 min' --no-pager \
+  podman logs --since 15m <name> 2>&1 \
     | grep -iE 'deprecat|no longer (supported|used)|will be removed|has been renamed|obsolete|unsupported (option|config)|legacy' | head -5
   ```
   Keep every hit — it goes into Phase 6 as class-A evidence.
@@ -226,11 +224,11 @@ restart on the rebuild. For EACH updated container:
   → expect 200/30x/401, not 5xx (services running DB migrations may need
   30–60 s; retry twice before declaring failure).
 
-**On failure of any container**: revert only its line
-(`sudo sed -i` back, or `git -C /etc/nixos checkout -- <file>` if it was the
-only change in that file, then re-add), `sudo nixos-rebuild test` again,
-confirm the service recovered, and report the failure with the journal
-excerpt. Do not let one bad update block the good ones.
+**On failure of any container**: revert only its line (Edit the old digest
+back, or `git -C /etc/nixos checkout -- <file>` if it was the only change in
+that file, then re-add), `sudo nixos-rebuild test` again, confirm the service
+recovered, and report the failure with the log excerpt. Do not let one bad
+update block the good ones.
 
 ## Phase 5 — Commit
 
@@ -239,9 +237,7 @@ Only when everything validates:
 1. `sudo nixos-rebuild switch`
 2. Commit **as santiago** (never `sudo git commit` — it writes root-owned
    objects that break the push): `git -C /etc/nixos commit` with a message
-   listing each `image: old → new`, then `git -C /etc/nixos push`. If the
-   push hits permission errors on loose objects, fix with
-   `sudo chown -R santiago:users /etc/nixos/.git` and retry.
+   listing each `image: old → new`, then `git -C /etc/nixos push`.
 
 The image bumps get their **own** commit. Anything from Phase 6 is a separate
 commit — never bundle a config change into an image-bump commit.
@@ -263,7 +259,7 @@ any deferred image whose changelog deprecated something we currently set
 
 Spawn **general-purpose subagents in parallel, one per updated stack** (group
 small stacks, ≤4 stacks per agent). Give each its stacks, the scratchpad
-research file paths for its images, any Phase-4 journal deprecation hits, and
+research file paths for its images, any Phase-4 log deprecation hits, and
 these instructions verbatim:
 
 > You are auditing whether our config for `<stack>` has fallen behind what
@@ -276,7 +272,8 @@ these instructions verbatim:
 >    it is where the workarounds are confessed), plus everything in its
 >    `assets/`.
 > 3. `/etc/nixos/CLAUDE.md` — the stack's own section and "Cross-cutting
->    container gotchas"; `/etc/nixos/FUTURE.md`; `/etc/nixos/AUTH.md`.
+>    container gotchas"; `/etc/nixos/FUTURE.md`; `/etc/nixos/AUTH.md`; the
+>    matching `.claude/rules/*.md` file if one covers the stack.
 > 4. `platform/podman.nix` + `platform/publishing.nix` — only to learn which
 >    first-class `fleet.*` option a finding should be expressed in.
 >
@@ -331,25 +328,25 @@ Then ask with **AskUserQuestion**:
 - Q2 "The rest?" — "Append to FUTURE.md" / "Drop" / (Other to cherry-pick).
 
 **Implementing a selection** is an ordinary declarative change under the
-CLAUDE.md loop: `sudo sed -i` the module, `git -C /etc/nixos add -A`,
-`sudo nixos-rebuild test`, verify the affected service (journal + the curl
+CLAUDE.md loop: Edit the module, `git -C /etc/nixos add -A`,
+`sudo nixos-rebuild test`, verify the affected service (logs + the curl
 smoke test), `sudo nixos-rebuild switch`, then a **separate** commit as
 santiago. If a stack's header comment documents a workaround you just
 removed, update that comment in the same commit — and per operator rule,
 describe the *current* system, never the change history.
 
-**Appending to FUTURE.md** follows the file's existing shape: `## N. <title>`,
-a paragraph of what we do today and why it's deferred, a "Plan when picked
-up" block with the concrete declarative change, and a closing
-"Trigger to revisit:" line. Append with `sudo tee -a`, then `git add` it.
+**Appending to FUTURE.md** follows the file's existing shape: a titled
+entry, a paragraph of what we do today and why it's deferred, a "Plan when
+picked up" block with the concrete declarative change, and a closing
+"Trigger to revisit:" line.
 
 ## Final message
 
 Two sections, in this order:
 
 1. **Updated** — old → new per image, what was skipped/deferred and why, what
-   failed and was reverted (with the journal excerpt), and version follow-ups
-   (e.g. "postgres 17/18 majors available — plan a migration session",
+   failed and was reverted (with the log excerpt), and version follow-ups
+   (e.g. "postgres majors available — plan a migration session",
    "immich release notes want X after first login").
 2. **Improvement opportunities** — the Phase 6 report: what we could simplify
    or must fix before a future bump, what you implemented, what went to

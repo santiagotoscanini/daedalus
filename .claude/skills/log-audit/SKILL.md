@@ -3,6 +3,12 @@ name: log-audit
 description: Post-reboot audit of ALL system + container logs on s2-server. Sweeps journald (the single log source) for errors, warnings, flapping units, silent-failure patterns and cross-stack inconsistencies; produces a prioritized findings report with proposed declarative fixes. Analysis only — never edits nix code.
 ---
 
+> Baseline discipline: when the operator accepts findings and you append
+> them to `baseline.md`, commit that change in the same session
+> (`git -C /etc/nixos add .claude/skills/log-audit/baseline.md && git commit`)
+> — an uncommitted baseline is invisible to a fresh checkout and to the
+> next audit.
+
 # log-audit — full-boot log sweep for s2-server
 
 You are auditing the logs of a NixOS home server after a reboot. The

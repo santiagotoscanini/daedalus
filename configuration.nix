@@ -193,6 +193,7 @@
     ddclient # CLI for poking at DDNS state when debugging
     intel-gpu-tools # `intel_gpu_top` for watching transcoding load
     fdupes # find duplicate files
+    jq # .claude/hooks/bash-guard.sh parses tool-call JSON with it
   ];
 
   # ── Memory / swap ───────────────────────────────────────────────────────────
