@@ -15,11 +15,15 @@ repo-level docs:
 | `FUTURE.md` | Deferred work and open follow-ups. |
 | `HARDWARE.md` | Dated physical-layer event log (journald keeps only ~11 days). |
 | `lemonade.md` | The GPU box's model server and its REST API. |
+| `anansi-oidc-handoff.md` | Handoff spec for the external anansi repo's OIDC work — delete once that lands. |
 
-Claude Code's project config is in-tree too — `.claude/` (skills,
-commands, tracked settings) plus `.claude/mcp.json.sops`, which
-`platform/claude.nix` decrypts to `.mcp.json` at activation. So a fresh
-checkout carries the operator manual and tooling, not just the system.
+Claude Code's project config is in-tree too — `.claude/` holds the
+permission matrix + PreToolUse guard (`settings.json`, `hooks/`) that
+mechanically enforce CLAUDE.md's hard rules, path-scoped context
+(`rules/`), workflow skills (`skills/`), a pre-switch reviewer agent
+(`agents/`), and `mcp.json.sops`, which `platform/claude.nix` decrypts
+to `.mcp.json` at activation. So a fresh checkout carries the operator
+manual, the guardrails and the tooling, not just the system.
 
 ## Daily driver commands
 
@@ -29,8 +33,9 @@ sudo nixos-rebuild switch    # commit as the next boot generation
 ```
 
 Both auto-detect `flake.nix` — no flags needed. The flake only sees
-**git-tracked files**: `sudo git add <newfile>` before rebuilding, or
-the eval fails with "file not found".
+**git-tracked files**: `git add <newfile>` (plain git, never sudo —
+root-owned .git objects break the push) before rebuilding, or the eval
+fails with "file not found".
 
 ## Upgrades
 
