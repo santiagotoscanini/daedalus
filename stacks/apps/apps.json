@@ -96,7 +96,7 @@
       }
     },
     "voyra": {
-      "stage": "lab",
+      "stage": "live",
       "postgres": true,
       "storage": false,
       "litellm": true,
