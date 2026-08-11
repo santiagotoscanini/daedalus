@@ -81,7 +81,8 @@
 
   # Resume cursor. Without it a restart re-subscribes with after_seq=null
   # and replays Lemonade's entire 5000-entry ring into Loki.
-  fleet.statePaths."/home/santiago/selfhost/lemonade-logs/state" = { };
+  # ai/ group, beside litellm and open-webui.
+  fleet.statePaths."${config.fleet.stateRoot}/ai/lemonade-logs" = { };
 
   virtualisation.oci-containers.containers.lemonade-logs = mkRootlessContainer {
     # Stock python purely as a runtime — the bridge is stdlib-only, so
@@ -104,7 +105,7 @@
       # mount Python silently falls back to UTC and every line lands
       # three hours off.
       "${pkgs.tzdata}/share/zoneinfo:/usr/share/zoneinfo:ro"
-      "/home/santiago/selfhost/lemonade-logs/state:/var/lib/lemonade-logs"
+      "${config.fleet.stateRoot}/ai/lemonade-logs:/var/lib/lemonade-logs"
     ];
 
     environment = {

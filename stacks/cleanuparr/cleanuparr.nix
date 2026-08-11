@@ -74,7 +74,8 @@
 
   # PUID 1000 → host 100999; /config must exist with that ownership or
   # a fresh install fails on first write (holds the SQLite state).
-  fleet.statePaths."/home/santiago/selfhost/cleanuparr/config".uid = 1000;
+  # Lives in the tv/ group: it janitors the media fleet's download queues.
+  fleet.statePaths."${config.fleet.stateRoot}/tv/cleanuparr".uid = 1000;
 
   # Native OIDC, SEPARATE from the forward-auth client `webApps.auth =
   # "oidc"` derives above. Both point at this hostname but they are
@@ -121,7 +122,7 @@
     };
 
     volumes = [
-      "/home/santiago/selfhost/cleanuparr/config:/config"
+      "${config.fleet.stateRoot}/tv/cleanuparr:/config"
     ];
   };
 }

@@ -5,7 +5,7 @@
 #
 # DRY-RUN, doubly fenced: application.yml sets dry-run=true AND the
 # media bind below is :ro — janitorr cannot write or delete anything.
-# Review candidates in /home/santiago/selfhost/janitorr/logs/. To go
+# Review candidates in /home/santiago/selfhost/tv/janitorr/logs/. To go
 # live: flip dry-run, make the bind rw, fix the leaving-soon symlink
 # namespace (header of assets/application.yml), and re-check ownership
 # of the leaving-soon dir for the image's 1002:1001 user.
@@ -64,13 +64,14 @@
   # assets/application.yml. Edit with `sops env.sops`.
   sops.secrets."janitorr-env" = mkDotenvSecret ./env.sops;
 
+  # Lives in the tv/ group: it janitors the media library and nothing else.
   fleet.statePaths = {
-    "/home/santiago/selfhost/janitorr" = { };
-    "/home/santiago/selfhost/janitorr/logs" = {
+    "${config.fleet.stateRoot}/tv/janitorr" = { };
+    "${config.fleet.stateRoot}/tv/janitorr/logs" = {
       uid = 1002;
       gid = 1001;
     };
-    "/home/santiago/selfhost/janitorr/leaving-soon" = {
+    "${config.fleet.stateRoot}/tv/janitorr/leaving-soon" = {
       uid = 1002;
       gid = 1001;
     };
@@ -81,12 +82,12 @@
 
     volumes = [
       "${./assets/application.yml}:/config/application.yml:ro"
-      "/home/santiago/selfhost/janitorr/logs:/logs"
+      "${config.fleet.stateRoot}/tv/janitorr/logs:/logs"
       "/s2/tv:/data:ro" # ro = hard write fence for the dry-run phase
       # dry-run still writes leaving-soon preview symlinks (verified: EROFS
       # without this) — give it a dedicated rw dir OUTSIDE the real library,
       # overlaid on the ro /data bind.
-      "/home/santiago/selfhost/janitorr/leaving-soon:/data/media/leaving-soon"
+      "${config.fleet.stateRoot}/tv/janitorr/leaving-soon:/data/media/leaving-soon"
     ];
 
     environment = {

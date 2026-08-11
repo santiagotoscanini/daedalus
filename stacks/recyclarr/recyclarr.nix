@@ -35,13 +35,14 @@
   # /config data dir (repo clones, logs, state). Container runs as its
   # image default UID 1000 -> host 100999 under rootless podman (no
   # privilege-drop in the entrypoint), so the dir must be 100999:100999.
-  fleet.statePaths."/home/santiago/selfhost/recyclarr".uid = 1000;
+  # Lives in the tv/ group: it exists to groom the *arrs' profiles.
+  fleet.statePaths."${config.fleet.stateRoot}/tv/recyclarr".uid = 1000;
 
   virtualisation.oci-containers.containers.recyclarr = mkRootlessContainer {
     image = "ghcr.io/recyclarr/recyclarr:8@sha256:2d6107f758d882a59fe9d646aa54fa8a5a4fb7a40995125fade575652a3f7871";
 
     volumes = [
-      "/home/santiago/selfhost/recyclarr:/config"
+      "${config.fleet.stateRoot}/tv/recyclarr:/config"
       "${./assets/recyclarr.yml}:/config/recyclarr.yml:ro"
     ];
 

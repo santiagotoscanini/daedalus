@@ -31,8 +31,8 @@
 
   # The image's node user (uid 1000) maps to host 100999; the config
   # dir must exist with that ownership or a fresh install fails on
-  # first write.
-  fleet.statePaths."/home/santiago/selfhost/seerr/config".uid = 1000;
+  # first write. Lives in the tv/ group with the *arrs it fronts.
+  fleet.statePaths."${config.fleet.stateRoot}/tv/seerr".uid = 1000;
 
   fleet.webApps.seerr = {
     serviceName = "seerr";
@@ -43,7 +43,7 @@
     image = "ghcr.io/seerr-team/seerr:v3.4.1@sha256:f4768de5f616248d723e05891f3345a1402123775d03bf0890dbfedc0831bda1";
 
     volumes = [
-      "/home/santiago/selfhost/seerr/config:/app/config"
+      "${config.fleet.stateRoot}/tv/seerr:/app/config"
     ];
 
     environment = {

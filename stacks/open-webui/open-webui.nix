@@ -45,8 +45,9 @@
 }:
 
 let
-  dataDir = "/home/santiago/selfhost/open-webui/data";
-  secretsDir = "/home/santiago/selfhost/open-webui/secrets";
+  # ai/ group, beside litellm (the gateway it fronts) and lemonade-logs.
+  dataDir = "${config.fleet.stateRoot}/ai/open-webui/data";
+  secretsDir = "${config.fleet.stateRoot}/ai/open-webui/secrets";
   webuiSecretFile = "${secretsDir}/webui-env";
   litellmKeyFile = "/run/open-webui-litellm/env";
 in

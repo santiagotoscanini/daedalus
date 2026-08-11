@@ -119,8 +119,10 @@ let
   appSecretsBase = "/etc/nixos/stacks/apps/secrets";
   appDbEnvBase = "/etc/nixos/stacks/app-db/secrets";
 
-  # Host tree backing `storage.enable`. One dir per app underneath.
-  appsDataRoot = "/home/santiago/selfhost/apps";
+  # Host tree backing `storage.enable`. One dir per app underneath —
+  # and the app-adjacent state other stacks own (argus's gluetun/,
+  # daedalus's apply/) nests in the same per-app dirs.
+  appsDataRoot = "${config.fleet.stateRoot}/apps";
 
   # GHCR classic PAT (read:packages) in podman auth.json form, passed on
   # every pull (container's implicit + the deploy oneshot's explicit).

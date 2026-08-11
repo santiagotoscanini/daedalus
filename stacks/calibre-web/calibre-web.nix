@@ -21,7 +21,7 @@
 #   /cwa-book-ingest <- /s2/books/ingest    the shelfmark downloader drops
 #     files here; CWA imports them into the library, then DELETES the ingest
 #     copy. Shared bind with stacks/shelfmark.
-#   /config          <- selfhost/calibre-web/config
+#   /config          <- selfhost/books/calibre-web
 #
 # The library lives on the HDD pool at /s2/books — its own snapshotted
 # dataset (platform/zfs.nix). library/ + ingest/ are siblings in that ONE
@@ -30,11 +30,12 @@
 # (platform/podman.nix), closing the cold-boot race where the container
 # could start before the dataset mounts.
 
-{ mkRootlessContainer, ... }:
+{ config, mkRootlessContainer, ... }:
 
 {
   fleet.statePaths = {
-    "/home/santiago/selfhost/calibre-web/config" = { };
+    # books/ group, beside shelfmark — the two halves of one pipeline.
+    "${config.fleet.stateRoot}/books/calibre-web" = { };
     # library/ + ingest/ siblings in the /s2/books dataset. Ownership is
     # re-enforced NON-recursively, so declaring library/ can't touch its
     # contents; both map to container root (santiago 1000:100), which CWA
@@ -101,7 +102,7 @@
     };
 
     volumes = [
-      "/home/santiago/selfhost/calibre-web/config:/config"
+      "${config.fleet.stateRoot}/books/calibre-web:/config"
       "/s2/books/library:/calibre-library"
       "/s2/books/ingest:/cwa-book-ingest"
     ];

@@ -60,7 +60,8 @@ let
     ;
 in
 {
-  fleet.statePaths."/home/santiago/selfhost/shelfmark/config" = { };
+  # books/ group, beside calibre-web — the two halves of one pipeline.
+  fleet.statePaths."${config.fleet.stateRoot}/books/shelfmark" = { };
   # Where qBittorrent puts book torrents and shelfmark reads them back. On the
   # BOOKS dataset, deliberately not under /s2/tv: nothing about a book belongs
   # in the media pool's hardlink space, and keeping them apart is what lets
@@ -102,7 +103,7 @@ in
     environmentFiles = [ config.sops.secrets."shelfmark-env".path ];
 
     volumes = [
-      "/home/santiago/selfhost/shelfmark/config:/config"
+      "${config.fleet.stateRoot}/books/shelfmark:/config"
       # Shared ingest handoff to CWA (declared in stacks/calibre-web).
       "/s2/books/ingest:/cwa-book-ingest"
       # Finished torrents, read-only: shelfmark only ever copies OUT of here.

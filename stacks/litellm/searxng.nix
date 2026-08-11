@@ -13,13 +13,14 @@
 # mounted from assets/; the real secret_key comes from SEARXNG_SECRET.
 
 {
+  config,
   pkgs,
   mkRootlessContainer,
   ...
 }:
 
 let
-  secretsDir = "/home/santiago/selfhost/litellm/secrets";
+  secretsDir = "${config.fleet.stateRoot}/ai/litellm/secrets";
   searxngSecretFile = "${secretsDir}/searxng-env";
 in
 {

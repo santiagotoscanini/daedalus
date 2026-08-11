@@ -194,6 +194,29 @@ in
 {
   options.fleet = {
 
+    stateRoot = lib.mkOption {
+      type = lib.types.str;
+      default = "/home/santiago/selfhost";
+      readOnly = true;
+      description = ''
+        The one host tree for container state (rpool/selfhost: 16K
+        recordsize, frequent+hourly+daily snapshots, syncoid-mirrored).
+        Interpolate this instead of restating the literal.
+
+        Layout convention — grouped stacks nest one level:
+          <stateRoot>/ai/<service>     lemonade-logs, litellm, open-webui
+          <stateRoot>/apps/<app>       the apps platform (data/, and
+                                       app-adjacent state like argus's
+                                       gluetun/ or daedalus's apply/)
+          <stateRoot>/books/<service>  calibre-web, shelfmark
+          <stateRoot>/tv/<service>     the media fleet, incl. its
+                                       janitors (cleanuparr, janitorr,
+                                       recyclarr, seerr)
+        Everything else is <stateRoot>/<stack>. A new stack that serves
+        an existing group joins the group's directory, not the root.
+      '';
+    };
+
     bridgeMemberships = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf lib.types.str);
       default = { };

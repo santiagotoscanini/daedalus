@@ -69,7 +69,7 @@ let
   # Machine-generated, one line per key, gitignored like every other
   # `secrets/` path on the box. Not in /run: it has to survive a reboot,
   # or every consumer would be re-keyed on every boot.
-  stateDir = "/home/santiago/selfhost/litellm/secrets";
+  stateDir = "${config.fleet.stateRoot}/ai/litellm/secrets";
   secretsFile = "${stateDir}/virtual-keys.env";
   secretsUnit = "litellm-key-secrets.service";
 

@@ -118,7 +118,9 @@ let
   # no privilege to lose, and the host agent never has to authenticate to the
   # app or reach into Postgres. The app produces the artifact; the host moves
   # it into the flake and rebuilds.
-  applyDir = "/home/santiago/selfhost/daedalus/apply";
+  # Under apps/ — daedalus is an app on its own platform, so its host-side
+  # state sits with the other apps' dirs rather than as a root-level stack.
+  applyDir = "${config.fleet.stateRoot}/apps/daedalus/apply";
 
   applyScript = pkgs.writeShellApplication {
     name = "daedalus-apply";

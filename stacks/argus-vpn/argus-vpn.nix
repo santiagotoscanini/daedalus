@@ -49,7 +49,11 @@ in
       secretName = "argus-wg0";
       wgConfSops = ./wg0.conf.sops;
       authConfig = ./assets/config.toml;
-      stateRoot = "/home/santiago/selfhost/argus-vpn";
+      # apps/argus, so the tunnel's state (<stateRoot>/gluetun) sits inside
+      # the app's own dir beside data/ — mirroring tv/gluetun for the TV
+      # tunnel. The gluetun dir contents are just servers.json + auth
+      # config; nothing here is netns-identity the tunnel would miss.
+      stateRoot = "${config.fleet.stateRoot}/apps/argus";
       keyExpiry = "2027-07-14";
       reminderDates = [
         "2027-06-14" # 30 days out
@@ -88,7 +92,7 @@ in
         "gluetun-argus-exporter"
       ];
 
-      fleet.statePaths."/home/santiago/selfhost/argus-vpn" = { };
+      fleet.statePaths."${config.fleet.stateRoot}/apps/argus" = { };
     }
   ];
 }

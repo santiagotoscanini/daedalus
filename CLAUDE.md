@@ -260,6 +260,22 @@ Every stack is a folder, even single-file ones. `assets/` is for
 tracked non-secret files (configs, dashboards, templates, bind-mounted
 YAML/JSON).
 
+**Container state lives under `fleet.stateRoot`**
+(`/home/santiago/selfhost` — interpolate the option, never the
+literal). Grouped stacks nest one level; the taxonomy is documented on
+the option in `platform/podman.nix` and enforced by review, not
+assertion:
+
+- `ai/` — lemonade-logs, litellm, open-webui
+- `apps/` — the apps platform: `apps/<name>/data`, plus app-adjacent
+  state other stacks own (argus's `gluetun/`, daedalus's `apply/`)
+- `books/` — calibre-web, shelfmark
+- `tv/` — the media fleet and its janitors (cleanuparr, janitorr,
+  recyclarr, seerr)
+- everything else — `<stateRoot>/<stack>`
+
+A new stack that serves an existing group joins the group's directory.
+
 **Two secret classes — never conflate them (see the Secrets section):**
 - **Operator-managed** secrets are `*.sops` files (age-encrypted,
   tracked in git, edited with `sops <file>`). They live at the stack
@@ -484,8 +500,8 @@ subuid range `100000:65536`:
 | 0 (root)      | 1000 (santiago) | Linuxserver.io images set `PUID=0` to map here. |
 | N ≥ 1         | 99999 + N | e.g. 33 → 100032 (www-data), 70 → 100069 (Alpine postgres), 105 → 100104 (Debian postgres), 911 → 100910 (linuxserver default). |
 
-Files on disk in `/home/santiago/selfhost/<stack>/` need host-UID
-ownership matching the container UID:
+Files on disk under `fleet.stateRoot` (`/home/santiago/selfhost/`)
+need host-UID ownership matching the container UID:
 
 - `1000:100` (santiago:users) — container root (UID 0)
 - `100032:100032` — www-data
