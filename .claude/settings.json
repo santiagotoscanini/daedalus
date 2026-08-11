@@ -158,11 +158,15 @@
       "Bash(rm /tmp/*)",
       "Bash(rm -f /tmp/*)",
       "Bash(rm -rf /tmp/*)",
-      "Bash(shred -u /tmp/*)"
+      "Bash(shred -u /tmp/*)",
+      "mcp__grafana__*",
+      "mcp__app-db-ro__*"
     ]
   },
   "enabledMcpjsonServers": [
-    "n8n-mcp"
+    "n8n-mcp",
+    "grafana",
+    "app-db-ro"
   ],
   "hooks": {
     "PreToolUse": [

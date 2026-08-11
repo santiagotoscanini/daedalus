@@ -22,13 +22,10 @@
 # Changing either changes the /nix/store hash → container restarts on
 # rebuild. No manual reload.
 #
-# Wire local `claude` to Grafana via MCP (token from
-# https://grafana.toscanini.me/org/serviceaccounts):
-#   claude mcp add --transport stdio --scope user grafana -- \
-#     podman run --rm -i \
-#     -e GRAFANA_URL=https://grafana.toscanini.me \
-#     -e GRAFANA_SERVICE_ACCOUNT_TOKEN={TOKEN} \
-#     docker.io/grafana/mcp-grafana -t stdio
+# Claude reaches Grafana/Loki/Prometheus via the `grafana` MCP server
+# declared in .claude/mcp.json.sops (project-scoped, sops-encrypted) —
+# a Viewer service-account token minted via Grafana's own API. Rotate by
+# minting a new token and editing that sops file, not here.
 
 {
   config,
