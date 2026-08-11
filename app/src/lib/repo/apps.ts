@@ -43,32 +43,37 @@ export async function importFromNix(): Promise<{ imported: string[] }> {
   const entries = await manifestEntries()
   const imported: string[] = []
 
-  for (const entry of entries) {
-    const row = toRow(entry)
+  // One transaction for the whole sync: the per-app shape is delete-then-insert
+  // on env vars, and a failure between the two would leave an app stripped of
+  // its vars — a partial re-sync the next Apply would then ship.
+  await db.transaction(async (tx) => {
+    for (const entry of entries) {
+      const row = toRow(entry)
 
-    const [saved] = await db
-      .insert(apps)
-      .values(row)
-      .onConflictDoUpdate({ target: apps.name, set: { ...row, updatedAt: new Date() } })
-      .returning({ id: apps.id })
+      const [saved] = await tx
+        .insert(apps)
+        .values(row)
+        .onConflictDoUpdate({ target: apps.name, set: { ...row, updatedAt: new Date() } })
+        .returning({ id: apps.id })
 
-    if (!saved) continue
+      if (!saved) continue
 
-    await db.delete(appEnvVars).where(eq(appEnvVars.appId, saved.id))
-    if (entry.env.length > 0) {
-      await db.insert(appEnvVars).values(
-        entry.env.map((e, i) => ({
-          appId: saved.id,
-          key: e.key,
-          value: e.value,
-          note: e.note ?? null,
-          position: i,
-        })),
-      )
+      await tx.delete(appEnvVars).where(eq(appEnvVars.appId, saved.id))
+      if (entry.env.length > 0) {
+        await tx.insert(appEnvVars).values(
+          entry.env.map((e, i) => ({
+            appId: saved.id,
+            key: e.key,
+            value: e.value,
+            note: e.note ?? null,
+            position: i,
+          })),
+        )
+      }
+
+      imported.push(entry.name)
     }
-
-    imported.push(entry.name)
-  }
+  })
 
   return { imported }
 }
@@ -271,7 +276,7 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
     .where(eq(apps.name, name))
 }
 
-function toRow(entry: ManifestEntry) {
+export function toRow(entry: ManifestEntry) {
   return {
     name: entry.name,
     stage: entry.stage,
@@ -299,11 +304,32 @@ function toRow(entry: ManifestEntry) {
 }
 
 /**
+ * jsonb neither preserves key order nor cares about it, so notes from the
+ * database and notes from the JSON file can hold the same pairs in different
+ * orders. Compared on sorted entries or a reordering reads as drift.
+ */
+const stableNotes = (notes: Record<string, string>): string =>
+  JSON.stringify(Object.entries(notes).sort(([a], [b]) => a.localeCompare(b)))
+
+/**
+ * One env var as a comparable line. JSON-encoded rather than `k=v` glued with
+ * separators: a value is free text, so any separator it could contain would
+ * make two different (value, note) pairs collapse into the same string.
+ */
+const envLine = (e: { key: string; value: string; note?: string | null }): string =>
+  JSON.stringify([e.key, e.value, e.note ?? null])
+
+/**
  * Does the database still describe what Nix built?
  *
  * Compared field by field on the normalised shape, so ordering and formatting
  * differences don't register as changes. An app present in one and not the
  * other counts as drifted — that is a create or a delete waiting to be applied.
+ *
+ * The invariant that keeps the Apply bar honest: every field
+ * `toRegistryExport` emits must be compared here. A field exported but not
+ * compared is an edit that never lights the bar and silently never ships —
+ * asserted by the field-coverage test in apps.test.ts.
  */
 export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined): string[] {
   if (!manifest) return ['not in the last Nix build']
@@ -320,13 +346,16 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     authMode: record.authMode,
     authHealthPath: record.authHealthPath,
     authIsolated: record.authIsolated,
+    authAllowedGroups: record.authAllowedGroups,
+    authBypassRule: record.authBypassRule,
     egressContainer: record.egressContainer,
     egressHostPort: record.egressHostPort,
     limitCpus: record.limitCpus,
     limitMemoryMb: record.limitMemoryMb,
     limitPids: record.limitPids,
     description: record.description,
-    env: record.envVars.map((e) => `${e.key}=${e.value}`).join('\n'),
+    notes: stableNotes(record.notes),
+    env: record.envVars.map(envLine).join('\n'),
   }
 
   const fromNix = {
@@ -341,13 +370,16 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     authMode: manifest.auth.mode,
     authHealthPath: manifest.auth.healthPath ?? null,
     authIsolated: manifest.auth.isolated ?? false,
+    authAllowedGroups: manifest.auth.allowedGroups ?? null,
+    authBypassRule: manifest.auth.bypassRule ?? null,
     egressContainer: manifest.egress?.container ?? null,
     egressHostPort: manifest.egress?.hostPort ?? null,
     limitCpus: manifest.resources?.cpus ?? null,
     limitMemoryMb: manifest.resources?.memoryMb ?? null,
     limitPids: manifest.resources?.pids ?? null,
     description: manifest.presentation.description,
-    env: manifest.env.map((e) => `${e.key}=${e.value}`).join('\n'),
+    notes: stableNotes(manifest.notes ?? {}),
+    env: manifest.env.map(envLine).join('\n'),
   }
 
   return (Object.keys(fromNix) as (keyof typeof fromNix)[]).filter(
