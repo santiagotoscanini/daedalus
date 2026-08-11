@@ -47,9 +47,7 @@ export async function readDeployStatus(): Promise<DeployStatus> {
  * runs from the timer, and from a manual `systemctl start`, neither of which
  * goes through daedalus.
  */
-export async function lastDeploy(
-  app: string,
-): Promise<{ digest: string; result: string } | null> {
+export async function lastDeploy(app: string): Promise<{ digest: string; result: string } | null> {
   try {
     const raw = (await readFile(join(DEPLOY_STATE, app), 'utf8')).trim()
     const [digest, result] = raw.split(/\s+/)
@@ -85,7 +83,13 @@ export async function requestDeploy(input: {
   await writeFile(
     tmp,
     `${JSON.stringify(
-      { id, app: input.app, reason: input.reason, actor: input.actor, requestedAt: new Date().toISOString() },
+      {
+        id,
+        app: input.app,
+        reason: input.reason,
+        actor: input.actor,
+        requestedAt: new Date().toISOString(),
+      },
       null,
       2,
     )}\n`,

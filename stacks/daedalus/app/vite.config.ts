@@ -1,6 +1,6 @@
-import { defineConfig } from 'vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
 
 // daedalus runs `vite dev` in production — deliberately. It is an internal
 // control plane for one operator, so the value of editing a file and seeing the

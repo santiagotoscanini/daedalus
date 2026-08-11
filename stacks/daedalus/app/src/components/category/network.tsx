@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-
+import { bytes, compact, DASH, flag, ms, num, pct, since, until } from '../../lib/dashboard/format'
+import type { NetworkData } from '../../server/category'
+import { LogBoard, type LogNeighbour } from '../logs'
+import { Changelog } from '../release-notes'
+import { LinkRow, ServiceHead, verdictOf } from '../service-head'
+import { Segmented } from '../ui'
+import type { Tone } from '../viz'
 import {
   BarList,
   Board,
@@ -12,13 +18,6 @@ import {
   Pulse,
   Trend,
 } from '../viz'
-import { LogBoard, type LogNeighbour } from '../logs'
-import { Changelog } from '../release-notes'
-import { LinkRow, ServiceHead, verdictOf } from '../service-head'
-import { Segmented } from '../ui'
-import { DASH, bytes, compact, flag, ms, num, pct, since, until } from '../../lib/dashboard/format'
-import type { NetworkData } from '../../server/category'
-import type { Tone } from '../viz'
 
 // The Network category, split by DIRECTION.
 //
@@ -111,7 +110,8 @@ function GeneralView({ data }: { data: General }) {
           span={8}
           aside={
             <span className="board-note">
-              24 hours · {wire.linkMbps === null ? 'one NIC' : `${num(wire.linkMbps / 1000, 1)} Gbps link`}
+              24 hours ·{' '}
+              {wire.linkMbps === null ? 'one NIC' : `${num(wire.linkMbps / 1000, 1)} Gbps link`}
             </span>
           }
         >
@@ -131,9 +131,9 @@ function GeneralView({ data }: { data: General }) {
           />
           <p className="board-foot">
             Every byte over this box’s one network interface, which is not the same thing as
-            internet traffic and is usually much more of it — a film streamed to the TV crosses
-            this cable in full and never leaves the house. The line’s own capacity is the board
-            below; these two numbers are not comparable and are deliberately not on one chart.
+            internet traffic and is usually much more of it — a film streamed to the TV crosses this
+            cable in full and never leaves the house. The line’s own capacity is the board below;
+            these two numbers are not comparable and are deliberately not on one chart.
           </p>
         </Board>
 
@@ -143,9 +143,11 @@ function GeneralView({ data }: { data: General }) {
           span={4}
           aside={
             <Chip tone={internet?.up === false ? 'bad' : gateway?.up === false ? 'warn' : 'ok'}>
-              {internet?.up === false ? 'no internet'
-              : gateway?.up === false ? 'no router'
-              : 'reachable'}
+              {internet?.up === false
+                ? 'no internet'
+                : gateway?.up === false
+                  ? 'no router'
+                  : 'reachable'}
             </Chip>
           }
         >
@@ -175,10 +177,10 @@ function GeneralView({ data }: { data: General }) {
             ]}
           />
           <p className="board-foot">
-            Two probes a minute rather than one: the router answering while the far side does not
-            is the ISP, and neither answering is this box’s own link. The public address is the
-            one fact that cannot be measured from inside — behind NAT nothing here can see it, so
-            it is read back from the edge the tunnel dials out to.
+            Two probes a minute rather than one: the router answering while the far side does not is
+            the ISP, and neither answering is this box’s own link. The public address is the one
+            fact that cannot be measured from inside — behind NAT nothing here can see it, so it is
+            read back from the edge the tunnel dials out to.
           </p>
         </Board>
 
@@ -235,12 +237,12 @@ function GeneralView({ data }: { data: General }) {
         >
           <TrafficList rows={services} />
           <p className="board-foot">
-            Counted inside each container’s own network namespace, so this is traffic the app
-            itself moved rather than a share of the total guessed from anything. Two kinds are
-            absent by construction and not by omission: a container on the host’s network has no
-            figures separable from the box, and the ten sharing <b>gluetun</b>’s namespace have
-            none separable from each other — gluetun’s row is the download stack entire, counted
-            as it crossed the wire encrypted.
+            Counted inside each container’s own network namespace, so this is traffic the app itself
+            moved rather than a share of the total guessed from anything. Two kinds are absent by
+            construction and not by omission: a container on the host’s network has no figures
+            separable from the box, and the ten sharing <b>gluetun</b>’s namespace have none
+            separable from each other — gluetun’s row is the download stack entire, counted as it
+            crossed the wire encrypted.
           </p>
         </Board>
 
@@ -266,14 +268,15 @@ function GeneralView({ data }: { data: General }) {
               gap in another chart lines up with the top of an hour. */}
           <p className="board-foot">
             What the connection can do rather than what it is doing, measured hourly by{' '}
-            {line.url === null ?
+            {line.url === null ? (
               'MySpeed'
-            : <a href={line.url} target="_blank" rel="noreferrer">
+            ) : (
+              <a href={line.url} target="_blank" rel="noreferrer">
                 MySpeed
               </a>
-            }
-            . It briefly saturates the link while it measures, so a gap at the top of an hour in
-            any other chart on this page is this test rather than an outage.
+            )}
+            . It briefly saturates the link while it measures, so a gap at the top of an hour in any
+            other chart on this page is this test rather than an outage.
           </p>
         </Board>
 
@@ -287,9 +290,9 @@ function GeneralView({ data }: { data: General }) {
           <p className="board-foot">
             The names most looked up, which is the closest thing to a list of what this house
             depends on outside itself.{' '}
-            {dns.fromBox === null || dns.queries === null ?
-              'Most of it is this box rather than the devices on the LAN.'
-            : `${pct((dns.fromBox / dns.queries) * 100)} of it came from 127.0.0.1 — every container on this box resolves through the host’s stub, so pi-hole sees them as one client and no split by service is available from here.`}
+            {dns.fromBox === null || dns.queries === null
+              ? 'Most of it is this box rather than the devices on the LAN.'
+              : `${pct((dns.fromBox / dns.queries) * 100)} of it came from 127.0.0.1 — every container on this box resolves through the host’s stub, so pi-hole sees them as one client and no split by service is available from here.`}
           </p>
         </Board>
 
@@ -369,7 +372,11 @@ function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceilin
         {row.name}
       </span>
       <span className="traffic-track">
-        <span className="traffic-in" style={{ width: width(row.in) }} title={`${bytes(row.in)} in`} />
+        <span
+          className="traffic-in"
+          style={{ width: width(row.in) }}
+          title={`${bytes(row.in)} in`}
+        />
         <span
           className="traffic-out"
           style={{ width: width(row.out) }}
@@ -446,16 +453,23 @@ function DeviceRow({ d }: { d: Device }) {
       <span className="device-ip mono">{d.ip}</span>
       <span
         className="device-mac mono"
-        title={d.knownForDays === null ? 'never seen' : `first seen ${num(d.knownForDays)} days ago`}
+        title={
+          d.knownForDays === null ? 'never seen' : `first seen ${num(d.knownForDays)} days ago`
+        }
       >
         {d.mac}
       </span>
       <span className="device-seen">
-        {d.lastSeenAgo === null ?
-          <span className="warn-text" title="declared in nix, but the resolver has never seen this address answer">
+        {d.lastSeenAgo === null ? (
+          <span
+            className="warn-text"
+            title="declared in nix, but the resolver has never seen this address answer"
+          >
             never
           </span>
-        : since(d.lastSeenAgo)}
+        ) : (
+          since(d.lastSeenAgo)
+        )}
       </span>
     </li>
   )
@@ -521,11 +535,13 @@ function InboundView({ data }: { data: Inbound }) {
         />
       </div>
 
-      {route === 'tunnel' ?
+      {route === 'tunnel' ? (
         <CfTunnelView t={tunnel} />
-      : route === 'direct' ?
+      ) : route === 'direct' ? (
         <DdnsView d={ddns} />
-      : <WireguardView data={wireguard} />}
+      ) : (
+        <WireguardView data={wireguard} />
+      )}
     </>
   )
 }
@@ -568,9 +584,11 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
             k: 'Latest',
             v: gap.latest,
             note:
-              gap.latest === null ? 'GitHub did not answer'
-              : gap.behind.length === 0 ? 'this is what is running'
-              : `${String(gap.behind.length)} release${gap.behind.length === 1 ? '' : 's'} between them`,
+              gap.latest === null
+                ? 'GitHub did not answer'
+                : gap.behind.length === 0
+                  ? 'this is what is running'
+                  : `${String(gap.behind.length)} release${gap.behind.length === 1 ? '' : 's'} between them`,
           },
           { k: 'Pinned by', v: null, note: 'an exact tag in stacks/wg-easy' },
         ]}
@@ -616,9 +634,10 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
             ]}
           />
 
-          {peers.length === 0 ?
+          {peers.length === 0 ? (
             <p className="viz-empty">no peers configured</p>
-          : <ul className="ranks">
+          ) : (
+            <ul className="ranks">
               {peers.map((p) => (
                 <li className="rank" key={p.name}>
                   <span className="rank-name">
@@ -646,7 +665,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
 
           <p className="board-foot">
             {/* The distinction that trips people up: WireGuard is
@@ -682,9 +701,9 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
             </p>
           )}
           <p className="board-foot">
-            Peak rather than average, because the question is whether the tunnel got used at all
-            and a twenty-minute session averages to nearly nothing over a day. An empty column is a
-            day nobody was away from the house — not a fault.
+            Peak rather than average, because the question is whether the tunnel got used at all and
+            a twenty-minute session averages to nearly nothing over a day. An empty column is a day
+            nobody was away from the house — not a fault.
           </p>
         </Board>
 
@@ -726,9 +745,7 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
   }
 
   const expiryTone: Tone | undefined =
-    t.expiryDays < 0 ? 'bad'
-    : t.expiryDays < 30 ? 'warn'
-    : undefined
+    t.expiryDays < 0 ? 'bad' : t.expiryDays < 30 ? 'warn' : undefined
 
   return (
     <>
@@ -741,14 +758,16 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
         name="VPN egress"
         version={data.gluetun.running}
         versionNote={
-          data.gluetun.builtOn === null ?
-            'the gluetun build every tunnel runs'
-          : `built ${data.gluetun.builtOn} · every tunnel runs it`
+          data.gluetun.builtOn === null
+            ? 'the gluetun build every tunnel runs'
+            : `built ${data.gluetun.builtOn} · every tunnel runs it`
         }
         verdict={
-          data.gluetun.running === null ? { label: 'unknown', tone: 'muted' }
-          : data.gluetun.behind.length === 0 ? { label: 'current', tone: 'ok' }
-          : { label: `${String(data.gluetun.behind.length)} behind`, tone: 'warn' }
+          data.gluetun.running === null
+            ? { label: 'unknown', tone: 'muted' }
+            : data.gluetun.behind.length === 0
+              ? { label: 'current', tone: 'ok' }
+              : { label: `${String(data.gluetun.behind.length)} behind`, tone: 'warn' }
         }
         compare={[
           {
@@ -784,15 +803,17 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           build={data.gluetun}
           span={6}
           title={
-            data.gluetun.behind.length === 0 ?
-              'gluetun — current'
-            : `gluetun — ${String(data.gluetun.behind.length)} commits behind`
+            data.gluetun.behind.length === 0
+              ? 'gluetun — current'
+              : `gluetun — ${String(data.gluetun.behind.length)} commits behind`
           }
           aside={
             <span className="board-note">
-              {data.gluetun.running === null ?
+              {data.gluetun.running === null ? (
                 'build unknown'
-              : <span className="mono">{data.gluetun.running}</span>}
+              ) : (
+                <span className="mono">{data.gluetun.running}</span>
+              )}
               {data.gluetun.builtOn !== null && ` · built ${data.gluetun.builtOn}`}
             </span>
           }
@@ -863,9 +884,7 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           aside={
             <span className="board-live">
               <Pulse on={t.up === true} tone={t.up === true ? 'ok' : 'bad'} />
-              {t.up === null ? 'unknown'
-              : t.up ? 'tunnel up'
-              : 'tunnel down'}
+              {t.up === null ? 'unknown' : t.up ? 'tunnel up' : 'tunnel down'}
             </span>
           }
         >
@@ -877,9 +896,9 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
                 v: t.expiryDays < 0 ? `${String(-t.expiryDays)}d ago` : until(t.expiryDays * 86400),
                 tone: expiryTone,
               },
-              ...(t.portForwarding ?
-                [{ k: 'forwarded port', v: t.port === null ? 'none yet' : String(t.port) }]
-              : []),
+              ...(t.portForwarding
+                ? [{ k: 'forwarded port', v: t.port === null ? 'none yet' : String(t.port) }]
+                : []),
             ]}
           />
 
@@ -908,9 +927,9 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
                 carries a bad day. */}
             gluetun reports its own tunnel state every 30 seconds; this is the share of each day it
             said it was connected. Columns are near-full by design — a day that dropped at all is
-            underlined in red rather than left to a difference of a pixel. The WireGuard key
-            expires <b>{t.keyExpiry}</b>, reminder mail goes out 30 and 7 days ahead, and the
-            renewal runbook is the header of <code>{t.runbook}</code>.
+            underlined in red rather than left to a difference of a pixel. The WireGuard key expires{' '}
+            <b>{t.keyExpiry}</b>, reminder mail goes out 30 and 7 days ahead, and the renewal
+            runbook is the header of <code>{t.runbook}</code>.
           </p>
         </Board>
 
@@ -933,8 +952,8 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
           <p className="board-foot">
             Read from each container’s own <code>--network=container:{t.container}</code>, so this
             is the set that actually shares the namespace rather than a list kept beside it. They
-            publish no ports of their own — only a namespace’s owner can — which is why every one
-            of their UIs is published on the gluetun container instead.
+            publish no ports of their own — only a namespace’s owner can — which is why every one of
+            their UIs is published on the gluetun container instead.
           </p>
         </Board>
 
@@ -960,9 +979,9 @@ function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outbound' }
             ]}
           />
           <p className="board-foot">
-            Asked of gluetun’s control API, which asks the provider — nothing on this box can
-            answer it, because the container only ever sees a private tunnel address and the exit
-            is only knowable from outside. The carrier is what an observer on the far side actually
+            Asked of gluetun’s control API, which asks the provider — nothing on this box can answer
+            it, because the container only ever sees a private tunnel address and the exit is only
+            knowable from outside. The carrier is what an observer on the far side actually
             attributes this traffic to.
           </p>
         </Board>
@@ -1049,9 +1068,11 @@ function TraefikView({ d }: { d: Proxy }) {
             k: 'Latest',
             v: d.gap.latest,
             note:
-              d.gap.latest === null ? 'GitHub did not answer'
-              : d.gap.behind.length === 0 ? 'this is what is running'
-              : `${String(d.gap.behind.length)} release${d.gap.behind.length === 1 ? '' : 's'} between them`,
+              d.gap.latest === null
+                ? 'GitHub did not answer'
+                : d.gap.behind.length === 0
+                  ? 'this is what is running'
+                  : `${String(d.gap.behind.length)} release${d.gap.behind.length === 1 ? '' : 's'} between them`,
           },
           {
             k: 'Read from',
@@ -1115,7 +1136,9 @@ function TraefikView({ d }: { d: Proxy }) {
                     {/* An em dash is not zero: traefik labels no request
                         counters for its own dashboard's router, and a 0 there
                         would read as "nobody has opened it". */}
-                    <span className="item-n">{r.requests === null ? DASH : compact(r.requests)}</span>
+                    <span className="item-n">
+                      {r.requests === null ? DASH : compact(r.requests)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -1185,9 +1208,7 @@ function TraefikView({ d }: { d: Proxy }) {
               <span className="endpoints">
                 {traffic.byEntrypoint.map((e) => (
                   <span key={e.label}>
-                    {e.label === 'websecure' ? 'LAN'
-                    : e.label === 'cfweb' ? 'tunnel'
-                    : e.label}{' '}
+                    {e.label === 'websecure' ? 'LAN' : e.label === 'cfweb' ? 'tunnel' : e.label}{' '}
                     <b>{compact(e.value)}</b>
                   </span>
                 ))}
@@ -1229,9 +1250,9 @@ function TraefikView({ d }: { d: Proxy }) {
               <span key={c.cn} className="endpoints">
                 <span>
                   <b>{c.cn}</b>{' '}
-                  {c.covers === 0 ?
-                    'answers for nothing published here'
-                  : `covers ${String(c.covers)} of the ${String(d.routes.length)} published names`}
+                  {c.covers === 0
+                    ? 'answers for nothing published here'
+                    : `covers ${String(c.covers)} of the ${String(d.routes.length)} published names`}
                 </span>
               </span>
             ))}
@@ -1300,7 +1321,6 @@ function TraefikView({ d }: { d: Proxy }) {
   )
 }
 
-
 /**
  * Response codes: one line by default, seventeen bars on request.
  *
@@ -1362,7 +1382,6 @@ function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] })
   )
 }
 
-
 /* The audit log's event names were translated here — "signed in", "opened",
    "first time" — for a raw stream that no longer exists. Nothing renders a
    verb now: the aggregates say which verb they counted, and the only events
@@ -1407,17 +1426,19 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
             k: 'Latest',
             v: t.gap.latest,
             note:
-              t.gap.latest === null ? 'GitHub did not answer'
-              : t.gap.behind.length === 0 ? 'this is what is running'
-              : `${String(t.gap.behind.length)} release${t.gap.behind.length === 1 ? '' : 's'} between them`,
+              t.gap.latest === null
+                ? 'GitHub did not answer'
+                : t.gap.behind.length === 0
+                  ? 'this is what is running'
+                  : `${String(t.gap.behind.length)} release${t.gap.behind.length === 1 ? '' : 's'} between them`,
           },
           { k: 'Pinned by', v: null, note: 'a digest in stacks/cloudflared' },
         ]}
         lede={
           <>
             An <b>outbound</b> connection cloudflared holds open to Cloudflare, which the edge then
-            reaches this box through. So the router never accepts an inbound connection for it —
-            no forwarded port, nothing to scan — and everything it carries is HTTP, terminated at
+            reaches this box through. So the router never accepts an inbound connection for it — no
+            forwarded port, nothing to scan — and everything it carries is HTTP, terminated at
             traefik’s <code>cfweb</code> entrypoint on plain HTTP because the edge already did TLS.
           </>
         }
@@ -1435,7 +1456,10 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
       <LinkRow
         links={[
           { label: 'cloudflared', href: 'https://github.com/cloudflare/cloudflared' },
-          { label: 'Docs', href: 'https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/' },
+          {
+            label: 'Docs',
+            href: 'https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/',
+          },
         ]}
       />
 
@@ -1483,9 +1507,9 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
 
           <p className="board-foot">
             Four connections into{' '}
-            {t.edges.length === 0 ?
-              'the edge'
-            : t.edges.map((e) => `${e.colo}×${String(e.count)}`).join(' · ')}{' '}
+            {t.edges.length === 0
+              ? 'the edge'
+              : t.edges.map((e) => `${e.colo}×${String(e.count)}`).join(' · ')}{' '}
             — two datacentres, so losing one is a reconnect rather than an outage. The counts are
             small on purpose: almost everything here is reached over the LAN, and the tunnel only
             carries what is genuinely away from home. <b>Held for</b> is the oldest connection, not
@@ -1499,9 +1523,10 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
           span={4}
           aside={<span className="board-note">{t.published.length} hostnames</span>}
         >
-          {t.published.length === 0 ?
+          {t.published.length === 0 ? (
             <p className="viz-empty">could not read the tunnel’s ingress rules</p>
-          : <ul className="itemlist">
+          ) : (
+            <ul className="itemlist">
               {t.published.map((p) => (
                 <li key={p.hostname}>
                   <span className="item-main">{p.hostname.replace(/\.toscanini\.me$/, '')}</span>
@@ -1509,7 +1534,7 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             Read back from the tunnel’s own ingress rules, which is the only list that decides
             anything — a hostname here is reachable from the internet, and one that is not here is
@@ -1558,13 +1583,19 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
         version={d.resolved}
         versionNote={`${d.host} — what the world resolves it to`}
         verdict={
-          !known ? { label: 'unknown', tone: 'muted' }
-          : match ? { label: 'pointing here', tone: 'ok' }
-          : { label: 'stale', tone: 'bad' }
+          !known
+            ? { label: 'unknown', tone: 'muted' }
+            : match
+              ? { label: 'pointing here', tone: 'ok' }
+              : { label: 'stale', tone: 'bad' }
         }
         compare={[
           { k: 'Actually here', v: d.actual, note: 'the address the tunnel reports arriving from' },
-          { k: 'Kept current by', v: `ddclient ${d.version ?? ''}`.trim(), note: 'platform/ddclient, every 5 minutes' },
+          {
+            k: 'Kept current by',
+            v: `ddclient ${d.version ?? ''}`.trim(),
+            note: 'platform/ddclient, every 5 minutes',
+          },
         ]}
         lede={
           <>
@@ -1589,16 +1620,18 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           aside={
             <span className="board-live">
               <Pulse on={match} tone={known && !match ? 'bad' : 'ok'} />
-              {!known ? 'cannot tell'
-              : match ? 'matches'
-              : 'does not match'}
+              {!known ? 'cannot tell' : match ? 'matches' : 'does not match'}
             </span>
           }
         >
           <Measures
             items={[
               { k: 'resolves to', v: d.resolved ?? DASH },
-              { k: 'actually here', v: d.actual ?? DASH, tone: known && !match ? 'bad' : undefined },
+              {
+                k: 'actually here',
+                v: d.actual ?? DASH,
+                tone: known && !match ? 'bad' : undefined,
+              },
               { k: 'record ttl', v: d.ttl === null ? DASH : until(d.ttl) },
               {
                 k: 'rechecked every',
@@ -1608,38 +1641,38 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           />
 
           <p className="board-foot">
-            {match ?
+            {match ? (
               <>
                 The name resolves to the address the tunnel reports traffic arriving from, so
                 everything below can be reached.{' '}
               </>
-            : known ?
+            ) : known ? (
               <>
                 <b>They disagree.</b> The name is pointing somewhere this box is not, so everything
                 below is unreachable from outside until ddclient catches up — its next run is within{' '}
                 {d.intervalSeconds === null ? 'five minutes' : until(d.intervalSeconds)}.{' '}
               </>
-            : <>One of the two could not be read, so this check is not currently making a claim. </>
-            }
+            ) : (
+              <>One of the two could not be read, so this check is not currently making a claim. </>
+            )}
             Asked of <code>1.1.1.1</code> over HTTPS rather than this box’s resolver, deliberately:
-            pi-hole short-circuits <code>*.toscanini.me</code> to the LAN address, which is right and
-            would make this check answer itself.
+            pi-hole short-circuits <code>*.toscanini.me</code> to the LAN address, which is right
+            and would make this check answer itself.
           </p>
 
           {/* The failure that has no other symptom. Counted from the log
               because the unit exits 0 either way. */}
           {(d.lookupFailures.month ?? 0) > 0 && (
             <p className="rejected">
-              ddclient could not work out this house’s address{' '}
-              <b>{num(d.lookupFailures.day)}</b> times in the last day,{' '}
-              <b>{num(d.lookupFailures.week)}</b> in the week and{' '}
+              ddclient could not work out this house’s address <b>{num(d.lookupFailures.day)}</b>{' '}
+              times in the last day, <b>{num(d.lookupFailures.week)}</b> in the week and{' '}
               <b>{num(d.lookupFailures.month)}</b> in the month — its lookup against{' '}
               <code>cloudflare.com/cdn-cgi/trace</code> got no answer. Each run that fails publishes
               nothing, so a real address change during one would not be noticed until the next
               success.{' '}
-              {d.monitored ?
-                'It is in fleet.monitoredJobs, so a failure mails you.'
-              : 'The unit still exits 0, so nothing alerts on it — including the OnFailure hook it does not have.'}
+              {d.monitored
+                ? 'It is in fleet.monitoredJobs, so a failure mails you.'
+                : 'The unit still exits 0, so nothing alerts on it — including the OnFailure hook it does not have.'}
             </p>
           )}
         </Board>
@@ -1650,9 +1683,10 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           span={4}
           aside={<span className="board-note">router-forwarded</span>}
         >
-          {d.needs.length === 0 ?
+          {d.needs.length === 0 ? (
             <p className="viz-empty">nothing declares a direct port</p>
-          : <ul className="itemlist">
+          ) : (
+            <ul className="itemlist">
               {d.needs.map((n) => (
                 <li key={n.name} title={n.note}>
                   <Chip tone="info">{n.proto}</Chip>
@@ -1661,7 +1695,7 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             From <code>fleet.directIngress</code>, which each service declares beside its own
             firewall rule. This is the one registry on the box recording something nix does not own
@@ -1677,22 +1711,21 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           span={6}
           aside={<Countdown at={d.nextRunAt} />}
         >
-          {d.history.length === 0 ?
+          {d.history.length === 0 ? (
             <p className="viz-empty">no change recorded in the log window</p>
-          : <ul className="itemlist">
+          ) : (
+            <ul className="itemlist">
               {d.history.map((h) => (
                 <li key={h.at}>
                   <span className="item-main mono">{h.ip}</span>
                   <span className="item-side">
-                    {h.heldDays === null ?
-                      'current'
-                    : `held ${String(h.heldDays)}d`}{' '}
-                    · {new Date(h.at).toLocaleDateString('en-CA')}
+                    {h.heldDays === null ? 'current' : `held ${String(h.heldDays)}d`} ·{' '}
+                    {new Date(h.at).toLocaleDateString('en-CA')}
                   </span>
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             {/* The pattern is the useful part: the changes and the failures
                 are the same event seen twice, which is worth saying because
@@ -1758,16 +1791,18 @@ function Countdown({ at }: { at: number | null }) {
   return (
     <span className="board-note">
       next check{' '}
-      {left === null ?
+      {left === null ? (
         'soon'
-        // Overdue is a real state worth showing rather than clamping away: the
-        // timer fires a little late, and a run that is genuinely stuck reads
-        // as a countdown that sat at zero.
-      : left === 0 ? 'due now'
-      : <span className="mono">
+      ) : // Overdue is a real state worth showing rather than clamping away: the
+      // timer fires a little late, and a run that is genuinely stuck reads
+      // as a countdown that sat at zero.
+      left === 0 ? (
+        'due now'
+      ) : (
+        <span className="mono">
           {String(Math.floor(left / 60)).padStart(2, '0')}:{String(left % 60).padStart(2, '0')}
         </span>
-      }
+      )}
     </span>
   )
 }
@@ -1811,9 +1846,11 @@ function DnsView({ data }: { data: Dns }) {
         />
       </div>
 
-      {side === 'zone' ?
+      {side === 'zone' ? (
         <ZoneView d={zone} />
-      : <ResolverView d={resolver} lan={data.lan} admin={data.admin} />}
+      ) : (
+        <ResolverView d={resolver} lan={data.lan} admin={data.admin} />
+      )}
     </>
   )
 }
@@ -1870,122 +1907,131 @@ function DhcpView({ data }: { data: Dhcp }) {
       <LinkRow
         links={[
           { label: 'Docs', href: 'https://docs.pi-hole.net/docker/DHCP/' },
-          ...(admin === null ? [] : [{ label: 'Leases in the admin', href: `${admin}/settings-dhcp` }]),
+          ...(admin === null
+            ? []
+            : [{ label: 'Leases in the admin', href: `${admin}/settings-dhcp` }]),
         ]}
       />
 
       <BoardGrid>
-      <Board
-        title="The pool"
-        icon="⊞"
-        span={6}
-        aside={<Chip tone={dhcp.active ? 'ok' : 'muted'}>{dhcp.active ? 'serving' : 'off'}</Chip>}
-      >
-        <Facts
-          rows={[
-            {
-              k: 'Range',
-              v: (
-                <span className="mono">
-                  {dhcp.start} – {dhcp.end}
-                </span>
-              ),
-            },
-            { k: 'Lease', v: dhcp.leaseTime },
-            { k: 'Gateway offered', v: <span className="mono">{dhcp.router}</span> },
-            { k: 'Fixed addresses', v: num(dhcp.reservations.length) },
-          ]}
-        />
-        <p className="board-foot">
-          The resolver is the DHCP server too, so addresses on this LAN are decided by this box
-          rather than by the router — which is also why the device list below can exist at all.
-          Everything without a reservation gets whatever is free in that range, for {dhcp.leaseTime}{' '}
-          at a time. A reservation is what lets something else on this box name a device by
-          address, which is why the fixed ones are declared in nix and not clicked into an admin.
-        </p>
-      </Board>
+        <Board
+          title="The pool"
+          icon="⊞"
+          span={6}
+          aside={<Chip tone={dhcp.active ? 'ok' : 'muted'}>{dhcp.active ? 'serving' : 'off'}</Chip>}
+        >
+          <Facts
+            rows={[
+              {
+                k: 'Range',
+                v: (
+                  <span className="mono">
+                    {dhcp.start} – {dhcp.end}
+                  </span>
+                ),
+              },
+              { k: 'Lease', v: dhcp.leaseTime },
+              { k: 'Gateway offered', v: <span className="mono">{dhcp.router}</span> },
+              { k: 'Fixed addresses', v: num(dhcp.reservations.length) },
+            ]}
+          />
+          <p className="board-foot">
+            The resolver is the DHCP server too, so addresses on this LAN are decided by this box
+            rather than by the router — which is also why the device list below can exist at all.
+            Everything without a reservation gets whatever is free in that range, for{' '}
+            {dhcp.leaseTime} at a time. A reservation is what lets something else on this box name a
+            device by address, which is why the fixed ones are declared in nix and not clicked into
+            an admin.
+          </p>
+        </Board>
 
-      <Board
-        title="Leases"
-        icon="⇌"
-        span={6}
-        aside={<span className="board-note">since FTL started</span>}
-      >
-        <Facts
-          rows={[
-            { k: 'Offers made', v: num(dhcp.counters.offers) },
-            { k: 'Accepted', v: num(dhcp.counters.acks) },
-            {
-              k: 'Declined',
-              v:
-                dhcp.counters.declines === null ? DASH
-                : dhcp.counters.declines === 0 ?
-                  <span className="ok-text">0</span>
-                : <span className="warn-text">{num(dhcp.counters.declines)}</span>,
-            },
-            {
-              k: 'Refused',
-              v:
-                dhcp.counters.nak === null ? DASH
-                : dhcp.counters.nak === 0 ?
-                  <span className="ok-text">0</span>
-                : <span className="warn-text">{num(dhcp.counters.nak)}</span>,
-            },
-          ]}
-        />
-        <p className="board-foot">
-          Offers vastly outnumber acceptances and that is normal — a device wakes, is offered an
-          address, and often already has one it is happy with. The two to watch are the bottom
-          pair: a <b>decline</b> means a client found the address already in use, a <b>refusal</b>{' '}
-          means it asked for one this server would not give it. Both are zero on a LAN with one
-          DHCP server, and non-zero is usually a second one.
-        </p>
-      </Board>
+        <Board
+          title="Leases"
+          icon="⇌"
+          span={6}
+          aside={<span className="board-note">since FTL started</span>}
+        >
+          <Facts
+            rows={[
+              { k: 'Offers made', v: num(dhcp.counters.offers) },
+              { k: 'Accepted', v: num(dhcp.counters.acks) },
+              {
+                k: 'Declined',
+                v:
+                  dhcp.counters.declines === null ? (
+                    DASH
+                  ) : dhcp.counters.declines === 0 ? (
+                    <span className="ok-text">0</span>
+                  ) : (
+                    <span className="warn-text">{num(dhcp.counters.declines)}</span>
+                  ),
+              },
+              {
+                k: 'Refused',
+                v:
+                  dhcp.counters.nak === null ? (
+                    DASH
+                  ) : dhcp.counters.nak === 0 ? (
+                    <span className="ok-text">0</span>
+                  ) : (
+                    <span className="warn-text">{num(dhcp.counters.nak)}</span>
+                  ),
+              },
+            ]}
+          />
+          <p className="board-foot">
+            Offers vastly outnumber acceptances and that is normal — a device wakes, is offered an
+            address, and often already has one it is happy with. The two to watch are the bottom
+            pair: a <b>decline</b> means a client found the address already in use, a <b>refusal</b>{' '}
+            means it asked for one this server would not give it. Both are zero on a LAN with one
+            DHCP server, and non-zero is usually a second one.
+          </p>
+        </Board>
 
-      <Board
-        title="Everything on the LAN"
-        icon="▤"
-        span={12}
-        aside={
-          <span className="board-note">
-            {active.length} active · {devices.length} known · {dhcp.reservations.length} fixed
-          </span>
-        }
-      >
-        <LanDevices devices={devices} />
-        <p className="board-foot">
-          Two lists joined on the hardware address. Everything in the house resolves through this
-          box, so anything that ever asked for a name has a row here whether or not it took a
-          lease — which is what makes this more than the leases above. The <b>fixed</b> ones are
-          the reservations, and one of those with no matching device is kept and marked{' '}
-          <b>never</b>: a declared address for something that has not appeared is the only thing
-          on this page worth acting on.
-          {unbound.length > 0 &&
-            ` ${String(unbound.length)} of ${String(dhcp.reservations.length)} are in that state — a device presenting a private, rotating Wi-Fi address never matches the MAC its reservation was written for.`}{' '}
-          <b>active</b> means it looked something up in the last day.
-        </p>
-      </Board>
+        <Board
+          title="Everything on the LAN"
+          icon="▤"
+          span={12}
+          aside={
+            <span className="board-note">
+              {active.length} active · {devices.length} known · {dhcp.reservations.length} fixed
+            </span>
+          }
+        >
+          <LanDevices devices={devices} />
+          <p className="board-foot">
+            Two lists joined on the hardware address. Everything in the house resolves through this
+            box, so anything that ever asked for a name has a row here whether or not it took a
+            lease — which is what makes this more than the leases above. The <b>fixed</b> ones are
+            the reservations, and one of those with no matching device is kept and marked{' '}
+            <b>never</b>: a declared address for something that has not appeared is the only thing
+            on this page worth acting on.
+            {unbound.length > 0 &&
+              ` ${String(unbound.length)} of ${String(dhcp.reservations.length)} are in that state — a device presenting a private, rotating Wi-Fi address never matches the MAC its reservation was written for.`}{' '}
+            <b>active</b> means it looked something up in the last day.
+          </p>
+        </Board>
 
-      {/* The same file the DNS tab reads, and worth repeating rather than
+        {/* The same file the DNS tab reads, and worth repeating rather than
           leaving this tab as the one page with a header and no log: one
           process serves both, so the lease that was never handed out and the
           name that never resolved are the same log line, and a reader chasing
           a device should not have to know they share a binary to find it.
           There is deliberately no changelog here — see the note on the header
           above, and the panel that carries it one tab over. */}
-      <LogBoard
-        source={{ unit: 'pihole-ftl.service' }}
-        title="pihole-FTL logs"
-        foot={
-          <p className="board-foot">
-            Shipped out of <span className="mono">/var/log/pihole/FTL.log</span> rather than the
-            journal — FTL keeps its own file, and the unit&rsquo;s journal lines are systemd&rsquo;s
-            rather than its own. Every lease offered, acknowledged and declined is in here by
-            hardware address, which is the only place the counters above can be turned back into
-            &ldquo;which device&rdquo;.
-          </p>
-        }
-      />
+        <LogBoard
+          source={{ unit: 'pihole-ftl.service' }}
+          title="pihole-FTL logs"
+          foot={
+            <p className="board-foot">
+              Shipped out of <span className="mono">/var/log/pihole/FTL.log</span> rather than the
+              journal — FTL keeps its own file, and the unit&rsquo;s journal lines are
+              systemd&rsquo;s rather than its own. Every lease offered, acknowledged and declined is
+              in here by hardware address, which is the only place the counters above can be turned
+              back into &ldquo;which device&rdquo;.
+            </p>
+          }
+        />
       </BoardGrid>
     </>
   )
@@ -2030,9 +2076,11 @@ function ResolverView({
             k: 'Latest',
             v: d.gap.latest,
             note:
-              d.gap.latest === null ? 'GitHub did not answer'
-              : d.gap.behind.length === 0 ? 'this is what is running'
-              : `${String(d.gap.behind.length)} release${d.gap.behind.length === 1 ? '' : 's'} between them`,
+              d.gap.latest === null
+                ? 'GitHub did not answer'
+                : d.gap.behind.length === 0
+                  ? 'this is what is running'
+                  : `${String(d.gap.behind.length)} release${d.gap.behind.length === 1 ? '' : 's'} between them`,
           },
           {
             k: 'Read from',
@@ -2094,9 +2142,9 @@ function ResolverView({
             outlive the thing it points at. An address is printed only when the entry points
             somewhere other than this box. <b>public</b> marks the ones the zone publishes as well,
             which is the same set the other side of this tab lists, seen from outside.
-            {unserved.length === 0 ?
-              ' Everything pointed at this box has a traefik router behind it.'
-            : ' A name marked no route resolves, then lands on the default certificate and 404s.'}
+            {unserved.length === 0
+              ? ' Everything pointed at this box has a traefik router behind it.'
+              : ' A name marked no route resolves, then lands on the default certificate and 404s.'}
           </p>
         </Board>
 
@@ -2174,9 +2222,11 @@ function ResolverView({
               {
                 k: 'Blocking',
                 v:
-                  d.blocking.on === null ? DASH
-                  : d.blocking.on ? 'on'
-                  : `off, back in ${until(d.blocking.resumesIn)}`,
+                  d.blocking.on === null
+                    ? DASH
+                    : d.blocking.on
+                      ? 'on'
+                      : `off, back in ${until(d.blocking.resumesIn)}`,
                 tone: d.blocking.on === false ? 'bad' : 'ok',
               },
               {
@@ -2244,8 +2294,8 @@ function ResolverView({
             <p className="board-foot">
               Not the journal. FTL is the one service on this box that keeps its own log file, and
               the only journal lines about the unit come from systemd — so these are shipped out of{' '}
-              <span className="mono">/var/log/pihole/FTL.log</span> by alloy. Startup, gravity
-              runs, DHCP leases, NTP and upstream trouble. Individual queries are not here and
+              <span className="mono">/var/log/pihole/FTL.log</span> by alloy. Startup, gravity runs,
+              DHCP leases, NTP and upstream trouble. Individual queries are not here and
               deliberately never will be: that log is two gigabytes of every domain every device in
               the house asked for.
             </p>
@@ -2280,7 +2330,9 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
   // record in the zone is in exactly one of the four groups, so whatever is
   // not in the other three is mail.
   const mailRecords =
-    d.cf.records === null ? 0 : d.cf.records - d.names.length - d.elsewhere.length - d.leftovers.length
+    d.cf.records === null
+      ? 0
+      : d.cf.records - d.names.length - d.elsewhere.length - d.leftovers.length
 
   return (
     <>
@@ -2334,7 +2386,10 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
             label: 'Registrar panel',
             href: `https://ap.www.namecheap.com/Domains/DomainControlPanel/${d.domain}/advancedns`,
           },
-          { label: 'RDAP record', href: `https://rdap.identitydigital.services/rdap/domain/${d.domain}` },
+          {
+            label: 'RDAP record',
+            href: `https://rdap.identitydigital.services/rdap/domain/${d.domain}`,
+          },
         ]}
       />
 
@@ -2424,27 +2479,39 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
               {
                 k: 'That is in',
                 v:
-                  reg.expiresIn === null ? DASH
-                  : <span className={expiryVerdict(reg).tone === 'ok' ? 'ok-text' : 'warn-text'}>
+                  reg.expiresIn === null ? (
+                    DASH
+                  ) : (
+                    <span className={expiryVerdict(reg).tone === 'ok' ? 'ok-text' : 'warn-text'}>
                       {until(reg.expiresIn)}
-                    </span>,
+                    </span>
+                  ),
               },
-              { k: 'Held since', v: reg.registeredAgo === null ? DASH : `${since(reg.registeredAgo)}` },
+              {
+                k: 'Held since',
+                v: reg.registeredAgo === null ? DASH : `${since(reg.registeredAgo)}`,
+              },
               {
                 k: 'Transfer lock',
                 v:
-                  reg.status.length === 0 ? DASH
-                  : locked ?
+                  reg.status.length === 0 ? (
+                    DASH
+                  ) : locked ? (
                     <span className="ok-text">on</span>
-                  : <span className="warn-text">off</span>,
+                  ) : (
+                    <span className="warn-text">off</span>
+                  ),
               },
               {
                 k: 'DNSSEC',
                 v:
-                  reg.signed === null ? DASH
-                  : reg.signed ?
+                  reg.signed === null ? (
+                    DASH
+                  ) : reg.signed ? (
                     <span className="ok-text">signed</span>
-                  : <span className="muted-text">not signed</span>,
+                  ) : (
+                    <span className="muted-text">not signed</span>
+                  ),
               },
               { k: 'Zone', v: d.cf.status ?? DASH },
               { k: 'Plan', v: d.cf.plan ?? DASH },
@@ -2473,9 +2540,10 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
           span={6}
           aside={<span className="board-note">{d.mail.length} domains</span>}
         >
-          {d.mail.length === 0 ?
+          {d.mail.length === 0 ? (
             <p className="viz-empty">no MX records in this zone</p>
-          : d.mail.map((m) => (
+          ) : (
+            d.mail.map((m) => (
               <section key={m.domain} className="mail-domain">
                 {/* Not `board-sub`: that heading is uppercased, and a domain
                     name and its mail exchangers are literal strings that are
@@ -2492,24 +2560,24 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
                     {
                       k: 'DKIM',
                       v:
-                        m.dkim === 0 ? 'missing'
-                        : `${String(m.dkim)} selector${m.dkim === 1 ? '' : 's'}`,
+                        m.dkim === 0
+                          ? 'missing'
+                          : `${String(m.dkim)} selector${m.dkim === 1 ? '' : 's'}`,
                       tone: m.dkim === 0 ? 'bad' : 'ok',
                     },
                     {
                       k: 'DMARC',
                       v: m.dmarc === null ? 'missing' : (m.dmarc.policy ?? 'set'),
-                      tone:
-                        m.dmarc === null ? 'bad'
-                        : m.dmarc.policy === 'reject' ? 'ok'
-                        : 'info',
+                      tone: m.dmarc === null ? 'bad' : m.dmarc.policy === 'reject' ? 'ok' : 'info',
                     },
                     {
                       k: 'Forgeries',
                       v:
-                        m.spf === null ? 'unchecked'
-                        : m.spf.qualifier === '-' ? 'rejected'
-                        : 'accepted, marked',
+                        m.spf === null
+                          ? 'unchecked'
+                          : m.spf.qualifier === '-'
+                            ? 'rejected'
+                            : 'accepted, marked',
                       tone: m.spf?.qualifier === '-' ? 'ok' : 'info',
                     },
                   ]}
@@ -2521,15 +2589,15 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
                 />
               </section>
             ))
-          }
+          )}
           <p className="board-foot">
             The {mailRecords} records behind this read as one policy: SPF says which servers may
             send as this domain, DKIM signs what they send, DMARC says what a receiver should do
             when neither holds. <b>quarantine</b> means spam folder rather than bounce, and{' '}
             <b>accepted, marked</b> is an SPF ending in <span className="mono">~all</span> — a
             forgery is flagged rather than refused. Both are the cautious settings, and both are
-            worth tightening once nothing legitimate is being caught by them. Open a domain to
-            check the reading against the records it came from.
+            worth tightening once nothing legitimate is being caught by them. Open a domain to check
+            the reading against the records it came from.
           </p>
         </Board>
 
@@ -2538,9 +2606,11 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
           icon="≡"
           span={6}
           aside={
-            d.leftovers.length > 0 ?
+            d.leftovers.length > 0 ? (
               <Chip tone="warn">{d.leftovers.length} leftover</Chip>
-            : <span className="board-note">{d.elsewhere.length} records</span>
+            ) : (
+              <span className="board-note">{d.elsewhere.length} records</span>
+            )
           }
         >
           <RecordList
@@ -2564,9 +2634,10 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
           />
 
           <p className="board-foot">
-            {d.tally.total === null ?
+            {d.tally.total === null ? (
               'The zone could not be read.'
-            : <>
+            ) : (
+              <>
                 All {d.tally.total} records in the zone are on this page: {d.tally.house} pointing
                 back here, {d.tally.mail} for mail, {d.tally.elsewhere} pointed elsewhere and{' '}
                 {/* The tail is ONE expression on ONE line: JSX turns a newline
@@ -2576,7 +2647,7 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
                 The count is Cloudflare’s and the groups are computed from it, so a record that
                 stopped matching its rule shows up above rather than going missing.
               </>
-            }
+            )}
           </p>
         </Board>
 
@@ -2598,8 +2669,8 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
           </ul>
           <p className="board-foot">
             The six most recently edited records. Cloudflare stamps every record with when it last
-            changed but keeps no history of what it changed from, so this says when — never what, and
-            never who.
+            changed but keeps no history of what it changed from, so this says when — never what,
+            and never who.
           </p>
         </Board>
       </BoardGrid>

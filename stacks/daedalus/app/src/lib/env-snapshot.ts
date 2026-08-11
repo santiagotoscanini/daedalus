@@ -1,12 +1,12 @@
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
-  IMAGE_KEYS,
-  PLATFORM_KEYS,
-  isSecret,
   type EnvGroup,
   type EnvOrigin,
   type EnvVar,
+  IMAGE_KEYS,
+  isSecret,
+  PLATFORM_KEYS,
 } from './env-groups'
 
 // Deliberately NOT re-exporting GROUP_LABELS and friends. A convenience
@@ -78,17 +78,22 @@ export async function readEnvSnapshot(
     // author wrote it down, that is where it came from. Then the explicit
     // platform list, then the base image. Whatever is left is the app's own
     // sops file if it has one, and genuinely unknown if it does not.
-    const origin: EnvOrigin =
-      declared.has(key) ? 'registry'
-      : key in PLATFORM_KEYS ? 'platform'
-      : IMAGE_KEYS.has(key) ? 'image'
-      : hasSecretsFile ? 'secrets'
-      : 'image'
+    const origin: EnvOrigin = declared.has(key)
+      ? 'registry'
+      : key in PLATFORM_KEYS
+        ? 'platform'
+        : IMAGE_KEYS.has(key)
+          ? 'image'
+          : hasSecretsFile
+            ? 'secrets'
+            : 'image'
 
     const group: EnvGroup =
-      origin === 'platform' ? (PLATFORM_KEYS[key] ?? 'other')
-      : origin === 'image' ? 'runtime'
-      : 'other'
+      origin === 'platform'
+        ? (PLATFORM_KEYS[key] ?? 'other')
+        : origin === 'image'
+          ? 'runtime'
+          : 'other'
 
     return {
       key,

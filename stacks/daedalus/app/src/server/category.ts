@@ -2,8 +2,8 @@ import { createServerFn } from '@tanstack/react-start'
 
 import type { AiData } from '../lib/dashboard/categories/ai'
 import type { GamingData } from '../lib/dashboard/categories/gaming'
-import type { MediaData } from '../lib/dashboard/categories/media'
 import type { HomeData } from '../lib/dashboard/categories/home'
+import type { MediaData } from '../lib/dashboard/categories/media'
 import type { MonitoringData } from '../lib/dashboard/categories/monitoring'
 import type { NetworkData } from '../lib/dashboard/categories/network'
 import type { SystemData } from '../lib/dashboard/categories/system'
@@ -34,15 +34,7 @@ import { CATEGORIES, type CategoryName } from '../lib/dashboard/nav'
 // page. It is gone: every service on this box has a tab now, so the cards were
 // restating three of a page's own numbers one scroll below it.
 
-export type {
-  AiData,
-  GamingData,
-  HomeData,
-  MediaData,
-  MonitoringData,
-  NetworkData,
-  SystemData,
-}
+export type { AiData, GamingData, HomeData, MediaData, MonitoringData, NetworkData, SystemData }
 
 export type CategoryPayload = Body
 
@@ -122,9 +114,9 @@ export const fetchTabStatus = createServerFn()
       // queries and every category pays for this handler.
       spec.tabs.some((t) => t.health === 'vpn-egress') ? vpnEgressHealth() : Promise.resolve(null),
       spec.tabs.some((t) => t.health === 'uplink') ? uplinkHealth() : Promise.resolve(null),
-      spec.tabs.some((t) => t.health === 'log-pipeline') ?
-        logPipelineHealth()
-      : Promise.resolve(null),
+      spec.tabs.some((t) => t.health === 'log-pipeline')
+        ? logPipelineHealth()
+        : Promise.resolve(null),
     ])
     // The `name` label, not `key` — `key` is `<group>_<name>`, so reading it
     // means knowing which group an endpoint was declared in. gatus probes the
@@ -141,12 +133,17 @@ export const fetchTabStatus = createServerFn()
     return Object.fromEntries(
       spec.tabs.map((t) => [
         t.id,
-        t.health === 'vpn-egress' ? egress
-        : t.health === 'uplink' ? uplink
-        : t.health === 'log-pipeline' ? logs
-        : t.probes !== undefined ? all(t.probes)
-        : t.probe === undefined ? null
-        : (health.get(t.probe) ?? null),
+        t.health === 'vpn-egress'
+          ? egress
+          : t.health === 'uplink'
+            ? uplink
+            : t.health === 'log-pipeline'
+              ? logs
+              : t.probes !== undefined
+                ? all(t.probes)
+                : t.probe === undefined
+                  ? null
+                  : (health.get(t.probe) ?? null),
       ]),
     )
   })
@@ -283,4 +280,3 @@ async function loadCategory(
     }
   }
 }
-

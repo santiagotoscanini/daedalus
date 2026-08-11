@@ -379,7 +379,12 @@ export function Spark({
       preserveAspectRatio="none"
       aria-hidden="true"
     >
-      <polyline points={pts.join(' ')} fill="none" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      <polyline
+        points={pts.join(' ')}
+        fill="none"
+        strokeWidth="1.5"
+        vectorEffect="non-scaling-stroke"
+      />
     </svg>
   )
 }
@@ -432,11 +437,11 @@ export function Stat({
         {value}
         {unit !== undefined && <em>{unit}</em>}
       </span>
-      {spark !== undefined && spark.length > 1 ?
+      {spark !== undefined && spark.length > 1 ? (
         <Spark values={spark} tone={tone ?? 'muted'} />
-      : sub !== undefined ?
+      ) : sub !== undefined ? (
         <span className="stat-sub">{sub}</span>
-      : null}
+      ) : null}
     </div>
   )
 }
@@ -448,8 +453,18 @@ function MicroSpark({ values, tone }: { values: number[]; tone: Tone }) {
   const step = w / (values.length - 1)
   const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`)
   return (
-    <svg className={`microspark microspark-${tone}`} viewBox={`0 0 ${String(w)} ${String(h)}`} preserveAspectRatio="none" aria-hidden="true">
-      <polyline points={pts.join(' ')} fill="none" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    <svg
+      className={`microspark microspark-${tone}`}
+      viewBox={`0 0 ${String(w)} ${String(h)}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polyline
+        points={pts.join(' ')}
+        fill="none"
+        strokeWidth="1.5"
+        vectorEffect="non-scaling-stroke"
+      />
     </svg>
   )
 }
@@ -476,8 +491,14 @@ export function Progress({
   height?: number
 }) {
   return (
-    <span className={`progress progress-${tone}${active ? ' progress-active' : ''}`} style={{ height }}>
-      <span className="progress-fill" style={{ width: `${String(Math.max(0, Math.min(100, pct ?? 0)))}%` }} />
+    <span
+      className={`progress progress-${tone}${active ? ' progress-active' : ''}`}
+      style={{ height }}
+    >
+      <span
+        className="progress-fill"
+        style={{ width: `${String(Math.max(0, Math.min(100, pct ?? 0)))}%` }}
+      />
     </span>
   )
 }
@@ -547,11 +568,7 @@ export function BoardGrid({ children }: { children: ReactNode }) {
  * other figure stays in text ink — colouring all of them would make the line a
  * decoration and the exception invisible.
  */
-export function Measures({
-  items,
-}: {
-  items: { k: string; v: ReactNode; tone?: Tone }[]
-}) {
+export function Measures({ items }: { items: { k: string; v: ReactNode; tone?: Tone }[] }) {
   return (
     <dl className="measures">
       {items.map((m) => (

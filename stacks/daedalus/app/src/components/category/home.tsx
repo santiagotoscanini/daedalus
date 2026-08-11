@@ -1,20 +1,10 @@
-import {
-  BarList,
-  Board,
-  BoardGrid,
-  Chip,
-  Facts,
-  Measures,
-  Progress,
-  Pulse,
-  Ring,
-} from '../viz'
+import { bytes, DASH, num, pct } from '../../lib/dashboard/format'
+import type { HomeData } from '../../server/category'
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'
-import { IdpView } from './idp'
 import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
-import { DASH, bytes, num, pct } from '../../lib/dashboard/format'
-import type { HomeData } from '../../server/category'
+import { BarList, Board, BoardGrid, Chip, Facts, Measures, Progress, Pulse, Ring } from '../viz'
+import { IdpView } from './idp'
 
 // The Home pages — a tab per household subject.
 //
@@ -79,11 +69,13 @@ function HouseView({ d }: { d: House }) {
           icon="⌂"
           span={8}
           aside={
-            d.reachable ?
+            d.reachable ? (
               <span className="board-note">
                 {num(d.entities)} entities · {num(d.integrations)} integrations
               </span>
-            : <span className="board-note text-bad">not answering</span>
+            ) : (
+              <span className="board-note text-bad">not answering</span>
+            )
           }
         >
           {d.people.length > 0 && (
@@ -130,11 +122,7 @@ function HouseView({ d }: { d: House }) {
               never will be — 25 Tuya bulbs have been unavailable since they
               lost their WiFi pairing — so the only reading worth having is
               whether the set has grown somewhere NEW. */}
-          <BarList
-            items={d.unavailableBy}
-            tone="warn"
-            empty="every entity is reporting"
-          />
+          <BarList items={d.unavailableBy} tone="warn" empty="every entity is reporting" />
           <p className="board-foot">
             {num(d.unavailable)} of {num(d.entities)} entities are <b>unavailable</b> or{' '}
             <b>unknown</b>. Most of that is the Tuya lights, which have been off the network since
@@ -152,9 +140,13 @@ function HouseView({ d }: { d: House }) {
               {
                 k: 'State',
                 v:
-                  d.place.state === null ? DASH
-                  : d.place.state === 'RUNNING' ? <Chip tone="ok">running</Chip>
-                  : <Chip tone="warn">{d.place.state.toLowerCase()}</Chip>,
+                  d.place.state === null ? (
+                    DASH
+                  ) : d.place.state === 'RUNNING' ? (
+                    <Chip tone="ok">running</Chip>
+                  ) : (
+                    <Chip tone="warn">{d.place.state.toLowerCase()}</Chip>
+                  ),
               },
             ]}
           />
@@ -235,18 +227,23 @@ function PhotosView({ d }: { d: Photos }) {
             />
           </div>
           <p className="board-foot">
-            Video is {pct(d.usageBytes === null || d.usageBytes === 0 ? null : ((d.usageVideos ?? 0) / d.usageBytes) * 100)}{' '}
-            of what is stored and {pct(total === 0 ? null : ((d.videos ?? 0) / total) * 100)} of what
-            is in it — the ratio that decides how fast this dataset grows.
+            Video is{' '}
+            {pct(
+              d.usageBytes === null || d.usageBytes === 0
+                ? null
+                : ((d.usageVideos ?? 0) / d.usageBytes) * 100,
+            )}{' '}
+            of what is stored and {pct(total === 0 ? null : ((d.videos ?? 0) / total) * 100)} of
+            what is in it — the ratio that decides how fast this dataset grows.
           </p>
         </Board>
 
         <Board title="Disk" icon="▦" span={4}>
           <Progress
             pct={
-              d.disk.usedBytes === null || d.disk.freeBytes === null ?
-                null
-              : (d.disk.usedBytes / (d.disk.usedBytes + d.disk.freeBytes)) * 100
+              d.disk.usedBytes === null || d.disk.freeBytes === null
+                ? null
+                : (d.disk.usedBytes / (d.disk.usedBytes + d.disk.freeBytes)) * 100
             }
             tone="info"
           />
@@ -257,10 +254,11 @@ function PhotosView({ d }: { d: Photos }) {
             ]}
           />
           <p className="board-foot">
-            The <span className="mono">/s2/immich</span> dataset, read from node_exporter. Immich&rsquo;s
-            own storage endpoint needs a permission this API key does not carry, and the dataset
-            underneath is the same disk — a real denominator rather than an invented one. Hourly,
-            daily and weekly snapshots; on the mirror, so a single drive failure costs nothing.
+            The <span className="mono">/s2/immich</span> dataset, read from node_exporter.
+            Immich&rsquo;s own storage endpoint needs a permission this API key does not carry, and
+            the dataset underneath is the same disk — a real denominator rather than an invented
+            one. Hourly, daily and weekly snapshots; on the mirror, so a single drive failure costs
+            nothing.
           </p>
         </Board>
 
@@ -344,7 +342,7 @@ function FilesView({ d }: { d: Files }) {
           {/* The one fact on this page that is worth acting on, and the one a
               tile of four stats had no room for. */}
           <p className={openLinks > 0 ? 'board-foot text-warn' : 'board-foot'}>
-            {openLinks > 0 ?
+            {openLinks > 0 ? (
               <>
                 <b>{num(openLinks)}</b> of {num(d.shares.link)} public links carry no password, so
                 each is a URL that opens the file for anyone holding it. That is how a link share is
@@ -352,7 +350,9 @@ function FilesView({ d }: { d: Files }) {
                 — but it means the count above is the number of files whose security is the secrecy
                 of a URL.
               </>
-            : <>Every public link is password-protected.</>}
+            ) : (
+              <>Every public link is password-protected.</>
+            )}
           </p>
         </Board>
 
@@ -386,7 +386,10 @@ function FilesView({ d }: { d: Files }) {
         <Board title="Underneath" icon="⚙" span={4}>
           <Facts
             rows={[
-              { k: 'Database', v: d.db.type === null ? DASH : `${d.db.type} · ${d.db.version ?? ''}` },
+              {
+                k: 'Database',
+                v: d.db.type === null ? DASH : `${d.db.type} · ${d.db.version ?? ''}`,
+              },
               { k: 'Database size', v: bytes(d.db.sizeBytes) },
               { k: 'PHP', v: d.php.version ?? DASH },
               { k: 'Opcache hit rate', v: pct(d.php.opcacheHitRate, 2) },
@@ -465,18 +468,19 @@ function PantryView({ d }: { d: Pantry }) {
             ]}
           />
           <p className={alarm > 0 ? 'board-foot text-warn' : 'board-foot'}>
-            {alarm > 0 ?
+            {alarm > 0 ? (
               <>
                 <b>{num(alarm)}</b> products are past their date. Grocy distinguishes the two:{' '}
                 <b>overdue</b> is past the best-before and still fine, <b>expired</b> is past the
                 use-by. Nothing here alerts — this is the only place it is said.
               </>
-            : <>
+            ) : (
+              <>
                 Nothing is past its date. &ldquo;Missing&rdquo; is a product below its minimum stock
                 level rather than one that has run out, which is the list a shopping trip is built
                 from.
               </>
-            }
+            )}
           </p>
         </Board>
 
@@ -487,17 +491,21 @@ function PantryView({ d }: { d: Pantry }) {
               {
                 k: 'Chores overdue',
                 v:
-                  (d.chores.overdue ?? 0) > 0 ?
+                  (d.chores.overdue ?? 0) > 0 ? (
                     <span className="text-warn">{num(d.chores.overdue)}</span>
-                  : num(d.chores.overdue),
+                  ) : (
+                    num(d.chores.overdue)
+                  ),
               },
               { k: 'Open tasks', v: num(d.tasks.total) },
               {
                 k: 'Tasks overdue',
                 v:
-                  (d.tasks.overdue ?? 0) > 0 ?
+                  (d.tasks.overdue ?? 0) > 0 ? (
                     <span className="text-warn">{num(d.tasks.overdue)}</span>
-                  : num(d.tasks.overdue),
+                  ) : (
+                    num(d.tasks.overdue)
+                  ),
               },
             ]}
           />
@@ -547,11 +555,23 @@ function ProjectsView({ d }: { d: Projects }) {
               {
                 k: 'Plane says latest is',
                 v:
-                  d.latest === null ? DASH
-                  : d.latest.replace(/^v/, '') === d.version ? <Chip tone="ok">what is running</Chip>
-                  : <Chip tone="warn">{d.latest}</Chip>,
+                  d.latest === null ? (
+                    DASH
+                  ) : d.latest.replace(/^v/, '') === d.version ? (
+                    <Chip tone="ok">what is running</Chip>
+                  ) : (
+                    <Chip tone="warn">{d.latest}</Chip>
+                  ),
               },
-              { k: 'Outbound mail', v: d.smtp === true ? <Chip tone="ok">configured</Chip> : <Chip tone="muted">off</Chip> },
+              {
+                k: 'Outbound mail',
+                v:
+                  d.smtp === true ? (
+                    <Chip tone="ok">configured</Chip>
+                  ) : (
+                    <Chip tone="muted">off</Chip>
+                  ),
+              },
             ]}
           />
           <p className="board-foot">
@@ -566,7 +586,12 @@ function ProjectsView({ d }: { d: Projects }) {
             rows={[
               {
                 k: 'Sign-ups',
-                v: d.signIn.signup === true ? <Chip tone="warn">open</Chip> : <Chip tone="ok">closed</Chip>,
+                v:
+                  d.signIn.signup === true ? (
+                    <Chip tone="warn">open</Chip>
+                  ) : (
+                    <Chip tone="ok">closed</Chip>
+                  ),
               },
               { k: 'Magic link', v: d.signIn.magicLink === true ? 'on' : 'off' },
               { k: 'Email + password', v: d.signIn.emailPassword === true ? 'on' : 'off' },
@@ -586,12 +611,12 @@ function ProjectsView({ d }: { d: Projects }) {
           icon="◫"
           span={12}
           aside={
-            d.workspace === null ?
-              undefined
-            : <span className="board-note">workspace {d.workspace.slug}</span>
+            d.workspace === null ? undefined : (
+              <span className="board-note">workspace {d.workspace.slug}</span>
+            )
           }
         >
-          {d.workspace === null ?
+          {d.workspace === null ? (
             <>
               <p className="viz-empty">No workspace API token — this section needs one.</p>
               <p className="board-foot">
@@ -600,9 +625,10 @@ function ProjectsView({ d }: { d: Projects }) {
                 settings rather than declared in nix. A missing key rather than a broken panel.
               </p>
             </>
-          : d.workspace.projects.length === 0 ?
+          ) : d.workspace.projects.length === 0 ? (
             <p className="viz-empty">No projects in this workspace.</p>
-          : <>
+          ) : (
+            <>
               {d.workspace.projects.map((p) => (
                 <PlaneProjectRows key={p.id} p={p} />
               ))}
@@ -614,7 +640,7 @@ function ProjectsView({ d }: { d: Projects }) {
                 this panel is for.
               </p>
             </>
-          }
+          )}
         </Board>
 
         <Changelog gap={d.gap} span={12} />
@@ -660,9 +686,10 @@ function PlaneProjectRows({ p }: { p: PlaneProject }) {
         ]}
       />
 
-      {p.cycles.length === 0 ?
+      {p.cycles.length === 0 ? (
         <p className="viz-empty">no cycles</p>
-      : <ul className="itemlist">
+      ) : (
+        <ul className="itemlist">
           {p.cycles.map((c) => (
             <li key={c.name}>
               <span className="item-main">
@@ -682,19 +709,21 @@ function PlaneProjectRows({ p }: { p: PlaneProject }) {
                     that it ends whether or not the work did. */}
                 {num(c.completed)} / {num(c.total)} done
               </span>
-              <span className="item-n">{pct(c.total === 0 ? null : (c.completed / c.total) * 100)}</span>
+              <span className="item-n">
+                {pct(c.total === 0 ? null : (c.completed / c.total) * 100)}
+              </span>
             </li>
           ))}
         </ul>
-      }
+      )}
 
       {p.scanned !== null && (
         // Said out loud rather than silently capped: a breakdown of the first
         // hundred of four hundred reads exactly like a breakdown of all of
         // them, and the difference is the whole point of the numbers.
         <p className="board-foot">
-          {num(p.items)} work items, of which the breakdown above counts the first{' '}
-          {num(p.scanned)} — the total is complete, the split is a sample.
+          {num(p.items)} work items, of which the breakdown above counts the first {num(p.scanned)}{' '}
+          — the total is complete, the split is a sample.
         </p>
       )}
     </>
@@ -716,9 +745,9 @@ function FinanceView({ d }: { d: Finance }) {
         verdict={verdictOf(d.gap)}
         compare={compareOf(
           d.gap,
-          d.running.source === 'pin' ?
-            'the image tag — the app serves no version'
-          : 'the image’s own OCI label',
+          d.running.source === 'pin'
+            ? 'the image tag — the app serves no version'
+            : 'the image’s own OCI label',
         )}
         lede={
           <>
@@ -736,14 +765,23 @@ function FinanceView({ d }: { d: Finance }) {
               { k: 'Running', v: d.running.version ?? DASH },
               {
                 k: 'Built from',
-                v: d.running.revision === null ? DASH : <span className="mono">{d.running.revision}</span>,
+                v:
+                  d.running.revision === null ? (
+                    DASH
+                  ) : (
+                    <span className="mono">{d.running.revision}</span>
+                  ),
               },
               {
                 k: 'Latest release',
                 v:
-                  d.gap.latest === null ? DASH
-                  : d.gap.behind.length === 0 ? <Chip tone="ok">up to date</Chip>
-                  : <Chip tone="warn">{d.gap.latest}</Chip>,
+                  d.gap.latest === null ? (
+                    DASH
+                  ) : d.gap.behind.length === 0 ? (
+                    <Chip tone="ok">up to date</Chip>
+                  ) : (
+                    <Chip tone="warn">{d.gap.latest}</Chip>
+                  ),
               },
             ]}
           />
@@ -754,9 +792,9 @@ function FinanceView({ d }: { d: Finance }) {
             Deliberately thin. Every path under this hostname returns the single-page app, and the
             API behind it authenticates with a browser session rather than a key — so there is no
             holding, no balance and no transaction count this dashboard can read without being a
-            logged-in browser. What is left is real: the version, whether it is current, and the log.
-            The alternative was the tile it replaces, which carried a name and a link and answered
-            nothing at all.
+            logged-in browser. What is left is real: the version, whether it is current, and the
+            log. The alternative was the tile it replaces, which carried a name and a link and
+            answered nothing at all.
           </p>
         </Board>
 
@@ -798,17 +836,25 @@ function ToolsView({ d }: { d: Tools }) {
               {
                 k: 'Health',
                 v:
-                  d.status === null ? DASH
-                  : d.status === 'UP' ? <Chip tone="ok">up</Chip>
-                  : <Chip tone="warn">{d.status.toLowerCase()}</Chip>,
+                  d.status === null ? (
+                    DASH
+                  ) : d.status === 'UP' ? (
+                    <Chip tone="ok">up</Chip>
+                  ) : (
+                    <Chip tone="warn">{d.status.toLowerCase()}</Chip>
+                  ),
               },
               { k: 'Version', v: d.version ?? DASH },
               {
                 k: 'Latest release',
                 v:
-                  d.gap.latest === null ? DASH
-                  : d.gap.behind.length === 0 ? <Chip tone="ok">up to date</Chip>
-                  : <Chip tone="warn">{d.gap.latest} available</Chip>,
+                  d.gap.latest === null ? (
+                    DASH
+                  ) : d.gap.behind.length === 0 ? (
+                    <Chip tone="ok">up to date</Chip>
+                  ) : (
+                    <Chip tone="warn">{d.gap.latest} available</Chip>
+                  ),
               },
             ]}
           />

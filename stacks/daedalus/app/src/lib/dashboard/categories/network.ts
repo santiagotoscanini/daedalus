@@ -10,32 +10,32 @@
 // already exports its last test, and wg-easy v2 requires TOTP on /api/session
 // so a credential login cannot work unattended at all.
 
+import { BASE_DOMAIN } from '../../hostname'
+import { lanHosts, webAppHosts } from '../../nix-manifest'
 import {
   getJson,
   getText,
-  piholeSid,
-  promBars,
-  promScalar,
-  promScalars,
-  promPoints,
-  promSeries,
-  promVector,
+  lokiEntries,
   lokiLatest,
   lokiScalar,
-  lokiEntries,
+  piholeSid,
+  promBars,
+  promPoints,
+  promScalar,
+  promScalars,
+  promSeries,
+  promVector,
 } from '../clients'
+import { key, localDay, since } from '../format'
 import {
+  type CommitGap,
   commitsSince,
-  versionGap,
   EMPTY_COMMITS,
   EMPTY_GAP,
-  type CommitGap,
   type VersionGap,
+  versionGap,
 } from '../github'
 import { clientHost, idpClients, type PocketClient } from '../idp'
-import { lanHosts, webAppHosts } from '../../nix-manifest'
-import { BASE_DOMAIN } from '../../hostname'
-import { key, localDay, since } from '../format'
 
 export type NetworkData =
   | ({ tab: 'general' } & GeneralData)
@@ -357,51 +357,51 @@ async function loadGeneral(): Promise<GeneralData> {
     hosts,
     tunnel,
   ] = await Promise.all([
-      promScalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
-      // MySpeed tests hourly, so an hourly step is the native resolution — a
-      // finer one would just carry each sample forward and draw stairs.
-      Promise.all([
-        promSeries('myspeed_download', 7 * 24 * 60, 3600),
-        promSeries('myspeed_upload', 7 * 24 * 60, 3600),
-        promSeries('myspeed_ping', 7 * 24 * 60, 3600),
-      ]),
-      promScalars({
-        // Bits, because a link is sold and negotiated in bits and the speed
-        // test reports bits — the whole board would otherwise print two
-        // numbers eight times apart in the same unit column.
-        inMbps: `sum(rate(${nic('receive')}[5m])) * 8 / 1e6`,
-        outMbps: `sum(rate(${nic('transmit')}[5m])) * 8 / 1e6`,
-        inDay: `sum(increase(${nic('receive')}[24h]))`,
-        outDay: `sum(increase(${nic('transmit')}[24h]))`,
-        linkMbps: 'max(node_network_speed_bytes{device!="lo"}) * 8 / 1e6',
-      }),
-      Promise.all([
-        promSeries(`sum(rate(${nic('receive')}[5m])) * 8 / 1e6`, 24 * 60, 300),
-        promSeries(`sum(rate(${nic('transmit')}[5m])) * 8 / 1e6`, 24 * 60, 300),
-      ]),
-      loadHops(),
-      promScalar('sum(rate(traefik_service_requests_total[10m])) * 60'),
-      // One number wanted out of it — the router count under the headline —
-      // and it is a call to a container on the next bridge over, so it costs
-      // less than the prometheus query that would half-answer it.
-      getJson<{ http?: { routers?: { total?: number } } }>('http://traefik:8080/api/overview'),
-      promSeries('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
-      loadAsked(),
-      loadServiceTraffic(),
-      loadRouter(),
-      webAppHosts(),
-      // Cloudflare's own view of the tunnel, for exactly one field. cloudflared
-      // never learns the WAN address it is dialling out from, and neither does
-      // anything else on this box behind NAT — the edge records the address the
-      // connection arrived from, so this is the only vantage point on the box
-      // that can answer "what is our public IP" truthfully.
-      getJson<{ result?: CfTunnel }>(
-        `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
-          process.env.CF_TUNNEL_ID ?? ''
-        }`,
-        { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
-      ),
-    ])
+    promScalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
+    // MySpeed tests hourly, so an hourly step is the native resolution — a
+    // finer one would just carry each sample forward and draw stairs.
+    Promise.all([
+      promSeries('myspeed_download', 7 * 24 * 60, 3600),
+      promSeries('myspeed_upload', 7 * 24 * 60, 3600),
+      promSeries('myspeed_ping', 7 * 24 * 60, 3600),
+    ]),
+    promScalars({
+      // Bits, because a link is sold and negotiated in bits and the speed
+      // test reports bits — the whole board would otherwise print two
+      // numbers eight times apart in the same unit column.
+      inMbps: `sum(rate(${nic('receive')}[5m])) * 8 / 1e6`,
+      outMbps: `sum(rate(${nic('transmit')}[5m])) * 8 / 1e6`,
+      inDay: `sum(increase(${nic('receive')}[24h]))`,
+      outDay: `sum(increase(${nic('transmit')}[24h]))`,
+      linkMbps: 'max(node_network_speed_bytes{device!="lo"}) * 8 / 1e6',
+    }),
+    Promise.all([
+      promSeries(`sum(rate(${nic('receive')}[5m])) * 8 / 1e6`, 24 * 60, 300),
+      promSeries(`sum(rate(${nic('transmit')}[5m])) * 8 / 1e6`, 24 * 60, 300),
+    ]),
+    loadHops(),
+    promScalar('sum(rate(traefik_service_requests_total[10m])) * 60'),
+    // One number wanted out of it — the router count under the headline —
+    // and it is a call to a container on the next bridge over, so it costs
+    // less than the prometheus query that would half-answer it.
+    getJson<{ http?: { routers?: { total?: number } } }>('http://traefik:8080/api/overview'),
+    promSeries('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
+    loadAsked(),
+    loadServiceTraffic(),
+    loadRouter(),
+    webAppHosts(),
+    // Cloudflare's own view of the tunnel, for exactly one field. cloudflared
+    // never learns the WAN address it is dialling out from, and neither does
+    // anything else on this box behind NAT — the edge records the address the
+    // connection arrived from, so this is the only vantage point on the box
+    // that can answer "what is our public IP" truthfully.
+    getJson<{ result?: CfTunnel }>(
+      `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
+        process.env.CF_TUNNEL_ID ?? ''
+      }`,
+      { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
+    ),
+  ])
 
   return {
     wire: {
@@ -502,9 +502,7 @@ async function loadHops(): Promise<Hop[]> {
     promVector('network_hop_up'),
     promVector('network_hop_rtt_seconds * 1000'),
     Promise.all(
-      HOPS.map((h) =>
-        promSeries(`network_hop_rtt_seconds{hop="${h.id}"} * 1000`, 6 * 60, 300),
-      ),
+      HOPS.map((h) => promSeries(`network_hop_rtt_seconds{hop="${h.id}"} * 1000`, 6 * 60, 300)),
     ),
   ])
 
@@ -550,7 +548,9 @@ async function loadServiceTraffic(): Promise<GeneralData['services']> {
   add(inBytes, 'in')
   add(outBytes, 'out')
 
-  return [...rows.values()].filter((r) => r.in + r.out > 0).sort((a, b) => b.in + b.out - (a.in + a.out))
+  return [...rows.values()]
+    .filter((r) => r.in + r.out > 0)
+    .sort((a, b) => b.in + b.out - (a.in + a.out))
 }
 
 /**
@@ -799,9 +799,9 @@ async function loadWireguard(): Promise<WireguardData> {
 
   const [counts, peers, peak, hosts] = await Promise.all([
     promScalars({
-      configured: "wireguard_configured_peers",
-      enabled: "wireguard_enabled_peers",
-      connected: "wireguard_connected_peers",
+      configured: 'wireguard_configured_peers',
+      enabled: 'wireguard_enabled_peers',
+      connected: 'wireguard_connected_peers',
     }),
     loadWgPeers(),
     // Peak, not average: the question a household asks of a personal VPN is
@@ -817,7 +817,7 @@ async function loadWireguard(): Promise<WireguardData> {
     counts,
     peers,
     daily: peak.map((p) => ({ date: localDay(p.t * 1000), peers: p.v })),
-    url: hosts["wg-easy"] === undefined ? null : `https://${hosts["wg-easy"]}`,
+    url: hosts['wg-easy'] === undefined ? null : `https://${hosts['wg-easy']}`,
   }
 }
 
@@ -997,7 +997,6 @@ async function loadTunnel(
   }
 }
 
-
 // ── The proxy ────────────────────────────────────────
 
 /** How a published hostname is protected, from the GATEWAY's point of view. */
@@ -1078,7 +1077,6 @@ type TraefikData = {
   tls: { version: string; share: number }[]
 }
 
-
 /**
  * traefik, and only traefik.
  *
@@ -1113,56 +1111,63 @@ type TraefikRouter = {
 async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikData> {
   const api = 'http://traefik:8080/api'
 
-  const [version, overview, routers, clients, live, byEntrypoint, byService, byCode, daily, p95, certs, tls, reload] =
-    await Promise.all([
-      getJson<{ Version?: string; Codename?: string; startDate?: string }>(`${api}/version`),
-      getJson<{
-        http?: Record<string, { total?: number; errors?: number }>
-        tcp?: Record<string, { errors?: number }>
-      }>(`${api}/overview`),
-      getJson<TraefikRouter[]>(`${api}/http/routers`),
-      clientsP,
-      promScalars({
-        rpm: 'sum(rate(traefik_entrypoint_requests_total[10m])) * 60',
-        open: 'sum(traefik_open_connections)',
-      }),
-      // Counts over the window rather than a rate: the tunnel carries a few
-      // hundred requests a day against the LAN's six figures, and at a
-      // per-minute rate it rounds to zero and reads as broken.
-      promBars(
-        `sum by (entrypoint) (increase(traefik_entrypoint_requests_total[${DAYS}d]))`,
-        'entrypoint',
-      ),
-      promBars(
-        'topk(8, sum by (service) (rate(traefik_service_requests_total[1h]) * 60))',
-        'service',
-        (s) => s.replace(/-svc@file$/, ''),
-      ),
-      promBars('sum by (code) (increase(traefik_service_requests_total[24h]))', 'code'),
-      promPoints(
-        'sum(increase(traefik_entrypoint_requests_total[1d]))',
-        DAYS * 24 * 60,
-        86400,
-      ),
-      promScalar(
-        'histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket[1h])))',
-      ),
-      promVector('traefik_tls_certs_not_after'),
-      promBars('sum by (tls_version) (traefik_entrypoint_requests_tls_total)', 'tls_version'),
-      promScalars({
-        at: 'traefik_config_last_reload_success',
-        n: 'traefik_config_reloads_total',
-      }),
-    ])
+  const [
+    version,
+    overview,
+    routers,
+    clients,
+    live,
+    byEntrypoint,
+    byService,
+    byCode,
+    daily,
+    p95,
+    certs,
+    tls,
+    reload,
+  ] = await Promise.all([
+    getJson<{ Version?: string; Codename?: string; startDate?: string }>(`${api}/version`),
+    getJson<{
+      http?: Record<string, { total?: number; errors?: number }>
+      tcp?: Record<string, { errors?: number }>
+    }>(`${api}/overview`),
+    getJson<TraefikRouter[]>(`${api}/http/routers`),
+    clientsP,
+    promScalars({
+      rpm: 'sum(rate(traefik_entrypoint_requests_total[10m])) * 60',
+      open: 'sum(traefik_open_connections)',
+    }),
+    // Counts over the window rather than a rate: the tunnel carries a few
+    // hundred requests a day against the LAN's six figures, and at a
+    // per-minute rate it rounds to zero and reads as broken.
+    promBars(
+      `sum by (entrypoint) (increase(traefik_entrypoint_requests_total[${DAYS}d]))`,
+      'entrypoint',
+    ),
+    promBars(
+      'topk(8, sum by (service) (rate(traefik_service_requests_total[1h]) * 60))',
+      'service',
+      (s) => s.replace(/-svc@file$/, ''),
+    ),
+    promBars('sum by (code) (increase(traefik_service_requests_total[24h]))', 'code'),
+    promPoints('sum(increase(traefik_entrypoint_requests_total[1d]))', DAYS * 24 * 60, 86400),
+    promScalar(
+      'histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket[1h])))',
+    ),
+    promVector('traefik_tls_certs_not_after'),
+    promBars('sum by (tls_version) (traefik_entrypoint_requests_tls_total)', 'tls_version'),
+    promScalars({
+      at: 'traefik_config_last_reload_success',
+      n: 'traefik_config_reloads_total',
+    }),
+  ])
 
   const requests = await promVector(
     `sum by (router) (increase(traefik_router_requests_total[${DAYS}d]))`,
   )
   const perRouter = new Map(requests.map((r) => [r.metric.router ?? '', Number(r.value[1])]))
 
-  const nativeHosts = new Set(
-    clients.map(clientHost).filter((h): h is string => h !== null),
-  )
+  const nativeHosts = new Set(clients.map(clientHost).filter((h): h is string => h !== null))
 
   const version3 = version?.Version ?? null
   const http = overview?.http ?? {}
@@ -1178,9 +1183,7 @@ async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikDa
     codename: version?.Codename ?? null,
     gap: await versionGap('traefik/traefik', version3),
     upSeconds:
-      version?.startDate === undefined ? null : (
-        (Date.now() - Date.parse(version.startDate)) / 1000
-      ),
+      version?.startDate === undefined ? null : (Date.now() - Date.parse(version.startDate)) / 1000,
     counts: {
       routers: http.routers?.total ?? null,
       services: http.services?.total ?? null,
@@ -1219,9 +1222,9 @@ async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikDa
       .filter((c) => Number.isFinite(c.days))
       .sort((a, b) => a.days - b.days),
     tls:
-      tlsTotal === 0 ?
-        []
-      : tls.map((t) => ({ version: t.label, share: (t.value / tlsTotal) * 100 })),
+      tlsTotal === 0
+        ? []
+        : tls.map((t) => ({ version: t.label, share: (t.value / tlsTotal) * 100 })),
   }
 }
 
@@ -1484,7 +1487,12 @@ type ResolverData = {
   queries: { total: number | null; perSecond: number | null; blockedPct: number | null }
   clients: { total: number | null; active: number | null }
   lists: { gravity: number | null; allowed: number | null; denied: number | null }
-  cache: { size: number | null; inserted: number | null; evicted: number | null; expired: number | null }
+  cache: {
+    size: number | null
+    inserted: number | null
+    evicted: number | null
+    expired: number | null
+  }
   upstreams: Upstream[]
   types: { label: string; value: number }[]
   /** Hourly buckets over the last day, oldest first. */
@@ -1509,7 +1517,12 @@ type Dhcp = {
   leaseTime: string
   reservations: { mac: string; ip: string; name: string }[]
   /** Offers, acks and declines since FTL started — see `loadResolver`. */
-  counters: { offers: number | null; acks: number | null; declines: number | null; nak: number | null }
+  counters: {
+    offers: number | null
+    acks: number | null
+    declines: number | null
+    nak: number | null
+  }
 }
 
 /** One resolver every name not answered locally is forwarded to. */
@@ -1625,7 +1638,14 @@ type ZoneData = {
    */
   unclassified: ZoneRecord[]
   /** Group totals plus the zone's own count, so the arithmetic is on the page. */
-  tally: { total: number | null; house: number; mail: number; elsewhere: number; leftovers: number; unclassified: number }
+  tally: {
+    total: number | null
+    house: number
+    mail: number
+    elsewhere: number
+    leftovers: number
+    unclassified: number
+  }
   changed: ZoneRecord[]
   /** Published names with no record in the zone at all — LAN-only. */
   lanOnly: number
@@ -1800,7 +1820,13 @@ async function loadResolver(base: string): Promise<ResolverData> {
     }>(`${base}/api/info/metrics`),
     getJson<{ types?: Record<string, number> }>(`${base}/api/stats/query_types`),
     getJson<{
-      history?: { timestamp: number; total: number; cached: number; blocked: number; forwarded: number }[]
+      history?: {
+        timestamp: number
+        total: number
+        cached: number
+        blocked: number
+        forwarded: number
+      }[]
     }>(`${base}/api/history`),
     getJson<{ size?: number; queries_disk?: number; earliest_timestamp_disk?: number }>(
       `${base}/api/info/database`,
@@ -1858,9 +1884,9 @@ async function loadResolver(base: string): Promise<ResolverData> {
         name: u.name ?? '',
         count: u.count ?? 0,
         replyMs:
-          u.statistics?.response === undefined || u.statistics.response === 0 ?
-            null
-          : u.statistics.response * 1000,
+          u.statistics?.response === undefined || u.statistics.response === 0
+            ? null
+            : u.statistics.response * 1000,
         declared: declared.includes(u.ip ?? ''),
       }))
       .sort((a, b) => b.count - a.count),
@@ -1872,9 +1898,9 @@ async function loadResolver(base: string): Promise<ResolverData> {
     store: {
       queries: store?.queries_disk ?? null,
       sinceSeconds:
-        store?.earliest_timestamp_disk === undefined ?
-          null
-        : Date.now() / 1000 - store.earliest_timestamp_disk,
+        store?.earliest_timestamp_disk === undefined
+          ? null
+          : Date.now() / 1000 - store.earliest_timestamp_disk,
       bytes: store?.size ?? null,
     },
   }
@@ -1888,7 +1914,9 @@ async function loadResolver(base: string): Promise<ResolverData> {
  * be the same nine lines with no way to tell a declared one from something
  * somebody clicked in. The counters come from FTL because only it knows them.
  */
-function dhcpConfig(counters: { offer?: number; ack?: number; decline?: number; nak?: number } | undefined): Dhcp {
+function dhcpConfig(
+  counters: { offer?: number; ack?: number; decline?: number; nak?: number } | undefined,
+): Dhcp {
   let cfg: Partial<{
     active: boolean
     router: string
@@ -1958,21 +1986,26 @@ function hourly(
     by.set(hour, acc)
   }
 
-  return [...by]
-    .sort((a, b) => a[0] - b[0])
-    // FTL's window is a rolling 24 hours, so the oldest hour is a fragment of
-    // one — a stub column that reads as a quiet spell rather than as an
-    // artefact of where the window happens to start. The newest is also
-    // partial, and that one stays: "so far this hour" is what a live chart is
-    // supposed to show.
-    .slice(-24)
-    .map(([hour, v]) => ({
-      // Formatted on the SERVER, like every other relative time on this
-      // dashboard: a Date read during render disagrees between the streamed
-      // HTML and the hydrated tree and React discards the whole subtree.
-      label: new Date(hour * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-      ...v,
-    }))
+  return (
+    [...by]
+      .sort((a, b) => a[0] - b[0])
+      // FTL's window is a rolling 24 hours, so the oldest hour is a fragment of
+      // one — a stub column that reads as a quiet spell rather than as an
+      // artefact of where the window happens to start. The newest is also
+      // partial, and that one stays: "so far this hour" is what a live chart is
+      // supposed to show.
+      .slice(-24)
+      .map(([hour, v]) => ({
+        // Formatted on the SERVER, like every other relative time on this
+        // dashboard: a Date read during render disagrees between the streamed
+        // HTML and the hydrated tree and React discards the whole subtree.
+        label: new Date(hour * 1000).toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        ...v,
+      }))
+  )
 }
 
 // ── DNS: the zone ──────────────────────────────────────────────────────
@@ -2027,7 +2060,9 @@ async function loadZone(): Promise<ZoneData> {
   // Every name the zone points at this house: the tunnel CNAMEs the reconciler
   // maintains, plus the one A record ddclient keeps on the WAN address.
   const tunnel = new Set(
-    records.filter((r) => r.type === 'CNAME' && r.content.endsWith('.cfargotunnel.com')).map((r) => r.fqdn),
+    records
+      .filter((r) => r.type === 'CNAME' && r.content.endsWith('.cfargotunnel.com'))
+      .map((r) => r.fqdn),
   )
   const wan = new Set(records.filter((r) => r.type === 'A').map((r) => r.fqdn))
 
@@ -2046,7 +2081,9 @@ async function loadZone(): Promise<ZoneData> {
 
   const mailNames = new Set(mailDomains(records))
   const mail = [...mailNames].sort().map((d) => mailPosture(d, records))
-  const rest = records.filter((r) => !tunnel.has(r.fqdn) && !wan.has(r.fqdn) && !isMail(r, mailNames))
+  const rest = records.filter(
+    (r) => !tunnel.has(r.fqdn) && !wan.has(r.fqdn) && !isMail(r, mailNames),
+  )
   const elsewhere = rest.filter((r) => !isDebris(r, records)).sort(byShort)
   const leftovers = rest.filter((r) => isDebris(r, records)).sort(byShort)
 
@@ -2109,23 +2146,22 @@ async function loadZone(): Promise<ZoneData> {
       // 192.168.0.120, so traefik is not in its path and "no router" would be
       // a true statement about an irrelevant program.
       lanWithoutRoute:
-        served === null ? (
-          []
-        ) : (
-          lan
-            .filter((h) => h.ip === LAN_IP && !served.has(h.host))
-            .map((h) => h.host)
-            .sort()
-        ),
+        served === null
+          ? []
+          : lan
+              .filter((h) => h.ip === LAN_IP && !served.has(h.host))
+              .map((h) => h.host)
+              .sort(),
       // A tunnel CNAME with no webApp behind it. The reconciler sweeps records
       // carrying its own comment, so anything here was made by hand.
       tunnelWithoutApp: [...tunnel].filter((h) => !publishedSet.has(h)).sort(),
     },
     note:
-      raw !== null ? null
-      : key('CF_DNS_TOKEN') === '' ?
-        'No Cloudflare token in this container — see daedalus-dashboard-keys.'
-      : 'Cloudflare did not answer for this zone.',
+      raw !== null
+        ? null
+        : key('CF_DNS_TOKEN') === ''
+          ? 'No Cloudflare token in this container — see daedalus-dashboard-keys.'
+          : 'Cloudflare did not answer for this zone.',
   }
 }
 
@@ -2208,7 +2244,9 @@ const toRecord =
  */
 function isDebris(r: ZoneRecord, all: ZoneRecord[]): boolean {
   if (r.short.startsWith('_acme-challenge')) return true
-  return all.filter((o) => o.fqdn === r.fqdn && o.type === r.type && o.content === r.content).length > 1
+  return (
+    all.filter((o) => o.fqdn === r.fqdn && o.type === r.type && o.content === r.content).length > 1
+  )
 }
 
 /** MX before the TXTs that qualify it, CNAME (the DKIM selectors) last. */
@@ -2242,7 +2280,8 @@ const isMail = (r: ZoneRecord, domains: Set<string>): boolean =>
  * SPF and the policy on DMARC are the two parts that decide anything.
  */
 function mailPosture(domain: string, records: ZoneRecord[]): MailDomain {
-  const at = (fqdn: string, type: string) => records.filter((r) => r.fqdn === fqdn && r.type === type)
+  const at = (fqdn: string, type: string) =>
+    records.filter((r) => r.fqdn === fqdn && r.type === type)
   const spf = at(domain, 'TXT').find((r) => r.content.startsWith('v=spf1'))
   const dmarc = at(`_dmarc.${domain}`, 'TXT').find((r) => r.content.startsWith('v=DMARC1'))
 
@@ -2257,14 +2296,16 @@ function mailPosture(domain: string, records: ZoneRecord[]): MailDomain {
   return {
     records: mine,
     domain,
-    mx: at(domain, 'MX').map((r) => r.content).sort(),
+    mx: at(domain, 'MX')
+      .map((r) => r.content)
+      .sort(),
     spf:
-      spf === undefined ? null : (
-        {
-          include: [...spf.content.matchAll(/include:(\S+)/g)].map((m) => m[1] ?? ''),
-          qualifier: /([-~?+])all/.exec(spf.content)?.[1] ?? null,
-        }
-      ),
+      spf === undefined
+        ? null
+        : {
+            include: [...spf.content.matchAll(/include:(\S+)/g)].map((m) => m[1] ?? ''),
+            qualifier: /([-~?+])all/.exec(spf.content)?.[1] ?? null,
+          },
     dkim: records.filter((r) => r.fqdn.endsWith(`._domainkey.${domain}`)).length,
     dmarc: dmarc === undefined ? null : { policy: /\bp=(\w+)/.exec(dmarc.content)?.[1] ?? null },
   }
@@ -2321,7 +2362,10 @@ async function rdap(domain: string): Promise<Registration> {
     registrar: vcardName(registrar),
     // The registrar's own RDAP base doubles as the only link the registry
     // publishes for them, and it is where a renewal actually happens.
-    registrarUrl: (registrar?.links ?? []).map((l) => l.href ?? '').find((h) => !h.includes('identitydigital')) ?? null,
+    registrarUrl:
+      (registrar?.links ?? [])
+        .map((l) => l.href ?? '')
+        .find((h) => !h.includes('identitydigital')) ?? null,
     expiresIn: expiry === undefined ? null : (Date.parse(expiry) - Date.now()) / 1000,
     expiresOn: expiry === undefined ? null : new Date(expiry).toLocaleDateString('en-CA'),
     registeredAgo: age(when('registration')),

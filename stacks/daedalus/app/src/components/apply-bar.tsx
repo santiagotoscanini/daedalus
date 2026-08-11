@@ -1,7 +1,7 @@
 import { useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { applyRegistry, fetchApplyStatus } from '../server/registry'
 import type { ApplyStatus } from '../lib/apply'
+import { applyRegistry, fetchApplyStatus } from '../server/registry'
 
 // The commit bar. Appears when the database no longer describes what Nix
 // built, and stays until an apply reconciles them.
@@ -11,7 +11,15 @@ import type { ApplyStatus } from '../lib/apply'
 // it names what changed, it needs a click, and it reports the phase the host
 // agent is actually in rather than a spinner.
 
-const PHASES = ['waiting', 'validating', 'writing', 'committing', 'building', 'switching', 'pushing'] as const
+const PHASES = [
+  'waiting',
+  'validating',
+  'writing',
+  'committing',
+  'building',
+  'switching',
+  'pushing',
+] as const
 
 export function ApplyBar({
   changed,
@@ -49,7 +57,9 @@ export function ApplyBar({
   if (changed.length === 0 && !running && status.state !== 'failed') return null
 
   return (
-    <div className={`apply-bar ${running ? 'is-running' : ''} ${status.state === 'failed' ? 'is-failed' : ''}`}>
+    <div
+      className={`apply-bar ${running ? 'is-running' : ''} ${status.state === 'failed' ? 'is-failed' : ''}`}
+    >
       <div className="apply-summary">
         {running ? (
           <>
@@ -59,10 +69,11 @@ export function ApplyBar({
                 <li
                   key={p}
                   className={
-                    p === status.phase ? 'now'
-                    : PHASES.indexOf(p) < PHASES.indexOf(status.phase as (typeof PHASES)[number]) ?
-                      'past'
-                    : ''
+                    p === status.phase
+                      ? 'now'
+                      : PHASES.indexOf(p) < PHASES.indexOf(status.phase as (typeof PHASES)[number])
+                        ? 'past'
+                        : ''
                   }
                 >
                   {p}

@@ -33,7 +33,11 @@ async function promQuery(query: string): Promise<VectorResult[]> {
   return body.data?.result ?? []
 }
 
-async function promRange(query: string, minutes: number, stepSeconds: number): Promise<MatrixResult[]> {
+async function promRange(
+  query: string,
+  minutes: number,
+  stepSeconds: number,
+): Promise<MatrixResult[]> {
   const end = Math.floor(Date.now() / 1000)
   const start = end - minutes * 60
   const url =
@@ -85,7 +89,9 @@ export async function appStatuses(names: string[]): Promise<Record<string, AppSt
   const [up, health, rpm, spark] = await Promise.allSettled([
     promQuery(`container_up{name=~"app-(${alt})"}`),
     promQuery(`gatus_results_endpoint_success{key=~"web-apps_(${alt})"}`),
-    promQuery(`sum by (service) (rate(traefik_service_requests_total{service=~"(${alt})-svc@file"}[5m])) * 60`),
+    promQuery(
+      `sum by (service) (rate(traefik_service_requests_total{service=~"(${alt})-svc@file"}[5m])) * 60`,
+    ),
     promRange(
       `sum by (service) (rate(traefik_service_requests_total{service=~"(${alt})-svc@file"}[5m])) * 60`,
       60,
@@ -122,10 +128,13 @@ export async function appStatuses(names: string[]): Promise<Record<string, AppSt
     const s = out[n]
     if (!s) continue
     s.state =
-      s.containerUp === null ? 'unknown'
-      : !s.containerUp ? 'stopped'
-      : s.healthy === false ? 'attention'
-      : 'running'
+      s.containerUp === null
+        ? 'unknown'
+        : !s.containerUp
+          ? 'stopped'
+          : s.healthy === false
+            ? 'attention'
+            : 'running'
   }
 
   return out
@@ -298,9 +307,9 @@ export async function appDatabase(name: string): Promise<AppDatabase> {
   return {
     sizeBytes: s(size),
     sizeTrend:
-      sizeTrend.status === 'fulfilled' && sizeTrend.value[0] ?
-        sizeTrend.value[0].values.map(([, v]) => Number(v))
-      : [],
+      sizeTrend.status === 'fulfilled' && sizeTrend.value[0]
+        ? sizeTrend.value[0].values.map(([, v]) => Number(v))
+        : [],
     connections: s(conns),
     maxConnections: s(maxConns),
     connectionLimit: s(limit),
@@ -309,9 +318,9 @@ export async function appDatabase(name: string): Promise<AppDatabase> {
     // Guarded rather than computed blindly: an idle database has both rates at
     // zero, and 0/0 would render "NaN%" on the calmest possible app.
     rollbackPct:
-      commit === null || rollback === null || commit + rollback === 0 ?
-        null
-      : (rollback / (commit + rollback)) * 100,
+      commit === null || rollback === null || commit + rollback === 0
+        ? null
+        : (rollback / (commit + rollback)) * 100,
     cacheHitPct:
       hits === null || reads === null || hits + reads === 0 ? null : (hits / (hits + reads)) * 100,
     tuples: {
@@ -323,12 +332,12 @@ export async function appDatabase(name: string): Promise<AppDatabase> {
     deadlocks: s(deadlocks),
     tempBytes: s(tempBytes),
     cluster:
-      cluster.status === 'fulfilled' ?
-        cluster.value
-          .map((r) => ({ label: r.metric.datname ?? '?', value: Number(r.value[1]) }))
-          .filter((r) => Number.isFinite(r.value))
-          .sort((a, b) => b.value - a.value)
-      : [],
+      cluster.status === 'fulfilled'
+        ? cluster.value
+            .map((r) => ({ label: r.metric.datname ?? '?', value: Number(r.value[1]) }))
+            .filter((r) => Number.isFinite(r.value))
+            .sort((a, b) => b.value - a.value)
+        : [],
   }
 }
 
@@ -399,9 +408,9 @@ export async function appVpn(container: string): Promise<AppVpn> {
     forwardedPort: forwarded === undefined ? null : Number(forwarded),
     uptime24h: first(uptime) ? Number(first(uptime)?.value[1]) : null,
     history:
-      history.status === 'fulfilled' && history.value[0] ?
-        history.value[0].values.map(([, v]) => Number(v))
-      : [],
+      history.status === 'fulfilled' && history.value[0]
+        ? history.value[0].values.map(([, v]) => Number(v))
+        : [],
   }
 }
 
@@ -467,7 +476,11 @@ export async function activityLog(name: string, limit = 60, hours = 6): Promise<
     lokiLines(`{unit="app-${name}-deploy.service"}`, limit, hours),
     // Only the lifecycle lines. The rest of that stream is runner
     // registration, which is noise next to a deploy.
-    lokiLines(`{service_name="gha-runner-${name}"} |~ "(?i)(running job|job .* completed)"`, limit, hours),
+    lokiLines(
+      `{service_name="gha-runner-${name}"} |~ "(?i)(running job|job .* completed)"`,
+      limit,
+      hours,
+    ),
   ])
 
   return [

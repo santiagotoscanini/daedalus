@@ -155,7 +155,7 @@ async function loadFactorio(ctx: { base: (app: string) => string }): Promise<Fac
       // wherever they are sitting.
       connect: `${wanHost()}:${String(PORT)}`,
       port: PORT,
-      adminUrl: ctx.base("factorio-admin"),
+      adminUrl: ctx.base('factorio-admin'),
     },
     news: feed,
     changelog,
@@ -221,10 +221,11 @@ async function fetchFeed(): Promise<FactorioData['news']> {
           date,
           // A release post is the one entry type that is actually a changelog,
           // so it is worth telling apart from a Friday Facts.
-          kind:
-            /version\s+\d|released/i.test(title) ? ('release' as const)
-            : /friday facts/i.test(title) ? ('fff' as const)
-            : ('post' as const),
+          kind: /version\s+\d|released/i.test(title)
+            ? ('release' as const)
+            : /friday facts/i.test(title)
+              ? ('fff' as const)
+              : ('post' as const),
         }
       })
       .filter((e) => e.title !== '')
@@ -326,20 +327,22 @@ async function fetchSeries(series: string): Promise<FactorioData['changelog']> {
 
 /** Wikitext → plain text. Only the markup Wube actually uses in changelogs. */
 function clean(s: string): string {
-  return s
-    // [url label] → label, and a bare [url] → nothing worth showing.
-    .replace(/\[https?:\/\/\S+\s+([^\]]*)\]/g, '$1')
-    .replace(/\[https?:\/\/\S+\]/g, '')
-    .replace(/\[\[[^|\]]*\|([^\]]*)\]\]/g, '$1')
-    .replace(/\[\[([^\]]*)\]\]/g, '$1')
-    .replace(/'''([^']*)'''/g, '$1')
-    .replace(/''([^']*)''/g, '$1')
-    // `([https://forums.factorio.com/131012 more])` becomes `(more)` once the
-    // URL is gone — a parenthesis around a word that no longer links
-    // anywhere. Drop it rather than ship dead furniture.
-    .replace(/\s*\(\s*more\s*\)\s*$/i, "")
-    .replace(/\s*\(\s*\)\s*$/, "")
-    .trim()
+  return (
+    s
+      // [url label] → label, and a bare [url] → nothing worth showing.
+      .replace(/\[https?:\/\/\S+\s+([^\]]*)\]/g, '$1')
+      .replace(/\[https?:\/\/\S+\]/g, '')
+      .replace(/\[\[[^|\]]*\|([^\]]*)\]\]/g, '$1')
+      .replace(/\[\[([^\]]*)\]\]/g, '$1')
+      .replace(/'''([^']*)'''/g, '$1')
+      .replace(/''([^']*)''/g, '$1')
+      // `([https://forums.factorio.com/131012 more])` becomes `(more)` once the
+      // URL is gone — a parenthesis around a word that no longer links
+      // anywhere. Drop it rather than ship dead furniture.
+      .replace(/\s*\(\s*more\s*\)\s*$/i, '')
+      .replace(/\s*\(\s*\)\s*$/, '')
+      .trim()
+  )
 }
 
 // ── Minecraft ──────────────────────────────────────────────────────────────
@@ -446,7 +449,7 @@ async function loadMinecraft(): Promise<MinecraftData> {
  */
 async function reportedVersion(): Promise<string | null> {
   const r = await promVector('minecraft_status_healthy')
-  return r[0]?.metric['server_version'] ?? null
+  return r[0]?.metric.server_version ?? null
 }
 
 /** Mojang's own idea of current. One field, from the launcher's manifest. */
@@ -508,9 +511,9 @@ async function paperBuilds(version: string | null, build: string | null): Promis
     builtOn: running?.time.slice(0, 10) ?? null,
     behind,
     note:
-      running === undefined ?
-        'The pinned build is not in Paper’s list for this version — it may have aged out.'
-      : null,
+      running === undefined
+        ? 'The pinned build is not in Paper’s list for this version — it may have aged out.'
+        : null,
   }
 }
 
@@ -533,7 +536,11 @@ async function joinsAndLeaves(): Promise<MinecraftData['events']> {
     .map(({ at, line }) => {
       const m = /:\s*(\w{3,16})\s+(joined|left) the game/.exec(line)
       if (m === null) return null
-      return { at, who: m[1] ?? '', kind: m[2] === 'joined' ? ('join' as const) : ('leave' as const) }
+      return {
+        at,
+        who: m[1] ?? '',
+        kind: m[2] === 'joined' ? ('join' as const) : ('leave' as const),
+      }
     })
     .filter((e): e is MinecraftData['events'][number] => e !== null)
 }

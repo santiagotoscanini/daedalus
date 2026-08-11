@@ -119,6 +119,7 @@ async function declaredPaths(origin: string): Promise<string[]> {
       const href = /href\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1]
       // Same-origin paths only. An app pointing at a CDN is not something to
       // follow from the control plane.
+      // biome-ignore lint/complexity/useOptionalChain: the explicit !== undefined is what narrows `href` for the push — `href?.startsWith()` would not.
       if (href !== undefined && href.startsWith('/')) out.push(href)
     }
     return out
@@ -162,10 +163,18 @@ function sniff(body: Buffer): string | null {
       return 'image/png'
     if (body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff) return 'image/jpeg'
     if (body.subarray(0, 6).toString('ascii').startsWith('GIF8')) return 'image/gif'
-    if (body.subarray(0, 4).toString('ascii') === 'RIFF' && body.subarray(8, 12).toString('ascii') === 'WEBP')
+    if (
+      body.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      body.subarray(8, 12).toString('ascii') === 'WEBP'
+    )
       return 'image/webp'
     // ICO/CUR: a 2-byte zero reserved field, then type 1 or 2.
-    if (body[0] === 0x00 && body[1] === 0x00 && (body[2] === 0x01 || body[2] === 0x02) && body[3] === 0x00)
+    if (
+      body[0] === 0x00 &&
+      body[1] === 0x00 &&
+      (body[2] === 0x01 || body[2] === 0x02) &&
+      body[3] === 0x00
+    )
       return 'image/x-icon'
   }
 

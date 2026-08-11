@@ -16,7 +16,7 @@
 // anyway.
 
 import { getJson, promBars, promScalar, promVector } from './dashboard/clients'
-import { versionGap, type VersionGap } from './dashboard/github'
+import { type VersionGap, versionGap } from './dashboard/github'
 import { imageVersion, type RunningVersion } from './dashboard/images'
 
 export type ImagesData = {

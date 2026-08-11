@@ -28,7 +28,7 @@
 // is enough, and the caption says so rather than leaving a login box to be
 // puzzled over.
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 
 import { Bar } from './skeleton'
 import { Segmented } from './ui'
@@ -70,7 +70,7 @@ const GRAFANA = 'https://grafana.toscanini.me'
  * With it gone the frame renders exactly once per mount, which is what makes
  * the first-load cover below sufficient rather than a band-aid.
  */
-export function grafanaLogsEmbed(source: LogSource, from = "now-7d"): string {
+export function grafanaLogsEmbed(source: LogSource, from = 'now-7d'): string {
   return (
     `${GRAFANA}/d-solo/container-logs/container-logs` +
     `?panelId=1&var-selector=${encodeURIComponent(`${label(source)}="${value(source)}"`)}` +
@@ -79,7 +79,7 @@ export function grafanaLogsEmbed(source: LogSource, from = "now-7d"): string {
 }
 
 /** The full Drilldown, for when you need search and live tail. */
-export function grafanaLogsFull(source: LogSource, from = "now-7d"): string {
+export function grafanaLogsFull(source: LogSource, from = 'now-7d'): string {
   return (
     `${GRAFANA}/a/grafana-lokiexplore-app/explore` +
     `?from=${from}&to=now&var-ds=loki-default` +
@@ -102,14 +102,8 @@ export function grafanaLogsFull(source: LogSource, from = "now-7d"): string {
  */
 export type LogSource = { container: string } | { stack: string } | { unit: string }
 
-const label = (s: LogSource) =>
-  'container' in s ? 'container'
-  : 'stack' in s ? 'stack'
-  : 'unit'
-const value = (s: LogSource) =>
-  'container' in s ? s.container
-  : 'stack' in s ? s.stack
-  : s.unit
+const label = (s: LogSource) => ('container' in s ? 'container' : 'stack' in s ? 'stack' : 'unit')
+const value = (s: LogSource) => ('container' in s ? s.container : 'stack' in s ? s.stack : s.unit)
 
 /**
  * The ranges worth one click.

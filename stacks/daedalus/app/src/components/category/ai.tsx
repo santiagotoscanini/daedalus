@@ -1,17 +1,16 @@
-import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-
+import { useState } from 'react'
+import { compact, DASH, ms, num, pct, until } from '../../lib/dashboard/format'
+import type { VersionGap } from '../../lib/dashboard/github'
+import type { AiData } from '../../server/category'
+import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
+import { GrafanaLogs, LogBoard, type LogNeighbour } from '../logs'
+import { Changelog } from '../release-notes'
+import { type CompareRow, LinkRow, latestRow, ServiceHead, verdictOf } from '../service-head'
 // No `StatBand`/`BigStat` anywhere on these four pages any more: every one of
 // them ended up saying either a number the panel below it states in context,
 // or a number that is zero almost always and means nothing when it is not.
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../viz'
-import { GrafanaLogs, LogBoard, type LogNeighbour } from '../logs'
-import { Changelog } from '../release-notes'
-import { latestRow, LinkRow, ServiceHead, verdictOf, type CompareRow } from '../service-head'
-import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
-import { compact, DASH, ms, num, pct, until } from '../../lib/dashboard/format'
-import type { VersionGap } from '../../lib/dashboard/github'
-import type { AiData } from '../../server/category'
 
 // The AI pages — one per service, chosen by the sub-tab.
 //
@@ -56,7 +55,6 @@ function compareOf(gap: VersionGap, note: string): CompareRow[] {
 
 // `ReleaseBoard` is gone: it was `Changelog` with one of its two shapes, and
 // the neighbour panels below needed the other.
-
 
 // ── Lemonade ───────────────────────────────────────────────────────────────
 
@@ -133,9 +131,11 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
             </ul>
           )}
 
-          {categories.length === 0 ?
+          {categories.length === 0 ? (
             <p className="viz-empty">Lemonade did not answer</p>
-          : categories.map((c) => <ModelKind key={c.type} kind={c} />)}
+          ) : (
+            categories.map((c) => <ModelKind key={c.type} kind={c} />)
+          )}
 
           {/* The build behind each runtime named above. Folded in here rather
               than given a panel of its own, which restated every runtime name
@@ -147,12 +147,13 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
               {data.backends.map((b) => (
                 <span key={`${b.recipe}-${b.backend}`}>
                   {b.recipe}
-                  {b.url === null ?
+                  {b.url === null ? (
                     <span className="mono">{b.version}</span>
-                  : <a className="mono" href={b.url} target="_blank" rel="noreferrer">
+                  ) : (
+                    <a className="mono" href={b.url} target="_blank" rel="noreferrer">
                       {b.version}
                     </a>
-                  }
+                  )}
                 </span>
               ))}
             </p>
@@ -162,8 +163,8 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
             One model of each kind stays in VRAM — Lemonade’s per-type limit — so picking a
             different chat model means putting down the current one. <b>Switch</b> does both in
             order, because a pinned model is exempt from eviction and the incoming load is refused
-            outright if the slot is not freed first. Counts survive an eviction, so a model you
-            have not run today still shows what it managed last time.
+            outright if the slot is not freed first. Counts survive an eviction, so a model you have
+            not run today still shows what it managed last time.
           </p>
         </Board>
 
@@ -228,7 +229,9 @@ function ModelKind({ kind }: { kind: Extract<AiData, { tab: 'lemonade' }>['categ
             quantities — 976k answers "has anything been using these", and
             976,228 answers it no better while costing half the row. */}
         <span className="mkind-agg">
-          <span>{kind.models.length === 1 ? '1 model' : `${String(kind.models.length)} models`}</span>
+          <span>
+            {kind.models.length === 1 ? '1 model' : `${String(kind.models.length)} models`}
+          </span>
           {size > 0 && <span>{num(size, 1)} GB</span>}
           {requests > 0 && <span>{compact(requests)} req</span>}
           {tokens > 0 && <span>{compact(tokens)} tok</span>}
@@ -236,9 +239,11 @@ function ModelKind({ kind }: { kind: Extract<AiData, { tab: 'lemonade' }>['categ
       </summary>
 
       <div className="mkind-body">
-        {resident === null ?
+        {resident === null ? (
           <p className="mkind-empty">nothing loaded — the next request will cold-load one</p>
-        : <ModelHero model={resident} />}
+        ) : (
+          <ModelHero model={resident} />
+        )}
 
         {others.length > 0 && (
           <ul className="malts">
@@ -284,11 +289,11 @@ function HostStrip({ host, live }: { host: Lemonade['host']; live: Lemonade['liv
       />
       <HostFact
         short={
-          live.memGb === null || host.ramGb === null ?
-            host.ramGb === null ?
-              DASH
-            : `${num(host.ramGb)} GB`
-          : `${num(live.memGb, 1)} / ${num(host.ramGb)} GB`
+          live.memGb === null || host.ramGb === null
+            ? host.ramGb === null
+              ? DASH
+              : `${num(host.ramGb)} GB`
+            : `${num(live.memGb, 1)} / ${num(host.ramGb)} GB`
         }
         detail="System memory in use on the gaming PC"
         note="not VRAM — see below"
@@ -319,6 +324,7 @@ function HostFact({
   muted?: boolean
 }) {
   return (
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex opens the :focus-within card for keyboard users — the popover pattern this codebase uses instead of title=; becomes the shared InfoHint (a real button) in the UI-system pass.
     <span className={muted === true ? 'hfact hfact-muted' : 'hfact'} tabIndex={0}>
       {short}
       <span className="hfact-card" role="tooltip">
@@ -357,14 +363,15 @@ function ModelHero({ model }: { model: Model }) {
   const some = (n: number | null | undefined) => n != null && n > 0
 
   const stats =
-    s === null ? []
-    : [
-        { k: 'throughput', v: `${(s.tps ?? 0).toFixed(1)} tok/s`, on: some(s.tps) },
-        { k: 'first token', v: `${num(s.ttftMs)} ms`, on: some(s.ttftMs) },
-        { k: 'requests', v: num(s.requests), on: some(s.requests) },
-        { k: 'tokens out', v: num(s.outputTokens), on: some(s.outputTokens) },
-        { k: 'tokens in', v: num(s.inputTokens), on: some(s.inputTokens) },
-      ].filter((f) => f.on)
+    s === null
+      ? []
+      : [
+          { k: 'throughput', v: `${(s.tps ?? 0).toFixed(1)} tok/s`, on: some(s.tps) },
+          { k: 'first token', v: `${num(s.ttftMs)} ms`, on: some(s.ttftMs) },
+          { k: 'requests', v: num(s.requests), on: some(s.requests) },
+          { k: 'tokens out', v: num(s.outputTokens), on: some(s.outputTokens) },
+          { k: 'tokens in', v: num(s.inputTokens), on: some(s.inputTokens) },
+        ].filter((f) => f.on)
 
   return (
     <div className={model.hot ? 'mhero mhero-hot' : 'mhero'}>
@@ -436,9 +443,9 @@ function ModelAlt({ model, replacing }: { model: Model; replacing: Model | null 
         className="btn btn-ghost"
         disabled={busy}
         title={
-          replacing === null ?
-            `Load ${model.name}`
-          : `Evict ${replacing.name} and load ${model.name}`
+          replacing === null
+            ? `Load ${model.name}`
+            : `Evict ${replacing.name} and load ${model.name}`
         }
         onClick={() => {
           setBusy(true)
@@ -567,9 +574,9 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
               {
                 k: 'failed',
                 v:
-                  total.requests === 0 ?
-                    DASH
-                  : `${num(total.failed)} · ${pct((total.failed / total.requests) * 100)}`,
+                  total.requests === 0
+                    ? DASH
+                    : `${num(total.failed)} · ${pct((total.failed / total.requests) * 100)}`,
                 tone: total.failed > 0 ? 'bad' : undefined,
               },
               // The one latency figure on this page that is actually about the
@@ -623,15 +630,16 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
           span={4}
           aside={
             <span className="board-note">
-              {data.mcpServers.length === 0 ?
-                `MCP, ${String(total.days)}d`
-              : data.mcpServers.map((s) => `${s.name} ${String(s.calls)}`).join(' · ')}
+              {data.mcpServers.length === 0
+                ? `MCP, ${String(total.days)}d`
+                : data.mcpServers.map((s) => `${s.name} ${String(s.calls)}`).join(' · ')}
             </span>
           }
         >
-          {data.mcp.length === 0 ?
+          {data.mcp.length === 0 ? (
             <p className="viz-empty">no tool calls in the window</p>
-          : <ul className="itemlist">
+          ) : (
+            <ul className="itemlist">
               {data.mcp.map((t) => (
                 <li key={`${t.server}/${t.tool}`}>
                   <Chip tone="info">{t.server}</Chip>
@@ -647,7 +655,7 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             The other direction: tools the gateway hands to a model mid-answer, counted when one was
             actually invoked. A registered server with no calls does not appear, and a tool whose
@@ -673,14 +681,20 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
           span={6}
           aside={<span className="board-note">requests, {total.days}d</span>}
         >
-          {data.callers.length === 0 ?
+          {data.callers.length === 0 ? (
             <p className="viz-empty">no keyed traffic in the window</p>
-          : <ul className="ranks">
+          ) : (
+            <ul className="ranks">
               {data.callers.map((c) => (
-                <CallerRow key={c.name} caller={c} max={data.callers[0]?.requests ?? 1} today={todayDate} />
+                <CallerRow
+                  key={c.name}
+                  caller={c}
+                  max={data.callers[0]?.requests ?? 1}
+                  today={todayDate}
+                />
               ))}
             </ul>
-          }
+          )}
 
           {/* Ranked by requests, not tokens, and that is the reason this box
               exists in the shape it does: a key that is rejected returns no
@@ -691,13 +705,14 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
               <b>{num(data.rejected.keys)}</b> keys never completed a request —{' '}
               <b>{num(data.rejected.requests)}</b> attempts, last{' '}
               {ago(data.rejected.last, todayDate)}.{' '}
-              {data.rejected.live === 0 ?
+              {data.rejected.live === 0 ? (
                 'None of them exists on the gateway today.'
-              : <>
+              ) : (
+                <>
                   <b>{num(data.rejected.live)}</b> of them still exists on the gateway, which is a
                   fault rather than a stale credential.
                 </>
-              }
+              )}
             </p>
           )}
 
@@ -771,9 +786,7 @@ function NeighbourPair({ n }: { n: NeighbourData }) {
         title={behind === 0 ? `${n.label} — current` : `${n.label} — ${count} ${unit}`}
         aside={
           <span className="board-note">
-            {n.version === null ?
-              'version unknown'
-            : <span className="mono">{n.version}</span>}
+            {n.version === null ? 'version unknown' : <span className="mono">{n.version}</span>}
           </span>
         }
         foot={<p className="board-foot">{n.note}</p>}
@@ -878,9 +891,11 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
             k: 'Its own check',
             v: data.selfLatest,
             note:
-              data.selfLatest === null ? 'it could not reach GitHub either'
-              : data.selfLatest === data.version ? 'agrees: this is current'
-              : 'what the app itself reports as newest',
+              data.selfLatest === null
+                ? 'it could not reach GitHub either'
+                : data.selfLatest === data.version
+                  ? 'agrees: this is current'
+                  : 'what the app itself reports as newest',
           },
         ]}
         lede={
@@ -932,25 +947,23 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
             ]}
           />
 
-          {data.reach.length === 0 ?
+          {data.reach.length === 0 ? (
             <p className="viz-empty">{data.note ?? 'nothing registered'}</p>
-          : <ul className="itemlist">
+          ) : (
+            <ul className="itemlist">
               {data.reach.map((r) => (
                 <li key={`${r.kind}-${r.name}`}>
                   <Chip tone={r.kind === 'model' ? 'info' : r.kind === 'tool' ? 'accent' : 'muted'}>
                     {r.kind}
                   </Chip>
                   <span className="item-main">{r.name}</span>
-                  <span
-                    className={r.flag ? 'item-side bad-text' : 'item-side'}
-                    title={r.detail}
-                  >
+                  <span className={r.flag ? 'item-side bad-text' : 'item-side'} title={r.detail}>
                     {r.detail}
                   </span>
                 </li>
               ))}
             </ul>
-          }
+          )}
 
           <p className="board-foot">
             Read back from the running instance, not from the config that was meant to produce it —
@@ -995,9 +1008,17 @@ function badgesFor(f: N8nFlow): { text: string; tone: 'warn' | 'muted'; why?: st
   const out: { text: string; tone: 'warn' | 'muted'; why?: string }[] = []
   if (f.stalled) out.push({ text: 'stalled', tone: 'warn', why: 'kept a cadence, then missed it' })
   if (f.active === true && f.runs === 0)
-    out.push({ text: 'never run', tone: 'warn', why: 'switched on and has not fired in the window' })
+    out.push({
+      text: 'never run',
+      tone: 'warn',
+      why: 'switched on and has not fired in the window',
+    })
   if (f.unpublished)
-    out.push({ text: 'unpublished', tone: 'warn', why: 'edited since the version the schedule runs' })
+    out.push({
+      text: 'unpublished',
+      tone: 'warn',
+      why: 'edited since the version the schedule runs',
+    })
   if (f.active === false) out.push({ text: 'off', tone: 'muted', why: 'switched off in n8n' })
   return out
 }
@@ -1061,8 +1082,9 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
               {
                 k: 'failed',
                 v:
-                  total.runs === 0 ? DASH
-                  : `${num(total.failed)} · ${pct((total.failed / total.runs) * 100, 1)}`,
+                  total.runs === 0
+                    ? DASH
+                    : `${num(total.failed)} · ${pct((total.failed / total.runs) * 100, 1)}`,
                 tone: total.failed > 0 ? 'bad' : undefined,
               },
               { k: 'typical run', v: ms(total.medianMs) },
@@ -1107,7 +1129,8 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
             is what n8n still holds, and an empty column early on may be forgetting rather than
             silence. A day that saw a failure is underlined in red; the stack trace is behind the
             Executions tab.
-            {data.partial && ' There were more executions than this fetched, so these are a lower bound.'}
+            {data.partial &&
+              ' There were more executions than this fetched, so these are a lower bound.'}
           </p>
         </Board>
 
@@ -1117,9 +1140,10 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           span={4}
           aside={<span className="board-note">runs, {total.days}d</span>}
         >
-          {flows.length === 0 ?
+          {flows.length === 0 ? (
             <p className="viz-empty">{data.note ?? 'nothing has run in the window'}</p>
-          : <ul className="ranks">
+          ) : (
+            <ul className="ranks">
               {flows.map((f) => (
                 <RankRow
                   key={f.id}
@@ -1129,25 +1153,24 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
                   value={f.runs}
                   max={flows[0]?.runs ?? 1}
                   meta={
-                    <>
-                      {f.runs === 0 ?
-                        <span className="bad-text">nothing in {total.days} days</span>
-                      : <>
-                          {f.medianMs !== null && <span>{ms(f.medianMs)}</span>}
-                          {/* `until`, not `ms`: a cadence is a period, and the
-                              latency formatter tops out at minutes — a daily
-                              schedule read "1440m 0s". */}
-                          {f.everyMs !== null && <span>every {until(f.everyMs / 1000)}</span>}
-                          {f.failed > 0 && <span className="bad-text">{num(f.failed)} failed</span>}
-                          <span>{f.ago}</span>
-                        </>
-                      }
-                    </>
+                    f.runs === 0 ? (
+                      <span className="bad-text">nothing in {total.days} days</span>
+                    ) : (
+                      <>
+                        {f.medianMs !== null && <span>{ms(f.medianMs)}</span>}
+                        {/* `until`, not `ms`: a cadence is a period, and the
+                            latency formatter tops out at minutes — a daily
+                            schedule read "1440m 0s". */}
+                        {f.everyMs !== null && <span>every {until(f.everyMs / 1000)}</span>}
+                        {f.failed > 0 && <span className="bad-text">{num(f.failed)} failed</span>}
+                        <span>{f.ago}</span>
+                      </>
+                    )
                   }
                 />
               ))}
             </ul>
-          }
+          )}
 
           <p className="board-foot">
             {/* Three of the four badges are states nothing else reports: a

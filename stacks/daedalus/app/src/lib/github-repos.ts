@@ -112,9 +112,8 @@ type GhRepo = {
 export async function listRepos(): Promise<RepoList> {
   return cached('repos', async () => {
     const authenticated = token() !== null
-    const url =
-      authenticated ?
-        'https://api.github.com/user/repos?affiliation=owner&sort=pushed&per_page=100'
+    const url = authenticated
+      ? 'https://api.github.com/user/repos?affiliation=owner&sort=pushed&per_page=100'
       : `https://api.github.com/users/${OWNER}/repos?sort=pushed&per_page=100`
 
     try {
@@ -124,9 +123,11 @@ export async function listRepos(): Promise<RepoList> {
           repos: [],
           authenticated,
           error: `GitHub answered ${String(res.status)} — ${
-            res.status === 401 ? 'the token is rejected; rotate DASH_GITHUB_REPO_TOKEN'
-            : res.status === 403 ? 'rate limited, or the token lacks repository read'
-            : 'unexpected'
+            res.status === 401
+              ? 'the token is rejected; rotate DASH_GITHUB_REPO_TOKEN'
+              : res.status === 403
+                ? 'rate limited, or the token lacks repository read'
+                : 'unexpected'
           }`,
         }
       }
@@ -240,7 +241,9 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
     const workflows = files.map((f) => f.name ?? '')
 
     const bodies = await Promise.all(
-      files.map((f) => ghRaw(`/repos/${OWNER}/${repo}/contents/${encodeURIComponent(f.path ?? '')}`)),
+      files.map((f) =>
+        ghRaw(`/repos/${OWNER}/${repo}/contents/${encodeURIComponent(f.path ?? '')}`),
+      ),
     )
     const allYaml = bodies.filter((b): b is string => b !== null).join('\n')
 
@@ -269,9 +272,9 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
         label: 'CI workflows',
         state: 'unknown',
         detail:
-          dir.status === 0 ?
-            'GitHub could not be reached'
-          : `GitHub answered ${String(dir.status)}`,
+          dir.status === 0
+            ? 'GitHub could not be reached'
+            : `GitHub answered ${String(dir.status)}`,
       })
     } else {
       checks.push({
@@ -279,9 +282,9 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
         label: 'CI workflows',
         state: workflows.length > 0 ? 'ok' : 'bad',
         detail:
-          workflows.length > 0 ?
-            workflows.join(', ')
-          : 'the directory exists but holds no workflow files',
+          workflows.length > 0
+            ? workflows.join(', ')
+            : 'the directory exists but holds no workflow files',
       })
     }
 
@@ -302,20 +305,27 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
       id: 'image-workflow',
       label: 'Publishes an image to the box’s registry',
       state:
-        allYaml === '' ? 'unknown'
-        : publishWorkflow === null ? 'bad'
-        : dispatchable ? 'ok'
-        : 'warn',
+        allYaml === ''
+          ? 'unknown'
+          : publishWorkflow === null
+            ? 'bad'
+            : dispatchable
+              ? 'ok'
+              : 'warn',
       detail:
-        allYaml === '' ? 'no workflow contents could be read'
-        : publishWorkflow === null ? 'no workflow pushes to zot:5000 — nothing would ever be deployed'
-        : dispatchable ? `${publishWorkflow} pushes to zot, and can be run on demand`
-        : `${publishWorkflow} pushes to zot, but has no workflow_dispatch trigger`,
+        allYaml === ''
+          ? 'no workflow contents could be read'
+          : publishWorkflow === null
+            ? 'no workflow pushes to zot:5000 — nothing would ever be deployed'
+            : dispatchable
+              ? `${publishWorkflow} pushes to zot, and can be run on demand`
+              : `${publishWorkflow} pushes to zot, but has no workflow_dispatch trigger`,
       fix:
-        publishWorkflow === null ?
-          'Add the release workflow that builds and pushes zot:5000/<name>:latest (copy it from an existing app).'
-        : dispatchable ? undefined
-        : 'Add `workflow_dispatch:` to its triggers — without it the first image can only come from a push to the default branch.',
+        publishWorkflow === null
+          ? 'Add the release workflow that builds and pushes zot:5000/<name>:latest (copy it from an existing app).'
+          : dispatchable
+            ? undefined
+            : 'Add `workflow_dispatch:` to its triggers — without it the first image can only come from a push to the default branch.',
     })
 
     // --- will these workflows run on OUR runners at all? -------------------
@@ -336,13 +346,13 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
       label: 'Workflows run on this box’s runners',
       state: allYaml === '' ? 'unknown' : usesServiceContainers ? 'bad' : 'ok',
       detail:
-        allYaml === '' ? 'no workflow contents could be read'
-        : usesServiceContainers ?
-          'a job declares services:/container: — our runners have no Docker API, so it fails at "Initialize containers"'
-        : 'plain run: steps only',
-      fix:
-        usesServiceContainers ?
-          'Replace the service container with something the job starts itself, or run that job on a GitHub-hosted runner. The socket is withheld deliberately — it is root-equivalent on this box.'
+        allYaml === ''
+          ? 'no workflow contents could be read'
+          : usesServiceContainers
+            ? 'a job declares services:/container: — our runners have no Docker API, so it fails at "Initialize containers"'
+            : 'plain run: steps only',
+      fix: usesServiceContainers
+        ? 'Replace the service container with something the job starts itself, or run that job on a GitHub-hosted runner. The socket is withheld deliberately — it is root-equivalent on this box.'
         : undefined,
     })
 
@@ -356,9 +366,11 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
       label: 'Dockerfile at the repo root',
       state: root.body === null ? 'unknown' : hasContainerfile ? 'ok' : 'warn',
       detail:
-        root.body === null ? 'the repo contents could not be read'
-        : hasContainerfile ? 'found'
-        : 'none at the root — fine if the workflow builds from elsewhere',
+        root.body === null
+          ? 'the repo contents could not be read'
+          : hasContainerfile
+            ? 'found'
+            : 'none at the root — fine if the workflow builds from elsewhere',
     })
 
     // --- the secrets these workflows read ----------------------------------
@@ -383,18 +395,18 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
     checks.push({
       id: 'registry-secret',
       label: 'REGISTRY_PASSWORD repo secret',
-      state:
-        !readable ? 'unknown'
-        : hasRegistryPassword ? 'ok'
-        : 'bad',
-      detail:
-        !readable ?
-          secrets.status === 403 ?
-            'the token cannot read repo secrets — check by hand'
+      state: !readable ? 'unknown' : hasRegistryPassword ? 'ok' : 'bad',
+      detail: !readable
+        ? secrets.status === 403
+          ? 'the token cannot read repo secrets — check by hand'
           : 'could not be checked'
-        : hasRegistryPassword ? 'set'
-        : 'not set — the image push will 401',
-      fix: readable && !hasRegistryPassword ? 'This box owns that password and can set it for you.' : undefined,
+        : hasRegistryPassword
+          ? 'set'
+          : 'not set — the image push will 401',
+      fix:
+        readable && !hasRegistryPassword
+          ? 'This box owns that password and can set it for you.'
+          : undefined,
     })
 
     // `${{ secrets.X }}`, minus the one GitHub injects itself. Uppercase-only
@@ -410,19 +422,17 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
       checks.push({
         id: 'workflow-secrets',
         label: 'Other secrets these workflows read',
-        state:
-          !readable ? 'unknown'
-          : missing.length === 0 ? 'ok'
-          : 'bad',
-        detail:
-          !readable ? `${referenced.join(', ')} — could not be checked`
-          : missing.length === 0 ? `${referenced.join(', ')} — all set`
-          : `missing: ${missing.join(', ')}`,
+        state: !readable ? 'unknown' : missing.length === 0 ? 'ok' : 'bad',
+        detail: !readable
+          ? `${referenced.join(', ')} — could not be checked`
+          : missing.length === 0
+            ? `${referenced.join(', ')} — all set`
+            : `missing: ${missing.join(', ')}`,
         fix:
-          readable && missing.length > 0 ?
-            'These belong to the app, not to the platform, so nothing here can supply them: gh secret set <NAME> --repo ' +
-            `${OWNER}/${repo}. The workflow will fail without them, whatever this page says about the rest.`
-          : undefined,
+          readable && missing.length > 0
+            ? 'These belong to the app, not to the platform, so nothing here can supply them: gh secret set <NAME> --repo ' +
+              `${OWNER}/${repo}. The workflow will fail without them, whatever this page says about the rest.`
+            : undefined,
       })
     }
 

@@ -17,14 +17,7 @@
  * five were Grafana, Loki, Prometheus, Gatus and Healthchecks — which is the
  * Monitoring tab row exactly.
  */
-export type CategoryName =
-  | 'ai'
-  | 'media'
-  | 'home'
-  | 'gaming'
-  | 'network'
-  | 'system'
-  | 'monitoring'
+export type CategoryName = 'ai' | 'media' | 'home' | 'gaming' | 'network' | 'system' | 'monitoring'
 
 export type CategorySpec = {
   id: CategoryName
@@ -142,15 +135,27 @@ export const CATEGORIES: CategorySpec[] = [
       // panel whose chart they describe.
       // Traffic + the tool list, then who is calling + the changelog. Paired
       // by height rather than by subject — see the note on that board.
-      { id: 'litellm', label: 'LiteLLM', probe: 'litellm', boardSpans: [8, 4, 4, 8], statBand: false },
+      {
+        id: 'litellm',
+        label: 'LiteLLM',
+        probe: 'litellm',
+        boardSpans: [8, 4, 4, 8],
+        statBand: false,
+      },
       // What it can reach + who gets in, then the changelog across.
-      { id: 'open-webui', label: 'Open WebUI', probe: 'open-webui', boardSpans: [6, 6, 12], statBand: false },
+      {
+        id: 'open-webui',
+        label: 'Open WebUI',
+        probe: 'open-webui',
+        boardSpans: [6, 6, 12],
+        statBand: false,
+      },
       // Runs + the workflows behind them, same 8/4 pairing as the gateway.
       { id: 'n8n', label: 'n8n', probe: 'n8n', boardSpans: [8, 4, 12], statBand: false },
     ],
   },
   {
-    id: "media",
+    id: 'media',
     label: 'Media',
     lede: 'Two libraries, and the chain that fills them — with what each service says about itself.',
     // Shaped to Jellyfin, the tab that opens by default.
@@ -176,8 +181,20 @@ export const CATEGORIES: CategorySpec[] = [
     // draw a green dot over a broken half. Unknown on any makes the whole thing
     // unknown, which is the honest answer to a partial reading.
     tabs: [
-      { id: 'jellyfin', label: 'Jellyfin', probe: 'jellyfin', boardSpans: [8, 4, 4, 8], statBand: false },
-      { id: 'calibre', label: 'Calibre', probe: 'calibre-web', boardSpans: [8, 4, 12], statBand: false },
+      {
+        id: 'jellyfin',
+        label: 'Jellyfin',
+        probe: 'jellyfin',
+        boardSpans: [8, 4, 4, 8],
+        statBand: false,
+      },
+      {
+        id: 'calibre',
+        label: 'Calibre',
+        probe: 'calibre-web',
+        boardSpans: [8, 4, 12],
+        statBand: false,
+      },
       // Past the rule: everything that fills the two libraries above.
       {
         id: 'wanted',
@@ -187,7 +204,13 @@ export const CATEGORIES: CategorySpec[] = [
         statBand: false,
         dividerBefore: true,
       },
-      { id: 'indexer', label: 'Indexer', probe: 'prowlarr', boardSpans: [12, 12, 12], statBand: false },
+      {
+        id: 'indexer',
+        label: 'Indexer',
+        probe: 'prowlarr',
+        boardSpans: [12, 12, 12],
+        statBand: false,
+      },
       {
         id: 'downloaders',
         label: 'Downloaders',
@@ -226,13 +249,31 @@ export const CATEGORIES: CategorySpec[] = [
     // household's list of people, but it is the answer to a question you ask
     // about the others, not one you open the category to see.
     tabs: [
-      { id: 'house', label: 'House', probe: 'home-assistant', boardSpans: [8, 4, 4, 8], statBand: false },
+      {
+        id: 'house',
+        label: 'House',
+        probe: 'home-assistant',
+        boardSpans: [8, 4, 4, 8],
+        statBand: false,
+      },
       { id: 'photos', label: 'Photos', probe: 'immich', boardSpans: [8, 4, 4, 8], statBand: false },
-      { id: 'files', label: 'Files', probe: 'nextcloud', boardSpans: [8, 4, 4, 4], statBand: false },
+      {
+        id: 'files',
+        label: 'Files',
+        probe: 'nextcloud',
+        boardSpans: [8, 4, 4, 4],
+        statBand: false,
+      },
       { id: 'pantry', label: 'Pantry', probe: 'grocy', boardSpans: [8, 4, 12], statBand: false },
       // Pocket ID, which had a category of its own until now — see the note in
       // components/category/idp.tsx for why it stopped deserving one.
-      { id: 'signin', label: 'Sign-in', probe: 'pocket-id', boardSpans: [6, 6, 3, 9], statBand: false },
+      {
+        id: 'signin',
+        label: 'Sign-in',
+        probe: 'pocket-id',
+        boardSpans: [6, 6, 3, 9],
+        statBand: false,
+      },
       // Past the rule: one person's, not the household's.
       {
         id: 'projects',
@@ -242,30 +283,42 @@ export const CATEGORIES: CategorySpec[] = [
         statBand: false,
         dividerBefore: true,
       },
-      { id: 'finance', label: 'Finance', probe: 'wealthfolio', boardSpans: [12, 12, 12], statBand: false },
-      { id: 'tools', label: 'Tools', probe: 'stirling-pdf', boardSpans: [12, 12, 12], statBand: false },
+      {
+        id: 'finance',
+        label: 'Finance',
+        probe: 'wealthfolio',
+        boardSpans: [12, 12, 12],
+        statBand: false,
+      },
+      {
+        id: 'tools',
+        label: 'Tools',
+        probe: 'stirling-pdf',
+        boardSpans: [12, 12, 12],
+        statBand: false,
+      },
     ],
   },
   {
-    id: "gaming",
+    id: 'gaming',
     label: 'Gaming',
-    lede: "The game servers: which build each one runs, and whether the people on the sofa can still join.",
+    lede: 'The game servers: which build each one runs, and whether the people on the sofa can still join.',
     boardSpans: [6, 6, 12],
     tabs: [
       // ofsm answering is the closest thing to a liveness check this server
       // has: the game itself speaks UDP straight to a forwarded port and
       // nothing on this box can ask it a question.
-      { id: "factorio", label: "Factorio", probe: "factorio-admin" },
+      { id: 'factorio', label: 'Factorio', probe: 'factorio-admin' },
       // Still no probe, but for the opposite reason to Factorio's: a probe is
       // a webApp answering HTTP, and Minecraft publishes no HTTP at all. It
       // answers the question better than a dot could anyway — the page reads
       // the game's own status ping, which is the game replying rather than a
       // container existing.
-      { id: "minecraft", label: "Minecraft" },
+      { id: 'minecraft', label: 'Minecraft' },
     ],
   },
   {
-    id: "network",
+    id: 'network',
     label: 'Network',
     lede: 'Everything between a packet and this box — the link, the ways in, the proxy, the resolver.',
     boardSpans: [12, 12, 8, 4],
@@ -301,7 +354,13 @@ export const CATEGORIES: CategorySpec[] = [
       // Three ways in — WireGuard, the Cloudflare tunnel, and the address
       // itself — chosen by a switch inside the page. The probe is wg-easy's
       // because it is the only one of the three gatus can check.
-      { id: 'wireguard', label: 'Coming in', probe: 'wg-easy', boardSpans: [8, 4, 12], statBand: false },
+      {
+        id: 'wireguard',
+        label: 'Coming in',
+        probe: 'wg-easy',
+        boardSpans: [8, 4, 12],
+        statBand: false,
+      },
       // What happens to a request once it has arrived. Pocket ID shared this
       // tab and is its own category now: the routing table still borrows the
       // IdP's client list to say which routes are gated, but that is one
@@ -360,7 +419,7 @@ export const CATEGORIES: CategorySpec[] = [
   // subject of its own. Beside the automation, the photos and the files it is
   // plainly one of the household's things, so it is Home › Sign-in now.
   {
-    id: "system",
+    id: 'system',
     label: 'System',
     lede: 'The machine itself: what it is running on, what it is storing, and what survives it.',
     // Shaped to Host, the tab that opens by default.
@@ -432,7 +491,13 @@ export const CATEGORIES: CategorySpec[] = [
     // monitoring stack was the one part of this box whose own upgrades were
     // invisible from the dashboard that watches everything else's.
     tabs: [
-      { id: 'alerts', label: 'Alerts', probe: 'grafana', boardSpans: [8, 4, 4, 8], statBand: false },
+      {
+        id: 'alerts',
+        label: 'Alerts',
+        probe: 'grafana',
+        boardSpans: [8, 4, 4, 8],
+        statBand: false,
+      },
       { id: 'probes', label: 'Probes', probe: 'gatus', boardSpans: [8, 4, 4, 12], statBand: false },
       {
         id: 'metrics',
@@ -450,7 +515,13 @@ export const CATEGORIES: CategorySpec[] = [
       // status is assembled from `up` instead of published for the sake of
       // being probed — a hostname for Loki would be new ingress bought to
       // colour a circle.
-      { id: 'logs', label: 'Logs', health: 'log-pipeline', boardSpans: [8, 4, 4, 8], statBand: false },
+      {
+        id: 'logs',
+        label: 'Logs',
+        health: 'log-pipeline',
+        boardSpans: [8, 4, 4, 8],
+        statBand: false,
+      },
       { id: 'jobs', label: 'Jobs', probe: 'healthchecks', boardSpans: [8, 4, 12], statBand: false },
     ],
   },

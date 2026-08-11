@@ -1,12 +1,12 @@
 import {
+  createRootRoute,
   HeadContent,
   Link,
   Outlet,
   Scripts,
-  createRootRoute,
   useRouterState,
 } from '@tanstack/react-router'
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 
 import { NavIcon } from '../components/nav-icon'
 import { CATEGORIES } from '../lib/dashboard/nav'
@@ -66,6 +66,9 @@ function RootDocument({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: NAV_BOOT is a
+            static string constant defined in this repo, not user input — it must
+            run before hydration, which only an inline script can do. */}
         <script dangerouslySetInnerHTML={{ __html: NAV_BOOT }} />
       </head>
       <body>
@@ -118,6 +121,7 @@ function Shell({ children }: { children: ReactNode }) {
   // a menu you have to dismiss yourself after tapping a link is one tap too
   // many, every time.
   const path = useRouterState({ select: (s) => s.location.pathname })
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `path` is not read in the body — it IS the trigger; the effect exists to run on navigation.
   useEffect(() => {
     setOpen(false)
   }, [path])

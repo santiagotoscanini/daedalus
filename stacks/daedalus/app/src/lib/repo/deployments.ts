@@ -2,8 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { desc, eq } from 'drizzle-orm'
 import { db } from '../db'
-import { deployments } from '../schema'
 import { imageInfo } from '../registry'
+import { deployments } from '../schema'
 
 // Ingests deploy.sh's journal into Postgres, and reads it back for the UI.
 
@@ -66,7 +66,9 @@ export async function ingestDeployments(appId: string, appName: string): Promise
     ).map((r) => `${r.digest}@${r.startedAt.toISOString()}`),
   )
 
-  const fresh = lines.filter((l) => !known.has(`${l.digest}@${new Date(l.startedAt).toISOString()}`))
+  const fresh = lines.filter(
+    (l) => !known.has(`${l.digest}@${new Date(l.startedAt).toISOString()}`),
+  )
   if (fresh.length === 0) return
 
   // Labels are looked up ONCE per digest and stored, not resolved on render:

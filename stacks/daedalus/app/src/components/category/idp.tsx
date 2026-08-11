@@ -15,13 +15,12 @@
 // routing.
 
 import { useState } from 'react'
-
-import { Board, BoardGrid, Chip, Columns, Measures } from '../viz'
-import { Changelog } from '../release-notes'
-import { LinkRow, ServiceHead, verdictOf } from '../service-head'
-import { GrafanaLogs, LogDetails } from '../logs'
 import { DASH, num } from '../../lib/dashboard/format'
 import type { IdpData } from '../../lib/dashboard/idp'
+import { GrafanaLogs, LogDetails } from '../logs'
+import { Changelog } from '../release-notes'
+import { LinkRow, ServiceHead, verdictOf } from '../service-head'
+import { Board, BoardGrid, Chip, Columns, Measures } from '../viz'
 
 /** How many registrations the list shows before it is asked for the rest. */
 const APPS_SHOWN = 5
@@ -54,11 +53,17 @@ export function IdpView({ d }: { d: IdpData }) {
             k: 'Latest',
             v: d.gap.latest,
             note:
-              d.gap.latest === null ? 'GitHub did not answer'
-              : d.gap.behind.length === 0 ? 'this is what is running'
-              : `${String(d.gap.behind.length)} release${d.gap.behind.length === 1 ? '' : 's'} between them`,
+              d.gap.latest === null
+                ? 'GitHub did not answer'
+                : d.gap.behind.length === 0
+                  ? 'this is what is running'
+                  : `${String(d.gap.behind.length)} release${d.gap.behind.length === 1 ? '' : 's'} between them`,
           },
-          { k: 'Pinned by', v: null, note: 'an exact tag in stacks/pocket-id — it serves no version' },
+          {
+            k: 'Pinned by',
+            v: null,
+            note: 'an exact tag in stacks/pocket-id — it serves no version',
+          },
         ]}
         lede={
           <>
@@ -157,10 +162,11 @@ export function IdpView({ d }: { d: IdpData }) {
             recent activity and the {num(idle)} nobody opened at all sit at the end of the full one
             — which for a proxy-gated app means nobody visited it, not that the registration is
             dead. Open a row for who went in and from what; the full log is in Pocket ID. A{' '}
-            <b>re-consent</b> is not a first use:
-            rewriting a client drops its stored consent, and the convergence job rewrites every one
-            of them on every rebuild, so these mark where a rebuild made everybody agree again.
-            {d.truncated && ' The window is longer than the pages read, so these are a lower bound.'}
+            <b>re-consent</b> is not a first use: rewriting a client drops its stored consent, and
+            the convergence job rewrites every one of them on every rebuild, so these mark where a
+            rebuild made everybody agree again.
+            {d.truncated &&
+              ' The window is longer than the pages read, so these are a lower bound.'}
           </p>
         </Board>
 
@@ -197,7 +203,9 @@ export function IdpView({ d }: { d: IdpData }) {
               <li key={g.name}>
                 <span className="item-main">{g.name}</span>
                 <span className="item-side">
-                  {g.members === 0 ? 'nobody in it' : `${String(g.members)} member${g.members === 1 ? '' : 's'}`}
+                  {g.members === 0
+                    ? 'nobody in it'
+                    : `${String(g.members)} member${g.members === 1 ? '' : 's'}`}
                 </span>
               </li>
             ))}
@@ -208,9 +216,10 @@ export function IdpView({ d }: { d: IdpData }) {
               raw stream of when each one did is a log, and Pocket ID's own
               audit page is the place for that. */}
           <h4 className="board-sub">Devices that signed in</h4>
-          {d.devices.length === 0 ?
+          {d.devices.length === 0 ? (
             <p className="viz-empty">nobody signed in during the window</p>
-          : <ul className="itemlist">
+          ) : (
+            <ul className="itemlist">
               {d.devices.map((v) => (
                 <li key={v.name}>
                   <span className="item-main" title={v.name}>
@@ -221,7 +230,7 @@ export function IdpView({ d }: { d: IdpData }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
 
           {/* A quarter of the width, so this says the things that change what
               the three lists above mean, and stops. */}
@@ -352,9 +361,9 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
               <em
                 className="is-muted"
                 title={
-                  c.role === 'gate' ?
-                    'The credential traefik’s forward-auth middleware signs in with, before the request reaches the app at all'
-                  : 'The credential the app itself runs its own login with'
+                  c.role === 'gate'
+                    ? 'The credential traefik’s forward-auth middleware signs in with, before the request reaches the app at all'
+                    : 'The credential the app itself runs its own login with'
                 }
               >
                 {c.role === 'gate' ? 'proxy gate' : 'app login'}
@@ -377,12 +386,13 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
         </summary>
 
         <div className="idp-app-body">
-          {c.opens.length === 0 ?
+          {c.opens.length === 0 ? (
             <p className="viz-empty">
               Nobody opened this in the window. For an app behind the proxy gate that means nobody
               visited it — the registration is what the middleware itself signs in with.
             </p>
-          : <ul className="itemlist">
+          ) : (
+            <ul className="itemlist">
               {c.opens.map((o) => (
                 <li key={o.id}>
                   {/* Not "first time": the event recurs, and an access older
@@ -400,7 +410,7 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           {c.used > c.opens.length && (
             <p className="board-foot">
               The {num(c.opens.length)} most recent of {num(c.used)}. The rest are in Pocket ID.

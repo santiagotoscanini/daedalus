@@ -14,8 +14,8 @@
 // the list of people, and of what each of them can open.
 
 import { getJson } from './clients'
-import { versionGap, type VersionGap } from './github'
 import { key, localDay, since } from './format'
+import { type VersionGap, versionGap } from './github'
 
 /** How far back the activity columns go. A column per day, as on the AI tabs. */
 const DAYS = 14
@@ -200,7 +200,10 @@ type AuditEvent = {
  * page down by nothing, and a truncated count that says so is better than a
  * complete one that arrives late.
  */
-async function auditLog(base: string, sinceMs: number): Promise<{ events: AuditEvent[]; truncated: boolean }> {
+async function auditLog(
+  base: string,
+  sinceMs: number,
+): Promise<{ events: AuditEvent[]; truncated: boolean }> {
   const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
   const events: AuditEvent[] = []
 
@@ -316,9 +319,7 @@ export async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): 
   // Pocket ID gives the static-API-key principal the all-zero UUID, which is
   // the only thing distinguishing it from a person — its username is generated
   // and its display name is whatever the release happened to call it.
-  const people = (users?.data ?? []).filter(
-    (u) => u.id !== '00000000-0000-0000-0000-000000000000',
-  )
+  const people = (users?.data ?? []).filter((u) => u.id !== '00000000-0000-0000-0000-000000000000')
 
   return {
     version,
@@ -342,9 +343,11 @@ export async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): 
           restricted: c.isGroupRestricted === true,
           sharesHost: host !== null && (byHost.get(host) ?? 0) > 1,
           role:
-            host === null || (byHost.get(host) ?? 0) < 2 ? null
-            : forwardAuthClient(c, host) ? ('gate' as const)
-            : ('app' as const),
+            host === null || (byHost.get(host) ?? 0) < 2
+              ? null
+              : forwardAuthClient(c, host)
+                ? ('gate' as const)
+                : ('app' as const),
           opens: hit?.opens ?? [],
           sortAt: hit?.last ?? 0,
         }
@@ -404,4 +407,3 @@ type PocketUser = {
   disabled?: boolean
   userGroups?: { name?: string; friendlyName?: string }[]
 }
-

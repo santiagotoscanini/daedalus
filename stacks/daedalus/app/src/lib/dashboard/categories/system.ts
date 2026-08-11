@@ -27,16 +27,16 @@
 import { promBars, promScalar, promScalars, promSeries, promVector } from '../clients'
 import { bytes } from '../format'
 import type { VersionGap } from '../github'
-import { postgresGap } from '../postgres'
 import {
-  hostFacts,
   type DatasetFacts,
   type Hardware,
   type HostFacts,
+  hostFacts,
   type ReplicationPair,
   type SmartDisk,
   type ZpoolFacts,
 } from '../host-facts'
+import { postgresGap } from '../postgres'
 
 export type SystemData =
   | ({ tab: 'host' } & HostData)
@@ -210,8 +210,7 @@ function labelled(
   )
   return values
     .map((v) => ({
-      label:
-        names.get(`${v.metric.chip ?? ''}/${v.metric.sensor ?? ''}`) ?? v.metric.sensor ?? '?',
+      label: names.get(`${v.metric.chip ?? ''}/${v.metric.sensor ?? ''}`) ?? v.metric.sensor ?? '?',
       value: Number(v.value[1]),
     }))
     .filter((v) => Number.isFinite(v.value))
@@ -513,9 +512,9 @@ async function loadDatabase(): Promise<DatabaseData> {
         sizeBytes: Number(s.value[1]),
         connections: c.get(name) ?? null,
         cacheHitPct:
-          hit === undefined || read === undefined || hit + read === 0 ?
-            null
-          : (hit / (hit + read)) * 100,
+          hit === undefined || read === undefined || hit + read === 0
+            ? null
+            : (hit / (hit + read)) * 100,
         commits: cm.get(name) ?? null,
         rollbacks: rb.get(name) ?? null,
         deadlocks: dl.get(name) ?? null,

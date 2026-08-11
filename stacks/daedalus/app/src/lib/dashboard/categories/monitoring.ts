@@ -49,7 +49,7 @@ import {
   promVector,
 } from '../clients'
 import { key } from '../format'
-import { versionGap, type VersionGap } from '../github'
+import { type VersionGap, versionGap } from '../github'
 import { imageVersion, type RunningVersion } from '../images'
 
 type Ctx = { base: (app: string) => string }
@@ -127,7 +127,10 @@ async function loadAlerts(): Promise<AlertsData> {
       'http://grafana:3000/api/prometheus/grafana/api/v1/rules',
       h,
     ),
-    getJson<{ dashboards?: number; datasources?: number }>('http://grafana:3000/api/admin/stats', h),
+    getJson<{ dashboards?: number; datasources?: number }>(
+      'http://grafana:3000/api/admin/stats',
+      h,
+    ),
     getJson<unknown[]>('http://grafana:3000/api/v1/provisioning/contact-points', h),
     getJson<{ version?: string }>('http://grafana:3000/api/health', h),
   ])
@@ -136,7 +139,9 @@ async function loadAlerts(): Promise<AlertsData> {
   // `file` is the folder title in Grafana's ruler response; `name` is the
   // evaluation group inside it. The folder is the useful grouping — it is what
   // the sidebar shows and what the provisioning files are organised by.
-  const flat = groups.flatMap((g) => (g.rules ?? []).map((r) => ({ folder: g.file ?? '?', rule: r })))
+  const flat = groups.flatMap((g) =>
+    (g.rules ?? []).map((r) => ({ folder: g.file ?? '?', rule: r })),
+  )
 
   const byFolder = new Map<string, number>()
   for (const { folder } of flat) byFolder.set(folder, (byFolder.get(folder) ?? 0) + 1)
@@ -387,17 +392,17 @@ async function loadLogs(): Promise<LogsData> {
     lokiBuild,
     alloyGap,
   ] = await Promise.all([
-      loadLogVolume(),
-      promScalar('sum(rate(loki_distributor_bytes_received_total[10m]))'),
-      lokiVector('sum by (level) (count_over_time({level=~".+"}[1h]))', 'level'),
-      lokiSeries('sum(count_over_time({level=~".+"}[1h]))', 24 * 60, 3600),
-      lokiSeries('sum(count_over_time({level="error"}[1h]))', 24 * 60, 3600),
-      lokiVector('topk(8, sum by (container) (count_over_time({level="error"}[24h])))', 'container'),
-      lokiVector('topk(10, sum by (stack) (count_over_time({stack=~".+"}[24h])))', 'stack'),
-      lokiScalar('sum(count_over_time({stack="adhoc"}[24h])) or vector(0)'),
-      getJson<{ version?: string }>(`${lokiBase()}/loki/api/v1/status/buildinfo`),
-      versionGap('grafana/alloy', alloyRunning.version),
-    ])
+    loadLogVolume(),
+    promScalar('sum(rate(loki_distributor_bytes_received_total[10m]))'),
+    lokiVector('sum by (level) (count_over_time({level=~".+"}[1h]))', 'level'),
+    lokiSeries('sum(count_over_time({level=~".+"}[1h]))', 24 * 60, 3600),
+    lokiSeries('sum(count_over_time({level="error"}[1h]))', 24 * 60, 3600),
+    lokiVector('topk(8, sum by (container) (count_over_time({level="error"}[24h])))', 'container'),
+    lokiVector('topk(10, sum by (stack) (count_over_time({stack=~".+"}[24h])))', 'stack'),
+    lokiScalar('sum(count_over_time({stack="adhoc"}[24h])) or vector(0)'),
+    getJson<{ version?: string }>(`${lokiBase()}/loki/api/v1/status/buildinfo`),
+    versionGap('grafana/alloy', alloyRunning.version),
+  ])
 
   const lokiVersion = lokiBuild?.version ?? null
 
@@ -516,19 +521,21 @@ async function loadJobs(ctx: Ctx): Promise<JobsData> {
     })
     // Jobs with a live dead-man's-switch first, then the mail-only ones —
     // which is the order of how much is actually known about each.
-    .sort((a, b) => Number(b.slug !== null) - Number(a.slug !== null) || a.unit.localeCompare(b.unit))
+    .sort(
+      (a, b) => Number(b.slug !== null) - Number(a.slug !== null) || a.unit.localeCompare(b.unit),
+    )
 
   return {
     running,
     gap,
     summary:
-      checks === undefined ?
-        null
-      : {
-          up: checks.filter((c) => c.status === 'up').length,
-          down: checks.filter((c) => c.status === 'down').length,
-          late: checks.filter((c) => c.status === 'grace').length,
-        },
+      checks === undefined
+        ? null
+        : {
+            up: checks.filter((c) => c.status === 'up').length,
+            down: checks.filter((c) => c.status === 'down').length,
+            late: checks.filter((c) => c.status === 'grace').length,
+          },
     checks: (checks ?? [])
       .map((c) => ({
         name: c.name ?? '?',
@@ -538,9 +545,9 @@ async function loadJobs(ctx: Ctx): Promise<JobsData> {
         // but still inside its grace period, which is precisely the state
         // worth seeing before it turns into an alert.
         dueIn:
-          c.next_ping === null || c.next_ping === undefined ?
-            null
-          : (Date.parse(c.next_ping) - now) / 1000,
+          c.next_ping === null || c.next_ping === undefined
+            ? null
+            : (Date.parse(c.next_ping) - now) / 1000,
         pings: c.n_pings ?? 0,
       }))
       // Anything not "up" first, then soonest due — the order you would read

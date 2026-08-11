@@ -103,7 +103,11 @@ export const GROUP_LABELS: Record<EnvGroup, { title: string; icon: string; hint:
     icon: '⚿',
     hint: 'Auth.js needs the public host, not the container name, or every callback fails.',
   },
-  sso: { title: 'Pocket ID (SSO)', icon: '⛨', hint: 'Native OIDC. Present only in auth.mode = native.' },
+  sso: {
+    title: 'Pocket ID (SSO)',
+    icon: '⛨',
+    hint: 'Native OIDC. Present only in auth.mode = native.',
+  },
   litellm: { title: 'LiteLLM gateway', icon: '✦', hint: 'The AI gateway, when the toggle is on.' },
   observability: {
     title: 'Observability',

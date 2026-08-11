@@ -1,18 +1,9 @@
-import {
-  BarList,
-  Board,
-  BoardGrid,
-  Chip,
-  Facts,
-  Measures,
-  Progress,
-  Trend,
-} from '../viz'
+import { bytes, DASH, duration, num, pct, since } from '../../lib/dashboard/format'
+import type { SystemData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
 import { compareOf, ServiceHead, verdictOf } from '../service-head'
-import { DASH, bytes, duration, num, pct, since } from '../../lib/dashboard/format'
-import type { SystemData } from '../../server/category'
+import { BarList, Board, BoardGrid, Chip, Facts, Measures, Progress, Trend } from '../viz'
 
 // The System pages — a tab per layer of the machine.
 //
@@ -181,9 +172,13 @@ function HostView({ d }: { d: Host }) {
             {
               k: 'Failed units',
               v:
-                d.failedUnits === null ? DASH
-                : d.failedUnits > 0 ? <Chip tone="bad">{num(d.failedUnits)}</Chip>
-                : <Chip tone="ok">none</Chip>,
+                d.failedUnits === null ? (
+                  DASH
+                ) : d.failedUnits > 0 ? (
+                  <Chip tone="bad">{num(d.failedUnits)}</Chip>
+                ) : (
+                  <Chip tone="ok">none</Chip>
+                ),
             },
           ]}
         />
@@ -248,8 +243,7 @@ function HostView({ d }: { d: Host }) {
 type Memory = Extract<SystemData, { tab: 'memory' }>
 
 function MemoryView({ d }: { d: Memory }) {
-  const arcShare =
-    d.arc.size === null || d.total === null ? null : (d.arc.size / d.total) * 100
+  const arcShare = d.arc.size === null || d.total === null ? null : (d.arc.size / d.total) * 100
 
   return (
     <BoardGrid>
@@ -288,9 +282,9 @@ function MemoryView({ d }: { d: Memory }) {
         span={4}
         aside={
           <span className="board-note">
-            {d.modules.populated === null || d.modules.slots === null ?
-              DASH
-            : `${num(d.modules.populated)} of ${num(d.modules.slots)} slots`}
+            {d.modules.populated === null || d.modules.slots === null
+              ? DASH
+              : `${num(d.modules.populated)} of ${num(d.modules.slots)} slots`}
           </span>
         }
       >
@@ -300,16 +294,16 @@ function MemoryView({ d }: { d: Memory }) {
             {
               k: 'Installed',
               v:
-                d.modules.totalGb === null ? DASH : (
-                  `${num(d.modules.totalGb)} GB ${d.modules.modules[0]?.type ?? ''}`.trim()
-                ),
+                d.modules.totalGb === null
+                  ? DASH
+                  : `${num(d.modules.totalGb)} GB ${d.modules.modules[0]?.type ?? ''}`.trim(),
             },
             {
               k: 'Speed',
               v:
-                d.modules.modules[0]?.speedMts == null ?
-                  DASH
-                : `${num(d.modules.modules[0].speedMts)} MT/s`,
+                d.modules.modules[0]?.speedMts == null
+                  ? DASH
+                  : `${num(d.modules.modules[0].speedMts)} MT/s`,
             },
             {
               k: 'Part',
@@ -318,18 +312,18 @@ function MemoryView({ d }: { d: Memory }) {
             {
               k: 'Room left',
               v:
-                d.modules.maxCapacityGb === null || d.modules.totalGb === null ?
-                  DASH
-                : `${num(d.modules.maxCapacityGb - d.modules.totalGb)} GB in ${num(
-                    (d.modules.slots ?? 0) - (d.modules.populated ?? 0),
-                  )} slots`,
+                d.modules.maxCapacityGb === null || d.modules.totalGb === null
+                  ? DASH
+                  : `${num(d.modules.maxCapacityGb - d.modules.totalGb)} GB in ${num(
+                      (d.modules.slots ?? 0) - (d.modules.populated ?? 0),
+                    )} slots`,
             },
           ]}
         />
         <p className="board-foot">
-          Read from SMBIOS rather than counted from bytes — the kernel knows how much memory it
-          has and nothing about how it arrives. Two slots free against a 128 GB ceiling is the
-          headroom this machine actually has, and the full specification is on <b>Build</b>.
+          Read from SMBIOS rather than counted from bytes — the kernel knows how much memory it has
+          and nothing about how it arrives. Two slots free against a 128 GB ceiling is the headroom
+          this machine actually has, and the full specification is on <b>Build</b>.
         </p>
       </Board>
 
@@ -357,9 +351,9 @@ function MemoryView({ d }: { d: Memory }) {
       <Board title="zram" icon="⇵" span={4}>
         <Progress
           pct={
-            d.zram.total === null || d.zram.used === null || d.zram.total === 0 ?
-              null
-            : (d.zram.used / d.zram.total) * 100
+            d.zram.total === null || d.zram.used === null || d.zram.total === 0
+              ? null
+              : (d.zram.used / d.zram.total) * 100
           }
           tone={(d.zram.used ?? 0) > 0 ? 'warn' : 'ok'}
         />
@@ -379,9 +373,9 @@ function MemoryView({ d }: { d: Memory }) {
         <BarList items={d.topMemory} tone="info" empty="nothing reporting" />
         <p className="board-foot">
           This is <span className="mono">memory.current</span>, which <b>includes page cache</b>. A
-          container doing file I/O sits near its limit forever and is perfectly healthy; the cache is
-          reclaimed when something else needs it. The number that means a cap is genuinely too tight
-          is the OOM counter below, not this bar.
+          container doing file I/O sits near its limit forever and is perfectly healthy; the cache
+          is reclaimed when something else needs it. The number that means a cap is genuinely too
+          tight is the OOM counter below, not this bar.
         </p>
       </Board>
 
@@ -400,15 +394,20 @@ function MemoryView({ d }: { d: Memory }) {
             {
               k: 'OOM kills, all time',
               v:
-                d.oomKills === null ? DASH
-                : d.oomKills > 0 ? <span className="text-warn">{num(d.oomKills)}</span>
-                : <Chip tone="ok">none</Chip>,
+                d.oomKills === null ? (
+                  DASH
+                ) : d.oomKills > 0 ? (
+                  <span className="text-warn">{num(d.oomKills)}</span>
+                ) : (
+                  <Chip tone="ok">none</Chip>
+                ),
             },
           ]}
         />
-        {d.capped.length === 0 ?
+        {d.capped.length === 0 ? (
           <p className="viz-empty">No container has a memory cap.</p>
-        : <ul className="itemlist">
+        ) : (
+          <ul className="itemlist">
             {d.capped.map((c) => (
               <li key={c.name}>
                 <span className="item-main mono">{c.name}</span>
@@ -417,7 +416,7 @@ function MemoryView({ d }: { d: Memory }) {
               </li>
             ))}
           </ul>
-        }
+        )}
         <p className="board-foot">
           A cap is only enforced because systemd delegates <span className="mono">memory</span> to
           the rootless user slice — without that podman accepts the flag and the kernel ignores it.
@@ -500,7 +499,10 @@ function diskPhoto(model: string | null): DiskPhoto | null {
  */
 const SEAGATE_CLASSES: Record<string, { line: string; note: string }> = {
   NE: { line: 'IronWolf Pro', note: 'NAS, rated 300 TB/year of reads and writes' },
-  NT: { line: 'IronWolf Pro', note: 'NAS, rated 500 TB/year — the same label as NE, a higher limit' },
+  NT: {
+    line: 'IronWolf Pro',
+    note: 'NAS, rated 500 TB/year — the same label as NE, a higher limit',
+  },
   VN: { line: 'IronWolf', note: 'NAS, rated 180 TB/year' },
   NM: { line: 'Exos', note: 'enterprise, rated 550 TB/year' },
   VX: { line: 'SkyHawk', note: 'surveillance — tuned for many sequential write streams' },
@@ -544,6 +546,8 @@ type Segment = {
  */
 function ModelDecode({ model, segments }: { model: string; segments: Segment[] }) {
   return (
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: the label names the decoded model string for assistive tech; becomes the shared InfoHint (a real button, with a role) in the UI-system pass.
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex opens the :focus-within decode card for keyboard users.
     <span className="decode" tabIndex={0} aria-label={`${model}, decoded`}>
       <strong className="disk-model decode-string">
         {segments.map((s, i) => (
@@ -588,7 +592,12 @@ function decodeSeagate(model: string | null): Segment[] | null {
   const tb = Number(gb) / 1000
 
   const segments: Segment[] = [
-    { key: 'maker', text: 'ST', label: 'Seagate', note: 'The maker. Every Seagate part number opens with it.' },
+    {
+      key: 'maker',
+      text: 'ST',
+      label: 'Seagate',
+      note: 'The maker. Every Seagate part number opens with it.',
+    },
     {
       key: 'capacity',
       text: gb ?? '',
@@ -655,9 +664,13 @@ function DisksView({ d }: { d: Disks }) {
                is as tall as the drive with the most to say. */
             span={4}
             aside={
-              disk.passed === null ? <span className="board-note">no SMART</span>
-              : disk.passed ? <Chip tone="ok">SMART ok</Chip>
-              : <Chip tone="bad">SMART failing</Chip>
+              disk.passed === null ? (
+                <span className="board-note">no SMART</span>
+              ) : disk.passed ? (
+                <Chip tone="ok">SMART ok</Chip>
+              ) : (
+                <Chip tone="bad">SMART failing</Chip>
+              )
             }
           >
             <div className="disk">
@@ -671,13 +684,16 @@ function DisksView({ d }: { d: Disks }) {
                 />
               )}
               <div className="disk-id">
-                {decoded === null ?
+                {decoded === null ? (
                   <strong className="disk-model">{disk.model ?? '?'}</strong>
-                : <ModelDecode model={disk.model ?? '?'} segments={decoded} />}
+                ) : (
+                  <ModelDecode model={disk.model ?? '?'} segments={decoded} />
+                )}
                 <span className="disk-product">
                   {disk.family ?? (nvme ? 'solid state' : 'hard disk')}
                   {disk.sizeBytes !== null && ` · ${bytes(disk.sizeBytes)}`}
-                  {disk.rotationRate !== null && disk.rotationRate > 0 &&
+                  {disk.rotationRate !== null &&
+                    disk.rotationRate > 0 &&
                     ` · ${num(disk.rotationRate)} rpm`}
                 </span>
                 {disk.serial !== null && <span className="disk-serial mono">{disk.serial}</span>}
@@ -686,7 +702,10 @@ function DisksView({ d }: { d: Disks }) {
 
             <Measures
               items={[
-                { k: 'temperature', v: disk.temperature === null ? DASH : `${String(disk.temperature)}°` },
+                {
+                  k: 'temperature',
+                  v: disk.temperature === null ? DASH : `${String(disk.temperature)}°`,
+                },
                 { k: 'powered on', v: hours(disk.powerOnHours) },
                 { k: 'power cycles', v: num(disk.powerCycles) },
                 {
@@ -699,31 +718,39 @@ function DisksView({ d }: { d: Disks }) {
             <h4 className="board-sub">What would fail first</h4>
             <Facts
               rows={
-                nvme ?
-                  [
-                    { k: 'Spare blocks', v: pct(disk.spareAvailable) },
-                    { k: 'Media errors', v: num(disk.mediaErrors) },
-                    { k: 'Unsafe shutdowns', v: num(disk.unsafeShutdowns) },
-                    {
-                      k: 'Critical warning',
-                      v:
-                        disk.criticalWarning === null ? DASH
-                        : disk.criticalWarning === 0 ? <Chip tone="ok">none</Chip>
-                        : <Chip tone="bad">{num(disk.criticalWarning)}</Chip>,
-                    },
-                  ]
-                : [
-                    { k: 'Reallocated sectors', v: num(disk.reallocated) },
-                    { k: 'Pending sectors', v: num(disk.pending) },
-                    { k: 'Offline uncorrectable', v: num(disk.uncorrectable) },
-                    {
-                      k: 'Link CRC errors',
-                      v:
-                        disk.crcErrors === null ? DASH
-                        : disk.crcErrors > 0 ? <span className="text-warn">{num(disk.crcErrors)}</span>
-                        : num(disk.crcErrors),
-                    },
-                  ]
+                nvme
+                  ? [
+                      { k: 'Spare blocks', v: pct(disk.spareAvailable) },
+                      { k: 'Media errors', v: num(disk.mediaErrors) },
+                      { k: 'Unsafe shutdowns', v: num(disk.unsafeShutdowns) },
+                      {
+                        k: 'Critical warning',
+                        v:
+                          disk.criticalWarning === null ? (
+                            DASH
+                          ) : disk.criticalWarning === 0 ? (
+                            <Chip tone="ok">none</Chip>
+                          ) : (
+                            <Chip tone="bad">{num(disk.criticalWarning)}</Chip>
+                          ),
+                      },
+                    ]
+                  : [
+                      { k: 'Reallocated sectors', v: num(disk.reallocated) },
+                      { k: 'Pending sectors', v: num(disk.pending) },
+                      { k: 'Offline uncorrectable', v: num(disk.uncorrectable) },
+                      {
+                        k: 'Link CRC errors',
+                        v:
+                          disk.crcErrors === null ? (
+                            DASH
+                          ) : disk.crcErrors > 0 ? (
+                            <span className="text-warn">{num(disk.crcErrors)}</span>
+                          ) : (
+                            num(disk.crcErrors)
+                          ),
+                      },
+                    ]
               }
             />
             {!nvme && (disk.crcErrors ?? 0) > 0 && (
@@ -742,16 +769,18 @@ function DisksView({ d }: { d: Disks }) {
                 <li key={`${t.type ?? '?'}-${String(t.hours ?? i)}-${String(i)}`}>
                   <span className="item-main">{t.type ?? '?'}</span>
                   <span className="item-side">
-                    {t.passed ?
+                    {t.passed ? (
                       <Chip tone="ok">ok</Chip>
-                    : <Chip tone="warn">{t.status ?? 'failed'}</Chip>}
+                    ) : (
+                      <Chip tone="warn">{t.status ?? 'failed'}</Chip>
+                    )}
                   </span>
                   <span className="item-side">
                     {/* Against the drive's CURRENT hours, because the drive has
                         no calendar — it counts hours, not dates. */}
-                    {t.hours === null || disk.powerOnHours === null ?
-                      DASH
-                    : `${hours(disk.powerOnHours - t.hours)} ago`}
+                    {t.hours === null || disk.powerOnHours === null
+                      ? DASH
+                      : `${hours(disk.powerOnHours - t.hours)} ago`}
                   </span>
                 </li>
               ))}
@@ -791,9 +820,13 @@ function DisksView({ d }: { d: Disks }) {
             {
               k: 'smartd',
               v:
-                d.smartdActive === null ? DASH
-                : d.smartdActive ? <Chip tone="ok">running</Chip>
-                : <Chip tone="bad">not running</Chip>,
+                d.smartdActive === null ? (
+                  DASH
+                ) : d.smartdActive ? (
+                  <Chip tone="ok">running</Chip>
+                ) : (
+                  <Chip tone="bad">not running</Chip>
+                ),
             },
           ]}
         />
@@ -835,7 +868,11 @@ function PoolsView({ d }: { d: Pools }) {
           icon="◫"
           span={6}
           aside={
-            p.health === 'ONLINE' ? <Chip tone="ok">online</Chip> : <Chip tone="bad">{p.health}</Chip>
+            p.health === 'ONLINE' ? (
+              <Chip tone="ok">online</Chip>
+            ) : (
+              <Chip tone="bad">{p.health}</Chip>
+            )
           }
         >
           <Progress pct={p.capacityPct} tone={p.capacityPct > 80 ? 'warn' : 'info'} />
@@ -856,41 +893,46 @@ function PoolsView({ d }: { d: Pools }) {
                   {v.name}
                 </span>
                 <span className="item-side">
-                  {v.state === 'ONLINE' ? <Chip tone="ok">online</Chip> : <Chip tone="warn">{v.state ?? '?'}</Chip>}
+                  {v.state === 'ONLINE' ? (
+                    <Chip tone="ok">online</Chip>
+                  ) : (
+                    <Chip tone="warn">{v.state ?? '?'}</Chip>
+                  )}
                 </span>
               </li>
             ))}
           </ul>
 
           <h4 className="board-sub">Last scrub</h4>
-          {p.scrub === null ?
+          {p.scrub === null ? (
             <p className="viz-empty">never scrubbed</p>
-          : <Facts
+          ) : (
+            <Facts
               rows={[
                 {
                   k: 'Result',
                   v:
-                    (p.scrub.errors ?? 0) === 0 ?
+                    (p.scrub.errors ?? 0) === 0 ? (
                       <Chip tone="ok">no errors</Chip>
-                    : <Chip tone="bad">{num(p.scrub.errors)} errors</Chip>,
+                    ) : (
+                      <Chip tone="bad">{num(p.scrub.errors)} errors</Chip>
+                    ),
                 },
                 {
                   k: 'Finished',
-                  v:
-                    p.scrub.endedAt === null ? DASH
-                    : since(Date.now() / 1000 - p.scrub.endedAt),
+                  v: p.scrub.endedAt === null ? DASH : since(Date.now() / 1000 - p.scrub.endedAt),
                 },
                 {
                   k: 'Took',
                   v:
-                    p.scrub.startedAt === null || p.scrub.endedAt === null ?
-                      DASH
-                    : duration(p.scrub.endedAt - p.scrub.startedAt),
+                    p.scrub.startedAt === null || p.scrub.endedAt === null
+                      ? DASH
+                      : duration(p.scrub.endedAt - p.scrub.startedAt),
                 },
                 { k: 'Read', v: bytes(p.scrub.examined) },
               ]}
             />
-          }
+          )}
           <p className="board-foot">
             Monthly, and it is the only thing that finds bit-rot: ZFS checksums every block on read,
             but a block nobody reads is never checked. On the mirror a bad copy is repaired from the
@@ -922,14 +964,13 @@ function PoolsView({ d }: { d: Pools }) {
           ))}
         </ul>
         <p className="board-foot">
-          <b>Used</b> is the dataset plus everything its snapshots still pin;{' '}
-          <b>in them</b> is that second part alone — data no longer live but held because a snapshot
-          references it. That column is the one to watch on{' '}
-          <span className="mono">rpool/selfhost</span>: 16K recordsize under every container&rsquo;s
-          database means its deltas are larger than intuition suggests, and the remedy if it grows
-          is dropping a snapshot tier in <span className="mono">platform/zfs.nix</span>. The tiers
-          are ring buffers — count times cadence IS the retention window — so a fully enrolled
-          dataset settles at 39.
+          <b>Used</b> is the dataset plus everything its snapshots still pin; <b>in them</b> is that
+          second part alone — data no longer live but held because a snapshot references it. That
+          column is the one to watch on <span className="mono">rpool/selfhost</span>: 16K recordsize
+          under every container&rsquo;s database means its deltas are larger than intuition
+          suggests, and the remedy if it grows is dropping a snapshot tier in{' '}
+          <span className="mono">platform/zfs.nix</span>. The tiers are ring buffers — count times
+          cadence IS the retention window — so a fully enrolled dataset settles at 39.
         </p>
       </Board>
 
@@ -1047,8 +1088,8 @@ function BuildView({ d }: { d: Build }) {
           Read from SMBIOS, so a BIOS update appears here on its own. It is deliberately not
           compared against anything: MSI publishes no machine-readable list of releases, and the
           only way to claim &ldquo;two behind&rdquo; would be to scrape a vendor page that will
-          change shape without warning. A version panel that quietly starts lying is worse than
-          one that only ever states what is installed.
+          change shape without warning. A version panel that quietly starts lying is worse than one
+          that only ever states what is installed.
         </p>
       </Board>
 
@@ -1062,9 +1103,9 @@ function BuildView({ d }: { d: Build }) {
           <div className="part-id">
             <strong className="part-name">{cpuName(hw.cpu.model)}</strong>
             <span className="part-detail">
-              {hw.cpu.cores === null || hw.cpu.threads === null ?
-                'core count unread'
-              : `${num(hw.cpu.cores)} cores, ${num(hw.cpu.threads)} threads`}
+              {hw.cpu.cores === null || hw.cpu.threads === null
+                ? 'core count unread'
+                : `${num(hw.cpu.cores)} cores, ${num(hw.cpu.threads)} threads`}
               {hw.cpu.maxMhz !== null && ` · up to ${(hw.cpu.maxMhz / 1000).toFixed(1)} GHz`}
             </span>
           </div>
@@ -1093,7 +1134,9 @@ function BuildView({ d }: { d: Build }) {
         span={4}
         aside={
           <span className="board-note">
-            {spinning.length === 0 ? 'nothing spinning' : `${num(spinning.length)} of ${num(d.fans.length)} headers`}
+            {spinning.length === 0
+              ? 'nothing spinning'
+              : `${num(spinning.length)} of ${num(d.fans.length)} headers`}
           </span>
         }
       >
@@ -1112,9 +1155,11 @@ function BuildView({ d }: { d: Build }) {
             <li key={f.label}>
               <span className="item-main">{f.label}</span>
               <span className="item-side">
-                {f.rpm > 0 ?
+                {f.rpm > 0 ? (
                   <span className="mono">{num(f.rpm)} rpm</span>
-                : <span className="text-dim">not connected</span>}
+                ) : (
+                  <span className="text-dim">not connected</span>
+                )}
               </span>
             </li>
           ))}
@@ -1122,7 +1167,11 @@ function BuildView({ d }: { d: Build }) {
         </ul>
         <h4 className="board-sub">Board temperatures</h4>
         <BarList
-          items={d.temps.map((t) => ({ label: t.label, value: t.value, display: `${t.value.toFixed(0)}°` }))}
+          items={d.temps.map((t) => ({
+            label: t.label,
+            value: t.value,
+            display: `${t.value.toFixed(0)}°`,
+          }))}
           tone="info"
           empty="no board sensors"
         />
@@ -1140,9 +1189,9 @@ function BuildView({ d }: { d: Build }) {
         span={4}
         aside={
           <span className="board-note">
-            {hw.memory.populated === null || hw.memory.slots === null ?
-              DASH
-            : `${num(hw.memory.populated)} of ${num(hw.memory.slots)} slots`}
+            {hw.memory.populated === null || hw.memory.slots === null
+              ? DASH
+              : `${num(hw.memory.populated)} of ${num(hw.memory.slots)} slots`}
           </span>
         }
       >
@@ -1157,9 +1206,9 @@ function BuildView({ d }: { d: Build }) {
             {
               k: 'Speed',
               v:
-                hw.memory.modules[0]?.speedMts == null ?
-                  DASH
-                : `${num(hw.memory.modules[0].speedMts)} MT/s`,
+                hw.memory.modules[0]?.speedMts == null
+                  ? DASH
+                  : `${num(hw.memory.modules[0].speedMts)} MT/s`,
             },
             {
               k: 'Part',
@@ -1168,9 +1217,9 @@ function BuildView({ d }: { d: Build }) {
             {
               k: 'Room left',
               v:
-                hw.memory.maxCapacityGb === null || hw.memory.totalGb === null ?
-                  DASH
-                : `${num(hw.memory.maxCapacityGb - hw.memory.totalGb)} GB`,
+                hw.memory.maxCapacityGb === null || hw.memory.totalGb === null
+                  ? DASH
+                  : `${num(hw.memory.maxCapacityGb - hw.memory.totalGb)} GB`,
             },
           ]}
         />
@@ -1219,8 +1268,7 @@ function BuildView({ d }: { d: Build }) {
             },
             {
               k: 'clock',
-              v:
-                d.gpu.frequencyMhz === null ? DASH : `${num(Math.round(d.gpu.frequencyMhz))} MHz`,
+              v: d.gpu.frequencyMhz === null ? DASH : `${num(Math.round(d.gpu.frequencyMhz))} MHz`,
             },
             { k: 'busiest', v: d.gpu.busiestEngine?.name ?? DASH },
             {
@@ -1234,8 +1282,8 @@ function BuildView({ d }: { d: Build }) {
           number rather than a broken one — it wakes when something asks it to. The package figure
           beside it is the whole chip including the cpu cores, which is why the two are shown
           together: on an integrated part they are one piece of silicon and one power budget. The
-          render node is passed into three containers at once — jellyfin for QSV transcoding,
-          immich for OpenVINO, and the exporter these numbers come from.
+          render node is passed into three containers at once — jellyfin for QSV transcoding, immich
+          for OpenVINO, and the exporter these numbers come from.
         </p>
       </Board>
 
@@ -1263,10 +1311,10 @@ function BuildView({ d }: { d: Build }) {
           })}
         </ul>
         <p className="board-foot">
-          The supply itself reports nothing — this model has no monitoring interface, so there is
-          no temperature, no load and no fan speed to show, and none of those will ever appear
-          here. What the board CAN see is what arrives on each rail, which is the next best
-          question: a supply beginning to fail sags before it dies.
+          The supply itself reports nothing — this model has no monitoring interface, so there is no
+          temperature, no load and no fan speed to show, and none of those will ever appear here.
+          What the board CAN see is what arrives on each rail, which is the next best question: a
+          supply beginning to fail sags before it dies.
         </p>
       </Board>
 
@@ -1280,10 +1328,10 @@ function BuildView({ d }: { d: Build }) {
           </div>
         </div>
         <p className="board-foot">
-          Six drive bays with two filled, and a 70 mm cooler ceiling that picked the cooler. This
-          is the one part on the page that nothing in the machine can report — SMBIOS reports the
-          board vendor as the chassis vendor, because a case has no firmware and no way to
-          introduce itself, so this panel is written down rather than read.
+          Six drive bays with two filled, and a 70 mm cooler ceiling that picked the cooler. This is
+          the one part on the page that nothing in the machine can report — SMBIOS reports the board
+          vendor as the chassis vendor, because a case has no firmware and no way to introduce
+          itself, so this panel is written down rather than read.
         </p>
       </Board>
 
@@ -1336,7 +1384,12 @@ function shortVendor(v: string): string {
 
 /** SMBIOS spells it "12th Gen Intel(R) Core(TM) i5-12600K". Nobody says that. */
 function cpuName(v: string | null): string {
-  return v === null ? DASH : v.replace(/\((R|TM)\)/g, '').replace(/\s+/g, ' ').trim()
+  return v === null
+    ? DASH
+    : v
+        .replace(/\((R|TM)\)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
 }
 
 function temp(c: number | null): string {
@@ -1373,118 +1426,124 @@ function DatabaseView({ d }: { d: Database }) {
       />
 
       <BoardGrid>
-      <Board
-        title="The cluster"
-        icon="◱"
-        span={8}
-        aside={
-          <span className="board-note">
-            {d.version ?? ''} · {num(d.databases.length)} databases
-          </span>
-        }
-      >
-        <Measures
-          items={[
-            { k: 'on disk', v: bytes(d.totals.sizeBytes) },
-            {
-              k: 'connections',
-              v: `${num(d.totals.connections)} / ${num(d.totals.maxConnections)}`,
-            },
-            { k: 'locks held', v: num(d.totals.locks) },
-            { k: 'longest transaction', v: duration(d.totals.longestTxSeconds) },
-          ]}
-        />
-        <p className="board-foot">
-          One cluster, every app a tenant with its own role and database — the consolidation that
-          replaced a postgres container per stack. That is why a mid-life restart here is felt
-          everywhere: Pocket ID fails its health check the moment it cannot resolve{' '}
-          <span className="mono">pg</span>, and every SSO app follows it down.{' '}
-          <b>Longest transaction</b> is the stuck-query signal — a number that climbs and does not
-          reset is something holding a lock nobody is waiting on any more.
-        </p>
-      </Board>
-
-      <Board title="Serving from" icon="◍" span={4}>
-        <Facts
-          rows={[
-            {
-              k: 'Status',
-              v:
-                d.up === null ? DASH
-                : d.up ? <Chip tone="ok">up</Chip>
-                : <Chip tone="bad">not answering</Chip>,
-            },
-            { k: 'Temp files written', v: bytes(d.totals.tempBytes) },
-            {
-              k: 'Lowest cache hit rate',
-              v: worstCache === undefined ? DASH : `${pct(worstCache.cacheHitPct, 2)}`,
-            },
-            { k: 'in', v: worstCache?.name ?? DASH },
-          ]}
-        />
-        <p className="board-foot">
-          A cache hit rate below about 99% means the cluster is going to disk for pages it should
-          have had in memory. Temp bytes are queries that outgrew{' '}
-          <span className="mono">work_mem</span> and spilled — both are tuning signals rather than
-          faults, and both are invisible in the size column.
-        </p>
-      </Board>
-
-      <Board title="Tenants" icon="▤" span={12}>
-        <ul className="itemlist">
-          {d.databases.map((db) => (
-            <li key={db.name}>
-              <span className="item-main mono">{db.name}</span>
-              <span className="item-side">{num(db.connections)} conn</span>
-              <span className="item-side">{pct(db.cacheHitPct, 2)} cached</span>
-              <span className="item-side">
-                {(db.deadlocks ?? 0) > 0 ?
-                  <span className="text-warn">{num(db.deadlocks)} deadlocks</span>
-                : `${num(db.rollbacks)} rollbacks`}
-              </span>
-              <span className="item-n">{bytes(db.sizeBytes)}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="board-foot">
-          Rollbacks are shown rather than commits because the ratio is what carries information — a
-          tenant rolling back a large share of its transactions is either retrying or erroring, and
-          neither shows up in its own logs as clearly as it does here. A database that appears with
-          no app is one whose stack was removed without dropping it.
-        </p>
-      </Board>
-
-      <Changelog
-        gap={d.gap}
-        span={12}
-        aside={<span className="board-note">postgresql.org</span>}
-        foot={
+        <Board
+          title="The cluster"
+          icon="◱"
+          span={8}
+          aside={
+            <span className="board-note">
+              {d.version ?? ''} · {num(d.databases.length)} databases
+            </span>
+          }
+        >
+          <Measures
+            items={[
+              { k: 'on disk', v: bytes(d.totals.sizeBytes) },
+              {
+                k: 'connections',
+                v: `${num(d.totals.connections)} / ${num(d.totals.maxConnections)}`,
+              },
+              { k: 'locks held', v: num(d.totals.locks) },
+              { k: 'longest transaction', v: duration(d.totals.longestTxSeconds) },
+            ]}
+          />
           <p className="board-foot">
-            Not from GitHub, unlike every other changelog here: the{' '}
-            <span className="mono">postgres/postgres</span> mirror carries tags and publishes no
-            releases at all, so the usual reader reports the one service on this box whose minors
-            are pure security fixes as having nothing to show. These come from{' '}
-            <span className="mono">postgresql.org/docs/release</span> instead. Only the running
-            MAJOR is counted — a major upgrade is a pg_upgrade with every tenant offline, which is
-            not what &ldquo;behind&rdquo; means anywhere else on this dashboard. Read the{' '}
-            <b>Migration</b> section first: it is the one paragraph that says whether the restart
-            is all it takes.
+            One cluster, every app a tenant with its own role and database — the consolidation that
+            replaced a postgres container per stack. That is why a mid-life restart here is felt
+            everywhere: Pocket ID fails its health check the moment it cannot resolve{' '}
+            <span className="mono">pg</span>, and every SSO app follows it down.{' '}
+            <b>Longest transaction</b> is the stuck-query signal — a number that climbs and does not
+            reset is something holding a lock nobody is waiting on any more.
           </p>
-        }
-      />
+        </Board>
 
-      <LogBoard
-        source={{ stack: 'app-db' }}
-        title="Cluster logs"
-        neighbours={[
-          {
-            source: { unit: 'app-db-bootstrap.service' },
-            label: 'Bootstrap',
-            role: 'what creates a tenant’s role and database',
-            note: 'Materialises one role, one database and one env file per fleet.appDatabases entry, generating the password on the box rather than in the store. An app that suddenly cannot connect after being declared is usually this not having run — every tenant is ordered after it, and after podman-pg itself, so a mass restart re-queues them.',
-          },
-        ]}
-      />
+        <Board title="Serving from" icon="◍" span={4}>
+          <Facts
+            rows={[
+              {
+                k: 'Status',
+                v:
+                  d.up === null ? (
+                    DASH
+                  ) : d.up ? (
+                    <Chip tone="ok">up</Chip>
+                  ) : (
+                    <Chip tone="bad">not answering</Chip>
+                  ),
+              },
+              { k: 'Temp files written', v: bytes(d.totals.tempBytes) },
+              {
+                k: 'Lowest cache hit rate',
+                v: worstCache === undefined ? DASH : `${pct(worstCache.cacheHitPct, 2)}`,
+              },
+              { k: 'in', v: worstCache?.name ?? DASH },
+            ]}
+          />
+          <p className="board-foot">
+            A cache hit rate below about 99% means the cluster is going to disk for pages it should
+            have had in memory. Temp bytes are queries that outgrew{' '}
+            <span className="mono">work_mem</span> and spilled — both are tuning signals rather than
+            faults, and both are invisible in the size column.
+          </p>
+        </Board>
+
+        <Board title="Tenants" icon="▤" span={12}>
+          <ul className="itemlist">
+            {d.databases.map((db) => (
+              <li key={db.name}>
+                <span className="item-main mono">{db.name}</span>
+                <span className="item-side">{num(db.connections)} conn</span>
+                <span className="item-side">{pct(db.cacheHitPct, 2)} cached</span>
+                <span className="item-side">
+                  {(db.deadlocks ?? 0) > 0 ? (
+                    <span className="text-warn">{num(db.deadlocks)} deadlocks</span>
+                  ) : (
+                    `${num(db.rollbacks)} rollbacks`
+                  )}
+                </span>
+                <span className="item-n">{bytes(db.sizeBytes)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="board-foot">
+            Rollbacks are shown rather than commits because the ratio is what carries information —
+            a tenant rolling back a large share of its transactions is either retrying or erroring,
+            and neither shows up in its own logs as clearly as it does here. A database that appears
+            with no app is one whose stack was removed without dropping it.
+          </p>
+        </Board>
+
+        <Changelog
+          gap={d.gap}
+          span={12}
+          aside={<span className="board-note">postgresql.org</span>}
+          foot={
+            <p className="board-foot">
+              Not from GitHub, unlike every other changelog here: the{' '}
+              <span className="mono">postgres/postgres</span> mirror carries tags and publishes no
+              releases at all, so the usual reader reports the one service on this box whose minors
+              are pure security fixes as having nothing to show. These come from{' '}
+              <span className="mono">postgresql.org/docs/release</span> instead. Only the running
+              MAJOR is counted — a major upgrade is a pg_upgrade with every tenant offline, which is
+              not what &ldquo;behind&rdquo; means anywhere else on this dashboard. Read the{' '}
+              <b>Migration</b> section first: it is the one paragraph that says whether the restart
+              is all it takes.
+            </p>
+          }
+        />
+
+        <LogBoard
+          source={{ stack: 'app-db' }}
+          title="Cluster logs"
+          neighbours={[
+            {
+              source: { unit: 'app-db-bootstrap.service' },
+              label: 'Bootstrap',
+              role: 'what creates a tenant’s role and database',
+              note: 'Materialises one role, one database and one env file per fleet.appDatabases entry, generating the password on the box rather than in the store. An app that suddenly cannot connect after being declared is usually this not having run — every tenant is ordered after it, and after podman-pg itself, so a mass restart re-queues them.',
+            },
+          ]}
+        />
       </BoardGrid>
     </>
   )
@@ -1503,33 +1562,36 @@ function BackupsView({ d }: { d: Backups }) {
         span={8}
         aside={<span className="board-note">{bytes(d.totalReplicatedBytes)} on the mirror</span>}
       >
-        {d.pairs.length === 0 ?
+        {d.pairs.length === 0 ? (
           <p className="viz-empty">no replication pairs found</p>
-        : <ul className="itemlist">
+        ) : (
+          <ul className="itemlist">
             {d.pairs.map((p) => (
               <li key={p.target}>
                 <span className="item-main mono">{p.source}</span>
                 <span className="item-side mono">→ {p.target}</span>
                 <span className="item-side">{num(p.targetSnapshots)} snapshots</span>
                 <span className="item-n">
-                  {p.lagSeconds === null ?
+                  {p.lagSeconds === null ? (
                     DASH
-                  : p.lagSeconds > 7200 ?
+                  ) : p.lagSeconds > 7200 ? (
                     <span className="text-warn">{duration(p.lagSeconds)} behind</span>
-                  : `${duration(p.lagSeconds)} behind`}
+                  ) : (
+                    `${duration(p.lagSeconds)} behind`
+                  )}
                 </span>
               </li>
             ))}
           </ul>
-        }
+        )}
         <p className="board-foot">
           syncoid runs hourly and rides the existing auto-snapshots rather than cutting its own, so
-          a lag under an hour is the schedule rather than a fault — the source takes a snapshot every
-          fifteen minutes and the replica catches the hourly one. It is a <b>mirror, not an
-          archive</b>: it prunes whatever the source pruned, so a manual snapshot you keep on the
-          source dies on the replica the moment its original is destroyed. That is also why the lag
-          is the reading and &ldquo;the target has snapshots&rdquo; is not — syncoid exits 0 on a
-          run that copied nothing.
+          a lag under an hour is the schedule rather than a fault — the source takes a snapshot
+          every fifteen minutes and the replica catches the hourly one. It is a{' '}
+          <b>mirror, not an archive</b>: it prunes whatever the source pruned, so a manual snapshot
+          you keep on the source dies on the replica the moment its original is destroyed. That is
+          also why the lag is the reading and &ldquo;the target has snapshots&rdquo; is not —
+          syncoid exits 0 on a run that copied nothing.
         </p>
       </Board>
 
@@ -1551,11 +1613,11 @@ function BackupsView({ d }: { d: Backups }) {
           </li>
         </ul>
         <p className="board-foot">
-          Both pools are in this box, on this shelf. The mirror survives a drive; it does not survive
-          a fire, a theft or a mistake that reaches both pools. The two files below it are outside
-          the snapshot tree entirely — losing the cert store means re-issuing against Let&rsquo;s
-          Encrypt&rsquo;s weekly rate limit. This is the biggest gap on the machine and it is stated
-          here rather than left to be discovered.
+          Both pools are in this box, on this shelf. The mirror survives a drive; it does not
+          survive a fire, a theft or a mistake that reaches both pools. The two files below it are
+          outside the snapshot tree entirely — losing the cert store means re-issuing against
+          Let&rsquo;s Encrypt&rsquo;s weekly rate limit. This is the biggest gap on the machine and
+          it is stated here rather than left to be discovered.
         </p>
       </Board>
 
@@ -1577,9 +1639,10 @@ function BackupsView({ d }: { d: Backups }) {
       </Board>
 
       <Board title="Deliberately not snapshotted" icon="○" span={4}>
-        {d.unsnapshotted.length === 0 ?
+        {d.unsnapshotted.length === 0 ? (
           <p className="viz-empty">every dataset is enrolled</p>
-        : <ul className="itemlist">
+        ) : (
+          <ul className="itemlist">
             {d.unsnapshotted.map((u) => (
               <li key={u.name}>
                 <span className="item-main mono">{u.name}</span>
@@ -1587,12 +1650,12 @@ function BackupsView({ d }: { d: Backups }) {
               </li>
             ))}
           </ul>
-        }
+        )}
         <p className="board-foot">
-          Opted out per dataset with{' '}
-          <span className="mono">com.sun:auto-snapshot=false</span>. The media library is the big
-          one and the reasoning is that it is re-downloadable — snapshotting a terabyte of files that
-          can be fetched again buys nothing and costs the deltas.
+          Opted out per dataset with <span className="mono">com.sun:auto-snapshot=false</span>. The
+          media library is the big one and the reasoning is that it is re-downloadable —
+          snapshotting a terabyte of files that can be fetched again buys nothing and costs the
+          deltas.
         </p>
       </Board>
 

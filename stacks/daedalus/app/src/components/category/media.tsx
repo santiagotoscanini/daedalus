@@ -1,5 +1,10 @@
 import { useState } from 'react'
-
+import { bytes, DASH, flag, num, rate, since, until } from '../../lib/dashboard/format'
+import type { MediaData } from '../../server/category'
+import { LogBoard, type LogNeighbour } from '../logs'
+import { Changelog } from '../release-notes'
+import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
+import { Segmented } from '../ui'
 import {
   Board,
   BoardGrid,
@@ -10,15 +15,9 @@ import {
   Pulse,
   RankRow,
   Ring,
-  Trend,
   type Tone,
+  Trend,
 } from '../viz'
-import { LogBoard, type LogNeighbour } from '../logs'
-import { Changelog } from '../release-notes'
-import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
-import { Segmented } from '../ui'
-import { DASH, bytes, flag, num, rate, since, until } from '../../lib/dashboard/format'
-import type { MediaData } from '../../server/category'
 
 // The Media pages — a tab per job, and a switch inside the page for the
 // services that share one.
@@ -169,9 +168,9 @@ const STALE_DAYS = 60
 function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
   const { library, counts } = d
   const total =
-    library.usedBytes !== null && library.freeBytes !== null ?
-      library.usedBytes + library.freeBytes
-    : null
+    library.usedBytes !== null && library.freeBytes !== null
+      ? library.usedBytes + library.freeBytes
+      : null
   const transcoding = d.playing.filter((s) => s.method === 'Transcode').length
 
   return (
@@ -199,14 +198,15 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
           icon="▶"
           span={8}
           aside={
-            transcoding === 0 ?
-              undefined
-            : <span className="board-note">{num(transcoding)} transcoding</span>
+            transcoding === 0 ? undefined : (
+              <span className="board-note">{num(transcoding)} transcoding</span>
+            )
           }
         >
-          {d.playing.length === 0 ?
+          {d.playing.length === 0 ? (
             <p className="viz-empty">Nobody is watching anything.</p>
-          : <ul className="playing">
+          ) : (
+            <ul className="playing">
               {d.playing.map((s, i) => (
                 <li key={`${s.user}-${String(i)}`} className="playing-row">
                   <div className="playing-head">
@@ -235,7 +235,7 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             Only sessions actually playing something. Every poller that has ever asked Jellyfin a
             question holds an idle session for a while afterwards, so the raw list reports an
@@ -247,9 +247,9 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
           <div className="library-split">
             <Ring
               pct={
-                total === null || library.usedBytes === null ?
-                  null
-                : (library.usedBytes / total) * 100
+                total === null || library.usedBytes === null
+                  ? null
+                  : (library.usedBytes / total) * 100
               }
               value={bytes(library.usedBytes)}
               label="/s2/tv"
@@ -274,17 +274,18 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
           span={4}
           aside={<span className="board-note">{num(d.people.length)} accounts</span>}
         >
-          {d.people.length === 0 ?
+          {d.people.length === 0 ? (
             <p className="viz-empty">could not read the user list</p>
-          : <ul className="who">
+          ) : (
+            <ul className="who">
               {d.people.map((p) => (
                 <li key={p.name} className="who-row">
                   <span className="who-name">{p.name}</span>
                   <span
                     className={
-                      p.lastSeenDays !== null && p.lastSeenDays > STALE_DAYS ?
-                        'who-when is-muted'
-                      : 'who-when'
+                      p.lastSeenDays !== null && p.lastSeenDays > STALE_DAYS
+                        ? 'who-when is-muted'
+                        : 'who-when'
                     }
                   >
                     {ago(p.lastSeenDays)}
@@ -292,7 +293,7 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             Last activity, not last login — a client that stays signed in reports the second one
             once and never again, which is why an account in daily use can show a login from May.
@@ -303,9 +304,11 @@ function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }> }) {
           gap={d.gap}
           span={8}
           aside={
-            d.pendingRestart ?
+            d.pendingRestart ? (
               <span className="board-note text-warn">restart pending</span>
-            : <span className="board-note">github</span>
+            ) : (
+              <span className="board-note">github</span>
+            )
           }
         />
 
@@ -372,13 +375,15 @@ function WantedView({ d }: { d: Wanted }) {
         ]}
       />
 
-      {who === 'seerr' ?
+      {who === 'seerr' ? (
         <SeerrPage d={d.seerr} />
-      : who === 'recyclarr' ?
+      ) : who === 'recyclarr' ? (
         <RecyclarrPage d={d.recyclarr} />
-      : who === 'bazarr' ?
+      ) : who === 'bazarr' ? (
         <BazarrPage d={d.bazarr} />
-      : <ArrPage d={who === 'sonarr' ? d.sonarr : d.radarr} />}
+      ) : (
+        <ArrPage d={who === 'sonarr' ? d.sonarr : d.radarr} />
+      )}
     </>
   )
 }
@@ -412,9 +417,10 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
           span={8}
           aside={<span className="board-note">{num(counts.total)} all time</span>}
         >
-          {d.requests.length === 0 ?
+          {d.requests.length === 0 ? (
             <p className="viz-empty">Nothing has been requested.</p>
-          : <ul className="reqs">
+          ) : (
+            <ul className="reqs">
               {d.requests.map((r, i) => (
                 <li key={`${r.title}-${String(i)}`} className="req">
                   <Chip tone={r.tone}>{r.status}</Chip>
@@ -425,7 +431,7 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             Titles are looked up per request: a request record carries a TMDB id and nothing else,
             so Seerr resolves the name the same way its own interface does.
@@ -453,9 +459,10 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
         </Board>
 
         <Board title="Who asks" icon="◍" span={4}>
-          {d.people.length === 0 ?
+          {d.people.length === 0 ? (
             <p className="viz-empty">no requests yet</p>
-          : <ul className="ranks">
+          ) : (
+            <ul className="ranks">
               {d.people.map((p) => (
                 <RankRow
                   key={p.name}
@@ -466,16 +473,18 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
                 />
               ))}
             </ul>
-          }
+          )}
         </Board>
 
         <Changelog
           gap={d.gap}
           span={8}
           aside={
-            d.selfBehind !== null && d.selfBehind > 0 ?
+            d.selfBehind !== null && d.selfBehind > 0 ? (
               <span className="board-note">{num(d.selfBehind)} commits behind, it says</span>
-            : <span className="board-note">github</span>
+            ) : (
+              <span className="board-note">github</span>
+            )
           }
         />
 
@@ -550,9 +559,11 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
               {
                 k: 'Still wanted',
                 v:
-                  (counts.wanted ?? 0) === 0 ?
+                  (counts.wanted ?? 0) === 0 ? (
                     num(counts.wanted)
-                  : <span className="text-warn">{num(counts.wanted)}</span>,
+                  ) : (
+                    <span className="text-warn">{num(counts.wanted)}</span>
+                  ),
               },
             ]}
           />
@@ -561,9 +572,9 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
               <h4 className="board-sub">{disk.path}</h4>
               <Progress
                 pct={
-                  disk.totalBytes > 0 ?
-                    ((disk.totalBytes - disk.freeBytes) / disk.totalBytes) * 100
-                  : null
+                  disk.totalBytes > 0
+                    ? ((disk.totalBytes - disk.freeBytes) / disk.totalBytes) * 100
+                    : null
                 }
                 tone="info"
               />
@@ -584,11 +595,12 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
             </span>
           }
         >
-          {d.queue.length === 0 ?
+          {d.queue.length === 0 ? (
             <p className="viz-empty">
               Nothing in the queue. Completed downloads are removed once imported.
             </p>
-          : <ul className="transfers">
+          ) : (
+            <ul className="transfers">
               {d.queue.map((q, i) => (
                 <li key={`${q.title}-${String(i)}`} className="transfers-row">
                   <div className="transfers-head">
@@ -608,7 +620,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             An item stuck at 100% with a note against it is the failure this panel exists for: the
             download finished and the import did not, so nothing is moving and nothing is wrong
@@ -617,9 +629,10 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
         </Board>
 
         <Board title={copy.upcoming} icon="◷" span={4}>
-          {d.upcoming.length === 0 ?
+          {d.upcoming.length === 0 ? (
             <p className="viz-empty">Nothing scheduled in the next fortnight.</p>
-          : <ul className="upnext">
+          ) : (
+            <ul className="upnext">
               {d.upcoming.map((u, i) => (
                 <li key={`${u.title}-${String(i)}`} className="upnext-row">
                   <span className="upnext-title" title={u.sub ?? u.title}>
@@ -632,13 +645,14 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
         </Board>
 
         <Board title="Lately" icon="≋" span={12}>
-          {d.history.length === 0 ?
+          {d.history.length === 0 ? (
             <p className="viz-empty">no recorded activity</p>
-          : <ul className="feed">
+          ) : (
+            <ul className="feed">
               {d.history.map((h, i) => (
                 <li key={`${h.title}-${String(i)}`} className="feed-row">
                   <span className={h.tone === 'muted' ? 'feed-event' : `feed-event text-${h.tone}`}>
@@ -651,7 +665,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             Only failures are coloured. A grab and an import are the machine working, and colouring
             those would bury the two events that mean somebody has to look.
@@ -721,24 +735,25 @@ function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> }) {
             </span>
           }
         >
-          {d.indexers.length === 0 ?
+          {d.indexers.length === 0 ? (
             <p className="viz-empty">no indexer statistics</p>
-          : <ul className="ranks">
+          ) : (
+            <ul className="ranks">
               {d.indexers.map((i) => (
                 <RankRow
                   key={i.name}
                   name={i.name}
                   badges={[
                     ...(i.enabled ? [] : [{ text: 'disabled', tone: 'muted' as const }]),
-                    ...(i.queries > 0 && i.failedQueries / i.queries > 0.25 ?
-                      [
-                        {
-                          text: 'failing',
-                          tone: 'warn' as const,
-                          why: `${String(i.failedQueries)} of ${String(i.queries)} queries failed`,
-                        },
-                      ]
-                    : []),
+                    ...(i.queries > 0 && i.failedQueries / i.queries > 0.25
+                      ? [
+                          {
+                            text: 'failing',
+                            tone: 'warn' as const,
+                            why: `${String(i.failedQueries)} of ${String(i.queries)} queries failed`,
+                          },
+                        ]
+                      : []),
                   ]}
                   value={i.queries}
                   max={maxQueries}
@@ -755,7 +770,7 @@ function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> }) {
                 />
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             Queries are the bar, because that is what the *arrs actually spend. Grabs beside it is
             the yield: an indexer with thousands of queries and no grabs is being searched and never
@@ -818,14 +833,17 @@ function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
           icon="⛁"
           span={8}
           aside={
-            throttled.length === 0 ?
+            throttled.length === 0 ? (
               <span className="board-note">all answering</span>
-            : <span className="board-note text-warn">{num(throttled.length)} throttled</span>
+            ) : (
+              <span className="board-note text-warn">{num(throttled.length)} throttled</span>
+            )
           }
         >
-          {d.providers.length === 0 ?
+          {d.providers.length === 0 ? (
             <p className="viz-empty">could not read the provider list</p>
-          : <ul className="provs">
+          ) : (
+            <ul className="provs">
               {d.providers.map((p) => (
                 <li key={p.name} className="prov">
                   <Chip tone={p.ok ? 'ok' : 'warn'}>{p.status}</Chip>
@@ -834,7 +852,7 @@ function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             The panel that explains a subtitle which never arrives. A throttled provider answers
             nothing and reports no error, so &ldquo;none found&rdquo; and &ldquo;we are not
@@ -862,11 +880,13 @@ function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
           gap={d.gap}
           span={12}
           aside={
-            d.subgen === null ?
+            d.subgen === null ? (
               <span className="board-note">github</span>
-            : <span className="board-note">
+            ) : (
+              <span className="board-note">
                 Subgen <span className="mono">{d.subgen}</span>
               </span>
+            )
           }
         />
 
@@ -906,13 +926,15 @@ function DownloadersView({ d }: { d: Downloaders }) {
         ]}
       />
 
-      {which === 'qbt' ?
+      {which === 'qbt' ? (
         <QbtPage d={d} />
-      : which === 'nzb' ?
+      ) : which === 'nzb' ? (
         <NzbPage d={d} />
-      : which === 'shelfmark' ?
+      ) : which === 'shelfmark' ? (
         <ShelfmarkPage d={d} />
-      : <MetubePage d={d.metube} />}
+      ) : (
+        <MetubePage d={d.metube} />
+      )}
     </>
   )
 }
@@ -938,9 +960,11 @@ function TunnelBoard({ vpn, span }: { vpn: Downloaders['vpn']; span: 4 | 6 }) {
           {
             k: 'Forwarded port',
             v:
-              vpn.port === null ?
+              vpn.port === null ? (
                 <span className="text-bad">not forwarded</span>
-              : <span className="mono">{vpn.port}</span>,
+              ) : (
+                <span className="mono">{vpn.port}</span>
+              ),
           },
         ]}
       />
@@ -995,13 +1019,14 @@ function QbtPage({ d }: { d: Downloaders }) {
               { k: 'Free', v: bytes(qbt.freeBytes) },
             ]}
           />
-          {qbt.transfers.length === 0 ?
+          {qbt.transfers.length === 0 ? (
             <p className="viz-empty">
-              {qbt.reachable ?
-                'Nothing downloading. Completed torrents are removed after import.'
-              : 'qBittorrent did not accept the login.'}
+              {qbt.reachable
+                ? 'Nothing downloading. Completed torrents are removed after import.'
+                : 'qBittorrent did not accept the login.'}
             </p>
-          : <ul className="transfers">
+          ) : (
+            <ul className="transfers">
               {qbt.transfers.map((t) => (
                 <li key={t.name} className="transfers-row">
                   <div className="transfers-head">
@@ -1019,7 +1044,7 @@ function QbtPage({ d }: { d: Downloaders }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
         </Board>
 
         <TunnelBoard vpn={d.vpn} span={4} />
@@ -1032,16 +1057,20 @@ function QbtPage({ d }: { d: Downloaders }) {
               {
                 k: 'Stalled',
                 v:
-                  qbt.counts.stalled === 0 ?
+                  qbt.counts.stalled === 0 ? (
                     num(0)
-                  : <span className="text-warn">{num(qbt.counts.stalled)}</span>,
+                  ) : (
+                    <span className="text-warn">{num(qbt.counts.stalled)}</span>
+                  ),
               },
               {
                 k: 'Errored',
                 v:
-                  qbt.counts.errored === 0 ?
+                  qbt.counts.errored === 0 ? (
                     num(0)
-                  : <span className="text-bad">{num(qbt.counts.errored)}</span>,
+                  ) : (
+                    <span className="text-bad">{num(qbt.counts.errored)}</span>
+                  ),
               },
             ]}
           />
@@ -1091,9 +1120,7 @@ function NzbPage({ d }: { d: Downloaders }) {
           aside={
             <span className="board-note">
               <Pulse on={(nzb.rate ?? 0) > 0} tone="accent" />
-              {nzb.paused ? 'paused'
-              : nzb.standby ? 'idle'
-              : 'active'}
+              {nzb.paused ? 'paused' : nzb.standby ? 'idle' : 'active'}
             </span>
           }
         >
@@ -1105,9 +1132,10 @@ function NzbPage({ d }: { d: Downloaders }) {
               { k: 'This month', v: bytes(nzb.monthBytes) },
             ]}
           />
-          {nzb.groups.length === 0 ?
+          {nzb.groups.length === 0 ? (
             <p className="viz-empty">Nothing in the queue.</p>
-          : <ul className="transfers">
+          ) : (
+            <ul className="transfers">
               {nzb.groups.map((g) => (
                 <li key={g.name} className="transfers-row">
                   <div className="transfers-head">
@@ -1122,7 +1150,7 @@ function NzbPage({ d }: { d: Downloaders }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
         </Board>
 
         <TunnelBoard vpn={d.vpn} span={4} />
@@ -1132,14 +1160,17 @@ function NzbPage({ d }: { d: Downloaders }) {
           icon="⛁"
           span={4}
           aside={
-            inactive === 0 ?
+            inactive === 0 ? (
               <span className="board-note">all active</span>
-            : <span className="board-note text-bad">{num(inactive)} inactive</span>
+            ) : (
+              <span className="board-note text-bad">{num(inactive)} inactive</span>
+            )
           }
         >
-          {nzb.servers.length === 0 ?
+          {nzb.servers.length === 0 ? (
             <p className="viz-empty">could not read the server list</p>
-          : <ul className="provs">
+          ) : (
+            <ul className="provs">
               {nzb.servers.map((s) => (
                 <li key={s.id} className="prov">
                   <Chip tone={s.active ? 'ok' : 'bad'}>{s.active ? 'active' : 'inactive'}</Chip>
@@ -1147,7 +1178,7 @@ function NzbPage({ d }: { d: Downloaders }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <Facts
             rows={[
               { k: 'Uptime', v: since(nzb.uptimeSeconds) },
@@ -1162,7 +1193,11 @@ function NzbPage({ d }: { d: Downloaders }) {
           </p>
         </Board>
 
-        <Changelog gap={nzb.gap} span={8} aside={<span className="board-note">nzbgetcom/nzbget</span>} />
+        <Changelog
+          gap={nzb.gap}
+          span={8}
+          aside={<span className="board-note">nzbgetcom/nzbget</span>}
+        />
 
         <LogBoard source={{ container: 'nzbget' }} title="NZBGet logs" />
       </BoardGrid>
@@ -1201,9 +1236,10 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
             </span>
           }
         >
-          {d.recent.length === 0 ?
+          {d.recent.length === 0 ? (
             <p className="viz-empty">Nothing downloaded yet.</p>
-          : <ul className="feed">
+          ) : (
+            <ul className="feed">
               {d.recent.map((r, i) => (
                 <li key={`${r.title}-${String(i)}`} className="feed-row">
                   <span className={r.status === 'finished' ? 'feed-event' : 'feed-event text-bad'}>
@@ -1215,7 +1251,7 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             The most recent finished items. MeTube keeps its history in the browser session as well
             as on the server, so this list and the one in its own UI can differ.
@@ -1250,7 +1286,6 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
   )
 }
 
-
 function ShelfmarkPage({ d }: { d: Downloaders }) {
   const { shelfmark } = d
   const counts = shelfmark.counts
@@ -1267,9 +1302,9 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
           shelfmark.gap,
           // The pin is `:latest` by digest, so the tag names a channel and this
           // number comes from org.opencontainers.image.version in the image.
-          shelfmark.running.revision === null ?
-            'the image’s OCI label'
-          : `the image’s OCI label · built from ${shelfmark.running.revision}`,
+          shelfmark.running.revision === null
+            ? 'the image’s OCI label'
+            : `the image’s OCI label · built from ${shelfmark.running.revision}`,
         )}
         lede={
           <>
@@ -1287,16 +1322,19 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
           icon="⇣"
           span={8}
           aside={
-            counts === null ?
+            counts === null ? (
               <span className="board-note">did not answer</span>
-            : <span className="board-note">
+            ) : (
+              <span className="board-note">
                 {num(counts.done)} completed · {num(counts.errors)} failed
               </span>
+            )
           }
         >
-          {shelfmark.jobs.length === 0 ?
+          {shelfmark.jobs.length === 0 ? (
             <p className="viz-empty">Queue is empty.</p>
-          : <ul className="transfers">
+          ) : (
+            <ul className="transfers">
               {shelfmark.jobs.map((j, i) => (
                 <li key={`${j.title}-${String(i)}`} className="transfers-row">
                   <div className="transfers-head">
@@ -1315,13 +1353,14 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
         </Board>
 
         <Board title="Queue" icon="◷" span={4}>
-          {counts === null ?
+          {counts === null ? (
             <p className="viz-empty">no reading</p>
-          : <Measures
+          ) : (
+            <Measures
               items={[
                 { k: 'Downloading', v: num(counts.downloading) },
                 { k: 'Queued', v: num(counts.queued) },
@@ -1333,16 +1372,18 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
                 },
               ]}
             />
-          }
+          )}
         </Board>
 
         <Changelog
           gap={shelfmark.gap}
           span={12}
           aside={
-            shelfmark.running.revision === null ?
+            shelfmark.running.revision === null ? (
               <span className="board-note">calibrain/shelfmark</span>
-            : <span className="board-note mono">{shelfmark.running.revision}</span>
+            ) : (
+              <span className="board-note mono">{shelfmark.running.revision}</span>
+            )
           }
           foot={
             <p className="board-foot">
@@ -1482,7 +1523,12 @@ function CleanuparrPage({ d }: { d: Cleanup }) {
       />
 
       <BoardGrid>
-        <Board title="What it did" icon="⌫" span={8} aside={<span className="board-note">{window}</span>}>
+        <Board
+          title="What it did"
+          icon="⌫"
+          span={8}
+          aside={<span className="board-note">{window}</span>}
+        >
           <Measures
             items={[
               { k: 'Stuck items removed', v: num(cleanuparr.removed) },
@@ -1502,8 +1548,8 @@ function CleanuparrPage({ d }: { d: Cleanup }) {
 
         <Board title="Why it is here" icon="◈" span={4}>
           <p className="board-foot">
-            A download that stalls does not fail — it sits in the queue at 97% forever, and the
-            *arr goes on believing the episode is handled. Nothing else on this box notices that.
+            A download that stalls does not fail — it sits in the queue at 97% forever, and the *arr
+            goes on believing the episode is handled. Nothing else on this box notices that.
             Cleanuparr strikes it, removes it, blocks the release and asks for another one.
           </p>
         </Board>
@@ -1530,9 +1576,9 @@ function JanitorrPage({ d }: { d: Cleanup }) {
         verdict={verdictOf(janitorr.gap)}
         compare={compareOf(
           janitorr.gap,
-          janitorr.running.revision === null ?
-            'the image’s OCI label — the tag is a channel'
-          : `the image’s OCI label · built from ${janitorr.running.revision}`,
+          janitorr.running.revision === null
+            ? 'the image’s OCI label — the tag is a channel'
+            : `the image’s OCI label · built from ${janitorr.running.revision}`,
         )}
         lede={
           <>
@@ -1554,9 +1600,10 @@ function JanitorrPage({ d }: { d: Cleanup }) {
           span={8}
           aside={<span className="board-note">as it reports them hourly</span>}
         >
-          {janitorr.schedules.length === 0 ?
+          {janitorr.schedules.length === 0 ? (
             <p className="viz-empty">nothing in the last day&rsquo;s log</p>
-          : <ul className="provs">
+          ) : (
+            <ul className="provs">
               {janitorr.schedules.map((s) => (
                 <li key={s.name} className="prov">
                   <Chip tone={s.enabled ? 'warn' : 'muted'}>{s.enabled ? 'enabled' : 'off'}</Chip>
@@ -1564,7 +1611,7 @@ function JanitorrPage({ d }: { d: Cleanup }) {
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             The schedules that announce themselves — every hour, whether or not they do anything.
             Off here is what a deliberately disarmed retention service looks like, and without this
@@ -1583,7 +1630,11 @@ function JanitorrPage({ d }: { d: Cleanup }) {
           </p>
         </Board>
 
-        <Changelog gap={janitorr.gap} span={12} aside={<span className="board-note">Schaka/janitorr</span>} />
+        <Changelog
+          gap={janitorr.gap}
+          span={12}
+          aside={<span className="board-note">Schaka/janitorr</span>}
+        />
 
         <LogBoard
           source={{ container: 'janitorr' }}
@@ -1608,9 +1659,9 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
         verdict={verdictOf(recyclarr.gap)}
         compare={compareOf(
           recyclarr.gap,
-          recyclarr.running.revision === null ?
-            'the image’s OCI label — the pin is a bare major'
-          : `the image’s OCI label · built from ${recyclarr.running.revision}`,
+          recyclarr.running.revision === null
+            ? 'the image’s OCI label — the pin is a bare major'
+            : `the image’s OCI label · built from ${recyclarr.running.revision}`,
         )}
         lede={
           <>
@@ -1620,11 +1671,13 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
           </>
         }
         actions={
-          recyclarr.lastRun === null ?
+          recyclarr.lastRun === null ? (
             <Chip tone="muted">no run recorded</Chip>
-          : <Chip tone={recyclarr.lastRun.ok ? 'ok' : 'bad'}>
+          ) : (
+            <Chip tone={recyclarr.lastRun.ok ? 'ok' : 'bad'}>
               {recyclarr.lastRun.ok ? 'last run ok' : 'last run failed'}
             </Chip>
+          )
         }
       />
 
@@ -1635,26 +1688,28 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
           span={8}
           aside={<span className="board-note">{recyclarr.lastRun?.day ?? DASH}</span>}
         >
-          {recyclarr.synced.length === 0 ?
+          {recyclarr.synced.length === 0 ? (
             <p className="viz-empty">no sync recorded in the window</p>
-          : <ul className="hchecks">
+          ) : (
+            <ul className="hchecks">
               {recyclarr.synced.map((s) => (
                 <li key={s.instance} className="hcheck">
                   <span className="hcheck-src">{s.instance}</span>
                   <span className="hcheck-msg">
-                    {s.updated === 0 ?
+                    {s.updated === 0 ? (
                       'nothing changed'
-                    : <strong>
+                    ) : (
+                      <strong>
                         {num(s.updated)} custom format{s.updated === 1 ? '' : 's'} updated
                       </strong>
-                    }
+                    )}
                     {' · '}
                     {num(s.skipped)} already current
                   </span>
                 </li>
               ))}
             </ul>
-          }
+          )}
           <p className="board-foot">
             The last run&rsquo;s numbers, not a total: a nightly job that changed two formats every
             night for a week did not change fourteen. Read out of its log, because Recyclarr has no
@@ -1682,9 +1737,11 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
           gap={recyclarr.gap}
           span={12}
           aside={
-            recyclarr.running.revision === null ?
+            recyclarr.running.revision === null ? (
               <span className="board-note">recyclarr/recyclarr</span>
-            : <span className="board-note mono">{recyclarr.running.revision}</span>
+            ) : (
+              <span className="board-note mono">{recyclarr.running.revision}</span>
+            )
           }
           foot={
             <p className="board-foot">
