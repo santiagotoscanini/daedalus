@@ -15,57 +15,48 @@ loop is always:
 
 1. Edit a file under `/etc/nixos/`.
 2. `git add` it — **this repo is a flake; the build only sees
-   git-tracked files.** A new file that isn't `git add`ed fails eval
-   with "file not found". Use **plain `git`, never `sudo git`**: the
-   repo is `santiago:users`, and a root-owned object makes the next
-   push fail with "unable to open loose object" while `git status`
-   sits permanently "ahead by 1". `sudo` is only for `nixos-rebuild`,
-   which just reads.
-3. `sudo nixos-rebuild test` — try the new config without making it
-   the next boot.
+   git-tracked files.** An un-added file fails eval with "file not
+   found". Use **plain `git`, never `sudo git`**: the repo is
+   `santiago:users`, and one root-owned object makes the next push fail
+   ("unable to open loose object") while `git status` sits permanently
+   "ahead by 1". `sudo` is only for `nixos-rebuild`, which just reads.
+3. `sudo nixos-rebuild test` — try the config without making it the
+   next boot.
 4. Verify.
 5. `sudo nixos-rebuild switch` — commit as the next boot generation.
-6. `git commit && git push` when the change is confirmed good.
+6. `git commit && git push` when confirmed good.
 
-This is a **flake** (`flake.nix` + `flake.lock`): every input —
-nixpkgs (25.11), nixpkgs-unstable, sops-nix — is pinned to an exact
-commit in `flake.lock`, so any checkout rebuilds this exact system.
-There is **no nixos channel** (removed); `nix-shell -p`, `nix run`,
-etc. resolve nixpkgs from the flake registry pin. Upgrade the world
-with `nix flake update` (or the weekly `flake-autoupgrade.timer`,
-which runs the update/commit/push as santiago via `setpriv` — no
-root-owned `.git` objects), never `nix-channel`.
+Every input (nixpkgs 25.11, nixpkgs-unstable, sops-nix) is pinned in
+`flake.lock`; any checkout rebuilds this exact system. There is **no
+nixos channel** — `nix-shell -p` / `nix run` resolve from the flake
+registry pin. Upgrade with `nix flake update` (or the weekly
+`flake-autoupgrade.timer`, which commits/pushes as santiago via
+`setpriv`), never `nix-channel`.
 
 If a real imperative bootstrap is unavoidable (rare), flag it, get
 confirmation, and queue the declarative version as the next step.
 
-This repo is also where Claude's own context lives — `CLAUDE.md`,
-`.claude/` (skills, commands, tracked settings) and the sops-encrypted
-`.mcp.json` source. They are subject to the same `git add` rule: a new
-skill or command that isn't tracked is invisible to a fresh checkout,
-and an untracked `*.sops` fails eval outright.
+Claude's own context lives in this repo too — `CLAUDE.md`, `.claude/`
+(skills, commands, rules, tracked settings), the sops-encrypted
+`.mcp.json` source — and follows the same `git add` rule: untracked
+means invisible to a fresh checkout, and an untracked `*.sops` fails
+eval outright.
 
 ### 2. Never mutate app state through the CLI
 
-The rule above is about OS state; this one is about the state *inside*
-an app — its SQLite file, its Postgres tables, its config store
-(`wg-easy.db`, `grafana.db`, `gravity.db`, n8n's tables, Cleanuparr's
-`general_configs`). Those live outside the rebuild trail, so a
+Rule 1 is OS state; this is the state *inside* an app — its SQLite
+file, Postgres tables, config store (`wg-easy.db`, `grafana.db`,
+`gravity.db`, n8n's tables). Those live outside the rebuild trail: a
 `sqlite3`/`psql`/`sed` write leaves no record of how the value came to
 be and dies on a fresh bootstrap.
 
-Two sanctioned paths, in order of preference:
-
-1. **Make it declarative** — an env var, a converge oneshot, an
-   `ExecStartPost`. Then a rebuild reproduces it.
-2. **Use the app's own API or UI** — that is the discoverable surface,
-   and it is how Cleanuparr, Pocket ID, the *arrs and Jellyfin were all
-   configured here. Reading is always fine; it is writes that are
-   fenced.
-
-If neither fits, report the exact values and let the operator enter
-them. Do not reach into a database to work around a missing scope or a
-UI that is awkward.
+Two sanctioned paths, in order: **make it declarative** (env var,
+converge oneshot, `ExecStartPost` — a rebuild then reproduces it), or
+**use the app's own API/UI** — the discoverable surface, and how
+Cleanuparr, Pocket ID, the *arrs and Jellyfin were all configured here.
+Reading is always fine; writes are what's fenced. If neither fits,
+report the exact values and let the operator enter them — never reach
+into a database to work around a missing scope or an awkward UI.
 
 ### 3. Confirm before destructive or system-wide actions
 
@@ -108,15 +99,13 @@ confirm before:
   port; the whitelist is empty on purpose (see operator decisions)
 - AI stack — LiteLLM gateway (`stacks/litellm`) + Open WebUI
   (`stacks/open-webui`, `chat.toscanini.me`) front the **Lemonade**
-  model server on the gaming PC (chat / embeddings / STT / TTS / image).
-  Lemonade has a full REST API reachable from this box — drive it
-  directly instead of the GUI. See **`/etc/nixos/lemonade.md`** (in the
-  flake repo) and its linked live API docs. RAG vector store: the
-  `stacks/litellm-pgvector` connector fronts pgvector (in the shared pg
-  cluster, its own `litellm_vector` db) behind LiteLLM's `pg_vector`
-  vector-store API; stores are DB state registered via
-  `/vector_store/new`, not config (STORE_MODEL_IN_DB drops the config
-  registry). Ingest via the connector's REST API, not the LiteLLM UI.
+  model server on the gaming PC (chat / embeddings / STT / TTS /
+  image). Lemonade has a full REST API reachable from this box — drive
+  it directly, not the GUI; see `lemonade.md`. RAG vectors:
+  `stacks/litellm-pgvector` fronts pgvector on the shared cluster
+  behind LiteLLM's vector-store API; stores are DB state registered via
+  `/vector_store/new` (STORE_MODEL_IN_DB drops the config registry), so
+  ingest via the connector's REST API, not the LiteLLM UI.
 
 Ask what depends on a thing before touching it. The answers that cost
 real downtime to learn are in **Cross-cutting container gotchas**; the
@@ -761,33 +750,18 @@ rides the Pocket ID forward-auth gate instead.
 ### Every container is DNS client `127.0.0.1` — one shared rate limit
 
 aardvark-dns forwards container queries to the host resolver, so all
-~75 containers **plus** the host share a single per-client budget:
-FTL's default `1000 queries / 60s`. One busy container exhausts it for
-the whole house.
-
-While limited, pi-hole answers `REFUSED`, which Go renders as
-`server misbehaving` — so the symptom never looks like DNS:
-
-- traefik: `exchangeAuthCode: … lookup id.toscanini.me … server
-  misbehaving` → the browser shows **"Failed to exchange auth code"** on
-  every Pocket-ID-gated app
-- pocket-id: `failed to send email: … lookup smtp.gmail.com …`
-
-`id.toscanini.me` is a *local* `fleet.dnsHosts` record, so failing to
-resolve it proves pi-hole is refusing rather than an upstream problem.
-
-Confirm in `/var/log/pihole/FTL.log` (**not** journald):
-`Rate-limiting 127.0.0.1 for at least N seconds`.
-
-Observed for real when a CI `pnpm install` on the self-hosted runner
-locked the operator out of daedalus mid-login. Raising `misc.rateLimit`
-in `stacks/pihole/pihole.nix` is the fix, but it restarts `pihole-ftl`
-(a brief LAN DNS outage) — so it's an ask-first change. Tracked in
-FUTURE.md.
-
-**Related but different mechanism**: myspeed's hourly speedtest
-saturates the uplink and blackholes DNS for 1–2 minutes at `:00`. See
-"never schedule network-heavy jobs on the hour" below.
+~75 containers **plus** the host share one per-client budget: FTL's
+default `1000 queries / 60s`. One busy container (a CI `pnpm install`
+did it) exhausts it for the whole house. While limited, pi-hole answers
+`REFUSED` — Go renders that as `server misbehaving`, so the symptom
+never looks like DNS: traefik shows **"Failed to exchange auth code"**
+on every gated app, pocket-id fails to send mail. `id.toscanini.me` is
+a *local* `fleet.dnsHosts` record, so failing to resolve it proves
+pi-hole is refusing rather than an upstream problem. Confirm in
+`/var/log/pihole/FTL.log` (**not** journald): `Rate-limiting 127.0.0.1
+…`. The fix (`misc.rateLimit` up) restarts pihole-ftl = brief LAN DNS
+outage — ask first; tracked in FUTURE.md. Different mechanism, same
+symptom: myspeed's `:00` speedtest blackhole (gotchas section).
 
 ---
 
@@ -830,29 +804,10 @@ gluetun VPN down / port-forward lost, traefik cert expiry, and
 `container_up` staleness. Gatus additionally probes each webApp's
 `healthPath` — the real upstream, not the IdP.
 
-Grafana **never** allows API or UI deletion of a dashboard that still
-has a provisioning record, and the provisioner never deletes on file
-removal — so removing a JSON leaves a ghost. Two consequences worth
-knowing before reorganizing dashboards: moving a provisioned JSON to a
-new path creates a *duplicate* `dashboard_provisioning` row (they're
-keyed by file path), after which per-uid GETs 500 with "found more than
-one provisioned dashboard"; and the way out is to **rename the
-provider** in `provisioning/dashboards/home-server.yaml`, because
-Grafana purges rows whose provider is absent from config at startup.
-Never mint a provisioned dashboard with a throwaway uid.
-
-### Alert rules must be instant queries
-
-A provisioned rule feeding a Prometheus query straight into a
-`type: threshold` condition **must** set `instant: true`. Without it the
-query returns a time series and the threshold expression intermittently
-fails with `DatasourceError … only reduced data can be alerted on`. The
-failure is **non-deterministic** — 3 of 26 rules were erroring while
-structurally identical ones were fine — so "healthy now" is not
-evidence. Every rule's time-windowing already lives inside its PromQL
-(`rate[5m]`, `predict_linear[6h]`), which an instant query evaluates
-correctly, so `instant: true` is always right here and changes no
-firing thresholds.
+Editing anything under `stacks/monitoring/assets/` has its own traps
+(provisioning ghosts, mandatory `instant: true` on alert rules) —
+`.claude/rules/monitoring-assets.md` loads them when you touch those
+files.
 
 ### Per-container metrics
 
@@ -1081,36 +1036,29 @@ POSTGRES_PASSWORD and DB_POSTGRESDB_PASSWORD (how n8n runs the stock
 entrypoint). If a future image wants yet another name, add it to the
 always-emitted list in `stacks/app-db/assets/bootstrap.sh`.
 
-Two traps come with `mkSecretRender`, and neither announces itself:
+Two silent traps come with `mkSecretRender`:
 
 **Never render into `/run/<container-name>`.** oci-containers gives each
-podman unit `RuntimeDirectory=<container-name>` with
-`RuntimeDirectoryPreserve=no`, so systemd **deletes that directory every
-time the container stops**. The render unit is `RemainAfterExit`, so a
-plain container restart does not re-run it — the file is simply gone and
-the container crash-loops on a missing config. Pick a `dir` whose
-basename matches no container (`/run/nextcloud-redis-conf`, not
-`/run/nextcloud-redis`). This cost hours of Nextcloud 500s.
+podman unit `RuntimeDirectory=<container-name>` with Preserve=no, so
+systemd **deletes that dir every time the container stops** — and the
+render unit is `RemainAfterExit`, so a plain container restart doesn't
+re-run it. The file is just gone; the container crash-loops on a missing
+config (hours of Nextcloud 500s). Pick a `dir` whose basename matches no
+container: `/run/nextcloud-redis-conf`, not `/run/nextcloud-redis`.
 
-**A rotated secret does not reach the box on a rebuild.** Editing a
-value inside an existing `*.sops` changes the ciphertext but not the
-render unit's own text, so systemd sees nothing to restart and keeps
-serving the old value — and even once it re-runs, the consumer already
-read the file as an `--env-file` at start. Activation will print
-`modifying secret: …` and `/run/secrets/…` will be correct while the
-rendered file is stale, which is what makes this so convincing. After
-any rotation, both, in order:
+**A rotated secret does not reach the box on a rebuild.** New ciphertext
+doesn't change the render unit's text, so nothing restarts — and the
+consumer read the old file as `--env-file` at start anyway. Activation
+prints `modifying secret: …` and `/run/secrets/…` IS correct, which is
+what makes the stale render so convincing. After any rotation:
 
 ```
-sudo systemctl restart <the-render>.service
-sudo systemctl restart podman-<consumer>.service
+sudo systemctl restart <the-render>.service && sudo systemctl restart podman-<consumer>.service
 ```
 
-This affects **every** `mkSecretRender` consumer. Plain
-`sops.secrets.<n>` are NOT affected — sops-nix re-decrypts on every
-activation, which is why `platform/claude.nix` uses one directly. The
-declarative fix (deriving `restartTriggers` from each secret's
-`sopsFile`) is in FUTURE.md.
+Plain `sops.secrets.<n>` are immune — sops-nix re-decrypts every
+activation (why `platform/claude.nix` uses one directly). The
+declarative fix (derived `restartTriggers`) is in FUTURE.md.
 
 ### Redis wants `vm.overcommit_memory=1`
 
@@ -1161,22 +1109,16 @@ oneshot ordered before the actual container starts.
 
 ### A pg restart is a fleet event
 
-Any change that restarts `podman-pg.service` — including a one-line edit
-to `stacks/app-db/app-db.nix` — bounces the shared cluster **mid-life**,
-and the blast radius is bigger than "16 tenants reconnect":
-
-- **pocket-id crashes and does not come back.** While pg restarts, its
-  DNS name briefly vanishes from the bridge; pocket-id's health check is
-  **fatal**, so `lookup pg … no such host` exits the process.
-  `Type=oneshot` then leaves a green `active (exited)` unit with a dead
-  container. `id.toscanini.me` → 502.
-- **Then everything gated by it fails**, and apps that validate OIDC at
-  startup (wealthfolio) hard-exit and stay down.
-- Every other tenant — nextcloud, litellm, n8n, grafana, the *arrs —
-  reconnects gracefully. pocket-id is the only fatal one.
-
-The documented consumer→pg ordering and `pg_isready` gate cover **boot**
-races only, not mid-life restarts.
+Any change that restarts `podman-pg.service` — a one-line edit to
+`stacks/app-db/app-db.nix` counts — bounces the shared cluster
+**mid-life**. Fifteen tenants reconnect gracefully; **pocket-id does
+not**: pg's DNS name briefly vanishes from the bridge, pocket-id's
+health check is fatal (`lookup pg … no such host` exits the process),
+and `Type=oneshot` leaves a green unit with a dead container.
+`id.toscanini.me` → 502, then everything gated by it fails, and apps
+that validate OIDC at startup (wealthfolio) hard-exit and stay down.
+The consumer→pg ordering and `pg_isready` gate cover **boot** races
+only, not mid-life restarts.
 
 **After any pg bounce:** `systemctl restart podman-pocket-id`, then
 anything still down, then verify:
@@ -1188,76 +1130,53 @@ curl -sk --resolve id.toscanini.me:443:192.168.0.2 \
 
 ### The first connection to a rootless-published port stalls
 
-Opening a **new** TCP connection from a container to a port published
-out of the rootless netns (`host.containers.internal:<port>` — the
-gluetun-netns services, home-assistant) hangs on the SYN and fails only
-after the kernel's retransmit ladder, **~10.5 s**. This is not rare:
-measured at **20–50%**, and the SYN dies in pasta's userspace before it
-ever reaches the target namespace.
+A **new** TCP connection from a container to a port published out of
+the rootless netns (`host.containers.internal:<port>` — the
+gluetun-netns services, home-assistant) hangs on the SYN **20–50% of
+the time** and fails only after the kernel's ~10.5 s retransmit ladder;
+the SYN dies in pasta's userspace before reaching the target namespace.
+Refuted, don't re-derive: not load (reproduces at concurrency 1), not
+staleness (back-to-back probes stall *more* than spaced ones).
 
-Two refuted theories, so nobody re-derives them: it is **not** load
-(reproduces at concurrency 1) and **not** a cold path going stale
-(back-to-back probes stalled *more* than spaced ones).
-
-**Never raise the timeout** — a flat 10 s timeout just means a 10 s
-page. Use an **escalating** ladder, retrying only a *thrown* request (a
-4xx/5xx is the service answering):
-
-```ts
-const ATTEMPT_MS = [400, 800, 1_500, 2_500]
-```
-
-Escalating because two different things are slow and want opposite
-treatment: a stalled *connection* should be abandoned fast (the retry
-succeeds in one round trip), a slow *response* should be waited out.
-
-**The inverse rule matters too: never retry an upstream that is slow
-because it is busy.** Loki runs few concurrent queries, so a retry
-queues another query behind the one still running and makes it worse —
-it gets one patient attempt instead.
+**Never raise the timeout** — a flat 10 s timeout is a 10 s page. Use an
+**escalating** ladder (`[400, 800, 1_500, 2_500]` ms), retrying only a
+*thrown* request — a 4xx/5xx is the service answering. Escalating,
+because a stalled *connection* wants abandoning fast while a slow
+*response* wants waiting out. The inverse rule also holds: **never
+retry an upstream that is slow because it is busy** (Loki runs few
+concurrent queries — a retry just queues another behind the first; it
+gets one patient attempt).
 
 ### Never schedule network-heavy jobs on the hour
 
-myspeed runs a speedtest at `:00:00` (schedule lives in its own DB, not
-nix). While it runs the uplink is saturated and DNS is dropped
-**wholesale for 1–2 minutes**, for every client in the house — pi-hole
-forwards and gets nothing back. This silently broke the RSS digest for
-three days: its 04:00:15 trigger landed inside the blackout, 29 of 35
-feeds failed to resolve, and the workflow reported `success` while
-producing nothing.
-
-Corollary: collapsing a job from every-6h to once-a-day removes the
-accidental redundancy that used to cover a starved run. Pair any such
-change with an explicit retry.
+myspeed speedtests at `:00:00` (schedule in its own DB, not nix),
+saturating the uplink and dropping DNS **wholesale for 1–2 minutes**
+house-wide. This silently broke the RSS digest for three days: its
+04:00:15 trigger landed in the blackout, 29/35 feeds failed to resolve,
+and the workflow still reported `success`. Corollary: collapsing a job
+from every-6h to daily removes the accidental redundancy that covered a
+starved run — pair the change with an explicit retry.
 
 ### Bridge → host-netns traffic arrives as the host's LAN IP
 
 A container on `traefik-net` dialing `host.containers.internal:<port>`
-reaches a `--network=host` container's listener with source address
-**192.168.0.2** — pasta SNATs to the host address, so the
-`10.89.7.0/24` bridge subnet never appears at the far end.
-
-So a reverse-proxy trust list on a host-netns app (Home Assistant's
-`http.trusted_proxies`) must name `${fleet.lanIp}/32`, **not**
-`fleet.bridgeSubnets.traefik`. The bridge-subnet answer is the intuitive
-one and silently rejects every proxied request. For ordinary
-bridge-routed containers the subnet IS correct (immich uses it) — the
-host-IP rule applies only when the *upstream* is in the host netns.
-
-This is the inverse of the rootlessport rewrite above.
+reaches a `--network=host` listener with source address **192.168.0.2**
+— pasta SNATs to the host address; the bridge subnet never appears. So
+a trust list on a host-netns app (Home Assistant's `trusted_proxies`)
+must name `${fleet.lanIp}/32`, **not** `fleet.bridgeSubnets.traefik` —
+the intuitive answer silently rejects every proxied request. For
+bridge-routed upstreams the subnet IS correct (immich). Inverse of the
+rootlessport rewrite above.
 
 ### A gated app's icons need an auth bypass
 
-An app behind forward-auth serves its favicon and apple-touch-icon
-**through the gate**, so anything fetching them outside an authenticated
-page load gets a 302 to Pocket ID. iOS does exactly that when you add a
-page to the home screen: it reads the IdP's HTML where it expected a PNG
-and falls back to a generic letter tile — the icon looks broken while
-being perfectly correct on disk.
-
-Add the icon paths to `authBypassRule`, same class as the gatus probe
-needing `healthPath` bypassed. iOS caches per site aggressively, so
-remove and re-add the bookmark after fixing.
+A forward-auth'd app serves its favicon and apple-touch-icon **through
+the gate**, so any fetch outside an authenticated page load gets a 302
+to Pocket ID. iOS does exactly that on add-to-home-screen: it reads the
+IdP's HTML where it expected a PNG and renders a generic letter tile —
+broken-looking icon, correct on disk. Add the icon paths to
+`authBypassRule` (same class as gatus needing `healthPath` bypassed);
+iOS caches per site, so remove and re-add the bookmark after fixing.
 
 ---
 
@@ -1267,19 +1186,14 @@ Four ways this box lies to you. Each one returns a confident, wrong
 answer rather than an error.
 
 **1. Container logs are not in the unit journal.**
-`journalctl -u podman-<name>` holds ~5 lines of systemd start/stop
-messages and none of the container's own output — the units are
-`Type=oneshot` running `podman run -d`, so stdout goes to podman's log
-driver (which alloy ships to Loki), never the unit journal. Grepping it
-for errors returns a meaningless zero. Sanity-check line counts: if
-`journalctl -u podman-X --since -15m | wc -l` says ~5, you are measuring
-nothing.
-
-Use `podman logs --since 12m <container>`, or Loki for history beyond
-the container's current lifetime (essential for "is this error new or
-pre-existing?" after a restart). Query Loki **through Grafana's
-datasource proxy** — the loki image has no working wget/curl and :3100
-isn't reachable from the host:
+`journalctl -u podman-<name>` holds ~5 systemd start/stop lines and
+none of the container's output (oneshot `podman run -d` → stdout goes
+to podman's log driver, shipped to Loki by alloy). Grepping it for
+errors returns a meaningless zero — if `| wc -l` says ~5, you're
+measuring nothing. Use `podman logs --since 12m <container>`, or Loki
+for history beyond the container's lifetime ("is this error new or
+pre-existing?"). Query Loki **through Grafana's datasource proxy** —
+the loki image has no wget/curl and :3100 isn't host-reachable:
 
 ```
 GF_USER=$(sudo grep '^GF_SECURITY_ADMIN_USER=' /run/secrets/grafana-env | cut -d= -f2-)
@@ -1289,44 +1203,37 @@ curl -sk -u "$GF_USER:$GF_PASS" --resolve grafana.toscanini.me:443:192.168.0.2 \
   --data-urlencode '{stack="<stack>"} |= "<needle>"' --data-urlencode 'limit=3'
 ```
 
-Stack labels come from `fleet.logStacks`; unnamed ad-hoc `podman run`s
-collapse to `stack=adhoc`. Note `jq` and `python3` are not on PATH.
+Stack labels come from `fleet.logStacks`; ad-hoc `podman run`s collapse
+to `stack=adhoc`. `jq` and `python3` are not on PATH.
 
 **2. `systemctl is-active` cannot tell you a container is alive.**
-`Type=oneshot` + `RemainAfterExit` + `--rm` means a container that dies
-seconds after start leaves a **green** unit and no corpse. This is the
-single most repeated failure mode on this box — it has bitten gatus
-(OIDC discovery panic), minecraft (a guessed username, and
-`--cap-drop=ALL`), searxng (bad engine config), pocket-id (pg bounce)
-and grocy-mcp (invalid YAML). Symptoms look like "the app is broken"
-while every unit-level signal says healthy.
-
-Always confirm with the container, not the unit:
+`Type=oneshot` + `RemainAfterExit` + `--rm`: a container that dies
+seconds after start leaves a **green** unit and no corpse. The single
+most repeated failure mode on this box — gatus (OIDC discovery panic),
+minecraft (guessed username; `--cap-drop=ALL`), searxng (bad config),
+pocket-id (pg bounce), grocy-mcp (invalid YAML). Always confirm with
+the container, not the unit:
 
 ```
 sudo -u santiago env XDG_RUNTIME_DIR=/run/user/1000 \
   podman ps --filter name=<x> --format '{{.Names}}\t{{.Status}}'
 ```
 
-If a stack fetches the OIDC discovery document at startup, don't
-hand-roll another `ExecStartPre` — add it to
-`fleet.sso.discoveryConsumers`.
+If a stack fetches OIDC discovery at startup, add it to
+`fleet.sso.discoveryConsumers` — don't hand-roll an `ExecStartPre`.
 
 **3. A gatus probe passing means "something answered", not "it works".**
-`healthPath` is probed with a condition of roughly `[STATUS] < 500`, so
-a **404 passes**. Argus's healthPath 404'd for an entire framework
-migration while gatus reported it healthy the whole time. Prefer a path
-whose absence is a 5xx; if you must use a static asset, remember that a
-framework may have been synthesising it (and therefore it never appears
-in `git`).
+`healthPath` passes on any status `< 500`, so a **404 passes** —
+Argus's healthPath 404'd through an entire framework migration while
+reporting healthy. Prefer a path whose absence is a 5xx; a static asset
+may have been synthesised by the old framework and absent from `git`.
 
 **4. A wedged gluetun reads as perfectly healthy.**
-When the tunnel can't establish, its healthcheck restarts it in a tight
-loop (seen: 145 restarts in 15 minutes). Meanwhile `podman ps` still
-says `Up 4 days` **and still lists the port mappings**, while `ss -lntp`
-shows no listener and everything in the netns 502s. Check gluetun's
-logs, not the app's; the tell is `restarting VPN because it failed to
-pass the healthcheck`. Fix is usually just
+A tunnel that can't establish restarts in a tight loop (seen: 145
+restarts/15 min) while `podman ps` says `Up 4 days` **with port
+mappings listed** — yet `ss -lntp` shows no listener and the whole
+netns 502s. Check gluetun's logs, not the app's; the tell is
+`restarting VPN because it failed to pass the healthcheck`. Fix:
 `systemctl restart podman-gluetun-<name>`.
 
 ---
