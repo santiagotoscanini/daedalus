@@ -26,6 +26,7 @@
 #   s2-pool/tv                no snapshots (re-downloadable).
 
 {
+  config,
   lib,
   pkgs,
   utils,
@@ -89,7 +90,7 @@ let
     # region files take small random rewrites, and a large record turns each
     # one into a big copy-on-write block and a bigger snapshot delta.
     "rpool/minecraft" = {
-      mount = "/home/santiago/selfhost/minecraft";
+      mount = "${config.fleet.stateRoot}/minecraft";
       properties = snapshotOn // {
         mountpoint = "legacy";
         recordsize = "16K";

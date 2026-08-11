@@ -31,7 +31,7 @@
 {
   fleet.bridgeMemberships.healthchecks = [ "app-db" ]; # iso-healthchecks membership comes from webApps.isolated
 
-  fleet.statePaths."/home/santiago/selfhost/healthchecks/data".uid = 999;
+  fleet.statePaths."${config.fleet.stateRoot}/healthchecks/data".uid = 999;
 
   # Database on the shared app-db cluster (see stacks/app-db/).
   fleet.appDatabases.healthchecks.consumers = [ "healthchecks" ];
@@ -109,7 +109,7 @@
     ];
 
     volumes = [
-      "/home/santiago/selfhost/healthchecks/data:/data"
+      "${config.fleet.stateRoot}/healthchecks/data:/data"
     ];
   };
 }

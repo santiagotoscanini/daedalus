@@ -135,7 +135,7 @@ let
   hostname = "homeassistant.${config.fleet.baseDomain}";
   url = "https://${hostname}";
 
-  configDir = "/home/santiago/selfhost/home-assistant/config";
+  configDir = "${config.fleet.stateRoot}/home-assistant/config";
 
   # Derived image — see assets/image/Containerfile, which is where the
   # upstream version + digest are pinned. `tagPrefix` only makes the

@@ -128,7 +128,7 @@ in
 
   # Pre-creating the file 0600 keeps a fresh restore from letting podman
   # create a directory here, which breaks ACME confusingly.
-  fleet.statePaths."/home/santiago/selfhost/traefik/acme.json" = {
+  fleet.statePaths."${config.fleet.stateRoot}/traefik/acme.json" = {
     type = "f";
     mode = "0600";
   };
@@ -315,7 +315,7 @@ in
     volumes = [
       "${traefikRulesDir}:/rules:ro"
       "${oidcPlugin}:/plugins-local/src/github.com/sevensolutions/traefik-oidc-auth:ro"
-      "/home/santiago/selfhost/traefik/acme.json:/acme.json"
+      "${config.fleet.stateRoot}/traefik/acme.json:/acme.json"
       # No /var/log/traefik mount: both app + access logs go to stdout
       # (journald -> Loki). File logging is intentionally off so nothing
       # grows unbounded under ~/selfhost/traefik/logs.

@@ -161,8 +161,8 @@
       };
 
       fleet.statePaths = {
-        "/home/santiago/selfhost/pocket-id" = { };
-        "/home/santiago/selfhost/pocket-id/data" = {
+        "${config.fleet.stateRoot}/pocket-id" = { };
+        "${config.fleet.stateRoot}/pocket-id/data" = {
           uid = 1000;
           mode = "0700";
         };
@@ -172,7 +172,7 @@
         image = "ghcr.io/pocket-id/pocket-id:v2.12.0@sha256:4a277d141d6069fd9a7b321a9aca80f4b9812b8fa122ee566d2f15900e3d8448";
 
         volumes = [
-          "/home/santiago/selfhost/pocket-id/data:/app/data"
+          "${config.fleet.stateRoot}/pocket-id/data:/app/data"
         ];
 
         environmentFiles = [

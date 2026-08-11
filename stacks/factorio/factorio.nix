@@ -66,13 +66,13 @@ in
     };
 
     fleet.statePaths = {
-      "/home/santiago/selfhost/factorio" = { };
-      "/home/santiago/selfhost/factorio/fsm-data" = { };
-      "/home/santiago/selfhost/factorio/mod_packs" = { };
-      "/home/santiago/selfhost/factorio/data" = { };
-      "/home/santiago/selfhost/factorio/data/config" = { };
-      "/home/santiago/selfhost/factorio/data/mods" = { };
-      "/home/santiago/selfhost/factorio/data/saves" = { };
+      "${config.fleet.stateRoot}/factorio" = { };
+      "${config.fleet.stateRoot}/factorio/fsm-data" = { };
+      "${config.fleet.stateRoot}/factorio/mod_packs" = { };
+      "${config.fleet.stateRoot}/factorio/data" = { };
+      "${config.fleet.stateRoot}/factorio/data/config" = { };
+      "${config.fleet.stateRoot}/factorio/data/mods" = { };
+      "${config.fleet.stateRoot}/factorio/data/saves" = { };
     };
 
     virtualisation.oci-containers.containers.factorio = mkRootlessContainer {
@@ -89,11 +89,11 @@ in
       ];
 
       volumes = [
-        "/home/santiago/selfhost/factorio/fsm-data:/opt/fsm-data"
-        "/home/santiago/selfhost/factorio/mod_packs:/opt/fsm/mod_packs"
-        "/home/santiago/selfhost/factorio/data/saves:/opt/factorio/saves"
-        "/home/santiago/selfhost/factorio/data/mods:/opt/factorio/mods"
-        "/home/santiago/selfhost/factorio/data/config:/opt/factorio/config"
+        "${config.fleet.stateRoot}/factorio/fsm-data:/opt/fsm-data"
+        "${config.fleet.stateRoot}/factorio/mod_packs:/opt/fsm/mod_packs"
+        "${config.fleet.stateRoot}/factorio/data/saves:/opt/factorio/saves"
+        "${config.fleet.stateRoot}/factorio/data/mods:/opt/factorio/mods"
+        "${config.fleet.stateRoot}/factorio/data/config:/opt/factorio/config"
       ];
 
       # The ofsm wrapper needs >10s to forward SIGTERM and let the Factorio

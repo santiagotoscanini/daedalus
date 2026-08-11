@@ -61,14 +61,14 @@
     # Non-traversable parent closes the world-readable window if wg-easy
     # rewrites its db loosely; container root maps to santiago, so the
     # bind mount still works.
-    "/home/santiago/selfhost/wg-easy".mode = "0700";
+    "${config.fleet.stateRoot}/wg-easy".mode = "0700";
     # wg-easy writes wg-easy.db (server private key + client configs/PSKs)
     # world-readable (0644). state-paths re-tightens it to 0600 at boot —
     # a private key has no business being world-readable, even on a
     # single-user box. (tmpfiles can't do this: it silently skips rules
     # under the santiago-owned /home prefix. `f` pre-creates the file
     # empty if missing, which SQLite treats as a valid empty DB.)
-    "/home/santiago/selfhost/wg-easy/wg-easy.db" = {
+    "${config.fleet.stateRoot}/wg-easy/wg-easy.db" = {
       type = "f";
       mode = "0600";
     };
@@ -82,7 +82,7 @@
     ];
 
     volumes = [
-      "/home/santiago/selfhost/wg-easy:/etc/wireguard"
+      "${config.fleet.stateRoot}/wg-easy:/etc/wireguard"
       # NixOS keeps kernel modules under /run/booted-system, not
       # /lib/modules. Belt-and-suspenders bind (the module is loaded).
       "/run/booted-system/kernel-modules/lib/modules:/lib/modules:ro"

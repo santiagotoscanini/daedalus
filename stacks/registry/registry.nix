@@ -82,7 +82,7 @@ let
   # metrics, scrub — the -minimal variant has none of those).
   zotImage = "ghcr.io/project-zot/zot:v2.1.18@sha256:34f18f783037f967dba10df02f9d4086c4d626f5643ef9f5e51e4a4547280a0b";
 
-  dataDir = "/home/santiago/selfhost/registry";
+  dataDir = "${config.fleet.stateRoot}/registry";
 
 in
 {

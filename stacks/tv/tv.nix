@@ -171,17 +171,17 @@ in
   };
 
   fleet.statePaths = {
-    "/home/santiago/selfhost/tv/bazarr" = { };
-    "/home/santiago/selfhost/tv/jellyfin" = { };
-    "/home/santiago/selfhost/tv/nzbget" = { };
+    "${config.fleet.stateRoot}/tv/bazarr" = { };
+    "${config.fleet.stateRoot}/tv/jellyfin" = { };
+    "${config.fleet.stateRoot}/tv/nzbget" = { };
     # nzbget's LogFile points at /config/logs and never creates the dir;
     # missing dir = hundreds of stderr complaints per day.
-    "/home/santiago/selfhost/tv/nzbget/logs" = { };
-    "/home/santiago/selfhost/tv/prowlarr" = { };
-    "/home/santiago/selfhost/tv/qbittorrent" = { };
-    "/home/santiago/selfhost/tv/radarr" = { };
-    "/home/santiago/selfhost/tv/sonarr" = { };
-    "/home/santiago/selfhost/tv/subgen" = { };
+    "${config.fleet.stateRoot}/tv/nzbget/logs" = { };
+    "${config.fleet.stateRoot}/tv/prowlarr" = { };
+    "${config.fleet.stateRoot}/tv/qbittorrent" = { };
+    "${config.fleet.stateRoot}/tv/radarr" = { };
+    "${config.fleet.stateRoot}/tv/sonarr" = { };
+    "${config.fleet.stateRoot}/tv/subgen" = { };
     # Content dirs on s2-pool that containers bind directly — declared
     # so a fresh restore pre-creates them with santiago ownership.
     "/s2/tv/media" = { };
@@ -198,7 +198,7 @@ in
     # temp path must also live under /data/torrents — a second bind
     # would force cross-mount copy+delete instead of rename().
     volumes = [
-      "/home/santiago/selfhost/tv/qbittorrent:/config"
+      "${config.fleet.stateRoot}/tv/qbittorrent:/config"
       "/s2/tv/torrents:/data/torrents:rw"
       # Books, and deliberately a SEPARATE mount on a separate dataset. The
       # note above is about keeping the *arrs' hardlink space on one
@@ -217,7 +217,7 @@ in
     image = "docker.io/linuxserver/nzbget:v26.2-ls255@sha256:d79a67d21cf63431d9e08e7f10c920ef1f68f06e61c015e602c2c3f79d28a0ac";
 
     volumes = [
-      "/home/santiago/selfhost/tv/nzbget:/config"
+      "${config.fleet.stateRoot}/tv/nzbget:/config"
       "/s2/tv/usenet:/data/usenet:rw"
     ];
   };
@@ -226,7 +226,7 @@ in
     image = "docker.io/linuxserver/prowlarr:2.5.2.5491-ls155@sha256:2f3d31307beba3ba2dd226d191f5f5c14ee3b4d8b49277c64683f5ed97083179";
 
     volumes = [
-      "/home/santiago/selfhost/tv/prowlarr:/config"
+      "${config.fleet.stateRoot}/tv/prowlarr:/config"
     ];
   };
 
@@ -237,7 +237,7 @@ in
     image = "docker.io/linuxserver/radarr:6.3.0.10514-ls312@sha256:e35056574cdc695a9ee745aa1ecda9eab3842450bf4b7b8471b023790fa3861d";
 
     volumes = [
-      "/home/santiago/selfhost/tv/radarr:/config"
+      "${config.fleet.stateRoot}/tv/radarr:/config"
       "/s2/tv:/data"
     ];
   };
@@ -246,7 +246,7 @@ in
     image = "docker.io/linuxserver/sonarr:4.0.19.2979-ls320@sha256:24acea2956a0ccb11f103877d9f4f8576600fb34bff34820ed749c2256dab89f";
 
     volumes = [
-      "/home/santiago/selfhost/tv/sonarr:/config"
+      "${config.fleet.stateRoot}/tv/sonarr:/config"
       "/s2/tv:/data"
     ];
   };
@@ -256,7 +256,7 @@ in
     image = "docker.io/linuxserver/bazarr:v1.6.0-ls356@sha256:ab401a0f361cfad328e444838b13d5b334b189d0f556fc91a3623eb581df36df";
 
     volumes = [
-      "/home/santiago/selfhost/tv/bazarr:/config"
+      "${config.fleet.stateRoot}/tv/bazarr:/config"
       "/s2/tv/media:/data/media"
     ];
 
@@ -291,7 +291,7 @@ in
     image = "docker.io/mccloud/subgen:cpu@sha256:7aa1e0dcca17cb93edb0ea00194f89c16949e4af406fc70375f7f4594dbb6627";
 
     volumes = [
-      "/home/santiago/selfhost/tv/subgen:/models"
+      "${config.fleet.stateRoot}/tv/subgen:/models"
     ];
 
     environment = {
@@ -319,7 +319,7 @@ in
     image = "docker.io/linuxserver/jellyfin:10.11.11ubu2404-ls42@sha256:bb8d372e35d5c4a6cb61d830a06f5b5846528315b97cf5d38b80eea1e430efa7";
 
     volumes = [
-      "/home/santiago/selfhost/tv/jellyfin:/config"
+      "${config.fleet.stateRoot}/tv/jellyfin:/config"
       "/s2/tv/media:/data"
     ];
 

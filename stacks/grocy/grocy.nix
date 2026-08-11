@@ -9,6 +9,7 @@
 # dir is chowned 100910:100910 to match.
 
 {
+  config,
   pkgs,
   mkRootlessContainer,
   ...
@@ -19,13 +20,13 @@
   # linuxserver abc (uid 911) maps to host 100910; the config dir must
   # exist with that ownership or a fresh install fails on first write.
   fleet.statePaths = {
-    "/home/santiago/selfhost/grocy/config".uid = 911;
+    "${config.fleet.stateRoot}/grocy/config".uid = 911;
     # data/ holds grocy.db — declared explicitly so a fresh restore
     # creates it abc-owned, not as a root mkdir -p side effect.
-    "/home/santiago/selfhost/grocy/config/data".uid = 911;
+    "${config.fleet.stateRoot}/grocy/config/data".uid = 911;
     # Grocy reads highest-precedence settings from data/settingoverrides
     # (over env + config.php); the bind-mounted .txt files below land here.
-    "/home/santiago/selfhost/grocy/config/data/settingoverrides".uid = 911;
+    "${config.fleet.stateRoot}/grocy/config/data/settingoverrides".uid = 911;
   };
   fleet.webApps.grocy = {
     serviceName = "grocy";
@@ -57,7 +58,7 @@
     image = "docker.io/linuxserver/grocy:v4.6.0-ls334@sha256:35b2c85b1238f8249c9b349fb03619d1915917e61b2e4bff580729ec87397b4c";
 
     volumes = [
-      "/home/santiago/selfhost/grocy/config:/config"
+      "${config.fleet.stateRoot}/grocy/config:/config"
       # Enable reverse-proxy header auth declaratively (over config.php).
       "${pkgs.writeText "grocy-auth-class" "Grocy\\Middleware\\ReverseProxyAuthMiddleware"}:/config/data/settingoverrides/AUTH_CLASS.txt:ro"
       "${pkgs.writeText "grocy-auth-header" "Remote-User"}:/config/data/settingoverrides/REVERSE_PROXY_AUTH_HEADER.txt:ro"

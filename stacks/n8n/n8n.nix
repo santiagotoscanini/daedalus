@@ -75,8 +75,8 @@ in
   ];
 
   fleet.statePaths = {
-    "/home/santiago/selfhost/n8n/data".uid = 1000;
-    "/home/santiago/selfhost/n8n/local-files".uid = 1000;
+    "${config.fleet.stateRoot}/n8n/data".uid = 1000;
+    "${config.fleet.stateRoot}/n8n/local-files".uid = 1000;
   };
 
   # Database on the shared app-db cluster: role + db + env file with
@@ -131,8 +131,8 @@ in
     image = "docker.io/n8nio/n8n:2.33.2@sha256:d31ca7afc9be90449e1ecb624ed27f38dedb0fefa58aa8e559ae0d302441ff94";
 
     volumes = [
-      "/home/santiago/selfhost/n8n/data:/home/node/.n8n"
-      "/home/santiago/selfhost/n8n/local-files:/files"
+      "${config.fleet.stateRoot}/n8n/data:/home/node/.n8n"
+      "${config.fleet.stateRoot}/n8n/local-files:/files"
       "${n8nOidcHook}/hooks.js:/opt/oidc-hooks.js:ro"
     ];
 

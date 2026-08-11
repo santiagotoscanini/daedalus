@@ -109,8 +109,8 @@ in
   ];
 
   fleet.statePaths = {
-    "/home/santiago/selfhost/nextcloud/nc_config".uid = 33; # www-data
-    "/home/santiago/selfhost/nextcloud/nc_redis".uid = 999;
+    "${config.fleet.stateRoot}/nextcloud/nc_config".uid = 33; # www-data
+    "${config.fleet.stateRoot}/nextcloud/nc_redis".uid = 999;
   };
 
   # Split-horizon publish — same hostname for LAN (websecure) + off-LAN
@@ -126,7 +126,7 @@ in
     image = "docker.io/library/redis:alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb";
 
     volumes = [
-      "/home/santiago/selfhost/nextcloud/nc_redis:/data"
+      "${config.fleet.stateRoot}/nextcloud/nc_redis:/data"
       "/run/nextcloud-redis-conf:/etc/redis:ro"
     ];
 
@@ -146,7 +146,7 @@ in
     dependsOn = [ "nextcloud-redis" ];
 
     volumes = [
-      "/home/santiago/selfhost/nextcloud/nc_config:/var/www/html"
+      "${config.fleet.stateRoot}/nextcloud/nc_config:/var/www/html"
       # Only the external-storage paths occ actually serves — NOT all of /s2.
       # A Nextcloud compromise (public, RCE-prone) cannot reach
       # /s2/immich, /s2/tv, or /s2/backup. Verified via `occ files_external:list`.

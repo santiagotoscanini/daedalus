@@ -372,11 +372,6 @@ design decision, so none warrants a section of its own.
   `127.0.0.1`. Raising it to ~5000/60 keeps a runaway-client guard
   without the false positives. Needs a `pihole-ftl` restart = brief LAN
   DNS outage, so ask first.
-- **~25 stacks still spell out `/home/santiago/selfhost` as a literal**
-  instead of interpolating `fleet.stateRoot` (added 2026-08-11 with the
-  ai/books/tv/apps state-tree regrouping; only the moved stacks were
-  converted). A mechanical sweep — no paths change, so no container
-  restarts beyond the unit-text diff.
 - **Lemonade's `/metrics` is live and unscraped** (root-level, no auth,
   ~206 lines): per-model request/token counters plus TTFT and tokens/sec
   — backend-side truth the gateway cannot see. Caveat: TTFT and tok/s

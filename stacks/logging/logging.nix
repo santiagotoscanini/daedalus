@@ -553,8 +553,8 @@ in
       ];
 
     fleet.statePaths = {
-      "/home/santiago/selfhost/logging/alloy/data" = { };
-      "/home/santiago/selfhost/logging/loki/data" = { };
+      "${config.fleet.stateRoot}/logging/alloy/data" = { };
+      "${config.fleet.stateRoot}/logging/loki/data" = { };
     };
 
     # Loki has NO traefik route by design: it is unauthenticated, so any
@@ -569,7 +569,7 @@ in
 
       volumes = [
         "${./assets/loki.yaml}:/etc/loki/loki.yaml:ro"
-        "/home/santiago/selfhost/logging/loki/data:/loki"
+        "${config.fleet.stateRoot}/logging/loki/data:/loki"
       ];
 
       extraOptions = [
@@ -607,7 +607,7 @@ in
         # the read regardless of what the config asks for. The explicit
         # path in file_match is the second lock, not the only one.
         "/var/log/pihole:/var/log/pihole:ro"
-        "/home/santiago/selfhost/logging/alloy/data:/var/lib/alloy/data"
+        "${config.fleet.stateRoot}/logging/alloy/data:/var/lib/alloy/data"
       ];
 
       extraOptions = [

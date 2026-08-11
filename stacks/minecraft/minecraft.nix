@@ -75,7 +75,7 @@ let
   paperBuild = "111";
 
   port = 25565;
-  dataDir = "/home/santiago/selfhost/minecraft";
+  dataDir = "${config.fleet.stateRoot}/minecraft";
   backupDir = "/s2/minecraft/backups";
 
   # Who may join at all, and who may run commands. Not secrets — the point of

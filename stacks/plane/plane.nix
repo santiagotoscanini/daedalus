@@ -159,7 +159,7 @@ let
   # the default keeps the panel to the two unauthenticated version fields
   # rather than erroring against a slug that isn't there yet.
 
-  stateRoot = "/home/santiago/selfhost/plane";
+  stateRoot = "${config.fleet.stateRoot}/plane";
 
   secretEnv = config.sops.secrets."plane-env".path;
   dbEnv = config.fleet.appDatabases.plane.envFile;

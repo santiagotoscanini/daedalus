@@ -354,8 +354,8 @@ in
   ];
 
   fleet.statePaths = {
-    "/home/santiago/selfhost/monitoring/grafana/data" = { };
-    "/home/santiago/selfhost/monitoring/prometheus/data" = { };
+    "${config.fleet.stateRoot}/monitoring/grafana/data" = { };
+    "${config.fleet.stateRoot}/monitoring/prometheus/data" = { };
     "/var/lib/node-exporter" = { };
   };
 
@@ -482,7 +482,7 @@ in
 
     volumes = [
       "${prometheusDir}:/etc/prometheus:ro"
-      "/home/santiago/selfhost/monitoring/prometheus/data:/prometheus"
+      "${config.fleet.stateRoot}/monitoring/prometheus/data:/prometheus"
     ];
 
     extraOptions = [
@@ -503,7 +503,7 @@ in
     dependsOn = [ "prometheus" ];
 
     volumes = [
-      "/home/santiago/selfhost/monitoring/grafana/data:/var/lib/grafana"
+      "${config.fleet.stateRoot}/monitoring/grafana/data:/var/lib/grafana"
       # Gmail app password for GF_SMTP_PASSWORD__FILE (shared mail secret).
       "${config.sops.secrets."mail-relay-password".path}:/run/secrets/mail-relay-password:ro"
       "${./assets/provisioning/datasources}:/etc/grafana/provisioning/datasources:ro"

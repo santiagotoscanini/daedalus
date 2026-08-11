@@ -96,7 +96,7 @@ let
   # `secrets/` path on the box. Not in /run: it has to survive a reboot,
   # or every client would rotate on every boot.
   secretsFile = "${stateDir}/client-secrets.env";
-  stateDir = "/home/santiago/selfhost/pocket-id/secrets";
+  stateDir = "${config.fleet.stateRoot}/pocket-id/secrets";
 
   secretsUnit = "sso-client-secrets.service";
 

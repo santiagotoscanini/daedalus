@@ -69,8 +69,8 @@ in
   ];
 
   fleet.statePaths = {
-    "/home/santiago/selfhost/immich/model-cache".uid = 1000;
-    "/home/santiago/selfhost/immich/postgres" = {
+    "${config.fleet.stateRoot}/immich/model-cache".uid = 1000;
+    "${config.fleet.stateRoot}/immich/postgres" = {
       uid = 999;
       mode = "0700";
     };
@@ -105,7 +105,7 @@ in
     image = immichPostgresImage;
 
     volumes = [
-      "/home/santiago/selfhost/immich/postgres:/var/lib/postgresql/data"
+      "${config.fleet.stateRoot}/immich/postgres:/var/lib/postgresql/data"
     ];
 
     environment = {
@@ -133,7 +133,7 @@ in
     image = "ghcr.io/immich-app/immich-machine-learning:${immichVersion}-openvino@sha256:4b6ef958e7749fc548377bb23ee219c09c74da8decee080d76dc6a388c39b013";
 
     volumes = [
-      "/home/santiago/selfhost/immich/model-cache:/cache"
+      "${config.fleet.stateRoot}/immich/model-cache:/cache"
     ];
 
     extraOptions = [

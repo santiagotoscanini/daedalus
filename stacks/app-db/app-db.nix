@@ -75,7 +75,7 @@ let
   clusterEnv = "${envBase}/cluster/env";
   appEnvFile = name: "${envBase}/${name}/env";
 
-  hostRoot = "/home/santiago/selfhost/app-db";
+  hostRoot = "${config.fleet.stateRoot}/app-db";
   dataDir = "${hostRoot}/postgres";
 
   # Locally-built postgres image with pgvector compiled in (see

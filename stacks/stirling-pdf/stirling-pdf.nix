@@ -7,16 +7,16 @@
 # No secrets, no inter-container DNS, no VPN. Joins traefik-net so
 # traefik dials `http://stirling-pdf:8080` directly — no host port.
 
-{ mkRootlessContainer, ... }:
+{ config, mkRootlessContainer, ... }:
 
 {
   fleet.bridgeMemberships.stirling-pdf = [ "traefik" ];
 
   fleet.statePaths = {
-    "/home/santiago/selfhost/stirling-pdf/custom-files".uid = 1000;
-    "/home/santiago/selfhost/stirling-pdf/extra-configs".uid = 1000;
-    "/home/santiago/selfhost/stirling-pdf/logs".uid = 1000;
-    "/home/santiago/selfhost/stirling-pdf/training-data" = { };
+    "${config.fleet.stateRoot}/stirling-pdf/custom-files".uid = 1000;
+    "${config.fleet.stateRoot}/stirling-pdf/extra-configs".uid = 1000;
+    "${config.fleet.stateRoot}/stirling-pdf/logs".uid = 1000;
+    "${config.fleet.stateRoot}/stirling-pdf/training-data" = { };
   };
   fleet.webApps.stirling-pdf = {
     serviceName = "stirling-pdf";
@@ -44,10 +44,10 @@
       # `training-data` holds tesseract `.traineddata` packs for OCR in
       # languages beyond the image's default English. Drop new language
       # files in there and they're picked up on next start.
-      "/home/santiago/selfhost/stirling-pdf/training-data:/usr/share/tessdata"
-      "/home/santiago/selfhost/stirling-pdf/extra-configs:/configs"
-      "/home/santiago/selfhost/stirling-pdf/custom-files:/customFiles/"
-      "/home/santiago/selfhost/stirling-pdf/logs:/logs/"
+      "${config.fleet.stateRoot}/stirling-pdf/training-data:/usr/share/tessdata"
+      "${config.fleet.stateRoot}/stirling-pdf/extra-configs:/configs"
+      "${config.fleet.stateRoot}/stirling-pdf/custom-files:/customFiles/"
+      "${config.fleet.stateRoot}/stirling-pdf/logs:/logs/"
     ];
 
     environment = {

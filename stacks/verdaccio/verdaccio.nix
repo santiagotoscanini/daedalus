@@ -84,8 +84,8 @@ in
 
   # 110000:100 = container UID 10001 : GID 0 in santiago's subuid range.
   fleet.statePaths = {
-    "/home/santiago/selfhost/verdaccio" = { };
-    "/home/santiago/selfhost/verdaccio/storage" = {
+    "${config.fleet.stateRoot}/verdaccio" = { };
+    "${config.fleet.stateRoot}/verdaccio/storage" = {
       uid = 10001;
       gid = 0;
       mode = "0775";
@@ -97,7 +97,7 @@ in
     inherit (verdaccioImage) image;
 
     volumes = [
-      "/home/santiago/selfhost/verdaccio/storage:/verdaccio/storage"
+      "${config.fleet.stateRoot}/verdaccio/storage:/verdaccio/storage"
       "${./assets/config.yaml}:/verdaccio/conf/config.yaml:ro"
     ];
 

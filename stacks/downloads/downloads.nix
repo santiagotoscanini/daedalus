@@ -137,7 +137,7 @@ in
       secretName = "downloads-wg0";
       wgConfSops = ./wg0.conf.sops;
       authConfig = ./assets/config.toml;
-      stateRoot = "/home/santiago/selfhost/tv";
+      stateRoot = "${config.fleet.stateRoot}/tv";
       keyExpiry = "2027-04-03";
       reminderDates = [
         "2027-03-04" # 30 days out
