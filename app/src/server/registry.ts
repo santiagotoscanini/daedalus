@@ -506,8 +506,8 @@ export const fetchCiRequestStatus = createServerFn().handler(async () => {
 export const createAppFn = createServerFn({ method: 'POST' })
   .inputValidator((i: { app: NewApp }) => i)
   .handler(async ({ data }) => {
-    const { createApp } = await import('../lib/repo/apps')
-    return createApp(data.app)
+    const { createApp, validateNewApp } = await import('../lib/repo/apps')
+    return createApp(validateNewApp(data.app as unknown as Record<string, unknown>))
   })
 
 export const deleteAppFn = createServerFn({ method: 'POST' })
@@ -519,62 +519,35 @@ export const deleteAppFn = createServerFn({ method: 'POST' })
   })
 
 export const saveApp = createServerFn({ method: 'POST' })
-  .inputValidator((input: { name: string; patch: Record<string, unknown> }) => input)
+  .inputValidator((input: { name: string; patch: Record<string, unknown> }) => {
+    // The type annotation describes the request; it does not check it. These
+    // two lines are the actual boundary — the field values are checked in
+    // validateAppPatch below, where the field list lives.
+    if (typeof input.name !== 'string') throw new Error('name must be a string')
+    if (typeof input.patch !== 'object' || input.patch === null) {
+      throw new Error('patch must be an object')
+    }
+    return input
+  })
   .handler(async ({ data }) => {
-    const { updateApp } = await import('../lib/repo/apps')
-    await updateApp(data.name, data.patch)
+    const { updateApp, validateAppPatch } = await import('../lib/repo/apps')
+    await updateApp(data.name, validateAppPatch(data.patch))
     return { ok: true }
   })
 
 /**
- * Publish an apply request: export the whole registry, describe what moved,
- * drop it in the bind mount for the host agent.
- *
- * The whole registry every time, not a diff — the export IS the desired state,
- * and shipping a patch would make the committed file depend on what the last
- * apply happened to contain.
+ * Publish an apply request — an adapter over lib/apply-flow.ts, which owns
+ * the whole check-and-write. The only thing decided here is the actor:
+ * whoever passed the Pocket ID gate. The forward-auth middleware forwards
+ * the claim as a header (auth.headers in stacks/daedalus/daedalus.nix), so
+ * the commit records a person rather than "daedalus".
  */
 export const applyRegistry = createServerFn({ method: 'POST' }).handler(async () => {
-  const { listApps, toRegistryExport, driftOf } = await import('../lib/repo/apps')
-  const { manifestEntries } = await import('../lib/nix-manifest')
-  const { requestApply, summarise, readApplyStatus } = await import('../lib/apply')
-  const { renderRegistryFile } = await import('../lib/registry-file')
-
-  // Refuse while one is in flight. The host script holds fleet.rebuildLock, so
-  // a second apply could not corrupt anything — it would simply queue behind
-  // it and then write a registry snapshot taken BEFORE the first one landed.
-  // Rejecting here is both faster feedback and the correct answer.
-  const inFlight = await readApplyStatus()
-  if (inFlight.state === 'running') {
-    return { ok: false as const, reason: `an apply is already running (${inFlight.phase})` }
-  }
-
-  const records = await listApps()
-  const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
-
-  const changed = records
-    .filter((r) => !r.managedInNix)
-    .map((r) => ({ name: r.name, fields: driftOf(r, manifest.get(r.name)) }))
-    .filter((c) => c.fields.length > 0)
-
-  if (changed.length === 0) {
-    return { ok: false as const, reason: 'nothing to apply' }
-  }
-
-  // Whoever passed the Pocket ID gate. The forward-auth middleware forwards
-  // the claim as a header (auth.headers in stacks/daedalus/daedalus.nix), so
-  // the commit records a person rather than "daedalus".
-  const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
-
-  const id = await requestApply({
-    // The finished file, not a data structure: the host agent copies these
-    // bytes into the flake verbatim and never parses the registry.
-    fileBody: renderRegistryFile(toRegistryExport(records)),
-    summary: summarise(changed),
-    actor,
-  })
-
-  return { ok: true as const, id, changed }
+  const { runApply } = await import('../lib/apply-flow')
+  const outcome = await runApply(getRequestHeader('x-forwarded-email') ?? 'unknown operator')
+  return outcome.ok
+    ? { ok: true as const, id: outcome.id, changed: outcome.changed }
+    : { ok: false as const, reason: outcome.reason }
 })
 
 export const fetchApplyStatus = createServerFn().handler(async () => {
@@ -623,6 +596,11 @@ export const revealEnvVar = createServerFn({ method: 'POST' })
     const snapshot = await readEnvSnapshot(data.name, new Map())
     const found = snapshot.vars.find((v) => v.key === data.key)
     if (!found) throw new Error(`no variable ${data.key} in ${data.name}`)
+
+    // Only masked variables have anything to reveal: a non-secret value is
+    // already in the page payload, so a request for one is not the UI — keep
+    // this door exactly as narrow as its purpose.
+    if (!found.secret) throw new Error(`${data.key} is not a masked variable`)
 
     return { value: found.value }
   })

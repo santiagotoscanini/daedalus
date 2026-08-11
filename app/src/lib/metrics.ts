@@ -520,7 +520,8 @@ function serviceToName(service: string | undefined): string {
 }
 
 // App names are constrained to [a-z][a-z0-9_-]* by the platform, but this
-// string lands inside a PromQL regex — escape rather than trust.
-function escapeRe(s: string): string {
+// string lands inside a PromQL regex — escape rather than trust. Exported so
+// every module that interpolates a name into PromQL uses the same rule.
+export function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

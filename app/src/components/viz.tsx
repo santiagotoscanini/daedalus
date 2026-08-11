@@ -17,7 +17,7 @@
 //   pulses while a stream is actually playing. Idle content sits still, so
 //   movement in the corner of your eye is always worth looking at.
 
-import type { ReactNode } from 'react'
+import { type ReactNode, useId } from 'react'
 
 import { num } from '../lib/dashboard/format'
 
@@ -304,6 +304,12 @@ export function Trend({
   height?: number
   empty?: string
 }) {
+  // useId, not the tone: SVG ids are document-global, and a page renders many
+  // Trends. Keyed by tone, a chart resolved `url(#…)` into whichever sibling
+  // rendered first — invalid markup, and Safari drops the fill entirely when
+  // that sibling is off-screen.
+  const gradientId = useId()
+
   if (values.length < 2) return <p className="viz-empty">{empty}</p>
 
   const w = 600
@@ -321,14 +327,14 @@ export function Trend({
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id={`trend-${tone}`} x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" className="trend-top" />
           <stop offset="100%" className="trend-bottom" />
         </linearGradient>
       </defs>
       <path
         d={`M0,${String(height)} L${line.split(' ').join(' L')} L${String(w)},${String(height)} Z`}
-        fill={`url(#trend-${tone})`}
+        fill={`url(#${gradientId})`}
       />
       <polyline points={line} fill="none" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
     </svg>

@@ -172,14 +172,15 @@ async function vpnEgressHealth(): Promise<boolean | null> {
   }
   if (declared.length === 0) return null
 
+  const { escapeRe } = await import('../lib/metrics')
   const names = declared.flatMap((d) => [d.container, d.exporter])
-  const [tunnels, containers] = await Promise.all([
+  const [tunnels, containers, seen] = await Promise.all([
     // `min` over the set, and `count` beside it: min alone would report
     // healthy if prometheus had lost a tunnel's series entirely.
     promScalar(`min(gluetun_vpn_status)`),
-    promScalar(`min(container_up{name=~"${names.join('|')}"})`),
+    promScalar(`min(container_up{name=~"${names.map(escapeRe).join('|')}"})`),
+    promScalar(`count(gluetun_vpn_status)`),
   ])
-  const seen = await promScalar(`count(gluetun_vpn_status)`)
 
   if (tunnels === null || containers === null || seen === null) return null
   return tunnels === 1 && containers === 1 && seen >= declared.length
