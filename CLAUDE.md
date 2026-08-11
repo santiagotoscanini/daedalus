@@ -16,7 +16,11 @@ loop is always:
 1. Edit a file under `/etc/nixos/`.
 2. `git add` it — **this repo is a flake; the build only sees
    git-tracked files.** A new file that isn't `git add`ed fails eval
-   with "file not found".
+   with "file not found". Use **plain `git`, never `sudo git`**: the
+   repo is `santiago:users`, and a root-owned object makes the next
+   push fail with "unable to open loose object" while `git status`
+   sits permanently "ahead by 1". `sudo` is only for `nixos-rebuild`,
+   which just reads.
 3. `sudo nixos-rebuild test` — try the new config without making it
    the next boot.
 4. Verify.
