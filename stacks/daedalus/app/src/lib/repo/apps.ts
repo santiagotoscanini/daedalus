@@ -106,6 +106,40 @@ export type NewApp = {
   hostname: string | null
 }
 
+/** Runtime validation of a create request — same rationale as validateAppPatch. */
+export function validateNewApp(input: Record<string, unknown>): NewApp {
+  const str = (k: 'name' | 'description'): string => {
+    const v = input[k]
+    if (typeof v !== 'string') throw new Error(`${k} must be a string`)
+    return v
+  }
+  const bool = (k: 'postgres' | 'storage' | 'litellm' | 'prometheus'): boolean => {
+    const v = input[k]
+    if (typeof v !== 'boolean') throw new Error(`${k} must be a boolean`)
+    return v
+  }
+  const strOrNull = (k: 'image' | 'hostname'): string | null => {
+    const v = input[k] ?? null
+    if (v !== null && typeof v !== 'string') throw new Error(`${k} must be a string or null`)
+    return v
+  }
+  const stage = input.stage
+  if (stage !== 'off' && stage !== 'lab' && stage !== 'live') {
+    throw new Error('stage must be off | lab | live')
+  }
+  return {
+    name: str('name'),
+    description: str('description'),
+    stage,
+    postgres: bool('postgres'),
+    storage: bool('storage'),
+    litellm: bool('litellm'),
+    prometheus: bool('prometheus'),
+    image: strOrNull('image'),
+    hostname: strOrNull('hostname'),
+  }
+}
+
 /**
  * Create a registry entry. The row only — no repo, no image, no rebuild.
  *
@@ -214,6 +248,64 @@ export const EDITABLE_FIELDS = [
 
 export type EditableField = (typeof EDITABLE_FIELDS)[number]
 export type AppPatch = Partial<Pick<typeof apps.$inferInsert, EditableField>>
+
+/**
+ * A request body into an AppPatch, or an error naming what was wrong.
+ *
+ * This is the runtime half of the server-function boundary: the TypeScript
+ * types on createServerFn describe the request, they do not check it, so a
+ * hand-made POST could put any JSON value in any field. updateApp whitelists
+ * the keys; this validates the values before they reach the UPDATE.
+ */
+export function validateAppPatch(patch: Record<string, unknown>): AppPatch {
+  const clean: AppPatch = {}
+  const bad = (k: string, want: string): never => {
+    throw new Error(`${k} must be ${want}`)
+  }
+
+  for (const [k, v] of Object.entries(patch)) {
+    switch (k as EditableField) {
+      case 'stage':
+        if (v !== 'off' && v !== 'lab' && v !== 'live') bad(k, 'off | lab | live')
+        clean.stage = v as AppPatch['stage']
+        break
+      case 'authMode':
+        if (v !== 'none' && v !== 'proxy' && v !== 'native') bad(k, 'none | proxy | native')
+        clean.authMode = v as AppPatch['authMode']
+        break
+      case 'image':
+      case 'hostname':
+      case 'description':
+      case 'authHealthPath':
+        if (v !== null && typeof v !== 'string') bad(k, 'a string or null')
+        clean[k as 'image'] = v as string | null
+        break
+      case 'postgres':
+      case 'storage':
+      case 'litellm':
+      case 'prometheus':
+        if (typeof v !== 'boolean') bad(k, 'a boolean')
+        clean[k as 'postgres'] = v as boolean
+        break
+      case 'limitCpus':
+        if (v !== null && (typeof v !== 'number' || !Number.isFinite(v) || v <= 0)) {
+          bad(k, 'a positive number or null')
+        }
+        clean.limitCpus = v as number | null
+        break
+      case 'limitMemoryMb':
+      case 'limitPids':
+        if (v !== null && (typeof v !== 'number' || !Number.isInteger(v) || v <= 0)) {
+          bad(k, 'a positive integer or null')
+        }
+        clean[k as 'limitMemoryMb'] = v as number | null
+        break
+      default:
+        throw new Error(`${k} is not an editable field`)
+    }
+  }
+  return clean
+}
 
 export async function updateApp(name: string, patch: AppPatch): Promise<void> {
   const record = await getApp(name)

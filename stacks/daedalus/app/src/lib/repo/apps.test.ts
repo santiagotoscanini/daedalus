@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { ManifestEntry } from '../nix-manifest'
 import { renderRegistryFile } from '../registry-file'
-import { type AppRecord, driftOf, toRegistryExport, toRow } from './apps'
+import {
+  type AppRecord,
+  driftOf,
+  toRegistryExport,
+  toRow,
+  validateAppPatch,
+  validateNewApp,
+} from './apps'
 
 // The registry's central invariant, stated in api.registry.export.ts and
 // checked nowhere until now: export → render → parse → import → export must be
@@ -163,6 +170,40 @@ describe('driftOf', () => {
     const swapped = { ...(entry as ManifestEntry) }
     swapped.env = [...swapped.env].reverse()
     expect(driftOf(record, swapped)).toContain('env')
+  })
+
+  it('validateAppPatch accepts well-typed fields and refuses the rest', () => {
+    expect(
+      validateAppPatch({ stage: 'live', postgres: true, limitCpus: 1.5, image: null }),
+    ).toEqual({ stage: 'live', postgres: true, limitCpus: 1.5, image: null })
+
+    expect(() => validateAppPatch({ stage: 'production' })).toThrow('off | lab | live')
+    expect(() => validateAppPatch({ authMode: 'oauth' })).toThrow('none | proxy | native')
+    expect(() => validateAppPatch({ postgres: 'yes' })).toThrow('boolean')
+    expect(() => validateAppPatch({ limitCpus: -1 })).toThrow('positive')
+    expect(() => validateAppPatch({ limitMemoryMb: 1.5 })).toThrow('positive integer')
+    expect(() => validateAppPatch({ image: 7 })).toThrow('string or null')
+    expect(() => validateAppPatch({ name: 'other' })).toThrow('not an editable field')
+    expect(() => validateAppPatch({ managedInNix: true })).toThrow('not an editable field')
+  })
+
+  it('validateNewApp accepts the create shape and refuses the rest', () => {
+    const good = {
+      name: 'demo',
+      description: 'x',
+      stage: 'lab',
+      postgres: true,
+      storage: false,
+      litellm: false,
+      prometheus: false,
+      image: null,
+      hostname: null,
+    }
+    expect(validateNewApp(good)).toEqual(good)
+    expect(() => validateNewApp({ ...good, stage: 'prod' })).toThrow('off | lab | live')
+    expect(() => validateNewApp({ ...good, name: 7 })).toThrow('name must be a string')
+    expect(() => validateNewApp({ ...good, postgres: 'yes' })).toThrow('boolean')
+    expect(() => validateNewApp({ ...good, hostname: 7 })).toThrow('string or null')
   })
 
   it('does not collapse value/note ambiguity — k=v#n as a value is not a note', () => {
