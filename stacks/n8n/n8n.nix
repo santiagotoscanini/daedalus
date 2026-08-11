@@ -5,6 +5,36 @@
 #
 # docker.io path NOT `docker.n8n.io` — the latter is blocked by
 # pi-hole (resolves to us, returns traefik's default cert).
+#
+# ── this instance separates a DRAFT from a PUBLISHED version ───────────
+#
+# Editing a workflow through the API (or the MCP server) writes the
+# DRAFT. Scheduled triggers and production runs execute the PUBLISHED
+# version, so an edit changes nothing about what actually runs until it
+# is published. Reading the workflow back only proves the draft holds
+# the edit — it is NOT evidence the change is live.
+#
+#   get_workflow_details → .workflow.versionId vs .workflow.activeVersionId
+#   equal = published; different = there is an unpublished draft
+#
+# This cost a full session once: fixes were reported live while sitting
+# unpublished, and two "backfill" runs silently executed the OLD
+# published version, which then looked like a de-duplication bug that
+# did not exist.
+#
+# Consequence for temporary states (widened date windows, disabled
+# de-dupe, purge nodes): they must be PUBLISHED to run, so for a while
+# the destructive-ish config IS the scheduled config. Design them to be
+# harmless if left published — prefer disabling a de-dupe node (worst
+# case: duplicates) over deleting rows (worst case: data loss) — and
+# revert + republish immediately after.
+#
+# n8n also issues TWO unrelated JWTs, told apart by their `aud` claim:
+# `public-api` (in stacks/daedalus/service-keys.sops, reaches /api/v1/*)
+# and `mcp-server-api` (in .claude/mcp.json.sops, reaches
+# /mcp-server/http). Rotating one does not touch the other, and neither
+# works in the other's place. Public-api keys are per-resource scoped, so
+# "n8n returns 403" is never one fact — it is per endpoint.
 
 {
   config,

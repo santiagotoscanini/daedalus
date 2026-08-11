@@ -12,6 +12,17 @@
 # init, so wikidata went on throwing a 403 traceback at every boot for as
 # long as it was listed that way. `remove` takes it out of the engine list
 # entirely, which is what was meant all along.
+#
+# CAUTION when adding to this list: SearXNG networks are defined by the
+# engine that OWNS them, so removing a network owner takes its dependents
+# down with it — dropping `brave` alone makes brave.images/videos/news
+# die at startup with `KeyError: 'brave'`. Grep the image's own defaults
+# for `network: <name>` before removing anything:
+#   podman run --rm --entrypoint sh <searxng-image> -lc \
+#     "grep -nE '^\s*-?\s*(name|network):' /usr/local/searxng/searx/settings.yml"
+# And note the failure is invisible from systemd: the unit is a oneshot
+# with RemainAfterExit, so a container that crashes on a bad config
+# leaves it `active` with nothing running. Confirm with `podman ps`.
 use_default_settings:
   engines:
     remove:

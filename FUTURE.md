@@ -314,4 +314,73 @@ Two errors are logged loudly at every start and both are expected:
   immediacy — discovery happens on ARP refresh rather than the instant a
   lease is issued — and devices whose ARP entry has aged out (a fourth
   lease was absent from Home Assistant for exactly that reason).
-# scratch marker 2026-08-03T23:36:23-03:00
+
+## 12. Loose ends carried over from working notes
+
+Small, independent items. Each is a known-open thread rather than a
+design decision, so none warrants a section of its own.
+
+**Waiting on the operator, not on code**
+
+- **Cleanuparr go-live.** Everything is configured and verifiably
+  working, but global `dryRun` is still true, so nothing is ever
+  actually deleted — and, more importantly, Blacklist Sync never pushes,
+  leaving qBittorrent's "excluded file names" list **empty**. That is
+  the layer that stops fake `.exe`/`.scr` releases at *download* time;
+  four such fakes once downloaded to completion and jammed the queue for
+  want of exactly it. The old REST route is dead (2.10.x added its own
+  account system and every config route 403s), so this is now
+  **UI-only**: Settings → General → Dry Run off, then trigger
+  `BlacklistSynchronizer` once so the list populates immediately.
+- **Minecraft's whitelist and ops are empty** by design; adding usernames
+  and rebuilding is the whole remaining step. Its healthchecks check
+  `minecraft-backup` also still needs its period set to 1 day / 2 hour
+  grace in the UI — self-provisioned checks get wrong defaults.
+- **The 25 Tuya bulbs are all offline** at Tuya's own cloud, so they are
+  unreachable on WiFi rather than misconfigured in Home Assistant (no
+  DHCP lease, no UDP 6666/6667, tcp/6668 closed, no BLE ads). The untried
+  fix that avoids touching 25 fixtures: recreate the OLD SSID as a
+  2.4 GHz guest network on the router and let them rejoin on their own.
+  Re-pairing individually risks new device ids and re-adding everything.
+  Note `XX:XX:XX:XX:XX:09` is the TV, not a bulb.
+- **Radarr's `Bluray-2160p` cutoff leaves ~31 movies cutoff-unmet**, so
+  it will re-download existing 1080p files in 4K as releases surface
+  (~800 GB over the metered VPN). The one-line alternative is
+  `until_quality: Bluray-1080p` — identical first-grab behaviour, no
+  library churn. Undecided; check `/api/v3/wanted/cutoff` before
+  assuming the count is still 31.
+
+**Undiagnosed**
+
+- **The LiteLLM gateway has a standing ~15% failure rate** (90 of 591
+  requests over one fortnight), concentrated on particular days rather
+  than spread evenly. Nothing surfaced it before the daedalus tab was
+  rebuilt, because the old panel only ever showed "failed today". The
+  per-day failure marks under that tab's traffic chart are where to
+  start.
+
+**Small declarative fixes, deliberately not applied yet**
+
+- **`mkSecretRender` should derive `restartTriggers`** from the
+  `sopsFile` store path of every secret its script reads, which would
+  make a rotated secret actually reach the box on a rebuild instead of
+  needing two manual restarts (see CLAUDE.md). The paths are derivable
+  rather than hand-listed. Costs one round of container restarts on the
+  rebuild that lands it.
+- **Pi-hole's `misc.rateLimit`** is at the FTL default of 1000/60s,
+  which all ~75 containers share because they all appear as
+  `127.0.0.1`. Raising it to ~5000/60 keeps a runaway-client guard
+  without the false positives. Needs a `pihole-ftl` restart = brief LAN
+  DNS outage, so ask first.
+- **Lemonade's `/metrics` is live and unscraped** (root-level, no auth,
+  ~206 lines): per-model request/token counters plus TTFT and tokens/sec
+  — backend-side truth the gateway cannot see. Caveat: TTFT and tok/s
+  are last-value gauges, not histograms, so build rate panels on the
+  `_total` counters and don't expect percentiles.
+
+**In another repo**
+
+- **anansi still has no OIDC provider** — password login remains the only
+  path in the running image. The full spec is in
+  `anansi-oidc-handoff.md`; it goes live on the next image push via the
+  normal deploy poll.

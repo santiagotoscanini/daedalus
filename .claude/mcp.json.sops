@@ -1,0 +1,18 @@
+{
+	"data": "ENC[AES256_GCM,data:ZuzftCMCc4ZLt9SMXYcv60IFylpxovIqiysVvqvZDNyrASApdmrhmJTQ/X9vGHINsZ+494X5B+/bPlYOAD86QALan/qc2OoFucythm1BQ11bka3DXt/kn727ybXIhAyfjgk0NEq929TF/ocjbHbJIh1GTCVQiXh7hubEO77hzU1wxbbXyEBD4MfmpT+89kNL0PE2xuDvF8FYlT9I+ZHicTc9+193nQy0anmvrVHCwWAzZUDdgfROKxKSwt7asLc+tP3i8KtqDd5od4WQh/sy14HRLwDqdX05oxBGNTqi1iSgrxRGZNgqxTgE0wjh3Ms+7z5pai93d7QF+Qc1kxYn3vUs7WEIrYk8JbhQt6WKeJYkfDWepT8ASdRk+rA/VFoiur2g87/HboItTFhMtBfBDzYKqEY/p7KI8KGXej9qaqCa0LEF+iVwMhx9bhkP7D3xFkN8A7YycUC4cusyRYeqGPFX+6MLDZU4X+cncEooHxiMxF/2cdWBsF+KXSkZOTwST6OwRKTTcZOPEGTXvgU2GEtoZnBpOpwzm3HnjSv0qKzR251NxMGvRbdcxvSwNdQUfjNyahjycVw2ddNf/bKklKOTQ3Xxbtkb1ZUiETuO,iv:YEF3KI59Ew8QvXVtCGv/1woF5tEmnU8DsgifqfRXSEg=,tag:9F2pOI6ahRKpYHLk3RZXFQ==,type:str]",
+	"sops": {
+		"age": [
+			{
+				"recipient": "age13xjamkkjcc2wdan3c8tscslqulgwz9uvxxs532paldqqfn4vxfqq65p0wa",
+				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBvUG9WbVloRk9HNEF0OXc0\nSjRCNC9wbFcxWWNIeFVZSjJaM2tpK3dZUVIwCnAyd2xOejdpRUJIZFFtekFNR2ZB\naGQ5M3ZKby9FbXV5OWxmSGd2VmRwU28KLS0tIHVtTFd6M2tORjBkRTZFNVRXSTgr\nUDJHT1NRKzU3cVhRSjF0aTF3YzNXZU0KR7tetoY2kC4H/wHfbuG4gzTt3jq5GVPj\nKjS7SkU9RNuAwDNMJLkLrRtqgcE/hwTiPJRW+p4NapswNDETmCPQSQ==\n-----END AGE ENCRYPTED FILE-----\n"
+			},
+			{
+				"recipient": "age1av4gwap6v2pf53acau25l4c8ksmhfu770x4glq7n6uunvq9szvvs3gcpkk",
+				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA0N1Y2NVU5aXBhZzJtanhR\nckwvbUJ3S3poazN4TS92MU5SS3dvWm9laEY0Ck9xWEwzR21SUWdVUXcwR3k5eWc4\nNjhPVUNoYVVFMjJvaG1sZmkvMGs2Z0UKLS0tIDdqaXpxc1lLLzY3bEczTXlBZ1lF\nUitnVkxNdHc5MCt5ODJHUWNUVjRnWDQKTAjEUOzZbUl9Lb+WTcY2Q/B6fimV0cf1\njQdDwL8S66xjibRLEwZlx21PQoOmGtG3Q4ZzhrU+gzPgyNDQhz+RXA==\n-----END AGE ENCRYPTED FILE-----\n"
+			}
+		],
+		"lastmodified": "2026-08-11T19:37:43Z",
+		"mac": "ENC[AES256_GCM,data:cvYWpexDOgWq3fWtxsdUvYKB7igzj95GMBKAL/qRWoW7BwvSgtp9hnIZeKX4g0/hdLzbEQCicuxrZQYdKOfWhg6kZ6gyQBBm8ywZKQ29mo/2lzQWR4fVofsahvo8P1Eug0v+y2Z5qmJjzXp1haTeZ0wfuw6nSE9HGSWpCTdt+rU=,iv:XTOUbwJ0HfbfGuCmowkYwBSAkCFU1QGJCJrnuGw13rA=,tag:3hip71vjGOGphPJ1RREXRA==,type:str]",
+		"version": "3.12.1"
+	}
+}

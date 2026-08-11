@@ -4,8 +4,22 @@ NixOS home server. **This repo is the complete system definition**:
 `flake.lock` pins every input, secrets are sops-encrypted in-tree, and
 any checkout + a decryption key rebuilds the exact running system.
 
-Deeper operational docs (module system, gotchas, per-stack quirks) live
-in each module's header comment and in `CLAUDE.md` (operator notes).
+Deeper operational docs live in each module's header comment (per-stack
+quirks — always the canonical source for a stack) and in these
+repo-level docs:
+
+| File | What it holds |
+|---|---|
+| `CLAUDE.md` | Operator notes: hard rules, the `fleet.*` module system, cross-cutting gotchas, debugging protocol, and the decisions that are settled and should not be re-proposed. |
+| `AUTH.md` | The per-service SSO migration plan. |
+| `FUTURE.md` | Deferred work and open follow-ups. |
+| `HARDWARE.md` | Dated physical-layer event log (journald keeps only ~11 days). |
+| `lemonade.md` | The GPU box's model server and its REST API. |
+
+Claude Code's project config is in-tree too — `.claude/` (skills,
+commands, tracked settings) plus `.claude/mcp.json.sops`, which
+`platform/claude.nix` decrypts to `.mcp.json` at activation. So a fresh
+checkout carries the operator manual and tooling, not just the system.
 
 ## Daily driver commands
 

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sudo nixos-rebuild test)",
+      "Bash(systemctl --failed)",
+      "Bash(systemctl is-active *)",
+      "Bash(systemctl list-timers *)",
+      "Bash(systemctl status *)",
+      "Bash(nix flake *)",
+      "Bash(command -v zpool zfs systemctl nixos-version)",
+      "Bash(ip route *)",
+      "Bash(ip -6 addr show scope global)",
+      "Bash(sudo -u santiago env XDG_RUNTIME_DIR=/run/user/1000 podman ps --format '{{.Names}} {{.Image}} {{.Status}}')"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "n8n-mcp"
+  ]
+}

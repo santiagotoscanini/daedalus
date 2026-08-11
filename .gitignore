@@ -16,6 +16,14 @@ result-*
 *.swp
 *.swo
 
+# Claude Code. `.claude/mcp.json.sops` is the tracked source; sops-nix
+# decrypts it to `.mcp.json` at activation (platform/claude.nix), so the
+# plaintext must never be committed. settings.local.json is whatever the
+# harness accumulates per-machine; the durable allowlist is in
+# .claude/settings.json, which IS tracked.
+.mcp.json
+.claude/settings.local.json
+
 # stacks/daedalus/app is the one place this repo holds application source
 # (source.mode = "local"). Its build/runtime artefacts must stay untracked —
 # the flake copies only tracked files into /nix/store, so an untracked
