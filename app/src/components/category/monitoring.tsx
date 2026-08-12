@@ -1,5 +1,5 @@
 import type { MonitoringData } from '../../lib/dashboard/categories/monitoring'
-import { bytes, compact, DASH, num, pct, since, until } from '../../lib/format'
+import { bytes, compact, DASH, ms, num, pct, since, until } from '../../lib/format'
 import { BASE_DOMAIN } from '../../lib/site'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
@@ -509,6 +509,81 @@ function LogsView({ d }: { d: Logs }) {
             its own name. The <span className="mono">adhoc</span> bucket is the exception worth
             watching — it catches containers started by hand rather than by a unit, which once
             minted 77 phantom services in Loki before it existed.
+          </p>
+        </Board>
+
+        {/* The one board on this tab that does not read Loki — see the `ship`
+            note in categories/monitoring: when shipping stops, everything
+            above goes quiet with it, and this is what still talks. */}
+        <Board
+          title="Shipping"
+          icon="⇥"
+          span={4}
+          aside={<span className="board-note">alloy → loki</span>}
+        >
+          <Facts
+            rows={[
+              {
+                k: 'Ship lag, 10m mean',
+                v: ms(d.ship.lagSeconds === null ? null : d.ship.lagSeconds * 1000),
+              },
+              {
+                k: 'Journal read',
+                v: d.ship.journalPerSec === null ? DASH : `${num(d.ship.journalPerSec, 1)} lines/s`,
+              },
+              {
+                k: 'Filtered as noise',
+                v:
+                  d.ship.filteredPerSec === null
+                    ? DASH
+                    : `${num(d.ship.filteredPerSec, 1)} lines/s`,
+              },
+              {
+                k: 'Shipped',
+                v: d.ship.sentPerSec === null ? DASH : `${num(d.ship.sentPerSec, 1)} lines/s`,
+              },
+              {
+                k: 'Dropped, 24h',
+                v:
+                  d.ship.dropped24h === null ? (
+                    DASH
+                  ) : d.ship.dropped24h > 0 ? (
+                    <span className="text-warn">{num(d.ship.dropped24h)}</span>
+                  ) : (
+                    <Chip tone="ok">none</Chip>
+                  ),
+              },
+              {
+                k: 'Push retries, 24h',
+                v:
+                  d.ship.retries24h === null ? (
+                    DASH
+                  ) : d.ship.retries24h > 0 ? (
+                    <span className="text-warn">{num(d.ship.retries24h)}</span>
+                  ) : (
+                    <Chip tone="ok">none</Chip>
+                  ),
+              },
+              {
+                k: 'Config reload',
+                v:
+                  d.ship.configOk === null ? (
+                    DASH
+                  ) : d.ship.configOk ? (
+                    <Chip tone="ok">loaded</Chip>
+                  ) : (
+                    <Chip tone="bad">failed — running old rules</Chip>
+                  ),
+              },
+            ]}
+          />
+          <p className="board-foot">
+            The write path, from alloy&rsquo;s own scraped metrics rather than from Loki — the one
+            set of numbers here that keeps talking when shipping stops. Read minus filtered is
+            shipped: the gap is <span className="mono">stacks/logging</span>&rsquo;s deliberate
+            noise-drop stages, not loss — loss is the <b>dropped</b> row. Lag includes
+            journald&rsquo;s batching, so about a second standing is normal; a retry is Loki pushing
+            back and the batch trying again.
           </p>
         </Board>
 

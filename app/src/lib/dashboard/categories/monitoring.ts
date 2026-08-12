@@ -351,6 +351,34 @@ type LogsData = {
   /** Containers whose lines land under no registered stack. */
   unregistered: number | null
   /**
+   * The write path between journald and Loki, from alloy's scraped metrics.
+   *
+   * Everything else on this tab is read back OUT of Loki, so all of it goes
+   * quiet together when shipping stops — these are the only numbers here that
+   * come from prometheus instead and keep talking through that failure.
+   * Drops and retries are 24h increases rather than rates because their
+   * healthy value is a flat zero and a rate of zero renders indistinguishable
+   * from "not measured"; lag is the propagation histogram's 10m mean, which
+   * includes journald's own batching (~1s standing is normal, minutes is a
+   * backlog).
+   */
+  ship: {
+    lagSeconds: number | null
+    /**
+     * The journal read rate, the noise-drop stages' rate, and what actually
+     * leaves — read minus filtered ≈ sent. Carried together because the gap
+     * between read and sent LOOKS like loss and is stacks/logging's
+     * deliberate drop pipeline; the number that means loss is dropped24h.
+     */
+    sentPerSec: number | null
+    journalPerSec: number | null
+    filteredPerSec: number | null
+    dropped24h: number | null
+    retries24h: number | null
+    /** alloy's last config reload — a failed one runs on the OLD rules. */
+    configOk: boolean | null
+  }
+  /**
    * Two versions, because this tab has two subjects.
    *
    * Loki stores and answers; alloy tails journald and ships. They are separate
@@ -381,6 +409,7 @@ async function loadLogs(): Promise<LogsData> {
     noisiest,
     byStack,
     adhoc,
+    ship,
     lokiBuild,
     alloyGap,
   ] = await Promise.all([
@@ -392,6 +421,17 @@ async function loadLogs(): Promise<LogsData> {
     lokiVector('topk(8, sum by (container) (count_over_time({level="error"}[24h])))', 'container'),
     lokiVector('topk(10, sum by (stack) (count_over_time({stack=~".+"}[24h])))', 'stack'),
     lokiScalar('sum(count_over_time({stack="adhoc"}[24h])) or vector(0)'),
+    promScalars({
+      lag:
+        'sum(rate(loki_write_entry_propagation_latency_seconds_sum[10m]))' +
+        ' / sum(rate(loki_write_entry_propagation_latency_seconds_count[10m]))',
+      sent: 'sum(rate(loki_write_sent_entries_total[10m]))',
+      journal: 'sum(rate(loki_source_journal_target_lines_total[10m]))',
+      filtered: 'sum(rate(loki_process_dropped_lines_total[10m])) or vector(0)',
+      dropped: 'sum(increase(loki_write_dropped_entries_total[24h]))',
+      retries: 'sum(increase(loki_write_batch_retries_total[24h]))',
+      configOk: 'min(alloy_config_last_load_successful)',
+    }),
     getJson<{ version?: string }>(`${lokiBase()}/loki/api/v1/status/buildinfo`),
     versionGap('grafana/alloy', alloyRunning.version),
   ])
@@ -418,6 +458,15 @@ async function loadLogs(): Promise<LogsData> {
     noisiest: noisiest.map((n) => (n.label === '?' ? { ...n, label: 'host units' } : n)),
     byStack,
     unregistered: adhoc,
+    ship: {
+      lagSeconds: ship.lag,
+      sentPerSec: ship.sent,
+      journalPerSec: ship.journal,
+      filteredPerSec: ship.filtered,
+      dropped24h: ship.dropped,
+      retries24h: ship.retries,
+      configOk: ship.configOk === null ? null : ship.configOk >= 1,
+    },
   }
 }
 

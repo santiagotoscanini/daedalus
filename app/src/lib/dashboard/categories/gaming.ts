@@ -5,10 +5,12 @@
 // and what has the vendor shipped since.
 //
 // The two tabs answer those from opposite ends. Factorio has an admin UI and
-// no way to be asked anything by a machine, so everything here comes from the
-// vendor and the pin. Minecraft has no admin UI at all and answers the
-// server-list ping, so its numbers are live — how many people are on right
-// now, and how long the server took to say so.
+// no way to be asked anything by a machine — RCON never leaves ofsm's netns —
+// so the version facts come from the vendor and the pin, and the only live
+// reads are second-hand: the container gauge, and what the game states about
+// itself in its own log. Minecraft has no admin UI at all and answers the
+// server-list ping, so its numbers are first-hand — how many people are on
+// right now, and how long the server took to say so.
 //
 // ── where the version facts come from ─────────────────────────────────────
 //
@@ -32,7 +34,7 @@
 
 import { getJson } from '../../http'
 import { lokiEntries } from '../../loki'
-import { promScalars, promSeries, promVector } from '../../prom'
+import { promScalar, promScalars, promSeries, promVector } from '../../prom'
 import type { Commit, CommitGap } from '../github'
 
 /**
@@ -57,6 +59,28 @@ type FactorioData = {
     /** Where the manager lives. LAN only — deliberately not forwarded. */
     adminUrl: string
   }
+  /**
+   * What is live here and what is not, and why the split sits where it does.
+   *
+   * ofsm holds RCON entirely to itself — the interface is opened inside the
+   * netns on a random port, nothing publishes it, and daedalus holds no ofsm
+   * credential — so there is no live player COUNT without new nix-side wiring.
+   * But the game states its own lifecycle in its log: ofsm prints one line
+   * when it starts the server and one when it stops it, and Loki already has
+   * both. That answers the question the sub-tab dot cannot — the dot reads the
+   * manager's UI, which keeps answering happily while the game inside it is
+   * shut down.
+   */
+  live: {
+    /** container_up — the ofsm container, which outlives the game it runs. */
+    containerUp: boolean | null
+    /** The newest lifecycle line wins. null = none in the 30-day window. */
+    game: 'running' | 'stopped' | null
+    /** ms — when that line was logged. */
+    since: number | null
+  }
+  /** Who came and went, newest first — same record Minecraft reads. */
+  events: { at: number; who: string; kind: 'join' | 'leave' }[]
   /** The devs' feed — release posts and Friday Facts, newest first. */
   news: { title: string; url: string; date: string; kind: 'release' | 'fff' | 'post' }[]
   /**
@@ -125,7 +149,7 @@ export async function loadGaming(
 async function loadFactorio(ctx: { base: (app: string) => string }): Promise<FactorioData> {
   const installed = process.env.FACTORIO_VERSION ?? null
 
-  const [releases, graph, feed] = await Promise.all([
+  const [releases, graph, feed, containerUp, gameLog] = await Promise.all([
     getJson<{ stable?: { headless?: string }; experimental?: { headless?: string } }>(
       'https://factorio.com/api/latest-releases',
     ),
@@ -133,6 +157,8 @@ async function loadFactorio(ctx: { base: (app: string) => string }): Promise<Fac
       'https://updater.factorio.com/get-available-versions',
     ),
     fetchFeed(),
+    promScalar('container_up{name="factorio"}'),
+    gameLines(),
   ])
 
   const stable = releases?.stable?.headless ?? null
@@ -159,8 +185,67 @@ async function loadFactorio(ctx: { base: (app: string) => string }): Promise<Fac
       port: PORT,
       adminUrl: ctx.base('factorio-admin'),
     },
+    live: {
+      containerUp: containerUp === null ? null : containerUp >= 1,
+      game: gameLog.state,
+      since: gameLog.since,
+    },
+    events: gameLog.events,
     news: feed,
     changelog,
+  }
+}
+
+/**
+ * Everything the game says about itself, in one Loki query.
+ *
+ * One rather than two on purpose — Loki's budget is a single patient attempt
+ * (lib/loki.ts), so lifecycle and joins ride the same line filter and are told
+ * apart here. The shapes are ofsm's and the game's own:
+ *
+ *   Factorio server with save: … started on port: 34197     (ofsm)
+ *   Factorio server stopped                                  (ofsm)
+ *   [JOIN] name joined the game / [LEAVE] name left the game (the game)
+ *
+ * The current state is the newest lifecycle line. A window with none means the
+ * question cannot be answered from here — reported as null, not guessed from
+ * the container gauge, because ofsm idling with no game is exactly the case
+ * this read exists to catch.
+ */
+async function gameLines(): Promise<{
+  state: 'running' | 'stopped' | null
+  since: number | null
+  events: FactorioData['events']
+}> {
+  const lines = await lokiEntries(
+    '{stack="factorio"} |~ "\\\\[(JOIN|LEAVE)\\\\]|started on port|Factorio server stopped"',
+    60 * 24 * 30,
+    60,
+  )
+
+  const lifecycle = lines.find(
+    (l) => l.line.includes('started on port') || l.line.includes('server stopped'),
+  )
+
+  return {
+    state:
+      lifecycle === undefined
+        ? null
+        : lifecycle.line.includes('started on port')
+          ? 'running'
+          : 'stopped',
+    since: lifecycle?.at ?? null,
+    events: lines
+      .map(({ at, line }) => {
+        const m = /\[(JOIN|LEAVE)\]\s+(\S+)/.exec(line)
+        if (m === null) return null
+        return {
+          at,
+          who: m[2] ?? '',
+          kind: m[1] === 'JOIN' ? ('join' as const) : ('leave' as const),
+        }
+      })
+      .filter((e): e is FactorioData['events'][number] => e !== null),
   }
 }
 
