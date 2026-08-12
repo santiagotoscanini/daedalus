@@ -67,20 +67,13 @@ export type ManifestApp = {
   notes?: Record<string, string>
 }
 
+// The publish/network/jobs registries moved to the /export domains
+// (src/lib/contract/domains/); the accessors below keep their names and
+// delegate. What remains OF the manifest is the app-registry contract:
 export type NixManifest = {
   schemaVersion: number
   registry: { schemaVersion: number; apps: Record<string, ManifestApp> }
   nixManaged: Record<string, ManifestApp>
-  /** Every hostname published on the box — apps and every other stack. */
-  takenHostnames: string[]
-  /**
-   * webApp name → its published hostname. The same set as `takenHostnames`,
-   * keyed rather than flattened: that one answers "is this name free", this one
-   * answers "where do I dial `jellyfin`". The dashboard's tile catalogue names
-   * webApps and resolves URLs through here, so a hostname edit moves the tile
-   * with it instead of stranding a literal in TypeScript.
-   */
-  webAppHosts: Record<string, string>
   /**
    * Apps with a tracked `stacks/apps/<name>-env.sops`.
    *
@@ -91,28 +84,6 @@ export type NixManifest = {
    * what daedalus decides, this manifest carries what Nix found.
    */
   operatorSecretApps: string[]
-  /**
-   * Names pi-hole answers itself instead of forwarding, and what it answers.
-   *
-   * Read from FTL's own `dns.hosts` setting, so it includes the entries that
-   * belong to no stack as well as every `fleet.dnsHosts` contribution. Nearly
-   * the same set as `takenHostnames` and deliberately not derived from it:
-   * this is what makes a name resolve to this box on the LAN and to
-   * Cloudflare's edge everywhere else, and the point of showing it is the case
-   * where the two disagree.
-   */
-  lanHosts: { ip: string; host: string }[]
-  /**
-   * Every scheduled job declared worth noticing, and HOW it is noticed.
-   *
-   * `email` means a run that FAILS sends mail; `slug` means a run that stops
-   * happening at all pages through healthchecks. They are different
-   * guarantees — a job with mail and no slug cannot report that it was never
-   * started, which is the failure a timer actually has — and this registry is
-   * the only place the pair is stated. healthchecks knows about half of them,
-   * systemd about all of them, and neither knows which was intended.
-   */
-  monitoredJobs: { unit: string; email: boolean; slug: string | null }[]
 }
 
 /**
@@ -161,11 +132,7 @@ const manifestApp: Decoder<ManifestApp> = obj({
 const managedManifestShape = obj({
   schemaVersion: optional(num, 1),
   nixManaged: recordOf(manifestApp),
-  takenHostnames: arrayOf(str),
-  webAppHosts: recordOf(str),
   operatorSecretApps: optional(arrayOf(str), []),
-  lanHosts: optional(arrayOf(obj({ ip: str, host: str })), []),
-  monitoredJobs: optional(arrayOf(obj({ unit: str, email: bool, slug: ns })), []),
 })
 
 const registryFileShape = obj({
@@ -174,11 +141,7 @@ const registryFileShape = obj({
 })
 
 let cachedManaged: NixManifest['nixManaged'] | null = null
-let cachedTaken: string[] | null = null
-let cachedHosts: Record<string, string> | null = null
 let cachedSecretApps: string[] | null = null
-let cachedLanHosts: NixManifest['lanHosts'] | null = null
-let cachedJobs: NixManifest['monitoredJobs'] | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {
   const managedPath = process.env.NIX_MANIFEST_PATH
@@ -193,24 +156,13 @@ export async function readNixManifest(): Promise<NixManifest> {
   // The hand-written entries are a /nix/store path: immutable, and a change to
   // them restarts this container anyway, so caching for the process lifetime
   // is safe.
-  if (
-    cachedManaged === null ||
-    cachedTaken === null ||
-    cachedHosts === null ||
-    cachedSecretApps === null ||
-    cachedLanHosts === null ||
-    cachedJobs === null
-  ) {
+  if (cachedManaged === null || cachedSecretApps === null) {
     // decode() throws with the failing path. Loud on purpose: this file is
     // the app's core contract with nix, and a silently-empty manifest would
     // report every app as "not in the last Nix build".
     const parsed = decode(managedManifestShape, JSON.parse(await readFile(managedPath, 'utf8')))
     cachedManaged = parsed.nixManaged
-    cachedTaken = parsed.takenHostnames
-    cachedHosts = parsed.webAppHosts
     cachedSecretApps = parsed.operatorSecretApps
-    cachedLanHosts = parsed.lanHosts
-    cachedJobs = parsed.monitoredJobs
   }
 
   // The committed registry is NOT cached. It lives at a fixed path that
@@ -231,17 +183,16 @@ export async function readNixManifest(): Promise<NixManifest> {
     schemaVersion: registry.schemaVersion,
     registry,
     nixManaged: cachedManaged,
-    takenHostnames: cachedTaken,
-    webAppHosts: cachedHosts,
     operatorSecretApps: cachedSecretApps,
-    lanHosts: cachedLanHosts,
-    monitoredJobs: cachedJobs,
   }
 }
 
-/** Scheduled jobs and how each is watched. See `NixManifest.monitoredJobs`. */
-export async function monitoredJobs(): Promise<NixManifest['monitoredJobs']> {
-  return (await readNixManifest()).monitoredJobs
+/** Scheduled jobs and how each is watched — from /export/jobs.json. */
+export async function monitoredJobs(): Promise<
+  { unit: string; email: boolean; slug: string | null }[]
+> {
+  const { monitoredJobsList } = await import('./contract/domains/jobs')
+  return monitoredJobsList()
 }
 
 /** Apps with a tracked operator-secrets file. See `NixManifest.operatorSecretApps`. */
@@ -251,21 +202,24 @@ export async function operatorSecretApps(): Promise<string[]> {
 
 /** Published hostnames, keyed by webApp name. See `NixManifest.webAppHosts`. */
 export async function webAppHosts(): Promise<Record<string, string>> {
-  return (await readNixManifest()).webAppHosts
+  const { publishingFacts } = await import('./contract/domains/publishing')
+  const { webApps } = await publishingFacts()
+  return Object.fromEntries(Object.entries(webApps).map(([name, w]) => [name, w.hostname]))
 }
 
-/** Names pi-hole answers from its own hosts file. See `NixManifest.lanHosts`. */
-export async function lanHosts(): Promise<NixManifest['lanHosts']> {
-  return (await readNixManifest()).lanHosts
+/** Names pi-hole answers from its own hosts file — from /export/network.json. */
+export async function lanHosts(): Promise<{ ip: string; host: string }[]> {
+  const { networkFacts } = await import('./contract/domains/network')
+  return (await networkFacts()).lanHosts
 }
 
 /**
  * Hostnames already published, minus the one this app currently holds — so an
- * app does not collide with itself.
+ * app does not collide with itself. From /export/publishing.json.
  */
 export async function hostnamesTakenBy(others: string): Promise<string[]> {
-  const m = await readNixManifest()
-  return m.takenHostnames.filter((h) => h !== others)
+  const { publishingFacts } = await import('./contract/domains/publishing')
+  return (await publishingFacts()).takenHostnames.filter((h) => h !== others)
 }
 
 export async function manifestEntries(): Promise<ManifestEntry[]> {

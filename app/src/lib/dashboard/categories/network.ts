@@ -10,15 +10,8 @@
 // already exports its last test, and wg-easy v2 requires TOTP on /api/session
 // so a credential login cannot work unattended at all.
 
-import {
-  arrayOf,
-  bool as dBool,
-  num as dNum,
-  obj as dObj,
-  optional as dOpt,
-  str as dStr,
-} from '../../contract/decode'
-import { readEnvJson } from '../../contract/env'
+import { type NetworkFacts, networkFacts } from '../../contract/domains/network'
+import { publishingFacts } from '../../contract/domains/publishing'
 import { BASE_DOMAIN } from '../../hostname'
 import { lanHosts, webAppHosts } from '../../nix-manifest'
 import { declaredVpnEgress, type VpnEgress } from '../../vpn-egress'
@@ -884,7 +877,7 @@ type VectorLike = { metric: Record<string, string>; value: [number, string] }
  * currently sharing its namespace.
  */
 async function loadOutbound(ctx: { hc: string }): Promise<OutboundData> {
-  const declared = declaredVpnEgress()
+  const declared = await declaredVpnEgress()
 
   if (declared.length === 0) {
     return {
@@ -1383,11 +1376,7 @@ async function loadDdns(cfP: Promise<CfTunnel | undefined>): Promise<DdnsData> {
   const version = process.env.DDCLIENT_VERSION || null
   const interval = /^(\d+)s?$/.exec(process.env.DDNS_INTERVAL ?? '')?.[1]
 
-  const needs = readEnvJson(
-    'DIRECT_INGRESS',
-    arrayOf(dObj({ name: dStr, port: dNum, proto: dStr, note: dOpt(dStr, '') })),
-    [] as DdnsData['needs'],
-  )
+  const needs = (await publishingFacts()).directIngress
 
   // The one ddclient failure that matters and is invisible: it cannot work out
   // the address, so it publishes nothing, so a real IP change would go
@@ -1702,7 +1691,7 @@ async function loadDhcp(): Promise<DhcpData> {
     metrics?: { dhcp?: { offer?: number; ack?: number; decline?: number; nak?: number } }
   }>(`${base}/api/info/metrics`, sid === null ? {} : { headers: { sid } })
 
-  const dhcp = dhcpConfig(metrics?.metrics?.dhcp)
+  const dhcp = dhcpConfig((await networkFacts()).dhcp, metrics?.metrics?.dhcp)
   return {
     dhcp,
     devices: await loadDevices(dhcp.reservations),
@@ -1777,7 +1766,7 @@ type FtlUpstream = {
 async function loadResolver(base: string): Promise<ResolverData> {
   const version = process.env.PIHOLE_VERSION || null
 
-  const declared = readEnvJson('DNS_UPSTREAMS', arrayOf(dStr), [])
+  const declared = (await networkFacts()).dnsUpstreams
 
   const [gap, sources, summary, ftl, metrics, types, history, store, blocking] = await Promise.all([
     versionGap('pi-hole/FTL', version),
@@ -1901,28 +1890,16 @@ async function loadResolver(base: string): Promise<ResolverData> {
  * somebody clicked in. The counters come from FTL because only it knows them.
  */
 function dhcpConfig(
+  cfg: NetworkFacts['dhcp'],
   counters: { offer?: number; ack?: number; decline?: number; nak?: number } | undefined,
 ): Dhcp {
-  const cfg = readEnvJson(
-    'DHCP_CONFIG',
-    dObj({
-      active: dOpt(dBool, false),
-      router: dOpt(dStr, ''),
-      start: dOpt(dStr, ''),
-      end: dOpt(dStr, ''),
-      leaseTime: dOpt(dStr, ''),
-      hosts: dOpt(arrayOf(dStr), [] as string[]),
-    }),
-    { active: false, router: '', start: '', end: '', leaseTime: '', hosts: [] as string[] },
-  )
-
   return {
-    active: cfg.active === true,
-    router: cfg.router ?? '',
-    start: cfg.start ?? '',
-    end: cfg.end ?? '',
-    leaseTime: cfg.leaseTime ?? '',
-    reservations: (cfg.hosts ?? [])
+    active: cfg.active,
+    router: cfg.router,
+    start: cfg.start,
+    end: cfg.end,
+    leaseTime: cfg.leaseTime,
+    reservations: cfg.hosts
       .map((h) => h.split(','))
       // "MAC,IP,hostname". Anything shorter is an entry shape this page does
       // not understand, and inventing a name for it would be worse than

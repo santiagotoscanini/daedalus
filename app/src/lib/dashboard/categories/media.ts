@@ -919,7 +919,7 @@ async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
   ])
 
   const nzbVer = nzbVersion?.result ?? null
-  const metubeVer = imageTag('metube')
+  const metubeVer = await imageTag('metube')
   const r = nzbStatus?.result
 
   const [qbtGap, nzbGap, metubeGap, shelfmarkGap] = await Promise.all([
@@ -1120,7 +1120,7 @@ type CalibreData = {
 }
 
 async function loadCalibre(ctx: Ctx): Promise<CalibreData> {
-  const version = imageTag('calibre-web')
+  const version = await imageTag('calibre-web')
 
   const [stats, disk, gap] = await Promise.all([
     // /opds is on calibre-web's forward-auth bypass and takes its own basic
@@ -1139,9 +1139,11 @@ async function loadCalibre(ctx: Ctx): Promise<CalibreData> {
       size: 'node_filesystem_size_bytes{mountpoint="/s2/books"}',
       avail: 'node_filesystem_avail_bytes{mountpoint="/s2/books"}',
     }),
-    versionGap('crocodilestick/Calibre-Web-Automated', imageTag('calibre-web'), {
-      tag: /^[Vv]?(\d+\.\d+\.\d+)$/,
-    }),
+    imageTag('calibre-web').then((v) =>
+      versionGap('crocodilestick/Calibre-Web-Automated', v, {
+        tag: /^[Vv]?(\d+\.\d+\.\d+)$/,
+      }),
+    ),
   ])
 
   return {
@@ -1243,7 +1245,7 @@ async function loadCleanup(): Promise<CleanupData> {
   // Cleanuparr's tag carries a real version and wins. Its image LABEL says
   // `24.04`, inherited from the Ubuntu base — the exact case that makes the
   // label a fallback rather than the primary. See lib/dashboard/images.ts.
-  const cleanuparrVersion = imageTag('cleanuparr')
+  const cleanuparrVersion = await imageTag('cleanuparr')
 
   const [removed, blocked, searches, wouldDelete, janitorr] = await Promise.all([
     over('cleanuparr', 'Removing item with max strikes'),

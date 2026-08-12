@@ -32,7 +32,7 @@
 // because this app cannot run podman — it is a container itself.
 
 import { nullable, obj, optional, recordOf, str } from '../contract/decode'
-import { readEnvJson } from '../contract/env'
+import { imageTagMap } from '../contract/domains/images'
 import { readSnapshot } from '../contract/snapshot'
 
 export type ImageLabels = {
@@ -111,9 +111,8 @@ function asVersion(raw: string | null | undefined): string | null {
  * wants to report a version costs no nix edit — see the binding in
  * stacks/daedalus/daedalus.nix.
  */
-export function imageTag(container: string): string | null {
-  const tags = readEnvJson('IMAGE_TAGS', recordOf(str), {})
-  return asVersion(tags[container])
+export async function imageTag(container: string): Promise<string | null> {
+  return asVersion((await imageTagMap())[container])
 }
 
 /**
@@ -132,8 +131,7 @@ export type RunningVersion = {
 }
 
 export async function imageVersion(container: string): Promise<RunningVersion> {
-  const pinned = imageTag(container)
-  const labels = await imageLabels(container)
+  const [pinned, labels] = await Promise.all([imageTag(container), imageLabels(container)])
   const shortRevision = labels.revision === null ? null : labels.revision.slice(0, 7)
 
   if (pinned !== null) return { version: pinned, source: 'pin', revision: shortRevision }
