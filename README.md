@@ -5,6 +5,8 @@
 
   **A home server manager.** One app runs the box — NixOS is the
   backend that keeps it reproducible.
+
+  [daedalus.toscanini.me](https://daedalus.toscanini.me)
 </div>
 
 ---
