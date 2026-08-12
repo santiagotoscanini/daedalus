@@ -446,3 +446,16 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
 export function forgetRepoChecks(repo: string): void {
   cache.forget(`checks:${repo}`)
 }
+
+/**
+ * Forget the repository listing.
+ *
+ * The TTL is what keeps a keystroke-hot picker off GitHub's hourly budget, and
+ * the cost of it is that a repo created a minute ago does not exist as far as
+ * this page is concerned. The picker's refresh button is the way past that —
+ * and it has to go through here, because re-running listRepos() alone would
+ * be served the same cached answer.
+ */
+export function forgetRepos(): void {
+  cache.forget('repos')
+}

@@ -126,6 +126,52 @@ export function RowsSkeleton({ count = 3, height = 58 }: { count?: number; heigh
   )
 }
 
+/**
+ * The first step of /apps/new: section head, search row, repository list.
+ *
+ * A generic `RowsSkeleton` was standing in for this, and it reserved neither
+ * the head nor the search field — so the placeholder started where the lede
+ * ended and the real thing started ~5rem lower. It borrows the picker's own
+ * boxes (`.picker-head`, `.picker-box`, `.repo-row`) rather than approximating
+ * them, which is what keeps the reserved space and the real space the same
+ * space; the rows are the picker's grid, so the bars land in the picker's
+ * columns.
+ */
+export function NewAppSkeleton() {
+  return (
+    <div className="wizard">
+      <section className="wizard-step">
+        <h2 className="section-head">
+          <Bar w="8rem" h={9} />
+        </h2>
+        <div className="picker-head">
+          <span className="sk sk-search" />
+          <span className="picker-count">
+            <Bar w="7rem" h={9} />
+          </span>
+        </div>
+        <div className="picker-box">
+          <div className="repo-list">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="repo-opt">
+                <div className="repo-row">
+                  <Bar w="62%" h={12} />
+                  <Bar w="3.4rem" h={12} />
+                  <Bar w="74%" h={11} />
+                  <Bar w="8rem" h={10} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="picker-hint">
+          <Bar w="11rem" h={8} />
+        </p>
+      </section>
+    </div>
+  )
+}
+
 /** A single free-form block, for tabs whose shape is one long list. */
 export function BlockSkeleton({ h = 240 }: { h?: number }) {
   return <div className="sk-block" style={{ height: h }} />

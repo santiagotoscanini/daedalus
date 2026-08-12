@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from 'react'
 import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { DASH, duration, num, pct } from '../../../lib/format'
+import { fetchPowerRequestStatus, requestRebootFn } from '../../../server/host'
 import { LogBoard } from '../../logs'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../viz'
 import { HOST_READERS, PARTS, PartPhoto } from './shared'
@@ -7,6 +9,209 @@ import { HOST_READERS, PARTS, PartPhoto } from './shared'
 /* ── Host ─────────────────────────────────────────────────────────────── */
 
 type Host = Extract<SystemData, { tab: 'host' }>
+
+/** How long an armed restart stays armed. Short enough that a control left
+    armed by a distraction cannot be finished by an accidental click later. */
+const ARM_MS = 10_000
+/** No status naming our request within this long means the host agent never
+    came for it — the same claim window components/status.tsx uses. */
+const PICKUP_MS = 20_000
+const HEALTH_MS = 3_000
+
+type RestartPhase = 'idle' | 'armed' | 'dispatching' | 'refused' | 'down' | 'back'
+
+/**
+ * Restart the box.
+ *
+ * Two steps rather than one click, and the second step is where the cost is
+ * spelled out: this is the only control in the app that takes the whole house
+ * offline, because pi-hole is this machine and every device in it resolves
+ * through here.
+ *
+ * The interesting half is what happens AFTER dispatch. Every other host action
+ * settles when its status file says so; this one kills the process that would
+ * write that status, so `running` is the last word from the bridge and the box
+ * itself becomes the signal — /api/healthz answering again is the completion
+ * event. Failed fetches in that phase are the expected path, not an error.
+ */
+function RestartControl({
+  containers,
+  uptimeSeconds,
+}: {
+  containers: number | null
+  uptimeSeconds: number | null
+}) {
+  const [phase, setPhase] = useState<RestartPhase>('idle')
+  const [request, setRequest] = useState<{ id: string; at: number } | null>(null)
+  const [refusal, setRefusal] = useState('')
+  // "Back" only means something after a "gone": the first health poll is
+  // answered by a container that has not been told to stop yet, and without
+  // this the restart would report itself finished before it had begun.
+  // The ref is what the poll decides on — the effect closes over it once — and
+  // the state beside it is what the copy reads.
+  const gone = useRef(false)
+  const [sawDown, setSawDown] = useState(false)
+
+  useEffect(() => {
+    if (phase !== 'armed') return
+    const t = setTimeout(() => {
+      setPhase('idle')
+    }, ARM_MS)
+    return () => {
+      clearTimeout(t)
+    }
+  }, [phase])
+
+  // The window in which the host is still alive to answer: it either refuses
+  // (bad verb, rebuild in flight) or writes `running` on its way to the
+  // reboot. Both arrive within a second or two.
+  useEffect(() => {
+    if (phase !== 'dispatching' || request === null) return
+    let stopped = false
+    const t = setInterval(() => {
+      void fetchPowerRequestStatus()
+        .then((s) => {
+          if (stopped) return
+          if (s.id !== request.id) {
+            // A status file from the LAST restart says `running` forever —
+            // only our own id is evidence about this request.
+            if (Date.now() - request.at > PICKUP_MS) {
+              setRefusal('the host did not pick this request up — is its path unit alive?')
+              setPhase('refused')
+            }
+            return
+          }
+          if (s.state === 'failed') {
+            setRefusal(s.error)
+            setPhase('refused')
+            return
+          }
+          if (s.state === 'running') setPhase('down')
+        })
+        .catch(() => {
+          // Not a failure: a server function that stops answering is what a
+          // machine going down looks like from in here.
+          if (!stopped) setPhase('down')
+        })
+    }, 1_000)
+    return () => {
+      stopped = true
+      clearInterval(t)
+    }
+  }, [phase, request])
+
+  // Nothing will ever be written to the status file again, so this phase asks
+  // the box instead. /api/healthz is the one unauthenticated path (it is the
+  // forward-auth bypass gatus uses), which is what makes it answerable the
+  // moment the app is serving again.
+  useEffect(() => {
+    if (phase !== 'down') return
+    let stopped = false
+    const t = setInterval(() => {
+      void fetch('/api/healthz', { cache: 'no-store' })
+        .then((r) => {
+          if (stopped) return
+          if (!r.ok) {
+            gone.current = true
+            setSawDown(true)
+            return
+          }
+          if (gone.current) setPhase('back')
+        })
+        .catch(() => {
+          if (stopped) return
+          gone.current = true
+          setSawDown(true)
+        })
+    }, HEALTH_MS)
+    return () => {
+      stopped = true
+      clearInterval(t)
+    }
+  }, [phase])
+
+  if (phase === 'armed') {
+    return (
+      <div className="restart is-armed">
+        <p className="restart-cost">
+          Everything on this box stops for a couple of minutes.{' '}
+          <strong>LAN DNS goes down with it</strong> — pi-hole is this machine, so no device in the
+          house resolves a name until it is back.{' '}
+          {containers === null ? 'Every container' : `All ${num(containers)} containers`} stop and
+          start again, and {duration(uptimeSeconds)} of uptime goes back to zero.
+        </p>
+        <div className="restart-actions">
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => {
+              setRefusal('')
+              gone.current = false
+              setSawDown(false)
+              setPhase('dispatching')
+              void requestRebootFn()
+                .then((r) => {
+                  setRequest({ id: r.id, at: Date.now() })
+                })
+                .catch((e: unknown) => {
+                  setRefusal(e instanceof Error ? e.message : String(e))
+                  setPhase('refused')
+                })
+            }}
+          >
+            Confirm restart
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              setPhase('idle')
+            }}
+          >
+            Cancel
+          </button>
+          <span className="restart-note">disarms on its own in {ARM_MS / 1000}s</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (phase === 'dispatching' || phase === 'down') {
+    return (
+      <div className="restart is-running">
+        <p className="restart-state">
+          {phase === 'dispatching'
+            ? 'Asking the host to restart…'
+            : sawDown
+              ? 'The box is down. Waiting for it to answer again…'
+              : 'Restarting — this page will stop responding shortly.'}
+        </p>
+        <p className="restart-note">
+          Nothing will report this finished: the server goes down with the box. This is watching{' '}
+          <span className="mono">/api/healthz</span> instead.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="restart">
+      {phase === 'back' && (
+        <p className="restart-state ok-text">The box is back, and this page is talking to it.</p>
+      )}
+      {phase === 'refused' && <p className="restart-state bad-text">{refusal}</p>}
+      <button
+        type="button"
+        className="btn btn-ghost"
+        onClick={() => {
+          setPhase('armed')
+        }}
+      >
+        Restart the box
+      </button>
+    </div>
+  )
+}
 
 export function HostView({ d }: { d: Host }) {
   return (
@@ -62,7 +267,11 @@ export function HostView({ d }: { d: Host }) {
           no reading and is not trying to: every other panel here is a number
           that moves, and this is the one thing on the page you could put a
           hand on. The specification lives on Build — this is recognition, and
-          a link to the rest. */}
+          a link to the rest.
+
+          It is also where the restart lives, for the same reason: the one
+          control that acts on the object rather than on a service belongs on
+          the panel that IS the object. */}
       <Board title="The box" icon="▣" span={4}>
         <div className="part">
           <PartPhoto part={PARTS.case} />
@@ -74,6 +283,7 @@ export function HostView({ d }: { d: Host }) {
             </span>
           </div>
         </div>
+        <RestartControl containers={d.containers.total} uptimeSeconds={d.uptimeSeconds} />
       </Board>
 
       <Board title="Running" icon="▣" span={4}>
