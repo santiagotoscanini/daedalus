@@ -102,7 +102,7 @@
       }
     },
     "chismed": {
-      "stage": "lab",
+      "stage": "live",
       "postgres": false,
       "storage": false,
       "litellm": false,
