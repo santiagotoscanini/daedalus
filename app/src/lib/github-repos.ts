@@ -15,6 +15,7 @@
 // one wants rate-limit headroom on public data, this one needs to SEE private
 // repos of the account, which the GHCR pull token cannot.
 
+import { swrCache } from './cache'
 import { key } from './dashboard/format'
 import { OWNER, REGISTRY_HOST_PATTERN } from './site'
 
@@ -30,16 +31,7 @@ export { OWNER }
  */
 const TTL_MS = 60_000
 
-type Cached<T> = { at: number; value: T }
-const cache = new Map<string, Cached<unknown>>()
-
-async function cached<T>(k: string, load: () => Promise<T>): Promise<T> {
-  const hit = cache.get(k) as Cached<T> | undefined
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.value
-  const value = await load()
-  cache.set(k, { at: Date.now(), value })
-  return value
-}
+const cache = swrCache({ ttlMs: TTL_MS })
 
 /**
  * The credential these reads authenticate with.
@@ -113,7 +105,7 @@ type GhRepo = {
  * search API has a far tighter rate limit.
  */
 export async function listRepos(): Promise<RepoList> {
-  return cached('repos', async () => {
+  return cache.get('repos', async () => {
     const authenticated = token() !== null
     const url = authenticated
       ? 'https://api.github.com/user/repos?affiliation=owner&sort=pushed&per_page=100'
@@ -231,7 +223,7 @@ const MAX_WORKFLOWS = 6
  * time.
  */
 export async function repoChecks(repo: string): Promise<RepoChecks> {
-  return cached(`checks:${repo}`, async () => {
+  return cache.get(`checks:${repo}`, async () => {
     const checks: Check[] = []
 
     // --- workflows ---------------------------------------------------------
@@ -452,5 +444,5 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
  * having done nothing.
  */
 export function forgetRepoChecks(repo: string): void {
-  cache.delete(`checks:${repo}`)
+  cache.forget(`checks:${repo}`)
 }

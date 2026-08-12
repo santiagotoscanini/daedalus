@@ -11,6 +11,7 @@
 // would blank three tabs at once, and a file that is ten minutes stale about
 // facts which move in hours is strictly better than that.
 
+import { swrValue } from '../cache'
 import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '../contract/decode'
 import { readSnapshot } from '../contract/snapshot'
 
@@ -293,12 +294,10 @@ const hostFactsShape = obj({
 })
 
 const TTL_MS = 60_000
-let cache: { at: number; facts: HostFacts } | null = null
 
-export async function hostFacts(): Promise<HostFacts> {
-  const now = Date.now()
-  if (cache !== null && now - cache.at < TTL_MS) return cache.facts
-
+// A failed read keeps the previous answer (lib/cache.ts) — a missing snapshot
+// would blank three tabs at once. A decode error still surfaces in the log.
+const cached = swrValue({ ttlMs: TTL_MS, retryMs: TTL_MS }, async () => {
   const result = await readSnapshot({
     path: process.env.HOST_FACTS_PATH ?? '/system/system.json',
     decoder: hostFactsShape,
@@ -306,15 +305,9 @@ export async function hostFacts(): Promise<HostFacts> {
     // Written every 10 minutes; twice that plus slack means the timer stopped.
     maxAgeMs: 25 * 60_000,
   })
+  return result.available ? result.data : null
+})
 
-  if (!result.available) {
-    // Keep the previous answer on a failed read — a missing snapshot would
-    // blank three tabs at once. A decode error still surfaced in the log.
-    if (cache !== null) return cache.facts
-    cache = { at: now, facts: NO_FACTS }
-    return NO_FACTS
-  }
-
-  cache = { at: now, facts: result.data }
-  return result.data
+export async function hostFacts(): Promise<HostFacts> {
+  return (await cached()) ?? NO_FACTS
 }

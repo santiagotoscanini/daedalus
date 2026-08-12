@@ -31,6 +31,7 @@
 // Published by daedalus-image-snapshot (stacks/daedalus/host/image-snapshot.sh)
 // because this app cannot run podman — it is a container itself.
 
+import { swrValue } from '../cache'
 import { nullable, obj, optional, recordOf, str } from '../contract/decode'
 import { imageTagMap } from '../contract/domains/images'
 import { readSnapshot } from '../contract/snapshot'
@@ -61,28 +62,20 @@ const labelsShape = recordOf(obj({ version: ns, revision: ns, source: ns, create
  * oneshot has not run yet, not that nothing has a version.
  */
 const TTL_MS = 60_000
-let cache: { at: number; labels: Record<string, ImageLabels> } | null = null
 
-async function snapshot(): Promise<Record<string, ImageLabels>> {
-  const now = Date.now()
-  if (cache !== null && now - cache.at < TTL_MS) return cache.labels
-
+// A snapshot that has gone missing is a reason to serve the last good one
+// (lib/cache.ts), not to report every service as unknown.
+const cached = swrValue({ ttlMs: TTL_MS, retryMs: TTL_MS }, async () => {
   const result = await readSnapshot({
     path: process.env.IMAGE_LABELS_PATH ?? '/images/labels.json',
     decoder: labelsShape,
     fallback: {},
   })
+  return result.available ? result.data : null
+})
 
-  if (!result.available) {
-    // Keep whatever we had. A snapshot that has gone missing is a reason to
-    // serve the last good one, not to report every service as unknown.
-    if (cache !== null) return cache.labels
-    cache = { at: now, labels: {} }
-    return {}
-  }
-
-  cache = { at: now, labels: result.data }
-  return result.data
+async function snapshot(): Promise<Record<string, ImageLabels>> {
+  return (await cached()) ?? {}
 }
 
 /** Everything the image says about itself. */

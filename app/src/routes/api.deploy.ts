@@ -128,6 +128,11 @@ export const Route = createFileRoute('/api/deploy')({
           actor: request.headers.get('x-forwarded-email') ?? 'registry',
         })
 
+        // The new image may ship a new icon, and the icon cache holds answers
+        // for an hour — a redeploy is the one event that invalidates it.
+        const { forgetAppIcon } = await import('../lib/app-icon')
+        forgetAppIcon(app)
+
         return Response.json({ status: 'queued', id, app })
       },
     },

@@ -25,6 +25,7 @@
 // the bypass every path below answers with the IdP's HTML.
 
 import { Buffer } from 'node:buffer'
+import { swrCache } from './cache'
 
 export type ResolvedIcon = { body: Buffer; contentType: string }
 
@@ -47,37 +48,36 @@ const FALLBACK_PATHS = [
 const CACHE_TTL_MS = 60 * 60 * 1000
 const FETCH_TIMEOUT_MS = 4000
 
-type Entry = { at: number; icon: ResolvedIcon | null }
-const cache = new Map<string, Entry>()
+const cache = swrCache({ ttlMs: CACHE_TTL_MS })
 
 /**
  * The app's icon, or null when it does not serve a usable one.
  *
  * Cached for an hour and keyed by name. A miss is cached too — a monogram is
  * the right answer for an app in gluetun's netns and re-probing six paths on
- * every list render to re-learn that would cost more than the icons do.
+ * every list render to re-learn that would cost more than the icons do. The
+ * wrapper object is what makes that work with lib/cache.ts, where a bare
+ * null means "the load failed, retry soon": here a null icon is an ANSWER,
+ * so it rides inside a value the cache keeps for the full hour.
  */
 export async function appIcon(
   name: string,
   hostname: string,
   exposed: boolean,
 ): Promise<ResolvedIcon | null> {
-  const hit = cache.get(name)
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.icon
-
-  let icon: ResolvedIcon | null = null
-  for (const origin of origins(name, hostname, exposed)) {
-    icon = await fromOrigin(origin)
-    if (icon) break
-  }
-
-  cache.set(name, { at: Date.now(), icon })
+  const { icon } = await cache.get(name, async (): Promise<{ icon: ResolvedIcon | null }> => {
+    for (const origin of origins(name, hostname, exposed)) {
+      const icon = await fromOrigin(origin)
+      if (icon) return { icon }
+    }
+    return { icon: null }
+  })
   return icon
 }
 
 /** Drop a cached answer, so a redeployed app's new icon is picked up. */
 export function forgetAppIcon(name: string): void {
-  cache.delete(name)
+  cache.forget(name)
 }
 
 function origins(name: string, hostname: string, exposed: boolean): string[] {
