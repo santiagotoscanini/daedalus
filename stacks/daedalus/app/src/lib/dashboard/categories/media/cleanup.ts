@@ -1,6 +1,12 @@
 import { lokiLatest, lokiScalar } from '../../../loki'
 import { type VersionGap, versionGap } from '../../github'
-import { imageTag, imageVersion, type RunningVersion } from '../../images'
+import {
+  type ImageFreshness,
+  imageFreshness,
+  imageTag,
+  imageVersion,
+  type RunningVersion,
+} from '../../images'
 import { CLEANUP_DAYS } from './shared'
 
 /* ── Cleanup ──────────────────────────────────────────────────────────── */
@@ -25,6 +31,8 @@ export type CleanupData = {
     /** From the image label — its pin is the channel `jvm-stable`. */
     running: RunningVersion
     gap: VersionGap
+    /** Whether the digest pin still matches the moving `jvm-stable` tag. */
+    freshness: ImageFreshness | null
     /** Dry-run: what it WOULD have deleted in the window. */
     wouldDelete: number | null
     /**
@@ -52,7 +60,7 @@ export async function loadCleanup(): Promise<CleanupData> {
   // label a fallback rather than the primary. See lib/dashboard/images.ts.
   const cleanuparrVersion = await imageTag('cleanuparr')
 
-  const [removed, blocked, searches, wouldDelete, janitorr] = await Promise.all([
+  const [removed, blocked, searches, wouldDelete, janitorr, freshness] = await Promise.all([
     over('cleanuparr', 'Removing item with max strikes'),
     over('cleanuparr', 'blocked item keeps coming back'),
     over('cleanuparr', 'Replacement search triggered'),
@@ -63,6 +71,10 @@ export async function loadCleanup(): Promise<CleanupData> {
     // retention window; past 30 days Loki refuses the range outright and the
     // version silently became "unknown". The label has no such expiry.
     imageVersion('janitorr'),
+    // And whether that channel has moved on from the pin — the label says
+    // what the frozen artefact is, the registry says whether it is still what
+    // `jvm-stable` serves.
+    imageFreshness('janitorr'),
   ])
 
   const schedules = await janitorrSchedules()
@@ -74,7 +86,7 @@ export async function loadCleanup(): Promise<CleanupData> {
 
   return {
     cleanuparr: { version: cleanuparrVersion, gap: cleanuparrGap, removed, blocked, searches },
-    janitorr: { running: janitorr, gap: janitorrGap, wouldDelete, schedules },
+    janitorr: { running: janitorr, gap: janitorrGap, freshness, wouldDelete, schedules },
     days: CLEANUP_DAYS,
   }
 }

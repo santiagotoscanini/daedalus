@@ -2,7 +2,7 @@ import type { AiData } from '../../../lib/dashboard/categories/ai'
 import { num } from '../../../lib/format'
 import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
-import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
+import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../service-head'
 import { Board, BoardGrid, Chip, Measures, Pulse } from '../../viz'
 import { comparePinned } from './shared'
 
@@ -19,9 +19,10 @@ export function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-web
         name="Open WebUI"
         version={data.version}
         versionNote="the chat window"
-        verdict={verdictOf(gap)}
+        verdict={verdictOf(gap, data.freshness)}
         compare={[
           ...comparePinned(gap, 'a digest in the flake, against a moving main tag'),
+          ...freshnessRow(data.freshness),
           // Its own update check, which used to be a whole stat card saying
           // "up to date". It is a second opinion on the line above it, so it
           // belongs beside that line — and it only earns a sentence when the

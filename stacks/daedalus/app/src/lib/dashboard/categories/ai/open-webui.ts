@@ -1,6 +1,7 @@
 import { getJson } from '../../../http'
 import { key } from '../../../keys'
 import { type VersionGap, versionGap } from '../../github'
+import { type ImageFreshness, imageFreshness } from '../../images'
 
 /**
  * One thing the chat window can reach.
@@ -23,6 +24,8 @@ type Reach = {
 export type OpenWebUiData = {
   version: string | null
   gap: VersionGap
+  /** Whether the digest pin still matches the moving `main` tag. */
+  freshness: ImageFreshness | null
   /** Its own update check. A second opinion on the release gap, not a repeat. */
   selfLatest: string | null
   /** Models mid-answer at this instant. */
@@ -59,7 +62,7 @@ export type OpenWebUiData = {
 export async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
   const auth = { headers: { Authorization: `Bearer ${key('OPENWEBUI_KEY')}` } }
 
-  const [usage, ver, models, knowledge, tools] = await Promise.all([
+  const [usage, ver, models, knowledge, tools, freshness] = await Promise.all([
     getJson<{ model_ids?: string[] }>(`${base}/api/usage`, auth),
     // The one service here that checks its own updates, which is why it is
     // kept alongside the release gap rather than replaced by it: two
@@ -72,6 +75,9 @@ export async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
       auth,
     ),
     getJson<{ name?: string; meta?: { description?: string } }[]>(`${base}/api/v1/tools/`, auth),
+    // A third opinion beside the release gap and the app's own check, and the
+    // only one about the artefact: has the `main` tag moved on from the pin.
+    imageFreshness('open-webui'),
   ])
 
   const version = ver?.current ?? null
@@ -109,6 +115,7 @@ export async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
   return {
     version,
     gap: await versionGap('open-webui/open-webui', version),
+    freshness,
     selfLatest: ver?.latest ?? null,
     generating: usage?.model_ids?.length ?? null,
     reach,

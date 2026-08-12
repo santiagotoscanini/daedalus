@@ -2,7 +2,7 @@ import type { AiData } from '../../../lib/dashboard/categories/ai'
 import { compact, DASH, ms, num, pct } from '../../../lib/format'
 import { GrafanaLogs } from '../../logs'
 import { Changelog } from '../../release-notes'
-import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
+import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../service-head'
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../../viz'
 import { comparePinned } from './shared'
 
@@ -27,8 +27,11 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
         name="LiteLLM"
         version={data.version}
         versionNote="one OpenAI API for everything"
-        verdict={verdictOf(gap)}
-        compare={comparePinned(gap, 'a digest in the flake, against a moving main-stable tag')}
+        verdict={verdictOf(gap, data.freshness)}
+        compare={[
+          ...comparePinned(gap, 'a digest in the flake, against a moving main-stable tag'),
+          ...freshnessRow(data.freshness),
+        ]}
         lede={
           <>
             The only thing that knows who asked for what. Nothing here holds a model — swapping

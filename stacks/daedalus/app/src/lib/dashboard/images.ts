@@ -32,7 +32,7 @@
 // because this app cannot run podman — it is a container itself.
 
 import { swrValue } from '../cache'
-import { nullable, obj, optional, recordOf, str } from '../contract/decode'
+import { bool, nullable, obj, optional, recordOf, str } from '../contract/decode'
 import { imageTagMap } from '../contract/domains/images'
 import { readSnapshot } from '../contract/snapshot'
 
@@ -133,4 +133,72 @@ export async function imageVersion(container: string): Promise<RunningVersion> {
   if (labelled !== null) return { version: labelled, source: 'label', revision: shortRevision }
 
   return { version: null, source: 'unknown', revision: shortRevision }
+}
+
+// ── the registry ──────────────────────────────────────────────────────────
+//
+// The third source, answering the one question the other two cannot: a pin
+// like `:latest@sha256:…` freezes an image forever, and neither the tag (a
+// channel name) nor the label (a fact about the FROZEN artefact) can say
+// whether the channel has since moved on. Only the registry knows, so a daily
+// host oneshot (daedalus-image-freshness) asks it and publishes the answer
+// beside labels.json.
+
+/** What the registry said about one container's pin, from the daily probe. */
+export type ImageFreshness = {
+  /** The tag ref the pin was taken from, e.g. `ghcr.io/schaka/janitorr:jvm-stable`. */
+  image: string
+  tag: string
+  pinnedDigest: string
+  /** Where the tag points now. Null when the registry did not answer. */
+  remoteDigest: string | null
+  /** The tag no longer points at the pinned digest. */
+  moved: boolean
+  /** When the image the tag NOW points at was built. Fetched only when moved. */
+  remoteCreated: string | null
+  checkedAt: string
+  /** The registry's refusal, verbatim-ish. Non-null means `moved` says nothing. */
+  error: string | null
+}
+
+const freshnessShape = recordOf(
+  obj({
+    image: str,
+    tag: str,
+    pinnedDigest: str,
+    remoteDigest: nullable(str),
+    moved: bool,
+    remoteCreated: nullable(str),
+    checkedAt: str,
+    error: nullable(str),
+  }),
+)
+
+// Three days: the producing timer is daily, and the shared convention (see
+// contract/snapshot.ts) is that one missed run is jitter and three is a
+// stopped producer. A stale file is treated as absent rather than served —
+// "the tag moved" asserted by a probe that died last week is exactly the
+// confidently-wrong answer this dashboard exists to avoid.
+const FRESHNESS_MAX_AGE_MS = 3 * 86_400_000
+
+const cachedFreshness = swrValue({ ttlMs: TTL_MS, retryMs: TTL_MS }, async () => {
+  const result = await readSnapshot({
+    path: process.env.IMAGE_FRESHNESS_PATH ?? '/images/freshness.json',
+    decoder: freshnessShape,
+    fallback: {},
+    acceptVersions: [1],
+    maxAgeMs: FRESHNESS_MAX_AGE_MS,
+  })
+  return result.available && !result.stale ? result.data : null
+})
+
+/**
+ * Whether a container's digest pin is still what its tag points at.
+ *
+ * Null when there is nothing to say: the container is not digest-pinned to a
+ * tag, the probe has never run, or its file has gone stale. Callers render
+ * null as no verdict at all — absence of evidence, stated as absence.
+ */
+export async function imageFreshness(container: string): Promise<ImageFreshness | null> {
+  return (await cachedFreshness())?.[container] ?? null
 }

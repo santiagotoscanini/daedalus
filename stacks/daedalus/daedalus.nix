@@ -253,6 +253,52 @@ let
     '';
   };
 
+  # Every image pinned as `:tag@sha256:…`, rendered at eval so the freshness
+  # script stays dumb: container → the tag ref to ask about and the digest the
+  # flake holds. ANY digest-on-a-tag pin qualifies, not just the moving
+  # channels — a re-pushed `2.10.1` is the same fact as a moved `latest`, and
+  # which tags count as "moving" is a judgement the reader can make with the
+  # tag string in hand. Local builds (mkLocalImage) and the registry-loop apps
+  # carry no digest and fall out of the match.
+  pinnedImages = lib.filterAttrs (_: v: v != null) (
+    lib.mapAttrs (
+      _: c:
+      let
+        m = builtins.match "(.*):([^@:]+)@(sha256:[0-9a-f]+)" c.image;
+      in
+      if m == null then
+        null
+      else
+        {
+          image = "${builtins.elemAt m 0}:${builtins.elemAt m 1}";
+          tag = builtins.elemAt m 1;
+          pinnedDigest = builtins.elemAt m 2;
+        }
+    ) config.virtualisation.oci-containers.containers
+  );
+
+  # Whether each of those tags has moved on from its pin — the one version
+  # question only the registry can answer. A snapshot file beside labels.json
+  # rather than a fleet.export domain, deliberately: export domains carry
+  # nix-eval facts and re-publish when the CONFIG changes, whereas this is a
+  # runtime probe whose answer changes while the config sits still. The
+  # snapshot contract (timer, envelope, staleness aged by the reader) is
+  # exactly the shape of that.
+  imageFreshnessScript = pkgs.writeShellApplication {
+    name = "daedalus-image-freshness";
+    runtimeInputs = [
+      pkgs.skopeo
+      pkgs.jq
+      pkgs.coreutils
+    ];
+    text = ''
+      OUT_DIR=${lib.escapeShellArg imageDir}
+      PINNED=${pkgs.writeText "daedalus-pinned-images.json" (builtins.toJSON pinnedImages)}
+
+      ${builtins.readFile ./host/image-freshness.sh}
+    '';
+  };
+
   # What only the host can answer about this machine — SMART, self-test
   # history, scrub state, snapshot usage, replication lag, boot generations.
   # See host/system-snapshot.sh for why each of those has no other route in.
@@ -599,6 +645,9 @@ in
       # — the other half of the version answer, for services whose pin is a
       # moving tag — still arrive as a snapshot:
       IMAGE_LABELS_PATH = "/images/labels.json";
+      # Digest-vs-tag freshness, published daily by daedalus-image-freshness
+      # into the same read-only mount.
+      IMAGE_FRESHNESS_PATH = "/images/freshness.json";
       HOST_FACTS_PATH = "/system/system.json";
 
       # The VPN tunnels, the DNS upstreams, the DHCP scope and direct ingress
@@ -703,6 +752,51 @@ in
   # what is wanted.
   fleet.monitoredJobs.daedalus-image-snapshot = { };
   fleet.monitoredJobs.daedalus-env-snapshot = { };
+
+  # Digest-vs-tag freshness. NOT ordered before the container, unlike the two
+  # snapshots above: this dials fifty registries, and a network probe must
+  # never gate the app's start — the reader treats an absent file as "not
+  # checked yet" and the pages simply show no freshness verdict.
+  systemd.services.daedalus-image-freshness = {
+    description = "Check digest-pinned images against where their tags point now";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${imageFreshnessScript}/bin/daedalus-image-freshness";
+      # ~55 refs with a polite sleep between network calls is a few minutes;
+      # the oneshot default of 90s would SIGTERM it mid-list.
+      TimeoutStartSec = "30min";
+    };
+  };
+
+  # Daily is the honest cadence: upstream tags move on release schedules, the
+  # answer feeds a verdict chip rather than an alert, and docker.io's
+  # anonymous budget is the scarce resource. The four-hour jitter is the
+  # rate-limit posture — never the same minute two days running, and never a
+  # thundering herd with anything else nightly. The run itself is a few KB of
+  # manifest reads, so the never-on-the-hour rule (a bandwidth rule) is not in
+  # play; a run landing in the myspeed blackout costs error rows for a day,
+  # which the reader renders as "registry did not answer".
+  #
+  # OnBootSec because /run is tmpfs: without it a reboot erases the file and
+  # Persistent=true only covers a missed CALENDAR trigger, so the verdicts
+  # would stay blank for up to a day after every boot.
+  systemd.timers.daedalus-image-freshness = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      RandomizedDelaySec = "4h";
+      OnBootSec = "15min";
+      Persistent = true;
+    };
+  };
+
+  # Same argument as its siblings: the failure mode is silent from the
+  # reader's side — verdicts quietly go stale, then (after the reader's 3-day
+  # window) quietly disappear. No slug: a missed run costs a day-old reading
+  # of something that moves in days.
+  fleet.monitoredJobs.daedalus-image-freshness = { };
 
   # The export publisher must have populated /run/daedalus-export before the
   # container mounts it: rootless podman cannot create a root-owned /run dir,
