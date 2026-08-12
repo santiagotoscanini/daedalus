@@ -42,17 +42,15 @@ export async function readApplyStatus(): Promise<ApplyStatus> {
 /**
  * Publish an apply request: the exact bytes to land in the flake, rendered
  * here (see lib/registry-file.ts) so the host agent never manipulates JSON —
- * it copies apps.json verbatim. request.json carries metadata only.
+ * it copies the id-stamped payload verbatim. request.json carries metadata
+ * only; the payload's name is derived from the id on both sides.
  */
 export async function requestApply(input: {
   fileBody: string
   summary: string
   actor: string
 }): Promise<string> {
-  return bridge.request(
-    { actor: input.actor, summary: input.summary },
-    { file: 'apps.json', body: input.fileBody },
-  )
+  return bridge.request({ actor: input.actor, summary: input.summary }, input.fileBody)
 }
 
 /** Human-readable one-liner for the commit message. */

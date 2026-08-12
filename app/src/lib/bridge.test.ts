@@ -43,12 +43,9 @@ describe('readStatus', () => {
 })
 
 describe('request', () => {
-  it('writes the payload and then the trigger, and returns the id', async () => {
-    const id = await bridge().request(
-      { actor: 'test' },
-      { file: 'apps.json', body: '{"apps":{}}\n' },
-    )
-    expect(await readFile(join(dir, 'apps.json'), 'utf8')).toBe('{"apps":{}}\n')
+  it('writes the payload under the request id and then the trigger, and returns the id', async () => {
+    const id = await bridge().request({ actor: 'test' }, '{"apps":{}}\n')
+    expect(await readFile(join(dir, `payload-${id}.json`), 'utf8')).toBe('{"apps":{}}\n')
     const request = JSON.parse(await readFile(join(dir, 'request.json'), 'utf8')) as {
       id: string
       actor: string
