@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { appIcon } from '../lib/app-icon'
+import { appIcon, type ResolvedIcon, siteIcon } from '../lib/app-icon'
+import { externalApp } from '../lib/external-apps'
 import { effectiveHostname } from '../lib/hostname'
 import { getApp } from '../lib/repo/apps'
 
@@ -21,14 +22,20 @@ export const Route = createFileRoute('/api/app-icon/$name')({
         // JSON body — which a browser would try to decode as an image.
         const miss = new Response(null, { status: 404 })
 
+        // Registry apps first, then the static off-box list — the resolution
+        // order that makes external ids forbidden from colliding with app
+        // names (see lib/external-apps.ts).
         const record = await getApp(params.name)
-        if (!record) return miss
+        const external = record ? null : externalApp(params.name)
+        if (!record && !external) return miss
 
-        const icon = await appIcon(
-          record.name,
-          effectiveHostname(record.name, record.hostname),
-          record.stage !== 'off',
-        )
+        const icon: ResolvedIcon | null = record
+          ? await appIcon(
+              record.name,
+              effectiveHostname(record.name, record.hostname),
+              record.stage !== 'off',
+            )
+          : external && (await siteIcon(external.id, external.host))
         // The page has already asked whether an icon exists and drawn a
         // monogram if not, so anything arriving here and missing is a real
         // miss, not a case to paper over with a placeholder image.

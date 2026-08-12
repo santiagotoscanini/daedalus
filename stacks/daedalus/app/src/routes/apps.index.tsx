@@ -48,6 +48,7 @@ export const Route = createFileRoute('/apps/')({
 
 type ListData = Awaited<ReturnType<typeof fetchApps>>
 type Row = ListData['apps'][number]
+type ExternalEntry = ListData['external'][number]
 
 function AppsPage() {
   const { tab, list, images, packages } = Route.useLoaderData()
@@ -58,7 +59,8 @@ function AppsPage() {
         <h1>Apps</h1>
       </header>
       <p className="lede cat-lede">
-        What this box runs of its own, and the two registries every one of them is built out of.
+        What this box runs of its own, what lives on someone else's infrastructure, and the two
+        registries everything here is built out of.
       </p>
 
       <TabBar tabs={TABS} active={tab} linkTo={(id) => ({ to: '/apps', search: { tab: id } })} />
@@ -93,7 +95,7 @@ function AppsPage() {
 }
 
 export function AppsList({ data }: { data: ListData }) {
-  const { apps, applyStatus } = data
+  const { apps, applyStatus, external } = data
   const [search, setSearch] = useState('')
   const [state, setState] = useState<'all' | AppState>('all')
   const [exposure, setExposure] = useState<'all' | 'live' | 'lab' | 'off'>('all')
@@ -119,6 +121,20 @@ export function AppsList({ data }: { data: ListData }) {
   // section, so the list above is exactly "the apps daedalus manages".
   const managed = visible.filter((r) => !r.managedInNix)
   const platform = visible.filter((r) => r.managedInNix)
+
+  // The off-box projects answer the search box but not the state/exposure
+  // filters — nothing here probes them, so they have no state to match, and
+  // pretending "external hosting" is an exposure would put them under a
+  // filter that means "published through the tunnel". They simply step aside
+  // while either filter is narrowing.
+  const offBox =
+    state === 'all' && exposure === 'all'
+      ? external.filter(
+          (e) =>
+            search === '' ||
+            `${e.name} ${e.host} ${e.description}`.toLowerCase().includes(search.toLowerCase()),
+        )
+      : []
 
   const changed = apps
     .filter((a) => !a.managedInNix && a.drift.length > 0)
@@ -204,8 +220,50 @@ export function AppsList({ data }: { data: ListData }) {
         </>
       )}
 
+      {/* Projects hosted off the box. The registry knows nothing about them —
+          the list is a hand-edited literal (lib/external-apps.ts) — so the
+          rows link out to the site itself rather than to a detail page there
+          is no data to fill. */}
+      {offBox.length > 0 && (
+        <>
+          <h2 className="section-head">
+            Hosted elsewhere
+            <small>GitHub Pages and Vercel — not on this box</small>
+          </h2>
+          <ul className="app-list app-list-platform">
+            {offBox.map((e) => (
+              <ExternalRow key={e.id} entry={e} />
+            ))}
+          </ul>
+        </>
+      )}
+
       <ApplyBar changed={changed} initialStatus={applyStatus} />
     </>
+  )
+}
+
+function ExternalRow({ entry }: { entry: ExternalEntry }) {
+  return (
+    <li>
+      <a
+        href={`https://${entry.host}`}
+        target="_blank"
+        rel="noreferrer"
+        className="app-row app-row-external"
+      >
+        <AppIcon name={entry.id} hasIcon={entry.hasIcon} />
+
+        <div className="app-id">
+          <div className="app-name">{entry.name}</div>
+          <div className="app-sub">{entry.description}</div>
+        </div>
+
+        <code className="app-host">{entry.host}</code>
+
+        <span className="chip chip-muted">{entry.platform}</span>
+      </a>
+    </li>
   )
 }
 
