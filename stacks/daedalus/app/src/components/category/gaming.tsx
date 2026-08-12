@@ -196,8 +196,15 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
   )
 }
 
+/**
+ * Live only at second hand — see the `live` note in categories/gaming.ts.
+ * There is no player count here because RCON never leaves ofsm's netns; the
+ * stat strip carries what the log and the container gauge can honestly say,
+ * and the game-state stat is the one fact the sub-tab dot gets wrong (the dot
+ * reads the manager's UI, which answers happily while the game is shut down).
+ */
 function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }> }) {
-  const { factorio, news } = data
+  const { factorio, news, live, events } = data
   const behind = factorio.behind.length
   const current = behind === 0 && factorio.installed !== null
 
@@ -238,6 +245,43 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           </a>
         }
       />
+
+      <StatStrip>
+        <Stat
+          label="Game process"
+          value={live.game === null ? '—' : live.game}
+          tone={live.game === 'stopped' ? 'warn' : undefined}
+          sub={
+            live.since === null
+              ? 'nothing in the log for 30 days'
+              : `since ${new Date(live.since).toLocaleString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}`
+          }
+          title="The newest start/stop line in the server’s own log — the manager keeps running either way."
+        />
+        <Stat
+          label="Manager"
+          value={live.containerUp === null ? '—' : live.containerUp ? 'up' : 'down'}
+          tone={live.containerUp === false ? 'bad' : undefined}
+          sub="the ofsm container"
+        />
+        {/* A count computed from an empty log and one computed from an
+            unreachable Loki are the same array — only claim zero when the
+            same query proved it could read the stream at all. */}
+        <Stat
+          label="Joins"
+          value={
+            events.length === 0 && live.game === null
+              ? '—'
+              : events.filter((e) => e.kind === 'join').length
+          }
+          sub="last 30 days"
+        />
+      </StatStrip>
 
       <BoardGrid>
         <Board
@@ -292,6 +336,44 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           <p className="board-foot">
             The studio’s own feed, which points forward: Friday Facts are what is being built rather
             than what has landed. What landed is the panel beside this one.
+          </p>
+        </Board>
+
+        <Board
+          title="Comings and goings"
+          icon="panels"
+          span={12}
+          aside={<span className="board-note">last 30 days</span>}
+        >
+          {events.length === 0 ? (
+            <p className="viz-empty">nobody has joined this month</p>
+          ) : (
+            <ul className="news">
+              {events.map((e) => (
+                <li key={`${String(e.at)}-${e.who}-${e.kind}`} className="news-row">
+                  <Chip tone={e.kind === 'join' ? 'ok' : 'muted'}>
+                    {e.kind === 'join' ? 'joined' : 'left'}
+                  </Chip>
+                  <span className="news-title">{e.who}</span>
+                  <span className="news-date">
+                    {new Date(e.at).toLocaleString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* Same read as Minecraft's board of the same name: the log already
+              IS the record, a second one could only disagree with it. */}
+          <p className="board-foot">
+            Parsed from the server’s log in Loki, newest first — the game announces every arrival
+            and departure with a <span className="mono">[JOIN]</span>/
+            <span className="mono">[LEAVE]</span> line. The panel below is the whole log; this is
+            the part of it that is about people.
           </p>
         </Board>
 

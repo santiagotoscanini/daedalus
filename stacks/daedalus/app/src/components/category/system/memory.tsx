@@ -141,7 +141,36 @@ export function MemoryView({ d }: { d: Memory }) {
           This is <span className="mono">memory.current</span>, which <b>includes page cache</b>. A
           container doing file I/O sits near its limit forever and is perfectly healthy; the cache
           is reclaimed when something else needs it. The number that means a cap is genuinely too
-          tight is the OOM counter below, not this bar.
+          tight is the OOM board beside this one, not this bar.
+        </p>
+      </Board>
+
+      <Board
+        title="OOM kills"
+        icon="warn"
+        span={4}
+        aside={
+          d.oomKills === null ? (
+            <span className="board-note">{DASH}</span>
+          ) : d.oomKills > 0 ? (
+            <span className="board-note">{num(d.oomKills)} all time</span>
+          ) : (
+            <Chip tone="ok">none, ever</Chip>
+          )
+        }
+      >
+        {/* The total tells "never" from "unreachable" — the filtered list
+            answers empty to both. */}
+        {d.oomKills !== null && d.oomKilled.length === 0 ? (
+          <p className="viz-empty">no container has ever been OOM-killed</p>
+        ) : (
+          <BarList items={d.oomKilled} tone="warn" empty="prometheus not answering" />
+        )}
+        <p className="board-foot">
+          Named, and only the killed — a fleet of zeros would bury the one counter that matters.
+          This moving is what &ldquo;the cap is too tight&rdquo; actually looks like; a bar to the
+          left resting on its limit is not. The kernel log below records which process was chosen
+          and what it was holding.
         </p>
       </Board>
 
@@ -155,21 +184,6 @@ export function MemoryView({ d }: { d: Memory }) {
           </span>
         }
       >
-        <Facts
-          rows={[
-            {
-              k: 'OOM kills, all time',
-              v:
-                d.oomKills === null ? (
-                  DASH
-                ) : d.oomKills > 0 ? (
-                  <span className="text-warn">{num(d.oomKills)}</span>
-                ) : (
-                  <Chip tone="ok">none</Chip>
-                ),
-            },
-          ]}
-        />
         {d.capped.length === 0 ? (
           <p className="viz-empty">No container has a memory cap.</p>
         ) : (
