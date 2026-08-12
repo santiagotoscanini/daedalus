@@ -1,8 +1,29 @@
-# s2-server
+# Daedalus
 
-NixOS home server. **This repo is the complete system definition**:
-`flake.lock` pins every input, secrets are sops-encrypted in-tree, and
-any checkout + a decryption key rebuilds the exact running system.
+Daedalus is a home server manager. One web app runs the box it lives
+on: it declares the apps, deploys them when CI ships a new image,
+publishes their hostnames and certificates, watches their containers,
+databases, disks and mail, reads their logs, and — when you change
+something — commits the change to git and rebuilds the machine to
+match. The craftsman, not the labyrinth.
+
+NixOS is the backend, and it is what makes the rest honest:
+**this repo is the complete system definition.** `flake.lock` pins
+every input, secrets are sops-encrypted in-tree, and any checkout plus
+a decryption key rebuilds the exact running system. Daedalus never
+mutates the machine imperatively — every change it applies is a commit
+here, which is why the box can always be reproduced and every change
+can always be explained.
+
+The shape of it:
+
+| Where | What |
+|---|---|
+| `stacks/daedalus/app/` | Daedalus itself — the TypeScript app (TanStack Start + React). |
+| `stacks/daedalus/host/` | Its host-side agents: the file-drop bridges that apply, deploy and snapshot on the app's behalf, so the container holds zero host privilege. |
+| `stacks/apps/` | The app platform Daedalus manages — `apps.json` is the committed contract between its database and the build. |
+| `stacks/*` | Everything else on the box: media, network, monitoring, identity — each stack's header comment is its canonical doc. |
+| `platform/` | The OS layer: podman, publishing, ZFS, sops, mail, and the `fleet.export` domains Daedalus reads its facts from. |
 
 Deeper operational docs live in each module's header comment (per-stack
 quirks — always the canonical source for a stack) and in these
@@ -55,7 +76,8 @@ commit + rebuild, or pick an older generation from the boot menu.
 
 Container images are pinned per-stack; updating one is
 `podman pull` + `systemctl restart podman-<name>` (moving tags) or a
-tag edit + rebuild (pinned tags).
+tag edit + rebuild (pinned tags). Daedalus's image-freshness probe
+reports which pins have fallen behind their tags.
 
 ## Secrets
 
@@ -102,10 +124,14 @@ git -C /etc/nixos add -A && sudo nixos-rebuild test && sudo nixos-rebuild switch
 git -C /etc/nixos commit -am "<name>: add stack"
 ```
 
+Apps built for the platform don't need any of this — Daedalus's own
+Apps pages create the registry entry, run the first CI build, and
+apply it.
+
 ## Disaster recovery
 
 1. Fresh NixOS install (any version with flakes) on new hardware.
-2. `git clone git@github.com:santiagotoscanini/nixos-s2.git /etc/nixos`
+2. `git clone git@github.com:santiagotoscanini/daedalus.git /etc/nixos`
 3. Restore the decryption identity — either the old host SSH key to
    `/etc/ssh/ssh_host_ed25519_key`, or santiago's age key (password
    manager) to `~/.config/sops/age/keys.txt` + re-encrypt for the new
