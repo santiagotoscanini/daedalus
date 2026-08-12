@@ -74,7 +74,7 @@ export const fetchApps = createServerFn().handler(async () => {
  * sits on a private bridge (auth.isolated) and reaches both through traefik.
  */
 export const fetchImagesTab = createServerFn().handler(async () => {
-  const { loadImages } = await import('../lib/registries')
+  const { loadImages } = await import('../lib/apps/registries')
   const { webAppHosts } = await import('../lib/nix-manifest')
   const hosts = await webAppHosts()
   return loadImages((app) => `https://${hosts[app] ?? app}`)
@@ -82,7 +82,7 @@ export const fetchImagesTab = createServerFn().handler(async () => {
 
 /** The npm registry tab. See above for why it is not folded into that one. */
 export const fetchPackagesTab = createServerFn().handler(async () => {
-  const { loadPackages } = await import('../lib/registries')
+  const { loadPackages } = await import('../lib/apps/registries')
   const { webAppHosts } = await import('../lib/nix-manifest')
   const hosts = await webAppHosts()
   return loadPackages((app) => `https://${hosts[app] ?? app}`)
