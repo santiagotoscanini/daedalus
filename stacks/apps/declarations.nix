@@ -88,70 +88,19 @@ let
     import ./operator-secrets-lib.nix { inherit lib; }
   );
 
-  # JSON → the `fleet.apps.<name>` submodule. Every field is emitted
-  # unconditionally where the option's default matches the exported value, so
-  # the mapping stays uniform; only genuinely optional shapes (image override,
-  # egress, auth paths) are conditional, because setting them to null is not
-  # the same as leaving them unset.
+  # The JSON→submodule mapping lives in ./registry-lib.nix — shared with
+  # daedalus.nix's self entry, so the two readers cannot drift. What layers on
+  # HERE is the one config-dependent field: operator secrets, keyed by the
+  # presence of a tracked `<name>-env.sops` in this directory.
+  registryLib = import ./registry-lib.nix { inherit lib; };
+
   mkApp =
     name: a:
-    {
-      inherit (a) stage;
-
-      postgres.enable = a.postgres;
-      storage.enable = a.storage;
-      litellm.enable = a.litellm;
-      prometheus.enable = a.prometheus;
-
-      auth = {
-        inherit (a.auth) mode;
-      }
-      // lib.optionalAttrs (a.auth.healthPath or null != null) {
-        inherit (a.auth) healthPath;
-      }
-      // lib.optionalAttrs (a.auth.allowedGroups or null != null) {
-        inherit (a.auth) allowedGroups;
-      }
-      // lib.optionalAttrs (a.auth.bypassRule or null != null) {
-        authBypassRule = a.auth.bypassRule;
-      }
-      // lib.optionalAttrs (a.auth.isolated or false) {
-        inherit (a.auth) isolated;
-      };
-
-      presentation = {
-        inherit (a.presentation) description;
-      };
-
-      # cgroup caps. Read with `or` defaults so an apps.json predating this
-      # field still evaluates — the file is under git and a revert of it alone
-      # is a legitimate recovery move.
-      resources = {
-        cpus = a.resources.cpus or null;
-        memoryMb = a.resources.memoryMb or null;
-        pids = a.resources.pids or null;
-      };
-
-      # `env` is a LIST of {key, value, note} rather than an attrset: the note is
-      # the reason a flag is set the way it is, which used to live in a nix
-      # comment here and would otherwise be lost in the round-trip through the
-      # database. daedalus renders them next to the value; nix only needs the pair.
-      env = lib.listToAttrs (map (e: lib.nameValuePair e.key e.value) a.env);
-
+    registryLib.mkApp a
+    // {
       environmentFiles = lib.optional (
         operatorSecretFiles ? ${name}
       ) config.sops.secrets.${secretName name}.path;
-    }
-    // lib.optionalAttrs (a.hostname or null != null) {
-      inherit (a) hostname;
-    }
-    // lib.optionalAttrs (a.image != null) {
-      inherit (a) image;
-    }
-    // lib.optionalAttrs (a.egress != null) {
-      egress = {
-        inherit (a.egress) container hostPort;
-      };
     };
 in
 {
@@ -167,8 +116,8 @@ in
 
   assertions = [
     {
-      assertion = registry.schemaVersion == 1;
-      message = "stacks/apps/apps.json declares schemaVersion ${toString registry.schemaVersion}, but declarations.nix understands 1. Regenerate the export from daedalus, or update this reader.";
+      assertion = lib.elem registry.schemaVersion registryLib.acceptedSchemaVersions;
+      message = "stacks/apps/apps.json declares schemaVersion ${toString registry.schemaVersion}, but registry-lib.nix understands ${lib.concatMapStringsSep "/" toString registryLib.acceptedSchemaVersions}. Regenerate the export from daedalus, or update the reader.";
     }
   ];
 }

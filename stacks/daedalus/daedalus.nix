@@ -363,7 +363,10 @@ let
     '';
   };
 
-  # daedalus's own registry entry, in the manifest's shape.
+  # daedalus's own registry entry — ./self.json, the same entry schema as one
+  # apps.json value, mapped through the same stacks/apps/registry-lib.nix the
+  # committed registry goes through. One schema, one mapper: when the registry
+  # grows a field, this entry cannot be the reader that silently drops it.
   #
   # Defined ONCE and consumed twice: by `fleet.apps.daedalus` below, and by the
   # manifest the container reads. As two literals these drift within the hour —
@@ -374,40 +377,26 @@ let
   # NOT read back out of `config.fleet.apps.daedalus`, which would be the other
   # way to deduplicate: this value feeds a volume on the container that
   # apps.nix generates from `fleet.apps`, and threading the read through that
-  # is the loop the apps module's header warns about. One let-binding, two
-  # consumers, no config read.
-  self = {
-    stage = "lab";
-    sourceMode = "local";
-    postgres = true;
-    storage = false;
-    litellm = true;
-    prometheus = false;
-    hostname = null; # = daedalus.<baseDomain>
-    image = null;
-    egress = null;
-    env = [ ];
-    auth = {
-      mode = "proxy";
-      isolated = true;
-      healthPath = "/api/healthz";
-    };
-    presentation = {
-      description = "S2 control plane";
-    };
-    # Uncapped on purpose: this is a Vite dev server that typechecks and
-    # bundles on demand, so its working set is spiky and unlike a built app's.
-    # A cap sized from steady state would OOM it on the first cold compile.
-    resources = {
-      cpus = null;
-      memoryMb = null;
-      pids = null;
-    };
-    notes = {
-      app = "The control plane itself. Declared by hand in stacks/daedalus/daedalus.nix rather than in the registry: an Apply that broke this entry would take down the interface you would use to undo it.";
-      source = "source.mode = \"local\" — the source lives in the flake repo at stacks/daedalus/app and is bind-mounted into the container, which runs the Vite dev server against it. Saving a file is the whole deploy.";
-    };
-  };
+  # is the loop the apps module's header warns about. A JSON file preserves the
+  # no-config-read property — which is also what registry-lib requires of its
+  # input.
+  #
+  # On its values: `stage = "lab"` keeps it LAN-only — a control plane for
+  # this box has no business answering on a public CNAME, wildcard cert or
+  # not. `postgres` puts role + database `daedalus` on the shared cluster
+  # (stacks/app-db), REVOKE'd from PUBLIC like every other tenant, with
+  # DATABASE_URL arriving via the bootstrap-generated env file; joining
+  # app-db-net for it is also how the container reaches `litellm:4000` on the
+  # same bridge. `litellm` sets LITELLM_BASE_URL against the shared gateway —
+  # not a second instance, so daedalus sees every model Lemonade serves with
+  # no duplicated model list. `resources` is uncapped on purpose: this is a
+  # Vite dev server that typechecks and bundles on demand, so its working set
+  # is spiky and unlike a built app's — a cap sized from steady state would
+  # OOM it on the first cold compile.
+  self = builtins.removeAttrs (builtins.fromJSON (builtins.readFile ./self.json)) [ "_hand" ];
+
+  registryLib = import ../apps/registry-lib.nix { inherit lib; };
+  selfApp = registryLib.mkApp self;
 in
 
 {
@@ -423,7 +412,11 @@ in
   # reach daedalus) is unaffected, since this only adds outbound reach.
   fleet.bridgeMemberships."app-daedalus" = [ "monitoring" ];
 
-  fleet.apps.daedalus = {
+  # selfApp carries everything self.json declares (stage, the feature flags,
+  # presentation, resources) through the shared mapper; layered on here is
+  # only what this module alone can know — the local source, the rendered env
+  # files, and the auth details that name nix-side machinery.
+  fleet.apps.daedalus = selfApp // {
     source = {
       mode = "local";
       # A plain string, not `./app` — a nix path literal would be copied into
@@ -433,39 +426,21 @@ in
       contextDir = ./assets;
     };
 
-    # Role + database `daedalus` on the shared pg cluster (stacks/app-db),
-    # REVOKE'd from PUBLIC like every other tenant. DATABASE_URL arrives via
-    # the bootstrap-generated env file. Joining app-db-net for it is also how
-    # the container reaches `litellm:4000`, which lives on the same bridge.
-    postgres.enable = self.postgres;
-    storage.enable = self.storage;
-
-    # Sets LITELLM_BASE_URL. The key is rendered separately below — the shared
-    # gateway, not a second instance, so daedalus sees every model Lemonade
-    # serves without a duplicated model list to keep in sync.
-    litellm.enable = self.litellm;
-    prometheus.enable = self.prometheus;
     environmentFiles = [
       "/run/daedalus-litellm/env"
       "/run/daedalus-deploy-hook/env"
       "/run/daedalus-dashboard/env"
     ];
 
-    # LAN-only. A control plane for this box has no business answering on a
-    # public CNAME, wildcard cert or not.
-    inherit (self) stage;
-
-    auth = {
-      # Forward-auth: daedalus has no user model of its own and only ever
-      # serves one operator, so the Pocket ID gate belongs in front of it
-      # rather than inside it. Zero app-side auth code.
-      #
-      # `isolated` puts it on a private iso-daedalus-net bridge with traefik as
-      # the only other member, so nothing on traefik-net can dial the dev
-      # server directly and skip the gate. `healthPath` is the one
-      # unauthenticated path — it backs the gatus probe and the forward-auth
-      # bypass.
-      inherit (self.auth) mode isolated healthPath;
+    # mode/isolated/healthPath arrive from self.json via the mapper.
+    # Forward-auth, because daedalus has no user model of its own and only
+    # ever serves one operator — the Pocket ID gate belongs in front of it
+    # rather than inside it, zero app-side auth code. `isolated` puts it on a
+    # private iso-daedalus-net bridge with traefik as the only other member,
+    # so nothing on traefik-net can dial the dev server directly and skip the
+    # gate. `healthPath` is the one unauthenticated path — it backs the gatus
+    # probe and the forward-auth bypass.
+    auth = selfApp.auth // {
       # Who applied. An Apply writes a git commit, so the commit should name a
       # person rather than "daedalus". Trusting a header requires that nothing
       # else can dial the app and forge one — which is exactly what `isolated`
