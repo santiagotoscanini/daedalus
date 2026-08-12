@@ -15,9 +15,10 @@
 // usual reason — it is one round trip for a number the box is collecting
 // anyway.
 
-import { getJson, promBars, promScalar, promVector } from './dashboard/clients'
 import { type VersionGap, versionGap } from './dashboard/github'
 import { imageVersion, type RunningVersion } from './dashboard/images'
+import { getJson } from './http'
+import { promBars, promScalar, promVector } from './prom'
 
 export type ImagesData = {
   /** Repositories that are apps built here, `cache/*` excluded. */

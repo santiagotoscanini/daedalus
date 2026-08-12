@@ -27,17 +27,9 @@
 // wrong: scraparr's copy of a queue depth is up to a minute old, which is a
 // minute of watching a stalled import that already cleared.
 
-import {
-  getJson,
-  getText,
-  lokiEntries,
-  lokiLatest,
-  lokiScalar,
-  pool,
-  promScalars,
-  promSeries,
-  qbtCookie,
-} from '../clients'
+import { ATTEMPT_MS, getJson, getText, pool } from '../../http'
+import { lokiEntries, lokiLatest, lokiScalar } from '../../loki'
+import { promScalars, promSeries } from '../../prom'
 import { key } from '../format'
 import { type VersionGap, versionGap } from '../github'
 import { imageTag, imageVersion, type RunningVersion } from '../images'
@@ -1004,6 +996,38 @@ async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
       port: vpnPort?.port ?? null,
     },
   }
+}
+
+/**
+ * qBittorrent's API is cookie-authenticated: POST the credentials, keep the
+ * SID. Not cached across requests — the dashboard reloads at most every 30s
+ * and a stale cookie would fail silently, which is exactly the kind of "the
+ * tile has been wrong for a week" bug this app exists to not have. Lives here
+ * rather than in lib/http.ts because qBittorrent is this tab's upstream and
+ * nobody else's.
+ */
+async function qbtCookie(base: string): Promise<string | null> {
+  // Hand-rolled rather than getJson: the value is in a response HEADER, and
+  // the body is empty (204). Same retry, same reason.
+  for (const ms of ATTEMPT_MS) {
+    try {
+      const res = await fetch(`${base}/api/v2/auth/login`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(ms),
+        redirect: 'manual',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: base },
+        body: new URLSearchParams({
+          username: process.env.DASH_QBT_USER ?? '',
+          password: process.env.DASH_QBT_PASS ?? '',
+        }),
+      })
+      if (!res.ok) return null
+      return res.headers.get('set-cookie')?.split(';')[0] ?? null
+    } catch {
+      // retry
+    }
+  }
+  return null
 }
 
 /**

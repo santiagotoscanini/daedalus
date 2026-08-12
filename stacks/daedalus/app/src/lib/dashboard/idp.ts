@@ -13,7 +13,7 @@
 // files, the pantry — this is plainly one of the household's own things: it is
 // the list of people, and of what each of them can open.
 
-import { getJson } from './clients'
+import { getJson } from '../http'
 import { key, localDay, since } from './format'
 import { type VersionGap, versionGap } from './github'
 
