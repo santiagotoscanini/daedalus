@@ -24,6 +24,7 @@
 // not a cache, because every other number on this dashboard has to be live.
 // Release history is the one upstream where staleness is free.
 
+import { swrCache } from '../cache'
 import { key } from './format'
 
 /**
@@ -127,57 +128,25 @@ function auth(): Record<string, string> {
   }
 }
 
-type Cached = {
-  /** When the last SUCCESSFUL fetch landed. */
-  at: number
-  /** When the last attempt was made, successful or not. */
-  tried: number
-  releases: GhRelease[] | null
-}
+// The two-clock stale-serving contract now lives in lib/cache.ts — it was
+// written here first, for the unauthenticated rate limit: 60 requests an hour
+// per IP, shared with anything else on this box that talks to GitHub.
+const cache = swrCache({ ttlMs: TTL_MS, retryMs: RETRY_MS })
 
-const cache = new Map<string, Cached>()
-
-/**
- * A repo's published releases, newest first, at most once per `TTL_MS`.
- *
- * Two clocks, because success and failure want different treatment. Fresh
- * data is reused for the full TTL. A refusal does NOT discard what we already
- * had — it only marks that an attempt was made, so the next render serves the
- * previous answer and the retry waits out `RETRY_MS`.
- *
- * The failure mode this exists for is the unauthenticated rate limit: 60
- * requests an hour per IP, shared with anything else on this box that talks to
- * GitHub. Without stale-serving, exhausting it replaces every release panel on
- * the AI pages with an error for a quarter of an hour, which looks like the
- * feature is broken rather than like one fetch was throttled.
- */
+/** A repo's published releases, newest first, at most once per `TTL_MS`. */
 async function releases(repo: string): Promise<GhRelease[] | null> {
-  const hit = cache.get(repo)
-  const now = Date.now()
-
-  if (hit !== undefined) {
-    const fresh = hit.releases !== null && now - hit.at < TTL_MS
-    const backingOff = now - hit.tried < RETRY_MS
-    if (fresh || backingOff) return hit.releases
-  }
-
-  try {
-    const res = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=60`, {
-      headers: auth(),
-      signal: AbortSignal.timeout(6_000),
-    })
-    if (res.ok) {
-      const out = (await res.json()) as GhRelease[]
-      cache.set(repo, { at: now, tried: now, releases: out })
-      return out
+  return cache.get(`releases:${repo}`, async (): Promise<GhRelease[] | null> => {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=60`, {
+        headers: auth(),
+        signal: AbortSignal.timeout(6_000),
+      })
+      if (res.ok) return (await res.json()) as GhRelease[]
+    } catch {
+      // Falls through to the same place a non-ok status does.
     }
-  } catch {
-    // Falls through to the same place a non-ok status does.
-  }
-
-  // Attempt recorded, previous answer (if any) kept.
-  cache.set(repo, { at: hit?.at ?? 0, tried: now, releases: hit?.releases ?? null })
-  return hit?.releases ?? null
+    return null
+  })
 }
 
 /**
@@ -414,8 +383,6 @@ export type CommitGap = {
 
 export const EMPTY_COMMITS: CommitGap = { running: null, builtOn: null, behind: [], note: null }
 
-const commitCache = new Map<string, { at: number; tried: number; gap: CommitGap | null }>()
-
 /**
  * What a branch has picked up since the commit an image was built from.
  *
@@ -428,7 +395,7 @@ const commitCache = new Map<string, { at: number; tried: number; gap: CommitGap 
  * Commits since the build is the true answer to "what would I get if I
  * repulled", which is the only upgrade question this image has.
  *
- * Same two-clock cache as `releases` for the same reason — see there.
+ * Same two-clock cache as `releases` for the same reason — see lib/cache.ts.
  */
 export async function commitsSince(
   repo: string,
@@ -437,56 +404,50 @@ export async function commitsSince(
 ): Promise<CommitGap> {
   if (sha === null || sha === '') return EMPTY_COMMITS
 
-  const cacheKey = `${repo}@${sha}...${branch}`
-  const hit = commitCache.get(cacheKey)
-  const now = Date.now()
-  if (hit !== undefined) {
-    if (hit.gap !== null && now - hit.at < TTL_MS) return hit.gap
-    if (now - hit.tried < RETRY_MS) return hit.gap ?? { ...EMPTY_COMMITS, running: sha }
-  }
+  const gap = await cache.get(
+    `compare:${repo}@${sha}...${branch}`,
+    async (): Promise<CommitGap | null> => {
+      // Plain fetch on a six-second budget, not `getJson` — same reason
+      // `releases` does it: getJson's ladder starts at 400ms, which is tuned
+      // for a stalled rootless-netns socket on this box and is far under a
+      // round trip to github.com. Through that helper this call failed every
+      // time.
+      type Compare = {
+        commits?: {
+          sha?: string
+          html_url?: string
+          commit?: { author?: { date?: string }; message?: string }
+        }[]
+        base_commit?: { commit?: { author?: { date?: string } } }
+      }
+      let body: Compare | null = null
+      try {
+        const res = await fetch(`https://api.github.com/repos/${repo}/compare/${sha}...${branch}`, {
+          headers: auth(),
+          signal: AbortSignal.timeout(6_000),
+        })
+        if (res.ok) body = (await res.json()) as Compare
+      } catch {
+        // Falls through to the same place a non-ok status does.
+      }
+      if (body === null) return null
 
-  // Plain fetch on a six-second budget, not `getJson` — same reason
-  // `releases` does it: getJson's ladder starts at 400ms, which is tuned for a
-  // stalled rootless-netns socket on this box and is far under a round trip to
-  // github.com. Through that helper this call failed every time.
-  type Compare = {
-    commits?: {
-      sha?: string
-      html_url?: string
-      commit?: { author?: { date?: string }; message?: string }
-    }[]
-    base_commit?: { commit?: { author?: { date?: string } } }
-  }
-  let body: Compare | null = null
-  try {
-    const res = await fetch(`https://api.github.com/repos/${repo}/compare/${sha}...${branch}`, {
-      headers: auth(),
-      signal: AbortSignal.timeout(6_000),
-    })
-    if (res.ok) body = (await res.json()) as Compare
-  } catch {
-    // Falls through to the same place a non-ok status does.
-  }
+      return {
+        running: sha,
+        builtOn: body.base_commit?.commit?.author?.date?.slice(0, 10) ?? null,
+        // Oldest first, matching how the release chain reads on the AI tabs.
+        behind: (body.commits ?? []).map((c) => ({
+          sha: (c.sha ?? '').slice(0, 7),
+          date: c.commit?.author?.date?.slice(0, 10) ?? '',
+          // The subject line only. A gluetun commit body is a diff summary and
+          // there are dozens of them; the subject is what a person scans.
+          subject: (c.commit?.message ?? '').split('\n')[0] ?? '',
+          url: c.html_url ?? `https://github.com/${repo}/commit/${c.sha ?? ''}`,
+        })),
+        note: null,
+      }
+    },
+  )
 
-  if (body === null) {
-    commitCache.set(cacheKey, { at: hit?.at ?? 0, tried: now, gap: hit?.gap ?? null })
-    return hit?.gap ?? { ...EMPTY_COMMITS, running: sha, note: 'GitHub would not answer' }
-  }
-
-  const gap: CommitGap = {
-    running: sha,
-    builtOn: body.base_commit?.commit?.author?.date?.slice(0, 10) ?? null,
-    // Oldest first, matching how the release chain reads on the AI tabs.
-    behind: (body.commits ?? []).map((c) => ({
-      sha: (c.sha ?? '').slice(0, 7),
-      date: c.commit?.author?.date?.slice(0, 10) ?? '',
-      // The subject line only. A gluetun commit body is a diff summary and
-      // there are dozens of them; the subject is what a person scans.
-      subject: (c.commit?.message ?? '').split('\n')[0] ?? '',
-      url: c.html_url ?? `https://github.com/${repo}/commit/${c.sha ?? ''}`,
-    })),
-    note: null,
-  }
-  commitCache.set(cacheKey, { at: now, tried: now, gap })
-  return gap
+  return gap ?? { ...EMPTY_COMMITS, running: sha, note: 'GitHub would not answer' }
 }

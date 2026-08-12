@@ -29,6 +29,7 @@
 // reason: a failure must serve the last good answer rather than blanking the
 // panel.
 
+import { swrCache } from '../cache'
 import type { ReleaseNote, VersionGap } from './github'
 import { EMPTY_GAP } from './github'
 
@@ -48,35 +49,9 @@ const MAX_PAGES = 4
 /** Bullets kept per section — the same cut github.ts makes, for the same reason. */
 const MAX_ITEMS = 8
 
-type Cached<T> = { at: number; tried: number; value: T | null }
-const cache = new Map<string, Cached<unknown>>()
-
-/**
- * Fetch-once-per-TTL, keep the previous answer on failure.
- *
- * Lifted to a helper rather than written twice because this file has two
- * upstreams with identical caching needs, and two hand-rolled copies of a
- * two-clock cache is how one of them quietly loses its stale-serving.
- */
-async function cached<T>(key: string, load: () => Promise<T | null>): Promise<T | null> {
-  const hit = cache.get(key) as Cached<T> | undefined
-  const now = Date.now()
-
-  if (hit !== undefined) {
-    const fresh = hit.value !== null && now - hit.at < TTL_MS
-    const backingOff = now - hit.tried < RETRY_MS
-    if (fresh || backingOff) return hit.value
-  }
-
-  const value = await load()
-  if (value !== null) {
-    cache.set(key, { at: now, tried: now, value })
-    return value
-  }
-
-  cache.set(key, { at: hit?.at ?? 0, tried: now, value: hit?.value ?? null })
-  return hit?.value ?? null
-}
+// Fetch-once-per-TTL, keep the previous answer on failure — the two-clock
+// contract documented in lib/cache.ts.
+const cache = swrCache({ ttlMs: TTL_MS, retryMs: RETRY_MS })
 
 async function getText(url: string): Promise<string | null> {
   try {
@@ -91,7 +66,7 @@ type Major = { major: string; latestMinor: string; supported: boolean }
 
 /** Every supported major and its newest minor, from postgresql.org. */
 async function majors(): Promise<Major[] | null> {
-  return cached('versions', async () => {
+  return cache.get('versions', async () => {
     const body = await getText('https://www.postgresql.org/versions.json')
     if (body === null) return null
     try {
@@ -128,7 +103,7 @@ function twoSegments(v: string): string {
 async function notesFor(version: string): Promise<ReleaseNote | null> {
   const url = `https://www.postgresql.org/docs/release/${version}/`
 
-  return cached(`notes:${version}`, async () => {
+  return cache.get(`notes:${version}`, async () => {
     const html = await getText(url)
     if (html === null) return null
 
