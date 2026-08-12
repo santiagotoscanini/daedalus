@@ -212,7 +212,7 @@ datasets_json() {
 # source pruned — so "the target has snapshots" is not evidence of anything.
 # Comparing the newest snapshot on each side is.
 replication_json() {
-  local root="s2-pool/backup"
+  local root="$BACKUP_ROOT"
   "$ZFS" list -H -o name -r "$root" 2>/dev/null | "$GREP" -v "^$root\$" | while read -r target; do
     child=${target#"$root"/}
     source="rpool/$child"
@@ -307,9 +307,11 @@ memory_table() {
 # filled, 128 GB maximum" is the fact an upgrade decision needs and no
 # `free -h` anywhere can answer.
 memory_json() {
-  local slots max
-  slots=$("$DMIDECODE" -t 16 2>/dev/null | "$GREP" -m1 'Number Of Devices' | "$SED" 's/.*: *//')
-  max=$("$DMIDECODE" -t 16 2>/dev/null | "$GREP" -m1 'Maximum Capacity' | "$SED" 's/.*: *//')
+  local array slots max
+  # One dmidecode call; both fields come from the same table-16 output.
+  array=$("$DMIDECODE" -t 16 2>/dev/null || true)
+  slots=$("$GREP" -m1 'Number Of Devices' <<<"$array" | "$SED" 's/.*: *//')
+  max=$("$GREP" -m1 'Maximum Capacity' <<<"$array" | "$SED" 's/.*: *//')
 
   memory_table |
     "$AWK" -F'\t' '$2 ~ /^[0-9]/' |

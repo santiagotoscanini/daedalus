@@ -30,7 +30,7 @@ api() {
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
-    "https://api.github.com/repos/santiagotoscanini/$1"
+    "https://api.github.com/repos/${OWNER}/$1"
 }
 
 read -ra repos <<<"$REPOS"
@@ -48,9 +48,14 @@ for repo in "${repos[@]}"; do
 
   # Last 10 runs is one call and covers both the history list and "is
   # something running right now" — filtering client-side beats three more
-  # round trips per repo per minute.
+  # round trips per repo per minute. ONE call, captured directly: the old
+  # probe-then-fetch shape issued the same request twice every 30s, and its
+  # `&&…||` binding let a failed second call keep ok=true with stale runs.
   runs='{"workflow_runs":[]}'
-  api "$repo/actions/runs?per_page=10" >/dev/null 2>&1 && runs=$(api "$repo/actions/runs?per_page=10") || ok=false
+  if ! runs=$(api "$repo/actions/runs?per_page=10" 2>/dev/null); then
+    ok=false
+    runs='{"workflow_runs":[]}'
+  fi
 
   # Steps only for a run that is actually active. This is the one call that
   # gives "step 3 of 5, docker build" — the runners endpoint knows a runner is

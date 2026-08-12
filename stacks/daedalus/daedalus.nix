@@ -264,6 +264,18 @@ let
     ];
     text = ''
       OUT_DIR=${lib.escapeShellArg systemDir}
+      # Derived from the syncoid pairs platform/backup.nix declares, so the
+      # replication panel can never watch a tree the backup stopped using.
+      BACKUP_ROOT=${
+        lib.escapeShellArg (
+          lib.head (
+            (lib.unique (
+              map (c: builtins.dirOf c.target) (lib.attrValues config.services.syncoid.commands)
+            ))
+            ++ [ "" ]
+          )
+        )
+      }
       SMARTCTL=${pkgs.smartmontools}/bin/smartctl
       DMIDECODE=${pkgs.dmidecode}/bin/dmidecode
       ZPOOL=${pkgs.zfs}/bin/zpool

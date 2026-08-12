@@ -137,6 +137,7 @@ let
       REPOS=${lib.escapeShellArg (toString repos)}
       ENV_FILE=${config.sops.secrets."gha-runner-env".path}
       OUT_DIR=${ciSnapshotDir}
+      OWNER=${lib.escapeShellArg config.fleet.github.owner}
       ${builtins.readFile ./assets/ci-snapshot.sh}
     '';
   };
