@@ -334,13 +334,20 @@ let
   # re-runs whenever apps.json changes (its ExecStart embeds the file's store
   # path, so the unit definition changes and systemd restarts it), while the
   # container's definition stays put. Nothing else about the app moves.
+  # Into /run/daedalus-export — the READ-ONLY mount — not the rw apply dir:
+  # applied.json is the drift-comparison target, the one file the app must
+  # not be able to overwrite. It used to sit in /apply purely because that
+  # was the convenient stable path; the export dir is the same trick without
+  # handing the app write access to its own baseline.
   registrySnapshot = pkgs.writeShellApplication {
     name = "daedalus-registry-snapshot";
     runtimeInputs = [ pkgs.coreutils ];
     text = ''
-      install -d -m 0755 -o santiago -g users ${lib.escapeShellArg applyDir}
-      install -m 0644 -o santiago -g users \
-        ${../apps/apps.json} ${lib.escapeShellArg "${applyDir}/applied.json"}
+      install -d -m 0755 /run/daedalus-export
+      install -m 0644 ${../apps/apps.json} /run/daedalus-export/applied.json
+      # The pre-export location — remove after one clean generation so a
+      # rollback cannot resurrect a stale baseline.
+      rm -f ${lib.escapeShellArg "${applyDir}/applied.json"}
     '';
   };
 
@@ -485,7 +492,7 @@ in
       # snapshot is a stable path refreshed by daedalus-registry-snapshot on
       # every rebuild — so an Apply updates it WITHOUT restarting this app.
       NIX_MANIFEST_PATH = "/registry/manifest.json";
-      NIX_REGISTRY_PATH = "/apply/applied.json";
+      NIX_REGISTRY_PATH = "/export/applied.json";
       # The fleet.export domains (platform/export.nix) — the successor to the
       # manifest and the env blobs; readers flip domain by domain.
       EXPORT_DIR = "/export";
