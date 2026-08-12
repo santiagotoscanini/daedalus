@@ -1,4 +1,4 @@
-import { bytes, DASH, duration, num, pct, since } from '../../lib/dashboard/format'
+import { bytes, DASH, duration, num, pct, since } from '../../lib/format'
 import type { SystemData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'

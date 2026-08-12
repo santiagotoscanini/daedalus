@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { bytes, compact, DASH, flag, ms, num, pct, since, until } from '../../lib/dashboard/format'
+import { bytes, compact, DASH, flag, ms, num, pct, since, until } from '../../lib/format'
 import { BASE_DOMAIN, stripBaseDomain } from '../../lib/site'
 import type { NetworkData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'

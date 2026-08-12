@@ -16,7 +16,7 @@
 // repos of the account, which the GHCR pull token cannot.
 
 import { swrCache } from './cache'
-import { key } from './dashboard/format'
+import { key } from './keys'
 import { OWNER, REGISTRY_HOST_PATTERN } from './site'
 
 // Every app repo lives under OWNER (site.ts, nix-bound) — the same assumption

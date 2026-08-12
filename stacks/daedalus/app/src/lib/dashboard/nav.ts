@@ -526,3 +526,16 @@ export const CATEGORIES: CategorySpec[] = [
     ],
   },
 ]
+
+/**
+ * Resolve a requested sub-tab against what a category actually declares:
+ * the tab if it exists, the category's first tab otherwise. Lives beside
+ * CATEGORIES because both the route loader and the server functions need
+ * the SAME answer — two copies of this rule is how a URL renders one tab
+ * while the server loads another.
+ */
+export function resolveTab(category: string, tab: string | undefined): string {
+  const spec = CATEGORIES.find((c) => c.id === category)
+  if (spec === undefined) return ''
+  return tab !== undefined && spec.tabs.some((t) => t.id === tab) ? tab : (spec.tabs[0]?.id ?? '')
+}

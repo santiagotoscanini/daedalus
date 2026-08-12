@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { bytes } from '../lib/format'
 
 import { Pulse, type Tone } from './viz'
 
@@ -80,19 +81,7 @@ export function StatePill({ state }: { state: AppState }) {
 }
 
 export function Bytes({ value }: { value: number | null }) {
-  if (value === null) return <>—</>
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let v = value
-  let u = 0
-  while (v >= 1024 && u < units.length - 1) {
-    v /= 1024
-    u++
-  }
-  return (
-    <>
-      {v.toFixed(v >= 10 || u === 0 ? 0 : 1)} {units[u]}
-    </>
-  )
+  return <>{bytes(value)}</>
 }
 
 export function Segmented<T extends string>({

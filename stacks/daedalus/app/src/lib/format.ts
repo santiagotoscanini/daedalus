@@ -119,6 +119,35 @@ export function until(seconds: number | null | undefined): string {
   return `${String(Math.round(seconds / 86400))}d`
 }
 
+/**
+ * A moment, absolutely and relatively at once.
+ *
+ * Absolute first, relative second: "3d ago" alone is useless when you are
+ * trying to correlate a deploy with something else that happened.
+ */
+export function when(iso: string): string {
+  const then = Date.parse(iso)
+  if (!Number.isFinite(then)) return DASH
+  return `${new Date(then).toISOString().slice(0, 16).replace('T', ' ')} · ${since((Date.now() - then) / 1000)}`
+}
+
+/**
+ * A log line's timestamp: "14:22:09.214" for today, "Jul 31 23:22:09" for
+ * anything older. In the BOX'S timezone (TZ is bound into the container),
+ * not UTC — these lines are read to correlate with "what was I doing at
+ * half past two", and an earlier version rendered the same-day clock in UTC,
+ * which put every entry three hours into the future of the wall clock.
+ */
+export function logTime(iso: string): string {
+  const d = new Date(iso)
+  if (!Number.isFinite(d.getTime())) return DASH
+  const hms = d.toLocaleTimeString('en-GB', { hour12: false })
+  if (d.toDateString() === new Date().toDateString()) {
+    return `${hms}.${String(d.getMilliseconds()).padStart(3, '0')}`
+  }
+  return `${d.toLocaleString('en-US', { month: 'short', day: '2-digit' })} ${hms}`
+}
+
 /** Country name → flag, for the VPN exit readouts. */
 export function flag(country: string | undefined | null): string {
   const F: Record<string, string> = {
@@ -152,9 +181,6 @@ export function flag(country: string | undefined | null): string {
   if (country === undefined || country === null || country === '') return DASH
   return `${F[country] ?? '🌐'} ${country}`
 }
-
-/** Per-service API keys, rendered to /run/daedalus-dashboard/env by nix. */
-export const key = (name: string): string => process.env[`DASH_${name}`] ?? ''
 
 /**
  * `YYYY-MM-DD` in the box's timezone, so a daily column is the day you lived

@@ -15,8 +15,8 @@
 // routing.
 
 import { useState } from 'react'
-import { DASH, num } from '../../lib/dashboard/format'
 import type { IdpData } from '../../lib/dashboard/idp'
+import { DASH, num } from '../../lib/format'
 import { GrafanaLogs, LogDetails } from '../logs'
 import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../service-head'

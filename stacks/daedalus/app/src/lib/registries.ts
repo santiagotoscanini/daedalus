@@ -17,6 +17,7 @@
 
 import { type VersionGap, versionGap } from './dashboard/github'
 import { imageVersion, type RunningVersion } from './dashboard/images'
+import { bytes } from './format'
 import { getJson } from './http'
 import { promBars, promScalar, promVector } from './prom'
 
@@ -82,7 +83,7 @@ export async function loadImages(base: (app: string) => string): Promise<ImagesD
     repositories: repos.filter((r) => !r.startsWith('cache/')),
     cachedRepos: repos.filter((r) => r.startsWith('cache/')),
     storageBytes: byRepo.length === 0 ? null : byRepo.reduce((n, r) => n + r.value, 0),
-    byRepo: byRepo.map((r) => ({ ...r, display: fmtBytes(r.value) })),
+    byRepo: byRepo.map((r) => ({ ...r, display: bytes(r.value) })),
     pulls,
     pushes,
     requestsPerHour: requests,
@@ -129,18 +130,4 @@ export async function loadPackages(base: (app: string) => string): Promise<Packa
     gap: await versionGap('verdaccio/verdaccio', running.version),
     reachable: npm !== null,
   }
-}
-
-// A local copy rather than an import from dashboard/format: that module is the
-// category pages' formatter and this one number is the only reason this file
-// would depend on it.
-function fmtBytes(v: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let n = v
-  let u = 0
-  while (n >= 1024 && u < units.length - 1) {
-    n /= 1024
-    u++
-  }
-  return `${n.toFixed(n >= 10 || u === 0 ? 0 : 1)} ${units[u] ?? 'B'}`
 }

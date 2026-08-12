@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
-import { DASH } from '../lib/dashboard/format'
 import type { VersionGap } from '../lib/dashboard/github'
 import type { RunningVersion } from '../lib/dashboard/images'
+import { DASH } from '../lib/format'
 import { Chip, type Tone } from './viz'
 
 // The header a page gets when its subject is one identifiable SERVICE.

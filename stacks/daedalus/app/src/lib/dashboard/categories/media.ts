@@ -28,9 +28,9 @@
 // minute of watching a stalled import that already cleared.
 
 import { ATTEMPT_MS, getJson, getText, pool } from '../../http'
+import { key } from '../../keys'
 import { lokiEntries, lokiLatest, lokiScalar } from '../../loki'
 import { promScalars, promSeries } from '../../prom'
-import { key } from '../format'
 import { type VersionGap, versionGap } from '../github'
 import { imageTag, imageVersion, type RunningVersion } from '../images'
 

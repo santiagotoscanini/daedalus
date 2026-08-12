@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { bytes, DASH, flag, num, rate, since, until } from '../../lib/dashboard/format'
+import { bytes, DASH, flag, num, rate, since, until } from '../../lib/format'
 import type { MediaData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'

@@ -12,13 +12,14 @@
 
 import { type NetworkFacts, networkFacts } from '../../contract/domains/network'
 import { publishingFacts } from '../../contract/domains/publishing'
+import { localDay, since } from '../../format'
 import { BASE_DOMAIN } from '../../hostname'
 import { getJson, getText } from '../../http'
+import { key } from '../../keys'
 import { lokiEntries, lokiLatest, lokiScalar } from '../../loki'
 import { lanHosts, webAppHosts } from '../../nix-manifest'
 import { promBars, promPoints, promScalar, promScalars, promSeries, promVector } from '../../prom'
 import { declaredVpnEgress, type VpnEgress } from '../../vpn-egress'
-import { key, localDay, since } from '../format'
 import {
   type CommitGap,
   commitsSince,
