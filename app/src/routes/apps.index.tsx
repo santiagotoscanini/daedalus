@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
+import { type Platform, PLATFORMS } from '../lib/external-apps'
 import { ApplyBar } from '../components/apply-bar'
 import { GuardedAwait } from '../components/error'
 import { ImagesView, PackagesView } from '../components/registries'
@@ -136,6 +137,10 @@ export function AppsList({ data }: { data: ListData }) {
         )
       : []
 
+  // The control plane's own row carries whether it serves an icon, so the
+  // section head borrows it rather than probing again.
+  const selfHasIcon = apps.find((a) => a.name === 'daedalus')?.hasIcon ?? false
+
   const changed = apps
     .filter((a) => !a.managedInNix && a.drift.length > 0)
     .map((a) => ({ name: a.name, fields: a.drift }))
@@ -195,6 +200,11 @@ export function AppsList({ data }: { data: ListData }) {
         />
       </div>
 
+      <SectionHead
+        icon={<AppIcon name="daedalus" hasIcon={selfHasIcon} size={15} />}
+        title="Daedalus"
+        sub="deployed, watched and managed on this box"
+      />
       <ul className="app-list">
         {managed.map((r) => (
           <AppRow key={r.name} row={r} />
@@ -220,27 +230,57 @@ export function AppsList({ data }: { data: ListData }) {
         </>
       )}
 
-      {/* Projects hosted off the box. The registry knows nothing about them —
-          the list is a hand-edited literal (lib/external-apps.ts) — so the
-          rows link out to the site itself rather than to a detail page there
-          is no data to fill. */}
-      {offBox.length > 0 && (
-        <>
-          <h2 className="section-head">
-            Hosted elsewhere
-            <small>GitHub Pages and Vercel — not on this box</small>
-          </h2>
-          <ul className="app-list app-list-platform">
-            {offBox.map((e) => (
-              <ExternalRow key={e.id} entry={e} />
-            ))}
-          </ul>
-        </>
-      )}
+      {/* Projects hosted off the box, one section per platform. The registry
+          knows nothing about them — the list is a hand-edited literal
+          (lib/external-apps.ts) — so the rows link out to the site itself
+          rather than to a detail page there is no data to fill. */}
+      {PLATFORMS.map((p) => {
+        const entries = offBox.filter((e) => e.platform === p.id)
+        if (entries.length === 0) return null
+        return (
+          <div key={p.id}>
+            <SectionHead icon={PLATFORM_ICONS[p.id]} title={p.id} sub={p.description} />
+            <ul className="app-list app-list-platform">
+              {entries.map((e) => (
+                <ExternalRow key={e.id} entry={e} />
+              ))}
+            </ul>
+          </div>
+        )
+      })}
 
       <ApplyBar changed={changed} initialStatus={applyStatus} />
     </>
   )
+}
+
+function SectionHead({ icon, title, sub }: { icon: ReactNode; title: string; sub: string }) {
+  return (
+    <h2 className="section-head">
+      <span className="section-glyph" aria-hidden="true">
+        {icon}
+      </span>
+      {title}
+      <small>{sub}</small>
+    </h2>
+  )
+}
+
+// The two brand marks, inlined. NOT in glyph.tsx, on that file's own rule:
+// its set is stroke pictographs named by shape, and these are filled logos
+// that are nothing without their subject. `currentColor` keeps them on the
+// section head's own grey in both themes.
+const PLATFORM_ICONS: Record<Platform, ReactNode> = {
+  'GitHub Pages': (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" role="presentation">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+    </svg>
+  ),
+  Vercel: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" role="presentation">
+      <path d="M12 2.5 23 21.5H1L12 2.5Z" />
+    </svg>
+  ),
 }
 
 function ExternalRow({ entry }: { entry: ExternalEntry }) {
@@ -260,8 +300,6 @@ function ExternalRow({ entry }: { entry: ExternalEntry }) {
         </div>
 
         <code className="app-host">{entry.host}</code>
-
-        <span className="chip chip-muted">{entry.platform}</span>
       </a>
     </li>
   )
