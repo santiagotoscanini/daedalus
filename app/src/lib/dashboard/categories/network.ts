@@ -13,22 +13,11 @@
 import { type NetworkFacts, networkFacts } from '../../contract/domains/network'
 import { publishingFacts } from '../../contract/domains/publishing'
 import { BASE_DOMAIN } from '../../hostname'
+import { getJson, getText } from '../../http'
+import { lokiEntries, lokiLatest, lokiScalar } from '../../loki'
 import { lanHosts, webAppHosts } from '../../nix-manifest'
+import { promBars, promPoints, promScalar, promScalars, promSeries, promVector } from '../../prom'
 import { declaredVpnEgress, type VpnEgress } from '../../vpn-egress'
-import {
-  getJson,
-  getText,
-  lokiEntries,
-  lokiLatest,
-  lokiScalar,
-  piholeSid,
-  promBars,
-  promPoints,
-  promScalar,
-  promScalars,
-  promSeries,
-  promVector,
-} from '../clients'
 import { key, localDay, since } from '../format'
 import {
   type CommitGap,
@@ -566,6 +555,21 @@ async function loadServiceTraffic(): Promise<GeneralData['services']> {
  * away from anything on the LAN. Dialled directly there is nothing to widen.
  */
 const PIHOLE = () => process.env.PIHOLE_URL ?? 'http://host.containers.internal:8080'
+
+/**
+ * Pi-hole v6 hands out a session id even with no password set (`api.pwhash`
+ * is blank — the Pocket ID gate is the real boundary, see stacks/pihole), but
+ * the stats endpoints still want the `sid` header. Lives here rather than in
+ * lib/http.ts because pi-hole is this tab's upstream and nobody else's.
+ */
+async function piholeSid(base: string): Promise<string | null> {
+  const body = await getJson<{ session?: { sid: string | null } }>(`${base}/api/auth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: '' }),
+  })
+  return body?.session?.sid ?? null
+}
 
 /** What the house looked up, and how much of it came from this box. */
 async function loadAsked(): Promise<GeneralData['dns']> {

@@ -1,5 +1,9 @@
-// Prometheus + Loki clients. Reached over the `monitoring` bridge that
-// stacks/daedalus/daedalus.nix adds to this container.
+import { lokiScalar, lokiStreams } from './loki'
+import { type MatrixResult, promEscape, promMatrix, promVector, type VectorResult } from './prom'
+
+// The app pages' readings from Prometheus + Loki, over the shared clients in
+// lib/prom.ts / lib/loki.ts (which carry the retry ladder and the one-patient-
+// attempt Loki rule — this file used to hand-roll bare fetches without them).
 //
 // Per-container CPU/memory/pids come from the textfile exporter in
 // stacks/monitoring, which reads cgroup v2 directly under
@@ -18,36 +22,6 @@
 //   perfectly healthy — the cache is reclaimed on pressure. The signal that a
 //   limit is genuinely too tight is container_oom_kills_total moving, not
 //   usage touching the ceiling.
-
-const PROM = () => process.env.PROMETHEUS_URL ?? 'http://prometheus:9090'
-const LOKI = () => process.env.LOKI_URL ?? 'http://loki:3100'
-
-type VectorResult = { metric: Record<string, string>; value: [number, string] }
-type MatrixResult = { metric: Record<string, string>; values: [number, string][] }
-
-async function promQuery(query: string): Promise<VectorResult[]> {
-  const url = `${PROM()}/api/v1/query?query=${encodeURIComponent(query)}`
-  const res = await fetch(url, { signal: AbortSignal.timeout(8_000) })
-  if (!res.ok) throw new Error(`prometheus HTTP ${String(res.status)}`)
-  const body = (await res.json()) as { data?: { result?: VectorResult[] } }
-  return body.data?.result ?? []
-}
-
-async function promRange(
-  query: string,
-  minutes: number,
-  stepSeconds: number,
-): Promise<MatrixResult[]> {
-  const end = Math.floor(Date.now() / 1000)
-  const start = end - minutes * 60
-  const url =
-    `${PROM()}/api/v1/query_range?query=${encodeURIComponent(query)}` +
-    `&start=${String(start)}&end=${String(end)}&step=${String(stepSeconds)}`
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
-  if (!res.ok) throw new Error(`prometheus HTTP ${String(res.status)}`)
-  const body = (await res.json()) as { data?: { result?: MatrixResult[] } }
-  return body.data?.result ?? []
-}
 
 export type AppStatus = {
   /** "running" | "attention" | "stopped" | "unknown" */
@@ -70,6 +44,10 @@ const EMPTY: AppStatus = {
   spark: [],
 }
 
+const firstNum = (r: VectorResult[]): number | null => (r[0] ? Number(r[0].value[1]) : null)
+const firstSeries = (m: MatrixResult[]): number[] =>
+  m[0] ? m[0].values.map(([, v]) => Number(v)) : []
+
 /**
  * Status for every app in one round trip per metric, rather than per app —
  * the list page renders 3 apps today but this is the query that would get
@@ -84,44 +62,36 @@ export async function appStatuses(names: string[]): Promise<Record<string, AppSt
   const out: Record<string, AppStatus> = Object.fromEntries(names.map((n) => [n, { ...EMPTY }]))
   if (names.length === 0) return out
 
-  const alt = names.map(escapeRe).join('|')
+  const alt = names.map(promEscape).join('|')
 
-  const [up, health, rpm, spark] = await Promise.allSettled([
-    promQuery(`container_up{name=~"app-(${alt})"}`),
-    promQuery(`gatus_results_endpoint_success{key=~"web-apps_(${alt})"}`),
-    promQuery(
+  const [up, health, rpm, spark] = await Promise.all([
+    promVector(`container_up{name=~"app-(${alt})"}`),
+    promVector(`gatus_results_endpoint_success{key=~"web-apps_(${alt})"}`),
+    promVector(
       `sum by (service) (rate(traefik_service_requests_total{service=~"(${alt})-svc@file"}[5m])) * 60`,
     ),
-    promRange(
+    promMatrix(
       `sum by (service) (rate(traefik_service_requests_total{service=~"(${alt})-svc@file"}[5m])) * 60`,
       60,
       120,
     ),
   ])
 
-  if (up.status === 'fulfilled') {
-    for (const r of up.value) {
-      const n = (r.metric.name ?? '').replace(/^app-/, '')
-      if (out[n]) out[n].containerUp = r.value[1] === '1'
-    }
+  for (const r of up) {
+    const n = (r.metric.name ?? '').replace(/^app-/, '')
+    if (out[n]) out[n].containerUp = r.value[1] === '1'
   }
-  if (health.status === 'fulfilled') {
-    for (const r of health.value) {
-      const n = (r.metric.key ?? '').replace(/^web-apps_/, '')
-      if (out[n]) out[n].healthy = r.value[1] === '1'
-    }
+  for (const r of health) {
+    const n = (r.metric.key ?? '').replace(/^web-apps_/, '')
+    if (out[n]) out[n].healthy = r.value[1] === '1'
   }
-  if (rpm.status === 'fulfilled') {
-    for (const r of rpm.value) {
-      const n = serviceToName(r.metric.service)
-      if (out[n]) out[n].rpm = Number(r.value[1])
-    }
+  for (const r of rpm) {
+    const n = serviceToName(r.metric.service)
+    if (out[n]) out[n].rpm = Number(r.value[1])
   }
-  if (spark.status === 'fulfilled') {
-    for (const r of spark.value) {
-      const n = serviceToName(r.metric.service)
-      if (out[n]) out[n].spark = r.values.map(([, v]) => Number(v))
-    }
+  for (const r of spark) {
+    const n = serviceToName(r.metric.service)
+    if (out[n]) out[n].spark = r.values.map(([, v]) => Number(v))
   }
 
   for (const n of names) {
@@ -168,33 +138,28 @@ const NO_GAUGE: ResourceGauge = { used: null, limit: null, spark: [] }
  * something else would be a lie at the only moment it matters.
  */
 export async function appResources(name: string): Promise<AppResources> {
-  const c = `{name="app-${escapeRe(name)}"}`
+  const c = `{name="app-${promEscape(name)}"}`
 
   const [cpu, cpuLimit, mem, memLimit, pids, pidsLimit, oom, cpuSpark, memSpark] =
-    await Promise.allSettled([
-      promQuery(`rate(container_cpu_usage_seconds_total${c}[5m])`),
-      promQuery(`container_cpu_limit_cores${c}`),
-      promQuery(`container_memory_usage_bytes${c}`),
-      promQuery(`container_memory_limit_bytes${c}`),
-      promQuery(`container_pids${c}`),
-      promQuery(`container_pids_limit${c}`),
-      promQuery(`container_oom_kills_total${c}`),
-      promRange(`rate(container_cpu_usage_seconds_total${c}[5m])`, 60, 120),
-      promRange(`container_memory_usage_bytes${c}`, 60, 120),
+    await Promise.all([
+      promVector(`rate(container_cpu_usage_seconds_total${c}[5m])`),
+      promVector(`container_cpu_limit_cores${c}`),
+      promVector(`container_memory_usage_bytes${c}`),
+      promVector(`container_memory_limit_bytes${c}`),
+      promVector(`container_pids${c}`),
+      promVector(`container_pids_limit${c}`),
+      promVector(`container_oom_kills_total${c}`),
+      promMatrix(`rate(container_cpu_usage_seconds_total${c}[5m])`, 60, 120),
+      promMatrix(`container_memory_usage_bytes${c}`, 60, 120),
     ])
 
-  const scalar = (r: PromiseSettledResult<VectorResult[]>): number | null =>
-    r.status === 'fulfilled' && r.value[0] ? Number(r.value[0].value[1]) : null
-  const series = (r: PromiseSettledResult<MatrixResult[]>): number[] =>
-    r.status === 'fulfilled' && r.value[0] ? r.value[0].values.map(([, v]) => Number(v)) : []
-
   return {
-    cpu: { used: scalar(cpu), limit: scalar(cpuLimit), spark: series(cpuSpark) },
-    memory: { used: scalar(mem), limit: scalar(memLimit), spark: series(memSpark) },
+    cpu: { used: firstNum(cpu), limit: firstNum(cpuLimit), spark: firstSeries(cpuSpark) },
+    memory: { used: firstNum(mem), limit: firstNum(memLimit), spark: firstSeries(memSpark) },
     // No sparkline: process count is a step function that spends its life
     // flat, and a flat line reads as "no data" rather than "stable".
-    pids: { used: scalar(pids), limit: scalar(pidsLimit), spark: [] },
-    oomKills: scalar(oom),
+    pids: { used: firstNum(pids), limit: firstNum(pidsLimit), spark: [] },
+    oomKills: firstNum(oom),
   }
 }
 
@@ -207,12 +172,7 @@ export const NO_RESOURCES: AppResources = {
 
 /** Bytes on disk for an app's database on the shared cluster. */
 export async function databaseSize(name: string): Promise<number | null> {
-  try {
-    const r = await promQuery(`pg_database_size_bytes{datname="${name}"}`)
-    return r[0] ? Number(r[0].value[1]) : null
-  } catch {
-    return null
-  }
+  return firstNum(await promVector(`pg_database_size_bytes{datname="${promEscape(name)}"}`))
 }
 
 /**
@@ -258,7 +218,7 @@ export type AppDatabase = {
 }
 
 export async function appDatabase(name: string): Promise<AppDatabase> {
-  const d = `{datname="${escapeRe(name)}"}`
+  const d = `{datname="${promEscape(name)}"}`
 
   const [
     size,
@@ -277,42 +237,36 @@ export async function appDatabase(name: string): Promise<AppDatabase> {
     deadlocks,
     tempBytes,
     cluster,
-  ] = await Promise.allSettled([
-    promQuery(`pg_database_size_bytes${d}`),
-    promRange(`pg_database_size_bytes${d}`, 30 * 24 * 60, 43200),
-    promQuery(`pg_stat_database_numbackends${d}`),
-    promQuery('pg_settings_max_connections'),
-    promQuery(`pg_database_connection_limit${d}`),
-    promQuery(`rate(pg_stat_database_xact_commit${d}[10m])`),
-    promQuery(`rate(pg_stat_database_xact_rollback${d}[10m])`),
-    promQuery(`rate(pg_stat_database_blks_hit${d}[10m])`),
-    promQuery(`rate(pg_stat_database_blks_read${d}[10m])`),
-    promQuery(`rate(pg_stat_database_tup_fetched${d}[10m])`),
-    promQuery(`rate(pg_stat_database_tup_inserted${d}[10m])`),
-    promQuery(`rate(pg_stat_database_tup_updated${d}[10m])`),
-    promQuery(`rate(pg_stat_database_tup_deleted${d}[10m])`),
-    promQuery(`pg_stat_database_deadlocks${d}`),
-    promQuery(`pg_stat_database_temp_bytes${d}`),
-    promQuery('topk(10, pg_database_size_bytes)'),
+  ] = await Promise.all([
+    promVector(`pg_database_size_bytes${d}`),
+    promMatrix(`pg_database_size_bytes${d}`, 30 * 24 * 60, 43200),
+    promVector(`pg_stat_database_numbackends${d}`),
+    promVector('pg_settings_max_connections'),
+    promVector(`pg_database_connection_limit${d}`),
+    promVector(`rate(pg_stat_database_xact_commit${d}[10m])`),
+    promVector(`rate(pg_stat_database_xact_rollback${d}[10m])`),
+    promVector(`rate(pg_stat_database_blks_hit${d}[10m])`),
+    promVector(`rate(pg_stat_database_blks_read${d}[10m])`),
+    promVector(`rate(pg_stat_database_tup_fetched${d}[10m])`),
+    promVector(`rate(pg_stat_database_tup_inserted${d}[10m])`),
+    promVector(`rate(pg_stat_database_tup_updated${d}[10m])`),
+    promVector(`rate(pg_stat_database_tup_deleted${d}[10m])`),
+    promVector(`pg_stat_database_deadlocks${d}`),
+    promVector(`pg_stat_database_temp_bytes${d}`),
+    promVector('topk(10, pg_database_size_bytes)'),
   ])
 
-  const s = (r: PromiseSettledResult<VectorResult[]>): number | null =>
-    r.status === 'fulfilled' && r.value[0] ? Number(r.value[0].value[1]) : null
-
-  const commit = s(commits)
-  const rollback = s(rollbacks)
-  const hits = s(hit)
-  const reads = s(read)
+  const commit = firstNum(commits)
+  const rollback = firstNum(rollbacks)
+  const hits = firstNum(hit)
+  const reads = firstNum(read)
 
   return {
-    sizeBytes: s(size),
-    sizeTrend:
-      sizeTrend.status === 'fulfilled' && sizeTrend.value[0]
-        ? sizeTrend.value[0].values.map(([, v]) => Number(v))
-        : [],
-    connections: s(conns),
-    maxConnections: s(maxConns),
-    connectionLimit: s(limit),
+    sizeBytes: firstNum(size),
+    sizeTrend: firstSeries(sizeTrend),
+    connections: firstNum(conns),
+    maxConnections: firstNum(maxConns),
+    connectionLimit: firstNum(limit),
     commitsPerSec: commit,
     rollbacksPerSec: rollback,
     // Guarded rather than computed blindly: an idle database has both rates at
@@ -324,20 +278,17 @@ export async function appDatabase(name: string): Promise<AppDatabase> {
     cacheHitPct:
       hits === null || reads === null || hits + reads === 0 ? null : (hits / (hits + reads)) * 100,
     tuples: {
-      fetched: s(fetched),
-      inserted: s(inserted),
-      updated: s(updated),
-      deleted: s(deleted),
+      fetched: firstNum(fetched),
+      inserted: firstNum(inserted),
+      updated: firstNum(updated),
+      deleted: firstNum(deleted),
     },
-    deadlocks: s(deadlocks),
-    tempBytes: s(tempBytes),
-    cluster:
-      cluster.status === 'fulfilled'
-        ? cluster.value
-            .map((r) => ({ label: r.metric.datname ?? '?', value: Number(r.value[1]) }))
-            .filter((r) => Number.isFinite(r.value))
-            .sort((a, b) => b.value - a.value)
-        : [],
+    deadlocks: firstNum(deadlocks),
+    tempBytes: firstNum(tempBytes),
+    cluster: cluster
+      .map((r) => ({ label: r.metric.datname ?? '?', value: Number(r.value[1]) }))
+      .filter((r) => Number.isFinite(r.value))
+      .sort((a, b) => b.value - a.value),
   }
 }
 
@@ -380,25 +331,22 @@ export type AppVpn = {
 }
 
 export async function appVpn(container: string): Promise<AppVpn> {
-  const j = `{job="${escapeRe(container)}"}`
+  const j = `{job="${promEscape(container)}"}`
 
-  const [status, info, port, uptime, history] = await Promise.allSettled([
-    promQuery(`gluetun_vpn_status${j}`),
-    promQuery(`gluetun_vpn_infos${j}`),
-    promQuery(`gluetun_forwarded_ports${j}`),
-    promQuery(`100 * avg_over_time(gluetun_vpn_status${j}[24h])`),
-    promRange(`gluetun_vpn_status${j}`, 24 * 60, 300),
+  const [status, info, port, uptime, history] = await Promise.all([
+    promVector(`gluetun_vpn_status${j}`),
+    promVector(`gluetun_vpn_infos${j}`),
+    promVector(`gluetun_forwarded_ports${j}`),
+    promVector(`100 * avg_over_time(gluetun_vpn_status${j}[24h])`),
+    promMatrix(`gluetun_vpn_status${j}`, 24 * 60, 300),
   ])
 
-  const first = (r: PromiseSettledResult<VectorResult[]>): VectorResult | undefined =>
-    r.status === 'fulfilled' ? r.value[0] : undefined
-
-  const up = first(status)
-  const labels = first(info)?.metric
+  const up = status[0]
+  const labels = info[0]?.metric
   // The port is a LABEL on a presence gauge, not a value — gluetun publishes
   // `gluetun_forwarded_ports{port="44861"} 1`, and no series at all when
   // nothing is forwarded.
-  const forwarded = first(port)?.metric.port
+  const forwarded = port[0]?.metric.port
 
   return {
     up: up === undefined ? null : up.value[1] === '1',
@@ -406,11 +354,8 @@ export async function appVpn(container: string): Promise<AppVpn> {
     city: labels?.city ?? null,
     country: labels?.country ?? null,
     forwardedPort: forwarded === undefined ? null : Number(forwarded),
-    uptime24h: first(uptime) ? Number(first(uptime)?.value[1]) : null,
-    history:
-      history.status === 'fulfilled' && history.value[0]
-        ? history.value[0].values.map(([, v]) => Number(v))
-        : [],
+    uptime24h: firstNum(uptime),
+    history: firstSeries(history),
   }
 }
 
@@ -431,17 +376,7 @@ export type LogLine = { ts: Date; level: string | null; line: string }
  * endpoint — Prometheus would reject the stream selector outright.
  */
 export async function logVolume(name: string): Promise<number | null> {
-  const query = `sum(count_over_time({service_name="${name}"}[1h]))`
-  const url = `${LOKI()}/loki/api/v1/query?query=${encodeURIComponent(query)}`
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) })
-    if (!res.ok) return null
-    const body = (await res.json()) as { data?: { result?: VectorResult[] } }
-    const first = body.data?.result?.[0]
-    return first ? Number(first.value[1]) : 0
-  } catch {
-    return null
-  }
+  return lokiScalar(`sum(count_over_time({service_name="${name}"}[1h]))`)
 }
 
 /**
@@ -491,37 +426,18 @@ export async function activityLog(name: string, limit = 60, hours = 6): Promise<
     .slice(-limit)
 }
 
+/** Lines with their stream's `level` label — which only exists on raw streams. */
 async function lokiLines(selector: string, limit: number, hours: number): Promise<LogLine[]> {
-  const end = Date.now() * 1e6
-  const start = (Date.now() - hours * 60 * 60 * 1000) * 1e6
-  const url =
-    `${LOKI()}/loki/api/v1/query_range?query=${encodeURIComponent(selector)}` +
-    `&start=${String(start)}&end=${String(end)}&limit=${String(limit)}&direction=backward`
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) })
-    if (!res.ok) return []
-    const body = (await res.json()) as {
-      data?: { result?: { stream: Record<string, string>; values: [string, string][] }[] }
-    }
-    return (body.data?.result ?? []).flatMap((s) =>
-      s.values.map(([ns, line]) => ({
-        ts: new Date(Number(BigInt(ns) / 1_000_000n)),
-        level: s.stream.level ?? null,
-        line,
-      })),
-    )
-  } catch {
-    return []
-  }
+  const streams = await lokiStreams(selector, { minutes: hours * 60, limit })
+  return streams.flatMap((s) =>
+    s.values.map(([ns, line]) => ({
+      ts: new Date(Number(BigInt(ns) / 1_000_000n)),
+      level: s.stream.level ?? null,
+      line,
+    })),
+  )
 }
 
 function serviceToName(service: string | undefined): string {
   return (service ?? '').replace(/-svc@file$/, '')
-}
-
-// App names are constrained to [a-z][a-z0-9_-]* by the platform, but this
-// string lands inside a PromQL regex — escape rather than trust. Exported so
-// every module that interpolates a name into PromQL uses the same rule.
-export function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

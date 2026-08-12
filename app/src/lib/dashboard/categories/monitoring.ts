@@ -36,18 +36,9 @@
 // number the running process stated is a measurement, and a number read off
 // the tag the flake pins is only true while the tag names a release.
 
-import {
-  basicAuth,
-  getJson,
-  lokiScalar,
-  lokiSeries,
-  lokiVector,
-  promBars,
-  promScalar,
-  promScalars,
-  promSeries,
-  promVector,
-} from '../clients'
+import { basicAuth, getJson } from '../../http'
+import { lokiScalar, lokiSeries, lokiVector } from '../../loki'
+import { promBars, promScalar, promScalars, promSeries, promVector } from '../../prom'
 import { key } from '../format'
 import { type VersionGap, versionGap } from '../github'
 import { imageVersion, type RunningVersion } from '../images'

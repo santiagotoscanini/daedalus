@@ -27,7 +27,9 @@
 //             as "over the last N days" comes from the gateway's own ledger or
 //             from a range query, never from a counter read once.
 
-import { getJson, lokiLatest, promBars, promScalar, promVector } from '../clients'
+import { getJson } from '../../http'
+import { lokiLatest } from '../../loki'
+import { promBars, promScalar, promVector } from '../../prom'
 import { DASH, key, since } from '../format'
 import { type CommitGap, commitsSince, type VersionGap, versionGap } from '../github'
 

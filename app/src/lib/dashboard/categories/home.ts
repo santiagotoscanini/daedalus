@@ -22,7 +22,8 @@
 // people, and of what each of them can open. Its loader lives in ../idp
 // because the proxy's routing table still borrows the client list.
 
-import { getJson, promScalars } from '../clients'
+import { getJson } from '../../http'
+import { promScalars } from '../../prom'
 import { key } from '../format'
 import { type VersionGap, versionGap } from '../github'
 import { type IdpData, idpClients, loadIdp } from '../idp'

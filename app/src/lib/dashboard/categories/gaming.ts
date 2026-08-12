@@ -30,7 +30,9 @@
 //                                 and Friday Facts, which is the closest thing
 //                                 to a changelog that is machine-readable
 
-import { getJson, lokiEntries, promScalars, promSeries, promVector } from '../clients'
+import { getJson } from '../../http'
+import { lokiEntries } from '../../loki'
+import { promScalars, promSeries, promVector } from '../../prom'
 import type { Commit, CommitGap } from '../github'
 
 /**

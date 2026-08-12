@@ -107,7 +107,7 @@ export const fetchTabStatus = createServerFn()
     const spec = CATEGORIES.find((c) => c.id === data.category)
     if (spec === undefined) return {}
 
-    const { promVector } = await import('../lib/dashboard/clients')
+    const { promVector } = await import('../lib/prom')
     const [probes, egress, uplink, logs] = await Promise.all([
       promVector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`),
       // Only when a tab actually asks for it — this is two more prometheus
@@ -162,19 +162,19 @@ export const fetchTabStatus = createServerFn()
  * is unreadable or prometheus has no answer — "cannot tell", not "down".
  */
 async function vpnEgressHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../lib/dashboard/clients')
+  const { promScalar } = await import('../lib/prom')
   const { declaredVpnEgress } = await import('../lib/vpn-egress')
 
   const declared = await declaredVpnEgress()
   if (declared.length === 0) return null
 
-  const { escapeRe } = await import('../lib/metrics')
+  const { promEscape } = await import('../lib/prom')
   const names = declared.flatMap((d) => [d.container, d.exporter])
   const [tunnels, containers, seen] = await Promise.all([
     // `min` over the set, and `count` beside it: min alone would report
     // healthy if prometheus had lost a tunnel's series entirely.
     promScalar(`min(gluetun_vpn_status)`),
-    promScalar(`min(container_up{name=~"${names.map(escapeRe).join('|')}"})`),
+    promScalar(`min(container_up{name=~"${names.map(promEscape).join('|')}"})`),
     promScalar(`count(gluetun_vpn_status)`),
   ])
 
@@ -195,7 +195,7 @@ async function vpnEgressHealth(): Promise<boolean | null> {
  * the same.
  */
 async function uplinkHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../lib/dashboard/clients')
+  const { promScalar } = await import('../lib/prom')
   const [worst, seen] = await Promise.all([
     promScalar('min(network_hop_up)'),
     promScalar('count(network_hop_up)'),
@@ -223,7 +223,7 @@ async function uplinkHealth(): Promise<boolean | null> {
  * min over an empty set is not a failure, it is no answer.
  */
 async function logPipelineHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../lib/dashboard/clients')
+  const { promScalar } = await import('../lib/prom')
   const [worst, seen] = await Promise.all([
     promScalar('min(up{job=~"loki|alloy"})'),
     promScalar('count(up{job=~"loki|alloy"})'),
