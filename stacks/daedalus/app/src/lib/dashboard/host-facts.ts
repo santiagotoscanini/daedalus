@@ -158,6 +158,32 @@ export const NO_HARDWARE: Hardware = {
   memory: { slots: null, maxCapacityGb: null, populated: null, totalGb: null, modules: [] },
 }
 
+/** A unit systemd reports as failed, named — the count alone sends you hunting. */
+export type FailedUnit = {
+  unit: string
+  description: string | null
+  activeState: string | null
+  subState: string | null
+}
+
+/**
+ * One timer and how its last run ended.
+ *
+ * `result`/`exitStatus` default to success/0 on a service that has never run
+ * — systemd's defaults, not a claim — so `lastAt` is what says whether they
+ * mean anything: null lastAt is a timer that has not fired since boot.
+ */
+export type JobRun = {
+  timer: string
+  service: string | null
+  /** Epoch seconds. Null = no next elapse scheduled. */
+  nextAt: number | null
+  /** Epoch seconds. Null = never fired since boot. */
+  lastAt: number | null
+  result: string | null
+  exitStatus: number | null
+}
+
 export type HostFacts = {
   disks: SmartDisk[]
   pools: ZpoolFacts[]
@@ -166,6 +192,8 @@ export type HostFacts = {
   generations: { id: number; date: string; current: boolean }[]
   kernel: string | null
   hardware: Hardware
+  failedUnits: FailedUnit[]
+  jobs: JobRun[]
 }
 
 export const NO_FACTS: HostFacts = {
@@ -176,6 +204,8 @@ export const NO_FACTS: HostFacts = {
   generations: [],
   kernel: null,
   hardware: NO_HARDWARE,
+  failedUnits: [],
+  jobs: [],
 }
 
 // Shorthands: the snapshot script emits null for anything a tool would not
@@ -291,6 +321,16 @@ const hostFactsShape = obj({
   // page must cost a few dashes then, not a crash in every consumer that
   // reaches for `hardware.board`.
   hardware: optional(hardware, NO_HARDWARE),
+  // Same rule for the two newest keys: absent from an older snapshot means
+  // empty, not broken.
+  failedUnits: optional(
+    arrayOf(obj({ unit: str, description: ns, activeState: ns, subState: ns })),
+    [],
+  ),
+  jobs: optional(
+    arrayOf(obj({ timer: str, service: ns, nextAt: nn, lastAt: nn, result: ns, exitStatus: nn })),
+    [],
+  ),
 })
 
 const TTL_MS = 60_000

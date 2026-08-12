@@ -256,6 +256,65 @@ generations_json() {
         | { id: (.id | tonumber), date: .date, current: (.cur != null and .cur != "") } ]'
 }
 
+# ── failed units ──────────────────────────────────────────────────────────
+#
+# The count was already on the Host tab (prometheus's systemd_failed_units);
+# this is the NAMES, which the count always made you go and fetch by hand.
+# From the host's systemctl rather than a scrape because the answer wants the
+# description and sub-state too — "failed (Result: exit-code)" and "failed
+# (Result: oom-kill)" are different mornings.
+failed_units_json() {
+  local raw
+  # `--failed` prints `[]` and exits 0 when nothing is failed; the guard is
+  # for systemctl itself being unable to answer, which must publish an empty
+  # list rather than kill the whole snapshot.
+  raw=$("$SYSTEMCTL" --failed --output=json --no-pager 2>/dev/null || true)
+  [ -n "$raw" ] || raw='[]'
+  printf '%s' "$raw" | "$JQ" -c '
+    [ .[] | { unit:        (.unit // null),
+              description: (.description // null),
+              activeState: (.active // null),
+              subState:    (.sub // null) } ]' || echo '[]'
+}
+
+# ── jobs ──────────────────────────────────────────────────────────────────
+#
+# Every timer on the box, with when it last fired, how that run ENDED, and
+# when it fires next. fleet.monitoredJobs declares which jobs are worth
+# alerting on — the intent — and nothing anywhere published the outcome; the
+# Monitoring › Jobs tab joins the two by unit name.
+#
+# `list-timers` timestamps are CLOCK_REALTIME microseconds; they are shipped
+# as epoch SECONDS because everything else in this file that names a moment
+# already is. A `last` of 0 is a timer that has never fired since boot, which
+# must land as null — "never" and "at the epoch" are different claims.
+jobs_json() {
+  local timers
+  timers=$("$SYSTEMCTL" list-timers --all --output=json --no-pager 2>/dev/null || true)
+  [ -n "$timers" ] || timers='[]'
+
+  printf '%s' "$timers" |
+    "$JQ" -r '.[] | [.unit, (.activates // ""), (.next // 0), (.last // 0)] | @tsv' |
+    while IFS=$'\t' read -r timer svc next last; do
+      # Result/ExecMainStatus describe the service's LAST completed run. Both
+      # default to success/0 on a service that has never run, so lastAt is
+      # the field that says whether they mean anything.
+      show=$("$SYSTEMCTL" show "$svc" -p Result,ExecMainStatus 2>/dev/null || true)
+
+      "$JQ" -n -c \
+        --arg timer "$timer" --arg svc "$svc" \
+        --arg next "$next" --arg last "$last" --arg show "$show" '
+        def at: (tonumber? // 0) as $us | (if $us <= 0 then null else ($us / 1000000 | floor) end);
+        def prop($k): ($show | split("\n")[] | select(startswith($k + "=")) | ltrimstr($k + "=")) // null;
+        { timer:      $timer,
+          service:    (if $svc == "" then null else $svc end),
+          nextAt:     ($next | at),
+          lastAt:     ($last | at),
+          result:     prop("Result"),
+          exitStatus: (prop("ExecMainStatus") | if . == null then null else (tonumber? // null) end) }'
+    done | "$JQ" -s -c '.'
+}
+
 # ── hardware ──────────────────────────────────────────────────────────────
 #
 # What the machine IS, as opposed to what it is doing. None of it changes
@@ -387,10 +446,13 @@ hardware_json() {
   --argjson replication "$(replication_json)" \
   --argjson generations "$(generations_json)" \
   --argjson hardware "$(hardware_json)" \
+  --argjson failedUnits "$(failed_units_json)" \
+  --argjson jobs "$(jobs_json)" \
   --arg kernel "$("$UNAME" -r)" \
   '{ disks: $disks, pools: $pools, datasets: $datasets,
      replication: $replication, generations: $generations,
-     hardware: $hardware, kernel: $kernel }' >"$tmp"
+     hardware: $hardware, kernel: $kernel,
+     failedUnits: $failedUnits, jobs: $jobs }' >"$tmp"
 
 # Validate before publishing, for the same reason image-snapshot does: a
 # half-written file would blank three tabs at once, and the previous snapshot
@@ -415,4 +477,6 @@ echo "published $("$JQ" '.disks | length' "$OUT_DIR/system.json") disks," \
   "$("$JQ" '.pools | length' "$OUT_DIR/system.json") pools," \
   "$("$JQ" '.datasets | length' "$OUT_DIR/system.json") datasets," \
   "$("$JQ" '.replication | length' "$OUT_DIR/system.json") replication pairs," \
-  "$("$JQ" '.generations | length' "$OUT_DIR/system.json") generations"
+  "$("$JQ" '.generations | length' "$OUT_DIR/system.json") generations," \
+  "$("$JQ" '.failedUnits | length' "$OUT_DIR/system.json") failed units," \
+  "$("$JQ" '.jobs | length' "$OUT_DIR/system.json") jobs"

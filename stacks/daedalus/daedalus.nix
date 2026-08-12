@@ -276,6 +276,7 @@ let
       pkgs.gawk
       pkgs.nix
       pkgs.jq
+      pkgs.systemd
     ];
     text = ''
       OUT_DIR=${lib.escapeShellArg systemDir}
@@ -302,6 +303,7 @@ let
       GREP=${pkgs.gnugrep}/bin/grep
       AWK=${pkgs.gawk}/bin/awk
       JQ=${pkgs.jq}/bin/jq
+      SYSTEMCTL=${pkgs.systemd}/bin/systemctl
 
       ${builtins.readFile ./host/system-snapshot.sh}
     '';
