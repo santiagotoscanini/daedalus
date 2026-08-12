@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { defineBridge } from './bridge'
+import { type Decoder, nullable, num, obj, str } from './contract/decode'
+import { readSnapshot } from './contract/snapshot'
 
 // Redeploy: pull the app's image and restart it if the digest moved.
 //
@@ -40,21 +42,51 @@ export async function readDeployStatus(): Promise<DeployStatus> {
 }
 
 /**
- * Last result recorded by the app's own deploy unit: `<digest> ok|failed`.
+ * The last deploy as the app's own deploy unit published it —
+ * `/deploy-state/<app>.json`, enveloped, written by publish_state in
+ * stacks/apps/assets/deploy.sh.
  *
+ * Timing fields are null on records migrated from the pre-JSON text state
+ * (the script synthesises those once, on its first tick after the format
+ * change); `httpCode` is the probe's answer, `"unverified"` for stage=off
+ * deploys where there is no ingress to ask.
+ */
+export type DeployRecord = {
+  app: string
+  digest: string
+  result: string
+  httpCode: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  durationMs: number | null
+  previousDigest: string | null
+}
+
+const deployRecord: Decoder<DeployRecord> = obj({
+  app: str,
+  digest: str,
+  result: str,
+  httpCode: nullable(str),
+  startedAt: nullable(str),
+  finishedAt: nullable(str),
+  durationMs: nullable(num),
+  previousDigest: nullable(str),
+})
+
+/**
  * This is the authoritative record, not our request status — a deploy also
  * runs from the timer, and from a manual `systemctl start`, neither of which
- * goes through daedalus.
+ * goes through daedalus. No maxAgeMs: deploys happen when digests move, so an
+ * old record is history, not staleness.
  */
-export async function lastDeploy(app: string): Promise<{ digest: string; result: string } | null> {
-  try {
-    const raw = (await readFile(join(DEPLOY_STATE, app), 'utf8')).trim()
-    const [digest, result] = raw.split(/\s+/)
-    if (!digest) return null
-    return { digest, result: result ?? 'unknown' }
-  } catch {
-    return null
-  }
+export async function lastDeploy(app: string): Promise<DeployRecord | null> {
+  const snap = await readSnapshot<DeployRecord | null>({
+    path: join(DEPLOY_STATE, `${app}.json`),
+    decoder: deployRecord,
+    fallback: null,
+    acceptVersions: [1],
+  })
+  return snap.available ? snap.data : null
 }
 
 /** True when pulls are currently failing (sibling marker file from deploy.sh). */
