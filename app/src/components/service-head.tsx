@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { VersionGap } from '../lib/dashboard/github'
-import type { RunningVersion } from '../lib/dashboard/images'
+import type { ImageFreshness, RunningVersion } from '../lib/dashboard/images'
 import { DASH } from '../lib/format'
 import { InfoHint } from './hint'
 import { Chip, type Tone } from './viz'
@@ -109,11 +109,60 @@ function VersionCompare({
  * need it first: every service tab on this dashboard makes the same three-way
  * call, and a second copy of it is how two pages come to disagree about what
  * "current" means.
+ *
+ * `freshness` is the registry's half of the answer, for the services whose
+ * pin is a digest on a tag (see `imageFreshness`). It changes the verdict in
+ * two places, both of them cases the release gap gets wrong on its own:
+ *
+ *   - "current" with a moved tag is NOT current — GitHub compares release
+ *     notes, but the artefact the pin freezes has been superseded on its own
+ *     channel. The registry's answer wins, because it is about the bytes.
+ *   - "unknown" with an unmoved tag IS an answer: a channel pin the release
+ *     list cannot measure is nonetheless exactly where its channel points.
+ *
+ * A gap that already says "N behind" keeps saying so — it is the more
+ * specific statement, and the freshness row in `compare` carries the
+ * registry's working. An errored or absent probe changes nothing.
  */
-export function verdictOf(gap: VersionGap): { label: string; tone: Tone } {
-  if (gap.installed === null || gap.latest === null) return { label: 'unknown', tone: 'muted' }
+export function verdictOf(
+  gap: VersionGap,
+  freshness?: ImageFreshness | null,
+): { label: string; tone: Tone } {
+  const probe = freshness !== undefined && freshness !== null && freshness.error === null
+  if (probe && freshness.moved && gap.behind.length === 0) {
+    return { label: 'pin behind tag', tone: 'warn' }
+  }
+  if (gap.installed === null || gap.latest === null) {
+    if (probe && !freshness.moved) return { label: 'pin matches tag', tone: 'ok' }
+    return { label: 'unknown', tone: 'muted' }
+  }
   if (gap.behind.length === 0) return { label: 'current', tone: 'ok' }
   return { label: `${String(gap.behind.length)} behind`, tone: 'warn' }
+}
+
+/**
+ * The registry's row of the working: where the tag points, versus the pin.
+ *
+ * An array so call sites can spread it after `compareOf`/`comparePinned` —
+ * empty when there is nothing to say, which is how a page without a digest
+ * pin (or before the probe's first run) renders no row rather than a dash.
+ */
+export function freshnessRow(f: ImageFreshness | null): CompareRow[] {
+  if (f === null) return []
+  if (f.error !== null) {
+    return [{ k: 'Its tag', v: null, note: `the registry did not answer for ${f.tag}` }]
+  }
+  return [
+    {
+      k: 'Its tag',
+      v: f.moved ? 'moved' : 'unmoved',
+      note: f.moved
+        ? `${f.tag} now points at a newer image${
+            f.remoteCreated === null ? '' : `, built ${f.remoteCreated.slice(0, 10)}`
+          } — the pin is behind its channel`
+        : `${f.tag} still points at the pinned digest`,
+    },
+  ]
 }
 
 /**

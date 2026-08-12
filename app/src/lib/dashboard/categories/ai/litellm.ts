@@ -2,6 +2,7 @@ import { getJson } from '../../../http'
 import { lokiLatest } from '../../../loki'
 import { promBars, promScalar } from '../../../prom'
 import { type CommitGap, commitsSince, type VersionGap, versionGap } from '../../github'
+import { type ImageFreshness, imageFreshness } from '../../images'
 import { DAYS } from './shared'
 
 /** Requests, failures and tokens over some period. The gateway's one shape. */
@@ -40,6 +41,8 @@ type Caller = Volume & {
 export type LitellmData = {
   version: string | null
   gap: VersionGap
+  /** Whether the digest pin still matches the moving `main-stable` tag. */
+  freshness: ImageFreshness | null
   /** Every day of the window, oldest first — including the ones with nothing. */
   daily: (Volume & { date: string })[]
   /** Null when the gateway has not served anything yet today. */
@@ -147,7 +150,7 @@ export async function loadLitellm(): Promise<LitellmData> {
   const from = dates[0] ?? ''
   const today = dates[DAYS - 1] ?? ''
 
-  const [activity, keys, version, inFlight, latSum, latCount, toolLatency, overhead] =
+  const [activity, keys, version, freshness, inFlight, latSum, latCount, toolLatency, overhead] =
     await Promise.all([
       getJson<DailyActivity>(
         `http://litellm:4000/user/daily/activity?start_date=${from}&end_date=${today}` +
@@ -168,6 +171,10 @@ export async function loadLitellm(): Promise<LitellmData> {
         auth,
       ),
       litellmVersion(auth),
+      // The pin is a digest on the moving `main-stable`, so alongside "how
+      // many releases behind" there is a second, sharper question only the
+      // registry can answer: has the channel moved on from the pin at all.
+      imageFreshness('litellm'),
       promScalar('sum(litellm_in_flight_requests)'),
       // The histogram's own sum and count, kept APART rather than divided in
       // PromQL. Two keys can share a display name — this box has two virtual keys
@@ -262,6 +269,7 @@ export async function loadLitellm(): Promise<LitellmData> {
   return {
     version,
     gap: await versionGap('BerriAI/litellm', version),
+    freshness,
     daily,
     today: daily.find((d) => d.date === today) ?? null,
     window: total,

@@ -3,7 +3,14 @@ import type { MediaData } from '../../../lib/dashboard/categories/media'
 import { num } from '../../../lib/format'
 import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
-import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../../service-head'
+import {
+  compareOf,
+  freshnessRow,
+  Open,
+  ServiceHead,
+  SOURCE_NOTE,
+  verdictOf,
+} from '../../service-head'
 import { Board, BoardGrid, Chip, Measures } from '../../viz'
 import { ServiceBar, tone, VERSION_SNAPSHOT } from './shared'
 
@@ -110,13 +117,16 @@ function JanitorrPage({ d }: { d: Cleanup }) {
         name="Janitorr"
         version={janitorr.running.version}
         versionNote={SOURCE_NOTE[janitorr.running.source]}
-        verdict={verdictOf(janitorr.gap)}
-        compare={compareOf(
-          janitorr.gap,
-          janitorr.running.revision === null
-            ? 'the image’s OCI label — the tag is a channel'
-            : `the image’s OCI label · built from ${janitorr.running.revision}`,
-        )}
+        verdict={verdictOf(janitorr.gap, janitorr.freshness)}
+        compare={[
+          ...compareOf(
+            janitorr.gap,
+            janitorr.running.revision === null
+              ? 'the image’s OCI label — the tag is a channel'
+              : `the image’s OCI label · built from ${janitorr.running.revision}`,
+          ),
+          ...freshnessRow(janitorr.freshness),
+        ]}
         lede={
           <>
             Retention: deletes what nobody has watched, on a schedule. Running in dry-run, so it
