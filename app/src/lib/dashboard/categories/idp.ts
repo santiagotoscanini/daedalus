@@ -13,6 +13,7 @@
 // files, the pantry — this is plainly one of the household's own things: it is
 // the list of people, and of what each of them can open.
 
+import { declaredSsoClients } from '../../contract/domains/sso'
 import { localDay, since } from '../../format'
 import { getJson } from '../../http'
 import { key } from '../../keys'
@@ -136,6 +137,25 @@ export type IdpData = {
   signups: string | null
   /** The audit log went back further than the pages we were willing to read. */
   truncated: boolean
+  /**
+   * Declared-vs-live: `fleet.ssoClients` against the IdP's own list.
+   *
+   * The convergence job creates and updates but NEVER prunes, so a deleted
+   * stack's client stays live at the IdP forever — a trusted redirect URI for
+   * an app that no longer exists. Nix knows the intent, the IdP knows the
+   * reality, and this diff is the only place they are compared. Keyed on the
+   * client id, because the `fleet.ssoClients` attr name IS the OIDC
+   * client_id the sync creates with.
+   */
+  nix: {
+    /** /export/sso.json published — without it every live client would read as an orphan. */
+    available: boolean
+    declared: number
+    /** Live at the IdP with no declaration behind them. */
+    orphans: { id: string; name: string }[]
+    /** Declared but absent at the IdP — the sync has not converged them yet. */
+    unsynced: { id: string; name: string }[]
+  }
 }
 export type PocketClient = {
   id?: string
@@ -241,7 +261,7 @@ export async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): 
   const windowStart = Date.now() - DAYS * 86400_000
   const version = process.env.POCKET_ID_VERSION || null
 
-  const [clients, users, groups, log, config, gap] = await Promise.all([
+  const [clients, users, groups, log, config, gap, declared] = await Promise.all([
     clientsP,
     getJson<{ data?: PocketUser[] }>(`${base}/api/users?pagination[limit]=100`, h),
     getJson<{ data?: { name?: string; friendlyName?: string; userCount?: number }[] }>(
@@ -251,6 +271,7 @@ export async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): 
     auditLog(base, windowStart),
     getJson<{ key?: string; value?: string }[]>(`${base}/api/application-configuration`, h),
     versionGap('pocket-id/pocket-id', version),
+    declaredSsoClients(),
   ])
 
   const recent = log.events
@@ -321,6 +342,30 @@ export async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): 
   // the only thing distinguishing it from a person — its username is generated
   // and its display name is whatever the release happened to call it.
   const people = (users?.data ?? []).filter((u) => u.id !== '00000000-0000-0000-0000-000000000000')
+
+  // The diff is only meaningful once BOTH sides answered: an empty export
+  // would read every live client as an orphan, and an empty live list would
+  // read every declaration as unsynced. Either side missing empties the diff
+  // and `available` says why.
+  const bothSides = declared.available && clients.length > 0
+  const declaredIds = new Set(declared.clients.map((c) => c.id))
+  const liveIds = new Set(clients.map((c) => c.id ?? ''))
+  const nix: IdpData['nix'] = {
+    available: declared.available,
+    declared: declared.clients.length,
+    orphans: !bothSides
+      ? []
+      : clients
+          .filter((c) => c.id !== undefined && !declaredIds.has(c.id))
+          .map((c) => ({ id: c.id ?? '?', name: c.name ?? '?' }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+    unsynced: !bothSides
+      ? []
+      : declared.clients
+          .filter((c) => !liveIds.has(c.id))
+          .map((c) => ({ id: c.id, name: c.displayName }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+  }
 
   return {
     version,
@@ -397,6 +442,7 @@ export async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): 
     },
     signups: (config ?? []).find((c) => c.key === 'allowUserSignups')?.value ?? null,
     truncated: log.truncated,
+    nix,
   }
 }
 
