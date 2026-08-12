@@ -1,4 +1,5 @@
 import { asc, eq } from 'drizzle-orm'
+import { REGISTRY_SCHEMA_VERSION } from '../contract/version'
 import { db } from '../db'
 import { appNameError, BASE_DOMAIN, effectiveHostname, hostnameError } from '../hostname'
 import {
@@ -492,7 +493,7 @@ export function toRegistryExport(records: AppRecord[]): {
   const editable = records.filter((r) => !r.managedInNix)
 
   return {
-    schemaVersion: 1,
+    schemaVersion: REGISTRY_SCHEMA_VERSION,
     apps: Object.fromEntries(
       editable
         .slice()
