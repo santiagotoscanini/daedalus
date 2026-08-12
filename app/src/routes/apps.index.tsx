@@ -1,6 +1,7 @@
-import { Await, createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
+import { GuardedAwait } from '../components/error'
 import { ImagesView, PackagesView } from '../components/registries'
 import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
@@ -63,21 +64,29 @@ function AppsPage() {
       <TabBar tabs={TABS} active={tab} linkTo={(id) => ({ to: '/apps', search: { tab: id } })} />
 
       {list !== null && (
-        <Await promise={list} fallback={<RowsSkeleton count={4} />}>
+        <GuardedAwait resetKey={tab} promise={list} fallback={<RowsSkeleton count={4} />}>
           {(data) => <AppsList data={data} />}
-        </Await>
+        </GuardedAwait>
       )}
 
       {images !== null && (
-        <Await promise={images} fallback={<BoardsSkeleton spans={[8, 4, 8, 4]} />}>
+        <GuardedAwait
+          resetKey={tab}
+          promise={images}
+          fallback={<BoardsSkeleton spans={[8, 4, 8, 4]} />}
+        >
           {(data) => <ImagesView d={data} />}
-        </Await>
+        </GuardedAwait>
       )}
 
       {packages !== null && (
-        <Await promise={packages} fallback={<BoardsSkeleton spans={[6, 6, 12]} />}>
+        <GuardedAwait
+          resetKey={tab}
+          promise={packages}
+          fallback={<BoardsSkeleton spans={[6, 6, 12]} />}
+        >
           {(data) => <PackagesView d={data} />}
-        </Await>
+        </GuardedAwait>
       )}
     </>
   )

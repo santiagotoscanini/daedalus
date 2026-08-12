@@ -118,7 +118,7 @@ export function Database({
           <p className="board-foot">10-minute average, from the cluster’s own counters.</p>
         </Board>
 
-        <Board title="Against the cluster" icon="▤" span={4}>
+        <Board title="Against the cluster" icon="rows" span={4}>
           <BarList
             items={data.cluster.map((c) => ({
               label: c.label,

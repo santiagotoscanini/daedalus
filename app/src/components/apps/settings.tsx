@@ -198,7 +198,7 @@ export function Settings({
         </p>
       </Board>
 
-      <Board title="Single sign-on" icon="⚿" span={6}>
+      <Board title="Single sign-on" icon="key" span={6}>
         <Segmented
           value={app.authMode}
           disabled={readOnly}

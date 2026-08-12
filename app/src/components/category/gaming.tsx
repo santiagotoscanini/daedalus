@@ -131,7 +131,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
 
         <Board
           title="Comings and goings"
-          icon="◫"
+          icon="panels"
           span={6}
           aside={<span className="board-note">last 7 days</span>}
         >
@@ -242,7 +242,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
       <BoardGrid>
         <Board
           title={current ? 'Release notes' : `${String(behind)} to apply`}
-          icon="≡"
+          icon="logs"
           span={6}
           aside={<span className="board-note">wiki.factorio.com</span>}
         >
@@ -265,7 +265,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
 
         <Board
           title="From the devs"
-          icon="◫"
+          icon="panels"
           span={6}
           aside={<span className="board-note">factorio.com/blog</span>}
         >

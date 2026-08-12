@@ -92,7 +92,7 @@ export function GeneralView({ data }: { data: General }) {
 
         <Board
           title="The way out"
-          icon="⌗"
+          icon="hash"
           span={4}
           aside={
             <Chip tone={internet?.up === false ? 'bad' : gateway?.up === false ? 'warn' : 'ok'}>
@@ -139,7 +139,7 @@ export function GeneralView({ data }: { data: General }) {
 
         <Board
           title="The router"
-          icon="⌗"
+          icon="hash"
           span={4}
           aside={
             <span className="board-note">
@@ -184,7 +184,7 @@ export function GeneralView({ data }: { data: General }) {
 
         <Board
           title="Which services move the bytes"
-          icon="▦"
+          icon="grid"
           span={8}
           aside={<span className="board-note">{bytes(moved)} over 24 hours</span>}
         >

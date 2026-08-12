@@ -17,7 +17,7 @@ export function BuildView({ d }: { d: Build }) {
     <BoardGrid>
       <Board
         title="Motherboard"
-        icon="⌗"
+        icon="hash"
         span={4}
         aside={
           <span className="board-note">
@@ -147,7 +147,7 @@ export function BuildView({ d }: { d: Build }) {
 
       <Board
         title="Memory"
-        icon="▤"
+        icon="rows"
         span={4}
         aside={
           <span className="board-note">

@@ -18,8 +18,8 @@
 //   movement in the corner of your eye is always worth looking at.
 
 import { type ReactNode, useId } from 'react'
-
 import { num } from '../lib/format'
+import { Glyph, type GlyphName, isGlyph } from './glyph'
 
 export type Tone = 'accent' | 'ok' | 'warn' | 'bad' | 'info' | 'muted'
 
@@ -532,7 +532,11 @@ export function Board({
   children,
 }: {
   title: string
-  icon?: string
+  /** A name from components/glyph.tsx, drawn as an SVG — or any other string,
+      rendered as text. The tail of one-off Unicode glyphs is long and stays
+      typed; `GlyphName | (string & {})` keeps the names in autocomplete
+      without rejecting it. */
+  icon?: GlyphName | (string & {})
   aside?: ReactNode
   /** Columns of the 12-wide category grid. Defaults to 6 (half width). */
   span?: 3 | 4 | 6 | 8 | 9 | 12
@@ -544,7 +548,7 @@ export function Board({
         <h3>
           {icon !== undefined && (
             <span className="board-icon" aria-hidden="true">
-              {icon}
+              {isGlyph(icon) ? <Glyph name={icon} /> : icon}
             </span>
           )}
           {title}

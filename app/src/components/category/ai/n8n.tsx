@@ -151,7 +151,7 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
 
         <Board
           title="Workflows"
-          icon="◫"
+          icon="panels"
           span={4}
           aside={<span className="board-note">runs, {total.days}d</span>}
         >

@@ -131,7 +131,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
 
         <Board
           title="Tools models called"
-          icon="⌗"
+          icon="hash"
           span={4}
           aside={
             <span className="board-note">
@@ -231,7 +231,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
 
         <Changelog gap={gap} span={6} />
 
-        <Board title="Logs" icon="≡" span={12}>
+        <Board title="Logs" icon="logs" span={12}>
           <GrafanaLogs source={{ container: 'litellm' }} title="LiteLLM logs" />
         </Board>
 
@@ -284,7 +284,7 @@ function NeighbourPair({ n }: { n: NeighbourData }) {
       />
       <Board
         title={`${n.label} logs`}
-        icon="≡"
+        icon="logs"
         span={6}
         aside={<span className="board-note">{n.role}</span>}
       >

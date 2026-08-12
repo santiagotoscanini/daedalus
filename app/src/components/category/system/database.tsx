@@ -96,7 +96,7 @@ export function DatabaseView({ d }: { d: Database }) {
           </p>
         </Board>
 
-        <Board title="Tenants" icon="▤" span={12}>
+        <Board title="Tenants" icon="rows" span={12}>
           <ul className="itemlist">
             {d.databases.map((db) => (
               <li key={db.name}>

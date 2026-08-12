@@ -302,7 +302,7 @@ export function TraefikView({ d }: { d: Proxy }) {
 
         <Board
           title="Where it goes"
-          icon="⌗"
+          icon="hash"
           span={3}
           aside={<span className="board-note">req/min, 1h</span>}
         >

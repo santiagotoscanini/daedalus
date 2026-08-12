@@ -228,7 +228,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
 
         <Board
           title="What rides it"
-          icon="◫"
+          icon="panels"
           span={4}
           aside={<span className="board-note">{t.tenants.length} containers</span>}
         >

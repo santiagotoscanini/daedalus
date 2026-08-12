@@ -103,7 +103,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
       </StatStrip>
 
       <BoardGrid>
-        <Board title="Storage by repository" icon="▤" span={8}>
+        <Board title="Storage by repository" icon="rows" span={8}>
           <BarList items={d.byRepo} tone="info" empty="nothing stored" />
           <p className="board-foot">
             A <code>cache/&lt;app&gt;</code> repository is the pull-through copy of an upstream base

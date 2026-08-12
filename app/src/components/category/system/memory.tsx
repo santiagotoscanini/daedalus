@@ -15,7 +15,7 @@ export function MemoryView({ d }: { d: Memory }) {
     <BoardGrid>
       <Board
         title="Memory"
-        icon="▤"
+        icon="rows"
         span={8}
         aside={<span className="board-note">{bytes(d.total)} total</span>}
       >
@@ -44,7 +44,7 @@ export function MemoryView({ d }: { d: Memory }) {
           a memory page gets asked when the bar looks full. */}
       <Board
         title="The modules"
-        icon="▤"
+        icon="rows"
         span={4}
         aside={
           <span className="board-note">
@@ -135,7 +135,7 @@ export function MemoryView({ d }: { d: Memory }) {
         </p>
       </Board>
 
-      <Board title="Heaviest containers" icon="▦" span={8}>
+      <Board title="Heaviest containers" icon="grid" span={8}>
         <BarList items={d.topMemory} tone="info" empty="nothing reporting" />
         <p className="board-foot">
           This is <span className="mono">memory.current</span>, which <b>includes page cache</b>. A

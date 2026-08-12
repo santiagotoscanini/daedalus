@@ -333,7 +333,7 @@ export function LogBoard({
   neighbours?: readonly LogNeighbour[]
 }) {
   return (
-    <Board title="Logs" icon="≡" span={12}>
+    <Board title="Logs" icon="logs" span={12}>
       <GrafanaLogs source={source} title={title} foot={foot} />
       {neighbours.map((n) => (
         <LogDetails

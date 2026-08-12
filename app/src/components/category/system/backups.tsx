@@ -50,7 +50,7 @@ export function BackupsView({ d }: { d: Backups }) {
         </p>
       </Board>
 
-      <Board title="What is not covered" icon="⚠" span={4}>
+      <Board title="What is not covered" icon="warn" span={4}>
         {/* The honest half, and the reason this is a tab rather than a panel
             on Pools. Everything above is easy to show and easy to believe. */}
         <ul className="itemlist">
@@ -78,7 +78,7 @@ export function BackupsView({ d }: { d: Backups }) {
 
       <Board
         title="Snapshot coverage"
-        icon="◷"
+        icon="clock"
         span={8}
         aside={<span className="board-note">{num(d.coverage.length)} enrolled</span>}
       >

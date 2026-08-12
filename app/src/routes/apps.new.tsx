@@ -1,5 +1,6 @@
-import { Await, createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { GuardedAwait } from '../components/error'
 import { RowsSkeleton } from '../components/skeleton'
 import { usePolledStatus } from '../components/status'
 import { Segmented, Toggle } from '../components/ui'
@@ -73,9 +74,9 @@ function NewAppPage() {
         derived from it.
       </p>
 
-      <Await promise={options} fallback={<RowsSkeleton count={4} />}>
+      <GuardedAwait resetKey="options" promise={options} fallback={<RowsSkeleton count={4} />}>
         {(data) => <Wizard options={data} />}
-      </Await>
+      </GuardedAwait>
     </>
   )
 }

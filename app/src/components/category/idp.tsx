@@ -99,7 +99,7 @@ export function IdpView({ d }: { d: IdpData }) {
             a credential actually being presented, and from what. */}
         <Board
           title="Signing in"
-          icon="⚿"
+          icon="key"
           span={6}
           aside={
             <span className="board-note">
@@ -243,7 +243,7 @@ export function IdpView({ d }: { d: IdpData }) {
           </p>
         </Board>
 
-        <Board title="Logs" icon="≡" span={9}>
+        <Board title="Logs" icon="logs" span={9}>
           <GrafanaLogs source={{ container: 'pocket-id' }} title="Pocket ID logs" />
           {/* The two units that WRITE the client list above. Neither is a
               container and neither has anywhere else on this dashboard to be

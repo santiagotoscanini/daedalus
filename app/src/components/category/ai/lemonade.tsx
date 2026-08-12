@@ -60,7 +60,7 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
       <BoardGrid>
         <Board
           title="Models"
-          icon="▤"
+          icon="rows"
           span={6}
           aside={
             <span className="board-note">
