@@ -90,11 +90,14 @@ async function fromOrigin(origin: string): Promise<ResolvedIcon | null> {
   const declared = await declaredPaths(origin)
   // The app's own <link rel="icon"> is authoritative; the fallbacks are
   // guesses. Deduped so a declared /icon.svg is not fetched twice.
-  for (const path of [...new Set([...declared, ...FALLBACK_PATHS])]) {
-    const icon = await fetchIcon(origin, path)
-    if (icon) return icon
-  }
-  return null
+  //
+  // Probed in PARALLEL and picked in order: the requests are cheap GETs to
+  // the box's own containers and the answer is cached for an hour, but a
+  // serial walk paid the 4s timeout once per missing path — an app with no
+  // icon cost ~30s to give up on, on the page's first render.
+  const paths = [...new Set([...declared, ...FALLBACK_PATHS])]
+  const results = await Promise.all(paths.map((p) => fetchIcon(origin, p)))
+  return results.find((r) => r !== null) ?? null
 }
 
 /**

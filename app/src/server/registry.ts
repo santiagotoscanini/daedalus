@@ -20,8 +20,10 @@ export const fetchApps = createServerFn().handler(async () => {
   const { appStatuses } = await import('../lib/metrics')
   const { readApplyStatus } = await import('../lib/apply')
 
-  const records = await listApps()
-  const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
+  // Independent reads — the registry rows and the manifest file — fetched
+  // together rather than one behind the other.
+  const [records, entries] = await Promise.all([listApps(), manifestEntries()])
+  const manifest = new Map(entries.map((m) => [m.name, m]))
   // appStatuses degrades per-app rather than rejecting, so a prometheus
   // outage costs the status column, not the page.
   const { appIcon } = await import('../lib/app-icon')
@@ -109,12 +111,12 @@ export const fetchApp = createServerFn()
     const { readApplyStatus } = await import('../lib/apply')
     const { lastDeploy, pullFailing, readDeployStatus } = await import('../lib/deploy')
 
-    const record = await getApp(name)
+    const [record, entries] = await Promise.all([getApp(name), manifestEntries()])
     if (!record) return null
 
-    const manifest = (await manifestEntries()).find((m) => m.name === name)
+    const manifest = entries.find((m) => m.name === name)
 
-    const [statuses, applyStatus, deploy, pullBroken, deployStatus, takenHostnames] =
+    const [statuses, applyStatus, deploy, pullBroken, deployStatus, takenHostnames, hasIcon] =
       await Promise.all([
         appStatuses([name]),
         readApplyStatus(),
@@ -124,6 +126,14 @@ export const fetchApp = createServerFn()
         // So the hostname field can reject a collision as it is typed rather
         // than during the rebuild it would otherwise fail.
         hostnamesTakenBy(effectiveHostname(record.name, record.hostname)),
+        import('../lib/app-icon').then(
+          async ({ appIcon }) =>
+            (await appIcon(
+              record.name,
+              effectiveHostname(record.name, record.hostname),
+              record.stage !== 'off',
+            )) !== null,
+        ),
       ])
 
     return {
@@ -148,14 +158,7 @@ export const fetchApp = createServerFn()
         hostname: record.hostname,
         effectiveHostname: effectiveHostname(record.name, record.hostname),
         description: record.description,
-        hasIcon:
-          (await (
-            await import('../lib/app-icon')
-          ).appIcon(
-            record.name,
-            effectiveHostname(record.name, record.hostname),
-            record.stage !== 'off',
-          )) !== null,
+        hasIcon,
         postgres: record.postgres,
         storage: record.storage,
         litellm: record.litellm,

@@ -76,11 +76,12 @@ export async function ingestDeployments(appId: string, appName: string): Promise
 
   // Labels are looked up ONCE per digest and stored, not resolved on render:
   // zot's retention will eventually GC an old manifest and the history should
-  // outlive the image it describes.
-  const infos = new Map<string, Awaited<ReturnType<typeof imageInfo>>>()
-  for (const digest of new Set(fresh.map((l) => l.digest))) {
-    infos.set(digest, await imageInfo(appName, digest))
-  }
+  // outlive the image it describes. All digests at once — each lookup is two
+  // requests to the box's own zot, and a first ingest can hold dozens.
+  const digests = [...new Set(fresh.map((l) => l.digest))]
+  const infos = new Map(
+    await Promise.all(digests.map(async (d) => [d, await imageInfo(appName, d)] as const)),
+  )
 
   await db
     .insert(deployments)

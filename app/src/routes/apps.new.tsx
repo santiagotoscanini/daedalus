@@ -135,15 +135,22 @@ function Wizard({ options }: { options: Options }) {
     }
     let live = true
     setChecking(true)
-    void fetchAppPreflight({ data: { repo: repo.name, name, image: image.trim() || null } })
-      .then((p) => {
-        if (live) setPreflight(p)
-      })
-      .finally(() => {
-        if (live) setChecking(false)
-      })
+    // Debounced: `name` and `image` are keystroke-hot dependencies, and every
+    // run costs a server round trip plus a zot manifest read that is
+    // deliberately uncached (the answer must flip the moment CI lands an
+    // image). A third of a second of quiet separates typing from asking.
+    const t = setTimeout(() => {
+      void fetchAppPreflight({ data: { repo: repo.name, name, image: image.trim() || null } })
+        .then((p) => {
+          if (live) setPreflight(p)
+        })
+        .finally(() => {
+          if (live) setChecking(false)
+        })
+    }, 350)
     return () => {
       live = false
+      clearTimeout(t)
     }
   }, [repo, name, image, recheck])
 
