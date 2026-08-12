@@ -11,7 +11,8 @@
 // would blank three tabs at once, and a file that is ten minutes stale about
 // facts which move in hours is strictly better than that.
 
-import { readFile } from 'node:fs/promises'
+import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '../contract/decode'
+import { readSnapshot } from '../contract/snapshot'
 
 export type SmartDisk = {
   device: string
@@ -176,6 +177,121 @@ export const NO_FACTS: HostFacts = {
   hardware: NO_HARDWARE,
 }
 
+// Shorthands: the snapshot script emits null for anything a tool would not
+// say, and a key can be absent entirely when written by an older script —
+// both must land as null, because a dash and a crash are different products.
+const ns = optional(nullable(str), null)
+const nn = optional(nullable(num), null)
+const nb = optional(nullable(bool), null)
+
+const smartDisk: Decoder<SmartDisk> = obj({
+  device: str,
+  model: ns,
+  family: ns,
+  serial: ns,
+  firmware: ns,
+  sizeBytes: nn,
+  rotationRate: nn,
+  passed: nb,
+  temperature: nn,
+  powerOnHours: nn,
+  powerCycles: nn,
+  reallocated: nn,
+  pending: nn,
+  uncorrectable: nn,
+  crcErrors: nn,
+  percentageUsed: nn,
+  spareAvailable: nn,
+  mediaErrors: nn,
+  unsafeShutdowns: nn,
+  criticalWarning: nn,
+  selfTests: optional(
+    arrayOf(obj({ type: ns, status: ns, passed: optional(bool, false), hours: nn })),
+    [],
+  ),
+})
+
+const zpool: Decoder<ZpoolFacts> = obj({
+  name: str,
+  sizeBytes: num,
+  allocBytes: num,
+  freeBytes: num,
+  fragPct: nn,
+  capacityPct: num,
+  health: str,
+  state: ns,
+  vdevs: optional(arrayOf(obj({ name: str, state: ns })), []),
+  scrub: optional(
+    nullable(obj({ state: ns, startedAt: nn, endedAt: nn, examined: nn, errors: nn })),
+    null,
+  ),
+})
+
+const dataset: Decoder<DatasetFacts> = obj({
+  name: str,
+  usedBytes: num,
+  snapshotBytes: num,
+  referencedBytes: num,
+  availableBytes: num,
+  mountpoint: ns,
+  snapshots: num,
+})
+
+const replicationPair: Decoder<ReplicationPair> = obj({
+  source: str,
+  target: str,
+  sourceLatest: ns,
+  sourceAt: nn,
+  targetLatest: ns,
+  targetAt: nn,
+  targetSnapshots: num,
+  lagSeconds: nn,
+})
+
+const hardware: Decoder<Hardware> = obj({
+  board: obj({
+    vendor: ns,
+    model: ns,
+    version: ns,
+    bios: obj({ vendor: ns, version: ns, date: ns }),
+  }),
+  chassis: obj({ vendor: ns }),
+  cpu: obj({ model: ns, socket: ns, cores: nn, threads: nn, maxMhz: nn }),
+  memory: obj({
+    slots: nn,
+    maxCapacityGb: nn,
+    populated: nn,
+    totalGb: nn,
+    modules: optional(
+      arrayOf(
+        obj({
+          locator: ns,
+          sizeGb: nn,
+          type: ns,
+          speedMts: nn,
+          manufacturer: ns,
+          partNumber: ns,
+          rank: nn,
+        }),
+      ),
+      [],
+    ),
+  }),
+})
+
+const hostFactsShape = obj({
+  disks: optional(arrayOf(smartDisk), []),
+  pools: optional(arrayOf(zpool), []),
+  datasets: optional(arrayOf(dataset), []),
+  replication: optional(arrayOf(replicationPair), []),
+  generations: optional(arrayOf(obj({ id: num, date: str, current: optional(bool, false) })), []),
+  kernel: ns,
+  // A snapshot written by an older script has no hardware key at all; the
+  // page must cost a few dashes then, not a crash in every consumer that
+  // reaches for `hardware.board`.
+  hardware: optional(hardware, NO_HARDWARE),
+})
+
 const TTL_MS = 60_000
 let cache: { at: number; facts: HostFacts } | null = null
 
@@ -183,20 +299,22 @@ export async function hostFacts(): Promise<HostFacts> {
   const now = Date.now()
   if (cache !== null && now - cache.at < TTL_MS) return cache.facts
 
-  try {
-    const raw = await readFile(process.env.HOST_FACTS_PATH ?? '/system/system.json', 'utf8')
-    const parsed = JSON.parse(raw) as HostFacts
-    // `hardware` is younger than this file's other keys, so a snapshot written
-    // by the previous version of the script has none — and the whole point of
-    // keeping a stale snapshot on a failed read is that the page stays up.
-    // Defaulting it here means an old file costs a few dashes, not a crash in
-    // every consumer that reaches for `hardware.board`.
-    const facts: HostFacts = { ...parsed, hardware: parsed.hardware ?? NO_HARDWARE }
-    cache = { at: now, facts }
-    return facts
-  } catch {
+  const result = await readSnapshot({
+    path: process.env.HOST_FACTS_PATH ?? '/system/system.json',
+    decoder: hostFactsShape,
+    fallback: NO_FACTS,
+    // Written every 10 minutes; twice that plus slack means the timer stopped.
+    maxAgeMs: 25 * 60_000,
+  })
+
+  if (!result.available) {
+    // Keep the previous answer on a failed read — a missing snapshot would
+    // blank three tabs at once. A decode error still surfaced in the log.
     if (cache !== null) return cache.facts
     cache = { at: now, facts: NO_FACTS }
     return NO_FACTS
   }
+
+  cache = { at: now, facts: result.data }
+  return result.data
 }

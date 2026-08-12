@@ -163,13 +163,9 @@ export const fetchTabStatus = createServerFn()
  */
 async function vpnEgressHealth(): Promise<boolean | null> {
   const { promScalar } = await import('../lib/dashboard/clients')
+  const { declaredVpnEgress } = await import('../lib/vpn-egress')
 
-  let declared: { container: string; exporter: string }[] = []
-  try {
-    declared = JSON.parse(process.env.VPN_EGRESS ?? '[]') as typeof declared
-  } catch {
-    return null
-  }
+  const declared = declaredVpnEgress()
   if (declared.length === 0) return null
 
   const { escapeRe } = await import('../lib/metrics')

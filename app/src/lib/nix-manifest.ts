@@ -1,4 +1,18 @@
 import { readFile } from 'node:fs/promises'
+import {
+  arrayOf,
+  bool,
+  type Decoder,
+  decode,
+  literal,
+  nullable,
+  num,
+  obj,
+  optional,
+  recordOf,
+  str,
+} from './contract/decode'
+import { REGISTRY_SCHEMA_VERSION } from './contract/version'
 
 // What Nix last built, as handed to this container by stacks/daedalus/daedalus.nix.
 //
@@ -114,6 +128,51 @@ export type ManifestEntry = ManifestApp & {
   operatorSecrets: boolean
 }
 
+// The runtime shape of one registry entry. Optional keys decode to the same
+// normalised defaults every consumer already applied by hand (`?? null`,
+// `?? {}`), so a file from an older writer parses and a malformed one names
+// its broken path instead of surfacing as a crash three renders later.
+const ns = optional(nullable(str), null)
+const nn = optional(nullable(num), null)
+
+const manifestApp: Decoder<ManifestApp> = obj({
+  stage: literal('off', 'lab', 'live'),
+  sourceMode: optional(literal('registry', 'local'), 'registry'),
+  postgres: bool,
+  storage: bool,
+  litellm: bool,
+  prometheus: bool,
+  hostname: ns,
+  image: ns,
+  egress: optional(nullable(obj({ container: str, hostPort: num })), null),
+  env: optional(arrayOf(obj({ key: str, value: str, note: ns })), []),
+  auth: obj({
+    mode: literal('none', 'proxy', 'native'),
+    healthPath: ns,
+    isolated: optional(bool, false),
+    allowedGroups: optional(nullable(arrayOf(str)), null),
+    bypassRule: ns,
+  }),
+  presentation: obj({ description: str }),
+  resources: optional(obj({ cpus: nn, memoryMb: nn, pids: nn }), NO_RESOURCES),
+  notes: optional(recordOf(str), {}),
+})
+
+const managedManifestShape = obj({
+  schemaVersion: optional(num, 1),
+  nixManaged: recordOf(manifestApp),
+  takenHostnames: arrayOf(str),
+  webAppHosts: recordOf(str),
+  operatorSecretApps: optional(arrayOf(str), []),
+  lanHosts: optional(arrayOf(obj({ ip: str, host: str })), []),
+  monitoredJobs: optional(arrayOf(obj({ unit: str, email: bool, slug: ns })), []),
+})
+
+const registryFileShape = obj({
+  schemaVersion: optional(num, 1),
+  apps: recordOf(manifestApp),
+})
+
 let cachedManaged: NixManifest['nixManaged'] | null = null
 let cachedTaken: string[] | null = null
 let cachedHosts: Record<string, string> | null = null
@@ -142,13 +201,16 @@ export async function readNixManifest(): Promise<NixManifest> {
     cachedLanHosts === null ||
     cachedJobs === null
   ) {
-    const parsed = JSON.parse(await readFile(managedPath, 'utf8')) as NixManifest
+    // decode() throws with the failing path. Loud on purpose: this file is
+    // the app's core contract with nix, and a silently-empty manifest would
+    // report every app as "not in the last Nix build".
+    const parsed = decode(managedManifestShape, JSON.parse(await readFile(managedPath, 'utf8')))
     cachedManaged = parsed.nixManaged
     cachedTaken = parsed.takenHostnames
     cachedHosts = parsed.webAppHosts
-    cachedSecretApps = parsed.operatorSecretApps ?? []
-    cachedLanHosts = parsed.lanHosts ?? []
-    cachedJobs = parsed.monitoredJobs ?? []
+    cachedSecretApps = parsed.operatorSecretApps
+    cachedLanHosts = parsed.lanHosts
+    cachedJobs = parsed.monitoredJobs
   }
 
   // The committed registry is NOT cached. It lives at a fixed path that
@@ -156,10 +218,17 @@ export async function readNixManifest(): Promise<NixManifest> {
   // what lets an Apply update it without restarting this app. Caching it would
   // reintroduce the restart by another name: the UI would keep reporting drift
   // against a registry that had already been applied.
-  const registry = JSON.parse(await readFile(registryPath, 'utf8')) as NixManifest['registry']
+  const registry = decode(registryFileShape, JSON.parse(await readFile(registryPath, 'utf8')))
+  if (registry.schemaVersion !== REGISTRY_SCHEMA_VERSION) {
+    // Finally read rather than assumed. The declarations.nix assertion guards
+    // the rebuild; this guards the importer and the drift comparison.
+    throw new Error(
+      `applied registry declares schemaVersion ${String(registry.schemaVersion)}; this reader understands ${String(REGISTRY_SCHEMA_VERSION)}`,
+    )
+  }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: registry.schemaVersion,
     registry,
     nixManaged: cachedManaged,
     takenHostnames: cachedTaken,

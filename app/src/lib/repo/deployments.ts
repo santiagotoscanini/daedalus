@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { desc, eq } from 'drizzle-orm'
+import { decode, num, obj, optional, str } from '../contract/decode'
 import { db } from '../db'
 import { imageInfo } from '../registry'
 import { deployments } from '../schema'
@@ -9,16 +10,18 @@ import { deployments } from '../schema'
 
 const DEPLOY_STATE = process.env.DEPLOY_STATE_DIR ?? '/deploy-state'
 
-type JournalLine = {
-  startedAt: string
-  finishedAt: string
-  app: string
-  digest: string
-  previousDigest: string
-  result: string
-  durationMs: number
-  http: string
-}
+const journalLine = obj({
+  startedAt: str,
+  finishedAt: str,
+  app: str,
+  digest: str,
+  previousDigest: optional(str, ''),
+  result: str,
+  durationMs: optional(num, 0),
+  http: optional(str, ''),
+})
+
+type JournalLine = ReturnType<typeof journalLine>
 
 /**
  * Fold `/deploy-state/<app>.log` into the deployments table.
@@ -44,14 +47,14 @@ export async function ingestDeployments(appId: string, appName: string): Promise
     .filter((l) => l.trim() !== '')
     .map((l) => {
       try {
-        return JSON.parse(l) as JournalLine
+        return decode(journalLine, JSON.parse(l))
       } catch {
         // A torn last line (appended while we read) is expected; skip it
         // rather than failing the whole ingest.
         return null
       }
     })
-    .filter((l): l is JournalLine => l !== null && typeof l.digest === 'string')
+    .filter((l): l is JournalLine => l !== null)
 
   if (lines.length === 0) return
 
