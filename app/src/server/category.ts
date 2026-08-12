@@ -7,7 +7,7 @@ import type { MediaData } from '../lib/dashboard/categories/media'
 import type { MonitoringData } from '../lib/dashboard/categories/monitoring'
 import type { NetworkData } from '../lib/dashboard/categories/network'
 import type { SystemData } from '../lib/dashboard/categories/system'
-import { CATEGORIES, type CategoryName } from '../lib/dashboard/nav'
+import { CATEGORIES, type CategoryName, resolveTab } from '../lib/dashboard/nav'
 
 // The loaders behind every category page.
 //
@@ -49,13 +49,6 @@ async function makeCtx(): Promise<{ base: (app: string) => string; hc: string }>
     base: (app: string) => `https://${hosts[app] ?? app}`,
     hc: 'http://host.containers.internal',
   }
-}
-
-/** Resolve a requested sub-tab against what the category actually declares. */
-function resolveTab(category: CategoryName, tab: string): string {
-  const spec = CATEGORIES.find((c) => c.id === category)
-  if (spec === undefined) return ''
-  return spec.tabs.some((t) => t.id === tab) ? tab : (spec.tabs[0]?.id ?? '')
 }
 
 export const fetchCategoryBoards = createServerFn()

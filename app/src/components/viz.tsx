@@ -19,7 +19,7 @@
 
 import { type ReactNode, useId } from 'react'
 
-import { num } from '../lib/dashboard/format'
+import { num } from '../lib/format'
 
 export type Tone = 'accent' | 'ok' | 'warn' | 'bad' | 'info' | 'muted'
 

@@ -37,9 +37,9 @@
 // the tag the flake pins is only true while the tag names a release.
 
 import { basicAuth, getJson } from '../../http'
+import { key } from '../../keys'
 import { lokiScalar, lokiSeries, lokiVector } from '../../loki'
 import { promBars, promScalar, promScalars, promSeries, promVector } from '../../prom'
-import { key } from '../format'
 import { type VersionGap, versionGap } from '../github'
 import { imageVersion, type RunningVersion } from '../images'
 

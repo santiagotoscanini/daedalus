@@ -5,13 +5,12 @@
 // cycles, not summaries of the app list. They sit under Apps rather than in a
 // category of their own because their only consumer is the apps beside them.
 
-import { DASH, num } from '../lib/dashboard/format'
-import type { VersionGap } from '../lib/dashboard/github'
+import { bytes, DASH, num } from '../lib/format'
 import type { ImagesData, PackagesData } from '../lib/registries'
 import { BASE_DOMAIN, REGISTRY_HOST } from '../lib/site'
 import { LogBoard, type LogNeighbour } from './logs'
 import { Changelog } from './release-notes'
-import { type CompareRow, ServiceHead, verdictOf } from './service-head'
+import { compareOf, ServiceHead, verdictOf } from './service-head'
 import { BarList, Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 
 /* ── container registry ───────────────────────────────────────────────── */
@@ -84,11 +83,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
           value={String(d.cachedRepos.length)}
           sub="pulled through zot"
         />
-        <Stat
-          label="On disk"
-          value={d.storageBytes === null ? DASH : fmtBytes(d.storageBytes)}
-          sub={`${String(total)} repositories`}
-        />
+        <Stat label="On disk" value={bytes(d.storageBytes)} sub={`${String(total)} repositories`} />
         <Stat
           label="Pushes"
           value={d.pushes === null ? DASH : num(d.pushes)}
@@ -320,24 +315,4 @@ export function PackagesView({ d }: { d: PackagesData }) {
       </BoardGrid>
     </>
   )
-}
-
-/* ── shared ───────────────────────────────────────────────────────────── */
-
-function compareOf(gap: VersionGap, note: string): CompareRow[] {
-  return [
-    { k: 'Running', v: gap.installed, note },
-    { k: 'Latest release', v: gap.latest, note: 'newest tag on GitHub' },
-  ]
-}
-
-function fmtBytes(v: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let n = v
-  let u = 0
-  while (n >= 1024 && u < units.length - 1) {
-    n /= 1024
-    u++
-  }
-  return `${n.toFixed(n >= 10 || u === 0 ? 0 : 1)} ${units[u] ?? 'B'}`
 }

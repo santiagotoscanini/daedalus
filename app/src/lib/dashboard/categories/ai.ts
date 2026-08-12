@@ -27,10 +27,11 @@
 //             as "over the last N days" comes from the gateway's own ledger or
 //             from a range query, never from a counter read once.
 
+import { DASH, since } from '../../format'
 import { getJson } from '../../http'
+import { key } from '../../keys'
 import { lokiLatest } from '../../loki'
 import { promBars, promScalar, promVector } from '../../prom'
-import { DASH, key, since } from '../format'
 import { type CommitGap, commitsSince, type VersionGap, versionGap } from '../github'
 
 export type AiData =

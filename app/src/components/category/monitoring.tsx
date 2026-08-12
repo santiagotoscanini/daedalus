@@ -1,4 +1,4 @@
-import { bytes, compact, DASH, num, pct, since, until } from '../../lib/dashboard/format'
+import { bytes, compact, DASH, num, pct, since, until } from '../../lib/format'
 import { BASE_DOMAIN } from '../../lib/site'
 import type { MonitoringData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'

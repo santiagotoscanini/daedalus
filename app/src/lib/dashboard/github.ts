@@ -25,7 +25,7 @@
 // Release history is the one upstream where staleness is free.
 
 import { swrCache } from '../cache'
-import { key } from './format'
+import { key } from '../keys'
 
 /**
  * How long a repo's release list is reused.

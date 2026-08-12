@@ -23,8 +23,8 @@
 // because the proxy's routing table still borrows the client list.
 
 import { getJson } from '../../http'
+import { key } from '../../keys'
 import { promScalars } from '../../prom'
-import { key } from '../format'
 import { type VersionGap, versionGap } from '../github'
 import { type IdpData, idpClients, loadIdp } from '../idp'
 import { imageVersion, type RunningVersion } from '../images'

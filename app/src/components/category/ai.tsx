@@ -1,7 +1,7 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import { compact, DASH, ms, num, pct, until } from '../../lib/dashboard/format'
 import type { VersionGap } from '../../lib/dashboard/github'
+import { compact, DASH, ms, num, pct, until } from '../../lib/format'
 import type { AiData } from '../../server/category'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../server/lemonade'
 import { GrafanaLogs, LogBoard, type LogNeighbour } from '../logs'
@@ -49,7 +49,7 @@ export function AiView({ data }: { data: AiData }) {
  * number already sitting two centimetres to the left; "pinned by" is the thing
  * you would have to go and edit.
  */
-function compareOf(gap: VersionGap, note: string): CompareRow[] {
+function comparePinned(gap: VersionGap, note: string): CompareRow[] {
   return [latestRow(gap), { k: 'Pinned by', v: null, note }]
 }
 
@@ -70,7 +70,7 @@ function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade' }> }) 
         version={data.version}
         versionNote="running on the gaming PC"
         verdict={verdictOf(gap)}
-        compare={compareOf(gap, 'nothing here — it is installed on Windows, not in the flake')}
+        compare={comparePinned(gap, 'nothing here — it is installed on Windows, not in the flake')}
         lede={
           <>
             The only thing in this stack that holds weights, and the only one not on this box. Every
@@ -523,7 +523,7 @@ function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
         version={data.version}
         versionNote="one OpenAI API for everything"
         verdict={verdictOf(gap)}
-        compare={compareOf(gap, 'a digest in the flake, against a moving main-stable tag')}
+        compare={comparePinned(gap, 'a digest in the flake, against a moving main-stable tag')}
         lede={
           <>
             The only thing that knows who asked for what. Nothing here holds a model — swapping
@@ -882,7 +882,7 @@ function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-webui' }> 
         versionNote="the chat window"
         verdict={verdictOf(gap)}
         compare={[
-          ...compareOf(gap, 'a digest in the flake, against a moving main tag'),
+          ...comparePinned(gap, 'a digest in the flake, against a moving main tag'),
           // Its own update check, which used to be a whole stat card saying
           // "up to date". It is a second opinion on the line above it, so it
           // belongs beside that line — and it only earns a sentence when the
@@ -1036,7 +1036,7 @@ function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
         version={data.version}
         versionNote="pinned in the flake"
         verdict={verdictOf(gap)}
-        compare={compareOf(gap, 'an exact tag in stacks/n8n — bump it there')}
+        compare={comparePinned(gap, 'an exact tag in stacks/n8n — bump it there')}
         lede={
           <>
             Scheduled workflows, several of which call the gateway. Nothing here runs on a person

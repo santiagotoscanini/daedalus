@@ -9,7 +9,7 @@ import { MonitoringView } from '../components/category/monitoring'
 import { NetworkView } from '../components/category/network'
 import { SystemView } from '../components/category/system'
 import { BoardsSkeleton, ServiceHeadSkeleton, StatBandSkeleton } from '../components/skeleton'
-import { CATEGORIES, type CategoryName, type CategorySpec } from '../lib/dashboard/nav'
+import { CATEGORIES, type CategoryName, type CategorySpec, resolveTab } from '../lib/dashboard/nav'
 import {
   type CategoryPayload,
   fetchCategoryBoards,
@@ -55,9 +55,7 @@ export const Route = createFileRoute('/c/$category')({
     if (spec === undefined) throw notFound()
 
     const category = params.category as CategoryName
-    const tab = spec.tabs.some((t) => t.id === deps.tab)
-      ? (deps.tab ?? '')
-      : (spec.tabs[0]?.id ?? '')
+    const tab = resolveTab(category, deps.tab)
 
     return {
       spec,

@@ -1,4 +1,4 @@
-import { bytes, DASH, num, pct } from '../../lib/dashboard/format'
+import { bytes, DASH, num, pct } from '../../lib/format'
 import type { HomeData } from '../../server/category'
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'

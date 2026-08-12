@@ -24,8 +24,8 @@
 // cap is genuinely too tight is container_oom_kills_total moving, which is why
 // that counter is on the page and "percent of limit" is not.
 
+import { bytes } from '../../format'
 import { promBars, promScalar, promScalars, promSeries, promVector } from '../../prom'
-import { bytes } from '../format'
 import type { VersionGap } from '../github'
 import {
   type DatasetFacts,

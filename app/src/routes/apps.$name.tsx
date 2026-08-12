@@ -26,7 +26,6 @@ import {
   WINDOW_SPEC,
 } from '../lib/access-window'
 import type { CiRequestStatus } from '../lib/ci-request'
-import { DASH } from '../lib/dashboard/format'
 import type { DeployStatus } from '../lib/deploy'
 // ./env-groups, NOT ./env-snapshot: this is client code, and env-snapshot
 // imports node:fs/promises. Vite externalises node builtins for the browser,
@@ -34,6 +33,7 @@ import type { DeployStatus } from '../lib/deploy'
 // page throw on load. Type-only imports would be erased and safe; GROUP_LABELS
 // is not.
 import { type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../lib/env-groups'
+import { bytes, DASH, logTime, ms, when } from '../lib/format'
 import { BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import { defaultImage, GRAFANA_URL, OWNER } from '../lib/site'
 import {
@@ -581,8 +581,8 @@ function AppDetail() {
                               )}
                             </div>
                             <div className="deploy-sub">
-                              <span>{fmtWhen(d.startedAt)}</span>
-                              <span>{fmtDuration(d.durationMs)}</span>
+                              <span>{when(d.startedAt)}</span>
+                              <span>{ms(d.durationMs)}</span>
                               <code>{d.digest.slice(0, 12)}</code>
                               {d.httpCode && <span>HTTP {d.httpCode}</span>}
                             </div>
@@ -1055,7 +1055,7 @@ function Database({
             items={data.cluster.map((c) => ({
               label: c.label,
               value: c.value,
-              display: fmtBytes(c.value),
+              display: bytes(c.value),
               tone: c.label === app.name ? ('accent' as const) : ('muted' as const),
             }))}
             empty="no databases reporting"
@@ -1162,17 +1162,6 @@ function fmtRate(v: number | null): string {
     : v < 1
       ? v.toFixed(2)
       : v.toLocaleString('en-US', { maximumFractionDigits: 1 })
-}
-
-function fmtBytes(v: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let n = v
-  let u = 0
-  while (n >= 1024 && u < units.length - 1) {
-    n /= 1024
-    u++
-  }
-  return `${n.toFixed(n >= 10 || u === 0 ? 0 : 1)} ${units[u] ?? 'B'}`
 }
 
 /**
@@ -1396,7 +1385,7 @@ function Access({
               <div className="hits">
                 {access.recentRejects.map((r, i) => (
                   <div key={`${r.ts}-${String(i)}`} className="hit">
-                    <time>{fmtLogTime(r.ts)}</time>
+                    <time>{logTime(r.ts)}</time>
                     <span className={`status status-${r.status.slice(0, 1)}`}>{r.status}</span>
                     <span className="hit-path" title={`${r.method} ${r.path}`}>
                       <span className="hit-method">{r.method}</span> {r.path}
@@ -1606,8 +1595,7 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
         ) : !ci.ok ? (
           <p className="viz-empty text-bad">
             Could not reach the GitHub API on the last sweep. This is the snapshot from{' '}
-            {ci.takenAt ? fmtWhen(ci.takenAt) : 'an earlier run'} — not a statement about the
-            runners.
+            {ci.takenAt ? when(ci.takenAt) : 'an earlier run'} — not a statement about the runners.
           </p>
         ) : ci.runners.length === 0 ? (
           <p className="viz-empty">
@@ -1650,13 +1638,13 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
           <div className="acts">
             {rolled.map((l) => (
               <div key={l.key} className={`act act-${l.source}`}>
-                <time>{fmtLogTime(l.ts)}</time>
+                <time>{logTime(l.ts)}</time>
                 <span className="act-src">{l.source}</span>
                 <span className="act-msg">{l.line}</span>
                 {l.count > 1 && (
                   <span
                     className="act-n"
-                    title={`Repeated ${String(l.count)} times, most recently at ${fmtLogTime(l.lastTs)}`}
+                    title={`Repeated ${String(l.count)} times, most recently at ${logTime(l.lastTs)}`}
                   >
                     ×{l.count}
                   </span>
@@ -1815,7 +1803,7 @@ function Secrets({
           span={12}
           aside={
             env.takenAt ? (
-              <span className="env-age">read from the container {fmtWhen(env.takenAt)}</span>
+              <span className="env-age">read from the container {when(env.takenAt)}</span>
             ) : null
           }
         >
@@ -2274,35 +2262,4 @@ function fmtBool(v: boolean | null | undefined): string {
 /** Bytes → whole MB. MiB, matching what --memory takes and cgroup enforces. */
 function fmtMb(bytes: number): string {
   return Math.round(bytes / (1024 * 1024)).toLocaleString()
-}
-
-/** "14:22:09.214" for today, "Jul 31 23:22:09" for anything older. */
-function fmtLogTime(iso: string): string {
-  const d = new Date(iso)
-  const sameDay = new Date().toISOString().slice(0, 10) === iso.slice(0, 10)
-  return sameDay
-    ? iso.slice(11, 23)
-    : `${d.toLocaleString('en-US', { month: 'short', day: '2-digit', timeZone: 'UTC' })} ${iso.slice(11, 19)}`
-}
-
-function fmtDuration(ms: number): string {
-  if (ms < 1000) return `${String(ms)}ms`
-  const s = Math.round(ms / 1000)
-  return s < 60 ? `${String(s)}s` : `${String(Math.floor(s / 60))}m ${String(s % 60)}s`
-}
-
-function fmtWhen(iso: string): string {
-  const then = new Date(iso)
-  const mins = Math.round((Date.now() - then.getTime()) / 60000)
-  const rel =
-    mins < 1
-      ? 'just now'
-      : mins < 60
-        ? `${String(mins)}m ago`
-        : mins < 60 * 24
-          ? `${String(Math.round(mins / 60))}h ago`
-          : `${String(Math.round(mins / 1440))}d ago`
-  // Absolute first, relative second: "3d ago" alone is useless when you are
-  // trying to correlate a deploy with something else that happened.
-  return `${then.toISOString().slice(0, 16).replace('T', ' ')} · ${rel}`
 }
