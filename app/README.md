@@ -10,7 +10,7 @@ container at `app-daedalus` bind-mounts this directory at `/app` and runs
 ## The loop
 
 Edit a file. That's it — HMR pushes it to the open browser tab at
-<https://daedalus.toscanini.me>. No commit, no rebuild, no restart.
+<https://daedalus-app.toscanini.me>. No commit, no rebuild, no restart.
 
 The exceptions, in increasing order of cost:
 
