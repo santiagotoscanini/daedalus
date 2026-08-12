@@ -101,6 +101,32 @@
         "storage": "The catalogue is in the shared pg cluster (migrated off SQLite 2026-08-08); the `storage` bind mount now holds only camera stills and a few fs-backed status records, joined to rows by cams.id + cams.screenshot_mime. Schema is applied by Drizzle migrations at container start (start.mjs), which exits non-zero rather than serving against a schema that doesn't match the code. Because this app rides gluetun's netns it has no bridge to reach `pg` on, so its DATABASE_URL points at the cluster's plain-TCP host port — see appDatabases.argus.reach, derived from `egress`."
       }
     },
+    "chismed": {
+      "stage": "lab",
+      "postgres": false,
+      "storage": false,
+      "litellm": false,
+      "prometheus": false,
+      "deploy": {
+        "enable": true
+      },
+      "image": null,
+      "hostname": null,
+      "egress": null,
+      "env": [],
+      "auth": {
+        "mode": "none"
+      },
+      "presentation": {
+        "description": "Chismed WhatsApp analyzer"
+      },
+      "resources": {
+        "cpus": null,
+        "memoryMb": null,
+        "pids": null
+      },
+      "notes": {}
+    },
     "voyra": {
       "stage": "live",
       "postgres": true,
