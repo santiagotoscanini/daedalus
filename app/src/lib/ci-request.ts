@@ -25,6 +25,8 @@ export type CiRequestStatus = {
   /** What happened, in the host's words — shown verbatim on success. */
   detail: string
   error: string
+  /** When the host agent took the request — null on statuses from before v2. */
+  startedAt: string | null
   finishedAt: string | null
 }
 
@@ -38,6 +40,7 @@ const bridge = defineBridge<CiRequestStatus>({
     state: 'idle',
     detail: '',
     error: '',
+    startedAt: null,
     finishedAt: null,
   },
 })
