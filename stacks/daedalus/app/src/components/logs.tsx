@@ -30,11 +30,12 @@
 
 import { type ReactNode, useEffect, useState } from 'react'
 
+import { GRAFANA_URL } from '../lib/site'
 import { Bar } from './skeleton'
 import { Segmented } from './ui'
 import { Board } from './viz'
 
-const GRAFANA = 'https://grafana.toscanini.me'
+const GRAFANA = GRAFANA_URL
 
 /**
  * One panel out of the provisioned dashboard, filtered to one container.

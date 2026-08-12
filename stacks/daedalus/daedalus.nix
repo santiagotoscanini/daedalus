@@ -574,6 +574,19 @@ in
       # The fleet.export domains (platform/export.nix) — the successor to the
       # manifest and the env blobs; readers flip domain by domain.
       EXPORT_DIR = "/export";
+
+      # The box's identity, for src/lib/site.ts. VITE_-prefixed because the
+      # CLIENT bundle needs these too — hostname validators and JSX render
+      # them, and a file under /export is server-only. Vite statically
+      # replaces them client-side; the server reads the same values through
+      # import.meta.env. This is what lets the app carry no hostname literals.
+      VITE_BASE_DOMAIN = config.fleet.baseDomain;
+      VITE_GITHUB_OWNER = config.fleet.github.owner;
+      VITE_REGISTRY_HOST = config.fleet.webApps.registry.hostname;
+      VITE_GRAFANA_URL = "https://${config.fleet.webApps.grafana.hostname}";
+      # The endpoint lib/registry.ts dials (zot over traefik — daedalus is
+      # `isolated` and deliberately not on registry-net).
+      REGISTRY_URL = "https://${config.fleet.webApps.registry.hostname}";
       # Where apply requests are dropped for the host agent.
       APPLY_DIR = "/apply";
 
