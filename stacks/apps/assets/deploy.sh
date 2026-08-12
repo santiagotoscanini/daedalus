@@ -42,6 +42,29 @@ send_alert() {  # $1 = subject; body on stdin
   } | msmtp --account=default -t 2>/dev/null || true
 }
 
+# --- published deploy record ----------------------------------------------
+# $STATE and $STATE.pull below are this script's own memory, shaped for shell
+# reads and deliberately jq-free. THIS is the publication: one enveloped JSON
+# per app under the same directory, the shape daedalus decodes
+# (stacks/daedalus/app/src/lib/deploy.ts). Pull health is NOT in it — the two
+# axes are independent (see the $STATE comment below), and folding the counter
+# in would overwrite a deploy record with nulls on every pull blip.
+#
+# Every value is shell-generated (digests, ISO timestamps, ok|failed,
+# integers), so printf is safe here for the same reason it is in
+# record_deploy. tmp+mv because daedalus reads the file live: a torn read must
+# surface as "unparseable JSON" in its snapshot reader, never as a
+# half-record.
+jstr() { if [ -n "$1" ]; then printf '"%s"' "$1"; else printf 'null'; fi; }
+
+publish_state() { # digest result httpCode startedAt finishedAt durationMs previousDigest
+  printf '{"daedalusExport":1,"domain":"deploy-state","schemaVersion":1,"source":"host","revision":null,"generatedAt":"%s","data":{"app":"%s","digest":%s,"result":%s,"httpCode":%s,"startedAt":%s,"finishedAt":%s,"durationMs":%s,"previousDigest":%s}}\n' \
+    "$(date -Is)" "$APP" "$(jstr "$1")" "$(jstr "$2")" "$(jstr "$3")" \
+    "$(jstr "$4")" "$(jstr "$5")" "${6:-null}" "$(jstr "$7")" >"$STATE_JSON.tmp"
+  chmod 0644 "$STATE_JSON.tmp"
+  mv "$STATE_JSON.tmp" "$STATE_JSON"
+}
+
 # The restart decision keys on IMAGE IDs, comparing what the CONTAINER runs
 # against what the tag points at after the pull. Not registry digests of the
 # local tag: (a) a crash between pull and restart would leave the tag moved
@@ -110,6 +133,14 @@ fi
 new_id=$(podman_ image inspect --format '{{.Id}}' "$IMAGE")
 after=$(podman_ image inspect --format '{{.Digest}}' "$IMAGE")
 
+# One-time migration: a box that deployed before the JSON record existed has
+# only the text state. Synthesise the record from it — timing fields null —
+# so the reader never needs a legacy path; the next real deploy overwrites it
+# with full fields.
+if [ ! -e "$STATE_JSON" ] && [ -n "$last" ]; then
+  publish_state "${last%% *}" "${last##* }" "" "" "" "" ""
+fi
+
 if [ "$new_id" = "$running" ]; then
   # Nothing new upstream. If what we're already serving failed its health
   # check when it was deployed, keep failing: a quiet exit 0 here would clear
@@ -170,6 +201,7 @@ echo "new image: $running -> $new_id ($after) — restarting $UNIT"
 # pre-written sentinel keeps that tick loud; the health-check below
 # overwrites it with "ok" on success.
 echo "$after failed" > "$STATE"
+publish_state "$after" "failed" "" "$deploy_started" "" "" "$prev_digest"
 systemctl restart "$UNIT"
 
 # No ingress (stage = "off") means no way to ask whether the new image serves.
@@ -178,6 +210,7 @@ systemctl restart "$UNIT"
 # and this says so out loud instead of implying a passed health check.
 if [ "$EXPOSED" != "1" ]; then
   echo "$after ok" > "$STATE"
+  publish_state "$after" "ok" "unverified" "$deploy_started" "$(date -Is)" "$(( (SECONDS - deploy_started_s) * 1000 ))" "$prev_digest"
   record_deploy ok unverified
   echo "deployed $after — NOT health-checked (stage=off: no ingress to probe)"
   if [ -n "$old_id" ]; then
@@ -206,6 +239,7 @@ while [ "$SECONDS" -lt "$deadline" ]; do
 
   if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
     echo "$after ok" > "$STATE"
+    publish_state "$after" "ok" "$code" "$deploy_started" "$(date -Is)" "$(( (SECONDS - deploy_started_s) * 1000 ))" "$prev_digest"
     record_deploy ok "$code"
     echo "deployed $after — healthy (HTTP $code)"
     # Recovered? Alert once on failed -> ok (not on every healthy deploy).
@@ -231,6 +265,7 @@ done
 # Deploy-and-report: the new image stays running. We don't roll back, we just
 # refuse to go quiet about it.
 echo "$after failed" > "$STATE"
+publish_state "$after" "failed" "$code" "$deploy_started" "$(date -Is)" "$(( (SECONDS - deploy_started_s) * 1000 ))" "$prev_digest"
 record_deploy failed "$code"
 echo "DEPLOY FAILED: app-$APP did not answer within ${HEALTH_TIMEOUT}s (last HTTP $code)"
 # Alert here, on the ok->failed transition only. The per-tick re-fail path

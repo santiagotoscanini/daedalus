@@ -268,6 +268,9 @@ let
           AUTHFILE=${lib.escapeShellArg ghcrAuthFile}
           LAN_IP=${lib.escapeShellArg lanIp}
           STATE=${lib.escapeShellArg "${deployStateDir}/${name}"}
+          # The published record daedalus decodes — see publish_state in the
+          # script body. Same directory, so it rides the existing :ro mount.
+          STATE_JSON=${lib.escapeShellArg "${deployStateDir}/${name}.json"}
           SETPRIV=${pkgs.util-linux}/bin/setpriv
           ENV_BIN=${pkgs.coreutils}/bin/env
           PODMAN=${pkgs.podman}/bin/podman
