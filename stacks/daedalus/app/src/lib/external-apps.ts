@@ -7,6 +7,24 @@
 // The hostname rule ("nix binds every hostname") does not apply here for the
 // same reason: the nix side has never heard of these hosts.
 
+/**
+ * The hosting platforms, in the order their sections render. The UI keys its
+ * brand icons off `id` (components live with the JSX, not here), so adding a
+ * platform means an entry here plus a mark in the route's PLATFORM_ICONS.
+ */
+export const PLATFORMS = [
+  {
+    id: 'GitHub Pages',
+    description: 'static sites, built by Actions and served from github.io',
+  },
+  {
+    id: 'Vercel',
+    description: 'deployed from git, served on Vercel’s edge',
+  },
+] as const
+
+export type Platform = (typeof PLATFORMS)[number]['id']
+
 export type ExternalApp = {
   /**
    * Keys the icon endpoint and its cache, so it must be unique AND must not
@@ -18,7 +36,7 @@ export type ExternalApp = {
   name: string
   /** Bare public hostname; every link and icon probe is https://<host>. */
   host: string
-  platform: 'GitHub Pages' | 'Vercel'
+  platform: Platform
   description: string
 }
 

@@ -1244,7 +1244,15 @@ h2 {
 /* An off-box row has no state dot and no spark — nothing on this box probes
    those sites — so it drops the columns instead of leaving them blank. */
 .app-row-external {
-  grid-template-columns: auto minmax(9rem, 1fr) auto auto;
+  grid-template-columns: auto minmax(9rem, 1fr) auto;
+}
+
+/* The icon leading a section head. Centred by hand because the head aligns
+   its text on the baseline, which an image does not have. */
+.section-glyph {
+  display: inline-flex;
+  align-self: center;
+  color: var(--muted);
 }
 
 .chip-off {
