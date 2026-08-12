@@ -1,6 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { rollUp } from '../../lib/ci'
+import { rollUp } from '../../lib/ci-lines'
 import type { CiRequestStatus } from '../../lib/ci-request'
 import { logTime, ms, when } from '../../lib/format'
 import { OWNER } from '../../lib/site'

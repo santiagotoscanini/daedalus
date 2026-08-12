@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type ActivityRow, rollUp, shortenDigests } from './ci'
+import { type ActivityRow, rollUp, shortenDigests } from './ci-lines'
 
 // A full 64-hex-character digest whose first twelve characters are the short
 // form the rest of the page shows.
