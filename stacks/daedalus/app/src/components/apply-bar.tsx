@@ -1,7 +1,8 @@
 import { useRouter } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ApplyStatus } from '../lib/apply'
 import { applyRegistry, fetchApplyStatus } from '../server/registry'
+import { usePolledStatus } from './status'
 
 // The commit bar. Appears when the database no longer describes what Nix
 // built, and stays until an apply reconciles them.
@@ -29,32 +30,24 @@ export function ApplyBar({
   initialStatus: ApplyStatus
 }) {
   const router = useRouter()
-  const [status, setStatus] = useState<ApplyStatus>(initialStatus)
-  const [submitting, setSubmitting] = useState(false)
+  // Why the host refused to start (already running, nothing to apply) —
+  // distinct from status.error, which is a run that started and failed.
+  const [refusal, setRefusal] = useState<string | null>(null)
 
-  const running = status.state === 'running' || submitting
-
-  // Poll only while something is in flight. A rebuild takes minutes, so the
-  // page cannot just wait on the request — the host agent owns the work and
-  // reports through a status file.
-  useEffect(() => {
-    if (!running) return
-    const t = setInterval(() => {
-      void fetchApplyStatus().then((s) => {
-        setStatus(s)
-        if (s.state !== 'running') {
-          setSubmitting(false)
-          // Pull fresh drift + status: a successful apply clears the bar.
-          void router.invalidate()
-        }
-      })
-    }, 2000)
-    return () => {
-      clearInterval(t)
-    }
-  }, [running, router])
+  const { status, running, start } = usePolledStatus({
+    initial: initialStatus,
+    fetch: () => fetchApplyStatus(),
+    onSettle: () => {
+      // Pull fresh drift + status: a successful apply clears the bar.
+      void router.invalidate()
+    },
+  })
 
   if (changed.length === 0 && !running && status.state !== 'failed') return null
+
+  // The phase vocabulary lives in host/apply.sh; a phase this list has not
+  // heard of must still render as progress, not blank the tracker.
+  const activeIndex = PHASES.indexOf(status.phase as (typeof PHASES)[number])
 
   return (
     <div
@@ -65,20 +58,12 @@ export function ApplyBar({
           <>
             <strong>Applying…</strong>
             <ol className="phases">
-              {PHASES.map((p) => (
-                <li
-                  key={p}
-                  className={
-                    p === status.phase
-                      ? 'now'
-                      : PHASES.indexOf(p) < PHASES.indexOf(status.phase as (typeof PHASES)[number])
-                        ? 'past'
-                        : ''
-                  }
-                >
+              {PHASES.map((p, i) => (
+                <li key={p} className={p === status.phase ? 'now' : i < activeIndex ? 'past' : ''}>
                   {p}
                 </li>
               ))}
+              {activeIndex === -1 && status.phase !== '' && <li className="now">{status.phase}</li>}
             </ol>
           </>
         ) : status.state === 'failed' ? (
@@ -95,6 +80,7 @@ export function ApplyBar({
             <span className="apply-detail">
               {changed.map((c) => `${c.name} (${c.fields.join(', ')})`).join(' · ')}
             </span>
+            {refusal !== null && <span className="bad-text">{refusal}</span>}
           </>
         )}
       </div>
@@ -104,9 +90,14 @@ export function ApplyBar({
         className="btn btn-primary"
         disabled={running || changed.length === 0}
         onClick={() => {
-          setSubmitting(true)
-          void applyRegistry().then((r) => {
-            if (!r.ok) setSubmitting(false)
+          setRefusal(null)
+          start(async () => {
+            const r = await applyRegistry()
+            if (!r.ok) {
+              setRefusal(r.reason)
+              return null
+            }
+            return r.id
           })
         }}
       >
