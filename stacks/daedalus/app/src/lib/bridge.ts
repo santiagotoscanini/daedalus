@@ -33,10 +33,7 @@ export function defineBridge<S extends BridgeStatus>(opts: {
   idle: S
 }): {
   readStatus: () => Promise<S>
-  request: (
-    body: Record<string, unknown>,
-    payload?: { file: string; body: string },
-  ) => Promise<string>
+  request: (body: Record<string, unknown>, payload?: string) => Promise<string>
 } {
   // Read per call rather than at module load so tests can point a bridge at a
   // temp directory; in the container the value never changes.
@@ -59,14 +56,17 @@ export function defineBridge<S extends BridgeStatus>(opts: {
      * The payload (when there is one) is written FIRST and the request file
      * LAST: the request is what the path unit watches, so the trigger must
      * not fire before the bytes it points at exist.
+     *
+     * It lands at `payload-<id>.json` — stamped with the request's own id, and
+     * the host derives the same name from the id it read, so nothing in the
+     * request body names a path. A second request queued while the host is
+     * mid-run therefore cannot overwrite the bytes the first one is committing
+     * (a fixed payload name was the last TOCTOU sliver in this bridge).
      */
-    async request(
-      body: Record<string, unknown>,
-      payload?: { file: string; body: string },
-    ): Promise<string> {
+    async request(body: Record<string, unknown>, payload?: string): Promise<string> {
       const id = randomUUID()
       await mkdir(dir(), { recursive: true })
-      if (payload !== undefined) await writeAtomic(join(dir(), payload.file), payload.body)
+      if (payload !== undefined) await writeAtomic(join(dir(), `payload-${id}.json`), payload)
       await writeAtomic(
         join(dir(), opts.requestFile),
         `${JSON.stringify({ id, requestedAt: new Date().toISOString(), ...body }, null, 2)}\n`,

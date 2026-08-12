@@ -3,10 +3,10 @@
 #
 # Deliberately dumb. It does NOT generate, transform or validate the registry
 # — daedalus renders the exact bytes (src/lib/registry-file.ts) and drops them
-# at $APPLY_DIR/apps.json; this copies that file verbatim. Every decision about
-# shape is application logic and belongs in TypeScript, where it can be typed
-# and tested. What is left here is the part that genuinely needs the host: a
-# privileged rebuild, and git.
+# at $APPLY_DIR/payload-<id>.json; this copies that file verbatim. Every
+# decision about shape is application logic and belongs in TypeScript, where
+# it can be typed and tested. What is left here is the part that genuinely
+# needs the host: a privileged rebuild, and git.
 #
 # jq survives for exactly two jobs, both about *this* script's own bookkeeping
 # rather than the registry: reading the request metadata, and emitting a status
@@ -25,7 +25,6 @@
 set -euo pipefail
 
 REQ="$APPLY_DIR/request.json"
-PAYLOAD="$APPLY_DIR/apps.json"
 STATUS="$APPLY_DIR/status.json"
 LOGFILE="$APPLY_DIR/last.log"
 
@@ -69,7 +68,19 @@ errtail() {
 
 REQ_ID="$(jq -r '.id // ""' "$REQ")"
 [ -n "$REQ_ID" ] || exit 0
+# The id names a path below, and request.json is written by the container —
+# the far side of the trust boundary. Constrain it to UUID characters so a
+# crafted id cannot traverse out of $APPLY_DIR; a request the app didn't
+# write this way is not one worth answering.
+[[ "$REQ_ID" =~ ^[0-9a-fA-F-]+$ ]] || exit 0
 STARTED_AT="$(date -Is)"
+
+# The payload rides under the request's own id — derived from the id HERE,
+# never read as a filename from the request body. A second Apply queued while
+# this one runs writes payload-<other-id>.json and cannot touch the bytes
+# this run is committing; the old fixed apps.json name was the last TOCTOU
+# sliver in the bridge.
+PAYLOAD="$APPLY_DIR/payload-$REQ_ID.json"
 
 # The path unit fires on any write to the request file, and again on a
 # daemon-reload replay at boot. Without this guard a completed apply could
@@ -105,10 +116,10 @@ fi
 
 write_status running validating ""
 
-# request.json is written after apps.json precisely so this cannot race, but
-# check rather than assume: a missing payload here would otherwise commit an
-# empty registry and take every app down.
-[ -s "$PAYLOAD" ] || fail validating "no apps.json payload alongside the request"
+# request.json is written after the payload precisely so this cannot race,
+# but check rather than assume: a missing payload here would otherwise commit
+# an empty registry and take every app down.
+[ -s "$PAYLOAD" ] || fail validating "no payload-$REQ_ID.json alongside the request"
 
 SUMMARY="$(jq -r '.summary // "update app registry"' "$REQ")"
 ACTOR="$(jq -r '.actor // "daedalus"' "$REQ")"
@@ -116,6 +127,10 @@ ACTOR="$(jq -r '.actor // "daedalus"' "$REQ")"
 # --- write ----------------------------------------------------------------
 write_status running writing ""
 install -m 0644 -o santiago -g users "$PAYLOAD" "$TARGET"
+# Copied into the flake; the id-stamped file has served its purpose. Removed
+# now rather than at exit so a failure path cannot leave payloads
+# accumulating in the mount — rollback works from git, not from this file.
+rm -f "$PAYLOAD"
 
 # --- commit ---------------------------------------------------------------
 # The flake only sees git-tracked files, so `git add` is not bookkeeping — an
