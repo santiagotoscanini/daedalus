@@ -240,6 +240,7 @@ export const EDITABLE_FIELDS = [
   'storage',
   'litellm',
   'prometheus',
+  'deployEnable',
   'authMode',
   'authHealthPath',
   'limitCpus',
@@ -285,6 +286,7 @@ export function validateAppPatch(patch: Record<string, unknown>): AppPatch {
       case 'storage':
       case 'litellm':
       case 'prometheus':
+      case 'deployEnable':
         if (typeof v !== 'boolean') bad(k, 'a boolean')
         clean[k as 'postgres'] = v as boolean
         break
@@ -369,12 +371,22 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
     .where(eq(apps.name, name))
 }
 
+/**
+ * The platform default for `deploy.enable`, mirrored from the option default
+ * in stacks/apps/apps.nix: registry apps auto-deploy, local-source ones have
+ * no registry image to poll. Applied where a manifest entry omits `deploy`
+ * (hand-written entries like daedalus's self.json).
+ */
+const deployDefault = (sourceMode: string | undefined): boolean =>
+  (sourceMode ?? 'registry') === 'registry'
+
 export function toRow(entry: ManifestEntry) {
   return {
     name: entry.name,
     stage: entry.stage,
     managedInNix: entry.managedInNix,
     sourceMode: entry.sourceMode ?? 'registry',
+    deployEnable: entry.deploy?.enable ?? deployDefault(entry.sourceMode),
     image: entry.image,
     hostname: entry.hostname ?? null,
     postgres: entry.postgres,
@@ -430,6 +442,7 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
   const fromDb = {
     stage: record.stage,
     sourceMode: record.sourceMode,
+    deployEnable: record.deployEnable,
     image: record.image,
     hostname: record.hostname,
     postgres: record.postgres,
@@ -454,6 +467,7 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
   const fromNix = {
     stage: manifest.stage,
     sourceMode: manifest.sourceMode ?? 'registry',
+    deployEnable: manifest.deploy?.enable ?? deployDefault(manifest.sourceMode),
     image: manifest.image,
     hostname: manifest.hostname ?? null,
     postgres: manifest.postgres,
@@ -506,6 +520,10 @@ export function toRegistryExport(records: AppRecord[]): {
             storage: r.storage,
             litellm: r.litellm,
             prometheus: r.prometheus,
+            // Always emitted (schema v2): every registry entry is explicit
+            // about whether it auto-deploys, so a freeze is visible in the
+            // committed file rather than inferred from a default.
+            deploy: { enable: r.deployEnable },
             image: r.image,
             hostname: r.hostname,
             egress:

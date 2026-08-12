@@ -72,6 +72,13 @@ export const apps = pgTable(
     litellm: boolean('litellm').notNull().default(false),
     prometheus: boolean('prometheus').notNull().default(false),
 
+    // The freeze switch (registry schema v2, `deploy.enable`): OFF stops the
+    // 2-minute deploy timer AND removes the app from the host trigger's
+    // allowlist, so a freeze holds against the Redeploy button too. Pair with
+    // a digest-pinned image override to hold a known-good build. Inert for
+    // sourceMode "local" — there is no registry image to poll.
+    deployEnable: boolean('deploy_enable').notNull().default(true),
+
     // "none" | "proxy" (traefik forward-auth) | "native" (the app is the
     // OIDC client). See AUTH.md for the order of preference.
     authMode: text('auth_mode').notNull().default('none'),

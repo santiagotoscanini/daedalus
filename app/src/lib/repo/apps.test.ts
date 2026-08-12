@@ -30,6 +30,9 @@ const RICH: ManifestEntry = {
   litellm: true,
   prometheus: true,
   hostname: 'films.toscanini.me',
+  // Frozen — the non-default, so the round trip proves the value survives
+  // rather than being regenerated from the platform default.
+  deploy: { enable: false },
   image: 'registry.toscanini.me/demo@sha256:abc',
   egress: { container: 'gluetun-argus', hostPort: 8081 },
   env: [
@@ -180,6 +183,8 @@ describe('driftOf', () => {
     expect(() => validateAppPatch({ stage: 'production' })).toThrow('off | lab | live')
     expect(() => validateAppPatch({ authMode: 'oauth' })).toThrow('none | proxy | native')
     expect(() => validateAppPatch({ postgres: 'yes' })).toThrow('boolean')
+    expect(() => validateAppPatch({ deployEnable: 'frozen' })).toThrow('boolean')
+    expect(validateAppPatch({ deployEnable: false })).toEqual({ deployEnable: false })
     expect(() => validateAppPatch({ limitCpus: -1 })).toThrow('positive')
     expect(() => validateAppPatch({ limitMemoryMb: 1.5 })).toThrow('positive integer')
     expect(() => validateAppPatch({ image: 7 })).toThrow('string or null')

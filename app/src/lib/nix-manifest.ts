@@ -51,6 +51,12 @@ export type ManifestApp = {
   prometheus: boolean
   /** null = `<name>.<baseDomain>`. Exactly one label under it — see apps.nix. */
   hostname?: string | null
+  /**
+   * The freeze switch. Absent (hand-written entries like daedalus's
+   * self.json) = the platform default, `sourceMode === 'registry'` — the
+   * same rule stacks/apps/apps.nix applies to `deploy.enable`.
+   */
+  deploy?: { enable: boolean } | null
   image: string | null
   egress: { container: string; hostPort: number } | null
   env: ManifestEnvVar[]
@@ -114,6 +120,7 @@ const manifestApp: Decoder<ManifestApp> = obj({
   litellm: bool,
   prometheus: bool,
   hostname: ns,
+  deploy: optional(nullable(obj({ enable: bool })), null),
   image: ns,
   egress: optional(nullable(obj({ container: str, hostPort: num })), null),
   env: optional(arrayOf(obj({ key: str, value: str, note: ns })), []),
