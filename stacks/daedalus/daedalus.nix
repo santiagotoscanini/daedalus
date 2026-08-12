@@ -546,6 +546,11 @@ in
       # The fleet.export domains (platform/export.nix) — the successor to the
       # manifest and the env blobs; readers flip domain by domain.
       EXPORT_DIR = "/export";
+      # The static DHCP reservations, read at request time. A file rather
+      # than the network export domain because the source is encrypted
+      # (stacks/pihole/dhcp-hosts.sops — a household device inventory has
+      # no place in a public repo) and nix cannot read a sops file at eval.
+      DHCP_HOSTS_PATH = "/dhcp/hosts";
 
       # The box's identity, for src/lib/site.ts. VITE_-prefixed because the
       # CLIENT bundle needs these too — hostname validators and JSX render
@@ -685,6 +690,10 @@ in
     # manifest above and the per-fact env blobs; readers flip domain by
     # domain, then the old channels are deleted.
     "/run/daedalus-export:/export:ro"
+    # The DIRECTORY, not the file: /run/secrets entries are symlinks that
+    # move on rotation, and a single-file bind would pin the old inode. The
+    # render unit below copies the decrypted hostsfile here.
+    "/run/daedalus-dhcp:/dhcp:ro"
     "${applyDir}:/apply"
     # Last deploy result per app, written by app-<name>-deploy.service
     # (`<digest> ok|failed`). Read-only, and the DIRECTORY rather than the
@@ -708,6 +717,23 @@ in
     # is kept out of the runner containers themselves.
     "/run/gha-ci:/ci:ro"
   ];
+
+  # The DHCP reservations for the network page, copied out of the encrypted
+  # hostsfile that pi-hole's dnsmasq reads (stacks/pihole/dhcp-hosts.sops —
+  # one source, two readers). A render rather than a direct bind of
+  # /run/secrets: the secret is pihole-owned, and the copy here is
+  # santiago-owned so rootless podman can mount it.
+  systemd.services.daedalus-dhcp-render = mkSecretRender {
+    description = "Render the DHCP reservations for daedalus's network page";
+    gates = [ "podman-app-daedalus.service" ];
+    dir = "/run/daedalus-dhcp";
+    file = "/run/daedalus-dhcp/hosts";
+    content = ''$(cat ${config.sops.secrets."pihole-dhcp-hosts".path})'';
+  };
+  # Re-render when the ciphertext changes (a device joined or left) — sops-nix
+  # bounces the unit, the container reads new bytes on its next request.
+  # (List-merges with the restartUnits pihole.nix declares.)
+  sops.secrets."pihole-dhcp-hosts".restartUnits = [ "daedalus-dhcp-render.service" ];
 
   # Refresh the published environments. A timer rather than an on-demand
   # request/response through the bind mount: a container's env only changes

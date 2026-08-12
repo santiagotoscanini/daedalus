@@ -23,8 +23,8 @@ both occasions.
 
 | Date | Drive | Notes |
 |---|---|---|
-| 2026-07-30 11:50 | sda (ata7, SERIAL-J3V) | ~20 min after boot |
-| 2026-07-31 07:01 | sdb (ata5, SERIAL-KG6) | Tripped smartd's "not capable of SMART self-check" warning email; `Command_Timeout` 16 16 16 → 16 17 17 |
+| 2026-07-30 11:50 | sda (ata7, serial …J3V) | ~20 min after boot |
+| 2026-07-31 07:01 | sdb (ata5, serial …KG6) | Tripped smartd's "not capable of SMART self-check" warning email; `Command_Timeout` 16 16 16 → 16 17 17 |
 
 **That smartd wording is misleading.** It means the SMART RETURN STATUS
 passthrough failed *during* the link reset, not that the drive lacks

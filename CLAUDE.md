@@ -147,6 +147,13 @@ the operator raises it — but don't open the topic unprompted.
   encryption retrofit.
 - **Immich keeps its own postgres** — it needs a VectorChord/pgvecto.rs
   image, so it cannot join the shared cluster.
+- **`daedalus.toscanini.me` is the public landing page, not the app.**
+  It's a hand-managed grey-cloud CNAME to GitHub Pages (served from
+  `website/` in this repo) and is deliberately NOT a fleet hostname —
+  the app lives at `daedalus-app.toscanini.me` (the `hostname` override
+  in `stacks/daedalus/self.json`) so the two never collide in pi-hole,
+  traefik, or `cloudflared-route-sync`. Never give any fleet app the
+  bare `daedalus` hostname: route-sync would overwrite the Pages CNAME.
 
 **Identity**
 

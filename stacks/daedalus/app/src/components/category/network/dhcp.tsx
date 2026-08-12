@@ -35,7 +35,7 @@ function LanDevices({ devices }: { devices: Device[] }) {
     <>
       {fixed.length > 0 && (
         <>
-          <h4 className="board-sub">Fixed here — {fixed.length} declared in nix</h4>
+          <h4 className="board-sub">Fixed here — {fixed.length} declared</h4>
           <ul className="devices">
             {fixed.map((d) => (
               <DeviceRow key={d.mac} d={d} />
@@ -82,7 +82,7 @@ function DeviceRow({ d }: { d: Device }) {
         {d.lastSeenAgo === null ? (
           <span
             className="warn-text"
-            title="declared in nix, but the resolver has never seen this address answer"
+            title="declared, but the resolver has never seen this address answer"
           >
             never
           </span>
@@ -128,8 +128,14 @@ export function DhcpView({ data }: { data: Dhcp }) {
           <>
             The same process that answers names hands out the addresses. Every device in the house
             asks this box for one and gets it from a pool this box decides —{' '}
-            {dhcp.reservations.length} of them pinned by hardware address, so the rest of the
-            machine can name them.
+            {dhcp.reservationsKnown ? (
+              <>
+                {dhcp.reservations.length} of them pinned by hardware address, so the rest of the
+                machine can name them.
+              </>
+            ) : (
+              <>some pinned by hardware address in a hostsfile this page could not read just now.</>
+            )}
           </>
         }
         actions={
@@ -173,7 +179,16 @@ export function DhcpView({ data }: { data: Dhcp }) {
               },
               { k: 'Lease', v: dhcp.leaseTime },
               { k: 'Gateway offered', v: <span className="mono">{dhcp.router}</span> },
-              { k: 'Fixed addresses', v: num(dhcp.reservations.length) },
+              {
+                k: 'Fixed addresses',
+                v: dhcp.reservationsKnown ? (
+                  num(dhcp.reservations.length)
+                ) : (
+                  <span className="warn-text" title="the reservations hostsfile could not be read">
+                    unknown
+                  </span>
+                ),
+              },
             ]}
           />
           <p className="board-foot">
@@ -181,8 +196,8 @@ export function DhcpView({ data }: { data: Dhcp }) {
             rather than by the router — which is also why the device list below can exist at all.
             Everything without a reservation gets whatever is free in that range, for{' '}
             {dhcp.leaseTime} at a time. A reservation is what lets something else on this box name a
-            device by address, which is why the fixed ones are declared in nix and not clicked into
-            an admin.
+            device by address, which is why the fixed ones are declared in the repo's encrypted
+            hostsfile and not clicked into an admin.
           </p>
         </Board>
 

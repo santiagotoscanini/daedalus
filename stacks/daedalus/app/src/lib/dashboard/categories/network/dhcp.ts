@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { type NetworkFacts, networkFacts } from '../../../contract/domains/network'
 import { getJson } from '../../../http'
 import { PIHOLE, piholeAdmin, piholeSid } from './shared'
@@ -120,7 +121,7 @@ async function loadDevices(reservations: Dhcp['reservations']): Promise<Device[]
  * The other half of what this resolver does.
  *
  * pi-hole is the DHCP server as well, so the addresses on the LAN are decided
- * here rather than by the router — and the fixed ones are declared in nix, not
+ * here rather than by the router — and the fixed ones are declared in the repo, not
  * clicked into the admin. That is what makes them worth a panel: a reservation
  * is the reason something else on this box is allowed to name an address.
  */
@@ -132,6 +133,12 @@ type Dhcp = {
   end: string
   leaseTime: string
   reservations: { mac: string; ip: string; name: string }[]
+  /**
+   * False when the hostsfile could not be read — an empty list then means
+   * "couldn't ask", not "none declared", and the page says so instead of
+   * quietly rendering zero reservations.
+   */
+  reservationsKnown: boolean
   /** Offers, acks and declines since FTL started — see `loadResolver`. */
   counters: {
     offers: number | null
@@ -161,6 +168,27 @@ export type DhcpData = {
   admin: string | null
 }
 
+/**
+ * The reservation lines, from the same encrypted hostsfile pi-hole's dnsmasq
+ * reads — the host renders a copy at DHCP_HOSTS_PATH (see daedalus.nix). Not
+ * part of the network export domain, because nix cannot read a sops file at
+ * eval and the household inventory has no place in the (public) repo.
+ *
+ * Null when the file cannot be read: the mount or render broke, which is a
+ * different fact from "no reservations declared".
+ */
+async function loadReservationLines(): Promise<string[] | null> {
+  try {
+    const raw = await readFile(process.env.DHCP_HOSTS_PATH ?? '/dhcp/hosts', 'utf8')
+    return raw
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== '' && !l.startsWith('#'))
+  } catch {
+    return null
+  }
+}
+
 export async function loadDhcp(): Promise<DhcpData> {
   const base = PIHOLE()
   const [sid, admin] = await Promise.all([piholeSid(base), piholeAdmin()])
@@ -168,7 +196,11 @@ export async function loadDhcp(): Promise<DhcpData> {
     metrics?: { dhcp?: { offer?: number; ack?: number; decline?: number; nak?: number } }
   }>(`${base}/api/info/metrics`, sid === null ? {} : { headers: { sid } })
 
-  const dhcp = dhcpConfig((await networkFacts()).dhcp, metrics?.metrics?.dhcp)
+  const dhcp = dhcpConfig(
+    (await networkFacts()).dhcp,
+    await loadReservationLines(),
+    metrics?.metrics?.dhcp,
+  )
   return {
     dhcp,
     devices: await loadDevices(dhcp.reservations),
@@ -180,13 +212,16 @@ export async function loadDhcp(): Promise<DhcpData> {
 /**
  * The DHCP half: how it is configured, and what it has actually done.
  *
- * The configuration is bound in from nix rather than asked of FTL, because the
+ * The configuration is bound in rather than asked of FTL, because the
  * reservations are DECLARED — a list read back from the running service would
  * be the same nine lines with no way to tell a declared one from something
- * somebody clicked in. The counters come from FTL because only it knows them.
+ * somebody clicked in. The pool comes from the network export domain; the
+ * reservations come from the rendered hostsfile (the declared source, just
+ * decrypted); the counters come from FTL because only it knows them.
  */
 function dhcpConfig(
   cfg: NetworkFacts['dhcp'],
+  hostLines: string[] | null,
   counters: { offer?: number; ack?: number; decline?: number; nak?: number } | undefined,
 ): Dhcp {
   return {
@@ -195,7 +230,8 @@ function dhcpConfig(
     start: cfg.start,
     end: cfg.end,
     leaseTime: cfg.leaseTime,
-    reservations: cfg.hosts
+    reservationsKnown: hostLines !== null,
+    reservations: (hostLines ?? [])
       .map((h) => h.split(','))
       // "MAC,IP,hostname". Anything shorter is an entry shape this page does
       // not understand, and inventing a name for it would be worse than

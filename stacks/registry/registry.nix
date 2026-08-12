@@ -26,7 +26,7 @@
 #     basic-auth API keys if ever needed.
 #
 # Push events: the `events` extension POSTs every registry event to
-# daedalus (https://daedalus.toscanini.me/api/deploy), which turns an
+# daedalus (https://daedalus-app.toscanini.me/api/deploy), which turns an
 # image push into an immediate redeploy instead of waiting up to two
 # minutes for that app's poll timer. Authenticated with
 # DEPLOY_HOOK_TOKEN from env.sops, sent as X-Deploy-Token.
@@ -142,6 +142,9 @@ in
     file = "/run/registry/config.json";
     prep = ''
       SSO_ISSUER=${lib.escapeShellArg config.fleet.sso.issuerUrl}
+      # The deploy-hook sink, from the app's published hostname rather than a
+      # literal in the asset — a hostname rename must reach zot too.
+      DAEDALUS_DEPLOY_URL=${lib.escapeShellArg "https://${config.fleet.webApps.daedalus.hostname}/api/deploy"}
       set -a
       . ${config.sops.secrets."registry-env".path}
       . ${config.fleet.ssoClients.zot.envFile}

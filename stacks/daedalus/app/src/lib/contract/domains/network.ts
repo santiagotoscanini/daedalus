@@ -9,13 +9,16 @@ import { readSnapshot } from '../snapshot'
 export type NetworkFacts = {
   lanHosts: { ip: string; host: string }[]
   dnsUpstreams: string[]
+  // No reservations here: they moved to an encrypted hostsfile (a household
+  // device inventory has no place in the public repo, and nix cannot read a
+  // sops file at eval). The dhcp tab reads the decrypted copy the host
+  // mounts at DHCP_HOSTS_PATH instead.
   dhcp: {
     active: boolean
     router: string
     start: string
     end: string
     leaseTime: string
-    hosts: string[]
   }
 }
 
@@ -29,16 +32,15 @@ const shape = obj({
       start: optional(str, ''),
       end: optional(str, ''),
       leaseTime: optional(str, ''),
-      hosts: optional(arrayOf(str), []),
     }),
-    { active: false, router: '', start: '', end: '', leaseTime: '', hosts: [] },
+    { active: false, router: '', start: '', end: '', leaseTime: '' },
   ),
 })
 
 const EMPTY: NetworkFacts = {
   lanHosts: [],
   dnsUpstreams: [],
-  dhcp: { active: false, router: '', start: '', end: '', leaseTime: '', hosts: [] },
+  dhcp: { active: false, router: '', start: '', end: '', leaseTime: '' },
 }
 
 export async function networkFacts(): Promise<NetworkFacts> {

@@ -37,7 +37,7 @@ export default defineConfig({
 
     // The HMR websocket is the one connection the browser opens on its own, so
     // it does not inherit the proxy's scheme or port — left alone the client
-    // tries ws://daedalus.toscanini.me:3000, which nothing listens on, and HMR
+    // tries ws://daedalus-app.toscanini.me:3000, which nothing listens on, and HMR
     // silently degrades to full page reloads. Point it back at traefik's TLS
     // entrypoint instead.
     hmr: {

@@ -342,7 +342,8 @@ design decision, so none warrants a section of its own.
   fix that avoids touching 25 fixtures: recreate the OLD SSID as a
   2.4 GHz guest network on the router and let them rejoin on their own.
   Re-pairing individually risks new device ids and re-adding everything.
-  Note `XX:XX:XX:XX:XX:09` is the TV, not a bulb.
+  Note the one responder on the smart-plug subnet is the TV, not a bulb
+  (its MAC is in pi-hole's network table).
 - **Radarr's `Bluray-2160p` cutoff leaves ~31 movies cutoff-unmet**, so
   it will re-download existing 1080p files in 4K as releases surface
   (~800 GB over the metered VPN). The one-line alternative is

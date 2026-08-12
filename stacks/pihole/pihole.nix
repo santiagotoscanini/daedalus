@@ -80,10 +80,27 @@ in
           start
           end
           leaseTime
-          hosts
           ;
+        # No `hosts` here: the reservations moved to the encrypted
+        # dhcp-hostsfile, which nix cannot read at eval (sops decrypts at
+        # activation), so the export simply doesn't have them any more.
+        # daedalus reads the decrypted file at runtime instead
+        # (DHCP_HOSTS_PATH in stacks/daedalus/daedalus.nix).
       };
     };
+
+  # The household device inventory (static DHCP reservations). Owned by
+  # pihole so FTL's dnsmasq can read it; rotation (a device joins or
+  # leaves) is `sops stacks/pihole/dhcp-hosts.sops` + rebuild, and the
+  # restart below makes the new lines land (dnsmasq reads hostsfiles at
+  # startup). daedalus consumes the same source via its own entry in
+  # stacks/daedalus/daedalus.nix — one encrypted file, two readers.
+  sops.secrets."pihole-dhcp-hosts" = {
+    sopsFile = ./dhcp-hosts.sops;
+    format = "binary";
+    owner = "pihole";
+    restartUnits = [ "pihole-ftl.service" ];
+  };
 
   services.pihole-ftl = {
     enable = true;
@@ -119,21 +136,12 @@ in
         start = "192.168.0.100";
         end = "192.168.0.250";
         leaseTime = "8h";
-        # Static reservations: "MAC,IP,hostname". s2-server is included for
-        # LAN-DNS only — dnsmasq populates a `s2-server.lan → .2` A record
-        # from this entry. No DHCP transaction (it IS the DHCP server;
-        # static IP from configuration.nix).
-        hosts = [
-          "XX:XX:XX:XX:XX:00,${config.fleet.lanIp},s2-server"
-          "XX:XX:XX:XX:XX:01,192.168.0.120,Gaming-PC"
-          "XX:XX:XX:XX:XX:02,192.168.0.100,MBP-Santiago"
-          "XX:XX:XX:XX:XX:03,192.168.0.101,MBP-B"
-          "XX:XX:XX:XX:XX:04,192.168.0.102,Galaxy-B"
-          "XX:XX:XX:XX:XX:05,192.168.0.202,EchoDot-Office"
-          "XX:XX:XX:XX:XX:06,192.168.0.103,iPhone-Santiago"
-          "XX:XX:XX:XX:XX:07,192.168.0.207,SmartVacuum"
-          "XX:XX:XX:XX:XX:08,192.168.0.208,SmartUSB-Mousepad"
-        ];
+        # Static reservations live in dhcp-hosts.sops (same "MAC,IP,hostname"
+        # lines, fed to dnsmasq via the dhcp-hostsfile= directive below).
+        # Encrypted rather than listed here because the repo is public and
+        # this is the one config atom that is a household device inventory:
+        # real MACs and family device names. The s2-server line rides along —
+        # dnsmasq populates `s2-server.lan → .2` from it, no DHCP transaction.
       };
 
       webserver = {
@@ -176,7 +184,12 @@ in
         # apex and every public record): names NOT in dns.hosts fall
         # through to upstreams normally, so `toscanini.me`, blog,
         # travel, etc. resolve to their real public records.
-        dnsmasq_lines = map (h: "local=/${h}/") localOnlyHostnames;
+        dnsmasq_lines = map (h: "local=/${h}/") localOnlyHostnames ++ [
+          # Static DHCP reservations, from the encrypted hostsfile (see the
+          # dhcp block above). dnsmasq re-reads hostsfiles on SIGHUP, but the
+          # secret's restartUnits already bounces FTL on rotation.
+          "dhcp-hostsfile=${config.sops.secrets."pihole-dhcp-hosts".path}"
+        ];
       };
     };
   };

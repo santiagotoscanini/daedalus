@@ -400,7 +400,7 @@ in
       middlewares:
         grafana-embed:
           headers:
-            contentSecurityPolicy: "frame-ancestors 'self' https://daedalus.toscanini.me"
+            contentSecurityPolicy: "frame-ancestors 'self' https://${config.fleet.webApps.daedalus.hostname}"
   '';
 
   fleet.appDatabases.grafana.consumers = [ "grafana" ];

@@ -12,7 +12,7 @@
 # rebuilds this exact box with no database in the loop. The DB is the editing
 # surface; this file is the contract.
 #
-# To change an app: use daedalus (https://daedalus.toscanini.me), then Apply.
+# To change an app: use daedalus (https://daedalus-app.toscanini.me), then Apply.
 # Editing apps.json directly works for one rebuild but daedalus will report the
 # app as drifted, and the next Apply overwrites it.
 #

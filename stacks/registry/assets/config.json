@@ -88,7 +88,7 @@
       "sinks": [
         {
           "type": "http",
-          "address": "https://daedalus.toscanini.me/api/deploy",
+          "address": "${DAEDALUS_DEPLOY_URL}",
           "timeout": "10s",
           "headers": { "X-Deploy-Token": "${DEPLOY_HOOK_TOKEN}" }
         }
