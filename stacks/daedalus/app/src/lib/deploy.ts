@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { defineBridge } from './bridge'
 
 // Redeploy: pull the app's image and restart it if the digest moved.
 //
@@ -15,10 +15,7 @@ import { join } from 'node:path'
 // whereas the timer's Persistent=true catches up on boot. Push removes
 // latency, the timer keeps the system self-healing.
 
-const APPLY_DIR = process.env.APPLY_DIR ?? '/apply'
 const DEPLOY_STATE = process.env.DEPLOY_STATE_DIR ?? '/deploy-state'
-const REQUEST = join(APPLY_DIR, 'deploy-request.json')
-const STATUS = join(APPLY_DIR, 'deploy-status.json')
 
 export type DeployState = 'idle' | 'running' | 'done' | 'failed'
 
@@ -30,14 +27,14 @@ export type DeployStatus = {
   finishedAt: string | null
 }
 
-const IDLE: DeployStatus = { id: null, app: null, state: 'idle', error: '', finishedAt: null }
+const bridge = defineBridge<DeployStatus>({
+  requestFile: 'deploy-request.json',
+  statusFile: 'deploy-status.json',
+  idle: { id: null, app: null, state: 'idle', error: '', finishedAt: null },
+})
 
 export async function readDeployStatus(): Promise<DeployStatus> {
-  try {
-    return { ...IDLE, ...(JSON.parse(await readFile(STATUS, 'utf8')) as Partial<DeployStatus>) }
-  } catch {
-    return IDLE
-  }
+  return bridge.readStatus()
 }
 
 /**
@@ -73,29 +70,5 @@ export async function requestDeploy(input: {
   reason: string
   actor: string
 }): Promise<string> {
-  const id = randomUUID()
-
-  await mkdir(APPLY_DIR, { recursive: true })
-
-  // Temp + rename: the path unit fires on rename-into-place, so the trigger
-  // never sees a half-written request.
-  const tmp = `${REQUEST}.tmp`
-  await writeFile(
-    tmp,
-    `${JSON.stringify(
-      {
-        id,
-        app: input.app,
-        reason: input.reason,
-        actor: input.actor,
-        requestedAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    )}\n`,
-    'utf8',
-  )
-  await rename(tmp, REQUEST)
-
-  return id
+  return bridge.request({ app: input.app, reason: input.reason, actor: input.actor })
 }

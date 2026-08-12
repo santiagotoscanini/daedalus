@@ -1,6 +1,4 @@
-import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { defineBridge } from './bridge'
 
 // Asking the host to do the two repo-side things that cannot be done from here.
 //
@@ -14,14 +12,7 @@ import { join } from 'node:path'
 //               pushes to zot over registry-net, so no hosted runner can do it,
 //               and a repo only gets a runner once it is a declared app.
 //
-// Same shape as lib/apply.ts and lib/deploy.ts: write a temp file, rename it
-// into place, let a systemd.path unit notice. Rename rather than write-in-place
-// because the path unit fires on close-after-write too, and a half-serialised
-// request must never be observable.
-
-const APPLY_DIR = process.env.APPLY_DIR ?? '/apply'
-const REQUEST = join(APPLY_DIR, 'ci-request.json')
-const STATUS = join(APPLY_DIR, 'ci-status.json')
+// Bridge mechanics (temp + rename, payload-before-trigger): lib/bridge.ts.
 
 export type CiAction = 'set-secret' | 'run-ci'
 export type CiRequestState = 'idle' | 'running' | 'done' | 'failed'
@@ -37,23 +28,22 @@ export type CiRequestStatus = {
   finishedAt: string | null
 }
 
-const IDLE: CiRequestStatus = {
-  id: null,
-  action: null,
-  repo: null,
-  state: 'idle',
-  detail: '',
-  error: '',
-  finishedAt: null,
-}
+const bridge = defineBridge<CiRequestStatus>({
+  requestFile: 'ci-request.json',
+  statusFile: 'ci-status.json',
+  idle: {
+    id: null,
+    action: null,
+    repo: null,
+    state: 'idle',
+    detail: '',
+    error: '',
+    finishedAt: null,
+  },
+})
 
 export async function readCiRequestStatus(): Promise<CiRequestStatus> {
-  try {
-    return { ...IDLE, ...(JSON.parse(await readFile(STATUS, 'utf8')) as Partial<CiRequestStatus>) }
-  } catch {
-    // No status file: nothing has ever been requested from here.
-    return IDLE
-  }
+  return bridge.readStatus()
 }
 
 export async function requestCi(input: {
@@ -63,28 +53,10 @@ export async function requestCi(input: {
   workflow?: string
   actor: string
 }): Promise<string> {
-  const id = randomUUID()
-
-  await mkdir(APPLY_DIR, { recursive: true })
-
-  const tmp = `${REQUEST}.tmp`
-  await writeFile(
-    tmp,
-    `${JSON.stringify(
-      {
-        id,
-        action: input.action,
-        repo: input.repo,
-        workflow: input.workflow ?? '',
-        actor: input.actor,
-        requestedAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    )}\n`,
-    'utf8',
-  )
-  await rename(tmp, REQUEST)
-
-  return id
+  return bridge.request({
+    action: input.action,
+    repo: input.repo,
+    workflow: input.workflow ?? '',
+    actor: input.actor,
+  })
 }
