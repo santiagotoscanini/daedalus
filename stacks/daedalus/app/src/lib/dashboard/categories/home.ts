@@ -26,8 +26,8 @@ import { getJson } from '../../http'
 import { key } from '../../keys'
 import { promScalars } from '../../prom'
 import { type VersionGap, versionGap } from '../github'
-import { type IdpData, idpClients, loadIdp } from '../idp'
 import { imageVersion, type RunningVersion } from '../images'
+import { type IdpData, idpClients, loadIdp } from './idp'
 
 type Ctx = { base: (app: string) => string; hc: string }
 

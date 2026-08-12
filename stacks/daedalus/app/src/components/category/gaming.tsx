@@ -1,4 +1,4 @@
-import type { GamingData } from '../../server/category'
+import type { GamingData } from '../../lib/dashboard/categories/gaming'
 import { LogBoard } from '../logs'
 import { Changelog, ReleaseNotes, UpgradeChain } from '../release-notes'
 import { ServiceHead } from '../service-head'

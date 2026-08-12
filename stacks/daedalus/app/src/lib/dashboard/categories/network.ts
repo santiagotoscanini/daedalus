@@ -28,7 +28,7 @@ import {
   type VersionGap,
   versionGap,
 } from '../github'
-import { clientHost, idpClients, type PocketClient } from '../idp'
+import { clientHost, idpClients, type PocketClient } from './idp'
 
 export type NetworkData =
   | ({ tab: 'general' } & GeneralData)

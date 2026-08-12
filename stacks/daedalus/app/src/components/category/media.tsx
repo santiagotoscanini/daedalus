@@ -1,6 +1,6 @@
 import { useState } from 'react'
+import type { MediaData } from '../../lib/dashboard/categories/media'
 import { bytes, DASH, flag, num, rate, since, until } from '../../lib/format'
-import type { MediaData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
 import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'

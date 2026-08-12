@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
+import type { NetworkData } from '../../lib/dashboard/categories/network'
 import { bytes, compact, DASH, flag, ms, num, pct, since, until } from '../../lib/format'
 import { BASE_DOMAIN, stripBaseDomain } from '../../lib/site'
-import type { NetworkData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../service-head'

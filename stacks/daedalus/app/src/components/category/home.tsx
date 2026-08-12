@@ -1,5 +1,5 @@
+import type { HomeData } from '../../lib/dashboard/categories/home'
 import { bytes, DASH, num, pct } from '../../lib/format'
-import type { HomeData } from '../../server/category'
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'
 import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'

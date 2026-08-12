@@ -1,12 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 
-import type { AiData } from '../lib/dashboard/categories/ai'
-import type { GamingData } from '../lib/dashboard/categories/gaming'
-import type { HomeData } from '../lib/dashboard/categories/home'
-import type { MediaData } from '../lib/dashboard/categories/media'
-import type { MonitoringData } from '../lib/dashboard/categories/monitoring'
-import type { NetworkData } from '../lib/dashboard/categories/network'
-import type { SystemData } from '../lib/dashboard/categories/system'
+import type { CategoryDataMap, CategoryPayload } from '../lib/dashboard/category-data'
 import { CATEGORIES, type CategoryName, resolveTab } from '../lib/dashboard/nav'
 
 // The loaders behind every category page.
@@ -34,9 +28,7 @@ import { CATEGORIES, type CategoryName, resolveTab } from '../lib/dashboard/nav'
 // page. It is gone: every service on this box has a tab now, so the cards were
 // restating three of a page's own numbers one scroll below it.
 
-export type { AiData, GamingData, HomeData, MediaData, MonitoringData, NetworkData, SystemData }
-
-export type CategoryPayload = Body
+export type { CategoryPayload }
 
 /** `https://<hostname>` per webApp, plus the host as containers see it. */
 async function makeCtx(): Promise<{ base: (app: string) => string; hc: string }> {
@@ -225,48 +217,34 @@ async function logPipelineHealth(): Promise<boolean | null> {
   return worst === 1
 }
 
-type Body =
-  | { kind: 'ai'; data: AiData }
-  | { kind: 'media'; data: MediaData }
-  | { kind: 'home'; data: HomeData }
-  | { kind: 'network'; data: NetworkData }
-  | { kind: 'system'; data: SystemData }
-  | { kind: 'monitoring'; data: MonitoringData }
-  | { kind: 'gaming'; data: GamingData }
+type Ctx = { base: (app: string) => string; hc: string }
+type Loader<K extends CategoryName> = (tab: string, ctx: Ctx) => Promise<CategoryDataMap[K]>
+
+/**
+ * One dynamic-import thunk per category — the server half of the registry
+ * whose types live in lib/dashboard/category-data.ts and whose views live in
+ * components/category/registry.tsx. Dynamic imports, because each category's
+ * data module drags its whole upstream graph with it and one request should
+ * load exactly one.
+ */
+const LOADERS: { [K in CategoryName]: () => Promise<Loader<K>> } = {
+  ai: async () => (await import('../lib/dashboard/categories/ai')).loadAi,
+  media: async () => (await import('../lib/dashboard/categories/media')).loadMedia,
+  home: async () => (await import('../lib/dashboard/categories/home')).loadHome,
+  network: async () => (await import('../lib/dashboard/categories/network')).loadNetwork,
+  system: async () => (await import('../lib/dashboard/categories/system')).loadSystem,
+  monitoring: async () => (await import('../lib/dashboard/categories/monitoring')).loadMonitoring,
+  gaming: async () => (await import('../lib/dashboard/categories/gaming')).loadGaming,
+}
 
 async function loadCategory(
   category: CategoryName,
   tab: string,
-  ctx: { base: (app: string) => string; hc: string },
-): Promise<Body> {
-  switch (category) {
-    case 'ai': {
-      const { loadAi } = await import('../lib/dashboard/categories/ai')
-      return { kind: 'ai', data: await loadAi(tab, ctx) }
-    }
-    case 'media': {
-      const { loadMedia } = await import('../lib/dashboard/categories/media')
-      return { kind: 'media', data: await loadMedia(tab, ctx) }
-    }
-    case 'home': {
-      const { loadHome } = await import('../lib/dashboard/categories/home')
-      return { kind: 'home', data: await loadHome(tab, ctx) }
-    }
-    case 'network': {
-      const { loadNetwork } = await import('../lib/dashboard/categories/network')
-      return { kind: 'network', data: await loadNetwork(tab, ctx) }
-    }
-    case 'system': {
-      const { loadSystem } = await import('../lib/dashboard/categories/system')
-      return { kind: 'system', data: await loadSystem(tab) }
-    }
-    case 'monitoring': {
-      const { loadMonitoring } = await import('../lib/dashboard/categories/monitoring')
-      return { kind: 'monitoring', data: await loadMonitoring(tab, ctx) }
-    }
-    case 'gaming': {
-      const { loadGaming } = await import('../lib/dashboard/categories/gaming')
-      return { kind: 'gaming', data: await loadGaming(tab, ctx) }
-    }
-  }
+  ctx: Ctx,
+): Promise<CategoryPayload> {
+  const load = await LOADERS[category]()
+  // TS cannot correlate an indexed record lookup with the union member the
+  // same key selects, so this one cast carries what the record's mapped type
+  // already proved: LOADERS[k] returns exactly CategoryDataMap[k].
+  return { kind: category, data: await load(tab, ctx) } as CategoryPayload
 }
