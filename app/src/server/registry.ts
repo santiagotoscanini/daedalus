@@ -26,8 +26,9 @@ export const fetchApps = createServerFn().handler(async () => {
   const manifest = new Map(entries.map((m) => [m.name, m]))
   // appStatuses degrades per-app rather than rejecting, so a prometheus
   // outage costs the status column, not the page.
-  const { appIcon } = await import('../lib/app-icon')
-  const [statuses, applyStatus, icons] = await Promise.all([
+  const { appIcon, siteIcon } = await import('../lib/app-icon')
+  const { EXTERNAL_APPS } = await import('../lib/external-apps')
+  const [statuses, applyStatus, icons, externalIcons] = await Promise.all([
     appStatuses(records.map((r) => r.name)),
     readApplyStatus(),
     // Resolved per app, in parallel, and cached for an hour in that module —
@@ -39,10 +40,15 @@ export const fetchApps = createServerFn().handler(async () => {
           null,
       ),
     ),
+    Promise.all(EXTERNAL_APPS.map(async (e) => (await siteIcon(e.id, e.host)) !== null)),
   ])
 
   return {
     applyStatus,
+    // The off-box projects (GitHub Pages / Vercel). Static data plus one
+    // probed fact — whether the site serves an icon — so the row can draw a
+    // monogram instead of a broken image.
+    external: EXTERNAL_APPS.map((e, i) => ({ ...e, hasIcon: externalIcons[i] ?? false })),
     apps: records.map((r, i) => ({
       name: r.name,
       stage: r.stage,

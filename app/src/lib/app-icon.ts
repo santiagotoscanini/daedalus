@@ -75,6 +75,18 @@ export async function appIcon(
   return icon
 }
 
+/**
+ * An off-box site's icon (lib/external-apps.ts). Same cache and probes, but
+ * only the public origin — there is no `app-<name>:3000` container to try,
+ * and probing one anyway would spend a DNS miss per fallback path per render.
+ * Shares the cache namespace with app names, which is why external ids must
+ * not collide with registry app names.
+ */
+export async function siteIcon(id: string, host: string): Promise<ResolvedIcon | null> {
+  const { icon } = await cache.get(id, async () => ({ icon: await fromOrigin(`https://${host}`) }))
+  return icon
+}
+
 /** Drop a cached answer, so a redeployed app's new icon is picked up. */
 export function forgetAppIcon(name: string): void {
   cache.forget(name)
