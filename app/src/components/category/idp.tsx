@@ -15,7 +15,7 @@
 // routing.
 
 import { useState } from 'react'
-import type { IdpData } from '../../lib/dashboard/idp'
+import type { IdpData } from '../../lib/dashboard/categories/idp'
 import { DASH, num } from '../../lib/format'
 import { GrafanaLogs, LogDetails } from '../logs'
 import { Changelog } from '../release-notes'

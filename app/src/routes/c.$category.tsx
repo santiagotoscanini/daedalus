@@ -1,21 +1,10 @@
 import { Await, createFileRoute, Link, notFound } from '@tanstack/react-router'
 import { Fragment } from 'react'
 
-import { AiView } from '../components/category/ai'
-import { GamingView } from '../components/category/gaming'
-import { HomeView } from '../components/category/home'
-import { MediaView } from '../components/category/media'
-import { MonitoringView } from '../components/category/monitoring'
-import { NetworkView } from '../components/category/network'
-import { SystemView } from '../components/category/system'
+import { CategoryBoards } from '../components/category/registry'
 import { BoardsSkeleton, ServiceHeadSkeleton, StatBandSkeleton } from '../components/skeleton'
 import { CATEGORIES, type CategoryName, type CategorySpec, resolveTab } from '../lib/dashboard/nav'
-import {
-  type CategoryPayload,
-  fetchCategoryBoards,
-  fetchTabStatus,
-  type TabStatus,
-} from '../server/category'
+import { fetchCategoryBoards, fetchTabStatus, type TabStatus } from '../server/category'
 
 // One page per category, and a tab per subject inside it.
 //
@@ -201,23 +190,4 @@ function BoardsPlaceholder({ spec, tab }: { spec: CategorySpec; tab: string }) {
       <BoardsSkeleton spans={t?.boardSpans ?? spec.boardSpans} />
     </>
   )
-}
-
-function CategoryBoards({ payload }: { payload: CategoryPayload }) {
-  switch (payload.kind) {
-    case 'ai':
-      return <AiView data={payload.data} />
-    case 'media':
-      return <MediaView data={payload.data} />
-    case 'home':
-      return <HomeView data={payload.data} />
-    case 'network':
-      return <NetworkView data={payload.data} />
-    case 'system':
-      return <SystemView data={payload.data} />
-    case 'monitoring':
-      return <MonitoringView data={payload.data} />
-    case 'gaming':
-      return <GamingView data={payload.data} />
-  }
 }

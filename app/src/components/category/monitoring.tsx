@@ -1,6 +1,6 @@
+import type { MonitoringData } from '../../lib/dashboard/categories/monitoring'
 import { bytes, compact, DASH, num, pct, since, until } from '../../lib/format'
 import { BASE_DOMAIN } from '../../lib/site'
-import type { MonitoringData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
 import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
