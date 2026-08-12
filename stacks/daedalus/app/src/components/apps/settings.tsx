@@ -202,6 +202,7 @@ export function Settings({
         <Segmented
           value={app.authMode}
           disabled={readOnly}
+          label="Single sign-on mode"
           onChange={(v) => {
             patch({ authMode: v })
           }}

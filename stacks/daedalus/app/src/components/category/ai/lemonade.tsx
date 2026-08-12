@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { AiData } from '../../../lib/dashboard/categories/ai'
 import { compact, DASH, num, pct } from '../../../lib/format'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../../server/lemonade'
+import { InfoHint } from '../../hint'
 import { LogBoard, type LogNeighbour } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
@@ -277,14 +278,14 @@ function HostFact({
   muted?: boolean
 }) {
   return (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex opens the :focus-within card for keyboard users — the popover pattern this codebase uses instead of title=; becomes the shared InfoHint (a real button) in the UI-system pass.
-    <span className={muted === true ? 'hfact hfact-muted' : 'hfact'} tabIndex={0}>
-      {short}
-      <span className="hfact-card" role="tooltip">
-        <span className="hfact-detail">{detail}</span>
-        {note !== undefined && <span className="hfact-note">{note}</span>}
-      </span>
-    </span>
+    <InfoHint
+      className={muted === true ? 'hfact hfact-muted' : 'hfact'}
+      cardClassName="hfact-card"
+      trigger={short}
+    >
+      <span className="hfact-detail">{detail}</span>
+      {note !== undefined && <span className="hfact-note">{note}</span>}
+    </InfoHint>
   )
 }
 

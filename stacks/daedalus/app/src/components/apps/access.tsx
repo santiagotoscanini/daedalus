@@ -65,6 +65,9 @@ export function Access({
           params={{ name }}
           search={(prev) => ({ ...prev, tab: 'access' as const, range: w })}
           className={w === range ? 'active' : ''}
+          // "true", not "page": the active window is the current selection,
+          // not the current location — the page is the same either side.
+          aria-current={w === range ? 'true' : undefined}
           replace
         >
           {WINDOW_SPEC[w].label}

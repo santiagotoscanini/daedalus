@@ -369,6 +369,7 @@ export function GrafanaLogs({
         <Segmented
           value={from}
           onChange={setFrom}
+          label="Log range"
           options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
         />
         <a

@@ -1,5 +1,6 @@
 import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { bytes, DASH, num, pct } from '../../../lib/format'
+import { InfoHint } from '../../hint'
 import { LogBoard } from '../../logs'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../../viz'
 import { hours, SYSTEM_SNAPSHOT } from './shared'
@@ -92,35 +93,36 @@ type Segment = {
  * rather than shown. It overlays the panel below it, which is what a tooltip
  * does anyway, and it needs no positioning library to do it.
  *
- * `tabIndex` and `:focus-within` alongside `:hover` so this is reachable
- * without a pointer — a hover-only disclosure is one that a keyboard, and a
- * phone, simply cannot open.
+ * The rows are spans, not a <ul>: InfoHint's trigger is a <button>, whose
+ * content model has no room for list elements.
  */
 function ModelDecode({ model, segments }: { model: string; segments: Segment[] }) {
   return (
-    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: the label names the decoded model string for assistive tech; becomes the shared InfoHint (a real button, with a role) in the UI-system pass.
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex opens the :focus-within decode card for keyboard users.
-    <span className="decode" tabIndex={0} aria-label={`${model}, decoded`}>
-      <strong className="disk-model decode-string">
+    <InfoHint
+      className="decode"
+      cardClassName="decode-card"
+      label={`${model}, decoded`}
+      trigger={
+        <strong className="disk-model decode-string">
+          {segments.map((s, i) => (
+            <span key={`${s.text}-${String(i)}`} className={`decode-seg decode-seg-${s.key}`}>
+              {s.text}
+            </span>
+          ))}
+        </strong>
+      }
+    >
+      <span className="decode-head">{model}</span>
+      <span className="decode-list">
         {segments.map((s, i) => (
-          <span key={`${s.text}-${String(i)}`} className={`decode-seg decode-seg-${s.key}`}>
-            {s.text}
+          <span key={`${s.text}-${String(i)}`} className="decode-item">
+            <code className={`decode-seg decode-seg-${s.key}`}>{s.text}</code>
+            <span className="decode-label">{s.label}</span>
+            <span className="decode-note">{s.note}</span>
           </span>
         ))}
-      </strong>
-      <span className="decode-card" role="tooltip">
-        <span className="decode-head">{model}</span>
-        <ul className="decode-list">
-          {segments.map((s, i) => (
-            <li key={`${s.text}-${String(i)}`}>
-              <code className={`decode-seg decode-seg-${s.key}`}>{s.text}</code>
-              <span className="decode-label">{s.label}</span>
-              <span className="decode-note">{s.note}</span>
-            </li>
-          ))}
-        </ul>
       </span>
-    </span>
+    </InfoHint>
   )
 }
 

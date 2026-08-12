@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
 import { ImagesView, PackagesView } from '../components/registries'
 import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
+import { TabBar } from '../components/tabs'
 import { AppIcon, type AppState, Segmented, StateDot } from '../components/ui'
 import { Spark } from '../components/viz'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
@@ -59,19 +60,7 @@ function AppsPage() {
         What this box runs of its own, and the two registries every one of them is built out of.
       </p>
 
-      <nav className="tabs">
-        {TABS.map((t) => (
-          <Link
-            key={t.id}
-            to="/apps"
-            search={{ tab: t.id }}
-            className={t.id === tab ? 'active' : ''}
-            replace
-          >
-            {t.label}
-          </Link>
-        ))}
-      </nav>
+      <TabBar tabs={TABS} active={tab} linkTo={(id) => ({ to: '/apps', search: { tab: id } })} />
 
       {list !== null && (
         <Await promise={list} fallback={<RowsSkeleton count={4} />}>
@@ -160,6 +149,7 @@ export function AppsList({ data }: { data: ListData }) {
         <Segmented
           value={state}
           onChange={setState}
+          label="Filter by state"
           options={[
             { value: 'all', label: 'all' },
             { value: 'running', label: 'running' },
@@ -170,6 +160,7 @@ export function AppsList({ data }: { data: ListData }) {
         <Segmented
           value={exposure}
           onChange={setExposure}
+          label="Filter by exposure"
           options={[
             { value: 'all', label: 'all' },
             { value: 'live', label: 'external' },

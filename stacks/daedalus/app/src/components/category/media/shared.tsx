@@ -28,7 +28,7 @@ export function ServiceBar<T extends string>({
 }) {
   return (
     <div className="tunnel-bar">
-      <Segmented value={value} onChange={onChange} options={options} />
+      <Segmented value={value} onChange={onChange} options={options} label="Service" />
     </div>
   )
 }

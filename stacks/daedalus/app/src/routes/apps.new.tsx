@@ -400,6 +400,7 @@ function Wizard({ options }: { options: Options }) {
                 <Segmented
                   value={stage}
                   onChange={setStage}
+                  label="Exposure"
                   options={[
                     { value: 'off', label: 'Off', icon: '⏻' },
                     { value: 'lab', label: 'Internal', icon: '⛨' },
