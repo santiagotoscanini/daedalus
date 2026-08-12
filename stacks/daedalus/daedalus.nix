@@ -56,28 +56,9 @@ let
     in
     if m == null then "" else builtins.head m;
 
-  # Every container's image tag, WHATEVER shape it is: `10.11.11ubu2404-ls42`,
-  # `jvm-stable`, `latest`, `8`.
-  #
-  # Deliberately not `tagOf`, which insists the tag look like a version and
-  # answers empty otherwise. Deciding whether a tag names a version is the
-  # reader's job, and a channel name arriving intact is exactly what lets a
-  # panel say "this pin carries no version" rather than show a wrong one.
-  #
-  # One variable over every container rather than a variable per service,
-  # because the alternative is a nix edit — and a rebuild — every time a page
-  # wants to report a version that is already written down here. The Media
-  # tabs read eight of these.
-  imageTags = lib.mapAttrs (
-    _: c:
-    let
-      pinned = builtins.match ".*:([^@:]+)@sha256:.*" c.image;
-      plain = builtins.match ".*:([^@:]+)" c.image;
-    in
-    if pinned != null then builtins.head pinned
-    else if plain != null then builtins.head plain
-    else ""
-  ) config.virtualisation.oci-containers.containers;
+  # The full per-container tag map lives in platform/export.nix now (the
+  # images export domain); `tagOf` above stays for the handful of named
+  # *_VERSION variables whose consumers read them by name.
 
   # `localhost/litellm-pgvector:b553f84-a4yhvmn9` → `b553f84`. Not a version:
   # there is no published image and no release, so the flake pins a source
@@ -326,35 +307,9 @@ let
   # (pihole, grafana, chat, …). Handed to the container so a hostname edit can
   # be rejected while it is being typed.
   #
-  # The platform already refuses a collision — fleet.traefikRoutes asserts that
-  # no two routers claim the same entrypoint+host, because traefik's pick
-  # between identical rules is nondeterministic. But that assertion fires
-  # during `nixos-rebuild`, i.e. mid-Apply, after the commit; recovering means
-  # a revert. This list is what lets the same mistake be a red input box
-  # instead.
-  #
-  # Reading config.fleet.webApps here is safe despite the module header's
-  # warning about config reads: webApps is derived from fleet.apps, which is a
-  # literal, and nothing in that chain depends on the container this file
-  # feeds. (`self`, by contrast, DOES feed the container, which is why it stays
-  # a let-binding rather than a read of fleet.apps.daedalus.)
-  takenHostnames = lib.sort (a: b: a < b) (
-    lib.mapAttrsToList (_: w: w.hostname) config.fleet.webApps
-  );
-
-  # webApp name → published hostname, for the dashboard's tile catalogue.
-  #
-  # The same list as `takenHostnames`, keyed rather than flattened, because the
-  # two answer different questions: that one is "is this name free", this one is
-  # "where do I dial `jellyfin`". Passing it means a hostname edit moves the
-  # dashboard's URL with it instead of stranding a literal in TypeScript — the
-  # tile catalogue names webApps, never FQDNs.
-  #
-  # Not every tile has an entry: the gluetun-netns services and the host-netns
-  # ones are reached on `host.containers.internal:<port>` (they cannot ride
-  # traefik-net), and those ports are literals in the catalogue — structural
-  # host ports, already restated in the stack that owns each one.
-  webAppHosts = lib.mapAttrs (_: w: w.hostname) config.fleet.webApps;
+  # (takenHostnames, webAppHosts, lanHosts and monitoredJobs all ride the
+  # /export domains now — publishing.json, network.json, jobs.json — see
+  # platform/export.nix and the stacks that contribute them.)
 
   # Apps with a tracked stacks/apps/<name>-env.sops. A FACT, read from the same
   # directory listing declarations.nix reads, not a setting: this is the only
@@ -363,51 +318,11 @@ let
   # manifest carries what Nix knows — and this belongs on that side.
   operatorSecretApps = lib.attrNames (import ../apps/operator-secrets-lib.nix { inherit lib; });
 
-  # Names pi-hole answers from its own hosts file instead of forwarding.
-  #
-  # Read from the setting FTL is actually configured with, not from
-  # `fleet.dnsHosts`: the stacks contribute most of these, but pi-hole's own
-  # module appends the hosts that belong to no stack (the gaming PC), and a
-  # page that showed only the stack half would be quietly missing entries that
-  # exist. Split into address and name because they are the two halves of the
-  # answer — nearly every one points at this box, and the ones that do not are
-  # exactly the interesting rows.
-  lanHosts =
-    let
-      parse = e: {
-        ip = lib.elemAt (lib.splitString " " e) 0;
-        host = lib.elemAt (lib.splitString " " e) 1;
-      };
-    in
-    lib.sort (a: b: a.host < b.host) (
-      map parse config.services.pihole-ftl.settings.dns.hosts
-    );
-
-  # Every scheduled job that has been declared as worth noticing, and HOW it is
-  # noticed. The two are different guarantees and the registry is the only
-  # place they are stated together: `email` means a run that FAILS sends mail,
-  # `slug` means a run that stops happening at all pages through healthchecks.
-  #
-  # A job with email and no slug cannot report that it was never started, which
-  # is exactly the failure a timer has — so the pair is what the Jobs tab
-  # exists to show. healthchecks knows about half of these and systemd knows
-  # about all of them; neither knows which was intended.
-  monitoredJobs = lib.mapAttrsToList (unit: j: {
-    inherit unit;
-    inherit (j) email slug;
-  }) config.fleet.monitoredJobs;
-
   nixManifest = pkgs.writeText "daedalus-nix-manifest.json" (
     builtins.toJSON {
       schemaVersion = 1;
       nixManaged.daedalus = self;
-      inherit
-        takenHostnames
-        webAppHosts
-        operatorSecretApps
-        lanHosts
-        monitoredJobs
-        ;
+      inherit operatorSecretApps;
     }
   );
 
@@ -667,30 +582,20 @@ in
       # reads back out of Loki.
       MCP_GROCY_VERSION = tagOf "mcp-grocy";
       PGVECTOR_REV = pgvectorRev;
-      # Every container's pinned tag, as JSON. The four variables above predate
-      # it and stay because their consumers already read them by name; anything
-      # new reads this instead, so a page that wants to report what a service
-      # is running costs no nix edit and no rebuild. See `imageTags`.
-      IMAGE_TAGS = builtins.toJSON imageTags;
-      # ...and where the OTHER half of that answer is published: the labels
-      # baked into the images actually on disk, for the services whose pin is
-      # a moving tag and therefore carries no version at all.
+      # The full tag map rides /export/images.json now (platform/export.nix);
+      # the named *_VERSION variables above predate it and stay because their
+      # consumers read them by name. The labels baked into the images on disk
+      # — the other half of the version answer, for services whose pin is a
+      # moving tag — still arrive as a snapshot:
       IMAGE_LABELS_PATH = "/images/labels.json";
       HOST_FACTS_PATH = "/system/system.json";
-      # The VPN tunnels, as JSON. One variable rather than a variable per
-      # tunnel per field, because the whole point is that the set grows: a
-      # third gluetun instance appears on the Network page with no change
-      # here and none in the app.
-      VPN_EGRESS = builtins.toJSON vpnEgress;
 
-      # The third way in, which is no proxy at all: the WAN address itself,
-      # kept current by platform/ddclient. What DEPENDS on that address is
-      # the registry each service contributes to; the rest is how the job
-      # that maintains it is configured, read from the service definition so
-      # a change to the poll interval cannot leave a stale number on a page.
-      DIRECT_INGRESS = builtins.toJSON (
-        lib.mapAttrsToList (name: v: { inherit name; inherit (v) port proto note; }) config.fleet.directIngress
-      );
+      # The VPN tunnels, the DNS upstreams, the DHCP scope and direct ingress
+      # all moved to /export domains (publishing.json, network.json) — fleet
+      # facts pages render, which is exactly what env is NOT for. What stays
+      # here is config: how the ddns job is set up, read from the service
+      # definition so a change to the poll interval cannot leave a stale
+      # number on a page.
       DDNS_HOST = lib.head (config.services.ddclient.domains ++ [ "" ]);
       DDNS_INTERVAL = config.services.ddclient.interval;
       DDCLIENT_VERSION = config.services.ddclient.package.version;
@@ -701,29 +606,13 @@ in
       # installation has never had (it answers `internal_error`). Read from the
       # package the service actually runs, not restated.
       PIHOLE_VERSION = config.services.pihole-ftl.package.version;
-      # The two upstream resolvers every name that is not answered locally goes
-      # to. Read from the same setting dnsmasq is configured with, so the page
-      # cannot claim a resolver that stopped being used a rebuild ago; FTL
-      # reports per-upstream counts and timings by IP, and this is what turns
-      # those into a list with an order.
-      DNS_UPSTREAMS = builtins.toJSON config.services.pihole-ftl.settings.dns.upstreams;
-      # The DHCP scope and its fixed reservations, as pi-hole is configured
-      # with them. `hosts` is "MAC,IP,hostname" per entry — the addresses that
-      # are decided here rather than handed out, which is why they are worth a
-      # panel: a device with a reservation is one something else on this box is
-      # allowed to refer to by address.
-      DHCP_CONFIG = builtins.toJSON {
-        inherit (config.services.pihole-ftl.settings.dhcp)
-          active
-          router
-          start
-          end
-          leaseTime
-          hosts
-          ;
-      };
     };
   };
+
+  # The tunnel registry rides the publishing domain (platform/export.nix); the
+  # derivation stays HERE because the tenant list comes from each container's
+  # own --network=container: flag, which this module already reads.
+  fleet.export.domains.publishing.data.vpnEgress = vpnEgress;
 
   # Same list-merge idiom stacks/litellm uses to add its token mount to
   # prometheus: the stack that OWNS the file contributes the mount, rather

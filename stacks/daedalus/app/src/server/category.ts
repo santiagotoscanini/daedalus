@@ -165,7 +165,7 @@ async function vpnEgressHealth(): Promise<boolean | null> {
   const { promScalar } = await import('../lib/dashboard/clients')
   const { declaredVpnEgress } = await import('../lib/vpn-egress')
 
-  const declared = declaredVpnEgress()
+  const declared = await declaredVpnEgress()
   if (declared.length === 0) return null
 
   const { escapeRe } = await import('../lib/metrics')
