@@ -673,7 +673,7 @@ rotation end-to-end.
 
 ## Recovery paths
 
-- **The repo IS the system**: clone `nixos-s2`, restore a decryption
+- **The repo IS the system**: clone `daedalus` (the repo), restore a decryption
   identity (old host SSH key, or santiago's age key from the password
   manager), `nixos-rebuild switch --flake /etc/nixos#s2-server`. Full
   runbook in `README.md`. Secrets included — only machine-generated

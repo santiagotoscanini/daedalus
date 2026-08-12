@@ -21,7 +21,7 @@
 #
 # ⚠ /etc/nixos lives on rpool/root, which has NO ZFS snapshots and is NOT in
 # the syncoid mirror (unlike /home/santiago/selfhost). The only copy of this
-# app's source outside this disk is what has been pushed to the nixos-s2 git
+# app's source outside this disk is what has been pushed to the daedalus git
 # remote. Commit often.
 #
 # Which rebuilds matter:
