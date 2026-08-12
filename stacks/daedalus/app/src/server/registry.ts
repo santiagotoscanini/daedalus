@@ -142,6 +142,7 @@ export const fetchApp = createServerFn()
         stage: record.stage,
         managedInNix: record.managedInNix,
         sourceMode: record.sourceMode,
+        deployEnable: record.deployEnable,
         image: record.image,
         effectiveImage: record.image ?? defaultImage(record.name),
         hostname: record.hostname,

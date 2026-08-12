@@ -128,15 +128,28 @@ let
     '';
   };
 
-  # Apps that actually have an `app-<name>-deploy.service` to start: exactly
-  # the registry-mode entries. Read from the same JSON the manifest uses
-  # rather than from `config.fleet.apps`, so this module still makes no config
-  # read (see the note on `self` below) — and a local-source app like daedalus
+  # The committed registry, read from the same JSON the manifest uses rather
+  # than from `config.fleet.apps`, so this module still makes no config read
+  # (see the note on `self` below).
+  registryApps = (builtins.fromJSON (builtins.readFile ../apps/apps.json)).apps;
+
+  # Apps that actually have an `app-<name>-deploy.service` to start: the
+  # registry-mode entries whose deploy is not frozen (schema v2's
+  # `deploy.enable`, absent = on — the same default the platform applies). A
+  # frozen app keeps its page and its env snapshot; what it loses is exactly
+  # this — the trigger refuses it, so a freeze holds against the UI's
+  # Redeploy button too, not just the timer. A local-source app like daedalus
   # is excluded for free, because it has no deploy unit at all.
   #
   # This list is the security control on the trigger: its contents become part
-  # of a unit name that root starts.
-  deployableApps = builtins.attrNames (builtins.fromJSON (builtins.readFile ../apps/apps.json)).apps;
+  # of a unit name that root starts. It MUST stay in lockstep with the
+  # entries registry-lib.nix maps `deploy.enable` for — an allowlist wider
+  # than the generated units would let root start a unit that does not exist.
+  deployableApps = lib.attrNames (
+    lib.filterAttrs (
+      _: a: (a.deploy.enable or true) && ((a.sourceMode or "registry") == "registry")
+    ) registryApps
+  );
 
   deployTriggerScript = pkgs.writeShellApplication {
     name = "daedalus-deploy-trigger";
@@ -204,8 +217,10 @@ let
     text = ''
       OUT_DIR=${lib.escapeShellArg envDir}
       # The registry's apps plus daedalus itself — exactly the set with a page
-      # in the UI. Derived from apps.json, so an Apply keeps it current.
-      APPS=${lib.escapeShellArg (lib.concatStringsSep " " (deployableApps ++ [ "daedalus" ]))}
+      # in the UI. Derived from apps.json, so an Apply keeps it current. ALL
+      # registry apps, not just the deployable ones: a frozen app still has a
+      # page, and that page still shows its environment.
+      APPS=${lib.escapeShellArg (lib.concatStringsSep " " (lib.attrNames registryApps ++ [ "daedalus" ]))}
       SETPRIV=${pkgs.util-linux}/bin/setpriv
       ENV_BIN=${pkgs.coreutils}/bin/env
       PODMAN=${pkgs.podman}/bin/podman

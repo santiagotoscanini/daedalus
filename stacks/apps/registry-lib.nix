@@ -22,11 +22,14 @@
 { lib }:
 
 {
-  # Grown in lockstep with the writer (stacks/daedalus/app,
-  # REGISTRY_SCHEMA_VERSION): the reader learns a version FIRST, the writer
-  # flips after the reader is live — the other order builds a system that
-  # cannot eval its own committed registry.
-  acceptedSchemaVersions = [ 1 ];
+  # Kept in lockstep with the writer (stacks/daedalus/app,
+  # REGISTRY_SCHEMA_VERSION): ONE version, not a range — reader and writer
+  # live in the same repo with one user, so a version flip is a single
+  # coordinated commit (writer + reader + a regenerated apps.json), never a
+  # migration window. A list only so the assertion message can print it.
+  #
+  # v2 added `deploy: { enable }` per entry — the freeze switch.
+  acceptedSchemaVersions = [ 2 ];
 
   # JSON → the `fleet.apps.<name>` submodule. Every field is emitted
   # unconditionally where the option's default matches the exported value, so
@@ -77,6 +80,14 @@
       # comment here and would otherwise be lost in the round-trip through the
       # database. daedalus renders them next to the value; nix only needs the pair.
       env = lib.listToAttrs (map (e: lib.nameValuePair e.key e.value) a.env);
+    }
+    # Emitted ONLY when the entry carries it: the option's default is
+    # `source.mode == "registry"`, so writing `true` unconditionally would
+    # turn the deploy machinery on for a local-source entry (daedalus's
+    # self.json, which carries no `deploy` key), and there is no registry
+    # image to poll there.
+    // lib.optionalAttrs (a ? deploy) {
+      deploy.enable = a.deploy.enable or true;
     }
     // lib.optionalAttrs (a.hostname or null != null) {
       inherit (a) hostname;

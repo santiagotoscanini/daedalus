@@ -1,7 +1,7 @@
 {
   "_generated": "GENERATED FILE — do not edit by hand. This is the Nix-facing contract of the daedalus app registry (stacks/daedalus). The authoritative copy lives in daedalus’s `apps` table; this file is exported from it by the Apply flow, committed, and read by declarations.nix. Editing it here will be overwritten on the next Apply, and daedalus will show the app as drifted until then.",
   "_why": "Nix eval is pure and a flake only sees git-tracked files, so nixos-rebuild cannot query Postgres. Exporting to a committed file is what keeps `the repo IS the system` true: a fresh checkout rebuilds this exact box with no database in the loop.",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "apps": {
     "anansi": {
       "stage": "live",
@@ -9,6 +9,9 @@
       "storage": false,
       "litellm": false,
       "prometheus": false,
+      "deploy": {
+        "enable": true
+      },
       "image": null,
       "hostname": null,
       "egress": null,
@@ -35,6 +38,9 @@
       "storage": true,
       "litellm": false,
       "prometheus": false,
+      "deploy": {
+        "enable": true
+      },
       "image": null,
       "hostname": null,
       "egress": {
@@ -101,6 +107,9 @@
       "storage": false,
       "litellm": true,
       "prometheus": false,
+      "deploy": {
+        "enable": true
+      },
       "image": null,
       "hostname": null,
       "egress": null,

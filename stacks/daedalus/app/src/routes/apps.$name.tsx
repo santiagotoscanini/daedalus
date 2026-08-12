@@ -757,6 +757,19 @@ function AppDetail() {
                 patch({ image: v.trim() === '' ? null : v.trim() })
               }}
             />
+            {/* Beside the image override on purpose: the two are one workflow.
+                A freeze without a pin only stops FUTURE digests — the current
+                `:latest` re-resolves on any container recreate — so holding a
+                known-good build means both. */}
+            <Toggle
+              checked={app.deployEnable}
+              disabled={readOnly || app.sourceMode === 'local'}
+              onChange={(v) => {
+                patch({ deployEnable: v })
+              }}
+              label="Auto-deploy"
+              hint="Poll the registry every 2 min and redeploy when the digest moves. Off freezes the app — the timer stops and the Redeploy button is refused host-side. Pair with a digest-pinned image override to hold a known-good build."
+            />
           </Board>
 
           <Board title="Resource limits" icon="◴" span={6}>
