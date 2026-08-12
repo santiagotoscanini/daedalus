@@ -1,8 +1,10 @@
 import { Await, createFileRoute, Link, useRouter } from '@tanstack/react-router'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { RowsSkeleton } from '../components/skeleton'
+import { usePolledStatus } from '../components/status'
 import { Segmented, Toggle } from '../components/ui'
 import { Board, BoardGrid } from '../components/viz'
+import type { CiRequestStatus } from '../lib/ci-request'
 import type { Check, Repo } from '../lib/github-repos'
 import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import {
@@ -38,6 +40,16 @@ export const Route = createFileRoute('/apps/new')({
   loader: () => ({ options: fetchNewAppOptions() }),
   component: NewAppPage,
 })
+
+const CI_IDLE: CiRequestStatus = {
+  id: null,
+  action: null,
+  repo: null,
+  state: 'idle',
+  detail: '',
+  error: '',
+  finishedAt: null,
+}
 
 type Options = Awaited<ReturnType<typeof fetchNewAppOptions>>
 type Preflight = Awaited<ReturnType<typeof fetchAppPreflight>>
@@ -152,33 +164,41 @@ function Wizard({ options }: { options: Options }) {
    *
    * The server function returns as soon as the request file is written, which
    * is before the host has done anything — so success has to come from the
-   * status file, not from the call returning.
+   * status file, not from the call returning. usePolledStatus owns the
+   * waiting, including not being fooled by the previous request's terminal
+   * state still sitting in the file; the row the verdict belongs to rides in
+   * a ref because settle fires from the poller, not from this closure.
    */
-  const hostAction = (id: 'registry-secret' | 'image', run: () => Promise<unknown>) => {
+  const hostRow = useRef<'registry-secret' | 'image' | null>(null)
+  const ci = usePolledStatus({
+    initial: CI_IDLE,
+    fetch: () => fetchCiRequestStatus(),
+    intervalMs: 1500,
+    onSettle: (s) => {
+      const id = hostRow.current
+      if (id === null) return
+      hostRow.current = null
+      const failed = s.state === 'failed'
+      setHost({ id, state: failed ? 'failed' : 'done', message: failed ? s.error : s.detail })
+      if (!failed) {
+        if (id === 'image') setAwaitingImage(true)
+        setRecheck((n) => n + 1)
+      }
+    },
+  })
+
+  const hostAction = (id: 'registry-secret' | 'image', run: () => Promise<{ id: string }>) => {
+    hostRow.current = id
     setHost({ id, state: 'running', message: '' })
-    void run()
-      .then(async () => {
-        for (let i = 0; i < 40; i++) {
-          await new Promise((r) => setTimeout(r, 1500))
-          const s = await fetchCiRequestStatus()
-          if (s.state === 'done' || s.state === 'failed') {
-            setHost({
-              id,
-              state: s.state,
-              message: s.state === 'failed' ? s.error : s.detail,
-            })
-            if (s.state === 'done') {
-              if (id === 'image') setAwaitingImage(true)
-              setRecheck((n) => n + 1)
-            }
-            return
-          }
-        }
-        setHost({ id, state: 'failed', message: 'the host did not answer within a minute' })
-      })
-      .catch((e: unknown) => {
+    ci.start(async () => {
+      try {
+        return (await run()).id
+      } catch (e: unknown) {
+        hostRow.current = null
         setHost({ id, state: 'failed', message: e instanceof Error ? e.message : String(e) })
-      })
+        return null
+      }
+    })
   }
 
   const canCreate =

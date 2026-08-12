@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
 import { GrafanaLogs } from '../components/logs'
 import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
+import { usePolledStatus } from '../components/status'
 import { AppIcon, Bytes, Segmented, Slider, StatePill, Toggle } from '../components/ui'
 import {
   BarList,
@@ -24,6 +25,7 @@ import {
   isAccessWindow,
   WINDOW_SPEC,
 } from '../lib/access-window'
+import type { CiRequestStatus } from '../lib/ci-request'
 import { DASH } from '../lib/dashboard/format'
 import type { DeployStatus } from '../lib/deploy'
 // ./env-groups, NOT ./env-snapshot: this is client code, and env-snapshot
@@ -1987,25 +1989,13 @@ function EnvRow({ app, v }: { app: string; v: EnvRowData }) {
  */
 function RedeployButton({ name, initial }: { name: string; initial: DeployStatus }) {
   const router = useRouter()
-  const [status, setStatus] = useState(initial)
-  const [submitting, setSubmitting] = useState(false)
-  const running = status.state === 'running' || submitting
-
-  useEffect(() => {
-    if (!running) return
-    const t = setInterval(() => {
-      void fetchDeployStatus().then((s) => {
-        setStatus(s)
-        if (s.state !== 'running') {
-          setSubmitting(false)
-          void router.invalidate()
-        }
-      })
-    }, 2000)
-    return () => {
-      clearInterval(t)
-    }
-  }, [running, router])
+  const { status, running, start } = usePolledStatus({
+    initial,
+    fetch: () => fetchDeployStatus(),
+    onSettle: () => {
+      void router.invalidate()
+    },
+  })
 
   return (
     <span className="redeploy">
@@ -2019,10 +2009,7 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
         className="btn btn-ghost"
         disabled={running}
         onClick={() => {
-          setSubmitting(true)
-          void triggerDeploy({ data: name }).catch(() => {
-            setSubmitting(false)
-          })
+          start(async () => (await triggerDeploy({ data: name })).id)
         }}
       >
         {running ? '↻ deploying…' : '↻ Redeploy'}
@@ -2044,6 +2031,16 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
  * watch the job), and load-bearing on one that does not yet — see the create
  * page, where it is the only way to get a first image.
  */
+const CI_IDLE: CiRequestStatus = {
+  id: null,
+  action: null,
+  repo: null,
+  state: 'idle',
+  detail: '',
+  error: '',
+  finishedAt: null,
+}
+
 function RunCiButton({
   repo,
   publish,
@@ -2052,8 +2049,19 @@ function RunCiButton({
   publish: { workflow: string | null; dispatchable: boolean }
 }) {
   const router = useRouter()
-  const [state, setState] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
-  const [message, setMessage] = useState('')
+  // A dispatch that never reached the host (the server function threw) —
+  // distinct from a request the host took and then failed.
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const { status, running, start } = usePolledStatus({
+    initial: CI_IDLE,
+    fetch: () => fetchCiRequestStatus(),
+    intervalMs: 1500,
+    onSettle: () => {
+      void router.invalidate()
+    },
+  })
+  const failed = submitError !== null || status.state === 'failed'
+  const message = submitError ?? (status.state === 'failed' ? status.error : status.detail)
 
   if (publish.workflow === null) {
     return (
@@ -2075,54 +2083,34 @@ function RunCiButton({
 
   return (
     <span className="redeploy">
-      {state === 'failed' && (
+      {failed && !running && (
         <span className="bad-text" title={message}>
           dispatch failed
         </span>
       )}
-      {state === 'done' && <span className="ok-text">dispatched</span>}
+      {status.state === 'done' && <span className="ok-text">dispatched</span>}
       <button
         type="button"
         className="btn btn-ghost"
-        disabled={state === 'running'}
+        disabled={running}
         title={`Dispatch ${publish.workflow}`}
         onClick={() => {
-          setState('running')
-          void runCiFn({ data: { repo, workflow: publish.workflow ?? '' } })
-            .then(() => waitForCi())
-            .then((s) => {
-              setState(s.state === 'failed' ? 'failed' : 'done')
-              setMessage(s.error || s.detail)
-              void router.invalidate()
-            })
-            .catch((e: unknown) => {
-              setState('failed')
-              setMessage(e instanceof Error ? e.message : String(e))
-            })
+          setSubmitError(null)
+          start(async () => {
+            try {
+              const r = await runCiFn({ data: { repo, workflow: publish.workflow ?? '' } })
+              return r.id
+            } catch (e: unknown) {
+              setSubmitError(e instanceof Error ? e.message : String(e))
+              return null
+            }
+          })
         }}
       >
-        {state === 'running' ? '⚙ dispatching…' : '⚙ Run CI'}
+        {running ? '⚙ dispatching…' : '⚙ Run CI'}
       </button>
     </span>
   )
-}
-
-/**
- * Poll the host's CI request status until it settles.
- *
- * The request is a file drop, so the server function returns as soon as it is
- * written — before the host has done anything. Everything the operator needs to
- * know (GitHub refused, no such repo, the runner would not start) arrives in
- * the status file a second or two later, and reporting "dispatched" without
- * waiting for it would mean showing success for a request that failed.
- */
-async function waitForCi(): Promise<{ state: string; detail: string; error: string }> {
-  for (let i = 0; i < 40; i++) {
-    await new Promise((r) => setTimeout(r, 1500))
-    const s = await fetchCiRequestStatus()
-    if (s.state === 'done' || s.state === 'failed') return s
-  }
-  return { state: 'failed', detail: '', error: 'the host did not answer within a minute' }
 }
 
 /**
