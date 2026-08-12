@@ -18,8 +18,8 @@ REQ="$APPLY_DIR/deploy-request.json"
 STATUS="$APPLY_DIR/deploy-status.json"
 
 write_status() {
-  install -m 0644 -o santiago -g users /dev/stdin "$STATUS" <<EOF
-{"id":"$REQ_ID","app":$(jq -Rn --arg a "${APP-}" '$a'),"state":"$1","error":$(jq -Rn --arg e "${2-}" '$e'),"finishedAt":"$(date -Is)"}
+  write_json_atomic "$STATUS" <<EOF
+{"id":"$REQ_ID","app":$(jq -Rn --arg a "${APP-}" '$a'),"state":"$1","error":$(jq -Rn --arg e "${2-}" '$e'),"startedAt":"$STARTED_AT","finishedAt":"$(date -Is)"}
 EOF
 }
 
@@ -27,6 +27,7 @@ EOF
 
 REQ_ID="$(jq -r '.id // ""' "$REQ")"
 [ -n "$REQ_ID" ] || exit 0
+STARTED_AT="$(date -Is)"
 
 # The path unit re-fires on a daemon-reload replay at boot; without this a
 # completed request would redeploy on every reboot.

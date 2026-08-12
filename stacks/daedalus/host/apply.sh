@@ -32,10 +32,11 @@ LOGFILE="$APPLY_DIR/last.log"
 # Status is the ONLY channel back to the UI, so it is written at every exit
 # path including the failure ones. `phase` drives the progress display;
 # `error` is shown verbatim, so it carries the real message rather than
-# "something went wrong".
+# "something went wrong". Atomic via write_json_atomic (host/lib.sh) — a
+# torn status reads as "idle" in the app, which mid-rebuild is a lie.
 write_status() {
-  install -m 0644 -o santiago -g users /dev/stdin "$STATUS" <<EOF
-{"id":"$REQ_ID","state":"$1","phase":"$2","error":$(jq -Rn --arg e "${3-}" '$e'),"finishedAt":"$(date -Is)","commit":"${COMMIT_SHA-}"}
+  write_json_atomic "$STATUS" <<EOF
+{"id":"$REQ_ID","state":"$1","phase":"$2","error":$(jq -Rn --arg e "${3-}" '$e'),"startedAt":"$STARTED_AT","finishedAt":"$(date -Is)","commit":"${COMMIT_SHA-}"}
 EOF
 }
 
@@ -68,6 +69,7 @@ errtail() {
 
 REQ_ID="$(jq -r '.id // ""' "$REQ")"
 [ -n "$REQ_ID" ] || exit 0
+STARTED_AT="$(date -Is)"
 
 # The path unit fires on any write to the request file, and again on a
 # daemon-reload replay at boot. Without this guard a completed apply could

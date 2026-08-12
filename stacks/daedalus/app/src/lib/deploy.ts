@@ -24,13 +24,15 @@ export type DeployStatus = {
   app: string | null
   state: DeployState
   error: string
+  /** When the host agent took the request — null on statuses from before v2. */
+  startedAt: string | null
   finishedAt: string | null
 }
 
 const bridge = defineBridge<DeployStatus>({
   requestFile: 'deploy-request.json',
   statusFile: 'deploy-status.json',
-  idle: { id: null, app: null, state: 'idle', error: '', finishedAt: null },
+  idle: { id: null, app: null, state: 'idle', error: '', startedAt: null, finishedAt: null },
 })
 
 export async function readDeployStatus(): Promise<DeployStatus> {

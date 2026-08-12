@@ -2038,6 +2038,7 @@ const CI_IDLE: CiRequestStatus = {
   state: 'idle',
   detail: '',
   error: '',
+  startedAt: null,
   finishedAt: null,
 }
 

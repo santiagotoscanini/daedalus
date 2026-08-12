@@ -15,6 +15,8 @@ export type ApplyStatus = {
   state: ApplyState
   phase: string
   error: string
+  /** When the host agent took the request — null on statuses from before v2. */
+  startedAt: string | null
   finishedAt: string | null
   commit: string | null
 }
@@ -22,7 +24,15 @@ export type ApplyStatus = {
 const bridge = defineBridge<ApplyStatus>({
   requestFile: 'request.json',
   statusFile: 'status.json',
-  idle: { id: null, state: 'idle', phase: '', error: '', finishedAt: null, commit: null },
+  idle: {
+    id: null,
+    state: 'idle',
+    phase: '',
+    error: '',
+    startedAt: null,
+    finishedAt: null,
+    commit: null,
+  },
 })
 
 export async function readApplyStatus(): Promise<ApplyStatus> {

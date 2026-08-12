@@ -139,7 +139,10 @@ let
       LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
       HOSTNAME=${lib.escapeShellArg config.networking.hostName}
       GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
+      OPERATOR_USER=santiago
+      OPERATOR_GROUP=users
 
+      ${builtins.readFile ./host/lib.sh}
       ${builtins.readFile ./host/apply.sh}
     '';
   };
@@ -164,7 +167,10 @@ let
     text = ''
       APPLY_DIR=${lib.escapeShellArg applyDir}
       DEPLOYABLE=${lib.escapeShellArg (lib.concatStringsSep " " deployableApps)}
+      OPERATOR_USER=santiago
+      OPERATOR_GROUP=users
 
+      ${builtins.readFile ./host/lib.sh}
       ${builtins.readFile ./host/deploy-trigger.sh}
     '';
   };
@@ -194,7 +200,10 @@ let
       OWNER=santiagotoscanini
       REGISTRY_ENV=${config.sops.secrets."registry-env".path}
       GHCR_AUTH=${config.sops.secrets."ghcr-auth".path}
+      OPERATOR_USER=santiago
+      OPERATOR_GROUP=users
 
+      ${builtins.readFile ./host/lib.sh}
       ${builtins.readFile ./host/ci.sh}
     '';
   };

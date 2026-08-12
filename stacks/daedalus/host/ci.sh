@@ -36,8 +36,8 @@ ACTION=""
 REPO=""
 
 write_status() {
-  install -m 0644 -o santiago -g users /dev/stdin "$STATUS" <<EOF
-{"id":"$REQ_ID","action":$(jq -Rn --arg a "$ACTION" '$a'),"repo":$(jq -Rn --arg r "$REPO" '$r'),"state":"$1","detail":$(jq -Rn --arg d "${2-}" '$d'),"error":$(jq -Rn --arg e "${3-}" '$e'),"finishedAt":"$(date -Is)"}
+  write_json_atomic "$STATUS" <<EOF
+{"id":"$REQ_ID","action":$(jq -Rn --arg a "$ACTION" '$a'),"repo":$(jq -Rn --arg r "$REPO" '$r'),"state":"$1","detail":$(jq -Rn --arg d "${2-}" '$d'),"error":$(jq -Rn --arg e "${3-}" '$e'),"startedAt":"$STARTED_AT","finishedAt":"$(date -Is)"}
 EOF
 }
 
@@ -66,6 +66,7 @@ fail() {
 
 REQ_ID="$(jq -r '.id // ""' "$REQ")"
 [ -n "$REQ_ID" ] || exit 0
+STARTED_AT="$(date -Is)"
 
 # The path unit re-fires on a daemon-reload replay at boot; without this guard
 # a completed request would re-dispatch a workflow on every reboot.
