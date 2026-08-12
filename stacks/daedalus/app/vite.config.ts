@@ -1,6 +1,6 @@
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 
 // daedalus runs `vite dev` in production — deliberately. It is an internal
 // control plane for one operator, so the value of editing a file and seeing the
@@ -18,6 +18,42 @@ import { defineConfig } from 'vite'
 // the webApp's hostname). Read rather than restated so the vhost has one source
 // of truth; the fallback keeps a bare `pnpm dev` on a laptop working.
 const appHost = process.env.APP_HOSTNAME ?? 'localhost'
+
+// Node turns an unhandled rejection into an uncaught exception and exits, so
+// one rejected promise in one server function took the whole dev server with
+// it — and the container with that. Nothing noticed: the unit is
+// `Type=oneshot` + `RemainAfterExit`, so it stayed green over a dead
+// container, and daedalus is the one app whose deploy timer is masked, so no
+// timer resurrected it either. Registering a listener at all is what stops
+// Node's conversion to a fatal exception; the body only has to report.
+//
+// Seen in the wild: Vite's SSR module runner failing to load a category data
+// module mid-HMR, surfacing as ERR_LOAD_URL out of a server function. That
+// request deserves to fail. The process does not.
+//
+// Registered from `configureServer` because that runs in the Node process
+// that serves requests. The symbol survives an SSR program reload, which
+// re-evaluates modules without restarting the process — without it, every
+// reload would stack another listener until Node warns about a leak.
+const REJECTION_GUARD = Symbol.for('daedalus.unhandledRejectionGuard')
+
+function keepServingOnRejection(): Plugin {
+  return {
+    name: 'daedalus:keep-serving-on-rejection',
+    apply: 'serve',
+    configureServer() {
+      const g = globalThis as unknown as Record<symbol, true | undefined>
+      if (g[REJECTION_GUARD]) return
+      g[REJECTION_GUARD] = true
+
+      process.on('unhandledRejection', (reason) => {
+        // console.error, not a logger: this is the Vite dev process itself,
+        // whose stdout is what podman ships to journald and Loki.
+        console.error('[daedalus] unhandled rejection — kept serving:', reason)
+      })
+    },
+  }
+}
 
 export default defineConfig({
   resolve: { tsconfigPaths: true },
@@ -54,6 +90,7 @@ export default defineConfig({
     },
   },
 
-  // Plugin order matters: Start must run before the React plugin.
-  plugins: [tanstackStart(), viteReact()],
+  // Plugin order matters: Start must run before the React plugin. The guard
+  // transforms nothing, so it is free to sit first.
+  plugins: [keepServingOnRejection(), tanstackStart(), viteReact()],
 })
