@@ -31,7 +31,9 @@
 // Published by daedalus-image-snapshot (stacks/daedalus/host/image-snapshot.sh)
 // because this app cannot run podman — it is a container itself.
 
-import { readFile } from 'node:fs/promises'
+import { nullable, obj, optional, recordOf, str } from '../contract/decode'
+import { readEnvJson } from '../contract/env'
+import { readSnapshot } from '../contract/snapshot'
 
 export type ImageLabels = {
   /** `org.opencontainers.image.version`. */
@@ -45,6 +47,9 @@ export type ImageLabels = {
 }
 
 const EMPTY: ImageLabels = { version: null, revision: null, source: null, created: null }
+
+const ns = optional(nullable(str), null)
+const labelsShape = recordOf(obj({ version: ns, revision: ns, source: ns, created: ns }))
 
 /**
  * The snapshot, read at most once per `TTL_MS`.
@@ -62,18 +67,22 @@ async function snapshot(): Promise<Record<string, ImageLabels>> {
   const now = Date.now()
   if (cache !== null && now - cache.at < TTL_MS) return cache.labels
 
-  try {
-    const raw = await readFile(process.env.IMAGE_LABELS_PATH ?? '/images/labels.json', 'utf8')
-    const labels = JSON.parse(raw) as Record<string, ImageLabels>
-    cache = { at: now, labels }
-    return labels
-  } catch {
+  const result = await readSnapshot({
+    path: process.env.IMAGE_LABELS_PATH ?? '/images/labels.json',
+    decoder: labelsShape,
+    fallback: {},
+  })
+
+  if (!result.available) {
     // Keep whatever we had. A snapshot that has gone missing is a reason to
     // serve the last good one, not to report every service as unknown.
     if (cache !== null) return cache.labels
     cache = { at: now, labels: {} }
     return {}
   }
+
+  cache = { at: now, labels: result.data }
+  return result.data
 }
 
 /** Everything the image says about itself. */
@@ -103,12 +112,7 @@ function asVersion(raw: string | null | undefined): string | null {
  * stacks/daedalus/daedalus.nix.
  */
 export function imageTag(container: string): string | null {
-  let tags: Record<string, string> = {}
-  try {
-    tags = JSON.parse(process.env.IMAGE_TAGS ?? '{}') as Record<string, string>
-  } catch {
-    return null
-  }
+  const tags = readEnvJson('IMAGE_TAGS', recordOf(str), {})
   return asVersion(tags[container])
 }
 

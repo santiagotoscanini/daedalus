@@ -10,8 +10,18 @@
 // already exports its last test, and wg-easy v2 requires TOTP on /api/session
 // so a credential login cannot work unattended at all.
 
+import {
+  arrayOf,
+  bool as dBool,
+  num as dNum,
+  obj as dObj,
+  optional as dOpt,
+  str as dStr,
+} from '../../contract/decode'
+import { readEnvJson } from '../../contract/env'
 import { BASE_DOMAIN } from '../../hostname'
 import { lanHosts, webAppHosts } from '../../nix-manifest'
+import { declaredVpnEgress, type VpnEgress } from '../../vpn-egress'
 import {
   getJson,
   getText,
@@ -874,12 +884,7 @@ type VectorLike = { metric: Record<string, string>; value: [number, string] }
  * currently sharing its namespace.
  */
 async function loadOutbound(ctx: { hc: string }): Promise<OutboundData> {
-  let declared: Declared[] = []
-  try {
-    declared = JSON.parse(process.env.VPN_EGRESS ?? '[]') as Declared[]
-  } catch {
-    declared = []
-  }
+  const declared = declaredVpnEgress()
 
   if (declared.length === 0) {
     return {
@@ -925,21 +930,8 @@ async function gluetunBuild(container: string): Promise<CommitGap> {
   return commitsSince('qdm12/gluetun', commit)
 }
 
-type Declared = {
-  container: string
-  exporter: string
-  job: string
-  controlPort: number
-  subject: string
-  provider: string
-  keyExpiry: string
-  runbook: string
-  portForwarding: boolean
-  tenants: string[]
-}
-
 async function loadTunnel(
-  d: Declared,
+  d: VpnEgress,
   hc: string,
   upOf: (name: string) => boolean | null,
 ): Promise<Tunnel> {
@@ -1391,12 +1383,11 @@ async function loadDdns(cfP: Promise<CfTunnel | undefined>): Promise<DdnsData> {
   const version = process.env.DDCLIENT_VERSION || null
   const interval = /^(\d+)s?$/.exec(process.env.DDNS_INTERVAL ?? '')?.[1]
 
-  let needs: DdnsData['needs'] = []
-  try {
-    needs = JSON.parse(process.env.DIRECT_INGRESS ?? '[]') as DdnsData['needs']
-  } catch {
-    needs = []
-  }
+  const needs = readEnvJson(
+    'DIRECT_INGRESS',
+    arrayOf(dObj({ name: dStr, port: dNum, proto: dStr, note: dOpt(dStr, '') })),
+    [] as DdnsData['needs'],
+  )
 
   // The one ddclient failure that matters and is invisible: it cannot work out
   // the address, so it publishes nothing, so a real IP change would go
@@ -1786,12 +1777,7 @@ type FtlUpstream = {
 async function loadResolver(base: string): Promise<ResolverData> {
   const version = process.env.PIHOLE_VERSION || null
 
-  let declared: string[] = []
-  try {
-    declared = JSON.parse(process.env.DNS_UPSTREAMS ?? '[]') as string[]
-  } catch {
-    declared = []
-  }
+  const declared = readEnvJson('DNS_UPSTREAMS', arrayOf(dStr), [])
 
   const [gap, sources, summary, ftl, metrics, types, history, store, blocking] = await Promise.all([
     versionGap('pi-hole/FTL', version),
@@ -1917,19 +1903,18 @@ async function loadResolver(base: string): Promise<ResolverData> {
 function dhcpConfig(
   counters: { offer?: number; ack?: number; decline?: number; nak?: number } | undefined,
 ): Dhcp {
-  let cfg: Partial<{
-    active: boolean
-    router: string
-    start: string
-    end: string
-    leaseTime: string
-    hosts: string[]
-  }> = {}
-  try {
-    cfg = JSON.parse(process.env.DHCP_CONFIG ?? '{}') as typeof cfg
-  } catch {
-    cfg = {}
-  }
+  const cfg = readEnvJson(
+    'DHCP_CONFIG',
+    dObj({
+      active: dOpt(dBool, false),
+      router: dOpt(dStr, ''),
+      start: dOpt(dStr, ''),
+      end: dOpt(dStr, ''),
+      leaseTime: dOpt(dStr, ''),
+      hosts: dOpt(arrayOf(dStr), [] as string[]),
+    }),
+    { active: false, router: '', start: '', end: '', leaseTime: '', hosts: [] as string[] },
+  )
 
   return {
     active: cfg.active === true,

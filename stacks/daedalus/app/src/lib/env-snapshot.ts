@@ -1,5 +1,6 @@
-import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { arrayOf, str } from './contract/decode'
+import { readSnapshot } from './contract/snapshot'
 import {
   type EnvGroup,
   type EnvOrigin,
@@ -44,28 +45,22 @@ export async function readEnvSnapshot(
   declared: Map<string, string | null>,
   hasSecretsFile = false,
 ): Promise<EnvSnapshot> {
-  const path = join(ENV_DIR, `${app}.json`)
-
-  let raw: string
-  let takenAt: string | null = null
-  try {
-    ;[raw, takenAt] = await Promise.all([
-      readFile(path, 'utf8'),
-      stat(path).then((s) => s.mtime.toISOString()),
-    ])
-  } catch {
-    // No snapshot: the app has no running container, or the timer has not run
-    // since it started. Reported as unavailable rather than as "no variables",
-    // which would read as a configuration fact rather than a missing file.
-    return { vars: [], takenAt: null, available: false }
+  // No snapshot: the app has no running container, or the timer has not run
+  // since it started. Reported as unavailable rather than as "no variables",
+  // which would read as a configuration fact rather than a missing file.
+  const result = await readSnapshot({
+    path: join(ENV_DIR, `${app}.json`),
+    decoder: arrayOf(str),
+    fallback: [] as string[],
+    // Written every 2 minutes; three missed runs means the timer stopped, and
+    // an env listing that old should say unavailable, not masquerade as now.
+    maxAgeMs: 6 * 60_000,
+  })
+  if (!result.available || result.stale) {
+    return { vars: [], takenAt: result.generatedAt, available: false }
   }
-
-  let entries: string[]
-  try {
-    entries = JSON.parse(raw) as string[]
-  } catch {
-    return { vars: [], takenAt, available: false }
-  }
+  const entries = result.data
+  const takenAt = result.generatedAt
 
   const vars: EnvVar[] = entries.map((entry) => {
     // Split on the FIRST '=' only: values legitimately contain '=' (a
