@@ -84,6 +84,42 @@ export function Bytes({ value }: { value: number | null }) {
   return <>{bytes(value)}</>
 }
 
+/**
+ * Ask a memoized upstream again.
+ *
+ * Two reads behind /apps/new are cached server-side — the repository listing
+ * and a repo's preflight — which is what keeps a keystroke-hot form off
+ * GitHub's hourly budget, and is also why a repo created a minute ago stays
+ * invisible until the TTL lapses. This is the way past that, so the in-flight
+ * state has to show: a refresh that looks like nothing happened is a refresh
+ * pressed twice.
+ */
+export function RefreshButton({
+  busy,
+  label,
+  onClick,
+}: {
+  busy: boolean
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className="iconbtn refresh"
+      title={label}
+      aria-label={label}
+      aria-busy={busy}
+      disabled={busy}
+      onClick={onClick}
+    >
+      {/* The glyph spins, not the button: rotating the button would carry its
+          hover fill and focus ring around with it. */}
+      <span aria-hidden="true">↻</span>
+    </button>
+  )
+}
+
 // One choice among a few, so the group is a radiogroup to assistive tech.
 // The options stay plain <button>s, each tabbable on its own — the roving
 // tabindex and arrow keys of a native radio group are not rebuilt here,

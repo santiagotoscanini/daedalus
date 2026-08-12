@@ -407,9 +407,13 @@ h2 {
   font: inherit;
   font-size: 0.9rem;
 }
+/* Designed rather than defaulted: a 1px outline on a rounded field reads as
+   the browser's own ring parked outside the border. The tinted border plus a
+   low-alpha halo says "focused" in the field's own language. */
 .search:focus {
-  outline: 1px solid var(--accent-dim);
+  outline: none;
   border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 /* One bordered list with hairline separators, not a stack of cards with gaps
@@ -965,6 +969,15 @@ h2 {
 .btn-ghost {
   background: transparent;
   color: var(--muted);
+}
+
+/* The shell's focus ring (`.brand`, `.nav-item`, `.iconbtn`), extended to the
+   controls that never had one. The toggle's checkbox is visually hidden, so
+   the ring has to be drawn on the track that stands in for it. */
+.btn:focus-visible,
+.toggle input:focus-visible + .track {
+  outline: 2px solid var(--accent-dim);
+  outline-offset: 2px;
 }
 
 /* ── banners + apply bar ────────────────────────────────────────────────── */
@@ -4338,6 +4351,14 @@ h2 {
   padding: 0.15rem 0 0;
 }
 
+/* The search field's box, greyed. A height rather than a `Bar` default,
+   because that field is what sets the height of the head row it sits in. */
+.sk-search {
+  flex: 0 1 22rem;
+  height: 2.55rem;
+  border-radius: 9px;
+}
+
 /* ── add-an-app wizard ──────────────────────────────────────────────────── */
 
 /* Right-aligned in the page head, which is a baseline-aligned flex row. */
@@ -4354,55 +4375,154 @@ h2 {
   text-decoration: none;
 }
 
+/* The flow's vertical rhythm lives here, not on the steps. Each step opens
+   with a `.section-head`, whose top rule and 2.5rem margin already separate it
+   from the step above — so the only two edges left are the wizard's own: the
+   gap under the lede, and a first step that must NOT draw that rule, where it
+   would read as an underline on the lede rather than the start of a step.
+
+   Flex rather than block so nothing collapses its margin through the
+   container: the loading placeholder and the real thing then begin at exactly
+   the same y, which is the whole point of a shape-matched skeleton. */
+.wizard {
+  display: flex;
+  flex-direction: column;
+  margin-top: 1.6rem;
+}
+.wizard > .wizard-step:first-child > .section-head {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+/* No margin of its own — see above. `min-width: 0` because the board grid
+   inside is wider than its content and a flex item floors at min-content. */
 .wizard-step {
-  margin-bottom: 2.2rem;
+  min-width: 0;
 }
 
-.repo-list {
-  list-style: none;
-  display: grid;
-  gap: 0.4rem;
-  max-height: 26rem;
-  overflow-y: auto;
-}
-
-/* A button, not a link: picking a repo changes the form below rather than
-   navigating, and the checklist that follows is the point of staying put. */
-.repo-row {
-  display: grid;
-  grid-template-columns: minmax(9rem, 14rem) 1fr auto;
-  align-items: baseline;
-  gap: 0.4rem 1rem;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.6rem 0.85rem;
-  cursor: pointer;
-}
-.repo-row:hover:not(:disabled) {
-  background: var(--raise);
-}
-.repo-row:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.repo-row.is-picked {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
-}
-.repo-name {
+/* The picker's top edge: the field on the left, the tally on the right, both
+   aligned with the list below them. */
+.picker-head {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+.picker-head .search {
+  flex: 0 1 22rem;
+}
+.picker-count {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The border and the radius sit on the frame rather than on the scroller: a
+   mask applied to the bordered element fades the border away with the rows. */
+.picker-box {
+  --repo-row-h: 2.9rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/* One grid for the whole list rather than one per row. A row-level grid sizes
+   its chip column to that row's OWN chips, which is why the description used
+   to start at a different x on every line; subgrid hands every row the list's
+   tracks, so `auto` can mean "the widest chip set in the list".
+
+   The mask is a soft bottom edge instead of a row sliced in half at the scroll
+   boundary. It is fixed to the scroller's viewport, not to its content, which
+   is what the padding-bottom is for: the last 1.6rem of scrollable content is
+   empty, so the fade never dims a row the reader has scrolled all the way to.
+   The trade is that the fade is unconditional — it does not know whether the
+   list overflows — which is a scroll listener's worth of JavaScript behind a
+   decoration, and the padding is the cheaper half of that bargain. */
+.repo-list {
+  padding: 0 0 1.6rem;
+  display: grid;
+  grid-template-columns: minmax(6rem, 14rem) auto minmax(0, 1fr) auto;
+  column-gap: 1rem;
+  max-height: calc(var(--repo-row-h) * 8 + 1.6rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6rem), transparent);
+}
+.repo-opt {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  min-width: 0;
+}
+.repo-opt + .repo-opt {
+  border-top: 1px solid var(--border-soft);
+}
+
+/* Without subgrid the row keeps fixed tracks: the chip column stops sizing
+   itself to the list, but every description still starts at one x. */
+@supports not (grid-template-columns: subgrid) {
+  .repo-opt,
+  .repo-row {
+    grid-template-columns: minmax(6rem, 14rem) 10rem minmax(0, 1fr) auto;
+  }
+}
+
+/* A button for a repo that can be picked, a link for one that is already an
+   app — the same row either way, because the difference is where it takes you,
+   not how much it matters. Never a tab stop: the search field owns focus and
+   moves this highlight through aria-activedescendant. */
+.repo-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  width: 100%;
+  min-height: var(--repo-row-h);
+  padding: 0.62rem 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.repo-row:hover,
+.repo-opt[aria-selected="true"] > .repo-row {
+  background: var(--panel-2);
+  text-decoration: none;
+}
+/* Inset, unlike the shell's rings: the row is full-bleed inside a clipping
+   frame, so an outward offset would be cut off by `.picker-box`. */
+.repo-row:focus-visible {
+  outline: 2px solid var(--accent-dim);
+  outline-offset: -2px;
+}
+
+.repo-name {
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Readable rather than greyed out: a repo that is already an app is a
+   destination, not a rejected option. */
+.repo-row-taken .repo-name {
+  color: var(--muted);
+}
+.repo-chips {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
 }
 .repo-desc {
   color: var(--muted);
   font-size: 0.85rem;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4411,41 +4531,163 @@ h2 {
   color: var(--dim);
   font-size: 0.78rem;
   white-space: nowrap;
+  text-align: right;
+}
+.repo-go {
+  margin-left: 0.5rem;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.repo-row:hover .repo-go,
+.repo-opt[aria-selected="true"] .repo-go {
+  opacity: 1;
+}
+.repo-list .empty {
+  grid-column: 1 / -1;
+  padding: 1.6rem 1rem;
+  font-size: 0.85rem;
+}
+
+.picker-hint {
+  margin: 0.55rem 0 0;
+  color: var(--dim);
+  font-size: 0.7rem;
+}
+
+/* Picked, so the search and the list collapse to the single line they
+   produced — the choice is made, and the page below it is the point now. */
+.repo-picked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem 0.9rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 0.7rem 1rem;
+}
+/* The confirmed line is a flex row, not the list's grid: the name and its
+   chips are the answer and never shrink; the description takes what is left. */
+.repo-picked .repo-name,
+.repo-picked .repo-chips {
+  flex: none;
+}
+.repo-picked .repo-name {
+  font-size: 1.02rem;
+}
+.repo-picked .repo-desc {
+  flex: 1 1 14rem;
+}
+.repo-picked .btn-ghost {
+  margin-left: auto;
+}
+
+/* What the name became. A left rule and an indent rather than another bordered
+   panel: these are consequences of the line above them, not a second thing to
+   read. */
+.derive {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.35rem 1rem;
+  margin: 0.9rem 0 0;
+  padding: 0.2rem 0 0.2rem 1.1rem;
+  border-left: 1px solid var(--border);
+}
+.derive dt {
+  color: var(--dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.derive dd {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+/* The one token this page is about, followed from the repo name into every
+   value derived from it. */
+.derive-token {
+  color: var(--accent);
+}
+
+/* Step 3 asks one question and gets one answer, so it is drawn as one panel:
+   the verdict, then whatever is still to be done about it, then two folds. A
+   card per check drew seven rectangles around seven rows that are the same
+   kind of thing — the reasoning above `.app-list`, and the hairline between
+   them is enough. */
+.readiness {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+  margin-bottom: 1.2rem;
+}
+.readiness > * + * {
+  border-top: 1px solid var(--border-soft);
+}
+
+/* The answer, with its own root cause already absorbed into it. Four states,
+   four colours, and `unknown` is grey rather than red on purpose: an image on
+   a registry this box cannot see is unverified, not broken, and painting that
+   as a failure is how a checklist becomes something you click past. */
+.verdict {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  border-left: 3px solid var(--dim);
+}
+.verdict-ok {
+  border-left-color: var(--ok);
+}
+.verdict-warn {
+  border-left-color: var(--warn);
+}
+.verdict-bad {
+  border-left-color: var(--bad);
+}
+.verdict-mark {
+  font-weight: 700;
+  color: var(--dim);
+}
+.verdict-ok .verdict-mark {
+  color: var(--ok);
+}
+.verdict-warn .verdict-mark {
+  color: var(--warn);
+}
+.verdict-bad .verdict-mark {
+  color: var(--bad);
+}
+.verdict-body {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+/* The image reference the verdict is about, in the face it is written in. */
+.verdict-subject {
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .checklist {
   list-style: none;
-  display: grid;
-  gap: 0.5rem;
-  margin-bottom: 1.2rem;
+  margin: 0;
+  padding: 0;
+}
+.checklist > li + li {
+  border-top: 1px solid var(--border-soft);
 }
 
-/* Four states, four colours, and `unknown` is grey rather than red on
-   purpose: two of these checks can only be answered by a credential daedalus
-   deliberately does not hold, and painting those as failures is how a
-   checklist becomes something you click past. */
 .check {
   display: grid;
-  grid-template-columns: 1.6rem 1fr auto;
-  align-items: center;
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto;
+  align-items: baseline;
   gap: 0.2rem 0.6rem;
-  border: 1px solid var(--border);
-  border-left-width: 3px;
-  border-radius: var(--radius);
-  background: var(--panel);
-  padding: 0.6rem 0.85rem;
-}
-.check-ok {
-  border-left-color: var(--ok);
-}
-.check-warn {
-  border-left-color: var(--warn);
-}
-.check-bad {
-  border-left-color: var(--bad);
-}
-.check-unknown {
-  border-left-color: var(--dim);
+  padding: 0.7rem 1rem;
 }
 .check-mark {
   font-weight: 700;
@@ -4462,9 +4704,25 @@ h2 {
 .check-unknown .check-mark {
   color: var(--dim);
 }
+/* Numbered rather than marked: everything in this list has already failed, so
+   the useful thing to print is the order the fixes have to happen in. */
+.acts .check-mark {
+  font-weight: 400;
+  color: var(--bad);
+}
+/* Not judged yet, and therefore not coloured — the row it waits on is the one
+   to read. */
+.check-blocked,
+.check-blocked b,
+.check-blocked .check-mark,
+.check-blocked .check-detail,
+.check-blocked .check-fix {
+  color: var(--dim);
+}
 .check-body {
   display: grid;
   gap: 0.15rem;
+  min-width: 0;
 }
 .check-detail {
   color: var(--muted);
@@ -4481,6 +4739,88 @@ h2 {
 }
 .check-action {
   white-space: nowrap;
+}
+
+/* What is fine, and what cannot be judged until something above it is fixed.
+   Both are folded shut: neither is in the way, and neither is thrown away —
+   the rows inside carry their full copy, so opening less of the panel never
+   costs the reader a sentence. Native <details>, so this costs no JavaScript
+   and works before hydration. */
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--muted);
+  list-style: none;
+}
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold > summary::before {
+  content: "▸";
+  color: var(--dim);
+  font-size: 0.7rem;
+  transition: transform 0.12s ease;
+}
+.fold[open] > summary::before {
+  transform: rotate(90deg);
+}
+.fold > summary:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+/* Inset: the summary is full-bleed inside a clipping panel, so an outward
+   offset would be cut off by `.readiness`. */
+.fold > summary:focus-visible {
+  outline: 2px solid var(--accent-dim);
+  outline-offset: -2px;
+}
+.fold[open] > summary {
+  border-bottom: 1px solid var(--border-soft);
+}
+/* What the host answered, once the row that asked for it has passed and moved
+   into a fold. Not a banner at the top of the page: it is still an answer
+   about this panel, so it stays inside it. */
+.readiness-said {
+  margin: 0;
+  padding: 0.6rem 1rem;
+}
+
+/* The whole step, once there is nothing left to do about it. It is the answer
+   now, not a fold under one, so it is drawn at the panel's own weight. */
+.fold-ready > summary {
+  padding: 0.85rem 1rem;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+/* Right-aligned in a section head, which is a baseline-aligned flex row —
+   hence the self-alignment, since a 30px button has no useful baseline. */
+.section-head .refresh {
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  align-self: center;
+  font-size: 0.95rem;
+}
+.iconbtn:disabled {
+  cursor: default;
+}
+.iconbtn:disabled:hover {
+  background: none;
+  color: var(--muted);
+}
+.refresh[aria-busy="true"] > span {
+  display: inline-block;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .wizard-actions {
@@ -4522,6 +4862,11 @@ h2 {
      "not here yet", and the motion was the part that was asked about. */
   .sk,
   .sk-block {
+    animation: none;
+  }
+  /* The refresh button is still disabled while it works, which is the part
+     that says "in flight"; the spin was only ever the decoration on top. */
+  .refresh[aria-busy="true"] > span {
     animation: none;
   }
   /* The embed appears instead of fading. Its `animation` is deliberately NOT
@@ -5708,4 +6053,49 @@ h2 {
    header is the normal state of six of the eight on this board. */
 .text-dim {
   color: var(--dim);
+}
+
+/* The restart control, under the case photo.
+   Quiet at rest and deliberately not primary: it is one ghost button with no
+   colour of its own, because a control that looks important gets clicked to
+   find out what it does. The cost — and the red — appear only once it is
+   armed, which is the step where they can still change the answer. */
+.restart {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-top: 0.7rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-soft);
+}
+.restart.is-armed {
+  border-top-color: color-mix(in srgb, var(--bad) 40%, var(--border-soft));
+}
+.restart-cost {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.restart-cost strong {
+  color: var(--warn);
+  font-weight: 500;
+}
+.restart-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.restart-state {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.restart-note {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.7rem;
+  line-height: 1.5;
 }

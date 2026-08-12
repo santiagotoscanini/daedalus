@@ -431,6 +431,20 @@ export const fetchNewAppOptions = createServerFn().handler(async () => {
 })
 
 /**
+ * The repository listing again, past its cache.
+ *
+ * Only the listing: the taken names come from files this box owns and are
+ * cheap, but they also cannot change while somebody is filling this form in.
+ * Returned to the caller rather than invalidating the route — re-running the
+ * loader would remount the wizard and take the half-filled form with it.
+ */
+export const refreshRepoList = createServerFn().handler(async () => {
+  const { listRepos, forgetRepos } = await import('../lib/github-repos')
+  forgetRepos()
+  return listRepos()
+})
+
+/**
  * Everything that has to be true before this repo can become an app.
  *
  * Two of the answers come from GitHub (workflows, repo secret) and one from
@@ -439,10 +453,17 @@ export const fetchNewAppOptions = createServerFn().handler(async () => {
  * container that cannot start, on a timer, until somebody notices.
  */
 export const fetchAppPreflight = createServerFn()
-  .inputValidator((i: { repo: string; name: string; image: string | null }) => i)
+  .inputValidator((i: { repo: string; name: string; image: string | null; force?: boolean }) => i)
   .handler(async ({ data }) => {
-    const { repoChecks } = await import('../lib/github-repos')
+    const { forgetRepoChecks, repoChecks } = await import('../lib/github-repos')
     const { imageInfo } = await import('../lib/registry')
+
+    // The GitHub half of this is memoized for a minute, so a re-check that
+    // does not drop the entry first is not a re-check at all — it re-reads the
+    // registry and re-serves the same cached answer about the repo. Only the
+    // explicit refresh forces it; the debounced re-runs behind every keystroke
+    // must NOT, or the cache would exist in name only.
+    if (data.force === true) forgetRepoChecks(data.repo)
 
     const effectiveImage = data.image?.trim() || defaultImage(data.name)
 

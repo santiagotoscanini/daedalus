@@ -1,19 +1,23 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type HostNote, ReadinessPanel } from '../components/apps/readiness'
+import { RepoPicker } from '../components/apps/repo-picker'
 import { GuardedAwait } from '../components/error'
-import { RowsSkeleton } from '../components/skeleton'
+import { NewAppSkeleton } from '../components/skeleton'
 import { usePolledStatus } from '../components/status'
-import { Segmented, Toggle } from '../components/ui'
+import { RefreshButton, Segmented, Toggle } from '../components/ui'
 import { Board, BoardGrid } from '../components/viz'
 import type { CiRequestStatus } from '../lib/ci-request'
 import type { Check, Repo } from '../lib/github-repos'
 import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
+import { readiness } from '../lib/readiness'
 import { defaultImage, OWNER } from '../lib/site'
 import {
   createAppFn,
   fetchAppPreflight,
   fetchCiRequestStatus,
   fetchNewAppOptions,
+  refreshRepoList,
   runCiFn,
   setRegistrySecretFn,
 } from '../server/registry'
@@ -74,7 +78,7 @@ function NewAppPage() {
         derived from it.
       </p>
 
-      <GuardedAwait resetKey="options" promise={options} fallback={<RowsSkeleton count={4} />}>
+      <GuardedAwait resetKey="options" promise={options} fallback={<NewAppSkeleton />}>
         {(data) => <Wizard options={data} />}
       </GuardedAwait>
     </>
@@ -86,6 +90,26 @@ function Wizard({ options }: { options: Options }) {
 
   const [repo, setRepo] = useState<Repo | null>(null)
   const [search, setSearch] = useState('')
+
+  // The listing lives here rather than being read from the loader on every
+  // render: the picker's refresh replaces it in place. Invalidating the route
+  // instead would re-run the loader, remount this component, and take the
+  // half-filled form below with it.
+  const [repoList, setRepoList] = useState<{
+    repos: Repo[]
+    authenticated: boolean
+    error: string | null
+  }>({ repos: options.repos, authenticated: options.authenticated, error: options.error })
+  const [reloading, setReloading] = useState(false)
+
+  const reloadRepos = () => {
+    setReloading(true)
+    void refreshRepoList()
+      .then(setRepoList)
+      .finally(() => {
+        setReloading(false)
+      })
+  }
 
   const [description, setDescription] = useState('')
   const [stage, setStage] = useState<'off' | 'lab' | 'live'>('lab')
@@ -128,6 +152,11 @@ function Wizard({ options }: { options: Options }) {
   // Re-check whenever the thing being checked changes. The result is about a
   // (repo, name, image) triple, so keeping a stale one on screen after the
   // image override is edited would be worse than showing none.
+  //
+  // Set by the readiness refresh, read by the run it triggers. A ref rather
+  // than state so it is not a dependency, and so a forced run whose debounce a
+  // keystroke cancelled is still owed rather than silently downgraded.
+  const forceChecks = useRef(false)
   // biome-ignore lint/correctness/useExhaustiveDependencies: `recheck` is not read in the body — it is the manual re-run trigger.
   useEffect(() => {
     if (!repo) {
@@ -141,7 +170,11 @@ function Wizard({ options }: { options: Options }) {
     // deliberately uncached (the answer must flip the moment CI lands an
     // image). A third of a second of quiet separates typing from asking.
     const t = setTimeout(() => {
-      void fetchAppPreflight({ data: { repo: repo.name, name, image: image.trim() || null } })
+      const force = forceChecks.current
+      forceChecks.current = false
+      void fetchAppPreflight({
+        data: { repo: repo.name, name, image: image.trim() || null, force },
+      })
         .then((p) => {
           if (live) setPreflight(p)
         })
@@ -211,6 +244,78 @@ function Wizard({ options }: { options: Options }) {
     })
   }
 
+  // Re-runs the same effect the debounce owns, rather than a second path
+  // alongside it — so a refresh cannot race the run a keystroke already
+  // scheduled, and every one of them still lands through the single `live`
+  // guard. The only difference is that this one is allowed past the cache.
+  const recheckNow = () => {
+    forceChecks.current = true
+    setRecheck((n) => n + 1)
+  }
+
+  // The seven answers, ordered into a plan: what is actually wrong, what is
+  // only waiting on it, and what needs nothing.
+  const plan =
+    preflight === null
+      ? null
+      : readiness({
+          checks: preflight.checks,
+          imageState: preflight.imageState,
+          effectiveImage: preflight.effectiveImage,
+        })
+
+  /** The button that fixes a row, on the two rows this box can fix. */
+  const rowAction = (c: Check): ReactNode => {
+    if (repo === null || preflight === null) return null
+    if (c.id === 'image') {
+      if (preflight.imageState !== 'missing' || !preflight.dispatchable) return null
+      return (
+        <button
+          type="button"
+          className="btn"
+          disabled={host?.state === 'running'}
+          onClick={() => {
+            hostAction('image', () =>
+              runCiFn({ data: { repo: repo.name, workflow: preflight.publishWorkflow ?? '' } }),
+            )
+          }}
+        >
+          {host?.id === 'image' && host.state === 'running'
+            ? 'Dispatching…'
+            : `Run ${preflight.publishWorkflow ?? 'CI'}`}
+        </button>
+      )
+    }
+    if (c.id === 'registry-secret' && c.state === 'bad') {
+      return (
+        <button
+          type="button"
+          className="btn"
+          disabled={host?.state === 'running'}
+          onClick={() => {
+            hostAction('registry-secret', () => setRegistrySecretFn({ data: { repo: repo.name } }))
+          }}
+        >
+          {host?.id === 'registry-secret' && host.state === 'running' ? 'Setting…' : 'Set it'}
+        </button>
+      )
+    }
+    return null
+  }
+
+  // What the host said back, per row. Two at most, and never two for the same
+  // row: a settled verdict about the image is the newer fact, so it wins over
+  // "still building".
+  const hostNotes: HostNote[] = []
+  if (host !== null && host.state !== 'running') hostNotes.push(host)
+  if (awaitingImage && imageMissing && !hostNotes.some((n) => n.id === 'image')) {
+    hostNotes.push({
+      id: 'image',
+      state: 'running',
+      message: 'building — this row refreshes itself every 20s',
+    })
+  }
+
   const canCreate =
     repo !== null && nameErr === null && hostErr === null && !imageMissing && !busy && !checking
 
@@ -245,27 +350,26 @@ function Wizard({ options }: { options: Options }) {
       })
   }
 
-  const visible = options.repos.filter(
-    (r) =>
-      search === '' ||
-      `${r.name} ${r.description ?? ''}`.toLowerCase().includes(search.toLowerCase()),
-  )
-
   return (
     <div className="wizard">
       <section className="wizard-step">
         <h2 className="section-head">
           1 · Repository
           <small>the app key, the image name and the CI runner all come from it</small>
+          <RefreshButton
+            busy={reloading}
+            label="Re-read the repository list"
+            onClick={reloadRepos}
+          />
         </h2>
 
-        {options.error !== null && (
+        {repoList.error !== null && (
           <p className="banner">
-            {options.error}. The list below is whatever could be read; you can still create an app
+            {repoList.error}. The list below is whatever could be read; you can still create an app
             by picking a repo once GitHub answers again.
           </p>
         )}
-        {options.error === null && !options.authenticated && (
+        {repoList.error === null && !repoList.authenticated && (
           <p className="banner banner-muted">
             No GitHub token in the container’s environment, so this lists <b>public</b>
             repositories only and the checks below that need authentication will say so. The fleet’s
@@ -275,51 +379,25 @@ function Wizard({ options }: { options: Options }) {
           </p>
         )}
 
-        <div className="filters">
-          <input
-            className="search"
-            type="search"
-            placeholder="Search repositories…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-            }}
-          />
-        </div>
-
-        <ul className="repo-list">
-          {visible.map((r) => {
-            const already = options.taken.includes(r.name)
-            return (
-              <li key={r.name}>
-                <button
-                  type="button"
-                  className={repo?.name === r.name ? 'repo-row is-picked' : 'repo-row'}
-                  disabled={already}
-                  title={already ? 'already an app on this box' : undefined}
-                  onClick={() => {
-                    setRepo(r)
-                    // Seed the description from the repo's own, which is
-                    // usually the sentence somebody already wrote for it.
-                    if (description === '') setDescription(r.description ?? '')
-                  }}
-                >
-                  <span className="repo-name">
-                    {r.name}
-                    {r.private && <span className="chip chip-muted">private</span>}
-                    {r.archived && <span className="chip chip-warn">archived</span>}
-                    {already && <span className="chip chip-off">already an app</span>}
-                  </span>
-                  <span className="repo-desc">{r.description ?? '—'}</span>
-                  <span className="repo-meta">
-                    {r.language ?? '—'} · {r.pushedAt ? fmtWhen(r.pushedAt) : 'never pushed'}
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-          {visible.length === 0 && <li className="empty">No repositories match that filter.</li>}
-        </ul>
+        <RepoPicker
+          repos={repoList.repos}
+          taken={options.taken}
+          picked={repo}
+          search={search}
+          hostname={hostname}
+          image={image}
+          postgres={postgres}
+          onSearch={setSearch}
+          onPick={(r) => {
+            setRepo(r)
+            // Seed the description from the repo's own, which is usually the
+            // sentence somebody already wrote for it.
+            if (description === '') setDescription(r.description ?? '')
+          }}
+          onClear={() => {
+            setRepo(null)
+          }}
+        />
       </section>
 
       {repo && (
@@ -440,109 +518,22 @@ function Wizard({ options }: { options: Options }) {
           </section>
 
           <section className="wizard-step">
-            <h2 className="section-head">
-              3 · Before it can run
-              <small>the repo-side half, checked instead of remembered</small>
-            </h2>
-
-            {checking && <p className="banner banner-muted">Checking the repository…</p>}
-
-            {preflight && (
-              <ul className="checklist">
-                <CheckRow
-                  check={{
-                    id: 'image',
-                    label: 'Image published',
-                    state:
-                      preflight.imageState === 'present'
-                        ? 'ok'
-                        : preflight.imageState === 'missing'
-                          ? 'bad'
-                          : 'unknown',
-                    detail:
-                      preflight.imageState === 'present'
-                        ? `${preflight.effectiveImage} is in the registry`
-                        : preflight.imageState === 'missing'
-                          ? `${preflight.effectiveImage} does not exist yet`
-                          : `${preflight.effectiveImage} is not on this box's registry — cannot be checked from here`,
-                    fix:
-                      preflight.imageState === 'missing'
-                        ? 'Run the image workflow once. Until the image exists, the container would restart-loop from the moment this entry is applied — which is why this is the one check that blocks.'
-                        : undefined,
-                  }}
-                  action={
-                    preflight.imageState === 'missing' && preflight.dispatchable ? (
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={host?.state === 'running'}
-                        onClick={() => {
-                          hostAction('image', () =>
-                            runCiFn({
-                              data: { repo: repo.name, workflow: preflight.publishWorkflow ?? '' },
-                            }),
-                          )
-                        }}
-                      >
-                        {host?.id === 'image' && host.state === 'running'
-                          ? 'Dispatching…'
-                          : `Run ${preflight.publishWorkflow ?? 'CI'}`}
-                      </button>
-                    ) : undefined
-                  }
-                  note={
-                    host?.id === 'image' && host.state !== 'running'
-                      ? host
-                      : awaitingImage
-                        ? {
-                            state: 'running' as const,
-                            message: 'building — this row refreshes itself every 20s',
-                          }
-                        : undefined
-                  }
-                />
-                {preflight.checks.map((c) => (
-                  <CheckRow
-                    key={c.id}
-                    check={c}
-                    action={
-                      c.id === 'registry-secret' && c.state === 'bad' ? (
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={host?.state === 'running'}
-                          onClick={() => {
-                            hostAction('registry-secret', () =>
-                              setRegistrySecretFn({ data: { repo: repo.name } }),
-                            )
-                          }}
-                        >
-                          {host?.id === 'registry-secret' && host.state === 'running'
-                            ? 'Setting…'
-                            : 'Set it'}
-                        </button>
-                      ) : undefined
-                    }
-                    note={
-                      c.id === 'registry-secret' &&
-                      host?.id === 'registry-secret' &&
-                      host.state !== 'running'
-                        ? host
-                        : undefined
-                    }
-                  />
-                ))}
-                <CheckRow
-                  check={{
-                    id: 'runner-pat',
-                    label: 'CI runner credential',
-                    state: 'ok',
-                    detail:
-                      'The PAT in stacks/gha-runner/env.sops covers every repository on the account, so declaring the app is all its runner needs.',
-                    fix: 'If the runner unit ever fails ExecStartPre with a 404, that PAT’s repository access is the thing to check — daedalus cannot see it from here.',
-                  }}
-                />
-              </ul>
+            {plan === null ? (
+              <>
+                <h2 className="section-head">
+                  3 · Readiness
+                  <small>can this repo publish an image?</small>
+                </h2>
+                <p className="banner banner-muted">Checking the repository…</p>
+              </>
+            ) : (
+              <ReadinessPanel
+                plan={plan}
+                refreshing={checking}
+                onRefresh={recheckNow}
+                action={rowAction}
+                notes={hostNotes}
+              />
             )}
 
             {error !== null && <p className="banner">{error}</p>}
@@ -566,45 +557,6 @@ function Wizard({ options }: { options: Options }) {
         </>
       )}
     </div>
-  )
-}
-
-/**
- * One checklist row, optionally with the button that fixes it.
- *
- * `note` is what the host said back. It is rendered on the row the action
- * belongs to rather than in a banner at the top, so "REGISTRY_PASSWORD set on
- * santiagotoscanini/voyra" appears next to the line that asked for it.
- */
-function CheckRow({
-  check,
-  action,
-  note,
-}: {
-  check: Check
-  action?: ReactNode
-  note?: { state: 'running' | 'done' | 'failed'; message: string }
-}) {
-  const mark =
-    check.state === 'ok' ? '✓' : check.state === 'bad' ? '✗' : check.state === 'warn' ? '!' : '?'
-
-  return (
-    <li className={`check check-${check.state}`}>
-      <span className="check-mark" aria-hidden="true">
-        {mark}
-      </span>
-      <span className="check-body">
-        <b>{check.label}</b>
-        <span className="check-detail">{check.detail}</span>
-        {check.fix !== undefined && <span className="check-fix">{check.fix}</span>}
-        {note !== undefined && (
-          <span className={note.state === 'failed' ? 'check-said bad-text' : 'check-said ok-text'}>
-            {note.message}
-          </span>
-        )}
-      </span>
-      {action !== undefined && <span className="check-action">{action}</span>}
-    </li>
   )
 }
 
@@ -653,11 +605,4 @@ function Field({
       )}
     </label>
   )
-}
-
-function fmtWhen(iso: string): string {
-  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000)
-  if (days < 1) return 'pushed today'
-  if (days < 30) return `pushed ${String(days)}d ago`
-  return `pushed ${iso.slice(0, 7)}`
 }

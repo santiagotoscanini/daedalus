@@ -202,6 +202,33 @@ let
     '';
   };
 
+  # Restart the box. The fourth bridge, and the one with a single verb: see
+  # host/power.sh for why poweroff has no branch there at all, and why the
+  # replay guard matters more here than in any of its siblings.
+  #
+  # No allowlist to carry and no argument from the request reaches a command —
+  # the request body is read for exactly one string, which is compared against
+  # one literal.
+  powerScript = pkgs.writeShellApplication {
+    name = "daedalus-power";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.systemd
+      pkgs.procps # pgrep
+      pkgs.util-linux # flock
+      pkgs.coreutils
+    ];
+    text = ''
+      APPLY_DIR=${lib.escapeShellArg applyDir}
+      LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
+      OPERATOR_USER=santiago
+      OPERATOR_GROUP=users
+
+      ${builtins.readFile ./host/lib.sh}
+      ${builtins.readFile ./host/power.sh}
+    '';
+  };
+
   # Where the merged per-container environment is published. /run, so these
   # secrets live on tmpfs and never enter a ZFS snapshot or the syncoid mirror.
   envDir = "/run/daedalus-env";
@@ -997,6 +1024,35 @@ in
   # Not monitoredJobs, unlike its two siblings: both verbs are synchronous
   # requests from somebody looking at the page, and the failure is reported
   # there with GitHub's own message. An email would arrive second, with less.
+
+  # Restart. Same file-drop bridge, fourth verb, and the only one whose agent
+  # does not outlive its own action.
+  #
+  # No network ordering, unlike the three above: this reads a local file, asks
+  # systemd three questions and calls `systemctl reboot`. Nothing it does needs
+  # a resolver.
+  systemd.services.daedalus-power = {
+    description = "Restart the box on daedalus's behalf";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${powerScript}/bin/daedalus-power";
+      # Everything before the reboot is a file read and three cheap checks; a
+      # minute is already generous, and a hung agent here should surface rather
+      # than sit on the rebuild lock it holds until it exits.
+      TimeoutStartSec = "1min";
+    };
+  };
+
+  systemd.paths.daedalus-power = {
+    description = "Watch for a daedalus restart request";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathChanged = "${applyDir}/power-request.json";
+  };
+
+  # Not monitoredJobs either, and for a sharper version of daedalus-ci's
+  # reason: a refusal is shown on the page that asked for it, and a SUCCESS
+  # takes the mail relay down with the rest of the box before anything could be
+  # sent. The only email this unit could ever deliver is a failure to reboot.
 
   # A failed apply means the box may have been rolled back without anyone
   # watching the UI. Mail it.
