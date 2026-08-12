@@ -235,7 +235,8 @@ Consequences that are easy to get wrong:
 ├── .sops.yaml                     # sops recipients (host key + santiago's age key)
 ├── configuration.nix              # host config (auto-imports platform/ + stacks/)
 ├── hardware-configuration.nix     # auto-generated
-├── README.md                      # one-screen orientation
+├── README.md                      # the project front page (pitch + doc index)
+├── docs/                          # per-topic runbooks: operations, secrets, adding-a-stack, recovery
 ├── CLAUDE.md                      # this file — always-on rules / runtime / "why"
 ├── AUTH.md                        # per-service SSO migration plan
 ├── FUTURE.md                      # deferred work + open follow-ups
@@ -676,7 +677,7 @@ rotation end-to-end.
 - **The repo IS the system**: clone `daedalus` (the repo), restore a decryption
   identity (old host SSH key, or santiago's age key from the password
   manager), `nixos-rebuild switch --flake /etc/nixos#s2-server`. Full
-  runbook in `README.md`. Secrets included — only machine-generated
+  runbook in `docs/recovery.md`. Secrets included — only machine-generated
   `secrets/` state and app data need the backups below.
 - **NixOS generations** — systemd-boot menu keeps the last 10
   (`boot.loader.systemd-boot.configurationLimit = 10`). Reboot, pick.
