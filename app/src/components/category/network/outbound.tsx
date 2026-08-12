@@ -158,6 +158,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           <Segmented
             value={t.key}
             onChange={setSelected}
+            label="Tunnel"
             options={data.tunnels.map((x) => ({
               value: x.key,
               // `gluetun` is the downloads one, historically unprefixed.

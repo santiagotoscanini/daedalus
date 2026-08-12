@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { VersionGap } from '../lib/dashboard/github'
 import type { RunningVersion } from '../lib/dashboard/images'
 import { DASH } from '../lib/format'
+import { InfoHint } from './hint'
 import { Chip, type Tone } from './viz'
 
 // The header a page gets when its subject is one identifiable SERVICE.
@@ -72,13 +73,8 @@ export function ServiceHead({
  * "current" is the answer; the versions it was compared against are the
  * working. As headline cards those comparisons read as unrelated numbers
  * competing for the same glance, and they spent a quarter of the page
- * restating what the one word already said. CSS-only, and shown on
- * `:focus-within` as well as `:hover`: these pages stream, so a popover that
- * needed hydration would be inert for the first moment, and a keyboard has no
- * hover.
- *
- * `title` is deliberately NOT the mechanism: it truncates, it cannot hold
- * labelled rows, and it appears after a delay long enough that nobody waits.
+ * restating what the one word already said. The reveal mechanics — and why
+ * `title` is not the mechanism — live on InfoHint.
  */
 function VersionCompare({
   verdict,
@@ -90,19 +86,19 @@ function VersionCompare({
   if (rows.length === 0) return <Chip tone={verdict.tone}>{verdict.label}</Chip>
 
   return (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: tabIndex opens the :focus-within card for keyboard users — the popover pattern this codebase uses instead of title=; becomes the shared InfoHint in the UI-system pass.
-    <span className="vercmp" tabIndex={0}>
-      <Chip tone={verdict.tone}>{verdict.label}</Chip>
-      <span className="vercmp-card" role="tooltip">
-        {rows.map((r) => (
-          <span key={r.k} className="vercmp-row">
-            <span className="vercmp-k">{r.k}</span>
-            <span className="vercmp-v mono">{r.v ?? DASH}</span>
-            <span className="vercmp-note">{r.note}</span>
-          </span>
-        ))}
-      </span>
-    </span>
+    <InfoHint
+      className="vercmp"
+      cardClassName="vercmp-card"
+      trigger={<Chip tone={verdict.tone}>{verdict.label}</Chip>}
+    >
+      {rows.map((r) => (
+        <span key={r.k} className="vercmp-row">
+          <span className="vercmp-k">{r.k}</span>
+          <span className="vercmp-v mono">{r.v ?? DASH}</span>
+          <span className="vercmp-note">{r.note}</span>
+        </span>
+      ))}
+    </InfoHint>
   )
 }
 

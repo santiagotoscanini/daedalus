@@ -54,6 +54,7 @@ export function InboundView({ data }: { data: Inbound }) {
         <Segmented
           value={route}
           onChange={setRoute}
+          label="Route"
           options={[
             { value: 'direct', label: 'Direct', dot: tone(dnsOk) },
             { value: 'tunnel', label: 'Cloudflare tunnel', dot: tone(tunnelOk) },

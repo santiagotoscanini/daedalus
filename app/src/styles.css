@@ -656,6 +656,22 @@ h2 {
 }
 /* ── controls ───────────────────────────────────────────────────────────── */
 
+/* InfoHint's trigger is a real <button> (keyboard and assistive tech for
+   free); the host class (`vercmp`, `hfact`, `decode`) carries the whole look,
+   so the UA chrome comes off here. Sits above those classes so any
+   declaration they make wins. */
+.hint {
+  appearance: none;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+}
+
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);
@@ -5562,16 +5578,13 @@ h2 {
   letter-spacing: 0.04em;
 }
 .decode-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
 }
 /* The code, its name, then what it means — the code column sized to the
    widest so the names line up and the list reads as a key. */
-.decode-list li {
+.decode-item {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.05rem 0.5rem;

@@ -9,6 +9,7 @@ import { Settings } from '../components/apps/settings'
 import { Vpn } from '../components/apps/vpn'
 import { GrafanaLogs } from '../components/logs'
 import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
+import { TabBar } from '../components/tabs'
 import { AppIcon, Segmented, StatePill } from '../components/ui'
 // ./access-window, NOT ./access — same split as env-groups below. The window
 // table is a value the picker and validateSearch both need in the browser;
@@ -149,6 +150,9 @@ function AppDetail() {
           <Segmented
             value={app.stage}
             disabled={readOnly}
+            // The "exposure" text beside this is a bare span, not a <label>,
+            // so the group still needs naming for assistive tech.
+            label="Exposure"
             onChange={(v) => {
               patch({ stage: v })
             }}
@@ -187,28 +191,23 @@ function AppDetail() {
         </div>
       )}
 
-      <nav className="tabs">
-        {/* The two feature tabs are hidden rather than disabled when the
-            feature is off: a greyed-out "vpn" on an app with no egress is a
-            question the page has already answered. */}
-        {TABS.filter(
+      {/* The two feature tabs are hidden rather than disabled when the
+          feature is off: a greyed-out "vpn" on an app with no egress is a
+          question the page has already answered. */}
+      <TabBar
+        tabs={TABS.filter(
           (t) =>
             (t !== 'database' || app.postgres) && (t !== 'vpn' || app.egressContainer !== null),
-        ).map((t) => (
-          <Link
-            key={t}
-            to="/apps/$name"
-            params={{ name: app.name }}
-            // Carry the rest of the search forward, so switching to another tab
-            // and back does not silently reset the access window.
-            search={(prev) => ({ ...prev, tab: t })}
-            className={t === tab ? 'active' : ''}
-            replace
-          >
-            {t}
-          </Link>
-        ))}
-      </nav>
+        ).map((t) => ({ id: t, label: t }))}
+        active={tab}
+        linkTo={(t) => ({
+          to: '/apps/$name',
+          params: { name: app.name },
+          // Carry the rest of the search forward, so switching to another tab
+          // and back does not silently reset the access window.
+          search: (prev) => ({ ...prev, tab: t }),
+        })}
+      />
 
       {tab === 'overview' && (
         <Await

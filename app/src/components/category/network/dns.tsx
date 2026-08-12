@@ -33,6 +33,7 @@ export function DnsView({ data }: { data: Dns }) {
         <Segmented
           value={side}
           onChange={setSide}
+          label="Resolver or zone"
           options={[
             { value: 'resolver', label: 'Resolver', dot: tone(resolver.queries.total !== null) },
             {

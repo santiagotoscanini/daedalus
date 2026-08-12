@@ -84,14 +84,22 @@ export function Bytes({ value }: { value: number | null }) {
   return <>{bytes(value)}</>
 }
 
+// One choice among a few, so the group is a radiogroup to assistive tech.
+// The options stay plain <button>s, each tabbable on its own — the roving
+// tabindex and arrow keys of a native radio group are not rebuilt here,
+// because Tab reaching every option is more presses, not wrong.
 export function Segmented<T extends string>({
   value,
   onChange,
   options,
   disabled,
+  label,
 }: {
   value: T
   onChange: (v: T) => void
+  /** Names the group for assistive tech — most of these pickers have no
+      visible label element to point at. */
+  label?: string
   // Per-option `disabled` + `reason` exist so a choice the platform would
   // reject can be greyed out with an explanation, instead of being accepted,
   // written to the database and then failing at Apply with a build error.
@@ -112,12 +120,20 @@ export function Segmented<T extends string>({
   disabled?: boolean
 }) {
   return (
-    <div className={disabled ? 'segmented disabled' : 'segmented'}>
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className={disabled ? 'segmented disabled' : 'segmented'}
+    >
       {options.map((o) => (
+        // biome-ignore lint/a11y/useSemanticElements: a native <input type="radio"> would trade the button markup the `.segmented` CSS keys on for a hidden-input-plus-label rebuild; the role carries the same semantics on the element that already looks and acts the part.
         <button
           key={o.value}
           type="button"
+          role="radio"
+          aria-checked={o.value === value}
           disabled={disabled ?? o.disabled}
+          aria-disabled={(disabled ?? o.disabled) === true ? true : undefined}
           title={o.reason}
           className={o.value === value ? 'active' : ''}
           onClick={() => {

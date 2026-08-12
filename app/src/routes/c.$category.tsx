@@ -1,8 +1,8 @@
-import { Await, createFileRoute, Link, notFound } from '@tanstack/react-router'
-import { Fragment } from 'react'
+import { Await, createFileRoute, notFound } from '@tanstack/react-router'
 
 import { CategoryBoards } from '../components/category/registry'
 import { BoardsSkeleton, ServiceHeadSkeleton, StatBandSkeleton } from '../components/skeleton'
+import { TabBar } from '../components/tabs'
 import { CATEGORIES, type CategoryName, type CategorySpec, resolveTab } from '../lib/dashboard/nav'
 import { fetchCategoryBoards, fetchTabStatus, type TabStatus } from '../server/category'
 
@@ -125,44 +125,34 @@ function TabNav({
   )
 
   return (
-    <nav className="tabs">
-      {spec.tabs.map((t) => {
+    <TabBar
+      tabs={spec.tabs.map((t) => {
         const up = status?.[t.id] ?? null
-        return (
-          <Fragment key={t.id}>
-            {/* Not a border on the tab itself: the row's own underline runs
-                through every item, and a left border would sit on top of it
-                rather than across it. */}
-            {t.dividerBefore === true && <span className="tabs-rule" aria-hidden="true" />}
-            <Link
-              to="/c/$category"
-              params={{ category }}
-              search={{ tab: t.id }}
-              className={t.id === tab ? 'active' : ''}
-              replace
-            >
-              {dotted && (
-                <span
-                  className={`dot dot-${up === null ? 'unknown' : up ? 'running' : 'attention'}`}
-                  role="img"
-                  aria-label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
-                  title={
-                    t.probe === undefined && t.probes === undefined && t.health === undefined
-                      ? 'nothing probes this yet'
-                      : up === null
-                        ? 'no reading from gatus'
-                        : up
-                          ? 'answering'
-                          : 'nothing has answered in the last few minutes'
-                  }
-                />
-              )}
-              {t.label}
-            </Link>
-          </Fragment>
-        )
+        return {
+          id: t.id,
+          label: t.label,
+          dividerBefore: t.dividerBefore,
+          extra: dotted ? (
+            <span
+              className={`dot dot-${up === null ? 'unknown' : up ? 'running' : 'attention'}`}
+              role="img"
+              aria-label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
+              title={
+                t.probe === undefined && t.probes === undefined && t.health === undefined
+                  ? 'nothing probes this yet'
+                  : up === null
+                    ? 'no reading from gatus'
+                    : up
+                      ? 'answering'
+                      : 'nothing has answered in the last few minutes'
+              }
+            />
+          ) : undefined,
+        }
       })}
-    </nav>
+      active={tab}
+      linkTo={(id) => ({ to: '/c/$category', params: { category }, search: { tab: id } })}
+    />
   )
 }
 
