@@ -172,6 +172,66 @@ export function IdpView({ d }: { d: IdpData }) {
 
         <Changelog gap={d.gap} span={6} />
 
+        {/* The join nothing else can make. The convergence job creates and
+            updates but never prunes, so nix believes a deleted stack's client
+            is gone while the IdP keeps trusting its redirect URIs forever —
+            and neither side alone can see the difference. */}
+        <Board
+          title={
+            d.nix.orphans.length === 0 && d.nix.unsynced.length === 0
+              ? 'Declared and live agree'
+              : 'Declared vs live'
+          }
+          icon="▣"
+          span={12}
+          aside={
+            <span className="board-note">
+              {num(d.nix.declared)} declared in nix · {num(d.clients.length)} live at the IdP
+            </span>
+          }
+        >
+          {!d.nix.available ? (
+            <p className="viz-empty">
+              /export/sso.json is not published — the declared side of the diff is missing, so
+              nothing here can be called an orphan yet.
+            </p>
+          ) : d.nix.orphans.length === 0 && d.nix.unsynced.length === 0 ? (
+            <p className="viz-empty">
+              Every live client is declared in <span className="mono">fleet.ssoClients</span>, and
+              every declaration exists at the IdP. Nothing has outlived its stack.
+            </p>
+          ) : (
+            <ul className="itemlist">
+              {d.nix.orphans.map((c) => (
+                <li key={c.id}>
+                  <Chip tone="warn">orphan</Chip>
+                  <span className="item-main">{c.name}</span>
+                  <span className="item-side mono">{c.id}</span>
+                  <span className="item-side">live at the IdP, declared nowhere</span>
+                </li>
+              ))}
+              {d.nix.unsynced.map((c) => (
+                <li key={c.id}>
+                  <Chip tone="warn">not synced</Chip>
+                  <span className="item-main">{c.name}</span>
+                  <span className="item-side mono">{c.id}</span>
+                  <span className="item-side">declared, absent at the IdP</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="board-foot">
+            <span className="mono">pocket-id-clients.service</span> converges every{' '}
+            <span className="mono">fleet.ssoClients</span> entry on each rebuild but{' '}
+            <b>never deletes</b>, so an <b>orphan</b> is a client whose declaring stack is gone —
+            still a trusted set of redirect URIs, still accepting logins, removable only by hand in
+            Pocket ID. <b>Not synced</b> is the other direction and usually transient: a declaration
+            the convergence job has not pushed yet, or a sync that failed — its journal is in the
+            Logs board below. Matched on the client id, because the nix attr name IS the OIDC{' '}
+            <span className="mono">client_id</span>.
+          </p>
+        </Board>
+
         <Board title="Who" icon="◑" span={3}>
           <ul className="itemlist">
             {d.users.map((u) => (

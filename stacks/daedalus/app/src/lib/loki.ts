@@ -89,6 +89,21 @@ export async function lokiStreams(
   query: string,
   opts: { minutes: number; limit: number },
 ): Promise<LokiStream[]> {
+  return (await lokiStreamsOrNull(query, opts)) ?? []
+}
+
+/**
+ * As `lokiStreams`, but an unreachable Loki is `null` rather than `[]`.
+ *
+ * For the consumer whose subject IS silence (the mail-relay board): "no
+ * matching lines" and "Loki did not answer" are its two most different
+ * possible readings, and the collapsed shape above renders both as a quiet
+ * month.
+ */
+export async function lokiStreamsOrNull(
+  query: string,
+  opts: { minutes: number; limit: number },
+): Promise<LokiStream[] | null> {
   const end = Date.now() * 1e6
   const start = end - opts.minutes * 60 * 1e9
   const body = await getJson<{ data?: { result?: LokiStream[] } }>(
@@ -97,7 +112,8 @@ export async function lokiStreams(
     {},
     LOKI_ATTEMPT_MS,
   )
-  return body?.data?.result ?? []
+  if (body === null) return null
+  return body.data?.result ?? []
 }
 
 /**

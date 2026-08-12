@@ -372,6 +372,16 @@ in
     }
 
     {
+      # What nix DECLARES, for daedalus's declared-vs-live diff. The sync
+      # above converges but never prunes, so a deleted stack's client stays
+      # live at the IdP forever — and diffing this list against the IdP's is
+      # the only way to see one. Non-secret facts only: the id (the attr
+      # name) and the display name.
+      fleet.export.domains.sso.data.clients = lib.mapAttrsToList (n: c: {
+        id = n;
+        inherit (c) displayName;
+      }) cfg;
+
       fleet.statePaths = {
         ${stateDir}.mode = "0700";
         ${secretsFile} = {

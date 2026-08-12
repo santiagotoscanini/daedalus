@@ -55,6 +55,15 @@ const SEVERITY: Record<string, 'bad' | 'warn' | 'info'> = {
 type Alerts = Extract<MonitoringData, { tab: 'alerts' }>
 
 function AlertsView({ d }: { d: Alerts }) {
+  // Present tense only when it is true in the present: a failure NEWER than
+  // the newest success means the relay may be broken right now; failures the
+  // relay has since recovered from are history, worth listing but not a
+  // headline. Failures arrive newest first.
+  const newestFailure = d.mail.failures[0]
+  const mailFailing =
+    newestFailure !== undefined &&
+    (d.mail.lastSend === null || newestFailure.agoSeconds < d.mail.lastSend.agoSeconds)
+
   return (
     <>
       <ServiceHead
@@ -147,6 +156,78 @@ function AlertsView({ d }: { d: Alerts }) {
             <span className="mono">/etc/nixos</span> to find every switch. Nothing above will ever
             mention Home Assistant while that holds, and a quiet board is not evidence that it is
             well.
+          </p>
+        </Board>
+
+        <Board
+          title={mailFailing ? 'Mail relay failing' : 'The mail relay'}
+          icon="✉"
+          span={12}
+          aside={
+            d.mail.failures.length === 0 ? (
+              <span className="board-note">
+                {d.mail.sent30d === null ? DASH : num(d.mail.sent30d)} sent in 30 days
+              </span>
+            ) : (
+              <Chip tone={mailFailing ? 'bad' : 'warn'}>
+                {num(d.mail.failed30d)} failed send{d.mail.failed30d === 1 ? '' : 's'} in 30 days
+              </Chip>
+            )
+          }
+        >
+          <Facts
+            rows={[
+              {
+                k: 'Identity',
+                v:
+                  d.mail.identity === null
+                    ? DASH
+                    : `${d.mail.identity.sender} → ${d.mail.identity.alertTo}`,
+              },
+              {
+                // Neutral on purpose: alerts are rare on a healthy box, so
+                // "nothing sent in N days" is a normal state, not a warning.
+                k: 'Last successful send',
+                v:
+                  d.mail.lastSend === null
+                    ? 'nothing in the last 30 days'
+                    : `${since(d.mail.lastSend.agoSeconds)} — from ${d.mail.lastSend.unit}`,
+              },
+              {
+                k: 'Failures, 30d',
+                v:
+                  d.mail.failed30d === null ? (
+                    DASH
+                  ) : d.mail.failed30d > 0 ? (
+                    <span className="text-warn">{num(d.mail.failed30d)}</span>
+                  ) : (
+                    <Chip tone="ok">none</Chip>
+                  ),
+              },
+            ]}
+          />
+          {d.mail.failures.length > 0 && (
+            <ul className="itemlist">
+              {d.mail.failures.map((f) => (
+                <li key={`${f.unit}-${String(f.agoSeconds)}`}>
+                  <Chip tone="bad">failed</Chip>
+                  <span className="item-main mono">{f.unit}</span>
+                  <span className="item-side">{f.error}</span>
+                  <span className="item-side">{since(f.agoSeconds)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="board-foot">
+            The relay read back from what it logged: msmtp writes one journal line per delivery
+            attempt, filed under the unit that was sending, so this is every mail the box tried to
+            send — smartd, ZED, each <span className="mono">OnFailure</span> hook — not just
+            Grafana&rsquo;s. This path is the one with no watcher of its own: a dead Gmail app
+            password makes the box <b>quieter</b>, not louder, because the failure notice would have
+            to travel the path that just broke. A long gap since the last send is normal — alerts
+            are rare — but a red row here means something tried to reach you and could not. Known
+            hole either way: the box resolves DNS through its own pi-hole, so a pi-hole-down alert
+            can never email out.
           </p>
         </Board>
 
