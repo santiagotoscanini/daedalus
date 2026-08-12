@@ -109,7 +109,7 @@ function AlertsView({ d }: { d: Alerts }) {
           </p>
         </Board>
 
-        <Board title="Rules by folder" icon="▤" span={4}>
+        <Board title="Rules by folder" icon="rows" span={4}>
           <BarList items={d.byFolder} tone="info" empty="no rules" />
           <p className="board-foot">
             Folders are the provisioning files in{' '}
@@ -241,7 +241,7 @@ function ProbesView({ d }: { d: Probes }) {
           </p>
         </Board>
 
-        <Board title="Certificates" icon="⚿" span={4}>
+        <Board title="Certificates" icon="key" span={4}>
           <Facts
             rows={[
               { k: 'Soonest expiry', v: d.cert.days === null ? DASH : `${num(d.cert.days)} days` },
@@ -368,7 +368,7 @@ function MetricsView({ d }: { d: Metrics }) {
           </p>
         </Board>
 
-        <Board title="Storage" icon="▦" span={4}>
+        <Board title="Storage" icon="grid" span={4}>
           <Facts
             rows={[
               { k: 'Series in head', v: compact(d.series) },
@@ -400,7 +400,7 @@ function MetricsView({ d }: { d: Metrics }) {
           </p>
         </Board>
 
-        <Board title="Series, seven days" icon="◫" span={8}>
+        <Board title="Series, seven days" icon="panels" span={8}>
           <Trend values={d.seriesTrend} tone="accent" height={110} />
           <p className="board-foot">
             Active series is what memory here is actually spent on. A step up that never comes back
@@ -456,7 +456,7 @@ function LogsView({ d }: { d: Logs }) {
       <BoardGrid>
         <Board
           title="Volume"
-          icon="≡"
+          icon="logs"
           span={8}
           aside={<span className="board-note">{compact(d.lines1h)} lines in the last hour</span>}
         >
@@ -481,7 +481,7 @@ function LogsView({ d }: { d: Logs }) {
           <BarList items={d.byLevel} tone="info" empty="nothing labelled" />
         </Board>
 
-        <Board title="Noisiest errors, 24h" icon="⚠" span={4}>
+        <Board title="Noisiest errors, 24h" icon="warn" span={4}>
           <BarList items={d.noisiest} tone="warn" empty="no errors" />
           <p className="board-foot">
             Host journal lines carry <span className="mono">unit</span> rather than{' '}
@@ -632,7 +632,7 @@ function JobsView({ d }: { d: Jobs }) {
 
         <Board
           title="Dead-man's switches"
-          icon="◷"
+          icon="clock"
           span={4}
           aside={
             d.summary === null ? undefined : (
@@ -676,7 +676,7 @@ function JobsView({ d }: { d: Jobs }) {
           // The join's whole reason for existing. Neither system can find this
           // on its own: nix believes the job is watched, healthchecks has never
           // heard of it, and nothing compares the two.
-          <Board title="Armed but never fired" icon="⚠" span={12}>
+          <Board title="Armed but never fired" icon="warn" span={12}>
             <ul className="itemlist">
               {d.orphaned.map((u) => (
                 <li key={u}>

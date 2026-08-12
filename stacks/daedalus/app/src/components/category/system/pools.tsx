@@ -15,7 +15,7 @@ export function PoolsView({ d }: { d: Pools }) {
         <Board
           key={p.name}
           title={p.name}
-          icon="◫"
+          icon="panels"
           span={6}
           aside={
             p.health === 'ONLINE' ? (
@@ -93,7 +93,7 @@ export function PoolsView({ d }: { d: Pools }) {
 
       <Board
         title="Datasets"
-        icon="▤"
+        icon="rows"
         span={12}
         aside={
           <span className="board-note">

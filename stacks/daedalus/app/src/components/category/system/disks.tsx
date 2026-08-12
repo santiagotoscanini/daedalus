@@ -190,7 +190,7 @@ export function DisksView({ d }: { d: Disks }) {
   return (
     <BoardGrid>
       {d.disks.length === 0 && (
-        <Board title="Disks" icon="▦" span={12}>
+        <Board title="Disks" icon="grid" span={12}>
           <p className="viz-empty">
             No snapshot yet — the host reader has not run, or could not read SMART.
           </p>

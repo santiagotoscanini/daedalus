@@ -31,7 +31,7 @@ export function Secrets({
   if (!env.available) {
     return (
       <BoardGrid>
-        <Board title="Environment" icon="⚿" span={12}>
+        <Board title="Environment" icon="key" span={12}>
           <p className="viz-empty">
             No snapshot yet — the container is not running, or <code>daedalus-env-snapshot</code>{' '}
             has not run since it started (every 2 min).

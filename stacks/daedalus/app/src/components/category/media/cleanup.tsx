@@ -133,7 +133,7 @@ function JanitorrPage({ d }: { d: Cleanup }) {
       <BoardGrid>
         <Board
           title="Schedules"
-          icon="◷"
+          icon="clock"
           span={8}
           aside={<span className="board-note">as it reports them hourly</span>}
         >

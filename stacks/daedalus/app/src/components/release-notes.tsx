@@ -126,7 +126,7 @@ export function Changelog({
   return (
     <Board
       title={title ?? (behind === 0 ? 'Release notes' : `${String(behind)} ${unit}`)}
-      icon="≡"
+      icon="logs"
       span={span}
       aside={aside ?? <span className="board-note">github</span>}
     >

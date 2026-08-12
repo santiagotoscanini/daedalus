@@ -189,7 +189,7 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
 
       <Board
         title="Build &amp; deploy activity"
-        icon="≡"
+        icon="logs"
         span={8}
         aside={<span className="board-note">last 6 hours</span>}
       >

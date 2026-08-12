@@ -134,7 +134,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
       <BoardGrid>
         <Board
           title="Peers"
-          icon="⚿"
+          icon="key"
           span={8}
           aside={
             <span className="board-live">
@@ -196,7 +196,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
 
         <Board
           title="Anyone home"
-          icon="◷"
+          icon="clock"
           span={4}
           aside={<span className="board-note">peak per day, 14d</span>}
         >
@@ -540,7 +540,7 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
 
         <Board
           title="The address, over time"
-          icon="◷"
+          icon="clock"
           span={6}
           aside={<Countdown at={d.nextRunAt} />}
         >

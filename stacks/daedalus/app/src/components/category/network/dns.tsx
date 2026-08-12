@@ -488,7 +488,7 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
 
         <Board
           title="The registration"
-          icon="◷"
+          icon="clock"
           span={4}
           aside={<span className="board-note">rdap</span>}
         >
@@ -623,7 +623,7 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
 
         <Board
           title="The rest of the zone"
-          icon="≡"
+          icon="logs"
           span={6}
           aside={
             d.leftovers.length > 0 ? (

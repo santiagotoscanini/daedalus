@@ -89,7 +89,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
           </p>
         </Board>
 
-        <Board title="Library" icon="▦" span={4}>
+        <Board title="Library" icon="grid" span={4}>
           <div className="library-split">
             <Ring
               pct={

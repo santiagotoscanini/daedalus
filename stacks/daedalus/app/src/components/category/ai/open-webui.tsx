@@ -69,7 +69,7 @@ export function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-web
       <BoardGrid>
         <Board
           title="What the chat can reach"
-          icon="▤"
+          icon="rows"
           span={6}
           aside={
             <span className="board-live">

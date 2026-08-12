@@ -117,7 +117,7 @@ function HouseView({ d }: { d: House }) {
           <BarList items={d.domains} tone="info" empty="nothing to count" />
         </Board>
 
-        <Board title="Not answering" icon="⚠" span={4}>
+        <Board title="Not answering" icon="warn" span={4}>
           {/* Split by domain rather than counted. The count is never zero and
               never will be — 25 Tuya bulbs have been unavailable since they
               lost their WiFi pairing — so the only reading worth having is
@@ -238,7 +238,7 @@ function PhotosView({ d }: { d: Photos }) {
           </p>
         </Board>
 
-        <Board title="Disk" icon="▦" span={4}>
+        <Board title="Disk" icon="grid" span={4}>
           <Progress
             pct={
               d.disk.usedBytes === null || d.disk.freeBytes === null
@@ -356,7 +356,7 @@ function FilesView({ d }: { d: Files }) {
           </p>
         </Board>
 
-        <Board title="Contents" icon="▤" span={4}>
+        <Board title="Contents" icon="rows" span={4}>
           <Facts
             rows={[
               { k: 'Files', v: num(d.numFiles) },
@@ -581,7 +581,7 @@ function ProjectsView({ d }: { d: Projects }) {
           </p>
         </Board>
 
-        <Board title="How people get in" icon="⚿" span={6}>
+        <Board title="How people get in" icon="key" span={6}>
           <Facts
             rows={[
               {
@@ -608,7 +608,7 @@ function ProjectsView({ d }: { d: Projects }) {
 
         <Board
           title="Work"
-          icon="◫"
+          icon="panels"
           span={12}
           aside={
             d.workspace === null ? undefined : (

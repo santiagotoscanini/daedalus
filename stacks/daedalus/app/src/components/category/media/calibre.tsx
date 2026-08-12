@@ -54,7 +54,7 @@ export function CalibreView({ d }: { d: Calibre }) {
           </p>
         </Board>
 
-        <Board title="Disk" icon="▦" span={4}>
+        <Board title="Disk" icon="grid" span={4}>
           <Measures
             items={[
               { k: 'On disk', v: bytes(disk.usedBytes) },

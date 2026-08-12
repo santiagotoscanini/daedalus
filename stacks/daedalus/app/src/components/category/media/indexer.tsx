@@ -100,7 +100,7 @@ export function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> 
           </p>
         </Board>
 
-        <Board title="What it says is wrong" icon="⚠" span={12}>
+        <Board title="What it says is wrong" icon="warn" span={12}>
           <HealthChecks checks={d.health} reachable={reachable} />
         </Board>
 

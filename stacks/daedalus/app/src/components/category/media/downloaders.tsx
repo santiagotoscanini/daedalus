@@ -109,7 +109,7 @@ function QbtPage({ d }: { d: Downloaders }) {
       <BoardGrid>
         <Board
           title="Transfers"
-          icon="⇣"
+          icon="down"
           span={8}
           aside={
             <span className="board-note">
@@ -222,7 +222,7 @@ function NzbPage({ d }: { d: Downloaders }) {
       <BoardGrid>
         <Board
           title="Downloading"
-          icon="⇣"
+          icon="down"
           span={8}
           aside={
             <span className="board-note">
@@ -335,7 +335,7 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
       <BoardGrid>
         <Board
           title="Queue"
-          icon="⇣"
+          icon="down"
           span={8}
           aside={
             <span className="board-note">
@@ -365,7 +365,7 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
           </p>
         </Board>
 
-        <Board title="All time" icon="▦" span={4}>
+        <Board title="All time" icon="grid" span={4}>
           <Measures
             items={[
               { k: 'Completed', v: num(d.done) },
@@ -426,7 +426,7 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
       <BoardGrid>
         <Board
           title="Downloading"
-          icon="⇣"
+          icon="down"
           span={8}
           aside={
             counts === null ? (
@@ -463,7 +463,7 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
           )}
         </Board>
 
-        <Board title="Queue" icon="◷" span={4}>
+        <Board title="Queue" icon="clock" span={4}>
           {counts === null ? (
             <p className="viz-empty">no reading</p>
           ) : (

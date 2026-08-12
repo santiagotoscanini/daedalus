@@ -116,7 +116,7 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
           </p>
         </Board>
 
-        <Board title="Where they are" icon="◷" span={4}>
+        <Board title="Where they are" icon="clock" span={4}>
           <Measures
             items={[
               {
@@ -221,14 +221,14 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
       <BoardGrid>
         <Board
           title="What it says is wrong"
-          icon="⚠"
+          icon="warn"
           span={8}
           aside={<span className="board-note">its own health checks</span>}
         >
           <HealthChecks checks={d.health} reachable={reachable} />
         </Board>
 
-        <Board title="The library" icon="▦" span={4}>
+        <Board title="The library" icon="grid" span={4}>
           <Facts
             rows={[
               { k: copy.unit, v: num(counts.library) },
@@ -265,7 +265,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
 
         <Board
           title="Queue"
-          icon="⇣"
+          icon="down"
           span={8}
           aside={
             <span className="board-note">
@@ -306,7 +306,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
           </p>
         </Board>
 
-        <Board title={copy.upcoming} icon="◷" span={4}>
+        <Board title={copy.upcoming} icon="clock" span={4}>
           {d.upcoming.length === 0 ? (
             <p className="viz-empty">Nothing scheduled in the next fortnight.</p>
           ) : (
@@ -428,7 +428,7 @@ function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
           </p>
         </Board>
 
-        <Board title="Still missing" icon="◷" span={4}>
+        <Board title="Still missing" icon="clock" span={4}>
           <Facts
             rows={[
               { k: 'Episodes', v: num(d.wanted.episodes) },
@@ -539,7 +539,7 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
           </p>
         </Board>
 
-        <Board title="Health" icon="⚠" span={4}>
+        <Board title="Health" icon="warn" span={4}>
           <Measures
             items={[
               {

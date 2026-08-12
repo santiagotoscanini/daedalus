@@ -982,6 +982,23 @@ h2 {
   background: var(--panel);
   color: var(--muted);
 }
+/* A failed section (components/error.tsx). Flex, because it carries a retry
+   button that should sit on the banner's own line, not under it. */
+.banner-bad {
+  border-color: color-mix(in srgb, var(--bad) 40%, var(--border));
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+.error-detail {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 
 .apply-bar {
   position: fixed;
@@ -2251,6 +2268,11 @@ h2 {
 .board-icon {
   color: var(--accent-dim);
   font-size: 0.95rem;
+}
+/* The h3 is a flex row, so a block SVG centres on the text without the
+   baseline wobble the typed glyphs have. */
+.board-icon .glyph {
+  display: block;
 }
 .board-note {
   color: var(--dim);

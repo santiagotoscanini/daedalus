@@ -231,7 +231,7 @@ export function DhcpView({ data }: { data: Dhcp }) {
 
         <Board
           title="Everything on the LAN"
-          icon="▤"
+          icon="rows"
           span={12}
           aside={
             <span className="board-note">

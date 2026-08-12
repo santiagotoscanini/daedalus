@@ -1,4 +1,4 @@
-import { Await, createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router'
 import { ApplyBar } from '../components/apply-bar'
 import { Access } from '../components/apps/access'
 import { Database } from '../components/apps/database'
@@ -7,6 +7,7 @@ import { Overview } from '../components/apps/overview'
 import { Secrets } from '../components/apps/secrets'
 import { Settings } from '../components/apps/settings'
 import { Vpn } from '../components/apps/vpn'
+import { GuardedAwait } from '../components/error'
 import { GrafanaLogs } from '../components/logs'
 import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
@@ -98,6 +99,11 @@ function AppDetail() {
 
   const readOnly = app.managedInNix
   const state = status?.state ?? 'unknown'
+
+  // What un-errors a failed tab body: anything that makes the loader hand
+  // over a fresh tabData promise. The range is part of it so widening the
+  // access window is itself a retry.
+  const sectionKey = `${tab}:${range ?? ''}`
 
   // Edits go straight to Postgres — the database IS the working copy, and the
   // drift banner is what marks it as not-yet-applied. There is no separate
@@ -210,7 +216,8 @@ function AppDetail() {
       />
 
       {tab === 'overview' && (
-        <Await
+        <GuardedAwait
+          resetKey={sectionKey}
           promise={tabData}
           fallback={
             <>
@@ -231,17 +238,18 @@ function AppDetail() {
               />
             )
           }
-        </Await>
+        </GuardedAwait>
       )}
 
       {tab === 'deployments' && (
-        <Await promise={tabData} fallback={<BlockSkeleton h={420} />}>
+        <GuardedAwait resetKey={sectionKey} promise={tabData} fallback={<BlockSkeleton h={420} />}>
           {(td) => (td.kind !== 'deployments' ? null : <Deployments app={app} td={td} />)}
-        </Await>
+        </GuardedAwait>
       )}
 
       {tab === 'database' && (
-        <Await
+        <GuardedAwait
+          resetKey={sectionKey}
           promise={tabData}
           fallback={
             <>
@@ -251,11 +259,12 @@ function AppDetail() {
           }
         >
           {(td) => (td.kind !== 'database' ? null : <Database app={app} data={td.database} />)}
-        </Await>
+        </GuardedAwait>
       )}
 
       {tab === 'vpn' && (
-        <Await
+        <GuardedAwait
+          resetKey={sectionKey}
           promise={tabData}
           fallback={
             <>
@@ -265,11 +274,12 @@ function AppDetail() {
           }
         >
           {(td) => (td.kind !== 'vpn' ? null : <Vpn app={app} data={td.vpn} />)}
-        </Await>
+        </GuardedAwait>
       )}
 
       {tab === 'access' && (
-        <Await
+        <GuardedAwait
+          resetKey={sectionKey}
           promise={tabData}
           fallback={
             <>
@@ -289,7 +299,7 @@ function AppDetail() {
               />
             )
           }
-        </Await>
+        </GuardedAwait>
       )}
 
       {tab === 'settings' && (
@@ -297,13 +307,13 @@ function AppDetail() {
       )}
 
       {tab === 'secrets' && (
-        <Await promise={tabData} fallback={<BlockSkeleton h={400} />}>
+        <GuardedAwait resetKey={sectionKey} promise={tabData} fallback={<BlockSkeleton h={400} />}>
           {(td) =>
             td.kind !== 'secrets' ? null : (
               <Secrets app={app.name} env={td.env} hasSecretsFile={app.operatorSecrets} />
             )
           }
-        </Await>
+        </GuardedAwait>
       )}
 
       {/* Grafana renders these. Nothing is fetched for this tab any more —

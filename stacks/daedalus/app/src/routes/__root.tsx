@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 
+import { ErrorPanel } from '../components/error'
 import { NavIcon } from '../components/nav-icon'
 import { CATEGORIES } from '../lib/dashboard/nav'
 import appCss from '../styles.css?url'
@@ -58,6 +59,9 @@ export const Route = createRootRoute({
       { rel: 'apple-touch-icon', href: '/apple-icon.png' },
     ],
   }),
+  // Inside the shell (this route's children render there), so an uncaught
+  // loader or render error keeps the rail and its way back to every other page.
+  errorComponent: ErrorPanel,
   shellComponent: RootDocument,
 })
 
