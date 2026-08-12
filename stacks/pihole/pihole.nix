@@ -54,6 +54,37 @@ in
     description = "LAN DNS, DHCP, ad-blocking";
   };
 
+  # The resolver facts daedalus renders (see platform/export.nix), contributed
+  # from the stack that owns the settings. Read back from the FTL config
+  # rather than fleet.dnsHosts, because this module appends hosts that belong
+  # to no stack (the gaming PC) and a page showing only the stack half would
+  # be quietly missing entries that exist. lanHosts split into address and
+  # name: nearly every one points at this box, and the ones that do not are
+  # exactly the interesting rows.
+  fleet.export.domains.network.data =
+    let
+      parse = e: {
+        ip = lib.elemAt (lib.splitString " " e) 0;
+        host = lib.elemAt (lib.splitString " " e) 1;
+      };
+    in
+    {
+      lanHosts = lib.sort (a: b: a.host < b.host) (
+        map parse config.services.pihole-ftl.settings.dns.hosts
+      );
+      dnsUpstreams = config.services.pihole-ftl.settings.dns.upstreams;
+      dhcp = {
+        inherit (config.services.pihole-ftl.settings.dhcp)
+          active
+          router
+          start
+          end
+          leaseTime
+          hosts
+          ;
+      };
+    };
+
   services.pihole-ftl = {
     enable = true;
     openFirewallDNS = true; # 53 TCP + UDP

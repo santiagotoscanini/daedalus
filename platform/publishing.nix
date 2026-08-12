@@ -691,6 +691,31 @@ in
   };
 
   config = {
+    # The publish registry, as daedalus renders it: the full per-webApp
+    # record (the manifest used to export only hostname, which is why the
+    # dashboard grew hardcoded host ports), the taken-hostname list for the
+    # live collision check, and the router-forwarded direct ingress. The
+    # dashboard reads /export/publishing.json; see platform/export.nix.
+    fleet.export.domains.publishing.data = {
+      webApps = lib.mapAttrs (_: w: {
+        inherit (w)
+          hostname
+          port
+          serviceName
+          serviceUrl
+          exposeRemotely
+          auth
+          healthPath
+          isolated
+          ;
+      }) cfg.webApps;
+      takenHostnames = lib.sort (a: b: a < b) (lib.mapAttrsToList (_: w: w.hostname) cfg.webApps);
+      directIngress = lib.mapAttrsToList (name: v: {
+        inherit name;
+        inherit (v) port proto note;
+      }) cfg.directIngress;
+    };
+
     # Materialize webApps into the lower-level options the rest of
     # the box consumes (traefik route rendering, pi-hole dns.hosts,
     # cloudflared-route-sync). Module-system merging means a stack

@@ -571,6 +571,9 @@ in
       # every rebuild — so an Apply updates it WITHOUT restarting this app.
       NIX_MANIFEST_PATH = "/registry/manifest.json";
       NIX_REGISTRY_PATH = "/apply/applied.json";
+      # The fleet.export domains (platform/export.nix) — the successor to the
+      # manifest and the env blobs; readers flip domain by domain.
+      EXPORT_DIR = "/export";
       # Where apply requests are dropped for the host agent.
       APPLY_DIR = "/apply";
 
@@ -714,6 +717,12 @@ in
   # than the apps platform learning about daedalus.
   virtualisation.oci-containers.containers.app-daedalus.volumes = [
     "${nixManifest}:/registry/manifest.json:ro"
+    # The fleet.export domains (platform/export.nix): versioned, stamped JSON
+    # per domain at a STABLE path — the publisher re-runs on change, the
+    # container just reads new bytes. This is the successor to both the
+    # manifest above and the per-fact env blobs; readers flip domain by
+    # domain, then the old channels are deleted.
+    "/run/daedalus-export:/export:ro"
     "${applyDir}:/apply"
     # Last deploy result per app, written by app-<name>-deploy.service
     # (`<digest> ok|failed`). Read-only, and the DIRECTORY rather than the
@@ -781,6 +790,16 @@ in
   # what is wanted.
   fleet.monitoredJobs.daedalus-image-snapshot = { };
   fleet.monitoredJobs.daedalus-env-snapshot = { };
+
+  # The export publisher must have populated /run/daedalus-export before the
+  # container mounts it: rootless podman cannot create a root-owned /run dir,
+  # and a bind mount of a missing source fails the whole container start.
+  # (The publisher itself lives in platform/export.nix; only the ordering is
+  # daedalus's concern.)
+  systemd.services.daedalus-export-publish = {
+    before = [ "podman-app-daedalus.service" ];
+    wantedBy = [ "podman-app-daedalus.service" ];
+  };
 
   # The host facts behind three System tabs. Runs as ROOT and unprivileged
   # nowhere: smartctl needs a raw device, and `zpool status` needs the pool.
