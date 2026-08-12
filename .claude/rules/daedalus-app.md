@@ -34,20 +34,40 @@ has been pushed. Commit often.
 
 - `src/routes/` — TanStack file-based routes: `__root.tsx`,
   `c.$category.tsx` (the category dashboard shell), `apps.index.tsx` /
-  `apps.$name.tsx` / `apps.new.tsx` (the app-registry UI), and
-  `api.*.ts` server routes (healthz, deploy hook, registry
-  apply/export/import, app-icon).
+  `apps.$name.tsx` (loader + frame only; its tab bodies live in
+  `src/components/apps/*`) / `apps.new.tsx`, and `api.*.ts` server
+  routes (healthz, deploy hook, registry apply/export/import,
+  app-icon).
 - **The mirrored category convention**:
-  `src/lib/dashboard/categories/<name>.ts` (data/query layer) ↔
-  `src/components/category/<name>.tsx` (render layer), one pair per
-  category (ai, gaming, home, media, monitoring, network, system).
-  `src/lib/dashboard/nav.ts` is the category/tab registry — a new
-  category registers there. Known asymmetry: `idp.tsx`'s data lives in
-  `src/lib/dashboard/idp.ts` (not under `categories/`).
+  `src/lib/dashboard/categories/<name>` (data/query layer) ↔
+  `src/components/category/<name>` (render layer), one pair per
+  category (ai, gaming, home, media, monitoring, network, system —
+  idp sits under `categories/` too). A big category is a DIRECTORY:
+  one file per tab id from nav.ts, the data union + tab dispatcher in
+  `index.ts`, the view dispatch in `index.tsx`, cross-tab helpers in
+  `shared.ts(x)` (leaf modules — never in the index, cycle risk). A
+  small category stays a single file pair. The split rule: >3 tabs
+  and >~1,000 lines → directory.
+- **The category registry**: `lib/dashboard/category-data.ts`
+  (CategoryDataMap + CategoryPayload, TYPE-only), `server/category.ts`
+  LOADERS (dynamic-import thunks), `components/category/registry.tsx`
+  VIEWS (static components). `src/lib/dashboard/nav.ts` declares
+  categories/tabs. A new category = nav entry + all three records;
+  the compiler enforces agreement.
+- **The shared client layer**: `lib/http.ts` (retry ladder, request
+  coalescer, pool), `lib/prom.ts` (PromQL + promEscape), `lib/loki.ts`
+  (LogQL, one-patient-attempt budget), `lib/cache.ts` (swrCache /
+  swrValue, the two-clock stale-serving contract), `lib/format.ts`
+  (isomorphic formatters), `lib/keys.ts` (the DASH_* secrets
+  accessor — the one process.env read, kept out of format.ts so
+  components can import it).
 - `src/server/` — server functions (category, lemonade, registry).
 - `src/lib/repo/` — drizzle repositories (apps, deployments);
   `src/lib/schema.ts` + `db.ts` for the database side
   (`pnpm db:generate` / `db:migrate` for schema changes).
+- `src/lib/contract/` — the decode layer for everything the host
+  publishes (`/export` domains, snapshots, the registry schema
+  version).
 
 ## Data-flow rules
 
