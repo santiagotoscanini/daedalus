@@ -5,8 +5,8 @@
 // cycles, not summaries of the app list. They sit under Apps rather than in a
 // category of their own because their only consumer is the apps beside them.
 
+import type { ImagesData, PackagesData } from '../lib/apps/registries'
 import { bytes, DASH, num } from '../lib/format'
-import type { ImagesData, PackagesData } from '../lib/registries'
 import { BASE_DOMAIN, REGISTRY_HOST } from '../lib/site'
 import { LogBoard, type LogNeighbour } from './logs'
 import { Changelog } from './release-notes'
