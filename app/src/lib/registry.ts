@@ -5,7 +5,9 @@
 // Reached over traefik (https://registry.toscanini.me) because daedalus is
 // `isolated` and deliberately not on registry-net, where the CI runners live.
 
-const REGISTRY = () => process.env.REGISTRY_URL ?? 'https://registry.toscanini.me'
+import { REGISTRY_HOST } from './site'
+
+const REGISTRY = () => process.env.REGISTRY_URL ?? `https://${REGISTRY_HOST}`
 
 const MANIFEST_ACCEPT = [
   'application/vnd.oci.image.manifest.v1+json',

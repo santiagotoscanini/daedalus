@@ -4,6 +4,7 @@ import type { AccessWindow } from '../lib/access-window'
 // Type-only, so the database module it lives next to is not pulled in here —
 // every value import in this file is dynamic for exactly that reason.
 import type { NewApp } from '../lib/repo/apps'
+import { defaultImage, REGISTRY_HOST_PATTERN } from '../lib/site'
 
 // Server functions behind the Apps UI. Kept in one module so the list page,
 // the detail page and the apply bar all read the same shapes.
@@ -142,7 +143,7 @@ export const fetchApp = createServerFn()
         managedInNix: record.managedInNix,
         sourceMode: record.sourceMode,
         image: record.image,
-        effectiveImage: record.image ?? `registry.toscanini.me/${record.name}:latest`,
+        effectiveImage: record.image ?? defaultImage(record.name),
         hostname: record.hostname,
         effectiveHostname: effectiveHostname(record.name, record.hostname),
         description: record.description,
@@ -433,7 +434,7 @@ export const fetchAppPreflight = createServerFn()
     const { repoChecks } = await import('../lib/github-repos')
     const { imageInfo } = await import('../lib/registry')
 
-    const effectiveImage = data.image?.trim() || `registry.toscanini.me/${data.name}:latest`
+    const effectiveImage = data.image?.trim() || defaultImage(data.name)
 
     // Only images on the box's own zot can be verified from here — an override
     // pointing at GHCR or docker.io is reported as unverified rather than
@@ -441,7 +442,9 @@ export const fetchAppPreflight = createServerFn()
     // `<repo>` then an optional `:tag` or `@digest`; the leading separator is
     // dropped either way, since the manifest endpoint takes both as a bare
     // reference.
-    const local = /^registry\.toscanini\.me\/(?<repo>[^:@]+)(?<ref>[:@].+)?$/.exec(effectiveImage)
+    const local = new RegExp(`^${REGISTRY_HOST_PATTERN}/(?<repo>[^:@]+)(?<ref>[:@].+)?$`).exec(
+      effectiveImage,
+    )
     const imageState =
       local?.groups?.repo === undefined
         ? ('unverifiable' as const)

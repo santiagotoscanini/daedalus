@@ -7,6 +7,7 @@ import { Board, BoardGrid } from '../components/viz'
 import type { CiRequestStatus } from '../lib/ci-request'
 import type { Check, Repo } from '../lib/github-repos'
 import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
+import { defaultImage, OWNER } from '../lib/site'
 import {
   createAppFn,
   fetchAppPreflight,
@@ -67,9 +68,9 @@ function NewAppPage() {
         <h1>Add an app</h1>
       </header>
       <p className="lede">
-        One repository under <code>github.com/santiagotoscanini</code> becomes one entry in the
-        registry. Everything downstream — container, hostname, TLS, DNS, probe, deploy timer, CI
-        runner — is derived from it.
+        One repository under <code>github.com/{OWNER}</code> becomes one entry in the registry.
+        Everything downstream — container, hostname, TLS, DNS, probe, deploy timer, CI runner — is
+        derived from it.
       </p>
 
       <Await promise={options} fallback={<RowsSkeleton count={4} />}>
@@ -421,7 +422,7 @@ function Wizard({ options }: { options: Options }) {
                 <Field
                   label="Image override"
                   value={image}
-                  placeholder={`registry.toscanini.me/${name}:latest`}
+                  placeholder={defaultImage(name)}
                   hint="Empty uses the box's own registry, which is what CI publishes to. Set this for a fork, another registry, or a pinned digest."
                   onChange={setImage}
                 />

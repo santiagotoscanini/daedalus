@@ -16,9 +16,12 @@
 // repos of the account, which the GHCR pull token cannot.
 
 import { key } from './dashboard/format'
+import { OWNER, REGISTRY_HOST_PATTERN } from './site'
 
-/** Every app repo lives under this account — the same assumption stacks/gha-runner makes. */
-export const OWNER = 'santiagotoscanini'
+// Every app repo lives under OWNER (site.ts, nix-bound) — the same assumption
+// stacks/gha-runner makes. Re-exported so this module's many importers keep
+// their import path.
+export { OWNER }
 
 /**
  * Listings change when a repo is pushed to, which is minutes-to-days apart,
@@ -252,7 +255,7 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
     // that merely *mentions* the registry in a comment would start the wrong
     // run, and `workflow_dispatch` has to be on the file being dispatched.
     const publishIndex = bodies.findIndex(
-      (b) => b !== null && /zot:5000|registry\.toscanini\.me/.test(b),
+      (b) => b !== null && new RegExp(`zot:5000|${REGISTRY_HOST_PATTERN}`).test(b),
     )
     const publishWorkflow = publishIndex === -1 ? null : (workflows[publishIndex] ?? null)
     const dispatchable =

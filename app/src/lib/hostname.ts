@@ -13,7 +13,11 @@
 // that is a revert. Rejecting it at the edit is the difference between a red
 // input box and a failed deploy.
 
-export const BASE_DOMAIN = 'toscanini.me'
+// Re-exported from site.ts (nix-bound env) so the validators and their many
+// importers keep one import path.
+import { BASE_DOMAIN } from './site'
+
+export { BASE_DOMAIN }
 
 /** One label: letters, digits, inner hyphens. Mirrors `hostnameRe` in apps.nix. */
 const LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/

@@ -35,6 +35,7 @@ import type { DeployStatus } from '../lib/deploy'
 // is not.
 import { type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../lib/env-groups'
 import { BASE_DOMAIN, hostnameError } from '../lib/hostname'
+import { defaultImage, GRAFANA_URL, OWNER } from '../lib/site'
 import {
   type AppTabData,
   deleteAppFn,
@@ -196,12 +197,8 @@ function AppDetail() {
             {app.sourceMode === 'local' ? (
               <span className="muted">⎇ stacks/{app.name}/app</span>
             ) : (
-              <a
-                href={`https://github.com/santiagotoscanini/${app.name}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                ⎇ santiagotoscanini/{app.name}
+              <a href={`https://github.com/${OWNER}/${app.name}`} target="_blank" rel="noreferrer">
+                ⎇ {OWNER}/{app.name}
               </a>
             )}
           </p>
@@ -517,11 +514,11 @@ function AppDetail() {
                   ) : (
                     <>
                       <a
-                        href={`https://github.com/santiagotoscanini/${app.name}`}
+                        href={`https://github.com/${OWNER}/${app.name}`}
                         target="_blank"
                         rel="noreferrer"
                       >
-                        ⎇ santiagotoscanini/{app.name}
+                        ⎇ {OWNER}/{app.name}
                       </a>
                       <span className="muted">builds run on self-hosted runners</span>
                       <span className="deploy-actions">
@@ -754,7 +751,7 @@ function AppDetail() {
             <TextField
               label="Image override"
               value={app.image ?? ''}
-              placeholder={`registry.toscanini.me/${app.name}:latest`}
+              placeholder={defaultImage(app.name)}
               disabled={readOnly || app.sourceMode === 'local'}
               onSave={(v) => {
                 patch({ image: v.trim() === '' ? null : v.trim() })
@@ -1375,7 +1372,7 @@ function Access({
               aside={
                 <a
                   className="btn btn-ghost"
-                  href={`https://grafana.toscanini.me/d/s2-security/security?from=now-${range}&to=now`}
+                  href={`${GRAFANA_URL}/d/s2-security/security?from=now-${range}&to=now`}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -1443,7 +1440,7 @@ function Access({
  */
 function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }) {
   const src =
-    `https://grafana.toscanini.me/d-solo/s2-app-access/app-access` +
+    `${GRAFANA_URL}/d-solo/s2-app-access/app-access` +
     `?panelId=1&var-host=${encodeURIComponent(hostname)}` +
     `&from=now-${range}&to=now&theme=dark`
 
@@ -1455,7 +1452,7 @@ function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }
       aside={
         <a
           className="btn btn-ghost"
-          href={`https://grafana.toscanini.me/d/s2-app-access/app-access?var-host=${encodeURIComponent(hostname)}&from=now-${range}&to=now`}
+          href={`${GRAFANA_URL}/d/s2-app-access/app-access?var-host=${encodeURIComponent(hostname)}&from=now-${range}&to=now`}
           target="_blank"
           rel="noreferrer"
         >
@@ -1466,7 +1463,7 @@ function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }
       <iframe className="geopanel" src={src} title={`Remote requests to ${hostname} by country`} />
       <p className="board-foot">
         Rendered by Grafana. A blank map means this browser has no Grafana session yet — open it{' '}
-        <a href="https://grafana.toscanini.me" target="_blank" rel="noreferrer">
+        <a href={GRAFANA_URL} target="_blank" rel="noreferrer">
           once
         </a>{' '}
         and it will fill in.

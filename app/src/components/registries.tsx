@@ -8,6 +8,7 @@
 import { DASH, num } from '../lib/dashboard/format'
 import type { VersionGap } from '../lib/dashboard/github'
 import type { ImagesData, PackagesData } from '../lib/registries'
+import { BASE_DOMAIN, REGISTRY_HOST } from '../lib/site'
 import { LogBoard, type LogNeighbour } from './logs'
 import { Changelog } from './release-notes'
 import { type CompareRow, ServiceHead, verdictOf } from './service-head'
@@ -153,7 +154,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
           <Facts
             list
             rows={[
-              { k: 'hostname', v: <code>registry.toscanini.me</code> },
+              { k: 'hostname', v: <code>{REGISTRY_HOST}</code> },
               { k: 'read', v: 'anonymous' },
               { k: 'push', v: 'htpasswd, from sops' },
               { k: 'pulled by', v: 'app deploy timers' },
@@ -292,7 +293,7 @@ export function PackagesView({ d }: { d: PackagesData }) {
           <Facts
             list
             rows={[
-              { k: 'hostname', v: <code>verdaccio.toscanini.me</code> },
+              { k: 'hostname', v: <code>verdaccio.{BASE_DOMAIN}</code> },
               { k: 'exposure', v: 'LAN only' },
               { k: 'login', v: 'Pocket ID (OIDC)' },
               { k: 'upstream', v: <code>registry.npmjs.org</code> },

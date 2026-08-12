@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { bytes, compact, DASH, flag, ms, num, pct, since, until } from '../../lib/dashboard/format'
+import { BASE_DOMAIN, stripBaseDomain } from '../../lib/site'
 import type { NetworkData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
@@ -1127,7 +1128,7 @@ function TraefikView({ d }: { d: Proxy }) {
               <ul className="itemlist routes">
                 {g.rows.map((r) => (
                   <li key={r.host} title={r.via ?? undefined}>
-                    <span className="item-main mono">{r.host.replace(/\.toscanini\.me$/, '')}</span>
+                    <span className="item-main mono">{stripBaseDomain(r.host)}</span>
                     {/* The chip is the whole point of the row: off-LAN means
                         the internet can ask, and the protection column beside
                         it says what answers. */}
@@ -1529,7 +1530,7 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
             <ul className="itemlist">
               {t.published.map((p) => (
                 <li key={p.hostname}>
-                  <span className="item-main">{p.hostname.replace(/\.toscanini\.me$/, '')}</span>
+                  <span className="item-main">{stripBaseDomain(p.hostname)}</span>
                   <span className="item-side mono">{p.service.replace(/^https?:\/\//, '')}</span>
                 </li>
               ))}
@@ -1656,7 +1657,7 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
               <>One of the two could not be read, so this check is not currently making a claim. </>
             )}
             Asked of <code>1.1.1.1</code> over HTTPS rather than this box’s resolver, deliberately:
-            pi-hole short-circuits <code>*.toscanini.me</code> to the LAN address, which is right
+            pi-hole short-circuits <code>*.{BASE_DOMAIN}</code> to the LAN address, which is right
             and would make this check answer itself.
           </p>
 

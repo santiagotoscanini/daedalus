@@ -1,4 +1,5 @@
 import { bytes, compact, DASH, num, pct, since, until } from '../../lib/dashboard/format'
+import { BASE_DOMAIN } from '../../lib/site'
 import type { MonitoringData } from '../../server/category'
 import { LogBoard, type LogNeighbour } from '../logs'
 import { Changelog } from '../release-notes'
@@ -249,7 +250,7 @@ function ProbesView({ d }: { d: Probes }) {
             ]}
           />
           <p className="board-foot">
-            One entrypoint-level wildcard covers <span className="mono">*.toscanini.me</span>, so
+            One entrypoint-level wildcard covers <span className="mono">*.{BASE_DOMAIN}</span>, so
             this is effectively one certificate for every hostname on the box. Renewal is DNS-01
             through Cloudflare and automatic — a number falling below thirty means lego is failing,
             and the store is a single file that is in no backup.
