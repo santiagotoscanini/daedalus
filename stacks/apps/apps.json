@@ -10,7 +10,7 @@
       "litellm": false,
       "prometheus": false,
       "deploy": {
-        "enable": false
+        "enable": true
       },
       "image": null,
       "hostname": null,
