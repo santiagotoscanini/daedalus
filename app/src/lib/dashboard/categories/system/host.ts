@@ -24,6 +24,12 @@ export type HostData = {
   containers: { total: number | null; down: string[] }
   failedUnits: number | null
   /**
+   * The failed units by NAME, from the host snapshot. The count above is
+   * prometheus's and refreshes every 60s; this list refreshes with the
+   * snapshot (10 min), so the two can briefly disagree after a unit flips.
+   */
+  failedUnitsList: { unit: string; description: string | null; subState: string | null }[]
+  /**
    * Every boot generation on the box.
    *
    * `configurationLimit = 10` bounds the BOOT MENU, not the profile — a
@@ -80,6 +86,11 @@ export async function loadHost(): Promise<HostData> {
       down: containerUp.filter((c) => c.value[1] !== '1').map((c) => c.metric.name ?? '?'),
     },
     failedUnits,
+    failedUnitsList: facts.failedUnits.map((u) => ({
+      unit: u.unit,
+      description: u.description,
+      subState: u.subState,
+    })),
     generations: facts.generations,
   }
 }

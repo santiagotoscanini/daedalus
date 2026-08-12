@@ -41,6 +41,7 @@ import { key } from '../../keys'
 import { lokiScalar, lokiSeries, lokiVector } from '../../loki'
 import { promBars, promScalar, promScalars, promSeries, promVector } from '../../prom'
 import { type VersionGap, versionGap } from '../github'
+import { hostFacts, type JobRun } from '../host-facts'
 import { imageVersion, type RunningVersion } from '../images'
 
 type Ctx = { base: (app: string) => string }
@@ -454,7 +455,20 @@ type JobsData = {
     /** Its healthchecks row, when the slug resolves to one. */
     status: string | null
     lastPingAgo: number | null
+    /**
+     * The OUTCOME, from the host snapshot's timer table — what actually
+     * happened, next to the two columns about what would be noticed. Null
+     * throughout for a job with no timer (boot oneshots, path units): their
+     * absence from the timer list is itself information, so the row stays
+     * and the columns read as dashes.
+     */
+    lastRunAgo: number | null
+    result: string | null
+    exitStatus: number | null
+    nextIn: number | null
   }[]
+  /** Timers running on the box that no monitoredJobs entry watches. */
+  unwatchedTimers: number
   /** Declared with a slug that healthchecks does not know. */
   orphaned: string[]
   /** Watched by mail only — cannot report never having run. */
@@ -477,12 +491,13 @@ async function loadJobs(ctx: Ctx): Promise<JobsData> {
   const { monitoredJobs } = await import('../../nix-manifest')
   const running = await imageVersion('healthchecks')
 
-  const [body, registry, gap] = await Promise.all([
+  const [body, registry, gap, facts] = await Promise.all([
     getJson<{ checks?: HcCheck[] }>(`${ctx.base('healthchecks')}/api/v1/checks/`, {
       headers: { 'X-Api-Key': key('HEALTHCHECKS_API_KEY') },
     }),
     monitoredJobs(),
     versionGap('healthchecks/healthchecks', running.version, { tag: TWO_OR_THREE }),
+    hostFacts(),
   ])
 
   const now = Date.now()
@@ -499,15 +514,32 @@ async function loadJobs(ctx: Ctx): Promise<JobsData> {
     if (c.name !== undefined) bySlug.set(c.name, c)
   }
 
+  // The registry names bare units ("minecraft-backup"); the snapshot names
+  // real ones ("minecraft-backup.timer" activating "…-backup.service").
+  // Indexed under both stripped forms so a job matches whichever side of the
+  // timer→service pair shares its name.
+  const runByUnit = new Map<string, JobRun>()
+  for (const r of facts.jobs) {
+    runByUnit.set(r.timer.replace(/\.timer$/, ''), r)
+    if (r.service !== null) runByUnit.set(r.service.replace(/\.service$/, ''), r)
+  }
+
   const jobs = [...registry]
     .map((j) => {
       const hit = j.slug === null ? undefined : bySlug.get(j.slug)
+      const run = runByUnit.get(j.unit)
       return {
         unit: j.unit,
         email: j.email,
         slug: j.slug,
         status: hit?.status ?? null,
         lastPingAgo: ageOf(hit?.last_ping),
+        lastRunAgo: run === undefined || run.lastAt === null ? null : now / 1000 - run.lastAt,
+        // Meaningless without a run to describe — systemd defaults them to
+        // success/0 on a service that never started.
+        result: run === undefined || run.lastAt === null ? null : run.result,
+        exitStatus: run === undefined || run.lastAt === null ? null : run.exitStatus,
+        nextIn: run?.nextAt === undefined || run.nextAt === null ? null : run.nextAt - now / 1000,
       }
     })
     // Jobs with a live dead-man's-switch first, then the mail-only ones —
@@ -549,6 +581,10 @@ async function loadJobs(ctx: Ctx): Promise<JobsData> {
       }),
     orphaned: jobs.filter((j) => j.slug !== null && j.status === null).map((j) => j.unit),
     emailOnly: jobs.filter((j) => j.slug === null).length,
+    unwatchedTimers: facts.jobs.filter((r) => {
+      const base = r.timer.replace(/\.timer$/, '')
+      return !registry.some((j) => j.unit === base)
+    }).length,
     jobs,
   }
 }

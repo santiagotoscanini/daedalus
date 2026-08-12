@@ -613,8 +613,24 @@ function JobsView({ d }: { d: Jobs }) {
                 ) : (
                   <Chip tone="bad">{j.status}</Chip>
                 )}
+                {/* The outcome: what the last run DID. A dash is a job with no
+                    timer — boot oneshots and path units — whose absence from
+                    the timer table is information, not a gap. */}
+                {j.result === null ? (
+                  <span className="item-side">{DASH}</span>
+                ) : j.result === 'success' ? (
+                  <Chip tone="ok">success</Chip>
+                ) : (
+                  <Chip tone="bad">
+                    {j.exitStatus === null || j.exitStatus === 0
+                      ? j.result
+                      : `${j.result} (${String(j.exitStatus)})`}
+                  </Chip>
+                )}
                 <span className="item-side">
-                  {j.slug === null ? '' : (since(j.lastPingAgo) ?? '')}
+                  {j.lastRunAgo === null ? DASH : `ran ${since(j.lastRunAgo)}`}
+                  {' · '}
+                  {j.nextIn === null ? DASH : `next ${until(j.nextIn)}`}
                 </span>
               </li>
             ))}
@@ -626,7 +642,11 @@ function JobsView({ d }: { d: Jobs }) {
             all tells you. Only the second catches a timer that was disabled, never fired, or whose
             service was renamed — which is the failure a scheduled job actually has.{' '}
             {num(d.emailOnly)} of the {num(d.jobs.length)} here are mail-only, deliberately: for a
-            job that runs on every rebuild, &ldquo;it did not run&rdquo; is not a fault.
+            job that runs on every rebuild, &ldquo;it did not run&rdquo; is not a fault. The outcome
+            column is the host&rsquo;s own timer table via the system snapshot: when the last run
+            happened, how it ended, and when the next is due. A dash is a job with no timer — boot
+            and rebuild oneshots — not a job that failed to schedule. {num(d.unwatchedTimers)} more
+            timers run on the box with no entry in this registry at all.
           </p>
         </Board>
 

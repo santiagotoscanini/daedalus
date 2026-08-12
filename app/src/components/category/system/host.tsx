@@ -102,6 +102,44 @@ export function HostView({ d }: { d: Host }) {
       </Board>
 
       <Board
+        title={d.failedUnitsList.length === 0 ? 'No failed units' : 'Failed units'}
+        icon="⚑"
+        span={8}
+        aside={
+          d.failedUnitsList.length === 0 ? (
+            <Chip tone="ok">none</Chip>
+          ) : (
+            <Chip tone="bad">{num(d.failedUnitsList.length)}</Chip>
+          )
+        }
+      >
+        {d.failedUnitsList.length === 0 ? (
+          <p className="viz-empty">
+            No systemd unit on the box is in the failed state — every service, timer and oneshot
+            that ran either succeeded or is still running.
+          </p>
+        ) : (
+          <ul className="itemlist">
+            {d.failedUnitsList.map((u) => (
+              <li key={u.unit}>
+                <Chip tone="bad">{u.subState ?? 'failed'}</Chip>
+                <span className="item-main mono">{u.unit}</span>
+                <span className="item-side">{u.description ?? ''}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="board-foot">
+          Named, from the host snapshot — the count in the panel above is prometheus&rsquo;s and can
+          lead this list by up to ten minutes. Empty is a weaker claim than it sounds on this box:
+          every container unit is a green <span className="mono">Type=oneshot</span> whose container
+          can die without the unit noticing, so &ldquo;no failed units&rdquo; and &ldquo;every
+          container alive&rdquo; are different questions — the second is the Containers row and its
+          list of who is not answering.
+        </p>
+      </Board>
+
+      <Board
         title="Generations"
         icon="⎌"
         span={4}
