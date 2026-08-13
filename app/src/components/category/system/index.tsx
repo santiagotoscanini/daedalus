@@ -6,6 +6,7 @@ import { DisksView } from './disks'
 import { HostView } from './host'
 import { MemoryView } from './memory'
 import { PoolsView } from './pools'
+import { UpdatesView } from './updates'
 
 // The System pages — a tab per layer of the machine.
 //
@@ -41,6 +42,8 @@ export function SystemView({ data }: { data: SystemData }) {
       return <BuildView d={data} />
     case 'database':
       return <DatabaseView d={data} />
+    case 'updates':
+      return <UpdatesView d={data} />
     case 'backups':
       return <BackupsView d={data} />
   }

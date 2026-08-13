@@ -6099,3 +6099,203 @@ h2 {
   font-size: 0.7rem;
   line-height: 1.5;
 }
+
+/* ── the updates page ───────────────────────────────────────────────────── */
+
+/* A row is a disclosure, and the same disclosure idiom as a release entry
+   (.rel above) — same triangle, same hover, same open rotation. Deliberately:
+   opening a container here and opening a release inside it are the same
+   gesture one level apart, and two different affordances for that would read
+   as two different kinds of thing. */
+.upd-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* The settled half of the page. Dimmed as a group rather than per row: it is
+   a long list whose whole message is "nothing to do here", and sixty rows at
+   full contrast compete with the eight that need reading. */
+.upd-rows.is-quiet {
+  opacity: 0.72;
+}
+.upd-rows.is-quiet:hover {
+  opacity: 1;
+}
+.upd-row > details {
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.upd-row summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.upd-row summary::-webkit-details-marker {
+  display: none;
+}
+.upd-row summary::before {
+  content: "\25B8";
+  color: var(--dim);
+  font-size: 0.7rem;
+  transition: transform 0.12s ease;
+}
+.upd-row > details[open] summary::before {
+  transform: rotate(90deg);
+}
+.upd-row summary:hover {
+  background: var(--raise);
+}
+.upd-name {
+  font-size: 0.84rem;
+  color: var(--text);
+  min-width: 11rem;
+}
+.upd-from {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+/* The arrow is in the stylesheet rather than the markup: it is punctuation
+   between two versions, not content, and a JSX string would put it in the
+   accessibility tree as a word. */
+.upd-to {
+  font-size: 0.76rem;
+  color: var(--text);
+}
+.upd-to::before {
+  content: "\2192\00a0";
+  color: var(--dim);
+}
+.upd-row summary .vchip {
+  margin-left: auto;
+}
+.upd-row summary .vchip + .vchip {
+  margin-left: 0.4rem;
+}
+
+.upd-body {
+  padding: 0.5rem 0.75rem 0.7rem;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+/* The exact ref this row would rewrite, last and quiet — it is the thing a
+   person copies into a shell when they want to check something by hand, and
+   it is not part of the decision. */
+.upd-ref {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
+.upd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+.upd-note {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--dim);
+}
+.upd-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+  color: var(--dim);
+}
+.upd-pick select {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* The confirmation gate, drawn as a warning rather than as a form: its job is
+   to interrupt, and the blast radius sentence above the input is the reason
+   it exists — the typing is only what makes the interruption deliberate. */
+.upd-ceremony {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+}
+.upd-ceremony p {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.upd-ceremony label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.74rem;
+  color: var(--dim);
+}
+.upd-ceremony input {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+  padding: 0.25rem 0.45rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.upd-running .phases,
+.upd-failed .phases {
+  margin-left: 0;
+}
+.upd-failed strong {
+  font-size: 0.82rem;
+}
+.upd-done {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.upd-commit {
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+/* What the host resolved the run to be. A member that was already on target
+   is shown struck through rather than omitted — a container silently missing
+   from this list would read as one that was dropped from the commit. */
+.upd-moves {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.74rem;
+}
+.upd-moves li {
+  display: flex;
+  gap: 0.6rem;
+}
+.upd-moves .is-noop {
+  color: var(--dim);
+}
+.upd-move-name {
+  min-width: 11rem;
+  color: var(--muted);
+}

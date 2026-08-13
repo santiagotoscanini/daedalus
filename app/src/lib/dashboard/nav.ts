@@ -459,6 +459,21 @@ export const CATEGORIES: CategorySpec[] = [
       // are peers, so none of them gets to be the big panel.
       { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 12], statBand: false, head: false },
       { id: 'database', label: 'Database', boardSpans: [8, 4, 12], statBand: false },
+      // The one tab in this row whose subject is the fleet rather than a layer
+      // of the machine — every digest-pinned container and whether it is
+      // behind. It sits here because it is the box's own maintenance state,
+      // and because a third of what it lists (the exporters, the sidecars, the
+      // six plane processes) has no other page in this app to sit on.
+      //
+      // No head, like its neighbours: sixty-five containers have no one
+      // version and no one thing to open.
+      {
+        id: 'updates',
+        label: 'Updates',
+        boardSpans: [12, 12],
+        statBand: false,
+        head: false,
+      },
       {
         id: 'backups',
         label: 'Backups',

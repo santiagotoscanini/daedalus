@@ -31,6 +31,7 @@ import { type DisksData, loadDisks } from './disks'
 import { type HostData, loadHost } from './host'
 import { loadMemory, type MemoryData } from './memory'
 import { loadPools, type PoolsData } from './pools'
+import { loadUpdates, type UpdatesData } from './updates'
 
 export type SystemData =
   | ({ tab: 'host' } & HostData)
@@ -39,12 +40,15 @@ export type SystemData =
   | ({ tab: 'pools' } & PoolsData)
   | ({ tab: 'build' } & BuildData)
   | ({ tab: 'database' } & DatabaseData)
+  | ({ tab: 'updates' } & UpdatesData)
   | ({ tab: 'backups' } & BackupsData)
 
 export async function loadSystem(tab: string): Promise<SystemData> {
   switch (tab) {
     case 'memory':
       return { tab: 'memory', ...(await loadMemory()) }
+    case 'updates':
+      return { tab: 'updates', ...(await loadUpdates()) }
     case 'build':
       return { tab: 'build', ...(await loadBuild()) }
     case 'disks':
