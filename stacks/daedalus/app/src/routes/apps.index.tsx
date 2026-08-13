@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { type ReactNode, useMemo, useState } from 'react'
-import { type Platform, PLATFORMS } from '../lib/external-apps'
 import { ApplyBar } from '../components/apply-bar'
 import { GuardedAwait } from '../components/error'
 import { ImagesView, PackagesView } from '../components/registries'
@@ -8,6 +7,7 @@ import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { AppIcon, type AppState, Segmented, StateDot } from '../components/ui'
 import { Spark } from '../components/viz'
+import { PLATFORMS, type Platform } from '../lib/external-apps'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
 
 // The app list. Every row joins three sources: the registry (Postgres — what
