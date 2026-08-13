@@ -300,7 +300,17 @@ write_status running committing ""
 # shellcheck disable=SC2086 # TOUCHED is a space-separated path list by design.
 git_ add -- $TOUCHED
 
-SUMMARY="$(jq -r '[.[] | select(.changed) | "\(.container): \(.fromTag) → \(.toTag)"] | join(", ")' <<<"$MOVES")"
+# A tag move names both tags; a channel re-pin names the digests instead,
+# because "latest → latest" is a true sentence that carries no information —
+# and the digest IS the change for every pin whose tag names a channel.
+SUMMARY="$(jq -r '
+  [ .[]
+    | select(.changed)
+    | if .fromTag == .toTag
+      then "\(.container): \(.toTag) re-pinned (\(.fromDigest[7:15]) → \(.toDigest[7:15]))"
+      else "\(.container): \(.fromTag) → \(.toTag)"
+      end
+  ] | join(", ")' <<<"$MOVES")"
 BODY="$(jq -r '.[] | select(.changed) | "\(.container)\n  \(.repo):\(.fromTag)@\(.fromDigest)\n  → \(.repo):\(.toTag)@\(.toDigest)"' <<<"$MOVES")"
 
 # shellcheck disable=SC2086
