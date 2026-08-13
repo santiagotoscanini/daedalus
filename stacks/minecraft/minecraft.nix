@@ -183,6 +183,11 @@ in
 
     fleet.grafanaDashboardsByFolder."Gaming".minecraft = builtins.readFile ./assets/dashboard.json;
 
+    # Router-forwarded and played on, like Factorio — and the itzg image
+    # resolves the whitelist against Mojang at startup, so a restart is also
+    # when a roster problem surfaces.
+    fleet.imageUpdates.minecraft.ceremony = "live players get kicked; the world may need a format migration";
+
     virtualisation.oci-containers.containers.minecraft = mkRootlessContainer {
       image = "docker.io/itzg/minecraft-server:stable-java25@sha256:e3335993929a1565f73c30b2041bcbc1473fc9c406fdd5a0d0ea24c08ef73320";
 

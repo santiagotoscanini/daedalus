@@ -75,6 +75,12 @@ in
       "${config.fleet.stateRoot}/factorio/data/saves" = { };
     };
 
+    # The one stack here whose blast radius is other people. The port is
+    # router-forwarded and the server has live players, so a restart kicks
+    # whoever is on it — and a Factorio version bump can force a save
+    # migration that the previous build will not open afterwards.
+    fleet.imageUpdates.factorio.ceremony = "live players get kicked, and a version bump can migrate the save";
+
     virtualisation.oci-containers.containers.factorio = mkRootlessContainer {
       image = "docker.io/ofsm/ofsm:0.10.1@sha256:2b031bc1ec51e437a90b24266ce87f82362b4d16670e3804688610b4ac03b608";
 

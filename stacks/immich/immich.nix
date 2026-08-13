@@ -47,6 +47,16 @@ let
   immichPostgresImage = "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23";
 in
 {
+  # The lockstep the comment on `immichVersion` above asks for, stated where
+  # a machine can honour it: daedalus rewrites both pins in one commit, or
+  # neither. The ML tag is the server's with `-openvino` appended, which is
+  # exactly the substitution the update agent performs.
+  fleet.imageUpdates.immich.lockstep = [ "immich-machine-learning" ];
+
+  # Tied to the immich major, per the comment on `immichPostgresImage` —
+  # so it is not a pin daedalus moves on its own.
+  fleet.imageUpdates.immich-postgres.updatable = false;
+
   # POSTGRES_PASSWORD + DB_PASSWORD (shared by db and server): sops-encrypted env.sops, decrypted to
   # /run/secrets/immich-env at activation. Edit with `sops env.sops`.
   sops.secrets."immich-env" = mkDotenvSecret ./env.sops;

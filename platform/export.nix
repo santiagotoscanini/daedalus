@@ -69,9 +69,129 @@ let
     else
       ""
   ) config.virtualisation.oci-containers.containers;
+
+  # Every image pinned as `:tag@sha256:…`, parsed once here because three
+  # consumers need the same answer: the export domain the dashboard reads, the
+  # daily freshness probe, and the update agent that rewrites a pin.
+  #
+  # ANY digest-on-a-tag pin qualifies, not just the moving channels — a
+  # re-pushed `2.10.1` is the same fact as a moved `latest`, and which tags
+  # count as "moving" is a judgement the reader makes with the tag in hand.
+  # Local builds (mkLocalImage) and the registry-loop apps carry no digest and
+  # fall out of the match.
+  #
+  # `digest` is the load-bearing field. It is the one part of a pin that is
+  # ALWAYS a literal in the .nix source — eight of these (plane's six,
+  # immich's two) interpolate a shared version variable into the tag, so the
+  # rendered `tag` appears nowhere in the file. The update agent anchors every
+  # edit on the digest for exactly that reason; see host/image-update.sh.
+  imagePins = lib.filterAttrs (_: v: v != null) (
+    lib.mapAttrs (
+      _: c:
+      let
+        m = builtins.match "(.*):([^@:]+)@(sha256:[0-9a-f]+)" c.image;
+      in
+      if m == null then
+        null
+      else
+        {
+          image = "${builtins.elemAt m 0}:${builtins.elemAt m 1}";
+          repo = builtins.elemAt m 0;
+          tag = builtins.elemAt m 1;
+          digest = builtins.elemAt m 2;
+        }
+    ) config.virtualisation.oci-containers.containers
+  );
+
+  # The pin plus what the fleet knows about moving it. Kept separate from
+  # `imagePins` because the freshness probe wants only the ref to ask about,
+  # while the dashboard needs the policy to decide whether to draw a button.
+  imagePinsWithPolicy = lib.mapAttrs (
+    name: pin:
+    let
+      p = cfg.imageUpdates.${name} or null;
+    in
+    pin
+    // {
+      updatable = if p == null then true else p.updatable;
+      lockstep = if p == null then [ ] else p.lockstep;
+      ceremony = if p == null then null else p.ceremony;
+    }
+  ) imagePins;
 in
 {
   options.fleet = {
+    imageUpdates = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            updatable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = ''
+                Whether daedalus may rewrite this container's pin.
+
+                False draws the changelog and no button — for a pin whose
+                move is not a pin edit at all. The precedent is a Nextcloud
+                MAJOR, which is a version variable plus a run of `occ`
+                chores that no rebuild performs.
+              '';
+            };
+            lockstep = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = ''
+                Containers that MUST move in the same commit as this one,
+                because they are two halves of one release.
+
+                Two shapes, both real here. Immich's server and
+                machine-learning read the same `immichVersion` and a version
+                skew between them is unsupported upstream; the six plane
+                containers share `planeVersion` the same way. The gluetun
+                pair is the other shape — one literal image string reached by
+                two containers, so moving either moves both whether or not
+                anyone declared it.
+
+                The agent resolves each member's own new tag by substituting
+                the primary's old tag for the new one INSIDE the member's tag,
+                which is what makes `v3.1.0-openvino` follow `v3.1.0`. A
+                member whose tag does not contain the primary's is refused
+                rather than guessed at.
+              '';
+            };
+            ceremony = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                What ELSE this update takes down, in one clause.
+
+                Non-null makes the UI demand the container's name be typed
+                before the button arms, and shows this string while asking.
+                It is not a warning label for risk in general — every update
+                here builds, switches and reverts on failure. It is for blast
+                radius the container's own name does not carry: gluetun owns
+                a netns ten containers ride, and a pg bounce takes pocket-id
+                with it and everything pocket-id gates.
+              '';
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Per-container policy for updating a digest-pinned image from
+        daedalus. Every pinned container is updatable with no entry here;
+        this registry exists for the ones where that is not the whole truth.
+      '';
+    };
+
+    imagePins = lib.mkOption {
+      type = lib.types.attrsOf lib.types.anything;
+      readOnly = true;
+      internal = true;
+      description = "Parsed `:tag@sha256:` pins, container → { image, repo, tag, digest }.";
+    };
+
     export.domains = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule {
@@ -161,8 +281,23 @@ in
       # One map over every container rather than a variable per service,
       # because the alternative is a nix edit — and a rebuild — every time a
       # page wants to report a version that is already written down here.
-      images.data.tags = imageTags;
+      #
+      # `pins` is the same containers seen from the other end: not what tag
+      # they carry but what ref that tag was frozen from, and whether the
+      # dashboard may move it. Together they are what the Updates page renders
+      # — every digest-pinned container on the box, including the two dozen
+      # sidecars and exporters that have no page of their own and until now
+      # appeared in this app only as somebody else's log embed.
+      images = {
+        schemaVersion = 2;
+        data = {
+          tags = imageTags;
+          pins = imagePinsWithPolicy;
+        };
+      };
     };
+
+    fleet.imagePins = imagePins;
 
     systemd.services.daedalus-export-publish = {
       description = "Publish fleet export domains for daedalus";

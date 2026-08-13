@@ -37,14 +37,73 @@ install -d -m 0755 -o santiago -g users "$OUT_DIR"
 tmp=$(mktemp "$OUT_DIR/.freshness.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
 
-declare -A remote_cache error_cache created_cache
+declare -A remote_cache error_cache created_cache tags_cache
+
+# ── what else this tag could be ───────────────────────────────────────────
+#
+# The digest question above is the whole story only for a pin whose tag names
+# a CHANNEL: `latest` moves, and re-resolving it is the update. Most pins here
+# name a release instead — `v1.6.0-ls356`, `10.11.11ubu2404-ls42` — and those
+# tags never move, so "has it moved" is permanently false while the service is
+# four releases behind. For those the update is a different TAG, and the only
+# party that knows which tags exist is the registry.
+#
+# The shape rule is what keeps that from being a guess. A candidate must match
+# the current tag with every run of digits blanked out, so the suffix
+# conventions that actually distinguish these images survive: a linuxserver
+# `-lsNNN` build can only be replaced by another `-lsNNN`, `-openvino` by
+# `-openvino`, `3.13-alpine` by another `-alpine`. Those are precisely the
+# distinctions a "newest tag" heuristic gets wrong, and getting one wrong here
+# means pulling a different image rather than a newer one.
+#
+# The reader still picks. This publishes the shortlist and which entry sorts
+# highest; nothing here decides that highest is what anyone wants — crossing a
+# major is a reading of a changelog, not of a version string.
+
+# A tag, as an anchored ERE matching tags of the same shape. Everything that
+# is not alphanumeric is escaped first (so `.` cannot match itself by
+# accident), then each digit run becomes the wildcard.
+tag_shape() {
+  printf '%s' "$1" | sed -e 's/[^a-zA-Z0-9_-]/\\&/g' -e 's/[0-9][0-9]*/[0-9]+/g'
+}
+
+# Tags of the same shape as $2 in repo $1, newest first, at most MAX_CANDIDATES.
+#
+# Empty for a channel tag (no digits to vary — there is no "newer latest") and
+# empty when the registry will not answer, both of which the reader renders as
+# "no other tag to offer" rather than as an error. A tag list is a much bigger
+# request than a manifest HEAD, so it is cached per repo and skipped entirely
+# for the channel pins.
+MAX_CANDIDATES=12
+
+candidates_for() {
+  local repo=$1 tag=$2 shape
+  shape=$(tag_shape "$tag")
+  case $shape in
+  *'[0-9]+'*) ;;
+  *) return 0 ;;
+  esac
+
+  if [[ ! -v "tags_cache[$repo]" ]]; then
+    sleep 2
+    tags_cache[$repo]=$(timeout 90 skopeo list-tags "docker://$repo" 2>/dev/null |
+      jq -r '.Tags[]?' || true)
+  fi
+
+  printf '%s\n' "${tags_cache[$repo]}" |
+    grep -xE -- "$shape" |
+    sort -V |
+    tail -n "$MAX_CANDIDATES" |
+    tac
+}
 
 checked=0
 moved_count=0
 error_count=0
+behind_count=0
 data='{}'
 
-while IFS=$'\t' read -r name image tag pinned; do
+while IFS=$'\t' read -r name image repo tag pinned; do
   [ -n "$name" ] && [ -n "$image" ] || continue
 
   # Several containers can share one image (and one answer); ask once.
@@ -79,16 +138,33 @@ while IFS=$'\t' read -r name image tag pinned; do
     created=${created_cache[$image]}
   fi
 
+  # The tags this pin could move to, and which of them sorts highest.
+  # `newerTag` is null when the pinned tag IS the highest — a version-pinned
+  # image that is genuinely current, which `moved: false` alone cannot say.
+  cands=$(candidates_for "$repo" "$tag" || true)
+  newest=$(printf '%s' "$cands" | head -n 1)
+  newer=""
+  if [ -n "$newest" ] && [ "$newest" != "$tag" ]; then
+    # sort -V decides, rather than string order: `10514` must beat `9999`,
+    # and a candidate list can contain tags OLDER than the pin.
+    if [ "$(printf '%s\n%s\n' "$tag" "$newest" | sort -V | tail -n 1)" = "$newest" ]; then
+      newer=$newest
+    fi
+  fi
+
   row=$(jq -n \
     --arg image "$image" --arg tag "$tag" --arg pinned "$pinned" \
     --arg remote "$remote" --arg created "$created" --arg err "$err" \
-    --arg at "$(date -Is)" --argjson moved "$moved" '{
+    --arg at "$(date -Is)" --argjson moved "$moved" --arg newer "$newer" \
+    --arg cands "$cands" '{
       image: $image,
       tag: $tag,
       pinnedDigest: $pinned,
       remoteDigest: (if $remote == "" then null else $remote end),
       moved: $moved,
       remoteCreated: (if $created == "" then null else $created end),
+      newerTag: (if $newer == "" then null else $newer end),
+      candidates: ($cands | split("\n") | map(select(length > 0))),
       checkedAt: $at,
       error: (if $err == "" then null else $err end)
     }')
@@ -96,8 +172,9 @@ while IFS=$'\t' read -r name image tag pinned; do
 
   checked=$((checked + 1))
   [ "$moved" = true ] && moved_count=$((moved_count + 1))
+  [ -n "$newer" ] && behind_count=$((behind_count + 1))
   [ -n "$err" ] && error_count=$((error_count + 1))
-done < <(jq -r 'to_entries[] | [.key, .value.image, .value.tag, .value.pinnedDigest] | @tsv' "$PINNED")
+done < <(jq -r 'to_entries[] | [.key, .value.image, .value.repo, .value.tag, .value.pinnedDigest] | @tsv' "$PINNED")
 
 # The standard host envelope (same shape deploy.sh publishes); generatedAt is
 # what the app's snapshot reader ages the file by.
@@ -119,4 +196,4 @@ trap - EXIT
 # Say what happened every run — the counts are the content: `moved` climbing
 # is pins quietly aging, `errors` at the total is the network (or a rate
 # limit), not the pins.
-echo "checked $checked pinned images: $moved_count moved, $error_count unanswered"
+echo "checked $checked pinned images: $moved_count moved, $behind_count with a newer tag, $error_count unanswered"

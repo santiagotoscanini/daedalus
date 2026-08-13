@@ -285,6 +285,13 @@ in
     }
   ];
 
+  # Every published hostname on this box resolves through this container,
+  # including daedalus's own — so the page that starts the update is behind
+  # the thing being restarted, and a failure looks like the dashboard dying
+  # rather than like a rebuild rolling back.
+  fleet.imageUpdates.traefik.ceremony =
+    "fronts every published hostname, including this page — a bad switch reads as the dashboard going down";
+
   virtualisation.oci-containers.containers.traefik = mkRootlessContainer {
     image = "docker.io/library/traefik:v3.7.9@sha256:652929a140a32d7cafafb13c6cdfab5376cfeff800f51397b87b524501ed02a8";
 

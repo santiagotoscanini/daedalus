@@ -282,27 +282,17 @@ let
 
   # Every image pinned as `:tag@sha256:…`, rendered at eval so the freshness
   # script stays dumb: container → the tag ref to ask about and the digest the
-  # flake holds. ANY digest-on-a-tag pin qualifies, not just the moving
-  # channels — a re-pushed `2.10.1` is the same fact as a moved `latest`, and
-  # which tags count as "moving" is a judgement the reader can make with the
-  # tag string in hand. Local builds (mkLocalImage) and the registry-loop apps
-  # carry no digest and fall out of the match.
-  pinnedImages = lib.filterAttrs (_: v: v != null) (
-    lib.mapAttrs (
-      _: c:
-      let
-        m = builtins.match "(.*):([^@:]+)@(sha256:[0-9a-f]+)" c.image;
-      in
-      if m == null then
-        null
-      else
-        {
-          image = "${builtins.elemAt m 0}:${builtins.elemAt m 1}";
-          tag = builtins.elemAt m 1;
-          pinnedDigest = builtins.elemAt m 2;
-        }
-    ) config.virtualisation.oci-containers.containers
-  );
+  # flake holds.
+  #
+  # Parsed in platform/export.nix rather than here, because the update agent
+  # below needs the same parse and two regexes over the same strings is how
+  # the probe and the thing that rewrites a pin come to disagree about what a
+  # pin is. The shape is `{ image, repo, tag, digest }`; this renames `digest`
+  # to the `pinnedDigest` the probe already speaks.
+  pinnedImages = lib.mapAttrs (_: p: {
+    inherit (p) image repo tag;
+    pinnedDigest = p.digest;
+  }) config.fleet.imagePins;
 
   # Whether each of those tags has moved on from its pin — the one version
   # question only the registry can answer. A snapshot file beside labels.json
@@ -316,6 +306,8 @@ let
     runtimeInputs = [
       pkgs.skopeo
       pkgs.jq
+      pkgs.gnugrep
+      pkgs.gnused
       pkgs.coreutils
     ];
     text = ''
@@ -323,6 +315,49 @@ let
       PINNED=${pkgs.writeText "daedalus-pinned-images.json" (builtins.toJSON pinnedImages)}
 
       ${builtins.readFile ./host/image-freshness.sh}
+    '';
+  };
+
+  # Move a pin and rebuild onto it — the fifth bridge, and the only one that
+  # edits nix source rather than copying bytes the app rendered.
+  #
+  # `PINS` is the same registry the freshness probe reads, plus the update
+  # policy: it is simultaneously the parse (what ref is this container on),
+  # the allowlist (a container absent from it reaches no command) and the
+  # lockstep table. Rendered by nix from the running config, so it cannot
+  # describe a container the box does not have.
+  imageUpdateScript = pkgs.writeShellApplication {
+    name = "daedalus-image-update";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.git
+      pkgs.skopeo
+      pkgs.gnugrep
+      pkgs.gnused
+      pkgs.util-linux # setpriv, flock
+      pkgs.coreutils
+      pkgs.nixos-rebuild
+      pkgs.openssh # git push over ssh
+    ];
+    text = ''
+      APPLY_DIR=${lib.escapeShellArg applyDir}
+      FLAKE=/etc/nixos
+      PINS=${
+        pkgs.writeText "daedalus-image-pins.json" (
+          builtins.toJSON config.fleet.export.domains.images.data.pins
+        )
+      }
+      LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
+      HOSTNAME=${lib.escapeShellArg config.networking.hostName}
+      GIT_EMAIL=${lib.escapeShellArg config.fleet.mail.sender}
+      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
+      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
+      SETPRIV=${pkgs.util-linux}/bin/setpriv
+      ENV_BIN=${pkgs.coreutils}/bin/env
+      PODMAN=${pkgs.podman}/bin/podman
+
+      ${builtins.readFile ./host/lib.sh}
+      ${builtins.readFile ./host/image-update.sh}
     '';
   };
 
@@ -970,6 +1005,37 @@ in
       PathChanged = "${applyDir}/request.json";
     };
   };
+
+  # Image updates. Same file-drop bridge, fifth verb — and the sibling of
+  # apply rather than of the trigger below: it takes the shared rebuild lock,
+  # commits to the flake, and switches the system. What is different is that
+  # it EDITS nix source to get there; host/image-update.sh opens with why the
+  # digest is the only anchor that makes that safe to do unattended.
+  systemd.services.daedalus-image-update = {
+    description = "Move a container's image pin and rebuild, on daedalus's behalf";
+    after = [
+      "network-online.target"
+      "linger-users.service"
+    ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${imageUpdateScript}/bin/daedalus-image-update";
+      # Same budget as apply: a pull plus a build plus two switch attempts, on
+      # a cold cache. The default 90s would SIGTERM it mid-switch.
+      TimeoutStartSec = "30min";
+    };
+  };
+
+  systemd.paths.daedalus-image-update = {
+    description = "Watch for a daedalus image update request";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathChanged = "${applyDir}/image-request.json";
+  };
+
+  # A failed update means the box may have been rolled back without anyone
+  # watching the page that started it — the same argument as daedalus-apply.
+  fleet.monitoredJobs.daedalus-image-update = { };
 
   # Redeploy trigger. Same file-drop bridge as apply, different verb: this one
   # starts an app's EXISTING deploy unit rather than rebuilding the system.

@@ -164,6 +164,16 @@ rec {
         portForwarding = (environment.VPN_PORT_FORWARDING or "off") == "on";
       };
 
+      # Updating this pin is never just this container. It owns a network
+      # namespace every tenant rides, so the restart takes all of them with
+      # it and the VPN drops for the length of the switch — and because every
+      # instance reaches the same `gluetunImage` literal, moving one pin moves
+      # the other tunnel in the same commit whether or not anyone meant to.
+      # Both facts are invisible from the container's name, which is exactly
+      # what `ceremony` is for.
+      fleet.imageUpdates.${name}.ceremony =
+        "owns the netns its tenants ride — all of them restart, and every gluetun instance shares this pin";
+
       # ProtonVPN shows the private key ONCE at export — the sops copy
       # IS the recovery path. Renewal: re-export from
       # account.protonvpn.com/downloads, `sops -e --input-type binary

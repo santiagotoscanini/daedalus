@@ -32,7 +32,7 @@
 // because this app cannot run podman — it is a container itself.
 
 import { swrValue } from '../cache'
-import { bool, nullable, obj, optional, recordOf, str } from '../contract/decode'
+import { arrayOf, bool, nullable, obj, optional, recordOf, str } from '../contract/decode'
 import { imageTagMap } from '../contract/domains/images'
 import { readSnapshot } from '../contract/snapshot'
 
@@ -156,6 +156,26 @@ export type ImageFreshness = {
   moved: boolean
   /** When the image the tag NOW points at was built. Fetched only when moved. */
   remoteCreated: string | null
+  /**
+   * The highest tag of the same shape, when it is above the pinned one.
+   *
+   * The answer `moved` cannot give. A release pin — `v1.6.0-ls356` — never
+   * moves, so `moved: false` is true and useless while the service sits four
+   * releases behind; this is the field that says so. Null means the pin is
+   * already the highest, or that the tag names a channel and there is no
+   * "newer" version of it to name.
+   */
+  newerTag: string | null
+  /**
+   * Tags of the same shape, newest first — what the picker offers.
+   *
+   * Shape-matched rather than newest-wins, which is what keeps a linuxserver
+   * `-lsNNN` build from being "updated" to a plain tag, or `-openvino` to the
+   * CPU image. The full argument is in host/image-freshness.sh; the important
+   * half here is that this is a shortlist to choose from, not a
+   * recommendation — crossing a major is a reading of a changelog.
+   */
+  candidates: string[]
   checkedAt: string
   /** The registry's refusal, verbatim-ish. Non-null means `moved` says nothing. */
   error: string | null
@@ -169,6 +189,10 @@ const freshnessShape = recordOf(
     remoteDigest: nullable(str),
     moved: bool,
     remoteCreated: nullable(str),
+    // Optional: a probe that last ran before these existed is still a valid
+    // answer to the digest question, which is the one this file was built for.
+    newerTag: optional(nullable(str), null),
+    candidates: optional(arrayOf(str), []),
     checkedAt: str,
     error: nullable(str),
   }),

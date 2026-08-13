@@ -298,6 +298,22 @@ let
   metricsPushMinutes = 10;
 in
 {
+  # The "bump the version and all six digests as one change" rule from the
+  # comment on `planeVersion`, in the form daedalus can actually obey. The
+  # primary is the backend because it carries the release's own tag; worker
+  # and beat are not listed because they ARE the backend image — one literal
+  # pin reached by three containers, so it moves once.
+  #
+  # The sidecars (redis, mq, minio, otel) are deliberately absent: they carry
+  # their own upstream versions and no release of Plane moves them.
+  fleet.imageUpdates.plane-api.lockstep = [
+    "plane-web"
+    "plane-space"
+    "plane-admin"
+    "plane-live"
+    "plane-proxy"
+  ];
+
   # SECRET_KEY, LIVE_SERVER_SECRET_KEY, the minio root/S3 credential
   # pair (same value under both names, so minio and the API cannot
   # drift), and the rabbitmq password under both the broker's
