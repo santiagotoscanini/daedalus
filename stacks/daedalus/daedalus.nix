@@ -267,8 +267,14 @@ let
       pkgs.podman
       pkgs.util-linux # setpriv
       pkgs.coreutils
+      pkgs.gnused
       pkgs.jq
     ];
+    # Same exclusion and the same reason as the system snapshot below: the jq
+    # programs here bind their own variables with --arg, and `$cv` in single
+    # quotes is jq's variable, not the shell's. Letting the shell near it is
+    # the bug SC2016 is warning about, in reverse.
+    excludeShellChecks = [ "SC2016" ];
     text = ''
       OUT_DIR=${lib.escapeShellArg imageDir}
       SETPRIV=${pkgs.util-linux}/bin/setpriv

@@ -64,14 +64,39 @@ trap 'rm -f "$tmp"' EXIT
     "" | null) labels='{}' ;;
     esac
 
+    # The version a stock RUNTIME image states about itself.
+    #
+    # Docker's official language images publish no OCI labels at all —
+    # python's are empty to the last field — and their tags name a LINE
+    # rather than a release: `3.13-alpine` is every 3.13.x that has ever been
+    # built. So for those the two sources this file already has both answer
+    # "3.13", and a changelog computed from that reports sixteen pending
+    # releases when the truth is one.
+    #
+    # What they do carry is `<LANG>_VERSION` in the image config — the
+    # convention across python, node, golang, ruby. Derived from the image's
+    # OWN name rather than by scanning for anything matching `*VERSION`,
+    # because python alone also exports PYTHON_PIP_VERSION and
+    # PYTHON_SETUPTOOLS_VERSION and picking one of those would be worse than
+    # having no answer. Absent for every image that does not follow the
+    # convention, which is the correct outcome — see the refinement rule in
+    # the app's images.ts for why it can only ever sharpen the pin, never
+    # contradict it.
+    base=$(printf '%s' "$image" | sed -e 's/@sha256:.*//' -e 's/:[^:/]*$//' -e 's#.*/##')
+    envvar=$(printf '%s' "$base" | tr '[:lower:]-' '[:upper:]_')_VERSION
+    configVersion=$(podman_ image inspect "$image" \
+      --format "{{range .Config.Env}}{{println .}}{{end}}" 2>/dev/null |
+      sed -n "s/^${envvar}=//p" | head -n 1)
+
     printf '%s  %s: %s' "$sep" \
       "$(printf '%s' "$name" | "$JQ" -R .)" \
-      "$(printf '%s' "$labels" | "$JQ" -c '{
+      "$(printf '%s' "$labels" | "$JQ" -c --arg cv "$configVersion" '{
            version:  (."org.opencontainers.image.version"  // null),
            revision: (."org.opencontainers.image.revision" // null),
            source:   (."org.opencontainers.image.source"   // null),
-           created:  (."org.opencontainers.image.created"  // null)
-         }' 2>/dev/null || printf '{"version":null,"revision":null,"source":null,"created":null}')"
+           created:  (."org.opencontainers.image.created"  // null),
+           configVersion: (if $cv == "" then null else $cv end)
+         }' 2>/dev/null || printf '{"version":null,"revision":null,"source":null,"created":null,"configVersion":null}')"
     sep=",
 "
   done <<EOF

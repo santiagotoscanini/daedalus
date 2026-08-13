@@ -145,10 +145,17 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   //   factorio      — ofsm wraps the game; the version that matters is
   //                   Factorio's own, which the Gaming tab reads from the
   //                   wiki changelog because there is no GitHub release for it.
-  //   lemonade-logs — a stock `python:3.13-alpine` running a shell loop. The
-  //                   image has no project and its "release notes" would be
-  //                   CPython's, which says nothing about this box.
-  //   minecraft-monitor, immich-postgres's siblings — same shape.
+  //   lemonade-logs — a stdlib-only bridge.py bind-mounted into an unmodified
+  //                   `python:3.13-alpine`. The code in it is ours and is not
+  //                   in the image; what ages is CPython and the Alpine
+  //                   packages under it. Pointing this at `python/cpython`
+  //                   was tried and reverted: that repo publishes ZERO GitHub
+  //                   Releases (only tags — CPython's notes live on
+  //                   python.org), so the panel rendered an empty board,
+  //                   which is a worse answer than none. The version delta is
+  //                   carried on the row itself instead — see `remoteVersion`
+  //                   in lib/dashboard/images.ts.
+  //   minecraft-monitor — same shape, and its base states no version at all.
 }
 
 /**

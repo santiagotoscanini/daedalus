@@ -121,8 +121,14 @@ function Row({ r, status }: { r: UpdateRow; status: UpdatesData['status'] }) {
         <summary>
           <span className="upd-name">{r.container}</span>
           <span className="upd-from mono">{r.running.version ?? r.tag}</span>
+          {/* For a moved CHANNEL pin both tags are the same string, so the
+              only honest thing the digests can say is "new digest" — unless
+              the image states its own version, in which case that IS the
+              answer and the one worth reading. */}
           <span className="upd-to mono">
-            {r.verdict === 'tag-moved' ? 'new digest' : (r.freshness?.newerTag ?? DASH)}
+            {r.verdict === 'tag-moved'
+              ? (r.freshness?.remoteVersion ?? 'new digest')
+              : (r.freshness?.newerTag ?? DASH)}
           </span>
           <Chip tone={v.tone}>{v.label}</Chip>
           {!r.updatable && <Chip tone="muted">pinned</Chip>}

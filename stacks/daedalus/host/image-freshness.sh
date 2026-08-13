@@ -37,7 +37,7 @@ install -d -m 0755 -o santiago -g users "$OUT_DIR"
 tmp=$(mktemp "$OUT_DIR/.freshness.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
 
-declare -A remote_cache error_cache created_cache tags_cache
+declare -A remote_cache error_cache created_cache version_cache tags_cache
 
 # ── what else this tag could be ───────────────────────────────────────────
 #
@@ -127,15 +127,30 @@ while IFS=$'\t' read -r name image repo tag pinned; do
 
   moved=false
   created=""
+  remote_version=""
   if [ -z "$err" ] && [ "$remote" != "$pinned" ]; then
     moved=true
     # The second request, spent only here: when the tag moved, the remote
-    # config's `created` date is what turns "behind" into "behind since".
+    # config answers both "behind since when" and "behind by what".
+    #
+    # The version half matters for a CHANNEL pin, where the tag string is the
+    # same on both sides and "new digest" is the only thing the digests can
+    # say. A stock runtime states its version in the config
+    # (`PYTHON_VERSION`), so the row can report `3.13.14 → 3.13.15` — which
+    # for an image whose project publishes no changelog IS the changelog.
+    # Same `<LANG>_VERSION` convention image-snapshot.sh reads locally; the
+    # name is derived from the image's own, never scanned for.
     if [[ ! -v "created_cache[$image]" ]]; then
-      created_cache[$image]=$(timeout 45 skopeo inspect --no-tags --config \
-        "docker://$image" 2>/dev/null | jq -r '.created // empty' || true)
+      cfg=$(timeout 45 skopeo inspect --no-tags --config "docker://$image" 2>/dev/null || true)
+      created_cache[$image]=$(printf '%s' "$cfg" | jq -r '.created // empty' 2>/dev/null || true)
+      base=${repo##*/}
+      envvar=$(printf '%s' "$base" | tr '[:lower:]-' '[:upper:]_')_VERSION
+      version_cache[$image]=$(printf '%s' "$cfg" |
+        jq -r --arg v "$envvar" '(.config.Env // [])[] | select(startswith($v + "=")) | sub("^[^=]+=";"")' \
+          2>/dev/null | head -n 1 || true)
     fi
     created=${created_cache[$image]}
+    remote_version=${version_cache[$image]}
   fi
 
   # The tags this pin could move to, and which of them sorts highest.
@@ -156,6 +171,7 @@ while IFS=$'\t' read -r name image repo tag pinned; do
     --arg image "$image" --arg tag "$tag" --arg pinned "$pinned" \
     --arg remote "$remote" --arg created "$created" --arg err "$err" \
     --arg at "$(date -Is)" --argjson moved "$moved" --arg newer "$newer" \
+    --arg rver "$remote_version" \
     --arg cands "$cands" '{
       image: $image,
       tag: $tag,
@@ -163,6 +179,7 @@ while IFS=$'\t' read -r name image repo tag pinned; do
       remoteDigest: (if $remote == "" then null else $remote end),
       moved: $moved,
       remoteCreated: (if $created == "" then null else $created end),
+      remoteVersion: (if $rver == "" then null else $rver end),
       newerTag: (if $newer == "" then null else $newer end),
       candidates: ($cands | split("\n") | map(select(length > 0))),
       checkedAt: $at,
