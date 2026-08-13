@@ -60,8 +60,47 @@ const bridge = defineBridge<ImageUpdateStatus>({
   idle: IDLE_UPDATE,
 })
 
+/**
+ * How long a `running` status may go unrefreshed before it is a corpse.
+ *
+ * The host rewrites the whole status file — `finishedAt` included — at every
+ * phase transition, so that field is really "last written". Past the unit's
+ * own `TimeoutStartSec` of 30 minutes, systemd has killed the run and no
+ * further write is coming; five minutes of slack keeps a slow switch from
+ * being declared dead while it is still going.
+ */
+const RUNNING_MAX_MS = 35 * 60_000
+
+/**
+ * The status, with a dead run reported as dead.
+ *
+ * A run CAN be killed without writing its terminal state: the first real
+ * update this performed was SIGTERMed mid-switch by its own rebuild (see the
+ * `restartIfChanged` note in daedalus.nix), which left the file saying
+ * "running switching" permanently. Nothing would ever have cleared it — and
+ * because the flow refuses to start while one is running, that single stuck
+ * file would have disabled every Update button on the box until a container
+ * restart.
+ *
+ * Sanitising here rather than at the two call sites, because the status file
+ * has three readers (the flow's busy check, the page loader, the API's GET)
+ * and a rule only two of them applied is a rule that gets it wrong somewhere.
+ */
 export async function readImageUpdateStatus(): Promise<ImageUpdateStatus> {
-  return bridge.readStatus()
+  const s = await bridge.readStatus()
+  if (s.state !== 'running') return s
+
+  const last = Date.parse(s.finishedAt ?? '')
+  if (Number.isFinite(last) && Date.now() - last < RUNNING_MAX_MS) return s
+
+  return {
+    ...s,
+    state: 'failed',
+    error:
+      `The host agent stopped writing during "${s.phase}" and did not report a result. ` +
+      'The rebuild may or may not have completed — check `journalctl -u daedalus-image-update` ' +
+      'and `git log` in /etc/nixos before retrying.',
+  }
 }
 
 /**
