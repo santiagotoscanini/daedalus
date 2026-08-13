@@ -27,7 +27,7 @@ recipe to onboard a new service or household member.
 | nextcloud | official `user_oidc` app, UID-mapped `preferred_username` (existing accounts reused); sync clients via Login Flow v2 | `/login?direct=1` |
 | grafana | generic OAuth with `auto_login`; `[auth.basic]` stays enabled (daedalus + the admin API use user/pass from sops) | `/login?disableAutoLogin` |
 | gatus | built-in `security.oidc` with `allowed-subjects` (sub UUID allow-list — without it any IdP account gets in) | — |
-| wealthfolio | native OIDC (`WF_OIDC_*`, `WF_OIDC_ALLOWED_SUBS`); OIDC-only, no password hash set | mint `WF_AUTH_PASSWORD_HASH` per the module header |
+| wealthfolio | native OIDC (`WF_OIDC_*`, `WF_OIDC_ALLOWED_SUBS`); **confidential** client — `WF_OIDC_CLIENT_SECRET` via `consumers`, PKCE on top; OIDC-only, no password hash set | mint `WF_AUTH_PASSWORD_HASH` per the module header |
 | litellm | `GENERIC_*` SSO (free ≤5 users), auto-redirect to Pocket ID | API Bearer keys untouched — never forward-auth `/v1` |
 | verdaccio | verdaccio-openid plugin baked into the custom image; web UI + `npm login --auth-type=web` | htpasswd + existing CLI tokens still work; registry API ungated so `npm install` is unaffected |
 | n8n | cweagans/n8n-oidc hook (pinned commit, bind-mounted hooks.js); SSO lands as owner | `/signin?showLogin=true`; webhooks untouched |

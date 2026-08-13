@@ -22,14 +22,26 @@
   fleet.sso.discoveryConsumers = [ "wealthfolio" ];
 
   # Pocket ID client — id `wealthfolio`, declarative like every other.
-  # No `consumers`: wealthfolio authenticates with PKCE and never sends
-  # a client secret, so nothing here consumes SSO_SECRET_WEALTHFOLIO —
-  # the key exists so a rebuilt IdP still gets a complete client.
+  #
+  # It IS a consumer of its own secret, and the reason is worth stating: the
+  # converge registers every client with `isPublic = false`, so Pocket ID
+  # demands client authentication at the token endpoint. This entry used to
+  # claim wealthfolio "authenticates with PKCE and never sends a client
+  # secret" — true of the hand-made client that predated the declarative
+  # sync, and false the moment the sync overwrote it. The result was a login
+  # that redirected, came back with a code, and died at the exchange with
+  # `invalid_client` for thirteen days, because nobody signed in during them.
+  #
+  # PKCE stays on. It is not an alternative to the secret here, it is the
+  # other half — the secret proves which client is asking, PKCE proves it is
+  # the same party that started the flow.
   fleet.ssoClients.wealthfolio = {
     description = "Personal finance";
     launchURL = "https://wealthfolio.toscanini.me/api/v1/auth/oidc/login";
     callbackURLs = [ "https://wealthfolio.toscanini.me/api/v1/auth/oidc/callback" ];
     logoutCallbackURLs = [ "https://wealthfolio.toscanini.me/api/v1/auth/oidc/callback" ];
+    consumers = [ "wealthfolio" ];
+    consumerEnv.secret = "WF_OIDC_CLIENT_SECRET";
   };
 
   fleet.statePaths."${config.fleet.stateRoot}/wealthfolio/data".uid = 1000;
@@ -50,10 +62,11 @@
       "${config.fleet.stateRoot}/wealthfolio/data:/data"
     ];
 
-    # Pocket ID SSO (AUTH.md) — public client, PKCE, no secret, so
-    # plain env suffices. OIDC-only: env.sops carries no
-    # WF_AUTH_PASSWORD_HASH (the header runbook mints one if password
-    # login is ever wanted) — the login page offers just "Sign in
+    # Pocket ID SSO (AUTH.md) — confidential client with PKCE. Only the
+    # non-secret half is here; WF_OIDC_CLIENT_SECRET arrives in the rendered
+    # creds file the `consumers` entry above appends. OIDC-only: env.sops
+    # carries no WF_AUTH_PASSWORD_HASH (the header runbook mints one if
+    # password login is ever wanted) — the login page offers just "Sign in
     # with SSO".
     environment = {
       WF_LISTEN_ADDR = "0.0.0.0:8088";

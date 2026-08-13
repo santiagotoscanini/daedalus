@@ -150,6 +150,21 @@ let
           inherit (c) description;
           inherit (c) callbackURLs;
           inherit (c) logoutCallbackURLs;
+          # Every client here is CONFIDENTIAL, and that is a claim about the
+          # app, not just a field: Pocket ID will demand client
+          # authentication at the token endpoint, so an app that does not
+          # send its secret gets `invalid_client` at the exchange — after a
+          # redirect and a callback that both looked fine. Give any native
+          # OIDC app `consumers = [ "<container>" ]` + the `consumerEnv.secret`
+          # name its image reads.
+          #
+          # This bit wealthfolio: it was a hand-made PUBLIC client until the
+          # sync landed and overwrote it, and the break stayed invisible for
+          # thirteen days because nothing logs in on a schedule.
+          #
+          # PKCE below is not the alternative to a secret. The secret proves
+          # which client is asking; PKCE proves it is the same party that
+          # started the flow. Confidential clients here run both.
           isPublic = false;
           pkceEnabled = c.pkce;
           inherit (c) skipConsent;
