@@ -152,6 +152,18 @@ export function freshnessRow(f: ImageFreshness | null): CompareRow[] {
   if (f.error !== null) {
     return [{ k: 'Its tag', v: null, note: `the registry did not answer for ${f.tag}` }]
   }
+  // The pin has moved since the probe ran — almost always because someone
+  // just updated it. Saying "unmoved" here would be a claim about a tag this
+  // box is no longer on; the probe simply has not caught up yet.
+  if (f.stale) {
+    return [
+      {
+        k: 'Its tag',
+        v: null,
+        note: `the pin has moved since the daily probe last asked about ${f.tag}`,
+      },
+    ]
+  }
   return [
     {
       k: 'Its tag',
