@@ -80,7 +80,7 @@
 let
   # Digest of ghcr.io/project-zot/zot:v2.1.18 (full image: ui, search,
   # metrics, scrub — the -minimal variant has none of those).
-  zotImage = "ghcr.io/project-zot/zot:v2.1.18@sha256:34f18f783037f967dba10df02f9d4086c4d626f5643ef9f5e51e4a4547280a0b";
+  zotImage = "ghcr.io/project-zot/zot:v2.1.20@sha256:542e25be4d32e7879c0cfad93492a93c81b1e059cbd2d30d485d4bd567318234";
 
   dataDir = "${config.fleet.stateRoot}/registry";
 
