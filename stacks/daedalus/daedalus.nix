@@ -986,6 +986,15 @@ in
       "linger-users.service"
     ];
     wants = [ "network-online.target" ];
+
+    # Defensive, for the reason spelled out on daedalus-image-update below:
+    # a unit that runs `nixos-rebuild switch` must not be restarted by that
+    # switch. This one survives today only because its ExecStart happens to
+    # embed nothing an Apply changes — its sibling daedalus-deploy-trigger
+    # already embeds a list derived from apps.json, so the escape is luck
+    # rather than design, and it would be silent when it ran out.
+    restartIfChanged = false;
+
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${applyScript}/bin/daedalus-apply";
@@ -1018,6 +1027,20 @@ in
       "linger-users.service"
     ];
     wants = [ "network-online.target" ];
+
+    # A unit that runs `nixos-rebuild switch` must not be restarted BY that
+    # switch, and this one changes its own definition every time it succeeds:
+    # `PINS` embeds the pin registry, so the digest it just rewrote lands in
+    # its own ExecStart. switch-to-configuration then dutifully restarts it,
+    # SIGTERMs the script mid-run, and the update loses its verify and push
+    # phases while leaving a status file stuck on "running" forever. Observed
+    # on the first real update this ever performed.
+    #
+    # The next invocation still gets the new definition — the path unit starts
+    # a fresh process, which is exactly when fresh pins are wanted. What this
+    # buys is that the run holding the rebuild lock survives its own rebuild.
+    restartIfChanged = false;
+
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${imageUpdateScript}/bin/daedalus-image-update";
