@@ -45,12 +45,29 @@ export type ImageLabels = {
   source: string | null
   /** When the image was built, ISO-8601. */
   created: string | null
+  /**
+   * `<LANG>_VERSION` from the image config — what a stock runtime image says
+   * about itself when it publishes no labels at all.
+   *
+   * Null for everything that does not follow the convention, which is most
+   * images. See the snapshot script for how it is derived and why it is not a
+   * scan for anything matching `*VERSION`.
+   */
+  configVersion: string | null
 }
 
-const EMPTY: ImageLabels = { version: null, revision: null, source: null, created: null }
+const EMPTY: ImageLabels = {
+  version: null,
+  revision: null,
+  source: null,
+  created: null,
+  configVersion: null,
+}
 
 const ns = optional(nullable(str), null)
-const labelsShape = recordOf(obj({ version: ns, revision: ns, source: ns, created: ns }))
+const labelsShape = recordOf(
+  obj({ version: ns, revision: ns, source: ns, created: ns, configVersion: ns }),
+)
 
 /**
  * The snapshot, read at most once per `TTL_MS`.
@@ -118,19 +135,58 @@ export async function imageTag(container: string): Promise<string | null> {
  */
 export type RunningVersion = {
   version: string | null
-  source: 'pin' | 'label' | 'unknown'
+  source: 'pin' | 'label' | 'config' | 'unknown'
   /** The commit the image was built from, when the publisher recorded one. */
   revision: string | null
+}
+
+/**
+ * A more precise reading of the SAME version, or null.
+ *
+ * The pin stays the primary source; this only ever sharpens it. A tag like
+ * `3.13-alpine` names a line, and the config's `PYTHON_VERSION` names which
+ * release of that line is actually in the image — strictly more information,
+ * and checkable: it counts only when it extends the pin segment-for-segment.
+ *
+ * That guard is the whole safety argument. It is what keeps this from
+ * repeating the label trap at the top of this file — Cleanuparr's image says
+ * `24.04`, which is Ubuntu's, and against a pin of `2.10.1` this returns null
+ * rather than confidently reporting the wrong number. A refinement that
+ * disagrees with the pin is not a refinement.
+ */
+function refine(pinned: string, configVersion: string | null): string | null {
+  if (configVersion === null) return null
+
+  const a = pinned.split('.')
+  const b = configVersion.split('.')
+  if (b.length <= a.length) return null
+  if (a.some((seg, i) => seg !== b[i])) return null
+
+  return configVersion
 }
 
 export async function imageVersion(container: string): Promise<RunningVersion> {
   const [pinned, labels] = await Promise.all([imageTag(container), imageLabels(container)])
   const shortRevision = labels.revision === null ? null : labels.revision.slice(0, 7)
 
-  if (pinned !== null) return { version: pinned, source: 'pin', revision: shortRevision }
+  if (pinned !== null) {
+    return {
+      version: refine(pinned, labels.configVersion) ?? pinned,
+      source: 'pin',
+      revision: shortRevision,
+    }
+  }
 
   const labelled = asVersion(labels.version)
   if (labelled !== null) return { version: labelled, source: 'label', revision: shortRevision }
+
+  // Last: the build config. For a pin whose tag is a bare channel — the
+  // `alpine` nextcloud-redis runs on — this is the ONLY version anywhere, and
+  // it is a precise one. It sits below the OCI label rather than above it
+  // because the label is the standard annotation and this is a convention,
+  // but in practice it answers exactly where the label is silent.
+  const configured = asVersion(labels.configVersion)
+  if (configured !== null) return { version: configured, source: 'config', revision: shortRevision }
 
   return { version: null, source: 'unknown', revision: shortRevision }
 }
@@ -156,6 +212,20 @@ export type ImageFreshness = {
   moved: boolean
   /** When the image the tag NOW points at was built. Fetched only when moved. */
   remoteCreated: string | null
+  /**
+   * The version the image the tag NOW points at states about itself.
+   *
+   * The whole content of an update for a CHANNEL pin. Both sides of
+   * `latest → latest` are the same string, so the digests are the only
+   * difference and "new digest" is all a row can otherwise say — while the
+   * truth is `3.13.14 → 3.13.15`, a CPython patch release. For an image whose
+   * project publishes no changelog this IS the changelog, which is why the
+   * probe spends a request on it (see host/image-freshness.sh).
+   *
+   * Null unless the tag moved AND the image follows the `<LANG>_VERSION`
+   * convention — most do not.
+   */
+  remoteVersion: string | null
   /**
    * The highest tag of the same shape, when it is above the pinned one.
    *
@@ -199,6 +269,7 @@ const freshnessShape = recordOf(
     remoteDigest: nullable(str),
     moved: bool,
     remoteCreated: nullable(str),
+    remoteVersion: optional(nullable(str), null),
     // Optional: a probe that last ran before these existed is still a valid
     // answer to the digest question, which is the one this file was built for.
     newerTag: optional(nullable(str), null),

@@ -234,6 +234,7 @@ export function compareOf(gap: VersionGap, note: string): CompareRow[] {
 export const SOURCE_NOTE: Record<RunningVersion['source'], string> = {
   pin: 'from the tag the flake pins',
   label: 'from the image’s own label',
+  config: 'from the image’s build config',
   unknown: 'unknown — the pin names a channel',
 }
 
