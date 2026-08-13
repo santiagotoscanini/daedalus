@@ -520,10 +520,29 @@ is never re-fetched again:
   so systemd sees no reason to restart the unit.
 
 So every stack pinned to `:latest` is frozen on whatever was pulled the
-day it was first started, and updating one is always an explicit
-`podman pull` + `systemctl restart` (`/update-images` runs the audit).
+day it was first started, and updating one is always an explicit act.
 Do NOT "fix" this with `pull = "newer"` — it makes every container
 start depend on the registry being reachable. Pull out-of-band.
+
+**Three ways to perform that act**, in increasing order of ceremony:
+
+- **daedalus → System › Updates** — every digest-pinned container, its
+  changelog, and a button that runs the whole cycle (resolve the
+  digest, pre-pull, rewrite the pin, commit, build, switch, verify the
+  container came back on the new image, revert if not, push). The
+  right tool for one container whose notes you have just read. The
+  same door is `POST /api/image-update {container, toTag?}`.
+- **`/update-images`** — the fleet-wide audit: research every pin in
+  parallel, pick by tier, then the **adoption review** the button does
+  not do (what the new versions let us delete from our own config).
+- By hand — `podman pull` + `systemctl restart` for a one-off probe,
+  remembering it leaves the flake pin behind and a rebuild undoes it.
+
+Per-container policy for the first two lives in `fleet.imageUpdates`:
+`lockstep` (immich's two, plane's six — one release, one commit),
+`ceremony` (blast radius the container's name does not carry; the UI
+demands the name typed), `updatable = false` (a move that is not a pin
+edit, e.g. immich-postgres's major).
 
 ### The apps platform IS continuously deployed
 

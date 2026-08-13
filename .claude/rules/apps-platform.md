@@ -83,6 +83,19 @@ look at the runner and at zot first, not at tokens.
 The app talks to the box through file-drop bridges under
 `<stateRoot>/apps/daedalus/apply/` watched by systemd path units:
 `request.json` → daedalus-apply (commit apps.json + rebuild),
-`deploy-request.json` → deploy trigger, `ci-request.json` → CI verbs.
+`deploy-request.json` → deploy trigger, `ci-request.json` → CI verbs,
+`power-request.json` → reboot, `image-request.json` →
+daedalus-image-update (rewrite a container's digest pin + rebuild).
 Read-only state flows IN via /run snapshot dirs (env, images, system,
 ci) refreshed by timers. The container holds no host privilege at all.
+
+**A bridge agent that runs `nixos-rebuild switch` must set
+`restartIfChanged = false`.** switch-to-configuration restarts units
+whose definition changed, and these agents can change their own: the
+image-update agent embeds the pin registry, so the digest it just
+rewrote lands in its own ExecStart, and the switch SIGTERMs it
+mid-run — losing its verify and push phases and leaving a status file
+stuck on `running` that disables the button until the container
+restarts. daedalus-apply carries the same flag defensively; its
+sibling deploy-trigger already embeds a list derived from apps.json,
+so escaping this is luck rather than design.

@@ -85,8 +85,11 @@ has been pushed. Commit often.
 - Secrets (service API keys) arrive via rendered env files
   (`DASH_*`). The app only ever GETs with them.
 - Writes to the box go through the file-drop bridges (`/apply`
-  request.json / deploy-request.json / ci-request.json) — the
-  container deliberately holds no host privilege.
+  request.json / deploy-request.json / ci-request.json /
+  power-request.json / image-request.json) — the container
+  deliberately holds no host privilege. Each has one flow module in
+  `lib/` (`apply-flow.ts`, `update-flow.ts`) that BOTH doors — the
+  button and the `api.*` route — go through, so the two cannot drift.
 - External-service reads follow the escalating-retry rule: retry only
   thrown requests with a `[400, 800, 1500, 2500]` ms ladder (the
   rootless-port first-SYN stall), never retry a busy upstream (Loki

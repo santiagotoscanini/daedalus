@@ -21,6 +21,20 @@ This skill has **two deliverables**, both required:
    are now deprecated, features we hand-roll that are now first-class. The
    update is routine; the adoption review is where the value compounds.
 
+**Deliverable 1 is now also a button.** daedalus's System › Updates tab lists
+every digest-pinned container with its changelog and runs the identical cycle
+(resolve → pre-pull → rewrite the pin → commit → build → switch → verify →
+revert on failure → push) via `daedalus-image-update`. So if the operator
+wants ONE container moved, say so and let them press it — this skill is not
+the cheaper path for that, and re-doing it by hand risks racing the same
+rebuild lock.
+
+What the button cannot do, and why this skill still exists: research every pin
+at once, weigh them against each other by tier, and — above all — deliverable
+2. Nothing in the UI reads our config back and asks what the new version lets
+us delete. Reach for this for a **fleet sweep**; reach for the button for a
+**single service you have just read the notes on**.
+
 If `$ARGUMENTS` is non-empty, treat it as a whitespace-separated list of stack
 names and restrict the whole run to images declared in
 `/etc/nixos/stacks/<name>/` for those stacks.
