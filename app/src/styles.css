@@ -37,6 +37,24 @@
 html,
 body {
   background: var(--bg);
+  /* The page is never wider than the window. Sideways scroll on a phone is
+     always a bug here — this is a dashboard of panels, and there is nothing
+     off to the right that anybody wants — but ONE overlooked unbreakable
+     token in one panel is enough to produce it, and what you then see is a
+     band of bare `--bg` beside content that stops short. The sticky top bar
+     is the tell: it is exactly one viewport wide, so scrolling past it
+     uncovers the background under a bar that looked full-width.
+
+     `clip` rather than `hidden`, and it is not a preference. `hidden` makes
+     the element a scroll CONTAINER, which silently breaks every
+     `position: sticky` descendant — the rail on a desktop and the top bar on
+     a phone both stop sticking. `clip` refuses the overflow without becoming
+     one.
+
+     This is the last line of defence, not the strategy: the rules below keep
+     content INSIDE the width, because anything reaching this rule is being
+     hidden rather than fitted. */
+  overflow-x: clip;
 }
 
 body {
@@ -51,6 +69,25 @@ code,
 .mono {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.86em;
+}
+
+/* Identifiers are the thing on this dashboard with no space in them: a
+   session id, an environment id, a store path, a container digest, a
+   hostname. A 34-character token at 0.75rem is ~250px that cannot be broken
+   at any word boundary, and inside a panel on a 360px phone that is the
+   whole budget. Breaking mid-token is ugly and is the correct trade — the
+   alternative is a panel wider than the screen.
+
+   `anywhere` rather than `break-word`: only `anywhere` also lowers the
+   element's MIN-CONTENT width, which is the number a flex or grid parent
+   consults when it decides how narrow it is allowed to get. `break-word`
+   wraps the text and still reports the unbroken token as its minimum, so the
+   container overflows anyway. */
+code,
+.mono,
+.board-foot,
+.viz-empty {
+  overflow-wrap: anywhere;
 }
 
 a {
@@ -686,8 +723,16 @@ h2 {
   cursor: default;
 }
 
+/* A pill of buttons that has to be allowed to become two rows.
+   `inline-flex` with no wrap is a single unbreakable box as wide as its
+   labels, so a control with five options — or three long ones — was simply
+   wider than a phone, and the page scrolled sideways to reach it. The app
+   detail page's exposure switch hit exactly this and was patched on its own
+   selector below; wrapping here is the same fix for every other one. */
 .segmented {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 9px;
   overflow: hidden;
@@ -3492,6 +3537,17 @@ h2 {
   font-variant-numeric: tabular-nums;
   min-width: 1.4rem;
   text-align: right;
+}
+
+/* A detail that earns its place on a wide row and not on a narrow one.
+   Every `.item-side` truncates, so a row of seven on a phone technically
+   fits — as a chip, a clipped name and five ellipses, which is width spent
+   to say nothing. Dropping the least important outright gives the ones that
+   remain enough room to be read. */
+@media (max-width: 50rem) {
+  .item-min {
+    display: none;
+  }
 }
 
 .people {

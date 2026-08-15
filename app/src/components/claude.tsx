@@ -1,10 +1,9 @@
-import {
-  type ClaudeData,
-  type ClaudeSession,
-  liveSessions,
-  type RcEvent,
-  versionVerdict,
-} from '../lib/dashboard/claude'
+// Types ONLY. The module behind them reads the host snapshot through
+// node:fs, and a value import from here would put that in the browser bundle
+// — see the warning at the foot of lib/dashboard/claude.ts. The two derived
+// helpers this page needs live at the bottom of this file for the same
+// reason.
+import type { ClaudeData, ClaudeFacts, ClaudeSession, RcEvent } from '../lib/dashboard/claude'
 import { bytes, DASH, duration, ms, num, since, text, until } from '../lib/format'
 import { LogBoard } from './logs'
 import { Changelog } from './release-notes'
@@ -383,14 +382,18 @@ function SessionRow({ session }: { session: ClaudeSession }) {
         {idle !== null && idle < 60 ? 'working' : 'idle'}
       </Chip>
       <span className="item-main">{session.name ?? `pid ${String(session.pid)}`}</span>
-      <span className="item-side mono">{text(session.remoteId)}</span>
-      <span className="item-side mono">{text(session.cwd)}</span>
+      {/* `item-min` on the four that a phone drops. What survives is the
+          answer to "which session is this and is anything happening in it";
+          the id, the directory and the two resource figures are the answer
+          to a question you would be at a desk to ask. */}
+      <span className="item-side item-min mono">{text(session.remoteId)}</span>
+      <span className="item-side item-min mono">{text(session.cwd)}</span>
       <span className="item-side">
         {session.startedAt === null ? DASH : duration((Date.now() - session.startedAt) / 1000)} old
       </span>
       <span className="item-side">last seen {idle === null ? DASH : since(idle)}</span>
-      <span className="item-side">{bytes(session.rssBytes)}</span>
-      <span className="item-side">{ms(session.cpuMs)} cpu</span>
+      <span className="item-side item-min">{bytes(session.rssBytes)}</span>
+      <span className="item-side item-min">{ms(session.cpuMs)} cpu</span>
     </li>
   )
 }
@@ -419,4 +422,49 @@ function EventRow({ event }: { event: RcEvent }) {
       <span className="item-side">{since((Date.now() - event.at) / 1000)}</span>
     </li>
   )
+}
+
+/* ── derived from the payload ─────────────────────────────────────────────
+   Beside the view rather than beside the loader, and not by preference: the
+   loader's module reads the host snapshot through node:fs, so importing a
+   value from it here is what takes the page down. */
+
+/** Sessions actually connected, newest first. */
+function liveSessions(facts: ClaudeFacts): ClaudeSession[] {
+  return facts.sessions
+    .filter((s) => s.alive)
+    .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))
+}
+
+/**
+ * The version verdict, and why it is three-way rather than two.
+ *
+ * "Behind" here means two different things and they have different remedies.
+ * The flake being behind upstream is a `nix flake update` away and is what
+ * every other service on this dashboard means by the word. The unit running
+ * an OLDER build than the flake already holds is a restart away — and it is
+ * the one that hides, because the store path is right, the rebuild succeeded,
+ * and nothing anywhere says the process never came back onto it.
+ */
+function versionVerdict(data: ClaudeData): { label: string; tone: Tone; note: string } {
+  const { remote, cli } = data.facts
+  if (remote.version !== null && cli.version !== null && remote.version !== cli.version) {
+    return {
+      label: 'restart pending',
+      tone: 'warn',
+      note: `The flake holds ${cli.version} and the running server is ${remote.version}, so this unit has not been restarted onto what the last rebuild built.`,
+    }
+  }
+  if (data.gap.installed === null) return { label: 'unknown', tone: 'muted', note: '' }
+  if (data.gap.latest === null) {
+    return { label: 'unknown', tone: 'muted', note: data.gap.note ?? 'GitHub did not answer.' }
+  }
+  const behind = data.gap.behind.length
+  return behind === 0
+    ? { label: 'current', tone: 'ok', note: 'Nothing has been published above this one.' }
+    : {
+        label: behind === 1 ? '1 release behind' : `${String(behind)} releases behind`,
+        tone: 'warn',
+        note: '',
+      }
 }
