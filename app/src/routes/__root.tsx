@@ -261,6 +261,21 @@ function Shell({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
+        {/* Below everything, and pushed there rather than ordered there.
+            The rail above is a directory of what this box RUNS, one entry
+            per subject area; Claude is not one of those — it is the thing
+            that maintains all of them, and this page is about the session
+            you would be holding while reading any of the others. Sitting it
+            eighth in that list would be a claim it belongs to the same
+            taxonomy. The gap is the argument. */}
+        <nav className="nav-secondary" aria-label="This workshop">
+          <span className="nav-divider" aria-hidden="true" />
+          <Link to="/claude" className="nav-item" data-label="Claude">
+            <NavIcon name="claude" />
+            <span className="nav-label">Claude</span>
+          </Link>
+        </nav>
+
         {/* Desktop only: the drawer is dismissed by the scrim, not by this. */}
         <button type="button" className="nav-collapse" onClick={toggle} aria-pressed={collapsed}>
           <NavIcon name="chevron" size={17} />

@@ -1,0 +1,26 @@
+<!--
+  The burst, drawn rather than fetched: every other icon-*.svg here is the
+  project's own published mark, and Anthropic's is not ours to vendor. This is
+  the same idea in this app's terms — one stroke width, round caps, the brand
+  orange — sized for the 44px slot the service header gives it.
+
+  Eleven spokes at uneven lengths, which is what stops it reading as a plain
+  asterisk; the rail's version (components/nav-icon.tsx) drops to eight even
+  ones, because the asymmetry that works at 44px is a smudge at 19.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48"
+     fill="none" stroke="#d97757" stroke-width="3.6" stroke-linecap="round">
+  <g transform="translate(24 24)">
+    <path d="M0 -17.5V-6.2" />
+    <path d="M0 17.5V6.2" />
+    <path d="M-17.5 0H-6.2" />
+    <path d="M17.5 0H6.2" />
+    <path d="M-11.8 -11.8 -4.4 -4.4" transform="rotate(4)" />
+    <path d="M11.8 11.8 4.4 4.4" transform="rotate(4)" />
+    <path d="M11.8 -11.8 4.4 -4.4" transform="rotate(-4)" />
+    <path d="M-11.8 11.8 -4.4 4.4" transform="rotate(-4)" />
+    <path d="M0 -14.4V-5.4" transform="rotate(58)" />
+    <path d="M0 -14.4V-5.4" transform="rotate(148)" />
+    <path d="M0 -14.4V-5.4" transform="rotate(238)" />
+  </g>
+</svg>
