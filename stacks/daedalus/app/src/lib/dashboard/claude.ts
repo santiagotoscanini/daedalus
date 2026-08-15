@@ -268,48 +268,18 @@ export async function loadClaude(): Promise<ClaudeData> {
   }
 }
 
-/* ── derived, and shared with the view ────────────────────────────────── */
-
-/** Sessions actually connected, newest first. */
-export function liveSessions(facts: ClaudeFacts): ClaudeSession[] {
-  return facts.sessions
-    .filter((s) => s.alive)
-    .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))
-}
-
-/**
- * The version verdict, and why it is three-way rather than two.
- *
- * "Behind" here means two different things and they have different remedies.
- * The flake being behind upstream is a `nix flake update` away and is what
- * every other service on this dashboard means by the word. The unit running
- * an OLDER build than the flake already holds is a restart away — and it is
- * the one that hides, because the store path is right, the rebuild succeeded,
- * and nothing anywhere says the process never came back onto it.
- */
-export function versionVerdict(data: ClaudeData): {
-  label: string
-  tone: 'ok' | 'warn' | 'muted'
-  note: string
-} {
-  const { remote, cli } = data.facts
-  if (remote.version !== null && cli.version !== null && remote.version !== cli.version) {
-    return {
-      label: 'restart pending',
-      tone: 'warn',
-      note: `the flake holds ${cli.version}; the running server is ${remote.version}`,
-    }
-  }
-  const behind = data.gap.behind.length
-  if (data.gap.installed === null) return { label: 'unknown', tone: 'muted', note: '' }
-  if (data.gap.latest === null) {
-    return { label: 'unknown', tone: 'muted', note: data.gap.note ?? 'GitHub did not answer' }
-  }
-  return behind === 0
-    ? { label: 'current', tone: 'ok', note: 'nothing published above this' }
-    : {
-        label: behind === 1 ? '1 release behind' : `${String(behind)} releases behind`,
-        tone: 'warn',
-        note: 'the weekly flake update is the path, not a self-update',
-      }
-}
+// ⚠ Nothing in this module may be imported as a VALUE by a component.
+//
+// `readSnapshot` above reaches node:fs/promises, and Vite's dev transform
+// hands the browser a stub that throws the moment its named exports are
+// destructured — at module evaluation, before any of it is called. So one
+// value import from a view drags this whole file into the client graph and
+// the page dies on hydration with the SSR markup already painted, which is
+// the most confusing shape a failure can take: the content is on screen and
+// then goes.
+//
+// Views import TYPES only (`import type { … }`, erased under
+// verbatimModuleSyntax) and reach the data through a server function. Every
+// other data module here follows the same rule — see the top of
+// components/category/gaming.tsx for the shape. Anything derived from this
+// payload that a view wants lives beside the view, not here.
