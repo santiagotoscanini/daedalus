@@ -203,9 +203,19 @@ h2 {
   text-overflow: ellipsis;
 }
 
+/* Everything that is not one of the box's subjects, held at the foot of the
+   rail. `margin-top: auto` lives HERE rather than on the collapse button
+   below it: two elements both claiming the free space would split it between
+   them, and the pair has to travel together. */
+.nav-secondary {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
 /* Bottom of the rail, where the two secondary links used to be. */
 .nav-collapse {
-  margin-top: auto;
   display: flex;
   align-items: center;
   gap: 0.7rem;

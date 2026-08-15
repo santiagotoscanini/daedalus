@@ -26,6 +26,7 @@ export type NavIconName =
   | 'network'
   | 'system'
   | 'monitoring'
+  | 'claude'
   | 'menu'
   | 'close'
   | 'chevron'
@@ -87,6 +88,18 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
   ),
   // A trace: the only category whose subject is a line moving.
   monitoring: <path d="M2.9 12.7h4.3l2.45-6.4 3.7 11.5 2.35-5.1h5.4" />,
+
+  // The burst. Eight even spokes rather than the mark's own uneven eleven:
+  // the asymmetry is what makes that logo legible at poster size and what
+  // turns it into a smudge at 19px, which is the only size this is ever
+  // drawn at. Distinct from `ai`'s four-pointed spark at a glance, which is
+  // the property that actually matters in a column of eight icons.
+  claude: (
+    <>
+      <path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4" />
+      <path d="m6.6 6.6 2.8 2.8m5.2 5.2 2.8 2.8m0-10.8-2.8 2.8m-5.2 5.2-2.8 2.8" />
+    </>
+  ),
 
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="M6.2 6.2l11.6 11.6M17.8 6.2 6.2 17.8" />,

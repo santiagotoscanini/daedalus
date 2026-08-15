@@ -423,6 +423,60 @@ let
     '';
   };
 
+  # Claude Code itself — the Remote Control unit, the sessions connected to
+  # it, and the credential clock underneath both. A separate snapshot from
+  # the one above rather than another key in it, for the two reasons that
+  # normally justify splitting: a different cadence (sessions come and go in
+  # minutes; SMART and scrub state move in hours) and a different blast
+  # radius — this one shells into a journal and a 0600 credentials file, and
+  # a failure in that has no business blanking the disk panels.
+  #
+  # See host/claude-snapshot.sh for what each piece is and, more importantly,
+  # for what is deliberately left out of a world-readable file.
+  claudeDir = "/run/daedalus-claude";
+
+  claudeSnapshotScript = pkgs.writeShellApplication {
+    name = "daedalus-claude-snapshot";
+    # Same reason as the system snapshot: every `$name` inside the jq
+    # programs is jq's own variable, bound with --arg. Letting the shell near
+    # them is the bug this check warns about, in reverse.
+    excludeShellChecks = [ "SC2016" ];
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnused
+      pkgs.gnugrep
+      pkgs.gawk
+      pkgs.jq
+      pkgs.systemd
+    ];
+    text = ''
+      OUT_DIR=${lib.escapeShellArg claudeDir}
+      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
+      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
+      # The CLI's own state directory, and the /tmp dir the Remote Control
+      # bridge writes a per-session debug log into — both keyed off the
+      # operator this unit reads on behalf of, so neither is a literal that
+      # can drift from platform/claude-rc.nix's User=.
+      CLAUDE_HOME=${lib.escapeShellArg "${config.users.users.${config.fleet.operator.user}.home}/.claude"}
+      BRIDGE_LOG_DIR=${lib.escapeShellArg "/tmp/claude-${toString config.fleet.operator.uid}"}
+      # What the flake built. Read from the package rather than by running
+      # `claude --version`, which is a node start-up to learn a string nix
+      # already knows — and which would report the same number either way,
+      # hiding exactly the drift this is here to show.
+      CLI_VERSION=${lib.escapeShellArg pkgs.claude-code.version}
+      CLI_STORE=${lib.escapeShellArg (toString pkgs.claude-code)}
+      SED=${pkgs.gnused}/bin/sed
+      GREP=${pkgs.gnugrep}/bin/grep
+      AWK=${pkgs.gawk}/bin/awk
+      JQ=${pkgs.jq}/bin/jq
+      SYSTEMCTL=${pkgs.systemd}/bin/systemctl
+      JOURNALCTL=${pkgs.systemd}/bin/journalctl
+
+      ${builtins.readFile ./host/lib.sh}
+      ${builtins.readFile ./host/claude-snapshot.sh}
+    '';
+  };
+
   # What Nix currently believes, handed to the container as one read-only
   # store file. Two parts, because they have different provenance:
   #
@@ -722,6 +776,7 @@ in
       # into the same read-only mount.
       IMAGE_FRESHNESS_PATH = "/images/freshness.json";
       HOST_FACTS_PATH = "/system/system.json";
+      CLAUDE_FACTS_PATH = "/claude/claude.json";
 
       # The VPN tunnels, the DNS upstreams, the DHCP scope and direct ingress
       # all moved to /export domains (publishing.json, network.json) — fleet
@@ -778,6 +833,11 @@ in
     # daedalus-system-snapshot. Read-only, and no secret in it — the closest
     # thing is a drive serial, which is printed on the drive.
     "${systemDir}:/system:ro"
+    # Remote Control's state, its live sessions and the credential clock,
+    # published by daedalus-claude-snapshot. Read-only, and the credential
+    # block in it is four non-secret fields copied out by name — the tokens
+    # beside them in ~/.claude/.credentials.json never enter this file.
+    "${claudeDir}:/claude:ro"
     # Per-repo CI state (runners, the running job and its steps, recent runs),
     # published by gha-ci-snapshot in stacks/gha-runner. Read-only, and it is
     # the OUTPUT rather than the credential: the GitHub PAT has
@@ -933,6 +993,41 @@ in
       OnUnitActiveSec = "10min";
     };
   };
+
+  # Root for the same shape of reason as its sibling, though a narrower one:
+  # the session roster is santiago's, but the credentials file is 0600 and
+  # the journal read wants the system journal rather than a user one.
+  systemd.services.daedalus-claude-snapshot = {
+    description = "Publish Claude Code remote-control and session facts for daedalus";
+    before = [ "podman-app-daedalus.service" ];
+    wantedBy = [ "podman-app-daedalus.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${claudeSnapshotScript}/bin/daedalus-claude-snapshot";
+    };
+  };
+
+  # One minute, and it is the shortest timer daedalus runs for a reason: a
+  # session list is the one thing here that is worth nothing when it is old.
+  # Somebody opening this page has usually just started a session from a
+  # phone and wants to see it, and a ten-minute snapshot would answer "no
+  # sessions" to a question asked about one that is running.
+  #
+  # It costs a systemctl call, four bounded journal seeks and a handful of
+  # /proc reads — cheaper than the env snapshot, which already runs at two.
+  systemd.timers.daedalus-claude-snapshot = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "90s";
+      OnUnitActiveSec = "1min";
+    };
+  };
+
+  # Silent from the reader's side like every snapshot here, and with a twist
+  # of its own: the page it feeds is about Remote Control, which is how the
+  # operator would be TALKING to this box when it broke. A mail is the only
+  # channel that does not depend on the thing it reports on.
+  fleet.monitoredJobs.daedalus-claude-snapshot = { };
 
   # Fifteen minutes, not two: an image label changes only when an image does,
   # which means a rebuild or a deploy pull — both of which restart the
