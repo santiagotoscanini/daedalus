@@ -108,6 +108,23 @@ confirm before:
   `anansi`, `argus`, `daedalus`, `voyra`). CI runs on this box too
   (`stacks/gha-runner` → `stacks/registry`, a zot at
   `registry.toscanini.me`); nothing leaves the house
+- **Project workspaces (`~santiago/projects/`)** — working clones of
+  the project repos (hosted apps AND the off-box sites: santree,
+  personal-portfolio, chismed…). **This is where Claude works on
+  project code**: edit there, commit, push to main — a hosted app is
+  live ~2 min later via its CI→zot→deploy loop. The host keeps the
+  clones fresh (daedalus's workspace feature: clone button in the UI,
+  30-min fast-forward timer, a pull right behind every deploy; dirty
+  or diverged trees are fetched but left alone). The exception is
+  **daedalus itself: its live app source is
+  `/etc/nixos/stacks/daedalus/app`, not the ~/projects clone** — the
+  clone only serves the repo's `website/` landing page. No node/pnpm
+  on the host: verify with throwaway `node:24` containers
+  (`--add-host=verdaccio.toscanini.me:host-gateway` for pnpm repos,
+  `--dns 8.8.8.8` for npm-heavy installs so pi-hole's rate limit
+  survives, `--store-dir` outside the tree), and trust a repo's
+  *Dockerfile* build over a bare `pnpm build` — the contexts differ
+  and that difference has produced real bugs
 - Plane (`stacks/plane`, `plane.toscanini.me`) — issue tracker, 12
   containers. The one web UI deliberately NOT behind the SSO gate
 - Minecraft (`stacks/minecraft`) — Paper server on a router-forwarded
