@@ -1315,6 +1315,29 @@ h2 {
   grid-template-columns: auto minmax(9rem, 1fr) auto;
 }
 
+/* A row with a repo splits into the site link (the row) and a trailing cell
+   holding the repo link + workspace button, which cannot live inside the
+   row's own anchor. */
+.external-item {
+  display: flex;
+  align-items: center;
+}
+.external-item > .app-row-external {
+  flex: 1;
+  min-width: 0;
+}
+.external-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0 1.1rem;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+.external-actions > a {
+  color: var(--muted);
+}
+
 /* The icon leading a section head. Centred by hand because the head aligns
    its text on the baseline, which an image does not have. */
 .section-glyph {

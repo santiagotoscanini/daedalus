@@ -229,6 +229,74 @@ let
     '';
   };
 
+  # Project workspaces: working clones of the projects' repos, in the
+  # operator's home so a Claude Code session on this box can work in them
+  # directly (and push — the GitHub SSH identity is the operator's too, from
+  # platform/git). NOT under fleet.stateRoot: these are development trees,
+  # not container state, and no container mounts them.
+  #
+  # ~/projects rides the `home` dataset, so unlike /etc/nixos these trees ARE
+  # snapshotted and syncoid-mirrored — uncommitted vibecode survives a disk.
+  workspaceRoot = "${config.users.users.${config.fleet.operator.user}.home}/projects";
+
+  # Where their published snapshot lives — same /run contract as the other
+  # snapshot dirs: derived state, republished on every sync, gone on reboot.
+  workspacesDir = "/run/daedalus-workspaces";
+
+  # The env both workspace agents share. The git binary is passed absolute
+  # like PODMAN/SETPRIV in the siblings: the setpriv child does not inherit
+  # writeShellApplication's PATH resolution for the command itself.
+  workspaceEnv = ''
+    WORKSPACE_ROOT=${lib.escapeShellArg workspaceRoot}
+    OUT_DIR=${lib.escapeShellArg workspacesDir}
+    OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
+    OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
+    OPERATOR_HOME=${lib.escapeShellArg config.users.users.${config.fleet.operator.user}.home}
+    SETPRIV=${pkgs.util-linux}/bin/setpriv
+    ENV_BIN=${pkgs.coreutils}/bin/env
+    GIT=${pkgs.git}/bin/git
+  '';
+
+  workspaceRuntimeInputs = [
+    pkgs.jq
+    pkgs.git
+    pkgs.openssh # git clone/fetch over ssh
+    pkgs.util-linux # setpriv, flock
+    pkgs.coreutils
+  ];
+
+  # The clone agent — the sixth file-drop verb. See host/workspace-clone.sh
+  # for why the ssh key never enters the container and what shape the slug
+  # is held to.
+  workspaceCloneScript = pkgs.writeShellApplication {
+    name = "daedalus-workspace-clone";
+    runtimeInputs = workspaceRuntimeInputs;
+    text = ''
+      APPLY_DIR=${lib.escapeShellArg applyDir}
+      ${workspaceEnv}
+      ${builtins.readFile ./host/lib.sh}
+      ${builtins.readFile ./host/workspace-lib.sh}
+      ${builtins.readFile ./host/workspace-clone.sh}
+    '';
+  };
+
+  # One body, two cadences: sync (fetch + fast-forward, network) and publish
+  # (local facts only, safe to gate the container's start on). See
+  # host/workspace-sync.sh for the split.
+  mkWorkspaceSyncScript =
+    doSync:
+    pkgs.writeShellApplication {
+      name = "daedalus-workspace-${if doSync then "sync" else "publish"}";
+      runtimeInputs = workspaceRuntimeInputs;
+      text = ''
+        DO_SYNC=${if doSync then "1" else "0"}
+        ${workspaceEnv}
+        ${builtins.readFile ./host/lib.sh}
+        ${builtins.readFile ./host/workspace-lib.sh}
+        ${builtins.readFile ./host/workspace-sync.sh}
+      '';
+    };
+
   # Where the merged per-container environment is published. /run, so these
   # secrets live on tmpfs and never enter a ZFS snapshot or the syncoid mirror.
   envDir = "/run/daedalus-env";
@@ -772,6 +840,11 @@ in
       # — the other half of the version answer, for services whose pin is a
       # moving tag — still arrive as a snapshot:
       IMAGE_LABELS_PATH = "/images/labels.json";
+      # The project workspaces snapshot (clones under ~/projects), published
+      # by daedalus-workspace-{publish,sync}. The ROOT is bound too, display
+      # only — the page says where a clone landed without restating the path.
+      WORKSPACES_PATH = "/workspaces/workspaces.json";
+      WORKSPACE_ROOT = workspaceRoot;
       # Digest-vs-tag freshness, published daily by daedalus-image-freshness
       # into the same read-only mount.
       IMAGE_FRESHNESS_PATH = "/images/freshness.json";
@@ -838,6 +911,11 @@ in
     # block in it is four non-secret fields copied out by name — the tokens
     # beside them in ~/.claude/.credentials.json never enter this file.
     "${claudeDir}:/claude:ro"
+    # The project workspaces snapshot — live git facts for every clone under
+    # ~/projects plus each one's last sync outcome. The DIRECTORY, not the
+    # file, like every snapshot here: it is replaced by rename and a
+    # single-file bind would pin the old inode.
+    "${workspacesDir}:/workspaces:ro"
     # Per-repo CI state (runners, the running job and its steps, recent runs),
     # published by gha-ci-snapshot in stacks/gha-runner. Read-only, and it is
     # the OUTPUT rather than the credential: the GitHub PAT has
@@ -1188,6 +1266,93 @@ in
   };
 
   fleet.monitoredJobs.daedalus-deploy-trigger = { };
+
+  # The workspace clone agent — same file-drop bridge, sixth verb. Root
+  # because a path unit can only start a system unit; every git call inside
+  # drops to the operator (the clones and the SSH identity are theirs).
+  systemd.services.daedalus-workspace-clone = {
+    description = "Clone a project repo into the workspace root on daedalus's behalf";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${workspaceCloneScript}/bin/daedalus-workspace-clone";
+      # A large repo on a slow evening plus the 10-minute lock wait; the
+      # default 90s would SIGTERM a legitimate first clone.
+      TimeoutStartSec = "15min";
+    };
+  };
+
+  systemd.paths.daedalus-workspace-clone = {
+    description = "Watch for a daedalus workspace clone request";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathChanged = "${applyDir}/workspace-request.json";
+  };
+
+  # Not monitoredJobs, like ci and power: both outcomes land in the status
+  # file the page that asked is polling, and a genuine refusal exits 0.
+
+  # Keep the clones current. Two triggers on one unit:
+  #
+  #   - the 30-minute timer — the cadence for the off-box projects, whose
+  #     pushes nothing on this box hears about;
+  #   - the path unit below — the hosted apps' push channel. Their deploy
+  #     units rewrite /var/lib/app-deploy/<name>.json exactly when a new
+  #     image lands (stacks/apps/assets/deploy.sh), which is minutes after
+  #     the push that built it, so the workspace pulls right behind the code
+  #     it is now running.
+  #
+  # Monotonic timer, deliberately off the hour (the myspeed rule); a sync is
+  # a handful of `git fetch`es, so the cost is SSH round trips, not bandwidth.
+  systemd.services.daedalus-workspace-sync = {
+    description = "Fetch and fast-forward the project workspaces";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${mkWorkspaceSyncScript true}/bin/daedalus-workspace-sync";
+      TimeoutStartSec = "15min";
+    };
+  };
+
+  systemd.timers.daedalus-workspace-sync = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "6min";
+      OnUnitActiveSec = "30min";
+    };
+  };
+
+  systemd.paths.daedalus-workspace-sync = {
+    description = "Sync the workspaces when an app deploy lands";
+    wantedBy = [ "multi-user.target" ];
+    # One entry per registry app, derived from the same apps.json the deploy
+    # units are generated from — a path unit cannot glob, and a hand-kept
+    # list would miss the next app.
+    pathConfig.PathChanged = map (n: "/var/lib/app-deploy/${n}.json") (
+      lib.attrNames registryApps
+    );
+  };
+
+  # Silent from the reader's side like every snapshot: a stopped sync shows
+  # yesterday's HEAD as though it were current, which reads as "no news from
+  # this project" — the exact opposite of what happened.
+  fleet.monitoredJobs.daedalus-workspace-sync = { };
+
+  # Publish-only variant, ordered before the container for the same two
+  # reasons as the system snapshot: the mount source must exist (rootless
+  # podman cannot create a root-owned /run dir) and the page should have
+  # facts on a cold boot. No network in it — a GitHub outage must never gate
+  # the app's start (the image-freshness rule).
+  systemd.services.daedalus-workspace-publish = {
+    description = "Publish the project workspace facts for daedalus";
+    before = [ "podman-app-daedalus.service" ];
+    wantedBy = [ "podman-app-daedalus.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${mkWorkspaceSyncScript false}/bin/daedalus-workspace-publish";
+    };
+  };
 
   # Repo-side CI actions (set the push credential, run the workflow). Same
   # file-drop bridge, third verb. Root because it reads a sops secret the

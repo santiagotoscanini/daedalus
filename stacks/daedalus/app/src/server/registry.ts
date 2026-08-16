@@ -4,7 +4,7 @@ import type { AccessWindow } from '../lib/access-window'
 // Type-only, so the database module it lives next to is not pulled in here —
 // every value import in this file is dynamic for exactly that reason.
 import type { NewApp } from '../lib/repo/apps'
-import { defaultImage, REGISTRY_HOST_PATTERN } from '../lib/site'
+import { defaultImage, OWNER, REGISTRY_HOST_PATTERN } from '../lib/site'
 
 // Server functions behind the Apps UI. Kept in one module so the list page,
 // the detail page and the apply bar all read the same shapes.
@@ -28,27 +28,40 @@ export const fetchApps = createServerFn().handler(async () => {
   // outage costs the status column, not the page.
   const { appIcon, siteIcon } = await import('../lib/app-icon')
   const { EXTERNAL_APPS } = await import('../lib/external-apps')
-  const [statuses, applyStatus, icons, externalIcons] = await Promise.all([
-    appStatuses(records.map((r) => r.name)),
-    readApplyStatus(),
-    // Resolved per app, in parallel, and cached for an hour in that module —
-    // so this costs one round of probes after a restart and nothing after.
-    Promise.all(
-      records.map(
-        async (r) =>
-          (await appIcon(r.name, effectiveHostname(r.name, r.hostname), r.stage !== 'off')) !==
-          null,
+  const { readWorkspaces, readWorkspaceRequestStatus, workspaceFor } = await import(
+    '../lib/workspaces'
+  )
+  const [statuses, applyStatus, icons, externalIcons, workspaces, workspaceStatus] =
+    await Promise.all([
+      appStatuses(records.map((r) => r.name)),
+      readApplyStatus(),
+      // Resolved per app, in parallel, and cached for an hour in that module —
+      // so this costs one round of probes after a restart and nothing after.
+      Promise.all(
+        records.map(
+          async (r) =>
+            (await appIcon(r.name, effectiveHostname(r.name, r.hostname), r.stage !== 'off')) !==
+            null,
+        ),
       ),
-    ),
-    Promise.all(EXTERNAL_APPS.map(async (e) => (await siteIcon(e.id, e.host)) !== null)),
-  ])
+      Promise.all(EXTERNAL_APPS.map(async (e) => (await siteIcon(e.id, e.host)) !== null)),
+      readWorkspaces(),
+      readWorkspaceRequestStatus(),
+    ])
 
   return {
     applyStatus,
-    // The off-box projects (GitHub Pages / Vercel). Static data plus one
-    // probed fact — whether the site serves an icon — so the row can draw a
-    // monogram instead of a broken image.
-    external: EXTERNAL_APPS.map((e, i) => ({ ...e, hasIcon: externalIcons[i] ?? false })),
+    workspaceStatus,
+    // The off-box projects (GitHub Pages / Vercel). Static data plus two
+    // probed facts — whether the site serves an icon, and whether a
+    // workspace on this box already holds the repo — so the row can draw a
+    // monogram instead of a broken image and a clone button that tells the
+    // truth.
+    external: EXTERNAL_APPS.map((e, i) => ({
+      ...e,
+      hasIcon: externalIcons[i] ?? false,
+      workspace: e.repo === null ? null : workspaceFor(e.repo, workspaces.data),
+    })),
     apps: records.map((r, i) => ({
       name: r.name,
       stage: r.stage,
@@ -116,35 +129,60 @@ export const fetchApp = createServerFn()
     const { appStatuses } = await import('../lib/metrics')
     const { readApplyStatus } = await import('../lib/apply')
     const { lastDeploy, pullFailing, readDeployStatus } = await import('../lib/deploy')
+    const { readWorkspaces, readWorkspaceRequestStatus, workspaceFor } = await import(
+      '../lib/workspaces'
+    )
 
     const [record, entries] = await Promise.all([getApp(name), manifestEntries()])
     if (!record) return null
 
     const manifest = entries.find((m) => m.name === name)
 
-    const [statuses, applyStatus, deploy, pullBroken, deployStatus, takenHostnames, hasIcon] =
-      await Promise.all([
-        appStatuses([name]),
-        readApplyStatus(),
-        lastDeploy(name),
-        pullFailing(name),
-        readDeployStatus(),
-        // So the hostname field can reject a collision as it is typed rather
-        // than during the rebuild it would otherwise fail.
-        hostnamesTakenBy(effectiveHostname(record.name, record.hostname)),
-        import('../lib/app-icon').then(
-          async ({ appIcon }) =>
-            (await appIcon(
-              record.name,
-              effectiveHostname(record.name, record.hostname),
-              record.stage !== 'off',
-            )) !== null,
-        ),
-      ])
+    // Every app repo lives under OWNER, keyed by the app's name — the same
+    // assumption the runner and the create flow make. True for the local-mode
+    // entry too: daedalus's repo is the flake repo, which carries its name.
+    const repo = `${OWNER}/${record.name}`
+
+    const [
+      statuses,
+      applyStatus,
+      deploy,
+      pullBroken,
+      deployStatus,
+      takenHostnames,
+      hasIcon,
+      workspaces,
+      workspaceStatus,
+    ] = await Promise.all([
+      appStatuses([name]),
+      readApplyStatus(),
+      lastDeploy(name),
+      pullFailing(name),
+      readDeployStatus(),
+      // So the hostname field can reject a collision as it is typed rather
+      // than during the rebuild it would otherwise fail.
+      hostnamesTakenBy(effectiveHostname(record.name, record.hostname)),
+      import('../lib/app-icon').then(
+        async ({ appIcon }) =>
+          (await appIcon(
+            record.name,
+            effectiveHostname(record.name, record.hostname),
+            record.stage !== 'off',
+          )) !== null,
+      ),
+      readWorkspaces(),
+      readWorkspaceRequestStatus(),
+    ])
 
     return {
       applyStatus,
       deployStatus,
+      repo,
+      workspace: workspaceFor(repo, workspaces.data),
+      // From the snapshot when it has published, from the env binding before
+      // the first publish — same value, different freshness.
+      workspaceRoot: workspaces.data.root || (process.env.WORKSPACE_ROOT ?? ''),
+      workspaceStatus,
       takenHostnames,
       // Authoritative record from the app's own deploy unit — a deploy also
       // runs from the timer and from a manual systemctl start, neither of
@@ -642,4 +680,40 @@ export const revealEnvVar = createServerFn({ method: 'POST' })
 export const fetchDeployStatus = createServerFn().handler(async () => {
   const { readDeployStatus } = await import('../lib/deploy')
   return readDeployStatus()
+})
+
+/**
+ * Ask the host to clone a project's repo into the workspace root — or, when
+ * the workspace already exists, to pull it. What crosses the bridge is a
+ * repo slug; the clone happens host-side over the operator's SSH identity,
+ * which never enters this container (lib/workspaces.ts).
+ *
+ * The allowlist is exactly the repos this UI offers a button for: the
+ * registry apps (keyed OWNER/<name>) and the off-box projects' hand-declared
+ * slugs. The host re-validates the slug's shape; this check is what keeps
+ * the bridge from being a general "clone anything as the operator" door.
+ */
+export const cloneWorkspaceFn = createServerFn({ method: 'POST' })
+  .inputValidator((i: { repo: string }) => i)
+  .handler(async ({ data }) => {
+    const { requestWorkspaceClone } = await import('../lib/workspaces')
+    const { listApps } = await import('../lib/repo/apps')
+    const { EXTERNAL_APPS } = await import('../lib/external-apps')
+
+    const apps = await listApps()
+    const offered = new Set([
+      ...apps.map((a) => `${OWNER}/${a.name}`.toLowerCase()),
+      ...EXTERNAL_APPS.flatMap((e) => (e.repo === null ? [] : [e.repo.toLowerCase()])),
+    ])
+    if (!offered.has(data.repo.toLowerCase())) {
+      throw new Error(`${data.repo} is not one of this box's project repos`)
+    }
+
+    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+    return { id: await requestWorkspaceClone({ repo: data.repo, actor }) }
+  })
+
+export const fetchWorkspaceRequestStatus = createServerFn().handler(async () => {
+  const { readWorkspaceRequestStatus } = await import('../lib/workspaces')
+  return readWorkspaceRequestStatus()
 })

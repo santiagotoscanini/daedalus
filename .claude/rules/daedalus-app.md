@@ -73,8 +73,8 @@ has been pushed. Commit often.
 
 - Host facts arrive via **read-only /run snapshot mounts** (env at
   /env-snapshot, image labels at /images, SMART/ZFS at /system, CI at
-  /ci, deploy state at /deploy-state) and the nix manifest at
-  /registry/manifest.json. Never reach around them (no SSH-ing the
+  /ci, deploy state at /deploy-state, project workspace clones at
+  /workspaces) and the nix manifest at /registry/manifest.json. Never reach around them (no SSH-ing the
   host, no reading host paths directly) — if a page needs a new host
   fact, extend the matching snapshot script in `stacks/daedalus/host/`
   and its nix wiring.

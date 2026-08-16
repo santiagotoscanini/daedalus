@@ -1,10 +1,11 @@
 import { useRouter } from '@tanstack/react-router'
 import type { DeployStatus } from '../../lib/deploy'
-import { DASH } from '../../lib/format'
+import { DASH, since } from '../../lib/format'
 import { type AppTabData, fetchDeployStatus, triggerDeploy } from '../../server/registry'
 import { usePolledStatus } from '../status'
 import { Bytes } from '../ui'
 import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
+import { CloneButton } from '../workspace'
 import type { AppRecord, LoaderData } from './shared'
 
 /** The auth mode as a person would say it, not as the column stores it. */
@@ -32,6 +33,10 @@ export function Overview({
   deployStatus,
   lastDeploy,
   pullBroken,
+  repo,
+  workspace,
+  workspaceRoot,
+  workspaceStatus,
   d,
 }: {
   app: AppRecord
@@ -39,6 +44,10 @@ export function Overview({
   deployStatus: NonNullable<LoaderData>['deployStatus']
   lastDeploy: NonNullable<LoaderData>['lastDeploy']
   pullBroken: NonNullable<LoaderData>['pullBroken']
+  repo: NonNullable<LoaderData>['repo']
+  workspace: NonNullable<LoaderData>['workspace']
+  workspaceRoot: NonNullable<LoaderData>['workspaceRoot']
+  workspaceStatus: NonNullable<LoaderData>['workspaceStatus']
   d: Extract<AppTabData, { kind: 'overview' }>
 }) {
   // `notes` is jsonb, so the database can hand back anything — an array, a
@@ -214,6 +223,90 @@ export function Overview({
               },
             ]}
           />
+        </Board>
+
+        {/* The clone of this app's repo under ~/projects on the host, where a
+            Claude Code session works on it directly from this box. The host
+            keeps it current — a deploy landing pulls it, a 30-minute timer
+            backstops — so the button is only ever "make it exist" or "don't
+            wait for the timer". */}
+        <Board
+          title="Workspace"
+          icon="⎇"
+          span={4}
+          aside={<CloneButton repo={repo} cloned={workspace !== null} initial={workspaceStatus} />}
+        >
+          {workspace ? (
+            <Facts
+              list
+              rows={[
+                {
+                  k: 'repo',
+                  v: (
+                    <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
+                      {repo}
+                    </a>
+                  ),
+                },
+                {
+                  k: 'path',
+                  v: <code>{`${workspaceRoot}/${workspace.name}`}</code>,
+                },
+                {
+                  k: 'checked out',
+                  v: (
+                    <code>
+                      {workspace.branch ?? DASH} @ {workspace.head ?? DASH}
+                    </code>
+                  ),
+                },
+                {
+                  k: 'tree',
+                  v: workspace.dirty ? (
+                    <span className="warn-text">uncommitted changes</span>
+                  ) : (
+                    'clean'
+                  ),
+                },
+                {
+                  k: 'vs origin',
+                  v:
+                    workspace.ahead === null || workspace.behind === null
+                      ? DASH
+                      : workspace.ahead === 0 && workspace.behind === 0
+                        ? 'current'
+                        : [
+                            workspace.ahead > 0 ? `${String(workspace.ahead)} ahead` : null,
+                            workspace.behind > 0 ? `${String(workspace.behind)} behind` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · '),
+                },
+                {
+                  k: 'last sync',
+                  v: workspace.sync ? (
+                    <span
+                      className={workspace.sync.result === 'failed' ? 'bad-text' : undefined}
+                      title={workspace.sync.detail || undefined}
+                    >
+                      {workspace.sync.result} ·{' '}
+                      {since((Date.now() - Date.parse(workspace.sync.at)) / 1000)}
+                    </span>
+                  ) : (
+                    'not yet'
+                  ),
+                },
+              ]}
+            />
+          ) : (
+            <p className="viz-empty">
+              Not cloned on this box.{' '}
+              <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
+                {repo}
+              </a>{' '}
+              would land in <code>{workspaceRoot}</code> and stay current on its own.
+            </p>
+          )}
         </Board>
 
         {app.egressContainer && (
