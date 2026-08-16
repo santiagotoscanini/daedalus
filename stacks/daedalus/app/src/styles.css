@@ -1317,13 +1317,16 @@ h2 {
 
 /* A row with a repo splits into the site link (the row) and a trailing cell
    holding the repo link + workspace button, which cannot live inside the
-   row's own anchor. */
+   row's own anchor. The anchor's flex-basis is what keeps this honest on
+   narrow screens: below it, the actions wrap onto their own line instead of
+   crushing the row into a one-word-per-line column. */
 .external-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
 }
 .external-item > .app-row-external {
-  flex: 1;
+  flex: 1 1 26rem;
   min-width: 0;
 }
 .external-actions {
@@ -1633,6 +1636,14 @@ h2 {
     flex-wrap: wrap;
     align-items: center;
     gap: 0.45rem 0.75rem;
+  }
+
+  /* The workspace cell has wrapped under the row here; give it the row's
+     own horizontal rhythm and push the button to the far edge. */
+  .external-actions {
+    width: 100%;
+    justify-content: space-between;
+    padding: 0 1.1rem 0.85rem;
   }
   .app-id {
     flex: 1 1 60%;
