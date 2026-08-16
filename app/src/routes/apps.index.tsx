@@ -7,6 +7,7 @@ import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { AppIcon, type AppState, Segmented, StateDot } from '../components/ui'
 import { Spark } from '../components/viz'
+import { CloneButton } from '../components/workspace'
 import { PLATFORMS, type Platform } from '../lib/external-apps'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
 
@@ -96,7 +97,7 @@ function AppsPage() {
 }
 
 export function AppsList({ data }: { data: ListData }) {
-  const { apps, applyStatus, external } = data
+  const { apps, applyStatus, external, workspaceStatus } = data
   const [search, setSearch] = useState('')
   const [state, setState] = useState<'all' | AppState>('all')
   const [exposure, setExposure] = useState<'all' | 'live' | 'lab' | 'off'>('all')
@@ -242,7 +243,7 @@ export function AppsList({ data }: { data: ListData }) {
             <SectionHead icon={PLATFORM_ICONS[p.id]} title={p.id} sub={p.description} />
             <ul className="app-list app-list-platform">
               {entries.map((e) => (
-                <ExternalRow key={e.id} entry={e} />
+                <ExternalRow key={e.id} entry={e} workspaceStatus={workspaceStatus} />
               ))}
             </ul>
           </div>
@@ -283,9 +284,20 @@ const PLATFORM_ICONS: Record<Platform, ReactNode> = {
   ),
 }
 
-function ExternalRow({ entry }: { entry: ExternalEntry }) {
+function ExternalRow({
+  entry,
+  workspaceStatus,
+}: {
+  entry: ExternalEntry
+  workspaceStatus: ListData['workspaceStatus']
+}) {
+  // The actions live BESIDE the row's anchor, not inside it — a button in an
+  // anchor is one click with two meanings, and invalid HTML besides. The row
+  // still links to the site; the trailing cell links to the repo and holds
+  // the one workspace action these projects have (no detail page to put it
+  // on — see the section comment above).
   return (
-    <li>
+    <li className={entry.repo === null ? undefined : 'external-item'}>
       <a
         href={`https://${entry.host}`}
         target="_blank"
@@ -301,6 +313,27 @@ function ExternalRow({ entry }: { entry: ExternalEntry }) {
 
         <code className="app-host">{entry.host}</code>
       </a>
+      {entry.repo !== null && (
+        <div className="external-actions">
+          <a
+            href={`https://github.com/${entry.repo}`}
+            target="_blank"
+            rel="noreferrer"
+            title={
+              entry.workspace
+                ? `cloned — ${entry.workspace.branch ?? '?'} @ ${entry.workspace.head ?? '?'}${entry.workspace.dirty ? ', uncommitted changes' : ''}`
+                : 'not cloned on this box'
+            }
+          >
+            ⎇ {entry.repo}
+          </a>
+          <CloneButton
+            repo={entry.repo}
+            cloned={entry.workspace !== null}
+            initial={workspaceStatus}
+          />
+        </div>
+      )}
     </li>
   )
 }

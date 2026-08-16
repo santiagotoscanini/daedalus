@@ -92,6 +92,10 @@ function AppDetail() {
     lastDeploy,
     pullBroken,
     takenHostnames,
+    repo,
+    workspace,
+    workspaceRoot,
+    workspaceStatus,
     tabData,
   } = Route.useLoaderData()
   const router = useRouter()
@@ -234,6 +238,10 @@ function AppDetail() {
                 deployStatus={deployStatus}
                 lastDeploy={lastDeploy}
                 pullBroken={pullBroken}
+                repo={repo}
+                workspace={workspace}
+                workspaceRoot={workspaceRoot}
+                workspaceStatus={workspaceStatus}
                 d={d}
               />
             )
