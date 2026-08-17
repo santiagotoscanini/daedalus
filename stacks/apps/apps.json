@@ -127,6 +127,33 @@
       },
       "notes": {}
     },
+    "iris": {
+      "stage": "lab",
+      "postgres": true,
+      "storage": false,
+      "litellm": false,
+      "prometheus": false,
+      "deploy": {
+        "enable": true
+      },
+      "image": null,
+      "hostname": null,
+      "egress": null,
+      "env": [],
+      "auth": {
+        "mode": "native",
+        "healthPath": "/api/healthz"
+      },
+      "presentation": {
+        "description": "One QR code, forever — retargetable QR codes and a basic linktree."
+      },
+      "resources": {
+        "cpus": null,
+        "memoryMb": null,
+        "pids": null
+      },
+      "notes": {}
+    },
     "voyra": {
       "stage": "live",
       "postgres": true,
