@@ -265,14 +265,26 @@ let
   #     closes. What it gives up is workspace freshness between those two
   #     jobs, for one repo's own run; what it keeps is the property that
   #     actually matters here, no podman socket in the container.
-  #   - `RuntimeMaxSec`. With no ephemeral exit and nothing watching it,
-  #     this is what ends the window — well clear of a build (minutes) and
-  #     still bounded.
-  #   - 143 is success: RuntimeMaxSec and a manual stop both arrive as
-  #     SIGTERM, and neither is a fault. Consequence, since the
-  #     deregister trap has no usable credential (see the header): the
-  #     repo keeps an offline runner entry until GitHub ages it out after
-  #     a day. Cosmetic, and the alternative is putting the PAT inside.
+  #   - A 45-minute cap, enforced by `timeout` **inside ExecStart** rather
+  #     than by `RuntimeMaxSec`. With no ephemeral exit and nothing
+  #     watching it, something has to end the window — well clear of a
+  #     build (minutes) and still bounded.
+  #
+  #     It is not `RuntimeMaxSec` because that marks the unit **failed
+  #     with `Result=timeout` regardless of the exit code**, which
+  #     `SuccessExitStatus` cannot whitelist — the exit-code whitelist and
+  #     the timeout verdict are independent. So every bootstrap that ran
+  #     its full window ended `failed`, and since `systemd_failed_units`
+  #     is an unlabeled count with nothing to exclude on (deliberately —
+  #     see stacks/monitoring), each one was a false "Host Systemd Service
+  #     Failed" alert. iris paid this on 2026-08-17. Wrapping in `timeout`
+  #     turns the cap into an ordinary exit status, which is whitelistable.
+  #   - 124 and 143 are success: `timeout` reports 124 when it ends the
+  #     window, and a manual stop reaches the cgroup as SIGTERM -> 143.
+  #     Neither is a fault. Consequence, since the deregister trap has no
+  #     usable credential (see the header): the repo keeps an offline
+  #     runner entry until GitHub ages it out after a day. Cosmetic, and
+  #     the alternative is putting the PAT inside.
   bootstrapRunner = {
     description = "One-shot GitHub Actions runner for %i (first-image bootstrap)";
     after = [
@@ -297,13 +309,17 @@ let
         "XDG_RUNTIME_DIR=/run/user/1000"
         "HOME=/home/santiago"
       ];
-      RuntimeMaxSec = "45min";
-      SuccessExitStatus = [ 143 ];
+      SuccessExitStatus = [
+        124
+        143
+      ];
       ExecStartPre = [
         "-${pkgs.podman}/bin/podman rm --force --ignore gha-runner-bootstrap-%i"
         "${mintToken}/bin/gha-runner-mint-token %i"
       ];
       ExecStart = lib.concatStringsSep " " [
+        # The window's end. See the note above on why this is not RuntimeMaxSec.
+        "${pkgs.coreutils}/bin/timeout 45m"
         "${pkgs.podman}/bin/podman run"
         "--rm"
         "--name=gha-runner-bootstrap-%i"
