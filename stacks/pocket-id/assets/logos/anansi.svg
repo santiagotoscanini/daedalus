@@ -1,0 +1,21 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Anansi — Ananse Ntontan">
+  <style>
+    .web { fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    .drop { fill: #b06a3b; }
+    @media (prefers-color-scheme: dark) { svg { color: #f3ead4; } }
+    @media (prefers-color-scheme: light) { svg { color: #1c1408; } }
+  </style>
+  <g class="web">
+    <line x1="50" y1="50" x2="50" y2="10"/>
+    <line x1="50" y1="50" x2="78.3" y2="21.7"/>
+    <line x1="50" y1="50" x2="90" y2="50"/>
+    <line x1="50" y1="50" x2="78.3" y2="78.3"/>
+    <line x1="50" y1="50" x2="50" y2="90"/>
+    <line x1="50" y1="50" x2="21.7" y2="78.3"/>
+    <line x1="50" y1="50" x2="10" y2="50"/>
+    <line x1="50" y1="50" x2="21.7" y2="21.7"/>
+    <polygon points="50,10 78.3,21.7 90,50 78.3,78.3 50,90 21.7,78.3 10,50 21.7,21.7"/>
+    <polygon points="50,26 67,33 74,50 67,67 50,74 33,67 26,50 33,33"/>
+  </g>
+  <circle class="drop" cx="50" cy="50" r="4.5"/>
+</svg>

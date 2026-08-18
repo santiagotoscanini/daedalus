@@ -1,0 +1,11 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="voyra-v" x1="14" y1="8" x2="50" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#863BFF"/>
+      <stop offset="1" stop-color="#5C3FDF"/>
+    </linearGradient>
+  </defs>
+  <path d="M4 47 C 16 25 38 15 61 20" stroke="#8B7BE8" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="0.5 6" opacity="0.85"/>
+  <path d="M8 10 H24 L32 33 L40 10 H56 L37 54 H27 Z" fill="url(#voyra-v)"/>
+  <circle cx="61" cy="20" r="3" fill="#863BFF"/>
+</svg>
