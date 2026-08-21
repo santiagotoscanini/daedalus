@@ -266,95 +266,114 @@ in
     );
   };
 
-  config = lib.mkIf (cfg != { }) {
-    fleet.statePaths = {
-      ${stateDir}.mode = "0700";
-      ${secretsFile} = {
-        type = "f";
-        mode = "0600";
-      };
-    };
-
-    systemd.services = {
-      litellm-key-secrets = {
-        description = "Generate the virtual key for every fleet.litellmKeys entry";
-        # /home is ZFS, and the renders that read this file are ordered
-        # after it rather than the other way round.
-        after = [ "local-fs.target" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          Restart = "on-failure";
-          RestartSec = "5s";
-          ExecStart = lib.getExe secretsScript;
-        };
-      };
-
-      litellm-keys-sync = {
-        description = "Converge fleet.litellmKeys into the LiteLLM gateway";
-        after = [
-          secretsUnit
-          "podman-litellm.service"
-        ];
-        wants = [ secretsUnit ];
-        requires = [ "podman-litellm.service" ];
-        wantedBy = [ "multi-user.target" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          # The gateway answers on its own port some seconds after the
-          # unit that starts it goes active — `podman run -d` returning
-          # is not the API being up. Retry rather than order behind a
-          # readiness probe: convergence is not on anyone's critical
-          # path, so a few late attempts cost nothing and one fewer gate
-          # is one fewer thing to get wrong.
-          Restart = "on-failure";
-          RestartSec = "20s";
-          User = "santiago";
-          Group = "users";
-          Environment = [
-            "HOME=/home/santiago"
-            "XDG_RUNTIME_DIR=/run/user/1000"
-          ];
-          ExecStart = lib.getExe syncScript;
-        };
-        unitConfig = {
-          StartLimitBurst = 10;
-          StartLimitIntervalSec = 600;
-        };
+  config = lib.mkMerge [
+    {
+      # Keys for registry apps live here rather than in a stack module,
+      # because a registry app has no module of its own — its container
+      # (`app-<name>`) is declared by stacks/apps from apps.json. The
+      # `litellm` flag on the app only injects LITELLM_BASE_URL; the key
+      # is this declaration.
+      #
+      # hermes — RSS TL;DRs via the chat model only. The app defaults
+      # LITELLM_MODEL to gemma-4-12b; widen `models` if that env var is
+      # ever pointed elsewhere.
+      fleet.litellmKeys.hermes = {
+        models = [ "gemma-4-12b" ];
+        consumers = [ "app-hermes" ];
+        consumerEnv = [ "LITELLM_API_KEY" ];
       };
     }
-    // lib.mapAttrs' (
-      n: k:
-      lib.nameValuePair "litellm-key-${n}-render" (mkSecretRender {
-        description = "Render the LiteLLM virtual key for ${n}";
-        gates = map (c: "podman-${c}.service") k.consumers;
-        dir = renderDir;
-        file = k.envFile;
-        after = [ secretsUnit ];
-        wants = [ secretsUnit ];
-        prep = ''
-          KEY=$(grep '^${secretKey n}=' ${secretsFile} | head -1 | cut -d= -f2-)
-          [ -n "$KEY" ] || { echo "${secretKey n} missing from ${secretsFile}" >&2; exit 1; }
-        '';
-        content = lib.concatMapStringsSep "\n" (v: "${v}=$KEY") k.consumerEnv;
-      })
-    ) rendered;
 
-    # The env file reaches its consumers from here rather than from each
-    # stack, so declaring a key is one edit — and so a stack never reads
-    # the path back out of `config`.
-    virtualisation.oci-containers.containers = lib.mkMerge (
-      lib.concatLists (
-        lib.mapAttrsToList (
-          _: k: map (c: { ${c}.environmentFiles = [ k.envFile ]; }) k.consumers
-        ) rendered
-      )
-    );
+    (lib.mkIf (cfg != { }) {
+      fleet.statePaths = {
+        ${stateDir}.mode = "0700";
+        ${secretsFile} = {
+          type = "f";
+          mode = "0600";
+        };
+      };
 
-    # A failed convergence is silent otherwise: the consumers keep
-    # working with the key they already hold, and the gateway quietly
-    # does not know about the ones it should.
-    fleet.monitoredJobs."litellm-keys-sync" = { };
-  };
+      systemd.services = {
+        litellm-key-secrets = {
+          description = "Generate the virtual key for every fleet.litellmKeys entry";
+          # /home is ZFS, and the renders that read this file are ordered
+          # after it rather than the other way round.
+          after = [ "local-fs.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            Restart = "on-failure";
+            RestartSec = "5s";
+            ExecStart = lib.getExe secretsScript;
+          };
+        };
+
+        litellm-keys-sync = {
+          description = "Converge fleet.litellmKeys into the LiteLLM gateway";
+          after = [
+            secretsUnit
+            "podman-litellm.service"
+          ];
+          wants = [ secretsUnit ];
+          requires = [ "podman-litellm.service" ];
+          wantedBy = [ "multi-user.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            # The gateway answers on its own port some seconds after the
+            # unit that starts it goes active — `podman run -d` returning
+            # is not the API being up. Retry rather than order behind a
+            # readiness probe: convergence is not on anyone's critical
+            # path, so a few late attempts cost nothing and one fewer gate
+            # is one fewer thing to get wrong.
+            Restart = "on-failure";
+            RestartSec = "20s";
+            User = "santiago";
+            Group = "users";
+            Environment = [
+              "HOME=/home/santiago"
+              "XDG_RUNTIME_DIR=/run/user/1000"
+            ];
+            ExecStart = lib.getExe syncScript;
+          };
+          unitConfig = {
+            StartLimitBurst = 10;
+            StartLimitIntervalSec = 600;
+          };
+        };
+      }
+      // lib.mapAttrs' (
+        n: k:
+        lib.nameValuePair "litellm-key-${n}-render" (mkSecretRender {
+          description = "Render the LiteLLM virtual key for ${n}";
+          gates = map (c: "podman-${c}.service") k.consumers;
+          dir = renderDir;
+          file = k.envFile;
+          after = [ secretsUnit ];
+          wants = [ secretsUnit ];
+          prep = ''
+            KEY=$(grep '^${secretKey n}=' ${secretsFile} | head -1 | cut -d= -f2-)
+            [ -n "$KEY" ] || { echo "${secretKey n} missing from ${secretsFile}" >&2; exit 1; }
+          '';
+          content = lib.concatMapStringsSep "\n" (v: "${v}=$KEY") k.consumerEnv;
+        })
+      ) rendered;
+
+      # The env file reaches its consumers from here rather than from each
+      # stack, so declaring a key is one edit — and so a stack never reads
+      # the path back out of `config`.
+      virtualisation.oci-containers.containers = lib.mkMerge (
+        lib.concatLists (
+          lib.mapAttrsToList (
+            _: k: map (c: { ${c}.environmentFiles = [ k.envFile ]; }) k.consumers
+          ) rendered
+        )
+      );
+
+      # A failed convergence is silent otherwise: the consumers keep
+      # working with the key they already hold, and the gateway quietly
+      # does not know about the ones it should.
+      fleet.monitoredJobs."litellm-keys-sync" = { };
+    })
+  ];
 }
