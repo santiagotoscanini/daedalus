@@ -127,6 +127,33 @@
       },
       "notes": {}
     },
+    "hermes": {
+      "stage": "lab",
+      "postgres": true,
+      "storage": false,
+      "litellm": true,
+      "prometheus": false,
+      "deploy": {
+        "enable": true
+      },
+      "image": null,
+      "hostname": null,
+      "egress": null,
+      "env": [],
+      "auth": {
+        "mode": "native",
+        "healthPath": "/api/healthz"
+      },
+      "presentation": {
+        "description": "Hermes — smart reader: RSS with AI TL;DRs, an opinions library, and a Hacker News lens."
+      },
+      "resources": {
+        "cpus": null,
+        "memoryMb": null,
+        "pids": null
+      },
+      "notes": {}
+    },
     "iris": {
       "stage": "live",
       "postgres": true,
