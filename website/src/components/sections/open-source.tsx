@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { GitHubLogo } from "~/components/icons";
 import { Labyrinth } from "~/components/labyrinth";
@@ -51,9 +52,9 @@ export function OpenSource() {
               <GitHubLogo size={15} />
               View on GitHub
             </a>
-            <a href={`${REPO}/tree/main/docs`} className="btn btn-ghost h-11 px-5">
+            <Link to="/docs" className="btn btn-ghost h-11 px-5">
               Read the docs
-            </a>
+            </Link>
           </div>
         </Reveal>
         <Reveal delay={0.14}>

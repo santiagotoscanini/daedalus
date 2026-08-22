@@ -58,6 +58,7 @@ match. The craftsman, not the labyrinth.
 | [Secrets](docs/secrets.md) | The two secret classes, sops recipients, rotation. |
 | [Adding a stack](docs/adding-a-stack.md) | Declaring a new self-hosted service. |
 | [Disaster recovery](docs/recovery.md) | Rebuilding the box from this repo and a key. |
+| [External setup](https://daedalus.toscanini.me/docs) | Everything configured outside the repo: Cloudflare, the router, VPN keys, GitHub, mail, key custody. Source: [`website/src/routes/docs.tsx`](website/src/routes/docs.tsx). |
 | [`CLAUDE.md`](CLAUDE.md) | The operator manual: hard rules, the `fleet.*` module system, cross-cutting gotchas, the debugging protocol, and the decisions that are settled. |
 | [`AUTH.md`](AUTH.md) | The per-service SSO migration plan. |
 | [`FUTURE.md`](FUTURE.md) | Deferred work and open follow-ups. |

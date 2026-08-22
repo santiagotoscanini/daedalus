@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { AppDemo } from "~/components/demo/demo-window";
 import { HeroLabyrinth } from "~/components/hero/hero-labyrinth";
 import { GitHubLogo } from "~/components/icons";
@@ -43,9 +44,9 @@ export function Hero() {
             <GitHubLogo size={15} />
             View on GitHub
           </a>
-          <a href={`${REPO}/tree/main/docs`} className="btn btn-ghost h-11 px-5">
+          <Link to="/docs" className="btn btn-ghost h-11 px-5">
             Read the docs
-          </a>
+          </Link>
         </div>
         <p className="rise rise-3 mt-7 font-mono text-[11px] tracking-wide text-[#8f8f99]">
           push to main · live in minutes · nothing leaves the house
