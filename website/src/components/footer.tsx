@@ -26,9 +26,9 @@ export function Footer() {
               </a>
             </li>
             <li>
-              <a href={`${REPO}/tree/main/docs`} className="transition-colors hover:text-fg">
+              <Link to="/docs" className="transition-colors hover:text-fg">
                 Docs
-              </a>
+              </Link>
             </li>
             <li>
               <a
