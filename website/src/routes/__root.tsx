@@ -8,9 +8,9 @@ import { Nav } from "~/components/nav";
 import stylesCss from "../styles.css?url";
 
 const SITE_URL = "https://daedalus.toscanini.me";
-const TITLE = "Daedalus — a home server manager";
+const TITLE = "Daedalus — build yourself a cloud";
 const DESCRIPTION =
-  "Daedalus is an open-source home server manager: one app declares, deploys and watches everything on the box, with NixOS as the reproducible backend.";
+  "Daedalus is an open-source personal cloud platform: push-to-deploy, managed Postgres, single sign-on, monitoring and backups on one box you own — your own Vercel, your own AWS, with NixOS as the reproducible backend.";
 
 export const Route = createRootRoute({
   head: () => ({

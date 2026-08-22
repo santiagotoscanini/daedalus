@@ -5,6 +5,7 @@ import { FEATURES } from "~/components/sections/features";
 import { Loop } from "~/components/sections/loop";
 import { OpenSource } from "~/components/sections/open-source";
 import { Principles } from "~/components/sections/principles";
+import { RentedCloud } from "~/components/sections/rented-cloud";
 import { SectionHeading } from "~/components/ui/section-heading";
 
 export const Route = createFileRoute("/")({
@@ -16,13 +17,13 @@ function Landing() {
     <main id="main">
       <Hero />
       <div className="divider mx-auto max-w-4xl" aria-hidden />
-      <Loop />
+      <RentedCloud />
       <section id="features" className="scroll-mt-28 py-16">
         <div className="mx-auto max-w-6xl px-6">
           <SectionHeading
-            kicker="What it does"
+            kicker="The pages"
             title="One app runs the box."
-            sub="Deploys, monitoring, isolation, recovery — each one a view in daedalus, each one backed by the same declared truth."
+            sub="Deploys, monitoring, updates, the whole fleet — each a page in daedalus, each backed by the same declared truth."
           />
           <div className="mt-24 flex flex-col gap-36">
             {FEATURES.map((f, i) => (
@@ -32,6 +33,7 @@ function Landing() {
         </div>
       </section>
       <div className="divider mx-auto max-w-4xl" aria-hidden />
+      <Loop />
       <Principles />
       <OpenSource />
     </main>

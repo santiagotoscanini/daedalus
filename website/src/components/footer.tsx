@@ -13,7 +13,8 @@ export function Footer() {
             <span className="text-[15px] tracking-tight">daedalus</span>
           </div>
           <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-muted">
-            Daedalus — a home server manager. NixOS is the backend that keeps it reproducible.
+            Daedalus — a cloud of your own, on one box. NixOS is the backend that keeps it
+            reproducible.
           </p>
         </div>
         <nav aria-label="Project">
@@ -50,6 +51,16 @@ export function Footer() {
         <nav aria-label="Site">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">Site</p>
           <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
+            <li>
+              <Link to="/" hash="cloud" className="transition-colors hover:text-fg">
+                The idea
+              </Link>
+            </li>
+            <li>
+              <Link to="/" hash="features" className="transition-colors hover:text-fg">
+                The pages
+              </Link>
+            </li>
             <li>
               <Link to="/" hash="loop" className="transition-colors hover:text-fg">
                 How it works

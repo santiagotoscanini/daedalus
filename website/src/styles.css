@@ -200,30 +200,6 @@ html {
   pointer-events: none;
 }
 
-/* Pointer-tracking highlight, dialed way down — a hint, not a flashlight. */
-.spotlight::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(
-    420px circle at var(--mx, 50%) var(--my, 50%),
-    rgba(226, 121, 90, 0.05),
-    transparent 70%
-  );
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  pointer-events: none;
-}
-.spotlight:hover::after {
-  opacity: 1;
-}
-@media (prefers-reduced-motion: reduce) {
-  .spotlight::after {
-    display: none;
-  }
-}
-
 /* ---------------------------------------------------------------- *
  * Small pieces
  * ---------------------------------------------------------------- */
@@ -287,38 +263,101 @@ html {
   background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(226, 121, 90, 0.18), transparent 70%);
 }
 
-/* The pipeline wire behind the apply-flow cards: a hairline the cards sit
- * on, with an ember pulse travelling left → right. */
-.pipeline-wire {
-  position: absolute;
-  left: 2%;
-  right: 2%;
-  top: 2.05rem;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.07);
+/* The commit thread in the apply-flow section: one unbroken vertical
+ * hairline with an ember pulse walking it top to bottom. */
+.thread-rail {
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 255, 255, 0.1) 8%,
+    rgba(255, 255, 255, 0.1) 92%,
+    transparent
+  );
   overflow: hidden;
 }
-.pipeline-wire::after {
+.thread-rail::after {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 140px;
-  background: linear-gradient(90deg, transparent, rgba(226, 121, 90, 0.9), transparent);
-  animation: wire-pulse 5s linear infinite;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(180deg, transparent, rgba(226, 121, 90, 0.9), transparent);
+  animation: thread-pulse 6s linear infinite;
 }
-@keyframes wire-pulse {
+@keyframes thread-pulse {
   from {
-    left: -140px;
+    top: -120px;
   }
   to {
-    left: 100%;
+    top: 100%;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pipeline-wire::after {
+  .thread-rail::after {
     animation: none;
     opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- *
+ * Demo windows — hand-authored views of the app on a fixed 1280×800
+ * canvas, scaled to fit. Stepped fallbacks keep the prerendered HTML
+ * roughly right with no JS; the @supports branch is exact; a
+ * ResizeObserver (use-fit-scale.ts) refines it live.
+ * ---------------------------------------------------------------- */
+
+.demo-fit {
+  container-type: inline-size;
+  background: var(--color-panel);
+  --demo-scale: 0.27;
+}
+@media (min-width: 640px) {
+  .demo-fit {
+    --demo-scale: 0.4625;
+  }
+}
+@media (min-width: 768px) {
+  .demo-fit {
+    --demo-scale: 0.5625;
+  }
+}
+@media (min-width: 1024px) {
+  .demo-fit {
+    --demo-scale: 0.7625;
+  }
+}
+@media (min-width: 1152px) {
+  .demo-fit {
+    --demo-scale: 0.8625;
+  }
+}
+@supports (opacity: calc(100cqw / 1280px)) {
+  .demo-fit {
+    --demo-scale: calc(100cqw / 1280px);
+  }
+}
+.demo-canvas {
+  transform: translate(-50%, -50%) scale(var(--demo-scale));
+}
+
+/* Status dots inside the demo breathe — life signs, frozen under
+ * reduced motion. */
+@keyframes demo-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.demo-dot-pulse {
+  animation: demo-pulse 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-dot-pulse {
+    animation: none;
   }
 }
 
@@ -371,7 +410,7 @@ html {
 /* Ember gradient text, from the labyrinth's own light: hot near-white at
  * the tip cooling into the deep terracotta of the mark. */
 .text-gradient-ember {
-  background: linear-gradient(100deg, #fdf3ef 0%, #f0a58b 40%, #e2795a 75%, #c65f41 100%);
+  background: linear-gradient(100deg, #fdf3ef 0%, #f5b8a2 45%, #e88a6c 80%, #e2795a 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

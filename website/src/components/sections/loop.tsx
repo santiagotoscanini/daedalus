@@ -1,34 +1,37 @@
 import { Reveal } from "~/components/reveal";
 import { SectionHeading } from "~/components/ui/section-heading";
-import { SpotlightCard } from "~/components/ui/spotlight-card";
+
+/** The apply flow, set as what it literally is: a commit trail. Five
+ * stations on one unbroken vertical thread — no card grid, the git-log
+ * form IS the section's argument. */
 
 const STEPS = [
   {
-    n: "01",
+    hash: "e21c04f",
     title: "Change",
     body: "Flip a setting in the UI. The database is the working copy.",
     color: "#4493f8",
   },
   {
-    n: "02",
+    hash: "9b7d3a1",
     title: "Export",
     body: "The registry renders to a committed JSON contract.",
     color: "#a78bfa",
   },
   {
-    n: "03",
+    hash: "f04e88d",
     title: "Rebuild",
     body: "NixOS converges the whole machine to the new declaration.",
     color: "#e2795a",
   },
   {
-    n: "04",
+    hash: "c5a9612",
     title: "Verify",
     body: "A failed rebuild reverts itself. The bad state never lands.",
     color: "#d9a441",
   },
   {
-    n: "05",
+    hash: "77b0cde",
     title: "Push",
     body: "The commit names who changed what, and why. Forever.",
     color: "#4ea87a",
@@ -44,28 +47,39 @@ export function Loop() {
           title="Every change is a commit."
           sub="Nothing reaches into the running system. A change in the UI becomes a contract, a commit and a rebuild — or it becomes nothing at all."
         />
-        <div className="relative mt-16">
-          {/* The wire the five stages hang on — an ember pulse runs the flow
-              left to right. Visible only in the gaps between cards. */}
-          <div className="pipeline-wire hidden lg:block" aria-hidden />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+
+        <div className="relative mx-auto mt-16 max-w-xl">
+          {/* The thread: one unbroken line the five commits hang on, with an
+              ember pulse walking it top to bottom. */}
+          <div className="thread-rail absolute bottom-3 left-[5px] top-3" aria-hidden />
+
+          <ol className="space-y-10">
             {STEPS.map((s, i) => (
-              <Reveal key={s.n} delay={i * 0.05}>
-                <SpotlightCard className="card h-full p-5 transition-[transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-white/[0.12]">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[11px] text-dim">{s.n}</span>
-                    <span
-                      className="size-1.5 rounded-full"
-                      style={{ background: s.color, boxShadow: `0 0 10px ${s.color}80` }}
-                      aria-hidden
-                    />
+              <li key={s.hash} className="relative pl-10">
+                {/* The commit dot, seated on the thread. A direct child of
+                    the li — inside Reveal, the reveal transform would
+                    change its containing block and pull it off the rail. */}
+                <span
+                  className="absolute left-0 top-[5px] block size-[11px] rounded-full border-2 bg-app"
+                  style={{ borderColor: s.color, boxShadow: `0 0 12px ${s.color}66` }}
+                  aria-hidden
+                />
+                <Reveal delay={i * 0.05}>
+                  <div className="flex flex-wrap items-baseline gap-x-3">
+                    <span className="font-mono text-[12px] text-dim">{s.hash}</span>
+                    <h3 className="text-[16px] font-medium">{s.title}</h3>
                   </div>
-                  <h3 className="mt-5 text-[15px] font-medium">{s.title}</h3>
-                  <p className="mt-2 text-[13px] leading-relaxed text-muted">{s.body}</p>
-                </SpotlightCard>
-              </Reveal>
+                  <p className="mt-1.5 text-[14px] leading-relaxed text-muted">{s.body}</p>
+                </Reveal>
+              </li>
             ))}
-          </div>
+          </ol>
+
+          <Reveal delay={0.3}>
+            <p className="mt-12 pl-10 font-mono text-[11px] tracking-wide text-dim">
+              git log --oneline · the whole machine, every change, forever
+            </p>
+          </Reveal>
         </div>
       </div>
     </section>

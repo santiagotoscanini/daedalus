@@ -8,8 +8,9 @@ const REPO = "https://github.com/santiagotoscanini/daedalus";
 // from ANY page a future route might add — a bare hash elsewhere points at
 // nothing and goes nowhere.
 const links = [
+  { label: "The idea", hash: "cloud" },
+  { label: "The pages", hash: "features" },
   { label: "How it works", hash: "loop" },
-  { label: "Principles", hash: "principles" },
 ];
 
 /** Floating nav: a detached, rounded, blurred bar inset from the top —

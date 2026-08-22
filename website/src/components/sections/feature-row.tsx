@@ -1,21 +1,23 @@
+import { DemoWindow } from "~/components/demo/demo-window";
 import { Reveal } from "~/components/reveal";
 import type { Feature } from "~/components/sections/features";
-import { ScreenshotFrame } from "~/components/ui/screenshot-frame";
 
-/** One alternating feature row: copy on one side, the view's screenshot slot
- * on the other. Still — the frame doesn't chase the pointer. */
+/** One alternating feature row: copy on one side, that page of the app —
+ * hand-rebuilt, not screenshotted — on the other. */
 export function FeatureRow({ feature, flip }: { feature: Feature; flip: boolean }) {
   return (
     <div
       id={feature.id}
-      className="grid scroll-mt-28 items-center gap-12 lg:grid-cols-[2fr_3fr] lg:gap-20"
+      className={`grid scroll-mt-28 items-center gap-12 lg:gap-20 ${
+        flip ? "lg:grid-cols-[3fr_2fr]" : "lg:grid-cols-[2fr_3fr]"
+      }`}
     >
       <Reveal className={flip ? "lg:order-2" : ""}>
         <p
           className="font-mono text-[11px] uppercase tracking-[0.18em]"
           style={{ color: feature.color }}
         >
-          {feature.view}
+          {feature.kicker}
         </p>
         <h3 className="mt-4 text-balance text-[1.75rem] font-semibold leading-[1.15] tracking-[-0.02em]">
           {feature.title}
@@ -23,7 +25,7 @@ export function FeatureRow({ feature, flip }: { feature: Feature; flip: boolean 
         <p className="mt-4 text-pretty text-[15px] leading-relaxed text-muted">{feature.body}</p>
       </Reveal>
       <Reveal delay={0.08} className={flip ? "lg:order-1" : ""}>
-        <ScreenshotFrame view={feature.view} />
+        <DemoWindow view={feature.view} />
       </Reveal>
     </div>
   );
