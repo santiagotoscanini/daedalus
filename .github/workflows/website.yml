@@ -64,7 +64,10 @@ jobs:
       - name: Assert prerendered pages
         run: |
           test -f dist/client/index.html
-          grep -q "declared, not administered" dist/client/index.html
+          # The hero headline — proves the page actually prerendered, not
+          # just an empty shell. Update alongside any hero rewrite.
+          grep -q "Build yourself" dist/client/index.html
+          grep -q "a cloud." dist/client/index.html
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
