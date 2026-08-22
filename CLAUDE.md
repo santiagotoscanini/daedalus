@@ -10,7 +10,7 @@ touch matching files (module-system for any `.nix`, zfs-storage,
 traefik-publishing, pihole-dns, monitoring, secrets-sops, vpn-netns,
 apps-platform, daedalus-app). Recurring workflows are skills —
 `/rebuild`, `/triage`, `/rotate-secret`, `/add-stack`,
-`/update-images`, `/log-audit`. Each module's header comment is the
+`/update-images`, `/log-audit`, `/new-app`. Each module's header comment is the
 canonical doc for its own stack.
 
 ## ⛔ Hard rules
@@ -272,7 +272,7 @@ Consequences that are easy to get wrong:
 │   ├── settings.local.json        # per-machine accumulation (gitignored)
 │   ├── hooks/                     # bash-guard.sh (PreToolUse enforcement) + its test suite
 │   ├── rules/                     # path-scoped context — loads when you touch matching files
-│   ├── skills/                    # workflows: rebuild, triage, rotate-secret, add-stack, update-images, log-audit
+│   ├── skills/                    # workflows: rebuild, triage, rotate-secret, add-stack, update-images, log-audit, new-app
 │   ├── agents/                    # subagents (nix-reviewer)
 │   └── mcp.json.sops              # encrypted source of .mcp.json
 ├── .mcp.json                      # SYMLINK to /run/secrets, made at activation (gitignored)
