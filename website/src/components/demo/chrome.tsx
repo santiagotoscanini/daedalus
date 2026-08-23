@@ -5,6 +5,8 @@
 
 import type { ReactNode } from "react";
 
+import { AppMark, hasAppMark } from "./app-marks";
+
 export const APP = {
   bg: "#08080a",
   rail: "#0b0b0d",
@@ -99,8 +101,12 @@ export function Spark({
   );
 }
 
-/** The monogram tile the app falls back to when an app ships no icon. */
+/** An app's icon in the list: its own mark when it ships one, and the
+ * generated monogram when it does not — the same order daedalus resolves
+ * them in, where the monogram is the fallback rather than the norm. */
 export function AppTile({ name, size = 22 }: { name: string; size?: number }) {
+  if (hasAppMark(name)) return <AppMark name={name} size={size} />;
+
   let hash = 0;
   for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
   return (
