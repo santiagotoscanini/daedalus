@@ -415,3 +415,47 @@ html {
   background-clip: text;
   color: transparent;
 }
+
+/* The hero's cycling vendor name. Flat ember, deliberately NOT the gradient
+ * the other headings use.
+ *
+ * A background clipped to text is sized to that text, so the gradient's
+ * stops land wherever the word happens to end. That is fine for a heading
+ * that never changes, and wrong here: this word grows a character at a
+ * time, so the ramp rescales on every keystroke and the name visibly
+ * shifts colour as it types. A single "A" samples the entire sweep and
+ * comes out muddy brown. One flat tone holds still. */
+.text-ember-word {
+  color: #f5b8a2;
+}
+
+/* The hero's typing caret. A block rather than a bar, to read as a
+ * terminal cursor next to the vendor name. Its colour is set here and not
+ * inherited: the heading beside it is gradient text, whose `color` is
+ * transparent. Steps(1) so it snaps rather than fades — a caret that
+ * cross-fades reads as a rendering fault rather than a cursor. */
+.type-caret {
+  display: inline-block;
+  width: 0.09em;
+  height: 0.82em;
+  background: #f5b8a2;
+  animation: caret-blink 1.05s steps(1) infinite;
+}
+@keyframes caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+/* Reduced motion stops the cycle in `vendor-cycle.tsx`, so a blinking
+ * caret beside a word that never changes would be motion for its own
+ * sake. Hold it solid. */
+@media (prefers-reduced-motion: reduce) {
+  .type-caret {
+    animation: none;
+  }
+}
