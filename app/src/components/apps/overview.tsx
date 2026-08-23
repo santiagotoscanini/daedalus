@@ -129,7 +129,7 @@ export function Overview({
       </StatStrip>
 
       <p className="strip-foot">
-        CPU and memory come from cgroup v2 at 60-second resolution — memory is{' '}
+        CPU and memory come from cgroup v2 at 60-second resolution. Memory is{' '}
         <code>memory.current</code>, which counts page cache, so an app doing file I/O sits at its
         limit and is fine. The signal that a cap is too tight is the OOM counter moving.
       </p>
@@ -158,7 +158,7 @@ export function Overview({
               },
               {
                 k: 'auto-deploy',
-                v: app.sourceMode === 'local' ? 'n/a — source is live' : 'every 2 min',
+                v: app.sourceMode === 'local' ? 'n/a, source is live' : 'every 2 min',
               },
               ...(lastDeploy
                 ? [
@@ -180,7 +180,7 @@ export function Overview({
                 ? [
                     {
                       k: 'pulls',
-                      v: <span className="bad-text">failing — check the registry</span>,
+                      v: <span className="bad-text">failing, check the registry</span>,
                     },
                   ]
                 : []),

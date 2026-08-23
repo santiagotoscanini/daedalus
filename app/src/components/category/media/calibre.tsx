@@ -28,7 +28,7 @@ export function CalibreView({ d }: { d: Calibre }) {
         version={calibre.version}
         versionNote="from the tag the flake pins"
         verdict={verdictOf(calibre.gap)}
-        compare={compareOf(calibre.gap, 'the image tag — the app serves no version')}
+        compare={compareOf(calibre.gap, 'the image tag, since the app serves no version')}
         lede={
           <>
             The shelf itself: Calibre-Web-Automated ingests whatever lands in{' '}
@@ -49,8 +49,8 @@ export function CalibreView({ d }: { d: Calibre }) {
             ]}
           />
           <p className="board-foot">
-            Read through the OPDS catalogue with its own credentials — the same endpoint an e-reader
-            uses, which is also the one path on this app that skips the Pocket ID gate.
+            Read through the OPDS catalogue with its own credentials, the same endpoint an e-reader
+            uses. It is the one path on this app that skips the Pocket ID gate.
           </p>
         </Board>
 

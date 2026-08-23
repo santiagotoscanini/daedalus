@@ -136,7 +136,7 @@ export function Database({
 
       <p className="strip-foot">
         Everything here comes from <code>postgres_exporter</code> on the shared cluster. There is no
-        table list or query log because daedalus has no connection to this database — its own role
+        table list or query log because daedalus has no connection to this database: its own role
         can only reach <code>daedalus</code>, and that separation is worth more than the panel would
         be.
       </p>

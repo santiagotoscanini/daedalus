@@ -129,7 +129,7 @@ export function UpdatesView() {
                     ))}
                   </div>
                   <p className="mt-[9px] text-[12px] leading-snug" style={{ color: APP.muted }}>
-                    10.11 — transcode pipeline rework, HDR tone-mapping fixes, trickplay on by
+                    10.11: transcode pipeline rework, HDR tone-mapping fixes, trickplay on by
                     default. Two point releases since; no breaking config changes.
                   </p>
                   <div className="mt-[10px] flex items-center gap-[10px]">
@@ -140,7 +140,7 @@ export function UpdatesView() {
                       Update to 10.11.1
                     </span>
                     <span className="text-[11.5px]" style={{ color: APP.dim }}>
-                      resolve · pre-pull · commit · rebuild · verify — reverts if it doesn't come
+                      resolve · pre-pull · commit · rebuild · verify · revert if it doesn't come
                       back
                     </span>
                   </div>

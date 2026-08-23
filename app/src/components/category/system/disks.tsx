@@ -54,12 +54,12 @@ const SEAGATE_CLASSES: Record<string, { line: string; note: string }> = {
   NE: { line: 'IronWolf Pro', note: 'NAS, rated 300 TB/year of reads and writes' },
   NT: {
     line: 'IronWolf Pro',
-    note: 'NAS, rated 500 TB/year — the same label as NE, a higher limit',
+    note: 'NAS, rated 500 TB/year. Same label as NE, higher limit.',
   },
   VN: { line: 'IronWolf', note: 'NAS, rated 180 TB/year' },
   NM: { line: 'Exos', note: 'enterprise, rated 550 TB/year' },
-  VX: { line: 'SkyHawk', note: 'surveillance — tuned for many sequential write streams' },
-  DM: { line: 'BarraCuda', note: 'desktop — no NAS vibration handling, no workload rating' },
+  VX: { line: 'SkyHawk', note: 'surveillance, tuned for many sequential write streams' },
+  DM: { line: 'BarraCuda', note: 'desktop, with no vibration handling and no workload rating' },
 }
 
 /**
@@ -156,7 +156,7 @@ function decodeSeagate(model: string | null): Segment[] | null {
       key: 'capacity',
       text: gb ?? '',
       label: `${tb % 1 === 0 ? tb.toFixed(0) : tb.toFixed(1)} TB`,
-      note: 'Capacity in gigabytes, decimal — which is why the operating system reports less.',
+      note: 'Capacity in gigabytes, decimal, which is why the operating system reports less.',
     },
     {
       key: 'class',
@@ -170,7 +170,7 @@ function decodeSeagate(model: string | null): Segment[] | null {
       key: 'variant',
       text: variant ?? '',
       label: 'variant',
-      note: 'The generation within that line — platter count, cache and internal design. Two drives differing only here are the same product bought a year apart.',
+      note: 'The generation within that line: platter count, cache and internal design. Two drives differing only here are the same product bought a year apart.',
     },
   ]
   if (suffix !== undefined) {
@@ -192,7 +192,7 @@ export function DisksView({ d }: { d: Disks }) {
       {d.disks.length === 0 && (
         <Board title="Disks" icon="grid" span={12}>
           <p className="viz-empty">
-            No snapshot yet — the host reader has not run, or could not read SMART.
+            No snapshot yet. The host reader has not run, or could not read SMART.
           </p>
         </Board>
       )}
@@ -310,10 +310,10 @@ export function DisksView({ d }: { d: Disks }) {
             {!nvme && (disk.crcErrors ?? 0) > 0 && (
               // The distinction that decides what you'd actually do about it.
               <p className="board-foot text-warn">
-                A link CRC error is the <em>cable</em>, not the platter — a transfer that had to be
+                A link CRC error is the <em>cable</em>, not the platter: a transfer that had to be
                 retried between the controller and the drive. It never decrements, so this is a
-                lifetime count and a stable one is nothing; a climbing one means reseating a SATA
-                cable, not replacing a disk.
+                lifetime count. A stable one is nothing. A climbing one means reseating a SATA
+                cable.
               </p>
             )}
 
@@ -357,9 +357,8 @@ export function DisksView({ d }: { d: Disks }) {
             {failedTest !== undefined && (
               <p className="board-foot text-warn">
                 The most recent <b>{failedTest.type ?? 'test'}</b> did not finish:{' '}
-                {failedTest.status ?? 'unknown'}. An interrupted test is not a failing disk — a host
-                reset or a power event ends one — but it does mean that scheduled check did not
-                actually verify anything.
+                {failedTest.status ?? 'unknown'}. An interrupted test is not a failing disk; a host
+                reset or a power event ends one. It does mean that scheduled check verified nothing.
               </p>
             )}
           </Board>
@@ -385,7 +384,7 @@ export function DisksView({ d }: { d: Disks }) {
           ]}
         />
         <p className="board-foot">
-          Autodetected across every disk, with no per-drive configuration — the schedule is one
+          Autodetected across every disk, with no per-drive configuration: the schedule is one
           string in <span className="mono">platform/smartd.nix</span>. A drive that reports
           pre-failure sends mail, wired in <span className="mono">platform/mail</span>. The results
           above are read back off each drive&rsquo;s own log rather than from that schedule, so a

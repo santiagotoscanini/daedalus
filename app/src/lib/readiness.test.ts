@@ -187,7 +187,7 @@ describe('readiness — warns are not blockers', () => {
 describe('readiness — a failing precondition outranks the image', () => {
   const noSecret: Check[] = allGood.map((c) =>
     c.id === 'registry-secret'
-      ? { ...c, state: 'bad' as const, detail: 'not set — the image push will 401' }
+      ? { ...c, state: 'bad' as const, detail: 'not set, so the image push will 401' }
       : c,
   )
   const r = readiness({ checks: noSecret, imageState: 'missing', effectiveImage: IMAGE })

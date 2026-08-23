@@ -67,8 +67,8 @@ export function IdpView({ d }: { d: IdpData }) {
         ]}
         lede={
           <>
-            Passkeys only — there is no password on this box to guess, phish or reuse. Every admin
-            UI either sits behind it at the proxy or signs in against it directly, so a single
+            Passkeys only. There is no password on this box to guess, phish or reuse. Every admin UI
+            either sits behind it at the proxy or signs in against it directly, so a single
             authentication here is what opens all of them for the day.
           </>
         }
@@ -142,14 +142,13 @@ export function IdpView({ d }: { d: IdpData }) {
                   the pair is declared, and the module that declares it says
                   why. Reading a coincidence as a defect is worse than not
                   noticing it. */}
-              <b>{num(shared.length)}</b> registrations answer for one hostname —{' '}
-              {[...new Set(shared.map((c) => c.host ?? c.name))].join(', ')} — and that is a design
-              rather than a leftover: the proxy gate and the app&rsquo;s own login are different
-              consumers with different callbacks, and one client cannot hold both, because the
-              generated one would overwrite the hand-written callbacks on every rebuild. Each of the
-              pair says which it is. What is genuinely lost is attribution — both carry the same
-              display name and the audit log records only the name, so one count covers the pair and
-              cannot be split.
+              <b>{num(shared.length)}</b> registrations answer for one hostname (
+              {[...new Set(shared.map((c) => c.host ?? c.name))].join(', ')}), by design rather than
+              as a leftover: the proxy gate and the app&rsquo;s own login are different consumers
+              with different callbacks, and one client cannot hold both, because the generated one
+              would overwrite the hand-written callbacks on every rebuild. Each of the pair says
+              which it is. What is lost is attribution: both carry the same display name and the
+              audit log records only the name, so one count covers the pair and cannot be split.
             </p>
           )}
 
@@ -159,9 +158,9 @@ export function IdpView({ d }: { d: IdpData }) {
             <b>{num(w.authorizations)} applications opened</b> is{' '}
             {num(w.authorizations - w.signIns)} logins that did not have to happen. The list is
             ordered by when each was last used rather than by volume, so the five above are the
-            recent activity and the {num(idle)} nobody opened at all sit at the end of the full one
-            — which for a proxy-gated app means nobody visited it, not that the registration is
-            dead. Open a row for who went in and from what; the full log is in Pocket ID. A{' '}
+            recent activity and the {num(idle)} nobody opened at all sit at the end of the full one.
+            For a proxy-gated app that means nobody visited it, not that the registration is dead.
+            Open a row for who went in and from what; the full log is in Pocket ID. A{' '}
             <b>re-consent</b> is not a first use: rewriting a client drops its stored consent, and
             the convergence job rewrites every one of them on every rebuild, so these mark where a
             rebuild made everybody agree again.
@@ -192,7 +191,7 @@ export function IdpView({ d }: { d: IdpData }) {
         >
           {!d.nix.available ? (
             <p className="viz-empty">
-              /export/sso.json is not published — the declared side of the diff is missing, so
+              /export/sso.json is not published, so the declared side of the diff is missing and
               nothing here can be called an orphan yet.
             </p>
           ) : d.nix.orphans.length === 0 && d.nix.unsynced.length === 0 ? (
@@ -223,12 +222,12 @@ export function IdpView({ d }: { d: IdpData }) {
           <p className="board-foot">
             <span className="mono">pocket-id-clients.service</span> converges every{' '}
             <span className="mono">fleet.ssoClients</span> entry on each rebuild but{' '}
-            <b>never deletes</b>, so an <b>orphan</b> is a client whose declaring stack is gone —
-            still a trusted set of redirect URIs, still accepting logins, removable only by hand in
-            Pocket ID. <b>Not synced</b> is the other direction and usually transient: a declaration
-            the convergence job has not pushed yet, or a sync that failed — its journal is in the
-            Logs board below. Matched on the client id, because the nix attr name IS the OIDC{' '}
-            <span className="mono">client_id</span>.
+            <b>never deletes</b>, so an <b>orphan</b> is a client whose declaring stack is gone. It
+            still holds trusted redirect URIs and still accepts logins, and only a hand edit in
+            Pocket ID removes it. <b>Not synced</b> is the other direction and usually transient: a
+            declaration the convergence job has not pushed yet, or a sync that failed. Its journal
+            is in the Logs board below. Matched on the client id, because the nix attr name IS the
+            OIDC <span className="mono">client_id</span>.
           </p>
         </Board>
 
@@ -245,7 +244,7 @@ export function IdpView({ d }: { d: IdpData }) {
                     on this dashboard it is visible at all. */}
                 {u.service && (
                   <Chip tone="muted">
-                    <span title="The principal behind STATIC_API_KEY — how daedalus reads this page">
+                    <span title="The principal behind STATIC_API_KEY, how daedalus reads this page">
                       api key
                     </span>
                   </Chip>
@@ -297,9 +296,8 @@ export function IdpView({ d }: { d: IdpData }) {
           <p className="board-foot">
             A group is what an application restricts itself to, so an empty one is an application
             nobody can reach through it. A passkey belongs to a device, so the devices are the
-            credentials — one appearing that you do not recognise is the thing to notice here.
-            Sign-ups are <b>{d.signups ?? 'unknown'}</b>, read back from the IdP rather than
-            restated here.
+            credentials. One you do not recognise is the thing to notice here. Sign-ups are{' '}
+            <b>{d.signups ?? 'unknown'}</b>, read back from the IdP rather than restated here.
           </p>
         </Board>
 
@@ -319,7 +317,7 @@ export function IdpView({ d }: { d: IdpData }) {
             title="pocket-id-clients"
             foot={
               <p className="board-foot">
-                A systemd oneshot on the host, not a container — journal lines rather than container
+                A systemd oneshot on the host, so these are journal lines rather than container
                 logs. Defined in <code>stacks/pocket-id/clients.nix</code>, ordered after the IdP,
                 and run on every rebuild: it upserts one OIDC client per{' '}
                 <code>fleet.ssoClients</code> entry — name, redirect URIs, allowed groups — with a
@@ -340,8 +338,8 @@ export function IdpView({ d }: { d: IdpData }) {
               <p className="board-foot">
                 The other host oneshot from the same file, and the one that runs first. It generates
                 a client secret per <code>fleet.ssoClients</code> entry into a gitignored file on
-                disk, so the credential never enters the nix store — which is also why it cannot be
-                a container: it writes host state the IdP is then told about. An app that suddenly
+                disk, so the credential never enters the nix store. That is also why it cannot be a
+                container: it writes host state the IdP is then told about. An app that suddenly
                 cannot complete a login, having been fine, is usually this having handed it a secret
                 the IdP no longer holds.
               </p>
@@ -422,7 +420,7 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
                 className="is-muted"
                 title={
                   c.role === 'gate'
-                    ? 'The credential traefik’s forward-auth middleware signs in with, before the request reaches the app at all'
+                    ? 'The credential traefik’s forward-auth middleware signs in with, before the request reaches the app'
                     : 'The credential the app itself runs its own login with'
                 }
               >
@@ -449,7 +447,7 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
           {c.opens.length === 0 ? (
             <p className="viz-empty">
               Nobody opened this in the window. For an app behind the proxy gate that means nobody
-              visited it — the registration is what the middleware itself signs in with.
+              visited it. The registration is what the middleware itself signs in with.
             </p>
           ) : (
             <ul className="itemlist">
@@ -459,7 +457,7 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
                       than it sitting below it is what gave that away. */}
                   {o.consent && (
                     <Chip tone="info">
-                      <span title="A consent record was created here rather than reused — Pocket ID drops the stored one whenever the client is rewritten, which every rebuild does">
+                      <span title="A consent record was created here rather than reused. Pocket ID drops the stored one whenever the client is rewritten, which every rebuild does">
                         re-consented
                       </span>
                     </Chip>

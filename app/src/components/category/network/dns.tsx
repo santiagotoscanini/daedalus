@@ -158,10 +158,10 @@ function ResolverView({
           <p className="board-foot">
             The names this house answers for itself instead of asking anyone. Each one is an entry
             in pi-hole’s hosts file generated from the stack that owns it, so a name gets here by
-            being declared and never by being typed into the admin — and nothing in this list can
-            outlive the thing it points at. An address is printed only when the entry points
-            somewhere other than this box. <b>public</b> marks the ones the zone publishes as well,
-            which is the same set the other side of this tab lists, seen from outside.
+            being declared and never by being typed into the admin. Nothing in this list can outlive
+            the thing it points at. An address is printed only when the entry points somewhere other
+            than this box. <b>public</b> marks the ones the zone publishes as well, which is the
+            same set the other side of this tab lists, seen from outside.
             {unserved.length === 0
               ? ' Everything pointed at this box has a traefik router behind it.'
               : ' A name marked no route resolves, then lands on the default certificate and 404s.'}
@@ -189,7 +189,7 @@ function ResolverView({
           </ul>
           <p className="board-foot">
             {num(sum)} queries in the window FTL keeps in memory. Cache and the hosts file never
-            left the box, which is the whole job — the forwarded slice is the only part any upstream
+            left the box, which is the whole job. The forwarded slice is the only part any upstream
             sees.
           </p>
 
@@ -205,8 +205,8 @@ function ResolverView({
             ))}
           </ul>
           <p className="board-foot">
-            Mean round trip, as FTL measured it — what a page load waits for on a name nobody has
-            asked for recently.
+            Mean round trip, as FTL measured it. That is what a page load waits for on a name nobody
+            has asked for recently.
           </p>
         </Board>
 
@@ -226,8 +226,8 @@ function ResolverView({
           />
           <p className="board-foot">
             The last day, busiest hour {num(busiest)}. A house at rest still asks thousands of
-            questions an hour — most of it is background chatter from devices nobody is touching,
-            which is why the cache share above is what it is.
+            questions an hour, most of it background chatter from devices nobody is touching, which
+            is why the cache share above is what it is.
           </p>
         </Board>
 
@@ -279,7 +279,7 @@ function ResolverView({
               empty="no query types reported"
             />
             <p className="board-foot">
-              A and AAAA are one question asked twice — every modern client wants both addresses at
+              A and AAAA are one question asked twice. Every modern client wants both addresses at
               once. PTR is reverse lookups, mostly this box naming its own LAN.
             </p>
           </details>
@@ -299,8 +299,8 @@ function ResolverView({
             />
             <p className="board-foot">
               Every query, with the client that asked and the domain it asked for. It is the most
-              revealing file on the machine — the argument for the admin being behind the gate
-              rather than behind a password.
+              revealing file on the machine, which is why the admin sits behind the gate rather than
+              behind a password.
             </p>
           </details>
         </Board>
@@ -313,7 +313,7 @@ function ResolverView({
           foot={
             <p className="board-foot">
               Not the journal. FTL is the one service on this box that keeps its own log file, and
-              the only journal lines about the unit come from systemd — so these are shipped out of{' '}
+              the only journal lines about the unit come from systemd, so these are shipped out of{' '}
               <span className="mono">/var/log/pihole/FTL.log</span> by alloy. Startup, gravity runs,
               DHCP leases, NTP and upstream trouble. Individual queries are not here and
               deliberately never will be: that log is two gigabytes of every domain every device in
@@ -363,7 +363,7 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
         // fact with a state: who currently holds it, and the verdict beside it
         // is how long they hold it for.
         version={reg.registrar}
-        versionNote="registrar · from the registry’s RDAP"
+        versionNote="the registrar, from the registry’s RDAP"
         verdict={expiryVerdict(reg)}
         compare={[
           { k: 'Expires', v: reg.expiresOn, note: 'renewing early does not lose the remainder' },
@@ -380,7 +380,7 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
         ]}
         lede={
           <>
-            One domain name, and every hostname on this box is a label under it — which means one
+            One domain name, and every hostname on this box is a label under it. That means one
             wildcard certificate, one tunnel, one set of OIDC redirect URIs and one expiry date. The
             zone lives at Cloudflare; the registration does not.
           </>
@@ -444,11 +444,11 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
           </ul>
           <p className="board-foot">
             The names the zone points back here. Everything else — {d.lanOnly} of them — exists only
-            in pi-hole, so the internet is told nothing about them at all and a request from outside
-            the house never gets as far as the tunnel. A name <b>answered on the LAN</b> is
+            in pi-hole, so the internet is told nothing about them and a request from outside the
+            house never gets as far as the tunnel. A name <b>answered on the LAN</b> is
             short-circuited by pi-hole, which is what keeps traffic from the sofa from going out to
             Cloudflare and back in; <b>proxied</b> means Cloudflare answers with its own address, so
-            this one is never published. The <b>tunnel</b> ones carry HTTP and only HTTP — the{' '}
+            this one is never published. The <b>tunnel</b> ones carry HTTP and only HTTP. The{' '}
             <span className="mono">this address</span> record is the WAN address itself, which is
             how anything speaking another protocol is reached and why it is deliberately not
             short-circuited.
@@ -463,21 +463,21 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
               {d.drift.publishedWithoutLan.length > 0 && (
                 <p className="board-foot">
                   <b>Published, but pi-hole does not answer for it:</b>{' '}
-                  <span className="mono">{d.drift.publishedWithoutLan.join(', ')}</span> — reachable
+                  <span className="mono">{d.drift.publishedWithoutLan.join(', ')}</span>. Reachable
                   at home only by going out to Cloudflare and back in.
                 </p>
               )}
               {d.drift.lanWithoutRoute.length > 0 && (
                 <p className="board-foot">
                   <b>pi-hole points these here and traefik has no router for them:</b>{' '}
-                  <span className="mono">{d.drift.lanWithoutRoute.join(', ')}</span> — they resolve,
+                  <span className="mono">{d.drift.lanWithoutRoute.join(', ')}</span>. They resolve,
                   then land on the default certificate and 404.
                 </p>
               )}
               {d.drift.tunnelWithoutApp.length > 0 && (
                 <p className="board-foot">
                   <b>Tunnel records with nothing behind them:</b>{' '}
-                  <span className="mono">{d.drift.tunnelWithoutApp.join(', ')}</span> — the
+                  <span className="mono">{d.drift.tunnelWithoutApp.join(', ')}</span>. The
                   reconciler only sweeps records carrying its own comment, so these were made by
                   hand and it will not remove them.
                 </p>
@@ -550,7 +550,7 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
           </details>
           <p className="board-foot">
             {reg.note ??
-              'The top half is the registry’s answer, not Cloudflare’s — the lock and the expiry live with the registrar and nothing on this box can see them. DNSSEC is read the same way: what matters is whether the parent zone holds a DS record, because until it does, nothing validates the signatures.'}
+              'The top half is the registry’s answer, not Cloudflare’s. The lock and the expiry live with the registrar, and nothing on this box can see them. DNSSEC is read the same way: what matters is whether the parent zone holds a DS record, because until it does, nothing validates the signatures.'}
           </p>
         </Board>
 
@@ -614,7 +614,7 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
             The {mailRecords} records behind this read as one policy: SPF says which servers may
             send as this domain, DKIM signs what they send, DMARC says what a receiver should do
             when neither holds. <b>quarantine</b> means spam folder rather than bounce, and{' '}
-            <b>accepted, marked</b> is an SPF ending in <span className="mono">~all</span> — a
+            <b>accepted, marked</b> is an SPF ending in <span className="mono">~all</span>, so a
             forgery is flagged rather than refused. Both are the cautious settings, and both are
             worth tightening once nothing legitimate is being caught by them. Open a domain to check
             the reading against the records it came from.
@@ -636,20 +636,20 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
           <RecordList
             records={d.elsewhere}
             summary="Pointed somewhere else"
-            note="Names in this zone served by someone other than this box — a static site host, a CDN, and the verification records those asked for."
+            note="Names in this zone served by someone other than this box: a static site host, a CDN, and the verification records those asked for."
             open
           />
           <RecordList
             records={d.leftovers}
             summary="Leftovers"
             tone="warn"
-            note="An _acme-challenge TXT is written during a certificate issuance and deleted when it finishes, so every one still in the zone belongs to an issuance that did not clean up — it proves nothing and grants nothing. Two pairs of them are also the same value entered twice, once quoted and once not."
+            note="An _acme-challenge TXT is written during a certificate issuance and deleted when it finishes, so every one still in the zone belongs to an issuance that did not clean up. It proves nothing and grants nothing. Two pairs of them are also the same value entered twice, once quoted and once not."
           />
           <RecordList
             records={d.unclassified}
             summary="Everything else"
             tone="bad"
-            note="Records none of the groups on this page claimed. The groups are rules — has an MX, is an _acme-challenge, points at the tunnel — and anything a rule set does not cover belongs here rather than nowhere."
+            note="Records none of the groups on this page claimed. The groups are rules: has an MX, is an _acme-challenge, points at the tunnel. Anything a rule set does not cover belongs here rather than nowhere."
             open
           />
 
@@ -689,8 +689,8 @@ function ZoneView({ d }: { d: Dns['zone'] }) {
           </ul>
           <p className="board-foot">
             The six most recently edited records. Cloudflare stamps every record with when it last
-            changed but keeps no history of what it changed from, so this says when — never what,
-            and never who.
+            changed but keeps no history of what it changed from, so this says when, never what and
+            never who.
           </p>
         </Board>
       </BoardGrid>

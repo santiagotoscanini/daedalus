@@ -29,13 +29,13 @@ const ZOT_NEIGHBOURS: readonly LogNeighbour[] = [
     source: { stack: 'gha-runner' },
     label: 'Actions runners',
     role: 'what pushes here',
-    note: 'Every image in this registry arrives from a self-hosted runner. An image that never appeared is a build that never finished, and that is this log rather than zot’s — zot can only report the pushes it received.',
+    note: 'Every image in this registry arrives from a self-hosted runner. An image that never appeared is a build that never finished, and that is this log rather than zot’s: zot can only report the pushes it received.',
   },
   {
     source: { unit: 'registry-config-render.service' },
     label: 'registry-config-render',
     role: 'writes the credentials zot checks',
-    note: 'A boot oneshot that renders zot’s config with its htpasswd from sops. If it fails, zot still starts and then rejects every push — the runners report an auth error and the registry log shows only the refusal.',
+    note: 'A boot oneshot that renders zot’s config with its htpasswd from sops. If it fails, zot still starts and then rejects every push. The runners report an auth error and the registry log shows only the refusal.',
   },
 ]
 
@@ -54,8 +54,8 @@ export function ImagesView({ d }: { d: ImagesData }) {
         lede={
           <>
             The box’s own container registry. Every app here is built by a runner on this machine
-            and pushed to zot, and each app’s deploy timer pulls from it every two minutes — so
-            nothing an app runs ever leaves the house.
+            and pushed to zot, and each app’s deploy timer pulls from it every two minutes. Nothing
+            an app runs ever leaves the house.
           </>
         }
         actions={
@@ -107,8 +107,8 @@ export function ImagesView({ d }: { d: ImagesData }) {
           <BarList items={d.byRepo} tone="info" empty="nothing stored" />
           <p className="board-foot">
             A <code>cache/&lt;app&gt;</code> repository is the pull-through copy of an upstream base
-            image, not something built here — which is why they usually outweigh the apps
-            themselves. Counted separately above for the same reason.
+            image, not something built here, which is why they usually outweigh the apps themselves.
+            Counted separately above for the same reason.
           </p>
         </Board>
 
@@ -206,8 +206,8 @@ export function PackagesView({ d }: { d: PackagesData }) {
         lede={
           <>
             A private npm registry, and a pull-through cache for npmjs. Every CI build on this box
-            resolves through it, which is what keeps a dependency install off the public internet
-            and fast — and what makes it the first thing to check when a build stops resolving.
+            resolves through it, which keeps a dependency install off the public internet and fast,
+            and makes it the first thing to check when a build stops resolving.
           </>
         }
         actions={
@@ -278,7 +278,7 @@ export function PackagesView({ d }: { d: PackagesData }) {
           />
           <p className="board-foot">
             A pull-through cache first: a package counts as cached the moment its manifest is
-            resolved, which is why that number leads the tarball count — resolving a dependency tree
+            resolved, which is why that number leads the tarball count: resolving a dependency tree
             records a manifest even when no tarball is ever fetched. Publishing here is opt-in and
             nothing does it yet.
           </p>
@@ -300,7 +300,7 @@ export function PackagesView({ d }: { d: PackagesData }) {
           />
           <p className="board-foot">
             The request figures above come from traefik, not from verdaccio: it publishes no
-            prometheus endpoint at all — upstream issue #1815, open since 2020 — which is also why
+            prometheus endpoint at all (upstream issue #1815, open since 2020), which is also why
             its Grafana dashboard is built out of proxy metrics.
           </p>
         </Board>

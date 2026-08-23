@@ -42,13 +42,15 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         logo="/icon-claude.svg"
         name="Claude Code"
         version={running}
-        versionNote={facts.remote.version === null ? 'from the flake' : 'running · remote control'}
+        versionNote={
+          facts.remote.version === null ? 'from the flake' : 'reported by the remote-control server'
+        }
         verdict={{ label: verdict.label, tone: verdict.tone }}
         compare={[
           {
             k: 'Server reports',
             v: facts.remote.version,
-            note: 'printed once at start — the process, not the pin',
+            note: 'printed at start by the running process, not the pin',
           },
           {
             k: 'Flake holds',
@@ -66,8 +68,8 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         ]}
         lede={
           <>
-            The always-on Remote Control server, so a session on this box can be picked up from
-            claude.ai/code or a phone at any time. It has no health endpoint of its own — every
+            The always-on Remote Control server. A session on this box can be picked up from
+            claude.ai/code or a phone at any time. It has no health endpoint of its own, so every
             number here is read from the unit, the session files and this unit's journal.
           </>
         }
@@ -92,7 +94,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           reader who has been told that can discount all of it at once. */}
       {!data.available ? (
         <p className="viz-empty">
-          The host snapshot has never been written. Nothing below is a reading —{' '}
+          The host snapshot has never been written, so nothing below is a reading.{' '}
           <span className="mono">daedalus-claude-snapshot.service</span> is what produces it.
         </p>
       ) : data.stale ? (
@@ -206,8 +208,8 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         >
           {live.length === 0 ? (
             <p className="viz-empty">
-              Nothing is connected. The server is still listening — a session appears here within a
-              minute of being started from claude.ai or the app.
+              Nothing is connected. The server is still listening, and a session appears here within
+              a minute of being started from claude.ai or the app.
             </p>
           ) : (
             <ul className="itemlist">
@@ -221,8 +223,8 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
               {num(facts.sessions.filter((s) => !s.alive).length)} session{' '}
               {facts.sessions.filter((s) => !s.alive).length === 1 ? 'file' : 'files'} in{' '}
               <span className="mono">~/.claude/sessions</span> have no process behind them. Not
-              shown above, and not an error either — a session that exits uncleanly leaves its file,
-              and the count is only worth watching if it grows without bound.
+              shown above, and not an error either: a session that exits uncleanly leaves its file.
+              The count is only worth watching if it grows without bound.
             </p>
           )}
           <p className="board-foot">
@@ -243,7 +245,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           {data.events.length === 0 ? (
             <p className="viz-empty">
               Nothing in the window. Either the server has been up and connected throughout, or its
-              journal has been rotated past — these lines are read back out of Loki.
+              journal has been rotated past. These lines are read back out of Loki.
             </p>
           ) : (
             <ul className="itemlist">
@@ -256,7 +258,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
             A <b>drop</b> is the server losing its link to Anthropic and backing off; it retries on
             an escalating ladder and the sessions survive, so a burst of these followed by a
             reconnect is the system working. Bursts landing at <span className="mono">:00</span> are
-            worth reading as the box rather than the network — myspeed runs a speedtest on the hour
+            worth reading as the box rather than the network: myspeed runs a speedtest on the hour
             and saturates the uplink for a minute or two, which is the same blackout that eats DNS
             house-wide. A <b>token refresh</b> is routine bookkeeping on a long-lived session.
           </p>
@@ -304,10 +306,10 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
               <p className="board-foot">
                 Two clocks, and only the second is a date to act on. The access token is refreshed
                 automatically about once an hour and its expiry is never the problem. The{' '}
-                <b>refresh</b> token running out is: Remote Control simply stops connecting, with no
-                other warning anywhere on this box. The fix is manual and takes a minute — SSH in,
-                run <span className="mono">claude</span> in <span className="mono">/etc/nixos</span>
-                , <span className="mono">/login</span>, then{' '}
+                <b>refresh</b> token running out is: Remote Control stops connecting, with no other
+                warning anywhere on this box. The fix is manual and takes a minute: SSH in, run{' '}
+                <span className="mono">claude</span> in <span className="mono">/etc/nixos</span>,{' '}
+                <span className="mono">/login</span>, then{' '}
                 <span className="mono">systemctl restart claude-remote-control</span>. Neither token
                 is in the snapshot this page reads; only the two dates and the plan are copied out.
               </p>
@@ -322,7 +324,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           foot={
             <p className="board-foot">
               The store binary cannot update itself, so being behind here is not a thing that
-              resolves on its own — the path is <span className="mono">nix flake update</span>, or
+              resolves on its own. The path is <span className="mono">nix flake update</span>, or
               the weekly <span className="mono">flake-autoupgrade.timer</span> that runs it. That
               bump changes this unit's ExecStart, so the switch restarts Remote Control and, with
               it, any session that was riding on it. {verdict.note}
@@ -338,7 +340,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
               The unit's whole journal, which is mostly not events: every remote session writes its
               full stream-json transcript to this same stdout, so a search here is searching
               transcripts as well as the server's own lines. The Connection board above is the
-              filtered view — the server's lines are the ones prefixed{' '}
+              filtered view: the server's lines are the ones prefixed{' '}
               <span className="mono">[HH:MM:SS]</span>, which a transcript line cannot be.
             </p>
           }

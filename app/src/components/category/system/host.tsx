@@ -76,7 +76,7 @@ function RestartControl({
             // A status file from the LAST restart says `running` forever —
             // only our own id is evidence about this request.
             if (Date.now() - request.at > PICKUP_MS) {
-              setRefusal('the host did not pick this request up — is its path unit alive?')
+              setRefusal('the host did not pick this request up. Is its path unit alive?')
               setPhase('refused')
             }
             return
@@ -135,7 +135,7 @@ function RestartControl({
       <div className="restart is-armed">
         <p className="restart-cost">
           Everything on this box stops for a couple of minutes.{' '}
-          <strong>LAN DNS goes down with it</strong> — pi-hole is this machine, so no device in the
+          <strong>LAN DNS goes down with it</strong>: pi-hole is this machine, so no device in the
           house resolves a name until it is back.{' '}
           {containers === null ? 'Every container' : `All ${num(containers)} containers`} stop and
           start again, and {duration(uptimeSeconds)} of uptime goes back to zero.
@@ -184,7 +184,7 @@ function RestartControl({
             ? 'Asking the host to restart…'
             : sawDown
               ? 'The box is down. Waiting for it to answer again…'
-              : 'Restarting — this page will stop responding shortly.'}
+              : 'Restarting. This page will stop responding shortly.'}
         </p>
         <p className="restart-note">
           Nothing will report this finished: the server goes down with the box. This is watching{' '}
@@ -325,8 +325,8 @@ export function HostView({ d }: { d: Host }) {
       >
         {d.failedUnitsList.length === 0 ? (
           <p className="viz-empty">
-            No systemd unit on the box is in the failed state — every service, timer and oneshot
-            that ran either succeeded or is still running.
+            No systemd unit on the box is in the failed state. Everything that ran either succeeded
+            or is still running.
           </p>
         ) : (
           <ul className="itemlist">
@@ -340,11 +340,11 @@ export function HostView({ d }: { d: Host }) {
           </ul>
         )}
         <p className="board-foot">
-          Named, from the host snapshot — the count in the panel above is prometheus&rsquo;s and can
+          Named, from the host snapshot. The count in the panel above is prometheus&rsquo;s and can
           lead this list by up to ten minutes. Empty is a weaker claim than it sounds on this box:
           every container unit is a green <span className="mono">Type=oneshot</span> whose container
           can die without the unit noticing, so &ldquo;no failed units&rdquo; and &ldquo;every
-          container alive&rdquo; are different questions — the second is the Containers row and its
+          container alive&rdquo; are different questions. The second is the Containers row and its
           list of who is not answering.
         </p>
       </Board>
@@ -376,7 +376,7 @@ export function HostView({ d }: { d: Host }) {
         </ul>
         <p className="board-foot">
           The rollback path: reboot and pick one from the systemd-boot menu.{' '}
-          <span className="mono">configurationLimit = 10</span> bounds that MENU — it does not prune
+          <span className="mono">configurationLimit = 10</span> bounds that MENU. It does not prune
           the profile, which is why {num(d.generations.length)} are on disk. They cost store space
           until a garbage collection runs, and nothing here schedules one.
         </p>
@@ -388,7 +388,7 @@ export function HostView({ d }: { d: Host }) {
         neighbours={HOST_READERS}
         foot={
           <p className="board-foot">
-            PID 1&rsquo;s own stream — unit starts, stops and failures for the whole box. Systemd
+            PID 1&rsquo;s own stream: unit starts, stops and failures for the whole box. Systemd
             files its &ldquo;Starting&rdquo; and &ldquo;Finished&rdquo; lines here rather than under
             the unit they are about, which is why a oneshot that succeeded looks silent in its own
             log and lands in this one.

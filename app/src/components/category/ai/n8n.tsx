@@ -51,11 +51,11 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
         version={data.version}
         versionNote="pinned in the flake"
         verdict={verdictOf(gap)}
-        compare={comparePinned(gap, 'an exact tag in stacks/n8n — bump it there')}
+        compare={comparePinned(gap, 'the exact tag in stacks/n8n')}
         lede={
           <>
             Scheduled workflows, several of which call the gateway. Nothing here runs on a person
-            being awake, which is why a failed run is worth seeing on a dashboard.
+            being awake, so a failed run is worth seeing on a dashboard.
           </>
         }
         actions={
@@ -140,10 +140,10 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           )}
 
           <p className="board-foot">
-            Counted from n8n’s own execution history, which it prunes on a schedule — so this window
-            is what n8n still holds, and an empty column early on may be forgetting rather than
-            silence. A day that saw a failure is underlined in red; the stack trace is behind the
-            Executions tab.
+            Counted from n8n’s own execution history, which it prunes on a schedule, so this window
+            is what n8n still holds. An empty column early on may be forgetting rather than silence.
+            A day that saw a failure is underlined in red; the stack trace is behind the Executions
+            tab.
             {data.partial &&
               ' There were more executions than this fetched, so these are a lower bound.'}
           </p>
@@ -194,12 +194,12 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
                 schedule actually runs. None of them produces an error. */}
             Everything that ran in the window, plus everything switched on that should have.{' '}
             <b>stalled</b> kept a cadence and has since missed more than two of them;{' '}
-            <b>never run</b> is on and has not fired at all; <b>unpublished</b> has been edited
-            since it was last published, so the runs above it are the old version — that one is why
-            &ldquo;I changed it and nothing happened&rdquo;. <b>off</b> is switched off and explains
-            the silence rather than reporting it.
+            <b>never run</b> is on and has not fired; <b>unpublished</b> has been edited since it
+            was last published, so the runs above it are the old version. That one is why &ldquo;I
+            changed it and nothing happened&rdquo;. <b>off</b> is switched off and explains the
+            silence rather than reporting it.
             {data.archived > 0 &&
-              ` ${String(data.archived)} archived workflow${data.archived === 1 ? '' : 's'} are left out — they cannot run.`}
+              ` ${String(data.archived)} archived workflow${data.archived === 1 ? '' : 's'} are left out, because they cannot run.`}
             {data.nameNote !== null && ` ${data.nameNote}`}
           </p>
         </Board>

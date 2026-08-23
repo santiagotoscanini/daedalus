@@ -16,7 +16,7 @@ export const DEMO_VIEWS: Array<{ id: DemoView; label: string; aria: string }> = 
   {
     id: "deploys",
     label: "Deploys",
-    aria: "An app's deployments tab: the self-hosted CI runner mid-build and a timeline of deploys, including one honest failure.",
+    aria: "An app's deployments tab: the self-hosted CI runner mid-build and a timeline of deploys, including one failure.",
   },
   {
     id: "monitoring",

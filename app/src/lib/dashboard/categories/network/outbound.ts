@@ -89,7 +89,7 @@ export async function loadOutbound(ctx: { hc: string }): Promise<OutboundData> {
       exporter: EMPTY_GAP,
       note:
         'No VPN egress declared. The list comes from fleet.vpnEgress, which ' +
-        'mkGluetunInstance fills in — see platform/gluetun-lib.nix.',
+        'mkGluetunInstance fills in. See platform/gluetun-lib.nix.',
     }
   }
 

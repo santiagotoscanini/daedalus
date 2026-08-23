@@ -75,11 +75,11 @@ function AlertsView({ d }: { d: Alerts }) {
         compare={compareOf(d.gap, 'from /api/health — what the running process says')}
         lede={
           <>
-            Every alert rule on this box is Grafana-managed and provisioned from files, so this is
-            both the thing that draws the graphs and the thing that decides when one of them is
-            worth an email. Its own state — users, service accounts, alert history — lives in the{' '}
-            <span className="mono">grafana</span> database on the shared cluster, which is the half
-            of it that is not in the rebuild trail.
+            Every alert rule on this box is Grafana-managed and provisioned from files, so this both
+            draws the graphs and decides when one of them is worth an email. Its own state — users,
+            service accounts, alert history — lives in the <span className="mono">grafana</span>{' '}
+            database on the shared cluster, which is the half of it that is not in the rebuild
+            trail.
           </>
         }
         actions={<Open name="Grafana" host="grafana" />}
@@ -110,11 +110,10 @@ function AlertsView({ d }: { d: Alerts }) {
             </ul>
           )}
           <p className="board-foot">
-            Grafana&rsquo;s ruler, not prometheus&rsquo;s — every rule here is Grafana-managed and
-            provisioned from files, so prometheus&rsquo;s own <span className="mono">/rules</span>{' '}
-            endpoint is empty and would report zero on a box with {num(d.rules)}. Severity is a
-            label on the generated alert instance rather than on the rule, which is why only active
-            ones carry it.
+            These are Grafana&rsquo;s rules, not prometheus&rsquo;s. Prometheus&rsquo;s own{' '}
+            <span className="mono">/rules</span> endpoint is empty and would report zero on a box
+            with {num(d.rules)}. Severity is a label on the generated alert instance rather than on
+            the rule, which is why only active ones carry it.
           </p>
         </Board>
 
@@ -122,8 +121,8 @@ function AlertsView({ d }: { d: Alerts }) {
           <BarList items={d.byFolder} tone="info" empty="no rules" />
           <p className="board-foot">
             Folders are the provisioning files in{' '}
-            <span className="mono">assets/provisioning/alerting/</span>. UI edits do not survive —
-            the files are source of truth.
+            <span className="mono">assets/provisioning/alerting/</span>. UI edits do not survive.
+            The files are source of truth.
           </p>
         </Board>
 
@@ -138,8 +137,8 @@ function AlertsView({ d }: { d: Alerts }) {
           />
           <p className="board-foot">
             A firing rule reaches a person by email through the same relay smartd and every{' '}
-            <span className="mono">OnFailure</span> unit use. There is no phone alert on this box —
-            the escalation path is a mailbox.
+            <span className="mono">OnFailure</span> unit use. There is no phone alert on this box.
+            The escalation path is a mailbox.
           </p>
         </Board>
 
@@ -150,12 +149,11 @@ function AlertsView({ d }: { d: Alerts }) {
             Every Home Assistant alert path on this box is <b>switched off on purpose</b>,
             indefinitely. The one that used to fire was the television being turned off, so{' '}
             <span className="mono">media_player</span> and <span className="mono">remote</span> are
-            excluded — and the 25 Tuya lights sitting unavailable in the floor are genuinely not
-            healthy, which is why the entity-count rule could not simply be re-armed with a higher
-            threshold. Grep <span className="mono">HA-MUTED</span> in{' '}
-            <span className="mono">/etc/nixos</span> to find every switch. Nothing above will ever
-            mention Home Assistant while that holds, and a quiet board is not evidence that it is
-            well.
+            excluded. The 25 Tuya lights sitting unavailable in the floor are genuinely not healthy,
+            which is why the entity-count rule could not be re-armed with a higher threshold. Grep{' '}
+            <span className="mono">HA-MUTED</span> in <span className="mono">/etc/nixos</span> to
+            find every switch. Nothing above will ever mention Home Assistant while that holds, and
+            a quiet board is not evidence that it is well.
           </p>
         </Board>
 
@@ -219,15 +217,15 @@ function AlertsView({ d }: { d: Alerts }) {
             </ul>
           )}
           <p className="board-foot">
-            The relay read back from what it logged: msmtp writes one journal line per delivery
+            Read back from what the relay logged: msmtp writes one journal line per delivery
             attempt, filed under the unit that was sending, so this is every mail the box tried to
-            send — smartd, ZED, each <span className="mono">OnFailure</span> hook — not just
-            Grafana&rsquo;s. This path is the one with no watcher of its own: a dead Gmail app
-            password makes the box <b>quieter</b>, not louder, because the failure notice would have
-            to travel the path that just broke. A long gap since the last send is normal — alerts
-            are rare — but a red row here means something tried to reach you and could not. Known
-            hole either way: the box resolves DNS through its own pi-hole, so a pi-hole-down alert
-            can never email out.
+            send (smartd, ZED, each <span className="mono">OnFailure</span> hook), not just
+            Grafana&rsquo;s. This path has no watcher of its own: a dead Gmail app password makes
+            the box <b>quieter</b>, not louder, because the failure notice would have to travel the
+            path that just broke. A long gap since the last send is normal, since alerts are rare,
+            but a red row here means something tried to reach you and could not. Known hole either
+            way: the box resolves DNS through its own pi-hole, so a pi-hole-down alert can never
+            email out.
           </p>
         </Board>
 
@@ -262,13 +260,13 @@ function ProbesView({ d }: { d: Probes }) {
         version={d.running.version}
         versionNote={SOURCE_NOTE[d.running.source]}
         verdict={verdictOf(d.gap)}
-        compare={compareOf(d.gap, 'the image tag — gatus publishes no version of its own anywhere')}
+        compare={compareOf(d.gap, 'the image tag — gatus publishes no version of its own')}
         lede={
           <>
             The only watcher that looks at this box from OUTSIDE it: every check here is a real
             HTTPS request through traefik and the forward-auth gate, on the same path a browser
-            takes. That is what makes it the one system able to notice a certificate, a router or an
-            IdP failing, and none of those is visible from a metric scraped on the inside.
+            takes. So it is the one system that can notice a certificate, a router or an IdP
+            failing. None of those is visible from a metric scraped on the inside.
           </>
         }
         // `status`, not `gatus`: the published label differs from the attribute
@@ -317,8 +315,8 @@ function ProbesView({ d }: { d: Probes }) {
             outage: traefik dials the *arrs at a port published out of gluetun&rsquo;s rootless
             namespace, where a new connection stalls about ten seconds one time in forty, and gatus
             times out at ten. Roughly 2% of those probes fail against a service answering every
-            request anybody actually made — which is why the tab dots elsewhere on this dashboard
-            require three minutes of silence before they turn red.
+            request anybody made. That is why the tab dots elsewhere on this dashboard require three
+            minutes of silence before they turn red.
           </p>
         </Board>
 
@@ -332,9 +330,9 @@ function ProbesView({ d }: { d: Probes }) {
           />
           <p className="board-foot">
             One entrypoint-level wildcard covers <span className="mono">*.{BASE_DOMAIN}</span>, so
-            this is effectively one certificate for every hostname on the box. Renewal is DNS-01
-            through Cloudflare and automatic — a number falling below thirty means lego is failing,
-            and the store is a single file that is in no backup.
+            this is one certificate for every hostname on the box. Renewal is DNS-01 through
+            Cloudflare and automatic. A number falling below thirty means lego is failing, and the
+            store is a single file that is in no backup.
           </p>
         </Board>
 
@@ -342,7 +340,7 @@ function ProbesView({ d }: { d: Probes }) {
           <BarList items={d.slowest} tone="warn" empty="nothing measured" />
           <p className="board-foot">
             Probed from outside over HTTPS, so this includes TLS, the proxy and the forward-auth
-            round trip — not just the app.
+            round trip, not just the app.
           </p>
         </Board>
 
@@ -355,7 +353,7 @@ function ProbesView({ d }: { d: Probes }) {
             <p className="board-foot">
               Gatus fetches the OIDC discovery document while starting and panics if it is not being
               served yet, which is why it is one of the containers gated behind a bounded probe of
-              the real discovery URL rather than merely ordered after Pocket ID — see{' '}
+              the real discovery URL rather than ordered after Pocket ID. See{' '}
               <span className="mono">fleet.sso.discoveryConsumers</span>.
             </p>
           }
@@ -384,7 +382,7 @@ const SCRAPE_NEIGHBOURS: readonly LogNeighbour[] = [
     source: { container: 'node-exporter' },
     label: 'node-exporter',
     role: 'the host’s own numbers',
-    note: 'CPU, memory, filesystems, the NIC counters and the pressure stall figures — everything the System › Host and Memory tabs draw. It runs on --network=host because it reads the real /proc, /sys and interfaces, which is also why it is the one target here published on a port rather than dialled over a bridge.',
+    note: 'Everything the System › Host and Memory tabs draw: CPU, memory, filesystems, the NIC counters and the pressure stall figures. It runs on --network=host because it reads the real /proc, /sys and interfaces, which is also why it is the one target here published on a port rather than dialled over a bridge.',
   },
   {
     source: { unit: 'host-liveness-exporter.service' },
@@ -409,7 +407,7 @@ function MetricsView({ d }: { d: Metrics }) {
             Every number on this dashboard that is a rate, a trend or a seven-day anything came from
             here. It publishes no host port and runs without{' '}
             <span className="mono">--web.enable-lifecycle</span>, and its scrape list is generated
-            from nix — each stack contributes its own{' '}
+            from nix. Each stack contributes its own{' '}
             <span className="mono">fleet.prometheusScrapes</span>, so a target that is missing is a
             stack that never declared one rather than a file somebody forgot to edit.
           </>
@@ -443,7 +441,7 @@ function MetricsView({ d }: { d: Metrics }) {
           )}
           <p className="board-foot">
             Read from prometheus&rsquo;s own API rather than from{' '}
-            <span className="mono">up == 0</span>, because only the API carries the last error — the
+            <span className="mono">up == 0</span>, because only the API carries the last error: the
             difference between &ldquo;prometheus cannot reach this&rdquo; and &ldquo;this answered
             401&rdquo;. Both look like a dead target on a graph.
           </p>
@@ -484,9 +482,9 @@ function MetricsView({ d }: { d: Metrics }) {
         <Board title="Series, seven days" icon="panels" span={8}>
           <Trend values={d.seriesTrend} tone="accent" height={110} />
           <p className="board-foot">
-            Active series is what memory here is actually spent on. A step up that never comes back
-            down is a new label with unbounded values — the way a TSDB usually gets into trouble,
-            and the thing a total sample count would not show.
+            Active series is what memory here is spent on. A step up that never comes back down is a
+            new label with unbounded values. That is how a TSDB usually gets into trouble, and a
+            total sample count would not show it.
           </p>
         </Board>
 
@@ -527,7 +525,7 @@ function LogsView({ d }: { d: Logs }) {
           <>
             Where every log panel on this dashboard gets its lines, including the one at the bottom
             of this page. Alloy tails journald and ships here; this stores and answers. It publishes
-            no hostname of its own — it is reached over the monitoring bridge — which is why this
+            no hostname of its own and is reached over the monitoring bridge, which is why this
             tab&rsquo;s dot is the one grey circle on the row: there is nothing here for gatus to
             probe from outside, which is a different claim from down.
           </>
@@ -552,9 +550,8 @@ function LogsView({ d }: { d: Logs }) {
           />
           <p className="board-foot">
             Two lines rather than one chart: total volume moves with how busy the box is and says
-            nothing on its own, while the error line is the one worth a glance. A spike in the
-            second without a spike in the first is a service failing rather than a service working
-            hard.
+            nothing on its own, while the error line is the one worth reading. A spike in the second
+            without a spike in the first is a service failing rather than a service working hard.
           </p>
         </Board>
 
@@ -587,9 +584,9 @@ function LogsView({ d }: { d: Logs }) {
           <p className="board-foot">
             Every container&rsquo;s lines are labelled with the stack it belongs to, generated from{' '}
             <span className="mono">fleet.logStacks</span>; an unregistered container falls back to
-            its own name. The <span className="mono">adhoc</span> bucket is the exception worth
-            watching — it catches containers started by hand rather than by a unit, which once
-            minted 77 phantom services in Loki before it existed.
+            its own name. The <span className="mono">adhoc</span> bucket is the one worth watching:
+            it catches containers started by hand rather than by a unit, which once minted 77
+            phantom services in Loki before it existed.
           </p>
         </Board>
 
@@ -659,10 +656,10 @@ function LogsView({ d }: { d: Logs }) {
             ]}
           />
           <p className="board-foot">
-            The write path, from alloy&rsquo;s own scraped metrics rather than from Loki — the one
-            set of numbers here that keeps talking when shipping stops. Read minus filtered is
+            The write path, from alloy&rsquo;s own scraped metrics rather than from Loki. These are
+            the only numbers here that keep talking when shipping stops. Read minus filtered is
             shipped: the gap is <span className="mono">stacks/logging</span>&rsquo;s deliberate
-            noise-drop stages, not loss — loss is the <b>dropped</b> row. Lag includes
+            noise-drop stages, not loss. Loss is the <b>dropped</b> row. Lag includes
             journald&rsquo;s batching, so about a second standing is normal; a retry is Loki pushing
             back and the batch trying again.
           </p>
@@ -685,7 +682,7 @@ function LogsView({ d }: { d: Logs }) {
           foot={
             <p className="board-foot">
               The collector, on its own release cycle. Its version is read{' '}
-              {SOURCE_NOTE[d.alloy.running.source]} rather than from the process — alloy shares a
+              {SOURCE_NOTE[d.alloy.running.source]} rather than from the process: alloy shares a
               stack with Loki here and publishes no hostname, so there is nothing to ask.
             </p>
           }
@@ -699,15 +696,15 @@ function LogsView({ d }: { d: Logs }) {
               source: { container: 'alloy' },
               label: 'Alloy',
               role: 'the collector that fills it',
-              note: 'Tails journald, applies the relabel rules generated from fleet.logStacks, and pushes to Loki. This is the half that touches the journal, so “lines stopped arriving” is answered here rather than next door — a rejected push, a dropped stream or a relabel rule that stopped matching all appear in this log and in no other.',
+              note: 'Tails journald, applies the relabel rules generated from fleet.logStacks, and pushes to Loki. This is the half that touches the journal, so “lines stopped arriving” is answered here rather than next door. A rejected push, a dropped stream or a relabel rule that stopped matching all appear in this log and in no other.',
             },
           ]}
           foot={
             <p className="board-foot">
-              Loki&rsquo;s own stream, with the collector one disclosure below it — they were one
+              Loki&rsquo;s own stream, with the collector one disclosure below it. They were one
               panel under the shared <span className="mono">stack=logging</span> label, which
-              interleaved two services whose failures mean opposite things. Note that Loki refuses a
-              query longer than about thirty days: a wider range on any log panel in this dashboard
+              interleaved two services whose failures mean opposite things. Loki refuses a query
+              longer than about thirty days: a wider range on any log panel in this dashboard
               returns an error rather than fewer results.
             </p>
           }
@@ -735,8 +732,8 @@ function JobsView({ d }: { d: Jobs }) {
           <>
             The only watcher here that reports the ABSENCE of an event. Everything else on this box
             notices something going wrong; this notices something that stopped happening, which is
-            the failure a scheduled job actually has — a timer that was disabled, never fired, or
-            whose service was renamed.
+            the failure a scheduled job has: a timer that was disabled, never fired, or whose
+            service was renamed.
           </>
         }
         // `hc`, not `healthchecks` — see the note on Gatus above.
@@ -793,16 +790,16 @@ function JobsView({ d }: { d: Jobs }) {
           </ul>
           <p className="board-foot">
             The registry from <span className="mono">fleet.monitoredJobs</span>, joined to what
-            healthchecks actually knows. The two are different guarantees: <b>mail on failure</b>{' '}
-            means a run that fails tells you, and <b>pinging</b> means a run that stops happening at
-            all tells you. Only the second catches a timer that was disabled, never fired, or whose
-            service was renamed — which is the failure a scheduled job actually has.{' '}
-            {num(d.emailOnly)} of the {num(d.jobs.length)} here are mail-only, deliberately: for a
-            job that runs on every rebuild, &ldquo;it did not run&rdquo; is not a fault. The outcome
-            column is the host&rsquo;s own timer table via the system snapshot: when the last run
-            happened, how it ended, and when the next is due. A dash is a job with no timer — boot
-            and rebuild oneshots — not a job that failed to schedule. {num(d.unwatchedTimers)} more
-            timers run on the box with no entry in this registry at all.
+            healthchecks knows. The two are different guarantees: <b>mail on failure</b> means a run
+            that fails tells you, and <b>pinging</b> means a run that stops happening at all tells
+            you. Only the second catches a timer that was disabled, never fired, or whose service
+            was renamed. {num(d.emailOnly)} of the {num(d.jobs.length)} here are mail-only,
+            deliberately: for a job that runs on every rebuild, &ldquo;it did not run&rdquo; is not
+            a fault. The outcome column is the host&rsquo;s own timer table via the system snapshot:
+            when the last run happened, how it ended, and when the next is due. A dash is a job with
+            no timer (boot and rebuild oneshots), not a job that failed to schedule.{' '}
+            {num(d.unwatchedTimers)} more timers run on the box with no entry in this registry at
+            all.
           </p>
         </Board>
 
@@ -843,8 +840,8 @@ function JobsView({ d }: { d: Jobs }) {
           )}
           <p className="board-foot">
             Each job pings on success; healthchecks alerts when a ping does not arrive inside the
-            period plus its grace. <b>Late</b> is the state worth seeing — it is inside the grace
-            window and has not become an alert yet.
+            period plus its grace. <b>Late</b> is the state worth seeing: inside the grace window,
+            not yet an alert.
           </p>
         </Board>
 
@@ -862,7 +859,7 @@ function JobsView({ d }: { d: Jobs }) {
               ))}
             </ul>
             <p className="board-foot">
-              These declare a healthchecks slug that healthchecks does not have a check for — so the
+              These declare a healthchecks slug that healthchecks does not have a check for, so the
               dead-man&rsquo;s switch reads as armed in nix and does not exist. A check is created
               by its first ping, which means either the job has never once succeeded, or the ping is
               failing silently. Neither system can see this alone: nix knows the intent,
@@ -894,7 +891,7 @@ function JobsView({ d }: { d: Jobs }) {
               source: { unit: 'hc-ping@.service' },
               label: 'Ping units',
               role: 'what sends the pings',
-              note: 'One templated unit per slug, wired as an OnSuccess hook by platform/hc-ping. A job that runs fine while its check goes late is this unit failing rather than the job — the ping is a separate exit from the work.',
+              note: 'One templated unit per slug, wired as an OnSuccess hook by platform/hc-ping. A job that runs fine while its check goes late is this unit failing rather than the job. The ping is a separate exit from the work.',
             },
           ]}
         />

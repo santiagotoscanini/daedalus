@@ -33,8 +33,8 @@ export function MemoryView({ d }: { d: Memory }) {
         />
         <p className="board-foot">
           Read <b>available</b>, not used. Linux spends free memory on cache by design, so a box
-          with nothing to do still reports most of its memory in use — and on this one a large share
-          of that is ZFS&rsquo;s cache, which is charged to the kernel and handed back on demand.
+          with nothing to do still reports most of its memory in use. On this one a large share of
+          that is ZFS&rsquo;s cache, which is charged to the kernel and handed back on demand.
         </p>
       </Board>
 
@@ -87,9 +87,9 @@ export function MemoryView({ d }: { d: Memory }) {
           ]}
         />
         <p className="board-foot">
-          Read from SMBIOS rather than counted from bytes — the kernel knows how much memory it has
+          Read from SMBIOS rather than counted from bytes: the kernel knows how much memory it has
           and nothing about how it arrives. Two slots free against a 128 GB ceiling is the headroom
-          this machine actually has, and the full specification is on <b>Build</b>.
+          this machine has. The full specification is on <b>Build</b>.
         </p>
       </Board>
 
@@ -109,8 +109,8 @@ export function MemoryView({ d }: { d: Memory }) {
         <p className="board-foot">
           {/* The panel that makes the one to its left readable. */}
           The single biggest consumer on this box and the reason &ldquo;used&rdquo; looks alarming.
-          ARC grows to fill what nothing else wants and shrinks under pressure — a high hit rate
-          here is what keeps the pools from being asked.
+          ARC grows to fill what nothing else wants and shrinks under pressure. A high hit rate here
+          is what keeps the pools from being asked.
         </p>
       </Board>
 
@@ -130,8 +130,8 @@ export function MemoryView({ d }: { d: Memory }) {
           ]}
         />
         <p className="board-foot">
-          The only swap on this box — compressed, in RAM, no disk. Bytes in here are memory pressure
-          that already happened and that no instantaneous gauge would show.
+          The only swap on this box, compressed in RAM with no disk behind it. Bytes in here are
+          memory pressure that already happened and that no instantaneous gauge would show.
         </p>
       </Board>
 
@@ -140,8 +140,8 @@ export function MemoryView({ d }: { d: Memory }) {
         <p className="board-foot">
           This is <span className="mono">memory.current</span>, which <b>includes page cache</b>. A
           container doing file I/O sits near its limit forever and is perfectly healthy; the cache
-          is reclaimed when something else needs it. The number that means a cap is genuinely too
-          tight is the OOM board beside this one, not this bar.
+          is reclaimed when something else needs it. The number that means a cap is too tight is the
+          OOM board beside this one, not this bar.
         </p>
       </Board>
 
@@ -167,10 +167,10 @@ export function MemoryView({ d }: { d: Memory }) {
           <BarList items={d.oomKilled} tone="warn" empty="prometheus not answering" />
         )}
         <p className="board-foot">
-          Named, and only the killed — a fleet of zeros would bury the one counter that matters.
-          This moving is what &ldquo;the cap is too tight&rdquo; actually looks like; a bar to the
-          left resting on its limit is not. The kernel log below records which process was chosen
-          and what it was holding.
+          Named, and only the killed: a fleet of zeros would bury the one counter that matters. This
+          moving is what &ldquo;the cap is too tight&rdquo; looks like; a bar to the left resting on
+          its limit is not. The kernel log below records which process was chosen and what it was
+          holding.
         </p>
       </Board>
 
@@ -203,7 +203,7 @@ export function MemoryView({ d }: { d: Memory }) {
           The module always emits <span className="mono">--memory-swap</span> equal to{' '}
           <span className="mono">--memory</span>: podman writes that value verbatim and defaults it
           to twice the limit, so a cap set alone would kill at three times what it says.{' '}
-          {num(d.uncapped)} containers have no cap at all, which is the platform default — a
+          {num(d.uncapped)} containers have no cap at all, which is the platform default. A
           silently-capped app is one that dies at 3am for a reason nobody wrote down.
         </p>
       </Board>
@@ -221,10 +221,10 @@ export function MemoryView({ d }: { d: Memory }) {
         foot={
           <p className="board-foot">
             Kernel lines carry no unit and no container, so alloy labels them{' '}
-            <span className="mono">stack=kernel</span> — this is the stream an OOM kill actually
-            lands in. The counter on the panel above says one happened; this says which cgroup was
-            chosen, how much it was holding, and what the machine was doing at the time, none of
-            which survives in the killed container&rsquo;s own log.
+            <span className="mono">stack=kernel</span>. This is the stream an OOM kill lands in. The
+            counter on the panel above says one happened; this says which cgroup was chosen, how
+            much it was holding, and what the machine was doing at the time. None of that survives
+            in the killed container&rsquo;s own log.
           </p>
         }
       />

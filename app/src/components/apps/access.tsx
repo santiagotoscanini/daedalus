@@ -45,7 +45,7 @@ export function Access({
           <p className="board-foot">
             Client IP and country come from the headers Cloudflare adds at the edge, which only
             exist on requests that arrive through the tunnel. LAN requests reach traefik through
-            rootlessport, which replaces the source address — every phone, laptop and WireGuard peer
+            rootlessport, which replaces the source address: every phone, laptop and WireGuard peer
             in the house shows up as the same bridge IP. Set exposure to <strong>External</strong>{' '}
             above to start collecting this.
           </p>
@@ -133,8 +133,8 @@ export function Access({
         <BoardGrid>
           <Board title="Where from" icon="⊕" span={12}>
             <p className="viz-empty">
-              Nothing arrived through the tunnel in {spec.prose}. The route exists — this app is
-              just not being visited from outside.
+              Nothing arrived through the tunnel in {spec.prose}. The route exists; nothing outside
+              is visiting it.
             </p>
           </Board>
         </BoardGrid>
@@ -245,10 +245,10 @@ export function Access({
                 ))}
               </div>
               <p className="board-foot">
-                4xx and 5xx from the tunnel. Most of this is background noise — the internet scans
+                4xx and 5xx from the tunnel. Most of this is background noise: the internet scans
                 every public hostname for WordPress paths within hours of the DNS record appearing,
-                and a 404 is the correct answer. What is worth reading is a <em>succeeding</em>{' '}
-                request to somewhere unexpected, not these.
+                and a 404 is the correct answer. The line worth reading is a <em>succeeding</em>{' '}
+                request to somewhere unexpected.
               </p>
             </Board>
           )}
@@ -311,7 +311,7 @@ function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }
     >
       <iframe className="geopanel" src={src} title={`Remote requests to ${hostname} by country`} />
       <p className="board-foot">
-        Rendered by Grafana. A blank map means this browser has no Grafana session yet — open it{' '}
+        Rendered by Grafana. A blank map means this browser has no Grafana session yet. Open it{' '}
         <a href={GRAFANA_URL} target="_blank" rel="noreferrer">
           once
         </a>{' '}

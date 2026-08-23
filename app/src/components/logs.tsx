@@ -395,10 +395,10 @@ export function GrafanaLogs({
       {foot ?? (
         <p className="board-foot">
           Rendered by Grafana from <code>{value(source)}</code>, newest first. The default is seven
-          days because most services here are quiet between restarts — a short window shows nothing
-          for a service that is perfectly healthy. If the frame shows a login screen, open Grafana
-          once in a tab: it needs a session it cannot obtain inside itself, because the IdP refuses
-          to be framed.
+          days because most services here are quiet between restarts, and a short window shows
+          nothing for a service that is perfectly healthy. If the frame shows a login screen, open
+          Grafana once in a tab: it needs a session it cannot obtain inside itself, because the IdP
+          refuses to be framed.
         </p>
       )}
     </>

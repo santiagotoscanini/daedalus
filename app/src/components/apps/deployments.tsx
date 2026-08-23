@@ -25,7 +25,7 @@ export function Deployments({
         {app.sourceMode === 'local' ? (
           <>
             <span className="muted">⎇ stacks/{app.name}/app</span>
-            <span className="muted">source is live — nothing to deploy</span>
+            <span className="muted">source is live, nothing to deploy</span>
           </>
         ) : (
           <>
@@ -53,7 +53,7 @@ export function Deployments({
       {td.deployments.length === 0 ? (
         <p className="lede">
           {app.sourceMode === 'local'
-            ? 'Local-source apps have no deploy history — the running code is the working tree.'
+            ? 'Local-source apps have no deploy history. The running code is the working tree.'
             : 'No deploys recorded yet. History starts from the first deploy where the image digest actually moved.'}
         </p>
       ) : (
@@ -151,12 +151,12 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
       >
         {!ci.available ? (
           <p className="viz-empty">
-            No CI snapshot yet — <code>gha-ci-snapshot</code> has not run since boot.
+            No CI snapshot yet. <code>gha-ci-snapshot</code> has not run since boot.
           </p>
         ) : !ci.ok ? (
           <p className="viz-empty text-bad">
             Could not reach the GitHub API on the last sweep. This is the snapshot from{' '}
-            {ci.takenAt ? when(ci.takenAt) : 'an earlier run'} — not a statement about the runners.
+            {ci.takenAt ? when(ci.takenAt) : 'an earlier run'}, not a statement about the runners.
           </p>
         ) : ci.runners.length === 0 ? (
           <p className="viz-empty">
@@ -182,8 +182,8 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
         {job && !ci.runners.some((r) => r.name === job.runnerName) && <JobProgress job={job} />}
 
         <p className="board-foot">
-          One job per runner, then a fresh container replaces it — so the name changes on every
-          build, and a gap between two jobs is the design working.
+          One job per runner, then a fresh container replaces it. The name changes on every build,
+          and a gap between two jobs is the design working.
         </p>
       </Board>
 
@@ -215,9 +215,9 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
           </div>
         )}
         <p className="board-foot">
-          The deploy half is the journal — pull, restart, health-check. The build half is only the
-          runner announcing a job starting and finishing: it streams step output to GitHub and never
-          writes it to its own stdout, so the full build log lives behind the link above.
+          The deploy half is the journal: pull, restart, health-check. The build half is only the
+          runner announcing a job starting and finishing — it streams step output to GitHub and
+          never writes it to its own stdout, so the full build log lives behind the link above.
         </p>
       </Board>
     </BoardGrid>
@@ -239,7 +239,7 @@ function JobProgress({ job }: { job: NonNullable<CiData['activeJobs'][number]> }
       </div>
       <div className="job-step">
         {job.status === 'queued'
-          ? 'queued — no runner has picked it up yet'
+          ? 'queued, no runner has picked it up yet'
           : running
             ? `step ${String(done + 1)}/${String(total)} · ${running.name}`
             : `${String(done)}/${String(total)} steps`}

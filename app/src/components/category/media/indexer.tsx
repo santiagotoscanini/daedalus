@@ -19,7 +19,7 @@ const PROWLARR_NEIGHBOURS: readonly LogNeighbour[] = [
     source: { container: 'flaresolverr' },
     label: 'FlareSolverr',
     role: 'the browser that answers Cloudflare challenges',
-    note: 'Indexers behind a Cloudflare challenge are searched through this. When one of them starts failing every query while the others are fine, this log says whether the challenge was refused or the browser never started — Prowlarr itself only records that the request timed out.',
+    note: 'Indexers behind a Cloudflare challenge are searched through this. When one of them starts failing every query while the others are fine, this log says whether the challenge was refused or the browser never started. Prowlarr itself only records that the request timed out.',
   },
 ]
 
@@ -39,7 +39,7 @@ export function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> 
         lede={
           <>
             One place to configure indexers, and one place for Sonarr, Radarr and Bazarr to search
-            them. Nothing here downloads anything — it finds the release and hands back a link.
+            them. Nothing here downloads anything. It finds the release and hands back a link.
           </>
         }
         actions={<Open name="Prowlarr" host="prowlarr" />}
@@ -94,9 +94,9 @@ export function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> 
             </ul>
           )}
           <p className="board-foot">
-            Queries are the bar, because that is what the *arrs actually spend. Grabs beside it is
-            the yield: an indexer with thousands of queries and no grabs is being searched and never
-            has the answer, which is a reason to turn it off rather than a fault.
+            Queries are the bar, because that is what the *arrs spend. Grabs beside it is the yield:
+            an indexer with thousands of queries and no grabs is being searched and never has the
+            answer, which is a reason to turn it off rather than a fault.
           </p>
         </Board>
 

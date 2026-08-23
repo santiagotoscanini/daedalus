@@ -21,13 +21,13 @@ const UPLINK_READERS: readonly LogNeighbour[] = [
     source: { unit: 'host-liveness-exporter.service' },
     label: 'host-liveness-exporter',
     role: 'the round trips, and the dot on this tab',
-    note: 'Pings the gateway and the internet every 60s and publishes network_hop_up / network_hop_rtt_seconds — the two hops charted above, and the pair this tab’s status dot is computed from, since there is no one service here for gatus to probe. It also walks the rootless cgroup tree for the per-container byte counters in the traffic panel.',
+    note: 'Pings the gateway and the internet every 60s and publishes network_hop_up / network_hop_rtt_seconds, the two hops charted above. This tab’s status dot is computed from that pair, since there is no one service here for gatus to probe. It also walks the rootless cgroup tree for the per-container byte counters in the traffic panel.',
   },
   {
     source: { container: 'node-exporter' },
     label: 'node-exporter',
     role: 'the NIC counters themselves',
-    note: 'Everything the cable chart is drawn from. It runs on --network=host precisely so it sees enp3s0 rather than a container’s virtual interface — which is also why the bytes it reports are all LAN traffic included, and are not comparable to the line capacity measured next door.',
+    note: 'Everything the cable chart is drawn from. It runs on --network=host so it sees enp3s0 rather than a container’s virtual interface, which is also why the bytes it reports include all LAN traffic and are not comparable to the line capacity measured next door.',
   },
 ]
 
@@ -84,7 +84,7 @@ export function GeneralView({ data }: { data: General }) {
           />
           <p className="board-foot">
             Every byte over this box’s one network interface, which is not the same thing as
-            internet traffic and is usually much more of it — a film streamed to the TV crosses this
+            internet traffic and is usually much more of it. A film streamed to the TV crosses this
             cable in full and never leaves the house. The line’s own capacity is the board below;
             these two numbers are not comparable and are deliberately not on one chart.
           </p>
@@ -132,7 +132,7 @@ export function GeneralView({ data }: { data: General }) {
           <p className="board-foot">
             Two probes a minute rather than one: the router answering while the far side does not is
             the ISP, and neither answering is this box’s own link. The public address is the one
-            fact that cannot be measured from inside — behind NAT nothing here can see it, so it is
+            fact that cannot be measured from inside. Behind NAT nothing here can see it, so it is
             read back from the edge the tunnel dials out to.
           </p>
         </Board>
@@ -194,7 +194,7 @@ export function GeneralView({ data }: { data: General }) {
             moved rather than a share of the total guessed from anything. Two kinds are absent by
             construction and not by omission: a container on the host’s network has no figures
             separable from the box, and the ten sharing <b>gluetun</b>’s namespace have none
-            separable from each other — gluetun’s row is the download stack entire, counted as it
+            separable from each other; gluetun’s row is the whole download stack, counted as it
             crossed the wire encrypted.
           </p>
         </Board>
@@ -245,7 +245,7 @@ export function GeneralView({ data }: { data: General }) {
             depends on outside itself.{' '}
             {dns.fromBox === null || dns.queries === null
               ? 'Most of it is this box rather than the devices on the LAN.'
-              : `${pct((dns.fromBox / dns.queries) * 100)} of it came from 127.0.0.1 — every container on this box resolves through the host’s stub, so pi-hole sees them as one client and no split by service is available from here.`}
+              : `${pct((dns.fromBox / dns.queries) * 100)} of it came from 127.0.0.1. Every container on this box resolves through the host’s stub, so pi-hole sees them as one client and no split by service is available from here.`}
           </p>
         </Board>
 
@@ -267,7 +267,7 @@ export function GeneralView({ data }: { data: General }) {
           foot={
             <p className="board-foot">
               The hourly speed test behind the capacity chart. It saturates the link while it runs,
-              which is why nothing network-heavy is ever scheduled on the hour on this box — a test
+              which is why nothing network-heavy is ever scheduled on the hour on this box. A test
               at :00 once took DNS down for two minutes for the whole house.
             </p>
           }

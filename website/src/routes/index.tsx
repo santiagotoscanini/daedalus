@@ -23,7 +23,7 @@ function Landing() {
           <SectionHeading
             kicker="The pages"
             title="One app runs the box."
-            sub="Deploys, monitoring, updates, the whole fleet — each a page in daedalus, each backed by the same declared truth."
+            sub="Deploys, monitoring and updates each get a page, all read from the same declared config."
           />
           <div className="mt-24 flex flex-col gap-36">
             {FEATURES.map((f, i) => (

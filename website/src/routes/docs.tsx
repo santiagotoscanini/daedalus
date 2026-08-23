@@ -10,11 +10,11 @@ export const Route = createFileRoute("/docs")({
   component: DocsPage,
   head: () => ({
     meta: [
-      { title: "Docs — what the repo can't declare · daedalus" },
+      { title: "Daedalus docs. What the repo can't declare." },
       {
         name: "description",
         content:
-          "The external surfaces of a self-hosted cloud: Cloudflare, the router, VPN keys, GitHub, mail, key custody — everything configured outside the repo, and what happens if it's lost.",
+          "The external surfaces of a self-hosted cloud: Cloudflare, the router, VPN keys, GitHub, mail and key custody. Everything configured outside the repo, and what happens if it's lost.",
       },
     ],
   }),
@@ -56,17 +56,17 @@ const SECTIONS: DocSection[] = [
     provider: "Cloudflare",
     title: "The zone and the tunnel",
     blurb:
-      "All public HTTP enters through one Cloudflare Tunnel. DNS for the zone splits three ways — synced, refreshed, and strictly hand-managed — and confusing them is the classic mistake.",
+      "All public HTTP enters through one Cloudflare Tunnel. DNS for the zone splits three ways: synced, refreshed, and strictly hand-managed. Confusing them is the classic mistake.",
     rows: [
       {
         name: "the tunnel",
-        body: "Created once via the API — Cloudflare returns the tunnel secret only in the creation response, so the wizard can't be used. Ingress is locally managed from the nix-rendered config; editing it in the dashboard does nothing. The credential rides sops-encrypted in the repo, which is the whole backup.",
+        body: "Created once via the API. Cloudflare returns the tunnel secret only in the creation response, so the wizard can't be used. Ingress is locally managed from the nix-rendered config; editing it in the dashboard does nothing. The credential rides sops-encrypted in the repo, which is the whole backup.",
         via: "stacks/cloudflared",
         tag: "re-issuable",
       },
       {
         name: "synced CNAMEs",
-        body: "One proxied CNAME per published app, upserted and swept on every rebuild. Any record pointing at the tunnel that isn't declared gets deleted — the repo owns this class of record, the dashboard doesn't.",
+        body: "One proxied CNAME per published app, upserted and swept on every rebuild. Any record pointing at the tunnel that isn't declared gets deleted. The repo owns this class of record; the dashboard doesn't.",
         via: "cloudflared-route-sync",
       },
       {
@@ -77,12 +77,12 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "the Pages CNAME",
-        body: "This very page: a grey-cloud CNAME to GitHub Pages, deliberately invisible to the sync. No fleet app may take the bare hostname — the sweep would overwrite it.",
+        body: "This very page: a grey-cloud CNAME to GitHub Pages, deliberately invisible to the sync. No fleet app may take the bare hostname, or the sweep would overwrite it.",
         tag: "hand-made",
       },
       {
         name: "two API tokens",
-        body: "A zone-scoped DNS-edit token (it lives in three sops files — the proxy's DNS-01, the route sync, the control plane — and all three rotate in one pass) and an account-scoped token for tunnel telemetry. Losing either is an outage, not data loss.",
+        body: "A zone-scoped DNS-edit token that lives in three sops files (the proxy's DNS-01, the route sync, the control plane) and rotates in one pass, plus an account-scoped token for tunnel telemetry. Losing either is an outage, not data loss.",
         via: "traefik · cloudflared · daedalus",
         tag: "re-issuable",
       },
@@ -93,16 +93,16 @@ const SECTIONS: DocSection[] = [
     provider: "Let's Encrypt",
     title: "One wildcard",
     blurb:
-      "The ACME account is created implicitly on first run. One certificate covers the apex and the wildcard — every published host is exactly one label under the domain, so no per-app cert work exists.",
+      "The ACME account is created implicitly on first run. One certificate covers the apex and the wildcard. Every published host is exactly one label under the domain, so no per-app cert work exists.",
     rows: [
       {
         name: "DNS-01, pinned upstream",
-        body: "Challenges resolve against 1.1.1.1 directly — the LAN's own resolver can't see a fresh TXT record, and waiting on it would time every renewal out.",
+        body: "Challenges resolve against 1.1.1.1 directly. The LAN's own resolver can't see a fresh TXT record, and waiting on it would time every renewal out.",
         via: "stacks/traefik",
       },
       {
         name: "acme.json",
-        body: "The cert store is not in any backup tree. It reissues itself from nothing — but Let's Encrypt rate-limits duplicates, so it's worth copying aside before risky disk work.",
+        body: "The cert store is not in any backup tree. It reissues itself from nothing, but Let's Encrypt rate-limits duplicates, so copy it aside before risky disk work.",
         tag: "re-issuable",
       },
     ],
@@ -112,7 +112,7 @@ const SECTIONS: DocSection[] = [
     provider: "The router",
     title: "Three ports",
     blurb:
-      "The only hardware configuration in the system. Each forward is declared in the repo beside the stack that needs it — because the router itself can't be declared, the declaration lives where a reader would look.",
+      "The only hardware configuration in the system. The router itself can't be declared, so each forward is written down in the repo beside the stack that needs it, where a reader would look.",
     rows: [
       {
         name: "51820/udp → WireGuard",
@@ -128,13 +128,13 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "25565/tcp → Minecraft",
-        body: "A custom binary protocol with no TLS — no SNI for a proxy to route on, and no tunnel client inside a game launcher.",
+        body: "A custom binary protocol with no TLS: no SNI for a proxy to route on, and no tunnel client inside a game launcher.",
         via: "stacks/minecraft",
         tag: "hand-made",
       },
       {
         name: "DHCP: off",
-        body: "The DNS server is also the LAN's DHCP server, so the router's must be off. The box itself boots on a static IP — there'd be nobody to lease from that early.",
+        body: "The DNS server is also the LAN's DHCP server, so the router's must be off. The box itself boots on a static IP, since there'd be nobody to lease from that early.",
         via: "stacks/pihole",
       },
       {
@@ -148,7 +148,7 @@ const SECTIONS: DocSection[] = [
     provider: "ProtonVPN",
     title: "Two tunnels out",
     blurb:
-      "Two separate WireGuard configs, because one key cannot run two live sessions — and the traffic must not mix.",
+      "Two separate WireGuard configs: one key cannot run two live sessions, and the traffic must not mix.",
     rows: [
       {
         name: "downloads egress",
@@ -158,7 +158,7 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "probe egress",
-        body: "No port forwarding, fail-closed kill switch — if the tunnel drops, the probes stop rather than leak the house IP.",
+        body: "No port forwarding, fail-closed kill switch. If the tunnel drops, the probes stop rather than leak the house IP.",
         via: "stacks/argus-vpn",
         tag: "re-issuable",
       },
@@ -173,7 +173,7 @@ const SECTIONS: DocSection[] = [
     provider: "GitHub",
     title: "Keys and runners",
     blurb:
-      "The repos live here; the CI does not. Builds run on the box's own runners and land in its own registry — GitHub holds the source, the keys, and this page.",
+      "The repos live here; the CI does not. Builds run on the box's own runners and land in its own registry. GitHub holds the source, the keys and this page.",
     rows: [
       {
         name: "deploy SSH key",
@@ -183,19 +183,19 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "runner token",
-        body: "A fine-grained PAT scoped to Administration on the app repos only. The box mints one-hour registration tokens host-side; the PAT itself never enters a container. Runners are ephemeral — one job, then gone.",
+        body: "A fine-grained PAT scoped to Administration on the app repos only. The box mints one-hour registration tokens host-side; the PAT itself never enters a container. Each runner takes one job, then dies.",
         via: "stacks/gha-runner",
         tag: "re-issuable",
       },
       {
         name: "Pages",
-        body: "The landing you're reading — built by Actions, custom domain set once in the repo's Pages settings, paired with the hand-managed CNAME above.",
+        body: "The landing you're reading. Built by Actions, custom domain set once in the repo's Pages settings, paired with the hand-managed CNAME above.",
         via: ".github/workflows/website.yml",
         tag: "hand-made",
       },
       {
         name: "per-repo registry secret",
-        body: "Each app repo carries one Actions secret for the box's registry — set from the box itself, so the value never leaves it.",
+        body: "Each app repo carries one Actions secret for the box's registry, set from the box itself so the value never leaves it.",
         via: "daedalus › apps",
       },
     ],
@@ -205,7 +205,7 @@ const SECTIONS: DocSection[] = [
     provider: "Gmail",
     title: "The alert channel",
     blurb:
-      "Every alert, disk failure and dead-man ping emails through one SMTP app password — five services share the single copy, none duplicates it.",
+      "Every alert, disk failure and dead-man ping emails through one SMTP app password. Five services share the single copy. None duplicates it.",
     rows: [
       {
         name: "one app password",
@@ -215,7 +215,7 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "the honest footnote",
-        body: "The box resolves DNS through itself — so an alert about the resolver being down cannot leave the box. Known, accepted, written down.",
+        body: "The box resolves DNS through itself, so an alert about the resolver being down cannot leave the box. Known and accepted.",
       },
     ],
   },
@@ -224,23 +224,23 @@ const SECTIONS: DocSection[] = [
     provider: "Custody",
     title: "The two keys",
     blurb:
-      "Everything above is re-issuable. These are not. This is the shortest section and the one that matters.",
+      "Everything above is re-issuable. Nothing in this section is.",
     rows: [
       {
         name: "the age key",
-        body: "Every secret in the repo decrypts for exactly two identities: the box's SSH host key, and the operator's personal age key — whose password-manager copy is the recovery of last resort. Lose both and the repo's secrets are ciphertext forever; every provider relationship above gets rebuilt by hand.",
+        body: "Every secret in the repo decrypts for exactly two identities: the box's SSH host key, and the operator's personal age key, whose password-manager copy is the recovery of last resort. Lose both and the repo's secrets are ciphertext forever; every provider relationship above gets rebuilt by hand.",
         via: ".sops.yaml",
         tag: "keep safe",
       },
       {
         name: "passkeys",
-        body: "The identity provider's first boot is interactive — an admin account and a passkey, registered once. The passkeys on your devices are the credential; the last resort is a one-time token minted from a shell on the box.",
+        body: "The identity provider's first boot is interactive: an admin account and a passkey, registered once. The passkeys on your devices are the credential; the last resort is a one-time token minted from a shell on the box.",
         via: "stacks/pocket-id",
         tag: "keep safe",
       },
       {
         name: "the encryption key",
-        body: "One environment variable encrypts the identity provider's signing keys at rest. Set it once and treat it as fixed — rotating it means re-encrypting everything it protects.",
+        body: "One environment variable encrypts the identity provider's signing keys at rest. Set it once and treat it as fixed. Rotating it means re-encrypting everything it protects.",
         via: "stacks/pocket-id",
         tag: "keep safe",
       },
@@ -251,11 +251,11 @@ const SECTIONS: DocSection[] = [
     provider: "The GPU box",
     title: "A second machine",
     blurb:
-      "Chat, embeddings, speech and image generation come from a model server on the gaming PC — a machine this repo does not manage.",
+      "Chat, embeddings, speech and image generation come from a model server on the gaming PC, a machine this repo does not manage.",
     rows: [
       {
         name: "the model server",
-        body: "Started by hand, addressed by a static DNS entry, unauthenticated on the LAN. Every model the gateway advertises is a promise about what's been downloaded onto that box — models are state there, not declarations here.",
+        body: "Started by hand, addressed by a static DNS entry, unauthenticated on the LAN. Every model the gateway advertises is a promise about what's been downloaded onto that box. Models are state there, not declarations here.",
         via: "stacks/litellm",
         tag: "hand-made",
       },
@@ -266,7 +266,7 @@ const SECTIONS: DocSection[] = [
     provider: "In the apps",
     title: "State the rebuild won't reproduce",
     blurb:
-      "Some services are configured in their own UI, on purpose — that's their discoverable surface. A fresh bootstrap replays none of it, so it's listed here instead of pretended away.",
+      "Some services are configured in their own UI, on purpose, because that's their discoverable surface. A fresh bootstrap replays none of it, so it's listed here rather than pretended away.",
     rows: [
       {
         name: "indexers & providers",
@@ -282,13 +282,13 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "admin panels",
-        body: "The issue tracker's god-mode is authoritative after first boot — the env vars only seed it. Its API key is minted by hand in the UI.",
+        body: "The issue tracker's god-mode is authoritative after first boot. The env vars only seed it. Its API key is minted by hand in the UI.",
         via: "plane",
         tag: "app state",
       },
       {
         name: "UI-minted tokens",
-        body: "Dashboard service accounts and per-app API keys are created in each app and pasted into sops — rotate them at the source.",
+        body: "Dashboard service accounts and per-app API keys are created in each app and pasted into sops. Rotate them at the source.",
         via: "grafana · jellyfin · immich · nextcloud · grocy",
         tag: "app state",
       },
@@ -300,7 +300,7 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "dead-man periods",
-        body: "Checks self-provision on first ping with wrong defaults — each one's period and grace get set by hand, once.",
+        body: "Checks self-provision on first ping with wrong defaults, so each one's period and grace get set by hand, once.",
         via: "healthchecks",
         tag: "app state",
       },
@@ -310,7 +310,7 @@ const SECTIONS: DocSection[] = [
     id: "manual",
     provider: "Still manual",
     title: "The steps that stay steps",
-    blurb: "Four moves no rebuild makes for you. Each is one command or one click — but only if you know it exists.",
+    blurb: "Four moves no rebuild makes for you. Each is one command or one click, if you know it exists.",
     rows: [
       {
         name: "after rotating a secret",
@@ -318,7 +318,7 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "after importing a fresh pool",
-        body: "Child datasets are not auto-created — each one is a one-time create. The repo lists every child; the pool doesn't.",
+        body: "Child datasets are not auto-created. Each one is a one-time create. The repo lists every child; the pool doesn't.",
       },
       {
         name: "after losing the box",
@@ -326,7 +326,7 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "after a major version bump",
-        body: "Some upgrades want their own chores — the file-sync app's occ commands are the standing example. The stack's header comment is the runbook.",
+        body: "Some upgrades want their own chores. The file-sync app's occ commands are the standing example. The stack's header comment is the runbook.",
       },
     ],
   },
@@ -348,14 +348,14 @@ function DocsPage() {
     <main id="main" className="mx-auto max-w-4xl px-6 pb-32 pt-40">
       <Reveal>
         <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-2">
-          Docs · external setup
+          External setup
         </p>
         <h1 className="mt-4 text-balance text-4xl font-semibold tracking-[-0.02em] sm:text-[3.25rem] sm:leading-[1.05]">
           What the repo <span className="text-gradient-ember">can't declare.</span>
         </h1>
         <p className="mt-6 max-w-2xl text-pretty text-[16px] leading-relaxed text-muted">
-          Any checkout rebuilds the machine — except for these. The accounts, dashboards, two keys
-          and one plastic router that live outside git. Each is configured once, by hand; this page
+          Any checkout rebuilds the machine, except for these: the accounts, dashboards, two keys
+          and one plastic router that live outside git. Each is configured once, by hand. This page
           is where the repo remembers them.
         </p>
       </Reveal>
@@ -457,7 +457,7 @@ function DocsPage() {
             for the same reason.
           </p>
           <p className="mt-6 font-mono text-[11px] tracking-wide text-dim">
-            declared where possible · written down where not · never only in someone's head
+            declared where possible, written down where not
           </p>
         </div>
       </Reveal>

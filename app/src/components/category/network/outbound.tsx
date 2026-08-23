@@ -52,7 +52,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
         versionNote={
           data.gluetun.builtOn === null
             ? 'the gluetun build every tunnel runs'
-            : `built ${data.gluetun.builtOn} · every tunnel runs it`
+            : `built ${data.gluetun.builtOn}, and every tunnel runs it`
         }
         verdict={
           data.gluetun.running === null
@@ -65,7 +65,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           {
             k: 'Tunnels',
             v: String(data.tunnels.length),
-            note: 'each its own key and its own exit — declared in fleet.vpnEgress',
+            note: 'each with its own key and exit, declared in fleet.vpnEgress',
           },
           { k: 'Pinned by', v: null, note: 'one image digest in platform/gluetun-lib.nix' },
         ]}
@@ -73,7 +73,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           <>
             gluetun holds a WireGuard tunnel and owns a network namespace; the containers behind one
             borrow it outright rather than having interfaces of their own. It is fail-closed, so a
-            tunnel that drops takes their internet with it — which is the point, and the reason this
+            tunnel that drops takes their internet with it. That is the point, and the reason this
             page exists.
           </>
         }
@@ -96,8 +96,8 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           span={6}
           title={
             data.gluetun.behind.length === 0
-              ? 'gluetun — current'
-              : `gluetun — ${String(data.gluetun.behind.length)} commits behind`
+              ? 'gluetun · current'
+              : `gluetun · ${String(data.gluetun.behind.length)} commits behind`
           }
           aside={
             <span className="board-note">
@@ -115,7 +115,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
                   gets — a correctness point, not a shortcut. */}
               Commits, not releases, and deliberately: this image is a digest-pinned{' '}
               <code>:latest</code>, which is master, and master has <b>diverged</b> from the v3.41.x
-              release line — v3.41.2 ships an acknowledged port-forwarding deadlock this box would
+              release line. v3.41.2 ships an acknowledged port-forwarding deadlock this box would
               trip, because it sets <code>VPN_PORT_FORWARDING_UP_COMMAND</code>. A release list here
               would advise a downgrade into a known bug. The build is read out of gluetun’s own
               startup banner in Loki, since <code>/v1/version</code> is not in the control-server
@@ -134,7 +134,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
               What has been <b>published</b>. Which of it is running cannot be said: the image is a
               digest-pinned <code>:latest</code> and the exporter prints no version in its log,
               serves none on <code>/metrics</code>, and has no endpoint that would answer. So this
-              is the honest half — a release exists, and comparing it to what is here is a manual
+              is the honest half. A release exists, and comparing it to what is here is a manual
               job. It polls each tunnel’s control API every 30 seconds and is what the VPN-down
               alert reads.
             </p>
@@ -219,7 +219,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
                 zero is the honest choice AND the useless one — the flag is what
                 carries a bad day. */}
             gluetun reports its own tunnel state every 30 seconds; this is the share of each day it
-            said it was connected. Columns are near-full by design — a day that dropped at all is
+            said it was connected. Columns are near-full by design, so a day that dropped at all is
             underlined in red rather than left to a difference of a pixel. The WireGuard key expires{' '}
             <b>{t.keyExpiry}</b>, reminder mail goes out 30 and 7 days ahead, and the renewal
             runbook is the header of <code>{t.runbook}</code>.
@@ -272,10 +272,10 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
             ]}
           />
           <p className="board-foot">
-            Asked of gluetun’s control API, which asks the provider — nothing on this box can answer
-            it, because the container only ever sees a private tunnel address and the exit is only
-            knowable from outside. The carrier is what an observer on the far side actually
-            attributes this traffic to.
+            Asked of gluetun’s control API, which asks the provider. Nothing on this box can answer
+            it: the container only ever sees a private tunnel address and the exit is only knowable
+            from outside. The carrier is what an observer on the far side attributes this traffic
+            to.
           </p>
         </Board>
 
@@ -291,7 +291,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
               source: { container: t.exporter },
               label: 'Exporter',
               role: 'the process the VPN alerts read',
-              note: 'Polls this tunnel’s control API every 30 seconds and serves the gluetun_vpn_status and forwarded-port metrics behind the chart above and the VPN-down alert. If those go stale while the tunnel is fine, the answer is here — a wedged gluetun reads as "Up 4 days" with its ports listed while nothing is listening.',
+              note: 'Polls this tunnel’s control API every 30 seconds and serves the gluetun_vpn_status and forwarded-port metrics behind the chart above and the VPN-down alert. If those go stale while the tunnel is fine, the answer is here. A wedged gluetun reads as "Up 4 days" with its ports listed while nothing is listening.',
             },
           ]}
         />

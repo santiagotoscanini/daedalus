@@ -27,7 +27,7 @@ export function Hero() {
 
       <div className="hero-text relative mx-auto max-w-3xl px-6 pb-20 pt-44 text-center sm:pb-24 sm:pt-56">
         <p className="rise font-mono text-[11px] uppercase tracking-[0.18em] text-muted-2">
-          Open source · one box · no one else's terms
+          Open source, on hardware you own
         </p>
         <h1 className="rise mt-6 text-balance text-5xl font-semibold leading-[1.04] tracking-[-0.03em] sm:text-[4.5rem]">
           Build yourself
@@ -35,9 +35,9 @@ export function Hero() {
           <span className="text-gradient-ember">a cloud.</span>
         </h1>
         <p className="rise rise-1 mx-auto mt-7 max-w-xl text-pretty text-[17px] leading-relaxed text-[#c6c6cd]">
-          The platform you'd otherwise rent — push-to-deploy, managed Postgres, single sign-on,
-          certificates, monitoring, backups — running on a machine you own. Your own Vercel, your
-          own AWS, on your own shelf.
+          The platform you'd otherwise rent: push-to-deploy, managed Postgres, single sign-on,
+          certificates, monitoring, backups. Your own Vercel, your own AWS, running on a machine you
+          own.
         </p>
         <div className="rise rise-2 mt-10 flex flex-wrap items-center justify-center gap-3">
           <a href={REPO} className="btn btn-primary h-11 px-5">
@@ -49,7 +49,7 @@ export function Hero() {
           </Link>
         </div>
         <p className="rise rise-3 mt-7 font-mono text-[11px] tracking-wide text-[#8f8f99]">
-          push to main · live in minutes · nothing leaves the house
+          push to main, live in about two minutes
         </p>
       </div>
 

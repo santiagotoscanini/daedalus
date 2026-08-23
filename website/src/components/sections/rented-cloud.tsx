@@ -15,7 +15,7 @@ const LEDGER: LedgerRow[] = [
   {
     vendor: "Vercel",
     sells: "push-to-deploy, build minutes",
-    ours: "Push to main. The box builds it, registers it, ships it — live in about two minutes.",
+    ours: "Push to main. The box builds it, registers it and ships it in about two minutes.",
   },
   {
     vendor: "AWS RDS",
@@ -25,7 +25,7 @@ const LEDGER: LedgerRow[] = [
   {
     vendor: "Auth0",
     sells: "single sign-on",
-    ours: "Pocket ID fronts every app with OIDC — one account, every door.",
+    ours: "Pocket ID fronts every app with OIDC. One account, every door.",
   },
   {
     vendor: "Route 53 + ACM",
@@ -35,7 +35,7 @@ const LEDGER: LedgerRow[] = [
   {
     vendor: "Datadog",
     sells: "metrics, logs, alerts",
-    ours: "Prometheus, Grafana and Loki on the box — dashboards that admit what they don't know.",
+    ours: "Prometheus, Grafana and Loki on the box, with dashboards that admit what they don't know.",
   },
   {
     vendor: "S3",
@@ -51,7 +51,7 @@ export function RentedCloud() {
         <SectionHeading
           kicker="The idea"
           title="You already run a cloud. You just rent it."
-          sub="Every line below is an invoice that stops arriving — and an outage that stops being someone else's."
+          sub="Every line below is an invoice that stops arriving, and an outage that stops being someone else's."
         />
 
         <Reveal delay={0.06}>
@@ -82,7 +82,7 @@ export function RentedCloud() {
             {/* Receipt footing */}
             <div className="flex items-baseline justify-between pt-4 font-mono text-[11px] tracking-wide">
               <span className="uppercase tracking-[0.18em] text-dim">Total</span>
-              <span className="text-accent">one box · one repo · yours</span>
+              <span className="text-accent">one box you own</span>
             </div>
           </div>
         </Reveal>

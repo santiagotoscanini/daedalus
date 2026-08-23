@@ -59,7 +59,7 @@ export function MonitoringView() {
     <Shell active="monitoring">
       <PageHead
         title="Monitoring"
-        lede="The watchers — and whether each of them would still tell you."
+        lede="The watchers, and whether each would still tell you."
       />
       <Tabs
         items={[
@@ -89,7 +89,7 @@ export function MonitoringView() {
         <Board
           title="Probes"
           note="every webApp's health path"
-          foot="A dead probe renders as unknown, never as healthy. Grey means the question went unanswered — not that the answer was yes."
+          foot="A dead probe renders as unknown, never as healthy. Grey means the question went unanswered."
         >
           {PROBES.map((p) => (
             <div
@@ -121,7 +121,7 @@ export function MonitoringView() {
         <Board
           title="Alert activity"
           note="last 14 days"
-          foot="Alerting covers failed units, dead probes, pool health, cert expiry and container staleness — and pages by mail, from the box."
+          foot="Alerting covers failed units, dead probes, pool health, cert expiry and container staleness. It pages by mail, from the box."
         >
           <div className="flex h-[128px] items-end gap-[7px] pt-[4px]">
             {[2, 0, 0, 1, 0, 0, 0, 3, 1, 0, 0, 0, 1, 4].map((v, i) => (

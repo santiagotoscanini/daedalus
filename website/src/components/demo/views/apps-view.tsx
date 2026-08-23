@@ -44,7 +44,7 @@ const ROWS: AppRow[] = [
   },
   {
     name: "hermes",
-    desc: "Smart reader — RSS with AI TL;DRs and a Hacker News lens",
+    desc: "RSS reader with AI TL;DRs and a Hacker News lens",
     host: "hermes.toscanini.me",
     tone: "ok",
     exposure: "external",
@@ -54,7 +54,7 @@ const ROWS: AppRow[] = [
   },
   {
     name: "iris",
-    desc: "One QR code, forever — retargetable QRs and a linktree",
+    desc: "Retargetable QR codes and a linktree",
     host: "iris.toscanini.me",
     tone: "ok",
     exposure: "external",
@@ -149,7 +149,7 @@ export function AppsView() {
           Daedalus
         </h2>
         <span className="text-[12px]" style={{ color: APP.dim }}>
-          deployed, watched and managed on this box
+          deployed and watched on this box
         </span>
       </div>
 

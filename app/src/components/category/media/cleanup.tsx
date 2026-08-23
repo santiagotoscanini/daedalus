@@ -55,12 +55,15 @@ function CleanuparrPage({ d }: { d: Cleanup }) {
         version={cleanuparr.version}
         versionNote="from the tag the flake pins"
         verdict={verdictOf(cleanuparr.gap)}
-        compare={compareOf(cleanuparr.gap, 'the image tag — the API that reported it is closed')}
+        compare={compareOf(
+          cleanuparr.gap,
+          'the image tag, since the API that reported it is closed',
+        )}
         lede={
           <>
             Unsticks the download queues: strikes items that stop progressing, blocks the ones that
             keep coming back, and asks the *arr for a replacement. It is why the queues on the
-            Wanted tab are usually empty rather than full of dead entries.
+            Wanted tab are usually empty.
           </>
         }
         actions={<Open name="Cleanuparr" host="cleanuparr" />}
@@ -92,9 +95,9 @@ function CleanuparrPage({ d }: { d: Cleanup }) {
 
         <Board title="Why it is here" icon="◈" span={4}>
           <p className="board-foot">
-            A download that stalls does not fail — it sits in the queue at 97% forever, and the *arr
-            goes on believing the episode is handled. Nothing else on this box notices that.
-            Cleanuparr strikes it, removes it, blocks the release and asks for another one.
+            A download that stalls does not fail. It sits in the queue at 97% forever, and the *arr
+            goes on believing the episode is handled. Nothing else on this box notices. Cleanuparr
+            strikes it, removes it, blocks the release and asks for another one.
           </p>
         </Board>
 
@@ -122,15 +125,15 @@ function JanitorrPage({ d }: { d: Cleanup }) {
           ...compareOf(
             janitorr.gap,
             janitorr.running.revision === null
-              ? 'the image’s OCI label — the tag is a channel'
-              : `the image’s OCI label · built from ${janitorr.running.revision}`,
+              ? 'the image’s OCI label, since the tag is a channel'
+              : `the image’s OCI label, built from ${janitorr.running.revision}`,
           ),
           ...freshnessRow(janitorr.freshness),
         ]}
         lede={
           <>
             Retention: deletes what nobody has watched, on a schedule. Running in dry-run, so it
-            decides and then does nothing — which makes its log the whole of its output.
+            decides and then does nothing. Its log is the whole of its output.
           </>
         }
         actions={
@@ -160,8 +163,8 @@ function JanitorrPage({ d }: { d: Cleanup }) {
             </ul>
           )}
           <p className="board-foot">
-            The schedules that announce themselves — every hour, whether or not they do anything.
-            Off here is what a deliberately disarmed retention service looks like, and without this
+            The schedules that announce themselves, every hour, whether or not they do anything. Off
+            here is what a deliberately disarmed retention service looks like, and without this
             panel it is indistinguishable from a broken one. It is not a list of everything Janitorr
             can do: its media-based cleanup says nothing either way on this box, which is why the
             count beside this one is the backstop.
@@ -171,7 +174,7 @@ function JanitorrPage({ d }: { d: Cleanup }) {
         <Board title="Would delete" icon="⌦" span={4}>
           <Measures items={[{ k: `Last ${String(d.days)} days`, v: num(janitorr.wouldDelete) }]} />
           <p className="board-foot">
-            Dry-run — nothing is removed, so this is what it decided it would take if it were armed.
+            Dry-run: nothing is removed, so this is what it decided it would take if it were armed.
             The image is pinned to a moving <span className="mono">jvm-stable</span>, which carries
             no version; the one in the header comes from the image&rsquo;s own OCI label.
           </p>

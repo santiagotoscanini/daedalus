@@ -14,7 +14,7 @@ export const SYSTEM_SNAPSHOT: LogNeighbour = {
   source: { unit: 'daedalus-system-snapshot.service' },
   label: 'System snapshot',
   role: 'where these numbers come from',
-  note: 'Runs smartctl, zpool and zfs as root every ten minutes and publishes the result, because this dashboard is a container and none of those three can be run from one. One line per run with the counts. It fails silently from the reader’s side — a stale file shows yesterday’s temperatures as though they were now — so its failures also send mail; see fleet.monitoredJobs in stacks/daedalus.',
+  note: 'Runs smartctl, zpool and zfs as root every ten minutes and publishes the result, because this dashboard is a container and none of those three can be run from one. One line per run with the counts. It fails silently from the reader’s side: a stale file shows yesterday’s temperatures as though they were now. Its failures also send mail; see fleet.monitoredJobs in stacks/daedalus.',
 }
 
 /**
@@ -30,13 +30,13 @@ export const HOST_READERS: readonly LogNeighbour[] = [
     source: { container: 'node-exporter' },
     label: 'node-exporter',
     role: 'the host’s own numbers',
-    note: 'CPU, load, memory, pressure stall, filesystems, hwmon temperatures and the NIC counters. It runs on --network=host because it reads the real /proc, /sys and interfaces — a bridge namespace would show it the container’s, which is why this is one of the few containers here with a published port rather than a traefik-net address.',
+    note: 'CPU, load, memory, pressure stall, filesystems, hwmon temperatures and the NIC counters. It runs on --network=host because it reads the real /proc, /sys and interfaces; a bridge namespace would show it the container’s. That is why this is one of the few containers here with a published port rather than a traefik-net address.',
   },
   {
     source: { unit: 'host-liveness-exporter.service' },
     label: 'host-liveness-exporter',
     role: 'per-container CPU, memory and OOM kills',
-    note: 'A timer, not a daemon: every 60s it walks the rootless cgroup tree under user@1000.service that no packaged exporter can see, and writes the result as a textfile for node-exporter to serve. That 60s tick is also why the per-container numbers here are quantised — a short rate window over them is reading the timer, not the workload. A container that vanishes from these panels is usually this not having run.',
+    note: 'A timer, not a daemon: every 60s it walks the rootless cgroup tree under user@1000.service that no packaged exporter can see, and writes the result as a textfile for node-exporter to serve. That 60s tick is also why the per-container numbers here are quantised, so a short rate window over them is reading the timer rather than the workload. A container that vanishes from these panels is usually this not having run.',
   },
 ]
 
@@ -72,7 +72,8 @@ export const PARTS = {
   case: {
     photo: { src: '/part-case-jonsbo-n4.png', width: 700, height: 603 },
     name: 'Jonsbo N4',
-    detail: 'Steel and wood, six 3.5" bays — the reason this box is a NAS shape and not a tower.',
+    detail:
+      'Steel and wood, six 3.5" bays. That is why this box is a NAS shape rather than a tower.',
     specs: [
       { k: 'Bays', v: '6 × 3.5" + 2 × 2.5"' },
       { k: 'Board', v: 'ITX / mATX' },
@@ -85,7 +86,7 @@ export const PARTS = {
     photo: { src: '/part-ram-vengeance-lpx.png', width: 700, height: 256 },
     name: 'Corsair Vengeance LPX',
     detail:
-      'Low-profile heat spreaders, which on a board this small is the specification that matters — a tall kit fouls the cooler.',
+      'Low-profile heat spreaders, which on a board this small is the specification that matters. A tall kit fouls the cooler.',
     specs: [],
   },
 } satisfies Record<string, Part>
