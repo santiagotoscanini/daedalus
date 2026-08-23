@@ -137,7 +137,7 @@ export function DeploysView() {
               Deploy history
             </h2>
             <span className="text-[12px]" style={{ color: APP.dim }}>
-              only the runs where the digest actually moved
+              only the runs where the digest moved
             </span>
           </div>
           <ol

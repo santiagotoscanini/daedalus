@@ -24,11 +24,11 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
         version={data.version}
         versionNote="running on the gaming PC"
         verdict={verdictOf(gap)}
-        compare={comparePinned(gap, 'nothing here — it is installed on Windows, not in the flake')}
+        compare={comparePinned(gap, 'nothing. It is installed on Windows, not in the flake')}
         lede={
           <>
-            The only thing in this stack that holds weights, and the only one not on this box. Every
-            caller reaches it through LiteLLM; it never sees them directly.
+            The only thing in this stack that holds weights, and the only one not on this box.
+            Callers reach it through LiteLLM, never directly.
           </>
         }
         actions={
@@ -114,11 +114,11 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
           )}
 
           <p className="board-foot">
-            One model of each kind stays in VRAM — Lemonade’s per-type limit — so picking a
-            different chat model means putting down the current one. <b>Switch</b> does both in
-            order, because a pinned model is exempt from eviction and the incoming load is refused
-            outright if the slot is not freed first. Counts survive an eviction, so a model you have
-            not run today still shows what it managed last time.
+            Lemonade keeps one model of each kind in VRAM, so picking a different chat model means
+            putting down the current one. <b>Switch</b> does both in order, because a pinned model
+            is exempt from eviction and the incoming load is refused if the slot is not freed first.
+            Counts survive an eviction, so a model you have not run today still shows what it
+            managed last time.
           </p>
         </Board>
 
@@ -134,8 +134,8 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
           foot={
             <p className="board-foot">
               Lemonade’s own log, streamed off the gaming PC over its <code>/logs/stream</code>{' '}
-              WebSocket — the only log egress it has — and pushed to Loki by the bridge below.
-              Timestamps are the ones Lemonade recorded, not the ones Loki received.
+              WebSocket and pushed to Loki by the bridge below. Timestamps are the ones Lemonade
+              recorded, not the ones Loki received.
             </p>
           }
           neighbours={LEMONADE_NEIGHBOURS}
@@ -194,7 +194,7 @@ function ModelKind({ kind }: { kind: Extract<AiData, { tab: 'lemonade' }>['categ
 
       <div className="mkind-body">
         {resident === null ? (
-          <p className="mkind-empty">nothing loaded — the next request will cold-load one</p>
+          <p className="mkind-empty">nothing loaded. The next request will cold-load one</p>
         ) : (
           <ModelHero model={resident} />
         )}
@@ -258,7 +258,7 @@ function HostStrip({ host, live }: { host: Lemonade['host']; live: Lemonade['liv
       <HostFact
         short="GPU load —"
         detail="Lemonade does not report GPU utilisation or VRAM on Windows"
-        note="its Windows metrics backend returns “not implemented”, where its macOS and Linux ones do not — so this is a gap in the port, not in the card"
+        note="its Windows metrics backend returns “not implemented”, where its macOS and Linux ones do not. The gap is in the port, not the card"
         muted
       />
       <HostFact short={shortOs(host.os)} detail={host.os ?? 'OS not reported'} />
@@ -422,7 +422,7 @@ function ModelAlt({ model, replacing }: { model: Model; replacing: Model | null 
             })
         }}
       >
-        {busy ? '· switching…' : 'Switch'}
+        {busy ? 'Switching…' : 'Switch'}
       </button>
     </li>
   )
@@ -453,7 +453,7 @@ function EvictButton({ model }: { model: Model }) {
           })
       }}
     >
-      {busy ? '· evicting…' : 'Evict'}
+      {busy ? 'Evicting…' : 'Evict'}
     </button>
   )
 }

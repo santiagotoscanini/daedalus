@@ -13,8 +13,7 @@ export function Footer() {
             <span className="text-[15px] tracking-tight">daedalus</span>
           </div>
           <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-muted">
-            Daedalus — a cloud of your own, on one box. NixOS is the backend that keeps it
-            reproducible.
+            A cloud of your own, on one box. NixOS is the backend that keeps it reproducible.
           </p>
         </div>
         <nav aria-label="Project">
@@ -76,7 +75,7 @@ export function Footer() {
       </div>
       <div className="border-t border-hairline">
         <p className="mx-auto max-w-5xl px-6 py-6 font-mono text-[11px] text-dim">
-          © 2026 daedalus · one unbroken line
+          © 2026 daedalus
         </p>
       </div>
     </footer>

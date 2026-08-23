@@ -157,7 +157,7 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'media',
     label: 'Media',
-    lede: 'Two libraries, and the chain that fills them — with what each service says about itself.',
+    lede: 'Two libraries, and the chain that fills them.',
     // Shaped to Jellyfin, the tab that opens by default.
     boardSpans: [8, 4, 4, 8],
     // No tile directory. It held eleven tiles, each three numbers and a link,
@@ -232,7 +232,7 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'home',
     label: 'Home',
-    lede: 'The household’s own things — what the house shares, and what one person keeps here.',
+    lede: 'What the house shares, and what one person keeps here.',
     // Shaped to the House tab, which opens by default.
     boardSpans: [8, 4, 4, 8],
     // No tile directory. It held eight tiles, and the two biggest data stores
@@ -322,7 +322,7 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'network',
     label: 'Network',
-    lede: 'Everything between a packet and this box — the link, the ways in, the proxy, the resolver.',
+    lede: 'Everything between a packet and this box: the link, the ways in, the proxy, the resolver.',
     boardSpans: [12, 12, 8, 4],
     // No tiles on any tab here. The nine that used to sit under General were
     // each a service already given a whole tab, restating three of its numbers
@@ -487,7 +487,7 @@ export const CATEGORIES: CategorySpec[] = [
   {
     id: 'monitoring',
     label: 'Monitoring',
-    lede: 'The watchers — and whether each of them would still tell you.',
+    lede: 'The watchers, and whether each would still tell you.',
     // Shaped to Alerts, the tab that opens by default.
     boardSpans: [8, 4, 4, 8],
     // No tile directory. Its five tiles were Grafana, Loki, Prometheus, Gatus

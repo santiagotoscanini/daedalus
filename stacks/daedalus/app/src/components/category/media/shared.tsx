@@ -71,7 +71,7 @@ export function HealthChecks({
 }) {
   if (!reachable) return <p className="viz-empty">could not ask</p>
   if (checks.length === 0)
-    return <p className="viz-empty">No warnings — every check this service runs is passing.</p>
+    return <p className="viz-empty">No warnings. Every check this service runs is passing.</p>
 
   return (
     <ul className="hchecks">

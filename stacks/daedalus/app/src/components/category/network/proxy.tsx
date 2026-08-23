@@ -40,7 +40,7 @@ const PROTECTION: Record<
 > = {
   app: {
     title: 'The app decides',
-    note: 'traefik routes these straight through. Whatever login they have is their own, and this page cannot see it — several of them do have one.',
+    note: 'traefik routes these straight through. Whatever login they have is their own, and this page cannot see it. Several of them do have one.',
     tone: 'muted',
   },
   gate: {
@@ -50,7 +50,7 @@ const PROTECTION: Record<
   },
   client: {
     title: 'Signs in against Pocket ID itself',
-    note: 'No middleware — the app is a registered OIDC client and runs the login itself, which means it also decides what an unauthenticated request gets.',
+    note: 'No middleware. The app is a registered OIDC client and runs the login itself, which means it also decides what an unauthenticated request gets.',
     tone: 'info',
   },
 }
@@ -76,9 +76,7 @@ export function TraefikView({ d }: { d: Proxy }) {
         logo="/icon-traefik.svg"
         name="Traefik"
         version={d.version}
-        versionNote={
-          d.codename === null ? 'from its own API' : `“${d.codename}” · from its own API`
-        }
+        versionNote={d.codename === null ? 'from its own API' : `“${d.codename}”, from its own API`}
         verdict={verdictOf(d.gap)}
         compare={[
           {
@@ -166,16 +164,16 @@ export function TraefikView({ d }: { d: Proxy }) {
           <p className="board-foot">
             One row per hostname rather than per router, because a name published both on the LAN
             and through the tunnel is two routers for one thing. Read from the configuration traefik
-            actually built — not from what the flake asked for, which is the point of looking. The
-            count on the right is requests over {d.windowDays} days.
+            built, not from what the flake asked for, which is the point of looking. The count on
+            the right is requests over {d.windowDays} days.
             {counts.errors > 0 && (
               <>
                 {' '}
                 <b>
                   {num(counts.errors)} piece{counts.errors === 1 ? '' : 's'} of configuration failed
-                  to build
+                  to build.
                 </b>{' '}
-                — a router that does not exist answers nothing, quietly.
+                A router that does not exist answers nothing, quietly.
               </>
             )}
           </p>
@@ -287,9 +285,9 @@ export function TraefikView({ d }: { d: Proxy }) {
           {/* A quarter of the width now, so this keeps the two facts that
               change how the list is read and drops the tour. */}
           <p className="board-foot">
-            The store, not a probe — <b>every</b> certificate this box serves HTTPS with is here,
-            and one wildcard is why that is a short list. Issued over DNS-01 against Cloudflare, so
-            a renewal needs nothing reachable from the internet.{' '}
+            The store, not a probe. <b>Every</b> certificate this box serves HTTPS with is here, and
+            one wildcard is why that is a short list. Issued over DNS-01 against Cloudflare, so a
+            renewal needs nothing reachable from the internet.{' '}
             {d.certs.some((c) => c.covers === 0) && (
               <>
                 One covering nothing is a leftover: traefik renews what it holds rather than what is
@@ -329,7 +327,7 @@ export function TraefikView({ d }: { d: Proxy }) {
             <p className="board-foot">
               The service log, not the access log: startup, certificate renewals, configuration
               reloads and the errors behind a router that refused to build. Per-request lines go to
-              the access log, which is not shipped here — the metrics above are what that answers.
+              the access log, which is not shipped here; the metrics above are what that answers.
             </p>
           }
         />
@@ -392,8 +390,8 @@ function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] })
       <p className="board-foot">
         {/* 401 is the gate working, not a fault, and on a box where half the
             routers forward-auth it is one of the commonest codes. */}
-        A 401 is usually the gate doing its job — a request arriving without a session, on its way
-        to the login.
+        A 401 is usually the gate doing its job, a request arriving without a session on its way to
+        the login.
       </p>
     </details>
   )

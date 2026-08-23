@@ -85,7 +85,7 @@ export function BuildView({ d }: { d: Build }) {
         />
         <p className="board-foot">
           Ten cores and sixteen threads is not an error: six of them are efficiency cores with no
-          hyperthread. That asymmetry is why the per-core temperature list on Host is uneven — the
+          hyperthread. That asymmetry is why the per-core temperature list on Host is uneven. The
           two kinds of core do not run at the same clock and are not meant to.
         </p>
       </Board>
@@ -106,8 +106,8 @@ export function BuildView({ d }: { d: Build }) {
           <div className="part-id">
             <strong className="part-name">Noctua NH-L9x65</strong>
             <span className="part-detail">
-              65 mm tall, chosen against the case&rsquo;s 70 mm ceiling — the whole build turns on
-              this number.
+              65 mm tall, chosen against the case&rsquo;s 70 mm ceiling. The whole build turns on
+              that number.
             </span>
           </div>
         </div>
@@ -125,7 +125,7 @@ export function BuildView({ d }: { d: Build }) {
               </span>
             </li>
           ))}
-          {d.fans.length === 0 && <p className="viz-empty">no fan sensors — see the note below</p>}
+          {d.fans.length === 0 && <p className="viz-empty">no fan sensors; see the note below</p>}
         </ul>
         <h4 className="board-sub">Board temperatures</h4>
         <BarList
@@ -140,8 +140,8 @@ export function BuildView({ d }: { d: Build }) {
         <p className="board-foot">
           These readings exist because a driver was added for the board&rsquo;s Nuvoton super-I/O
           chip; without it Linux sees three sensors and counts no revolutions at all, which on a
-          machine that lives in a cupboard makes a dead fan silent until it is thermal. The headers
-          reading zero are not faults — they are empty.
+          machine that lives in a cupboard makes a dead fan silent until it is thermal. Headers
+          reading zero are empty, not faulty.
         </p>
       </Board>
 
@@ -198,8 +198,8 @@ export function BuildView({ d }: { d: Build }) {
         </ul>
         <p className="board-foot">
           Both modules sit in the second slot of each channel, which is the pairing the board wants
-          for dual channel — the empty slots are the two that would break it if filled wrong. Two
-          free slots and a 128 GB ceiling is the upgrade this machine actually has left.
+          for dual channel. The empty slots are the two that would break it if filled wrong. Two
+          free slots and a 128 GB ceiling is the upgrade this machine has left.
         </p>
       </Board>
 
@@ -217,7 +217,7 @@ export function BuildView({ d }: { d: Build }) {
           <div className="part-id">
             <strong className="part-name">Intel UHD Graphics 770</strong>
             <span className="part-detail">
-              Integrated in the CPU — there is no card in this machine. It transcodes for Jellyfin
+              Integrated in the CPU; there is no card in this machine. It transcodes for Jellyfin
               and runs Immich&rsquo;s vision models.
             </span>
           </div>
@@ -240,12 +240,12 @@ export function BuildView({ d }: { d: Build }) {
           ]}
         />
         <p className="board-foot">
-          A parked graphics engine reads zero watts and zero megahertz, and that is the honest
-          number rather than a broken one — it wakes when something asks it to. The package figure
-          beside it is the whole chip including the cpu cores, which is why the two are shown
-          together: on an integrated part they are one piece of silicon and one power budget. The
-          render node is passed into three containers at once — jellyfin for QSV transcoding, immich
-          for OpenVINO, and the exporter these numbers come from.
+          A parked graphics engine reads zero watts and zero megahertz. That is the honest number
+          rather than a broken one: it wakes when something asks it to. The package figure beside it
+          is the whole chip including the cpu cores, which is why the two are shown together — on an
+          integrated part they are one piece of silicon and one power budget. The render node is
+          passed into three containers at once: jellyfin for QSV transcoding, immich for OpenVINO,
+          and the exporter these numbers come from.
         </p>
       </Board>
 
@@ -254,7 +254,7 @@ export function BuildView({ d }: { d: Build }) {
           <div className="part-id">
             <strong className="part-name">EVGA SuperNOVA 650 GM</strong>
             <span className="part-detail">
-              SFX, 80+ Gold, fully modular — the form factor the case dictates.
+              SFX, 80+ Gold, fully modular. The case dictates the form factor.
             </span>
           </div>
         </div>
@@ -273,7 +273,7 @@ export function BuildView({ d }: { d: Build }) {
           })}
         </ul>
         <p className="board-foot">
-          The supply itself reports nothing — this model has no monitoring interface, so there is no
+          The supply itself reports nothing. This model has no monitoring interface, so there is no
           temperature, no load and no fan speed to show, and none of those will ever appear here.
           What the board CAN see is what arrives on each rail, which is the next best question: a
           supply beginning to fail sags before it dies.
@@ -291,9 +291,9 @@ export function BuildView({ d }: { d: Build }) {
         </div>
         <p className="board-foot">
           Six drive bays with two filled, and a 70 mm cooler ceiling that picked the cooler. This is
-          the one part on the page that nothing in the machine can report — SMBIOS reports the board
+          the one part on the page that nothing in the machine can report: SMBIOS gives the board
           vendor as the chassis vendor, because a case has no firmware and no way to introduce
-          itself, so this panel is written down rather than read.
+          itself. So this panel is written down rather than read.
         </p>
       </Board>
 

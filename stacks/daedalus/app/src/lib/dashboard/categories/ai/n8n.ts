@@ -292,7 +292,7 @@ export async function loadN8n(base: string): Promise<N8nData> {
     partial: execs.partial,
     archived: all.length - live.length,
     note: execs.refused
-      ? 'n8n refused the executions API. The key needs the execution:read scope — make one ' +
+      ? 'n8n refused the executions API. The key needs the execution:read scope. Make one ' +
         'in Settings → n8n API and put it in stacks/daedalus/service-keys.sops as N8N_API_KEY.'
       : null,
     // A different, smaller problem than the one above, and worth saying

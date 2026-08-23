@@ -191,7 +191,7 @@ export async function postgresGap(reported: string | null): Promise<VersionGap> 
     return {
       ...EMPTY_GAP,
       installed,
-      note: 'postgresql.org did not answer — the version and its notes both come from there',
+      note: 'postgresql.org did not answer, and the version and its notes both come from there',
     }
   }
 
@@ -200,7 +200,7 @@ export async function postgresGap(reported: string | null): Promise<VersionGap> 
     return {
       ...EMPTY_GAP,
       installed,
-      note: `postgresql.org lists no ${major}.x release line — this cluster is on a major it no longer publishes`,
+      note: `postgresql.org lists no ${major}.x release line, so this cluster is on a major it no longer publishes`,
     }
   }
 
@@ -233,7 +233,7 @@ export async function postgresGap(reported: string | null): Promise<VersionGap> 
     // minors, and it is invisible from a version number alone: 16.10 looks
     // exactly as healthy as 18.4 until you know which lines still get fixes.
     note: !line.supported
-      ? `PostgreSQL ${major} is out of support — postgresql.org publishes no further fixes for this line`
+      ? `PostgreSQL ${major} is out of support; postgresql.org publishes no further fixes for this line`
       : releases.length > 0
         ? null
         : 'postgresql.org served the version list but not the release notes',

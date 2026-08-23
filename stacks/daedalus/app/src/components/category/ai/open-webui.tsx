@@ -106,12 +106,12 @@ export function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-web
           )}
 
           <p className="board-foot">
-            Read back from the running instance, not from the config that was meant to produce it —
-            which is the only way to catch the two ways these disappear quietly. An env-backed
+            Read back from the running instance, not from the config that was meant to produce it.
+            That is the only way to catch the two ways these disappear quietly. An env-backed
             setting the database had already overridden leaves the models list short, and a virtual
             key not permitted to reach an MCP server makes its tools return an empty list rather
-            than an error. A knowledge base holding no files is marked: it answers nothing, and says
-            nothing about it.
+            than an error. A knowledge base holding no files is marked: it answers nothing and
+            reports no error.
           </p>
         </Board>
 

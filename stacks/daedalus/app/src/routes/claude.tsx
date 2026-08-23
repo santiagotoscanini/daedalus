@@ -41,7 +41,7 @@ function ClaudePage() {
         <h1>Claude</h1>
       </header>
       <p className="lede cat-lede">
-        The remote-control server that lets this box be worked on from anywhere — what is connected
+        The remote-control server that lets this box be worked on from anywhere. What is connected
         to it, whether it has stayed connected, and which version it is running.
       </p>
 

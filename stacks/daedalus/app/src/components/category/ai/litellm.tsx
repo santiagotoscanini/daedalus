@@ -34,8 +34,8 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
         ]}
         lede={
           <>
-            The only thing that knows who asked for what. Nothing here holds a model — swapping
-            Lemonade out is a config change here and no caller notices.
+            The only thing that knows who asked for what. Nothing here holds a model, so swapping
+            Lemonade out is a config change and no caller notices.
           </>
         }
         actions={
@@ -126,8 +126,8 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
                 ))}
               </span>
             )}
-            Counted from the gateway’s own ledger, which survives a restart — its Prometheus
-            counters do not. A day that saw a failure is underlined in red.
+            Counted from the gateway’s own ledger, which survives a restart. Its Prometheus counters
+            do not. A day that saw a failure is underlined in red.
             {data.partial && ' The window has more rows than one page, so these are a lower bound.'}
           </p>
         </Board>
@@ -166,8 +166,8 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
           )}
           <p className="board-foot">
             The other direction: tools the gateway hands to a model mid-answer, counted when one was
-            actually invoked. A registered server with no calls does not appear, and a tool whose
-            counters were reset by a restart shows no time.
+            invoked. A registered server with no calls does not appear, and a tool whose counters
+            were reset by a restart shows no time.
           </p>
         </Board>
 
@@ -210,7 +210,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
               scored zero and never appeared. */}
           {data.rejected.keys > 0 && (
             <p className="rejected">
-              <b>{num(data.rejected.keys)}</b> keys never completed a request —{' '}
+              <b>{num(data.rejected.keys)}</b> keys never completed a request.{' '}
               <b>{num(data.rejected.requests)}</b> attempts, last{' '}
               {ago(data.rejected.last, todayDate)}.{' '}
               {data.rejected.live === 0 ? (
@@ -226,7 +226,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
 
           <p className="board-foot">
             Named by their key’s alias; a key with none shows as its hash, and one the gateway no
-            longer holds is marked <b>revoked</b> — hover any name for what it is. A key that fails
+            longer holds is marked <b>revoked</b>. Hover any name for what it is. A key that fails
             authentication never reaches a model, so it has no tokens and no model against it. The
             gateway is LAN-only, so every attempt above came from something in the house.
           </p>

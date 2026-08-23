@@ -73,9 +73,8 @@ function NewAppPage() {
         <h1>Add an app</h1>
       </header>
       <p className="lede">
-        One repository under <code>github.com/{OWNER}</code> becomes one entry in the registry.
-        Everything downstream — container, hostname, TLS, DNS, probe, deploy timer, CI runner — is
-        derived from it.
+        One repository under <code>github.com/{OWNER}</code> becomes one entry in the registry. The
+        container, hostname, TLS, DNS, probe, deploy timer and CI runner are all derived from it.
       </p>
 
       <GuardedAwait resetKey="options" promise={options} fallback={<NewAppSkeleton />}>
@@ -312,7 +311,7 @@ function Wizard({ options }: { options: Options }) {
     hostNotes.push({
       id: 'image',
       state: 'running',
-      message: 'building — this row refreshes itself every 20s',
+      message: 'building. This row refreshes itself every 20s',
     })
   }
 
@@ -354,7 +353,7 @@ function Wizard({ options }: { options: Options }) {
     <div className="wizard">
       <section className="wizard-step">
         <h2 className="section-head">
-          1 · Repository
+          1. Repository
           <small>the app key, the image name and the CI runner all come from it</small>
           <RefreshButton
             busy={reloading}
@@ -404,7 +403,7 @@ function Wizard({ options }: { options: Options }) {
         <>
           <section className="wizard-step">
             <h2 className="section-head">
-              2 · What it gets
+              2. What it gets
               <small>every one of these is editable afterwards</small>
             </h2>
 
@@ -463,15 +462,15 @@ function Wizard({ options }: { options: Options }) {
                   checked={prometheus}
                   onChange={setPrometheus}
                   label="Prometheus scrape"
-                  hint="Only once the app actually serves /metrics — otherwise it is a permanently-down target."
+                  hint="Only once the app actually serves /metrics. Otherwise it is a permanently-down target."
                 />
                 <p className="board-foot">
                   Not here, on purpose. <b>SSO</b> is a second, deliberate step on the app’s own
-                  page — its client secret is generated on the box, so there is nothing to author
-                  first. <b>Operator secrets</b> have no switch at all: commit a{' '}
+                  page: its client secret is generated on the box, so there is nothing to author
+                  first. <b>Operator secrets</b> have no switch at all. Commit a{' '}
                   <code>{name || '<name>'}-env.sops</code> to <code>stacks/apps/</code> and the next
-                  rebuild loads it. <b>VPN egress</b> is the one thing that still needs the flake —
-                  it wants a gluetun instance to exist before anything can join its netns.
+                  rebuild loads it. <b>VPN egress</b> is the one thing that still needs the flake.
+                  It wants a gluetun instance to exist before anything can join its netns.
                 </p>
               </Board>
 
@@ -488,7 +487,7 @@ function Wizard({ options }: { options: Options }) {
                 />
                 <p className="board-foot">
                   {stage === 'off'
-                    ? 'No traefik router, no DNS, no probe — but the container still runs and still deploys.'
+                    ? 'No traefik router, no DNS, no probe. The container still runs and still deploys.'
                     : stage === 'lab'
                       ? 'LAN only: HTTPS through traefik with the wildcard certificate, resolved by pi-hole.'
                       : 'Also published through the Cloudflare tunnel, with a public CNAME. Anyone on the internet can reach it.'}
@@ -500,7 +499,7 @@ function Wizard({ options }: { options: Options }) {
                   validate={(v) => hostnameError(v)}
                   hint={
                     <>
-                      Empty uses the default. One level under <code>{BASE_DOMAIN}</code> — the
+                      Empty uses the default. One level under <code>{BASE_DOMAIN}</code>, since the
                       wildcard certificate matches exactly one label.
                     </>
                   }
@@ -521,7 +520,7 @@ function Wizard({ options }: { options: Options }) {
             {plan === null ? (
               <>
                 <h2 className="section-head">
-                  3 · Readiness
+                  3. Readiness
                   <small>can this repo publish an image?</small>
                 </h2>
                 <p className="banner banner-muted">Checking the repository…</p>
@@ -549,7 +548,7 @@ function Wizard({ options }: { options: Options }) {
               </button>
               <p className="footnote">
                 {imageMissing
-                  ? 'Blocked until the image exists. Run CI above — a one-shot runner is started for the repo, since it has no runner of its own until it is an app. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
+                  ? 'Blocked until the image exists. Run CI above; a one-shot runner is started for the repo, since it has no runner of its own until it is an app. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
                   : 'Writes the registry row. Nothing is built, routed or started until you Apply, which commits stacks/apps/apps.json and rebuilds.'}
               </p>
             </div>

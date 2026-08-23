@@ -81,7 +81,7 @@ export function UpdateControl({
   if (!t.updatable) {
     return (
       <p className="upd-note">
-        Pinned by policy — moving this one is not a pin edit. See
+        Pinned by policy: moving this one is not a pin edit. See
         <code> fleet.imageUpdates</code>.
       </p>
     )
@@ -147,7 +147,7 @@ export function UpdateControl({
           out from a commit message afterwards is not consent. */}
       {t.lockstep.length > 0 && (
         <p className="upd-note">
-          Moves with it: <span className="mono">{t.lockstep.join(', ')}</span> — one release, one
+          Moves with it: <span className="mono">{t.lockstep.join(', ')}</span>. One release, one
           commit.
         </p>
       )}

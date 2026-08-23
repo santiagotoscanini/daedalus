@@ -160,9 +160,9 @@ export function Changelog({
         <p className="board-foot">
           {gap !== null
             ? behind === 0
-              ? 'What the running version shipped. Parsed from the project’s own GitHub releases and shortened — open one for the detail.'
-              : 'Everything between the running version and the newest release, oldest at the top. Parsed from the project’s own GitHub releases and shortened — open one for the detail, and the link inside goes to the full text.'
-            : 'Commits rather than releases, because this image tracks a branch instead of a tag — so this is what a re-pull would actually bring.'}
+              ? 'What the running version shipped. Parsed from the project’s own GitHub releases and shortened; open one for the detail.'
+              : 'Everything between the running version and the newest release, oldest at the top. Parsed from the project’s own GitHub releases and shortened; open one for the detail, and the link inside goes to the full text.'
+            : 'Commits rather than releases, because this image tracks a branch instead of a tag, so this is what a re-pull would actually bring.'}
         </p>
       )}
     </Board>

@@ -311,7 +311,7 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
         allYaml === ''
           ? 'no workflow contents could be read'
           : publishWorkflow === null
-            ? 'no workflow pushes to zot:5000 — nothing would ever be deployed'
+            ? 'no workflow pushes to zot:5000, so nothing would ever be deployed'
             : dispatchable
               ? `${publishWorkflow} pushes to zot, and can be run on demand`
               : `${publishWorkflow} pushes to zot, but has no workflow_dispatch trigger`,
@@ -320,7 +320,7 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
           ? 'Add the release workflow that builds and pushes zot:5000/<name>:latest (copy it from an existing app).'
           : dispatchable
             ? undefined
-            : 'Add `workflow_dispatch:` to its triggers — without it the first image can only come from a push to the default branch.',
+            : 'Add `workflow_dispatch:` to its triggers. Without it the first image can only come from a push to the default branch.',
     })
 
     // --- will these workflows run on OUR runners at all? -------------------
@@ -344,10 +344,10 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
         allYaml === ''
           ? 'no workflow contents could be read'
           : usesServiceContainers
-            ? 'a job declares services:/container: — our runners have no Docker API, so it fails at "Initialize containers"'
+            ? 'a job declares services:/container:, and our runners have no Docker API, so it fails at "Initialize containers"'
             : 'plain run: steps only',
       fix: usesServiceContainers
-        ? 'Replace the service container with something the job starts itself, or run that job on a GitHub-hosted runner. The socket is withheld deliberately — it is root-equivalent on this box.'
+        ? 'Replace the service container with something the job starts itself, or run that job on a GitHub-hosted runner. The socket is withheld deliberately: it is root-equivalent on this box.'
         : undefined,
     })
 
@@ -365,7 +365,7 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
           ? 'the repo contents could not be read'
           : hasContainerfile
             ? 'found'
-            : 'none at the root — fine if the workflow builds from elsewhere',
+            : 'none at the root, which is fine if the workflow builds from elsewhere',
     })
 
     // --- the secrets these workflows read ----------------------------------
@@ -393,11 +393,11 @@ export async function repoChecks(repo: string): Promise<RepoChecks> {
       state: !readable ? 'unknown' : hasRegistryPassword ? 'ok' : 'bad',
       detail: !readable
         ? secrets.status === 403
-          ? 'the token cannot read repo secrets — check by hand'
+          ? 'the token cannot read repo secrets; check by hand'
           : 'could not be checked'
         : hasRegistryPassword
           ? 'set'
-          : 'not set — the image push will 401',
+          : 'not set, so the image push will 401',
       fix:
         readable && !hasRegistryPassword
           ? 'This box owns that password and can set it for you.'

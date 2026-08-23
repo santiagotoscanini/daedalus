@@ -22,7 +22,7 @@ export function Vpn({
   if (app.egressContainer === null) {
     return (
       <p className="lede">
-        This app’s traffic leaves the house directly. Egress is set in Nix rather than here — it
+        This app’s traffic leaves the house directly. Egress is set in Nix rather than here: it
         pairs a gluetun container with a host port, and both move together.
       </p>
     )
@@ -76,7 +76,7 @@ export function Vpn({
           />
           <p className="board-foot">
             If the tunnel drops, the app loses the network rather than falling back to the house
-            connection — that is the point of borrowing the namespace instead of routing.
+            connection. That is the point of borrowing the namespace instead of routing.
           </p>
         </Board>
       </BoardGrid>

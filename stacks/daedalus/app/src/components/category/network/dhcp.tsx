@@ -35,7 +35,7 @@ function LanDevices({ devices }: { devices: Device[] }) {
     <>
       {fixed.length > 0 && (
         <>
-          <h4 className="board-sub">Fixed here — {fixed.length} declared</h4>
+          <h4 className="board-sub">Fixed here, {fixed.length} declared</h4>
           <ul className="devices">
             {fixed.map((d) => (
               <DeviceRow key={d.mac} d={d} />
@@ -44,7 +44,7 @@ function LanDevices({ devices }: { devices: Device[] }) {
         </>
       )}
 
-      <h4 className="board-sub">Given whatever was free — {rest.length} seen</h4>
+      <h4 className="board-sub">Given whatever was free, {rest.length} seen</h4>
       <ul className="devices">
         {recent.map((d) => (
           <DeviceRow key={d.mac} d={d} />
@@ -127,14 +127,17 @@ export function DhcpView({ data }: { data: Dhcp }) {
         lede={
           <>
             The same process that answers names hands out the addresses. Every device in the house
-            asks this box for one and gets it from a pool this box decides —{' '}
+            asks this box for one and gets it from a pool this box decides.{' '}
             {dhcp.reservationsKnown ? (
               <>
-                {dhcp.reservations.length} of them pinned by hardware address, so the rest of the
-                machine can name them.
+                {dhcp.reservations.length} of them are pinned by hardware address, so the rest of
+                the machine can name them.
               </>
             ) : (
-              <>some pinned by hardware address in a hostsfile this page could not read just now.</>
+              <>
+                Some are pinned by hardware address in a hostsfile this page could not read just
+                now.
+              </>
             )}
           </>
         }
@@ -193,11 +196,11 @@ export function DhcpView({ data }: { data: Dhcp }) {
           />
           <p className="board-foot">
             The resolver is the DHCP server too, so addresses on this LAN are decided by this box
-            rather than by the router — which is also why the device list below can exist at all.
-            Everything without a reservation gets whatever is free in that range, for{' '}
-            {dhcp.leaseTime} at a time. A reservation is what lets something else on this box name a
-            device by address, which is why the fixed ones are declared in the repo's encrypted
-            hostsfile and not clicked into an admin.
+            rather than by the router, which is also why the device list below can exist. Everything
+            without a reservation gets whatever is free in that range, for {dhcp.leaseTime} at a
+            time. A reservation is what lets something else on this box name a device by address,
+            which is why the fixed ones are declared in the repo's encrypted hostsfile and not
+            clicked into an admin.
           </p>
         </Board>
 
@@ -236,7 +239,7 @@ export function DhcpView({ data }: { data: Dhcp }) {
             ]}
           />
           <p className="board-foot">
-            Offers vastly outnumber acceptances and that is normal — a device wakes, is offered an
+            Offers vastly outnumber acceptances and that is normal. A device wakes, is offered an
             address, and often already has one it is happy with. The two to watch are the bottom
             pair: a <b>decline</b> means a client found the address already in use, a <b>refusal</b>{' '}
             means it asked for one this server would not give it. Both are zero on a LAN with one
@@ -258,12 +261,12 @@ export function DhcpView({ data }: { data: Dhcp }) {
           <p className="board-foot">
             Two lists joined on the hardware address. Everything in the house resolves through this
             box, so anything that ever asked for a name has a row here whether or not it took a
-            lease — which is what makes this more than the leases above. The <b>fixed</b> ones are
-            the reservations, and one of those with no matching device is kept and marked{' '}
-            <b>never</b>: a declared address for something that has not appeared is the only thing
-            on this page worth acting on.
+            lease. That is what makes this more than the leases above. The <b>fixed</b> ones are the
+            reservations, and one of those with no matching device is kept and marked <b>never</b>:
+            a declared address for something that has not appeared is the only thing on this page
+            worth acting on.
             {unbound.length > 0 &&
-              ` ${String(unbound.length)} of ${String(dhcp.reservations.length)} are in that state — a device presenting a private, rotating Wi-Fi address never matches the MAC its reservation was written for.`}{' '}
+              ` ${String(unbound.length)} of ${String(dhcp.reservations.length)} are in that state. A device presenting a private, rotating Wi-Fi address never matches the MAC its reservation was written for.`}{' '}
             <b>active</b> means it looked something up in the last day.
           </p>
         </Board>
@@ -281,7 +284,7 @@ export function DhcpView({ data }: { data: Dhcp }) {
           foot={
             <p className="board-foot">
               Shipped out of <span className="mono">/var/log/pihole/FTL.log</span> rather than the
-              journal — FTL keeps its own file, and the unit&rsquo;s journal lines are
+              journal. FTL keeps its own file, and the unit&rsquo;s journal lines are
               systemd&rsquo;s rather than its own. Every lease offered, acknowledged and declined is
               in here by hardware address, which is the only place the counters above can be turned
               back into &ldquo;which device&rdquo;.

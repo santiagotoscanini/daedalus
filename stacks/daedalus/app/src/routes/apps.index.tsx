@@ -357,7 +357,7 @@ function AppRow({ row }: { row: Row }) {
           <div className="app-name">
             {row.name}
             {row.managedInNix && (
-              <span className="chip chip-muted" title="Declared by hand in Nix — read-only here">
+              <span className="chip chip-muted" title="Declared by hand in Nix, read-only here">
                 nix
               </span>
             )}

@@ -349,7 +349,7 @@ async function loadNeighbours(): Promise<Neighbour[]> {
       container: 'mcp-grocy',
       label: 'Grocy MCP',
       role: 'the local tool server it proxies',
-      note: 'The one MCP server that runs on this box — TickTick is remote and logs nothing here. Every call counted in “tools models called” above passed through this container.',
+      note: 'The one MCP server that runs on this box. TickTick is remote and logs nothing here. Every call counted in “tools models called” above passed through this container.',
       repo: 'miguelangel-nubla/mcp-grocy',
       version: grocy,
       gap: grocyGap,
@@ -484,7 +484,7 @@ function callersOf(
 }
 
 const GONE =
-  'No key with this hash exists on the gateway any more — it was deleted or rotated, which is usually the whole explanation for a caller that succeeded and then failed forever.'
+  'No key with this hash exists on the gateway any more. It was deleted or rotated, which is usually the whole explanation for a caller that succeeded and then failed forever.'
 
 /**
  * What litellm's own two credentials actually are.
@@ -496,9 +496,9 @@ const GONE =
  */
 const NOTES: Record<string, string> = {
   'master key':
-    'The admin credential, so this row is every consumer configured with it at once — Open WebUI (chat, RAG embeddings, transcription, speech, images), the pgvector connector, and this dashboard. Giving each its own aliased key is what would split them apart.',
+    'The admin credential, so this row is every consumer configured with it at once: Open WebUI (chat, RAG embeddings, transcription, speech, images), the pgvector connector, and this dashboard. Giving each its own aliased key is what would split them apart.',
   'health check':
-    'LiteLLM testing its own deployments. Not a status ping — it sends a real minimal request to each one, which is why it has tokens against it. Triggered on demand, from the admin UI or /health, rather than on a schedule.',
+    'LiteLLM testing its own deployments. Not a status ping: it sends a real minimal request to each one, which is why it has tokens against it. Triggered on demand, from the admin UI or /health, rather than on a schedule.',
 }
 
 function volumeOf(m: DayMetrics | undefined): Volume {

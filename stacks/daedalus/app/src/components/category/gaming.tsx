@@ -52,7 +52,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
         logo="/icon-minecraft.svg"
         name="Minecraft"
         version={mc.version}
-        versionNote={mc.build === null ? 'running' : `running · Paper build ${mc.build}`}
+        versionNote={mc.build === null ? 'running' : `running Paper build ${mc.build}`}
         verdict={
           mc.version === null
             ? { label: 'unknown', tone: 'muted' }
@@ -69,14 +69,14 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
           {
             k: 'Server reports',
             v: mc.reported,
-            note: 'what the ping handshake said — should echo the pin',
+            note: 'what the ping handshake said, which should echo the pin',
           },
         ]}
         lede={
           <>
-            Paper, near-vanilla. Everyone connects to <span className="mono">{mc.connect}</span> —
-            the same address at home and away, because pi-hole answers that name with the LAN
-            address and Cloudflare with the public one.
+            Paper, near-vanilla. Everyone connects to <span className="mono">{mc.connect}</span>.
+            That works at home and away because pi-hole answers the name with the LAN address and
+            Cloudflare with the public one.
           </>
         }
         actions={
@@ -121,10 +121,10 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
           aside={<span className="board-note">papermc</span>}
           foot={
             <p className="board-foot">
-              Commits rather than releases: Paper cuts a build per handful of them, so the count
-              means little and the subjects mean everything. Each links to the real commit — the
-              server jar is downloaded fresh for this version and build on every start, so a bump
-              here is a restart away.
+              Commits rather than releases: Paper cuts a build per handful of them, so the subjects
+              matter more than the count. Each links to the real commit. The server jar is
+              downloaded fresh for this version and build on every start, so a bump here is a
+              restart away.
             </p>
           }
         />
@@ -161,8 +161,8 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
               The log already IS the record; a second one could only disagree
               with it. */}
           <p className="board-foot">
-            Parsed from the server’s log in Loki, newest first. The panel below is the whole log,
-            this is the part of it that is about people.
+            Parsed from the server’s log in Loki, newest first. The panel below is the whole log;
+            this is the part about people.
           </p>
         </Board>
 
@@ -176,7 +176,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
               },
               {
                 k: 'Ingress',
-                v: 'TCP 25565 forwarded by the router — no tunnel: Minecraft offers no TLS, so traefik has no SNI to route on',
+                v: 'TCP 25565 forwarded by the router. No tunnel: Minecraft offers no TLS, so traefik has no SNI to route on',
               },
               {
                 k: 'World',
@@ -214,7 +214,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
         logo="/icon-factorio.png"
         name="Factorio"
         version={factorio.installed}
-        versionNote="running · re-downloaded on every start"
+        versionNote="running, re-downloaded on every start"
         verdict={
           current
             ? { label: 'current', tone: 'ok' }
@@ -229,13 +229,13 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           {
             k: 'Experimental',
             v: factorio.experimental,
-            note: 'not tracked — this server follows stable',
+            note: 'not tracked, since this server follows stable',
           },
         ]}
         lede={
           <>
             Headless server behind ofsm. Players connect to{' '}
-            <span className="mono">{factorio.connect}</span> — the one UDP port the router forwards
+            <span className="mono">{factorio.connect}</span>, the one UDP port the router forwards
             inward.
           </>
         }
@@ -261,7 +261,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
                   minute: '2-digit',
                 })}`
           }
-          title="The newest start/stop line in the server’s own log — the manager keeps running either way."
+          title="The newest start/stop line in the server’s own log. The manager keeps running either way."
         />
         <Stat
           label="Manager"
@@ -334,8 +334,8 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
               one", which was true when this panel stood alone and is now flatly
               contradicted by the structured changelog sitting next to it. */}
           <p className="board-foot">
-            The studio’s own feed, which points forward: Friday Facts are what is being built rather
-            than what has landed. What landed is the panel beside this one.
+            The studio’s own feed, which points forward: Friday Facts are about what is being built.
+            What has landed is the panel beside this one.
           </p>
         </Board>
 
@@ -370,10 +370,10 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           {/* Same read as Minecraft's board of the same name: the log already
               IS the record, a second one could only disagree with it. */}
           <p className="board-foot">
-            Parsed from the server’s log in Loki, newest first — the game announces every arrival
-            and departure with a <span className="mono">[JOIN]</span>/
+            Parsed from the server’s log in Loki, newest first: the game announces every arrival and
+            departure with a <span className="mono">[JOIN]</span>/
             <span className="mono">[LEAVE]</span> line. The panel below is the whole log; this is
-            the part of it that is about people.
+            the part about people.
           </p>
         </Board>
 

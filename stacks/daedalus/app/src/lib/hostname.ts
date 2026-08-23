@@ -39,11 +39,11 @@ export function appNameError(name: string, taken: readonly string[] = []): strin
   if (n === '') return 'pick a repository first.'
   if (taken.includes(n)) return `${n} is already an app on this box.`
   if (!LABEL.test(n)) {
-    return 'may use lowercase letters, digits and inner hyphens only — it becomes a DNS label, a container name and a postgres role.'
+    return 'may use lowercase letters, digits and inner hyphens only. It becomes a DNS label, a container name and a postgres role.'
   }
   // `app-<name>` is a container name and the left label of a hostname; 63 is
   // the DNS limit and the shorter of the two ceilings.
-  if (n.length > 59) return 'too long — `app-<name>` has to fit in a 63-character DNS label.'
+  if (n.length > 59) return 'too long. `app-<name>` has to fit in a 63-character DNS label.'
   return null
 }
 
@@ -60,17 +60,17 @@ export function hostnameError(value: string, taken: readonly string[] = []): str
   if (h === '') return null // empty means "use the default"
 
   if (taken.includes(h)) {
-    return `${h} is already published by something else on this box — two traefik routers on one host is a build failure, not a race.`
+    return `${h} is already published by something else on this box. Two traefik routers on one host is a build failure, not a race.`
   }
 
   if (!h.endsWith(`.${BASE_DOMAIN}`)) {
-    return `must end in .${BASE_DOMAIN} — it is the only domain with a wildcard cert, a tunnel and DNS on this box.`
+    return `must end in .${BASE_DOMAIN}, the only domain with a wildcard cert, a tunnel and DNS on this box.`
   }
 
   const label = h.slice(0, -(BASE_DOMAIN.length + 1))
   if (label === '') return `needs a name in front of .${BASE_DOMAIN}.`
   if (label.includes('.')) {
-    return `only one level under ${BASE_DOMAIN} — the wildcard cert matches a single label, so "${h}" would serve the wrong certificate.`
+    return `only one level under ${BASE_DOMAIN}. The wildcard cert matches a single label, so "${h}" would serve the wrong certificate.`
   }
   if (!LABEL.test(label)) {
     return 'may use lowercase letters, digits and inner hyphens only.'

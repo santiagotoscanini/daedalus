@@ -115,12 +115,12 @@ export function PoolsView({ d }: { d: Pools }) {
         </ul>
         <p className="board-foot">
           <b>Used</b> is the dataset plus everything its snapshots still pin; <b>in them</b> is that
-          second part alone — data no longer live but held because a snapshot references it. That
+          second part alone, data no longer live but held because a snapshot references it. That
           column is the one to watch on <span className="mono">rpool/selfhost</span>: 16K recordsize
           under every container&rsquo;s database means its deltas are larger than intuition
           suggests, and the remedy if it grows is dropping a snapshot tier in{' '}
-          <span className="mono">platform/zfs.nix</span>. The tiers are ring buffers — count times
-          cadence IS the retention window — so a fully enrolled dataset settles at 39.
+          <span className="mono">platform/zfs.nix</span>. The tiers are ring buffers, so count times
+          cadence IS the retention window and a fully enrolled dataset settles at 39.
         </p>
       </Board>
 
@@ -133,7 +133,7 @@ export function PoolsView({ d }: { d: Pools }) {
             source: { unit: 'zfs-scrub.service' },
             label: 'Scrub',
             role: 'the monthly read of every block',
-            note: 'Quiet unless it finds something. A missed run is the failure mode that matters, so this one is a dead-man’s-switch ping rather than a failure email — it reports to healthchecks and pages if it stops running entirely.',
+            note: 'Quiet unless it finds something. A missed run is the failure mode that matters, so this one is a dead-man’s-switch ping rather than a failure email: it reports to healthchecks and pages if it stops running entirely.',
           },
         ]}
         foot={

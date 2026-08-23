@@ -564,7 +564,7 @@ async function loadZone(): Promise<ZoneData> {
       raw !== null
         ? null
         : key('CF_DNS_TOKEN') === ''
-          ? 'No Cloudflare token in this container — see daedalus-dashboard-keys.'
+          ? 'No Cloudflare token in this container. See daedalus-dashboard-keys.'
           : 'Cloudflare did not answer for this zone.',
   }
 }

@@ -41,12 +41,12 @@ export function BackupsView({ d }: { d: Backups }) {
         )}
         <p className="board-foot">
           syncoid runs hourly and rides the existing auto-snapshots rather than cutting its own, so
-          a lag under an hour is the schedule rather than a fault — the source takes a snapshot
-          every fifteen minutes and the replica catches the hourly one. It is a{' '}
+          a lag under an hour is the schedule rather than a fault. The source takes a snapshot every
+          fifteen minutes and the replica catches the hourly one. It is a{' '}
           <b>mirror, not an archive</b>: it prunes whatever the source pruned, so a manual snapshot
           you keep on the source dies on the replica the moment its original is destroyed. That is
-          also why the lag is the reading and &ldquo;the target has snapshots&rdquo; is not —
-          syncoid exits 0 on a run that copied nothing.
+          also why the lag is the reading and &ldquo;the target has snapshots&rdquo; is not. syncoid
+          exits 0 on a run that copied nothing.
         </p>
       </Board>
 
@@ -70,9 +70,8 @@ export function BackupsView({ d }: { d: Backups }) {
         <p className="board-foot">
           Both pools are in this box, on this shelf. The mirror survives a drive; it does not
           survive a fire, a theft or a mistake that reaches both pools. The two files below it are
-          outside the snapshot tree entirely — losing the cert store means re-issuing against
-          Let&rsquo;s Encrypt&rsquo;s weekly rate limit. This is the biggest gap on the machine and
-          it is stated here rather than left to be discovered.
+          outside the snapshot tree entirely, and losing the cert store means re-issuing against
+          Let&rsquo;s Encrypt&rsquo;s weekly rate limit. This is the biggest gap on the machine.
         </p>
       </Board>
 
@@ -108,9 +107,8 @@ export function BackupsView({ d }: { d: Backups }) {
         )}
         <p className="board-foot">
           Opted out per dataset with <span className="mono">com.sun:auto-snapshot=false</span>. The
-          media library is the big one and the reasoning is that it is re-downloadable —
-          snapshotting a terabyte of files that can be fetched again buys nothing and costs the
-          deltas.
+          media library is the big one, and it is re-downloadable: snapshotting a terabyte of files
+          that can be fetched again buys nothing and costs the deltas.
         </p>
       </Board>
 

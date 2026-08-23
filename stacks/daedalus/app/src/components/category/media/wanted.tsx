@@ -20,7 +20,7 @@ const WANTED_NEIGHBOURS: readonly LogNeighbour[] = [
     source: { container: 'scraparr' },
     label: 'Scraparr',
     role: 'the exporter behind the *arr graphs',
-    note: 'Polls Sonarr, Radarr, Prowlarr and Bazarr on a timer and republishes what they say as prometheus metrics. Nothing on this tab reads it — every number here comes from the *arrs directly — but the dashboards on the Monitoring page do, so a flat line there starts here. Expect periodic “scrape failed” and “No data found” errors: those four are dialled at a rootless-published host port, where a new connection occasionally hangs ~10.5s, and scraparr gives up at a hardcoded 10 with no retry. The scrape after it succeeds and the previous value is kept, so the metrics stay correct — but scraparr_services_up dips while it happens.',
+    note: 'Polls Sonarr, Radarr, Prowlarr and Bazarr on a timer and republishes what they say as prometheus metrics. Nothing on this tab reads it; every number here comes from the *arrs directly. The dashboards on the Monitoring page do, so a flat line there starts here. Expect periodic “scrape failed” and “No data found” errors: those four are dialled at a rootless-published host port, where a new connection occasionally hangs ~10.5s, and scraparr gives up at a hardcoded 10 with no retry. The scrape after it succeeds and the previous value is kept, so the metrics stay correct, but scraparr_services_up dips while it happens.',
   },
 ]
 
@@ -82,7 +82,7 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
         lede={
           <>
             The front door. Somebody asks for a film or a series here, and if it is approved Seerr
-            hands it straight to Radarr or Sonarr — the two services beside it on this tab.
+            hands it straight to Radarr or Sonarr.
           </>
         }
         actions={<Open name="Seerr" host="seerr" />}
@@ -195,7 +195,7 @@ const ARR_COPY = {
     name: 'Radarr',
     logo: '/icon-radarr.svg',
     unit: 'Movies',
-    lede: 'The same program as Sonarr, pointed at films. Same indexers, same downloaders, same folder — the difference is that a film has a release date rather than a schedule.',
+    lede: 'The same program as Sonarr, pointed at films. Same indexers, same downloaders, same folder. The difference is that a film has a release date rather than a schedule.',
     upcoming: 'Releasing next',
   },
 } as const
@@ -369,7 +369,7 @@ const BAZARR_NEIGHBOURS: readonly LogNeighbour[] = [
     source: { container: 'subgen' },
     label: 'Subgen',
     role: 'Whisper, for the subtitles nobody published',
-    note: 'Registered with Bazarr as the `whisperai` provider. When an episode has no subtitles anywhere, this transcribes the audio instead — on the CPU, so a single film can take a long time and the only evidence it is working is here.',
+    note: 'Registered with Bazarr as the `whisperai` provider. When an episode has no subtitles anywhere, this transcribes the audio instead. It runs on the CPU, so a single film can take a long time and the only evidence it is working is here.',
   },
 ]
 
@@ -388,7 +388,7 @@ function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
         lede={
           <>
             Subtitles for what the others already downloaded. It reads Sonarr&rsquo;s and
-            Radarr&rsquo;s libraries directly, so nothing here decides what exists — only what is
+            Radarr&rsquo;s libraries directly, so nothing here decides what exists, only what is
             missing words.
           </>
         }
@@ -438,7 +438,7 @@ function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
             ]}
           />
           <p className="board-foot">
-            The two versions are Bazarr&rsquo;s own view of the *arrs it is wired to — a cheap
+            The two versions are Bazarr&rsquo;s own view of the *arrs it is wired to. It is a cheap
             cross-check that both connections are live, since a broken one reports zero missing
             rather than an error.
           </p>
@@ -482,8 +482,8 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
         compare={compareOf(
           recyclarr.gap,
           recyclarr.running.revision === null
-            ? 'the image’s OCI label — the pin is a bare major'
-            : `the image’s OCI label · built from ${recyclarr.running.revision}`,
+            ? 'the image’s OCI label, since the pin is a bare major'
+            : `the image’s OCI label, built from ${recyclarr.running.revision}`,
         )}
         lede={
           <>
@@ -567,10 +567,10 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
           }
           foot={
             <p className="board-foot">
-              Recyclarr is pinned to a bare major (<span className="mono">:8</span>) — a channel,
-              not a version — prints no banner, exposes no API and logs nothing about itself. This
-              page used to say its version could not be established at all. It can: the image
-              records it, along with the commit it was built from.
+              Recyclarr is pinned to a bare major (<span className="mono">:8</span>), which is a
+              channel rather than a version. It prints no banner, exposes no API and logs nothing
+              about itself. This page used to say its version could not be established. It can: the
+              image records it, along with the commit it was built from.
             </p>
           }
         />

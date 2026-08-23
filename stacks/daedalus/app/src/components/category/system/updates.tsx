@@ -72,7 +72,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         )}
         <p className="board-foot">
           Pins come from the flake; the verdicts from a daily registry probe. A tag that MOVED is a
-          channel pin like <span className="mono">:latest</span> whose image was replaced — the
+          channel pin like <span className="mono">:latest</span> whose image was replaced, so the
           update is the same tag and a new digest. A NEWER TAG is a frozen release pin with a higher
           version published beside it, and the notes inside the row are what that version contains.
         </p>
@@ -91,8 +91,8 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         </ul>
         <p className="board-foot">
           Open one to read what its current version shipped. “No verdict” means the registry did not
-          answer for it, or the pin names a channel with nothing to compare — not that it is
-          current.
+          answer for it, or the pin names a channel with nothing to compare against. Treat it as
+          unknown.
         </p>
       </Board>
     </BoardGrid>
@@ -163,7 +163,7 @@ function NotesPanel({ notes, hasNotes }: { notes: Notes | null; hasNotes: boolea
     return (
       <p className="viz-empty">
         No release notes: nothing maps this container to a project whose changelog we can read. The
-        tag delta above is still the real answer to what a re-pull would bring — see
+        tag delta above is still the real answer to what a re-pull would bring. See
         <code> lib/dashboard/image-repos.ts</code> for why a guess is not offered instead.
       </p>
     )

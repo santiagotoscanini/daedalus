@@ -33,7 +33,7 @@ const STEPS = [
   {
     hash: "77b0cde",
     title: "Push",
-    body: "The commit names who changed what, and why. Forever.",
+    body: "The commit names who changed what, and why.",
     color: "#4ea87a",
   },
 ];
@@ -45,7 +45,7 @@ export function Loop() {
         <SectionHeading
           kicker="The apply flow"
           title="Every change is a commit."
-          sub="Nothing reaches into the running system. A change in the UI becomes a contract, a commit and a rebuild — or it becomes nothing at all."
+          sub="Nothing reaches into the running system. A change in the UI becomes a contract, a commit and a rebuild — or nothing at all."
         />
 
         <div className="relative mx-auto mt-16 max-w-xl">
@@ -77,7 +77,7 @@ export function Loop() {
 
           <Reveal delay={0.3}>
             <p className="mt-12 pl-10 font-mono text-[11px] tracking-wide text-dim">
-              git log --oneline · the whole machine, every change, forever
+              git log --oneline covers the whole machine
             </p>
           </Reveal>
         </div>

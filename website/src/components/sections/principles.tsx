@@ -10,11 +10,11 @@ const PRINCIPLES = [
   },
   {
     title: "Zero host privilege.",
-    body: "Daedalus runs in a rootless container and talks to the machine through file-drop bridges watched by systemd. It can't rebuild, restart or read anything the host didn't explicitly hand it.",
+    body: "Daedalus runs in a rootless container and talks to the machine through file-drop bridges watched by systemd. It can't rebuild, restart or read anything the host didn't hand it.",
   },
   {
     title: "Lose the box, keep the cloud.",
-    body: "Every container, route, dashboard and alert is declared in the repo. A fresh checkout plus one key rebuilds the exact machine — the hardware is the only replaceable part.",
+    body: "Every container, route, dashboard and alert is declared in the repo. A fresh checkout plus one key rebuilds all of it; the hardware is the only replaceable part.",
   },
 ];
 
@@ -36,7 +36,7 @@ export function Principles() {
         </div>
         <Reveal delay={0.2}>
           <p className="mt-16 text-center font-mono text-[12px] tracking-wide text-dim">
-            Honest pre-release framing: one operator, one box, in production every day.
+            Pre-release. One operator, one box, in production every day.
           </p>
         </Reveal>
       </div>

@@ -31,7 +31,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
         lede={
           <>
             Where everything on this page ends up. Streams from <span className="mono">/s2/tv</span>{' '}
-            and transcodes on the iGPU — the one media container deliberately outside the VPN, so
+            and transcodes on the iGPU. The one media container deliberately outside the VPN, so
             playing something at home does not go out through Switzerland and back.
           </>
         }
@@ -141,8 +141,8 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
             </ul>
           )}
           <p className="board-foot">
-            Last activity, not last login — a client that stays signed in reports the second one
-            once and never again, which is why an account in daily use can show a login from May.
+            Last activity, not last login. A client that stays signed in reports the second one once
+            and never again, which is why an account in daily use can show a login from May.
           </p>
         </Board>
 
@@ -166,7 +166,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
               source: { container: 'intel-gpu-exporter' },
               label: 'intel-gpu-exporter',
               role: 'what the iGPU is actually doing',
-              note: 'The only reader of the render node Jellyfin transcodes on, and the only container on this box with no page of its own — its metrics (gpumon_engine_usage, gpumon_power) are scraped and nothing here draws them yet. When a transcode is slow and Jellyfin’s own log says only that ffmpeg took a while, this is where "was the GPU busy or was it not being used at all" is answered. i915 is force-probed via a kernel param; a driver that failed to bind shows up here first.',
+              note: 'The only reader of the render node Jellyfin transcodes on, and the only container on this box with no page of its own. Its metrics (gpumon_engine_usage, gpumon_power) are scraped and nothing here draws them yet. When a transcode is slow and Jellyfin’s own log says only that ffmpeg took a while, this is where "was the GPU busy or was it not being used at all" is answered. i915 is force-probed via a kernel param; a driver that failed to bind shows up here first.',
             },
           ]}
         />

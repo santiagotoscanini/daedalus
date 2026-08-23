@@ -87,7 +87,7 @@ export function usePolledStatus<S extends HostStatus>(opts: {
             ...s,
             id: claim.id,
             state: 'failed',
-            error: 'the host did not pick this request up — is its path unit alive?',
+            error: 'the host did not pick this request up. Is its path unit alive?',
           } as S
           setClaim(null)
           setSubmitting(false)

@@ -99,8 +99,8 @@ function QbtPage({ d }: { d: Downloaders }) {
         lede={
           <>
             The torrent half, and what the *arrs reach for first. Runs inside gluetun&rsquo;s
-            network namespace, which is also why its forwarded port is a fact worth watching:
-            without one it can download and never seed.
+            network namespace, so the forwarded port matters: without one it can download and never
+            seed.
           </>
         }
         actions={<Open name="qBittorrent" host="qbittorrent" />}
@@ -212,8 +212,8 @@ function NzbPage({ d }: { d: Downloaders }) {
         lede={
           <>
             The usenet half. Faster than a torrent when the post is fully retained and useless when
-            it is not — which is a property of the provider rather than of the release, and the
-            reason the news-server list below is on this page.
+            it is not. Retention is a property of the provider rather than the release, which is why
+            the news-server list is on this page.
           </>
         }
         actions={<Open name="NZBGet" host="nzbget" />}
@@ -294,9 +294,8 @@ function NzbPage({ d }: { d: Downloaders }) {
             ]}
           />
           <p className="board-foot">
-            A provider whose subscription lapses goes inactive and everything simply stops being
-            found — which from Sonarr&rsquo;s side is indistinguishable from the release not
-            existing.
+            A provider whose subscription lapses goes inactive and everything stops being found.
+            From Sonarr&rsquo;s side that is indistinguishable from the release not existing.
           </p>
         </Board>
 
@@ -321,11 +320,11 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
         version={d.version}
         versionNote="from the tag the flake pins"
         verdict={verdictOf(d.gap)}
-        compare={compareOf(d.gap, 'the image tag — MeTube serves no version')}
+        compare={compareOf(d.gap, 'the image tag, since MeTube serves no version')}
         lede={
           <>
             yt-dlp with a web form in front of it, and the only downloader here that nothing else
-            drives — you point it at a URL yourself. Also inside the VPN namespace, which is
+            drives: you point it at a URL yourself. Also inside the VPN namespace, which is
             occasionally why a site refuses it.
           </>
         }
@@ -380,9 +379,9 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
           span={12}
           foot={
             <p className="board-foot">
-              MeTube ships a new dated build most weeks and almost all of them are a yt-dlp bump —
-              which is exactly what fixes a site that suddenly stopped downloading. It is the one
-              service on this page where being behind is usually the whole explanation.
+              MeTube ships a new dated build most weeks and almost all of them are a yt-dlp bump,
+              which is what fixes a site that suddenly stopped downloading. It is the one service on
+              this page where being behind is usually the whole explanation.
             </p>
           }
         />
@@ -411,7 +410,7 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
           // number comes from org.opencontainers.image.version in the image.
           shelfmark.running.revision === null
             ? 'the image’s OCI label'
-            : `the image’s OCI label · built from ${shelfmark.running.revision}`,
+            : `the image’s OCI label, built from ${shelfmark.running.revision}`,
         )}
         lede={
           <>
@@ -495,9 +494,9 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
           foot={
             <p className="board-foot">
               The pin is a moving <span className="mono">:latest</span> by digest, so the tag says
-              nothing — but the image does. Its OCI labels carry the version and the commit it was
-              built from, which is what makes this a real gap rather than a list of everything that
-              has ever shipped.
+              nothing. The image does: its OCI labels carry the version and the commit it was built
+              from, which is what makes this a real gap rather than a list of everything that has
+              ever shipped.
             </p>
           }
         />

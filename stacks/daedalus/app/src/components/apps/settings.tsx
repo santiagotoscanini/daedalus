@@ -55,7 +55,7 @@ export function Settings({
             patch({ prometheus: v })
           }}
           label="Prometheus scrape"
-          hint="Only turn on once the app actually serves /metrics — otherwise it is a permanently-down target."
+          hint="Only turn on once the app actually serves /metrics. Otherwise it is a permanently-down target."
         />
         <Facts
           list
@@ -87,8 +87,8 @@ export function Settings({
           validate={(v) => hostnameError(v, takenHostnames)}
           hint={
             <>
-              Empty uses the default. Must be one level under <code>{BASE_DOMAIN}</code> — that is
-              the only domain here with a wildcard certificate, a Cloudflare tunnel and DNS.
+              Empty uses the default. Must be one level under <code>{BASE_DOMAIN}</code>, the only
+              domain here with a wildcard certificate, a Cloudflare tunnel and DNS.
             </>
           }
           onSave={(v) => {
@@ -136,7 +136,7 @@ export function Settings({
             patch({ deployEnable: v })
           }}
           label="Auto-deploy"
-          hint="Poll the registry every 2 min and redeploy when the digest moves. Off freezes the app — the timer stops and the Redeploy button is refused host-side. Pair with a digest-pinned image override to hold a known-good build."
+          hint="Poll the registry every 2 min and redeploy when the digest moves. Off freezes the app: the timer stops and the Redeploy button is refused host-side. Pair with a digest-pinned image override to hold a known-good build."
         />
       </Board>
 
@@ -160,7 +160,7 @@ export function Settings({
         />
         <Slider
           label="Memory"
-          hint="resident cap — pages spill to zram past it, OOM kill at twice it"
+          hint="resident cap: pages spill to zram past it, OOM kill at twice it"
           value={app.limitMemoryMb}
           min={128}
           max={4096}
@@ -190,7 +190,7 @@ export function Settings({
         />
         <p className="board-foot">
           Enforced by cgroup v2, and only because systemd delegates <code>cpu io memory pids</code>{' '}
-          down to <code>user@1000.service</code> — without that podman would accept the flags and
+          down to <code>user@1000.service</code>. Without that, podman would accept the flags and
           the kernel would ignore them. CPU throttles rather than kills. Memory is the resident cap:
           pages past it spill to zram and the OOM kill lands at twice it, because podman writes{' '}
           <code>--memory-swap</code> through verbatim instead of subtracting. Takes effect on the
@@ -219,7 +219,7 @@ export function Settings({
                 app.stage === 'off'
                   ? 'Nothing to gate: the middleware is generated from the ingress, and this app is not exposed.'
                   : !app.authHealthPath
-                    ? 'Set a health path first — it is the unauthenticated path the gate lets through, so the probe tests the app instead of the login redirect.'
+                    ? 'Set a health path first. It is the unauthenticated path the gate lets through, so the probe tests the app instead of the login redirect.'
                     : undefined,
             },
             { value: 'native', label: 'App is the client', icon: '⚿' },
@@ -260,7 +260,7 @@ export function Settings({
           The client is declared, not clicked: this materializes{' '}
           <code>fleet.ssoClients.{app.name}</code>, and a oneshot creates it at the IdP on the next
           Apply. Its secret is generated on the box the first time the client is declared, so there
-          is nothing to author and nothing to paste back. Egress is not editable here at all —
+          is nothing to author and nothing to paste back. Egress is not editable here at all:
           routing an app through a VPN needs a gluetun instance to exist first, and that is a stack
           of its own.
         </p>

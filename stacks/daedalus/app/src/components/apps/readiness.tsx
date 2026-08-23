@@ -47,7 +47,7 @@ export function ReadinessPanel({
   return (
     <>
       <h2 className="section-head">
-        3 · Readiness
+        3. Readiness
         <small>can this repo publish an image?</small>
         <RefreshButton busy={refreshing} label="Re-run the checks" onClick={onRefresh} />
       </h2>
@@ -65,7 +65,7 @@ export function ReadinessPanel({
                 <span className="ok-text" aria-hidden="true">
                   ✓
                 </span>{' '}
-                Ready · image published, workflows fine
+                Ready: image published, workflows fine
               </summary>
               <ul className="checklist">
                 {plan.settled.map((c) => (

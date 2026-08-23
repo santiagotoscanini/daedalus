@@ -33,8 +33,8 @@ export function Secrets({
       <BoardGrid>
         <Board title="Environment" icon="key" span={12}>
           <p className="viz-empty">
-            No snapshot yet — the container is not running, or <code>daedalus-env-snapshot</code>{' '}
-            has not run since it started (every 2 min).
+            No snapshot yet. Either the container is not running, or{' '}
+            <code>daedalus-env-snapshot</code> has not run since it started (every 2 min).
           </p>
         </Board>
       </BoardGrid>
@@ -51,7 +51,7 @@ export function Secrets({
   return (
     <>
       <div className="banner banner-info">
-        Injected at container start, not hot-reloaded — a change takes effect on the next deploy or
+        Injected at container start, not hot-reloaded. A change takes effect on the next deploy or
         Apply.
       </div>
 
@@ -69,7 +69,7 @@ export function Secrets({
           <p className="env-legend">
             Injected by the apps platform from the toggles on Settings. Read-only here because they
             are not values so much as consequences: turn Postgres off and the whole database block
-            goes with it. Secret values are withheld until revealed — they are never in this
+            goes with it. Secret values are withheld until revealed; they are never in this
             page&apos;s source.
           </p>
           {groups.map(({ g, vars }) => (
@@ -116,7 +116,7 @@ export function Secrets({
           icon="◲"
           vars={of('image')}
           app={app}
-          empty="Nothing — this image bakes in no environment of its own."
+          empty="Nothing. This image bakes in no environment of its own."
           legend={
             <>
               Baked into the base image or set by podman. Not configuration: these describe the

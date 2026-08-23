@@ -55,7 +55,7 @@ function HouseView({ d }: { d: House }) {
         compare={compareOf(d.gap, 'from /api/config — what it says about itself')}
         lede={
           <>
-            The automation hub, and the only container on this box in the host network namespace —
+            The automation hub, and the only container on this box in the host network namespace.
             mDNS and SSDP discovery do not cross a bridge, so every IoT integration would otherwise
             need hand-typed addresses.
           </>
@@ -126,8 +126,8 @@ function HouseView({ d }: { d: House }) {
           <p className="board-foot">
             {num(d.unavailable)} of {num(d.entities)} entities are <b>unavailable</b> or{' '}
             <b>unknown</b>. Most of that is the Tuya lights, which have been off the network since
-            they lost their pairing and need re-pairing from the app — a number that will not fall
-            on its own. A domain appearing here that did not before is the thing to notice.
+            they lost their pairing and need re-pairing from the app. That number will not fall on
+            its own. A domain appearing here that did not before is the thing to notice.
           </p>
         </Board>
 
@@ -151,8 +151,8 @@ function HouseView({ d }: { d: House }) {
             ]}
           />
           <p className="board-foot">
-            Read back from the instance rather than restated here — a time zone that has drifted
-            from the host&rsquo;s is what makes an automation fire an hour late.
+            Read back from the instance rather than restated here. A time zone that has drifted from
+            the host&rsquo;s is what makes an automation fire an hour late.
           </p>
         </Board>
 
@@ -166,7 +166,7 @@ function HouseView({ d }: { d: House }) {
               source: { unit: 'ha-dbus-relay.service' },
               label: 'D-Bus relay',
               role: 'how it reaches the Bluetooth adapter',
-              note: 'The host system bus rejects a connection from container root, so this relay passes the socket through with the uid rewritten — and it has to forward SCM_RIGHTS as well, which is why a plain xdg-dbus-proxy does not work. Bluetooth integrations going quiet after a reboot is this unit not having come up. Defined in platform/bluetooth.',
+              note: 'The host system bus rejects a connection from container root, so this relay passes the socket through with the uid rewritten. It has to forward SCM_RIGHTS as well, which is why a plain xdg-dbus-proxy does not work. Bluetooth integrations going quiet after a reboot is this unit not having come up. Defined in platform/bluetooth.',
             },
           ]}
         />
@@ -193,8 +193,8 @@ function PhotosView({ d }: { d: Photos }) {
         compare={compareOf(d.gap, 'from /api/server/version')}
         lede={
           <>
-            The photo and video library — every phone in the house backs up here, and it is where
-            the pictures moved to when Nextcloud stopped being the place for them.
+            The photo and video library. Every phone in the house backs up here, and it is where the
+            pictures moved to when Nextcloud stopped being the place for them.
           </>
         }
         actions={<Open name="Immich" host="immich" />}
@@ -234,7 +234,7 @@ function PhotosView({ d }: { d: Photos }) {
                 : ((d.usageVideos ?? 0) / d.usageBytes) * 100,
             )}{' '}
             of what is stored and {pct(total === 0 ? null : ((d.videos ?? 0) / total) * 100)} of
-            what is in it — the ratio that decides how fast this dataset grows.
+            what is in it. That ratio decides how fast this dataset grows.
           </p>
         </Board>
 
@@ -256,9 +256,8 @@ function PhotosView({ d }: { d: Photos }) {
           <p className="board-foot">
             The <span className="mono">/s2/immich</span> dataset, read from node_exporter.
             Immich&rsquo;s own storage endpoint needs a permission this API key does not carry, and
-            the dataset underneath is the same disk — a real denominator rather than an invented
-            one. Hourly, daily and weekly snapshots; on the mirror, so a single drive failure costs
-            nothing.
+            the dataset underneath is the same disk. Hourly, daily and weekly snapshots; on the
+            mirror, so a single drive failure costs nothing.
           </p>
         </Board>
 
@@ -346,9 +345,9 @@ function FilesView({ d }: { d: Files }) {
               <>
                 <b>{num(openLinks)}</b> of {num(d.shares.link)} public links carry no password, so
                 each is a URL that opens the file for anyone holding it. That is how a link share is
-                normally used — sending one to somebody who has no account here is the entire point
-                — but it means the count above is the number of files whose security is the secrecy
-                of a URL.
+                normally used, and sending one to somebody who has no account here is the entire
+                point. It also means the count above is the number of files whose security is the
+                secrecy of a URL.
               </>
             ) : (
               <>Every public link is password-protected.</>
@@ -378,7 +377,7 @@ function FilesView({ d }: { d: Files }) {
             ]}
           />
           <p className="board-foot">
-            Sign-in is Pocket ID only — the login form is hidden, so there is no password on this
+            Sign-in is Pocket ID only. The login form is hidden, so there is no password on this
             instance to guess or reuse.
           </p>
         </Board>
@@ -397,7 +396,7 @@ function FilesView({ d }: { d: Files }) {
             ]}
           />
           <p className="board-foot">
-            The database is a tenant of the shared cluster, not a container of its own — it appears
+            The database is a tenant of the shared cluster, not a container of its own. It appears
             on System &rsaquo; Database with every other app&rsquo;s.
           </p>
         </Board>
@@ -418,7 +417,7 @@ function FilesView({ d }: { d: Files }) {
               source: { unit: 'nextcloud-image-build.service' },
               label: 'Image build',
               role: 'where the running image comes from',
-              note: 'The official image ships no ffmpeg, which the preview generator and the recognize app both need, so this builds a local wrapper before the app starts. The tag embeds the build context’s store hash — an unchanged context rebuilds from cache in seconds, a changed one produces a new tag and restarts the container.',
+              note: 'The official image ships no ffmpeg, which the preview generator and the recognize app both need, so this builds a local wrapper before the app starts. The tag embeds the build context’s store hash. An unchanged context rebuilds from cache in seconds; a changed one produces a new tag and restarts the container.',
             },
           ]}
         />
@@ -472,7 +471,7 @@ function PantryView({ d }: { d: Pantry }) {
               <>
                 <b>{num(alarm)}</b> products are past their date. Grocy distinguishes the two:{' '}
                 <b>overdue</b> is past the best-before and still fine, <b>expired</b> is past the
-                use-by. Nothing here alerts — this is the only place it is said.
+                use-by. Nothing here alerts. This is the only place it is said.
               </>
             ) : (
               <>
@@ -510,7 +509,7 @@ function PantryView({ d }: { d: Pantry }) {
             ]}
           />
           <p className="board-foot">
-            Both lists are empty on this instance — the stock half is what it is used for.
+            Both lists are empty on this instance. The stock half is what it is used for.
           </p>
         </Board>
 
@@ -539,7 +538,7 @@ function ProjectsView({ d }: { d: Projects }) {
         lede={
           <>
             Projects, cycles and work items. The one published application on this box that is{' '}
-            <em>not</em> behind the Pocket ID gate — Community edition has no OIDC, so it keeps its
+            <em>not</em> behind the Pocket ID gate. Community edition has no OIDC, so it keeps its
             own sign-in.
           </>
         }
@@ -599,10 +598,9 @@ function ProjectsView({ d }: { d: Projects }) {
             ]}
           />
           <p className="board-foot">
-            Read back from the instance rather than restated. This is the deliberate exception to
-            the rule that every UI here signs in through Pocket ID: the edition simply has no OIDC
-            client to point at it, so the mitigation is that sign-ups are closed and the account
-            list is one person.
+            These are read from the instance itself. This is the deliberate exception to the rule
+            that every UI here signs in through Pocket ID: the edition has no OIDC client to point
+            at it, so the mitigation is that sign-ups are closed and the account list is one person.
           </p>
         </Board>
 
@@ -618,7 +616,7 @@ function ProjectsView({ d }: { d: Projects }) {
         >
           {d.workspace === null ? (
             <>
-              <p className="viz-empty">No workspace API token — this section needs one.</p>
+              <p className="viz-empty">No workspace API token. This section needs one.</p>
               <p className="board-foot">
                 Plane&rsquo;s instance endpoint above needs no credential, but everything{' '}
                 <em>inside</em> a workspace does, and the token is generated from Plane&rsquo;s own
@@ -635,9 +633,9 @@ function ProjectsView({ d }: { d: Projects }) {
               <p className="board-foot">
                 Counted by state <b>group</b> rather than by state: the names are per-project and
                 anybody can rename &ldquo;Todo&rdquo;, but the five groups are Plane&rsquo;s own
-                fixed vocabulary, so this tally survives that. A cycle is time-boxed — the bar is
-                how much of it is done, and one that has ended with work still in it is the thing
-                this panel is for.
+                fixed vocabulary, so this tally survives that. A cycle is time-boxed. The bar is how
+                much of it is done, and one that has ended with work still in it is the thing this
+                panel is for.
               </p>
             </>
           )}
@@ -653,7 +651,7 @@ function ProjectsView({ d }: { d: Projects }) {
               source: { unit: 'plane-migrate.service' },
               label: 'Migrations',
               role: 'what runs before the API will start',
-              note: 'Plane ships its schema migrations as a separate step, and the API comes up broken rather than not at all if they have not run. A unit rather than a container that exits quietly, so a failure sends mail — see fleet.monitoredJobs in stacks/plane.',
+              note: 'Plane ships its schema migrations as a separate step, and the API comes up broken rather than not at all if they have not run. A unit rather than a container that exits quietly, so a failure sends mail. See fleet.monitoredJobs in stacks/plane.',
             },
           ]}
           foot={
@@ -722,8 +720,8 @@ function PlaneProjectRows({ p }: { p: PlaneProject }) {
         // hundred of four hundred reads exactly like a breakdown of all of
         // them, and the difference is the whole point of the numbers.
         <p className="board-foot">
-          {num(p.items)} work items, of which the breakdown above counts the first {num(p.scanned)}{' '}
-          — the total is complete, the split is a sample.
+          {num(p.items)} work items, of which the breakdown above counts the first {num(p.scanned)}.
+          The total is complete; the split is a sample.
         </p>
       )}
     </>
@@ -790,7 +788,7 @@ function FinanceView({ d }: { d: Finance }) {
               the answer is zero look identical otherwise. */}
           <p className="board-foot">
             Deliberately thin. Every path under this hostname returns the single-page app, and the
-            API behind it authenticates with a browser session rather than a key — so there is no
+            API behind it authenticates with a browser session rather than a key, so there is no
             holding, no balance and no transaction count this dashboard can read without being a
             logged-in browser. What is left is real: the version, whether it is current, and the
             log. The alternative was the tile it replaces, which carried a name and a link and
@@ -823,7 +821,7 @@ function ToolsView({ d }: { d: Tools }) {
         lede={
           <>
             Split, merge, rotate, OCR, sign. A toolbox rather than a service: nothing is stored, so
-            there is nothing here to back up and nothing to lose.
+            there is nothing here to back up.
           </>
         }
         actions={<Open name="Stirling-PDF" host="stirling-pdf" />}
@@ -859,9 +857,9 @@ function ToolsView({ d }: { d: Tools }) {
             ]}
           />
           <p className="board-foot">
-            Stateless by design — documents are processed in memory and dropped, which is why this
-            tab is a version and a log and stops there. It is also the reason this is the one
-            application here that could be deleted and rebuilt from nothing with no loss.
+            Stateless: documents are processed in memory and dropped, which is why this tab is a
+            version and a log and stops there. It is also why this is the one application here that
+            could be deleted and rebuilt from nothing with no loss.
           </p>
         </Board>
 
