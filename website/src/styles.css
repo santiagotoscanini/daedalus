@@ -429,33 +429,43 @@ html {
   color: #f5b8a2;
 }
 
-/* The hero's typing caret. A block rather than a bar, to read as a
- * terminal cursor next to the vendor name. Its colour is set here and not
- * inherited: the heading beside it is gradient text, whose `color` is
- * transparent. Steps(1) so it snaps rather than fades — a caret that
- * cross-fades reads as a rendering fault rather than a cursor. */
-.type-caret {
-  display: inline-block;
-  width: 0.09em;
-  height: 0.82em;
-  background: #f5b8a2;
-  animation: caret-blink 1.05s steps(1) infinite;
+/* The hero's vendor roll: a one-line window onto a stacked column of
+ * names, which slides up a name at a time.
+ *
+ * --roll-h is the window, and every item is exactly that tall, so one step
+ * is one item. It is set above 1em on purpose: at 1em the window clips
+ * the ascenders and descenders the names actually use ("Google Photos"
+ * has both), and the overflow that makes the roll work would cut them. */
+.vendor-roll {
+  --roll-h: 1.16em;
+  display: block;
+  height: var(--roll-h);
+  overflow: hidden;
 }
-@keyframes caret-blink {
-  0%,
-  50% {
-    opacity: 1;
-  }
-  50.01%,
-  100% {
-    opacity: 0;
-  }
+.vendor-roll-track {
+  display: flex;
+  flex-direction: column;
+  transition: transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-/* Reduced motion stops the cycle in `vendor-cycle.tsx`, so a blinking
- * caret beside a word that never changes would be motion for its own
- * sake. Hold it solid. */
+.vendor-roll-item {
+  display: flex;
+  height: var(--roll-h);
+  align-items: center;
+  justify-content: center;
+  gap: 0.26em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.vendor-roll-mark {
+  height: 0.74em;
+  width: 0.74em;
+  flex-shrink: 0;
+  color: #f5b8a2;
+}
+/* Reduced motion holds vendor 0 in `vendor-roll.tsx`, so the track never
+ * moves; drop the transition too rather than leave it armed. */
 @media (prefers-reduced-motion: reduce) {
-  .type-caret {
-    animation: none;
+  .vendor-roll-track {
+    transition: none;
   }
 }
