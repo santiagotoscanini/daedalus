@@ -26,7 +26,7 @@ const ROWS: AppRow[] = [
   },
   {
     name: "argus",
-    desc: "Exposed-webcam catalogue",
+    desc: "Internet exposure catalogue",
     host: "argus.toscanini.me",
     tone: "bad",
     exposure: "internal",

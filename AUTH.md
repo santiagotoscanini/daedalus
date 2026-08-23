@@ -61,7 +61,7 @@ paths.
 | metube | none (WebSocket passthrough works through traefik defaults) |
 | myspeed | password unset (its own auth sends the password as a plaintext header — worthless) |
 | stirling-pdf | none — its native OIDC is paywalled; forward-auth is the maintainers' endorsed path |
-| ipcrawl | none — no user model at all; `fleet.apps.ipcrawl.auth.mode = "proxy"`, `/favicon.ico` bypassed so gatus and the auto-deploy check reach the app |
+| argus | none — no user model at all; `fleet.apps.argus.auth.mode = "proxy"`, `/favicon.ico` bypassed so gatus and the auto-deploy check reach the app |
 
 ## Waiting on upstream
 
@@ -91,7 +91,7 @@ restricted:
 - **family apps** (allow admins + family): immich, nextcloud, calibre-web,
   grocy, stirling-pdf, metube, myspeed
 - **admin-only** (allow admins): grafana, prometheus, traefik-dashboard, gatus,
-  healthchecks, litellm, n8n, verdaccio, wealthfolio, pihole, anansi, ipcrawl,
+  healthchecks, litellm, n8n, verdaccio, wealthfolio, pihole, anansi, argus,
   home-assistant, and the whole TV stack (qbittorrent, nzbget, prowlarr, radarr,
   sonarr, bazarr)
 

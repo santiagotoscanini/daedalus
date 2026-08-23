@@ -1,10 +1,10 @@
 # argus-vpn — a dedicated gluetun (ProtonVPN WireGuard) whose netns is
 # borrowed by app-argus, so every outbound connection argus makes
-# (camera live-probes + the daily Shodan pull) exits from ProtonVPN's IP,
+# (live probes + the daily index pull) exits from ProtonVPN's IP,
 # never the house's WAN IP. gluetun is fail-closed: if the tunnel drops its
 # kill-switch blocks all egress, so a VPN outage can't leak the real IP —
 # argus just loses internet until it recovers (the LAN UI keeps serving the
-# local SQLite + screenshots).
+# local catalogue + stored captures).
 #
 # This is the same "gluetun trap" the TV stack lives with, standalone for
 # argus:

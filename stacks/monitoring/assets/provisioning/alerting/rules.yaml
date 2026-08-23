@@ -593,7 +593,7 @@ groups:
           severity: critical
         isPaused: false
       # Covers both gluetun instances via the job label (job="gluetun" is
-      # the TV stack, job="gluetun-ipcrawl" the ipcrawl app tunnel).
+      # the TV stack, job="gluetun-argus" the argus app tunnel).
       - uid: vpn-tunnel-down-1
         title: VPN Tunnel Down
         condition: C
@@ -1229,7 +1229,7 @@ groups:
           severity: warning
         isPaused: false
       # Scoped to job="gluetun" (the TV stack): ProtonVPN port forwarding
-      # feeds qBittorrent there. job="gluetun-ipcrawl" has no port
+      # feeds qBittorrent there. job="gluetun-argus" has no port
       # forwarding configured and permanently reports 0 — including it
       # would fire forever.
       - uid: vpn-portfwd-lost-1

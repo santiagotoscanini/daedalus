@@ -51,27 +51,17 @@
         {
           "key": "ENABLE_LIVE_PROBE",
           "value": "true",
-          "note": "ON: probe cameras live so cards show current frames instead of the static Shodan still. This dials arbitrary exposed cameras straight from the house's IP — enabled deliberately."
+          "note": "ON: re-probe catalogued endpoints live, so a card shows current state instead of the stored capture. Probing dials third-party hosts, which is the whole reason this app has its own egress tunnel — enabled deliberately."
         },
         {
           "key": "ENABLE_LIVE_FRAME_PERSIST",
           "value": "true",
-          "note": "Write successful live frames back into the screenshot store, so the cached still stays fresh for when probing is off/unreachable."
-        },
-        {
-          "key": "SHODAN_LIMIT_PER_QUERY",
-          "value": "1500",
-          "note": "Cams pulled per Shodan query. ~1 credit / 100 results / query, so this is the main lever on credit burn. Upstream prod runs 2999."
+          "note": "Write successful live captures back into the capture store, so the stored copy stays fresh for when probing is off or a target is unreachable."
         },
         {
           "key": "OFFLINE_FOR_NOW",
           "value": "false",
           "note": "Maintenance brake, held off. \"true\" 503s the APIs and redirects HTML to /offline-for-now."
-        },
-        {
-          "key": "SHODAN_REFRESH_ON_BOOT",
-          "value": "false",
-          "note": "OFF: the Shodan pull runs on a Nitro in-process cron (daily 00:00), not at boot. On-boot refresh only fires when the DB is empty, but keeping it off means a fresh install waits for the cron or a manual trigger rather than pulling during first boot."
         },
         {
           "key": "PUBLIC_SITE_URL",
@@ -85,7 +75,7 @@
         "bypassRule": "Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`)"
       },
       "presentation": {
-        "description": "Argus — exposed-webcam catalogue"
+        "description": "Argus — internet exposure catalogue"
       },
       "resources": {
         "cpus": null,
@@ -93,12 +83,13 @@
         "pids": null
       },
       "notes": {
-        "app": "Fork of github.com/alectrocute/ipcrawl (MIT), rebranded to Argus and since migrated to TanStack Start; upstream still runs the public ipcrawl.com, which is why that name survives in the UI's attribution and nowhere else. Upstream has no Dockerfile and deploys as systemd+nginx on a VPS; the fork adds the Dockerfile + .github/workflows/image.yml, and CI derives the image name from the GitHub repo name, so `image` and `hostname` are both left null and derived from this key. Rebase the fork on upstream to pick up changes.",
+        "app": "Fork of a third-party MIT project, rebranded to Argus and since migrated to TanStack Start; upstream still runs its own public site, which is why upstream's name survives in the UI's attribution and nowhere else. Upstream has no Dockerfile and deploys as systemd+nginx on a VPS; the fork adds the Dockerfile + .github/workflows/image.yml, and CI derives the image name from the GitHub repo name, so `image` and `hostname` are both left null and derived from this key. Rebase the fork on upstream to pick up changes.",
         "auth": "Forward-auth: Argus has no user model, so the gate belongs in front of it rather than inside it. No app-side change, and no identity headers — nothing downstream would read them. /favicon.ico is the health path and therefore the primary bypass: harmless unauthenticated, and it comes from the app itself, so gatus and the deploy check certify the upstream instead of the middleware's 302. bypassRule adds the three icon paths for the same reason daedalus needs them — a gated /icon.svg answers the IdP's HTML, so the app list would show a monogram instead of the mark (and iOS a letter tile instead of the home-screen icon).",
-        "stage": "LAN-only. This is a catalogue of other people's exposed webcams; publishing it on a CNAME under our own domain is a decision to make deliberately, not a default.",
-        "egress": "All outbound (camera live-probes + the daily Shodan pull) exits through the dedicated ProtonVPN tunnel in stacks/argus-vpn/ instead of the house WAN IP. The app leaves traefik-net and rides gluetun-argus's netns; traefik reaches the UI via the host port gluetun publishes.",
-        "secrets": "SHODAN_API_KEY + VOTER_PEPPER + CAM_ID_PEPPER come from the tracked stacks/apps/argus-env.sops (operatorSecrets). Without a Shodan key the app still boots and serves; the catalogue is just empty. The machine-generated secrets/argus/env keeps only the bootstrap AUTH_SECRET.",
-        "storage": "The catalogue is in the shared pg cluster (migrated off SQLite 2026-08-08); the `storage` bind mount now holds only camera stills and a few fs-backed status records, joined to rows by cams.id + cams.screenshot_mime. Schema is applied by Drizzle migrations at container start (start.mjs), which exits non-zero rather than serving against a schema that doesn't match the code. Because this app rides gluetun's netns it has no bridge to reach `pg` on, so its DATABASE_URL points at the cluster's plain-TCP host port — see appDatabases.argus.reach, derived from `egress`."
+        "stage": "LAN-only, and staying that way. The catalogue is about third-party hosts, so putting it on a CNAME under our own domain is a decision to make deliberately, not a default.",
+        "egress": "All outbound (live probes + the daily index pull) exits through the dedicated ProtonVPN tunnel in stacks/argus-vpn/ instead of the house WAN IP. The app leaves traefik-net and rides gluetun-argus's netns; traefik reaches the UI via the host port gluetun publishes.",
+        "tuning": "Per-query pull size and the refresh-on-boot flag are deliberately absent: both were set here to the app's own defaults (1500 per query, no refresh on boot), so they were restatements rather than overrides. Pull size is the main lever on API credit burn — set it here only when it should differ from the default.",
+        "secrets": "The index API key and the two peppers come from the tracked stacks/apps/argus-env.sops (operatorSecrets). Without the API key the app still boots and serves; the catalogue is just empty. The machine-generated secrets/argus/env keeps only the bootstrap AUTH_SECRET.",
+        "storage": "The catalogue is in the shared pg cluster (migrated off SQLite 2026-08-08); the `storage` bind mount now holds only captures and a few fs-backed status records, joined to rows by the row id + its stored mime column. Schema is applied by Drizzle migrations at container start (start.mjs), which exits non-zero rather than serving against a schema that doesn't match the code. Because this app rides gluetun's netns it has no bridge to reach `pg` on, so its DATABASE_URL points at the cluster's plain-TCP host port — see appDatabases.argus.reach, derived from `egress`."
       }
     },
     "chismed": {

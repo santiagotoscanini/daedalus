@@ -74,7 +74,7 @@ the safety net.
   `stacks/daedalus/service-keys.sops`, rendered as `DASH_<n>`. Two are
   deliberately NOT duplicated there: pocket-id's `STATIC_API_KEY` and
   plane's `PLANE_API_KEY` are grepped out of their own stacks' secrets.
-- **Argus's operator secrets** (Shodan key + peppers) live in tracked
+- **Argus's operator secrets** (index API key + peppers) live in tracked
   `stacks/apps/argus-env.sops`; the machine-generated
   `stacks/apps/secrets/argus/env` carries only `AUTH_SECRET`.
 

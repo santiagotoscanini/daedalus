@@ -6,7 +6,7 @@
 # unauthenticated read-only: daedalus (publicip/ip + vpn/status) and
 # gluetun-exporter (all four, for the Grafana VPN panels and
 # the VPN-down / port-forward-lost alerts). Shared shape with
-# stacks/ipcrawl-vpn/assets/config.toml.
+# stacks/argus-vpn/assets/config.toml.
 [[roles]]
 name = "readonly"
 routes = [

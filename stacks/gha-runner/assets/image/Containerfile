@@ -11,7 +11,7 @@ FROM docker.io/myoung34/github-runner:ubuntu-noble@sha256:9196d59b8364de0813e645
 #   base's node 18 (import.meta.dirname is node >= 20.11). Replaces the
 #   distro nodejs and brings npm/npx, which also run playwright's dep
 #   resolver instead of hand-maintaining ~30 libs (version tracks
-#   ipcrawl's @playwright/test loosely — only the system-dep set
+#   argus's @playwright/test loosely — only the system-dep set
 #   matters, stable across minor versions).
 # - podman + fuse-overlayfs: NESTED image builds (release/image
 #   workflows) — jobs run `podman build/push` against a podman living

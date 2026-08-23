@@ -38,7 +38,7 @@ const TABS = [
 
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
-  // it is linkable ("look at ipcrawl's settings"), and it renders on the
+  // it is linkable ("look at argus's settings"), and it renders on the
   // server, so the settings form is not a client-only surface.
   //
   // `range` is optional rather than defaulted here on purpose: an always-present
