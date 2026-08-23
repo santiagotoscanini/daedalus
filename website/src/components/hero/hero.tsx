@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { AppDemo } from "~/components/demo/demo-window";
 import { HeroLabyrinth } from "~/components/hero/hero-labyrinth";
-import { VENDOR_CYCLE_LABEL, VendorCycle } from "~/components/hero/vendor-cycle";
+import { VENDOR_ROLL_LABEL, VendorRoll } from "~/components/hero/vendor-roll";
 import { GitHubLogo } from "~/components/icons";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
@@ -31,28 +31,24 @@ export function Hero() {
           Open source, on hardware you own
         </p>
         {/* The heading reads once for assistive tech and animates for
-            everyone else; see the note in vendor-cycle.tsx. No text-balance
-            here — the line break is ours, and balancing fights it. */}
-        <h1 className="rise mt-6 text-5xl font-semibold leading-[1.04] tracking-[-0.03em] sm:text-[4.5rem]">
-          <span className="sr-only">{VENDOR_CYCLE_LABEL}</span>
-          <span aria-hidden>
-            {/* The vendor name changes width constantly, so the line must
-                never reflow: a wrap that depends on the current word would
-                relayout everything below the hero, on a loop.
-                  - phones: the vendor gets its own line unconditionally, so
-                    the heading is always three lines and never overflows.
-                  - sm and up: "Your own <vendor>" fits on one line, held
-                    there with nowrap. */}
-            <span className="sm:whitespace-nowrap">
-              Your own{" "}
-              <span className="block sm:inline">
-                <VendorCycle />
-              </span>
-            </span>
-            {/* On phones the span above is already a block, so it ends the
-                line on its own; this br would add a second, empty one. */}
-            <br className="hidden sm:inline" />
-            On one box.
+            everyone else; see the note in vendor-roll.tsx. No text-balance
+            here — the lines are ours, and balancing fights them.
+
+            Fluid, not stepped. The roll clips horizontally (overflow:hidden
+            is what makes it a window), so a name too wide for the viewport
+            is silently cut rather than overflowing: at a fixed 48px,
+            "Google Photos" lost its tail below 430px. The floor here fits
+            the longest name at 360px. */}
+        <h1 className="rise mt-6 text-[clamp(2.25rem,8.5vw,4.5rem)] font-semibold leading-[1.04] tracking-[-0.03em]">
+          <span className="sr-only">{VENDOR_ROLL_LABEL}</span>
+          {/* Three fixed lines. The roll gets one to itself at every width:
+              the names vary from "AWS" to "Google Photos", and inline they
+              would resize the line under them on a loop. On its own line
+              the width is free to vary and nothing else moves. */}
+          <span aria-hidden className="block">
+            <span className="block">Your own</span>
+            <VendorRoll />
+            <span className="block">On one box.</span>
           </span>
         </h1>
         <p className="rise rise-1 mx-auto mt-6 max-w-lg text-pretty text-[15px] leading-relaxed text-[#b4b4be]">
