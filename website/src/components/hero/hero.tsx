@@ -41,14 +41,13 @@ export function Hero() {
             the longest name at 360px. */}
         <h1 className="rise mt-6 text-[clamp(2.25rem,8.5vw,4.5rem)] font-semibold leading-[1.04] tracking-[-0.03em]">
           <span className="sr-only">{VENDOR_ROLL_LABEL}</span>
-          {/* Three fixed lines. The roll gets one to itself at every width:
+          {/* Two fixed lines. The roll gets one to itself at every width:
               the names vary from "AWS" to "Google Photos", and inline they
-              would resize the line under them on a loop. On its own line
+              would resize the line beside them on a loop. On its own line
               the width is free to vary and nothing else moves. */}
           <span aria-hidden className="block">
             <span className="block">Your own</span>
             <VendorRoll />
-            <span className="block">On one box.</span>
           </span>
         </h1>
         <p className="rise rise-1 mx-auto mt-6 max-w-lg text-pretty text-[15px] leading-relaxed text-[#b4b4be]">
