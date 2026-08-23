@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { GitHubLogo } from "~/components/icons";
 import { Logo } from "~/components/logo";
 
@@ -13,43 +14,57 @@ const links = [
   { label: "How it works", hash: "loop" },
 ];
 
-/** Floating nav: a detached, rounded, blurred bar inset from the top —
- * the page scrolls underneath it. */
+/** Slim full-width header: invisible over the hero, gaining a hairline
+ * border + blur only once the page scrolls under it. Starts transparent on
+ * the server and on the first client render (scrolled=false) so hydration
+ * always agrees; a reload mid-page corrects on the first scroll event. */
 export function Nav() {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
-    <header className="fixed inset-x-0 top-0 z-40 px-4 pt-4">
-      <nav className="mx-auto flex h-14 max-w-5xl items-center justify-between rounded-2xl border border-line bg-app/70 pl-5 pr-3 backdrop-blur-xl">
-        <Link to="/" className="flex items-center gap-2.5 font-semibold">
-          <Logo size={20} />
+    <header
+      className={`fixed inset-x-0 top-0 z-40 border-b transition-colors duration-300 ${
+        scrolled ? "border-hairline bg-app/75 backdrop-blur-xl" : "border-transparent"
+      }`}
+    >
+      <nav className="mx-auto flex h-14 max-w-6xl items-center px-6">
+        <Link to="/" className="flex items-center gap-2 font-medium">
+          <Logo size={19} />
           <span className="text-[15px] tracking-tight">daedalus</span>
         </Link>
 
-        <div className="hidden items-center gap-1 md:flex">
+        <div className="ml-auto hidden items-center gap-0.5 md:flex">
           {links.map((l) => (
             <Link
               key={l.hash}
               to="/"
               hash={l.hash}
-              className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-white/5 hover:text-fg"
+              className="rounded-md px-2.5 py-1.5 text-[13.5px] text-muted transition-colors hover:text-fg"
             >
               {l.label}
             </Link>
           ))}
           <Link
             to="/docs"
-            className="rounded-lg px-3 py-1.5 text-sm text-muted transition-colors hover:bg-white/5 hover:text-fg"
+            className="rounded-md px-2.5 py-1.5 text-[13.5px] text-muted transition-colors hover:text-fg"
           >
             Docs
           </Link>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="ml-2 flex items-center gap-1.5 md:ml-4">
           <a
             href={REPO}
             aria-label="daedalus on GitHub"
-            className="rounded-lg p-2 text-muted transition-colors hover:bg-white/5 hover:text-fg"
+            className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-muted transition-colors hover:text-fg"
           >
-            <GitHubLogo size={17} />
+            <GitHubLogo size={16} />
           </a>
           <a href={REPO} className="btn btn-primary hidden h-9 px-3.5 text-[13px] sm:inline-flex">
             View on GitHub
