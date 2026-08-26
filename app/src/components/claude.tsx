@@ -1,13 +1,19 @@
+import { useEffect, useState } from 'react'
+
 // Types ONLY. The module behind them reads the host snapshot through
 // node:fs, and a value import from here would put that in the browser bundle
 // — see the warning at the foot of lib/dashboard/claude.ts. The two derived
 // helpers this page needs live at the bottom of this file for the same
-// reason.
+// reason. claude-rc-request is under the same rule (it imports the bridge,
+// which reads node:fs), which is why its idle shape is restated below.
+import type { ClaudeRcStatus } from '../lib/claude-rc-request'
 import type { ClaudeData, ClaudeFacts, ClaudeSession, RcEvent } from '../lib/dashboard/claude'
 import { bytes, DASH, duration, ms, num, since, text, until } from '../lib/format'
+import { fetchClaudeRcStatusFn, requestClaudeRestartFn } from '../server/claude'
 import { LogBoard } from './logs'
 import { Changelog } from './release-notes'
 import { ServiceHead } from './service-head'
+import { usePolledStatus } from './status'
 import { Board, BoardGrid, Chip, Facts, Stat, StatStrip, type Tone } from './viz'
 
 // The Claude page.
@@ -194,6 +200,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
             they are on the console. Memory and CPU are the whole unit including every session under
             it, which is why they are large.
           </p>
+          <RestartServerControl live={live.length} />
         </Board>
 
         <Board
@@ -309,9 +316,9 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
                 <b>refresh</b> token running out is: Remote Control stops connecting, with no other
                 warning anywhere on this box. The fix is manual and takes a minute: SSH in, run{' '}
                 <span className="mono">claude</span> in <span className="mono">/etc/nixos</span>,{' '}
-                <span className="mono">/login</span>, then{' '}
-                <span className="mono">systemctl restart claude-remote-control</span>. Neither token
-                is in the snapshot this page reads; only the two dates and the plan are copied out.
+                <span className="mono">/login</span>, then the restart control on this page. Neither
+                token is in the snapshot this page reads; only the two dates and the plan are
+                copied out.
               </p>
             </>
           )}
@@ -325,9 +332,10 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
             <p className="board-foot">
               The store binary cannot update itself, so being behind here is not a thing that
               resolves on its own. The path is <span className="mono">nix flake update</span>, or
-              the weekly <span className="mono">flake-autoupgrade.timer</span> that runs it. That
-              bump changes this unit's ExecStart, so the switch restarts Remote Control and, with
-              it, any session that was riding on it. {verdict.note}
+              the weekly <span className="mono">flake-autoupgrade.timer</span> that runs it. A
+              rebuild deliberately does NOT restart this unit onto the new build — it once killed
+              its own activation doing so — so after the bump the server runs the old binary until
+              the next reboot, or the restart control on this page. {verdict.note}
             </p>
           }
         />
@@ -347,6 +355,123 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         />
       </BoardGrid>
     </>
+  )
+}
+
+const RC_IDLE: ClaudeRcStatus = {
+  id: null,
+  action: null,
+  state: 'idle',
+  detail: '',
+  error: '',
+  startedAt: null,
+  finishedAt: null,
+}
+
+/** Same arming window as the box restart, for the same reason. */
+const RC_ARM_MS = 10_000
+
+/**
+ * Restart the Remote Control server.
+ *
+ * The out-of-band hand for the unit nothing else may touch: rebuilds
+ * deliberately never restart it (platform/claude-rc.nix), and a remote
+ * session running `systemctl restart` on it kills itself mid-command — so
+ * recovering a wedged server, or landing the build a rebuild left pending,
+ * is either this button or a reboot of the whole box.
+ *
+ * Two steps like the box restart, but the cost spelled out at arm time is a
+ * different one: sessions, not the house. And unlike its big sibling this
+ * flow settles normally — the host agent outlives the restart and writes a
+ * real done/failed, so the ordinary status poll covers it.
+ */
+function RestartServerControl({ live }: { live: number }) {
+  const [armed, setArmed] = useState(false)
+  const { status, running, start } = usePolledStatus<ClaudeRcStatus>({
+    initial: RC_IDLE,
+    fetch: () => fetchClaudeRcStatusFn(),
+    claimTimeoutMs: 30_000,
+  })
+
+  useEffect(() => {
+    if (!armed) return
+    const t = setTimeout(() => {
+      setArmed(false)
+    }, RC_ARM_MS)
+    return () => {
+      clearTimeout(t)
+    }
+  }, [armed])
+
+  if (running) {
+    return (
+      <div className="restart is-running">
+        <p className="restart-state">Restarting the server…</p>
+      </div>
+    )
+  }
+
+  if (armed) {
+    return (
+      <div className="restart is-armed">
+        <p className="restart-cost">
+          {live === 0
+            ? 'Nothing is connected, so this costs nothing right now.'
+            : live === 1
+              ? 'The one connected session dies with the server.'
+              : `All ${num(live)} connected sessions die with the server.`}{' '}
+          Sessions stay resumable from claude.ai for about four hours, but the environment id is
+          minted per start, so the session link above becomes a new one. The box itself is
+          untouched.
+        </p>
+        <div className="restart-actions">
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => {
+              setArmed(false)
+              start(async () => {
+                const r = await requestClaudeRestartFn()
+                return r.id
+              })
+            }}
+          >
+            Confirm restart
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              setArmed(false)
+            }}
+          >
+            Cancel
+          </button>
+          <span className="restart-note">disarms on its own in {RC_ARM_MS / 1000}s</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="restart">
+      {status.state === 'done' && (
+        <p className="restart-state ok-text">
+          {status.detail || 'The server restarted.'} The boards above catch up within a minute —
+          the snapshot is on a timer.
+        </p>
+      )}
+      {status.state === 'failed' && <p className="restart-state bad-text">{status.error}</p>}
+      <button
+        type="button"
+        className="btn btn-ghost"
+        onClick={() => {
+          setArmed(true)
+        }}
+      >
+        Restart the server
+      </button>
+    </div>
   )
 }
 
