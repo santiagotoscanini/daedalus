@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 // which reads node:fs), which is why its idle shape is restated below.
 import type { ClaudeRcStatus } from '../lib/claude-rc-request'
 import type { ClaudeData, ClaudeFacts, ClaudeSession, RcEvent } from '../lib/dashboard/claude'
+import type { ShotCounts, ShotRun, ShotterData } from '../lib/dashboard/shotter'
 import { bytes, DASH, duration, ms, num, since, text, until } from '../lib/format'
 import { fetchClaudeRcStatusFn, requestClaudeRestartFn } from '../server/claude'
 import { LogBoard } from './logs'
@@ -328,6 +329,9 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           )}
         </Board>
 
+        <ShotterBoard shotter={data.shotter} />
+        <ShotRunsBoard shotter={data.shotter} />
+
         <Changelog
           gap={data.gap}
           span={12}
@@ -479,6 +483,145 @@ function RestartServerControl({ live }: { live: number }) {
       </button>
     </div>
   )
+}
+
+const shotUrl = (run: string, file: string) => `/api/shot-run/${run}/${file}`
+
+/**
+ * Shotter, on the Claude page rather than anywhere else in the taxonomy,
+ * because it is these sessions' eyes: `shot` is how an agent on this
+ * GUI-less box looks at a web page (stacks/shotter — no daemon, a throwaway
+ * Chromium per run), and the archive it leaves is what this pair of boards
+ * reads. The thumbnails are the newest run's viewport slices, served through
+ * api.shot-run out of the same read-only mount.
+ */
+function ShotterBoard({ shotter }: { shotter: ShotterData }) {
+  const latest = shotter.latest
+  return (
+    <Board
+      title="Shotter"
+      icon="panels"
+      span={4}
+      aside={<span className="board-note">the sessions&rsquo; eyes</span>}
+    >
+      {!shotter.available ? (
+        <p className="viz-empty">
+          The <span className="mono">/shotter</span> mount is not answering — either the rebuild
+          that binds it has not landed, or the stack is gone.
+        </p>
+      ) : (
+        <>
+          <Facts
+            list
+            rows={[
+              {
+                k: 'Runs',
+                v: `${num(shotter.totalRuns)} all-time · ${num(shotter.failedRuns)} failed`,
+              },
+              { k: 'Archive', v: `${num(shotter.archived)} kept · ${bytes(shotter.runsBytes)}` },
+              {
+                k: 'Last run',
+                v:
+                  shotter.updatedAt === null
+                    ? 'never'
+                    : since((Date.now() - shotter.updatedAt) / 1000),
+              },
+            ]}
+          />
+          {latest !== null && latest.shots.length > 0 && (
+            <div className="shot-strip">
+              {latest.shots.map((f) => (
+                <a key={f} href={shotUrl(latest.id, f)} target="_blank" rel="noreferrer">
+                  <img src={shotUrl(latest.id, f)} alt={`${latest.id} — ${f}`} loading="lazy" />
+                </a>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      <p className="board-foot">
+        The headless-browser lab (<span className="mono">stacks/shotter</span>) — how a session
+        here looks at a page without a screen. Not a daemon: each run is a cold Chromium, and
+        what persists is this archive. The images are the newest run&rsquo;s viewport slices;{' '}
+        <span className="mono">shot help</span> on the box is the manual. &ldquo;Last run&rdquo;
+        carries no staleness alarm — a quiet week means nothing needed eyes.
+      </p>
+    </Board>
+  )
+}
+
+function ShotRunsBoard({ shotter }: { shotter: ShotterData }) {
+  const latest = shotter.latest
+  return (
+    <Board
+      title="Runs"
+      icon="logs"
+      span={8}
+      aside={
+        <span className="board-note">
+          {shotter.runs.length === 0 ? 'none yet' : `last ${num(shotter.runs.length)}, newest first`}
+        </span>
+      }
+    >
+      {shotter.runs.length === 0 ? (
+        <p className="viz-empty">
+          Nothing in the ledger. <span className="mono">shot quick &lt;url&gt;</span> writes the
+          first line.
+        </p>
+      ) : (
+        <ul className="itemlist">
+          {shotter.runs.map((r) => (
+            <ShotRunRow key={r.id} run={r} />
+          ))}
+        </ul>
+      )}
+      {latest !== null && latest.log.length > 0 && (
+        <pre className="shot-log">{latest.log.join('\n')}</pre>
+      )}
+      <p className="board-foot">
+        The append-only ledger, one line per <span className="mono">shot</span> invocation, with
+        the newest run&rsquo;s own log above. The verdict chip reads the run&rsquo;s event
+        counters, not its screenshots — events outrank pixels, because a page can render
+        beautifully over a broken deploy. <b>fail</b> is the runner itself dying; <b>issues</b> is
+        a page that answered with console errors, failed requests or 4xx/5xx underneath. The full
+        evidence for any run — every slice, <span className="mono">events.json</span>,{' '}
+        <span className="mono">log.txt</span> — is <span className="mono">shot show &lt;id&gt;</span>{' '}
+        on the box.
+      </p>
+    </Board>
+  )
+}
+
+function ShotRunRow({ run }: { run: ShotRun }) {
+  const bad = issueSummary(run.counts)
+  return (
+    <li title={run.id}>
+      <Chip tone={!run.ok ? 'bad' : bad === null ? 'ok' : 'warn'}>
+        {!run.ok ? 'fail' : bad === null ? 'clean' : 'issues'}
+      </Chip>
+      <span className="item-main">{run.label === '' ? run.id : run.label}</span>
+      {bad !== null && <span className="item-side">{bad}</span>}
+      <span className="item-side">
+        {num(run.shots)} shot{run.shots === 1 ? '' : 's'}
+      </span>
+      <span className="item-side item-min">
+        {run.durationMs === null ? DASH : ms(run.durationMs)}
+      </span>
+      <span className="item-side">{run.at === null ? DASH : since((Date.now() - run.at) / 1000)}</span>
+    </li>
+  )
+}
+
+/** The counters that matter, compressed to one phrase; null = a clean page. */
+function issueSummary(c: ShotCounts): string | null {
+  const parts = [
+    c.consoleError > 0 ? `${num(c.consoleError)} console` : null,
+    c.pageError > 0 ? `${num(c.pageError)} page-err` : null,
+    c.requestFailed > 0 ? `${num(c.requestFailed)} req-failed` : null,
+    c.http4xx > 0 ? `${num(c.http4xx)}× 4xx` : null,
+    c.http5xx > 0 ? `${num(c.http5xx)}× 5xx` : null,
+  ].filter((p) => p !== null)
+  return parts.length === 0 ? null : parts.join(' · ')
 }
 
 function UnitState({ data }: { data: ClaudeData }) {

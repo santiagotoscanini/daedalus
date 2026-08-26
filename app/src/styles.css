@@ -6399,3 +6399,37 @@ h2 {
   min-width: 11rem;
   color: var(--muted);
 }
+
+/* ── the Claude page's shotter boards ────────────────────────────────────
+   The strip holds one run's viewport slices — consecutive crops of a single
+   long page — so they lay out as a film row: fixed height, natural width,
+   side scroll. Each image is also the link to its full-size self. */
+.shot-strip {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  margin: 0.6rem 0 0.2rem;
+}
+.shot-strip img {
+  display: block;
+  height: 150px;
+  width: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+/* An excerpt, not the artifact: it scrolls rather than grows, and keeps the
+   runner's own line breaks. */
+.shot-log {
+  margin: 0.5rem 0 0;
+  max-height: 9rem;
+  overflow: auto;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
