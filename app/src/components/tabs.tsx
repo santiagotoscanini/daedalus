@@ -40,6 +40,12 @@ export function TabBar<Id extends string>({
             {...linkTo(t.id)}
             className={t.id === active ? 'active' : ''}
             aria-current={t.id === active ? 'page' : undefined}
+            // The `active` prop above is the ONLY source of activeness.
+            // Without this, Link's default activeProps injects its own
+            // `active` class by location match — which subset-matches on
+            // search params, so a default tab with empty search (Claude's
+            // Remote Control) stays lit while its sibling is selected.
+            activeProps={{}}
             replace
           >
             {t.extra}
