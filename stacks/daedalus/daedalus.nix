@@ -229,6 +229,30 @@ let
     '';
   };
 
+  # Restart the Remote Control server. The fifth bridge, and the one that
+  # exists because the fourth is oversized for its commonest customer: a
+  # wedged or version-stale claude-remote-control is a single unit, and a
+  # remote session cannot restart it without killing itself (the session
+  # lives in that unit's cgroup — see platform/claude-rc.nix, whose
+  # restartIfChanged = false is also why rebuilds no longer land updates
+  # onto it). See host/claude-rc.sh for the verb and its guards.
+  claudeRcScript = pkgs.writeShellApplication {
+    name = "daedalus-claude-rc";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.systemd
+      pkgs.coreutils
+    ];
+    text = ''
+      APPLY_DIR=${lib.escapeShellArg applyDir}
+      OPERATOR_USER=santiago
+      OPERATOR_GROUP=users
+
+      ${builtins.readFile ./host/lib.sh}
+      ${builtins.readFile ./host/claude-rc.sh}
+    '';
+  };
+
   # Project workspaces: working clones of the projects' repos, in the
   # operator's home so a Claude Code session on this box can work in them
   # directly (and push — the GitHub SSH identity is the operator's too, from
@@ -1403,6 +1427,29 @@ in
     wantedBy = [ "multi-user.target" ];
     pathConfig.PathChanged = "${applyDir}/power-request.json";
   };
+
+  # The claude-rc bridge's agent. Unlike daedalus-power it outlives its
+  # action, so the ordinary status-file flow covers it end to end.
+  systemd.services.daedalus-claude-rc = {
+    description = "Restart the Claude Remote Control server on daedalus's behalf";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${claudeRcScript}/bin/daedalus-claude-rc";
+      # One restart and a five-second settle check; a minute means wedged.
+      TimeoutStartSec = "1min";
+    };
+  };
+
+  systemd.paths.daedalus-claude-rc = {
+    description = "Watch for a daedalus claude-rc restart request";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathChanged = "${applyDir}/claude-rc-request.json";
+  };
+
+  # Not monitoredJobs, for ci and power's reason: both outcomes land in the
+  # status file and are shown on the page that asked. The only mailable event
+  # is the agent itself breaking, which `systemctl --failed` and the failed-
+  # units alert already carry.
 
   # Not monitoredJobs either, and for a sharper version of daedalus-ci's
   # reason: a refusal is shown on the page that asked for it, and a SUCCESS
