@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- A viewfinder: the lab is the sessions' eyes. Drawn in the dashboard's
+       accent because shotter is self-built and has no brand of its own. -->
+  <rect width="48" height="48" rx="10" fill="#17171a"/>
+  <circle cx="24" cy="24" r="13" fill="none" stroke="#e2795a" stroke-width="3"/>
+  <circle cx="24" cy="24" r="4.5" fill="#e2795a"/>
+  <path d="M24 6.5v6M24 35.5v6M6.5 24h6M35.5 24h6" stroke="#e2795a" stroke-width="3" stroke-linecap="round"/>
+</svg>

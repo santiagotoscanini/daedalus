@@ -223,13 +223,16 @@ in
 
   environment.systemPackages = [ shot ];
 
-  # The Claude page in daedalus reads the stats surface and serves run
-  # screenshots out of the archive. Same list-merge idiom as litellm's
-  # prometheus mount: the stack that OWNS the files contributes the bind,
-  # rather than the apps platform learning about shotter.
-  virtualisation.oci-containers.containers.app-daedalus.volumes = [
-    "${stateDir}:/shotter:ro"
-  ];
+  # The Shotter tab on daedalus's Claude page reads the stats surface and
+  # serves run screenshots out of the archive. Same list-merge idiom as
+  # litellm's prometheus mount: the stack that OWNS the files contributes the
+  # bind, rather than the apps platform learning about shotter. The version
+  # env var rides along so the tab's changelog compares against THIS pin
+  # instead of restating it in TypeScript.
+  virtualisation.oci-containers.containers.app-daedalus = {
+    volumes = [ "${stateDir}:/shotter:ro" ];
+    environment.SHOTTER_PLAYWRIGHT_VERSION = playwrightVersion;
+  };
 
   systemd.services.shotter-image = labImage.service;
 
