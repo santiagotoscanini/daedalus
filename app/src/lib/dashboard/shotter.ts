@@ -183,6 +183,41 @@ async function latestRun(runsDir: string): Promise<ShotterData['latest']> {
   return { id, shots, log }
 }
 
+export type DeployShot = {
+  runId: string | null
+  digest: string | null
+  /** The runner finished cleanly. False = the failure shot is what published. */
+  ok: boolean
+  at: number | null
+  /** Cache-buster for the image URL — a new deploy mints a new one. */
+  v: string
+}
+
+const deployShotShape = obj({
+  runId: optional(nullable(str), null),
+  digest: optional(nullable(str), null),
+  ok: optional(bool, false),
+  at: optional(nullable(str), null),
+})
+
+/**
+ * The screenshot taken right after <name>'s last deploy — the Vercel-style
+ * preview. Written by shot-deploy-<name>.service (stacks/shotter); the PNG
+ * beside this pointer is served by api.deploy-shot. Null covers every
+ * degraded case at once: app never deployed since the hook landed, mount
+ * absent, pointer unparseable mid-write.
+ */
+export async function deployShot(name: string): Promise<DeployShot | null> {
+  try {
+    const raw = await readFile(join(shotterDir(), 'deploys', `${name}.json`), 'utf8')
+    const d = decode(deployShotShape, JSON.parse(raw))
+    const at = isoMs(d.at)
+    return { runId: d.runId, digest: d.digest, ok: d.ok, at, v: String(at ?? 0) }
+  } catch {
+    return null
+  }
+}
+
 export async function loadShotter(): Promise<ShotterData> {
   const root = shotterDir()
   try {

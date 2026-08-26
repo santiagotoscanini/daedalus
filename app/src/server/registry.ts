@@ -153,6 +153,7 @@ export const fetchApp = createServerFn()
       hasIcon,
       workspaces,
       workspaceStatus,
+      deployShot,
     ] = await Promise.all([
       appStatuses([name]),
       readApplyStatus(),
@@ -172,6 +173,7 @@ export const fetchApp = createServerFn()
       ),
       readWorkspaces(),
       readWorkspaceRequestStatus(),
+      import('../lib/dashboard/shotter').then(({ deployShot: read }) => read(name)),
     ])
 
     return {
@@ -189,6 +191,8 @@ export const fetchApp = createServerFn()
       // which goes through daedalus.
       lastDeploy: deploy,
       pullBroken,
+      // The post-deploy screenshot pointer — the Overview's Vercel card.
+      deployShot,
       drift: driftOf(record, manifest),
       status: statuses[name] ?? null,
       app: {

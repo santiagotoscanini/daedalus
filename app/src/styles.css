@@ -6418,6 +6418,35 @@ h2 {
   border-radius: 6px;
   background: var(--panel-2);
 }
+/* The Vercel-style post-deploy preview on an app's Deployment board. The
+   crop shows the top of the page at the board's width; the full slice is one
+   click away. Cropped by height rather than scaled to fit, because a whole
+   1300px-tall page scaled into a 4-col board is a texture, not a preview. */
+.deploy-shot {
+  position: relative;
+  display: block;
+  margin: 0 0 0.6rem;
+  max-height: 180px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.deploy-shot img {
+  display: block;
+  width: 100%;
+}
+.deploy-shot-flag {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  color: var(--text);
+  background: var(--bad);
+}
+
 /* An excerpt, not the artifact: it scrolls rather than grows, and keeps the
    runner's own line breaks. */
 .shot-log {
