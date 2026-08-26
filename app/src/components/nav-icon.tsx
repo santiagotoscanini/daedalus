@@ -30,6 +30,16 @@ export type NavIconName =
   | 'menu'
   | 'close'
   | 'chevron'
+  // The app rail's sections (routes/apps.$name.tsx APP_TABS) — same rule as
+  // the categories: the icon name IS the tab id, nothing to keep in sync.
+  | 'overview'
+  | 'deployments'
+  | 'database'
+  | 'vpn'
+  | 'access'
+  | 'settings'
+  | 'secrets'
+  | 'logs'
 
 const PATHS: Record<NavIconName, React.ReactNode> = {
   // Four tiles: the app list.
@@ -102,6 +112,65 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
       fill="currentColor"
       stroke="none"
     />
+  ),
+
+  // A dashboard split: the hero row over the board grid.
+  overview: (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="2.2" />
+      <path d="M3.5 9.8h17M10.2 9.8v10.7" />
+    </>
+  ),
+  // Layers: one image on top of the last.
+  deployments: (
+    <>
+      <path d="M12 3.6 20.6 8 12 12.4 3.4 8Z" />
+      <path d="m3.4 12.4 8.6 4.4 8.6-4.4" />
+      <path d="m3.4 16.6 8.6 4.4 8.6-4.4" />
+    </>
+  ),
+  database: (
+    <>
+      <ellipse cx="12" cy="5.6" rx="8" ry="2.7" />
+      <path d="M4 5.6v12.8c0 1.5 3.6 2.7 8 2.7s8-1.2 8-2.7V5.6" />
+      <path d="M4 12c0 1.5 3.6 2.7 8 2.7s8-1.2 8-2.7" />
+    </>
+  ),
+  // A shield: the tunnel is worn, not configured, from this side.
+  vpn: (
+    <>
+      <path d="M12 3.4c2.5 1.5 5 2.3 7.3 2.5v6.2c0 4.2-3 7.1-7.3 8.5-4.3-1.4-7.3-4.3-7.3-8.5V5.9C7 5.7 9.5 4.9 12 3.4Z" />
+      <path d="m9.4 11.9 1.9 1.9 3.4-3.6" />
+    </>
+  ),
+  // A key: who gets in.
+  access: (
+    <>
+      <circle cx="8.4" cy="15.6" r="4.6" />
+      <path d="m11.7 12.3 8.4-8.4M16.4 7.6l2.8 2.8" />
+    </>
+  ),
+  // Sliders, not a gear: a gear at 1.6 stroke and 19px is a blob.
+  settings: (
+    <>
+      <path d="M4 7h4.1M11.9 7H20M4 12h8.6M16.4 12H20M4 17h2.6M10.4 17H20" />
+      <circle cx="10" cy="7" r="1.9" />
+      <circle cx="14.5" cy="12" r="1.9" />
+      <circle cx="8.5" cy="17" r="1.9" />
+    </>
+  ),
+  secrets: (
+    <>
+      <rect x="4.8" y="10.6" width="14.4" height="9.6" rx="2" />
+      <path d="M8.2 10.6V7.7a3.8 3.8 0 0 1 7.6 0v2.9" />
+    </>
+  ),
+  // A terminal: where a log is read.
+  logs: (
+    <>
+      <rect x="3.2" y="4.4" width="17.6" height="15.2" rx="2.2" />
+      <path d="m7 9.4 3 2.7-3 2.7M12.8 15h4.4" />
+    </>
   ),
 
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
