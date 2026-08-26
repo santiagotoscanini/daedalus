@@ -8,9 +8,24 @@
 # What it leans on, all pre-existing:
 #   - `claude` is pkgs.claude-code (unstable overlay in configuration.nix) —
 #     the store binary can't self-update; the weekly flake-autoupgrade bumps it,
-#     which changes ExecStart and restarts this unit on switch. That is the
-#     update path. SuccessExitStatus=143 keeps those SIGTERM restarts from
-#     firing the OnFailure email.
+#     which changes ExecStart. **Updates land on reboot or a manual restart,
+#     never on switch**: `restartIfChanged = false`, for the same reason the
+#     daedalus bridge agents carry it (apps-platform rule). Without it, the
+#     first rebuild run FROM a remote session after a claude-code bump is a
+#     murder-suicide: the session's `sudo nixos-rebuild` lives inside this
+#     unit's cgroup (sudo doesn't migrate cgroups), activation stops the unit
+#     to restart it, the SIGTERM kills the in-flight activation itself, and
+#     the unit is left STOPPED — every remote session hangs and the box sits
+#     half-activated until someone reboots (2026-08-26, recovered via
+#     daedalus's restart button). The weekly autoupgrade already stages with
+#     `nixos-rebuild boot`, so reboot-gated updates were the design anyway.
+#     SuccessExitStatus=143 keeps SIGTERM stops from firing the OnFailure
+#     email.
+#   - The ExecStartPre gcroot pins the RUNNING version against nix-gc
+#     (weekly, --delete-older-than 30d): after later switches move
+#     current-system past it, an unrestarted server could outlive every
+#     generation referencing its binary — new sessions would then spawn from
+#     a deleted store path. The root tracks whatever version each start uses.
 #   - Credentials: ~santiago/.claude/.credentials.json (subscription login).
 #     Expiry runbook: SSH in, run `claude` in /etc/nixos, `/login`, then
 #     `systemctl restart claude-remote-control`. Workspace trust for /etc/nixos
@@ -19,9 +34,11 @@
 #     apply; approvals render in the claude.ai/code UI.
 #
 # Sessions survive a server stop and stay resumable for ~4 hours (claude.ai
-# session list, or --session-id). Corollary: a remote session that itself runs
-# `sudo nixos-rebuild switch` touching this unit kills its own server —
-# reconnect and resume from claude.ai/code.
+# session list, or --session-id). With restartIfChanged=false a rebuild no
+# longer touches the running server; the remaining way to kill it from inside
+# a remote session is an explicit `systemctl restart claude-remote-control` —
+# which also kills the session that typed it. Reconnect and resume from
+# claude.ai/code.
 #
 # Status: no health endpoint exists. `systemctl status claude-remote-control`,
 # `journalctl -fu claude-remote-control` (--verbose logs connection/session
@@ -78,11 +95,17 @@ in
         "HOME=/home/santiago"
         "XDG_RUNTIME_DIR=/run/user/1000"
       ];
+      # "+": root, to write the gcroot; the service itself stays santiago.
+      ExecStartPre = "+${pkgs.coreutils}/bin/ln -sfn ${rcJournal} /nix/var/nix/gcroots/claude-remote-control";
       ExecStart = lib.getExe rcJournal;
       Restart = "always";
       RestartSec = "5s";
       SuccessExitStatus = [ 143 ];
     };
+    # See the header: a switch must never restart this unit — it kills every
+    # remote session AND (when the rebuild runs inside one) the activation
+    # that ordered the restart. Updates ride the next reboot/manual restart.
+    restartIfChanged = false;
     unitConfig = {
       StartLimitBurst = 20;
       StartLimitIntervalSec = 600;
