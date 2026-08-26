@@ -20,7 +20,18 @@ directory at /app and runs the Vite dev server against it.
   caller): `podman exec app-daedalus node -e
   "fetch('http://localhost:3000/<page>').then(r=>r.text()).then(t=>console.log(t.includes('<needle>')))"`
   renders the real SSR page, loaders included. Vite compile errors land
-  in `podman logs app-daedalus`.
+  in `podman logs app-daedalus`. For PIXELS under the gate (visual
+  work), run the shotter image on the app's own bridge — vite allows
+  the `app-daedalus` host for exactly this:
+  `podman run --rm --network=iso-daedalus-net --shm-size=1g -v
+  ~santiago/selfhost/shotter:/lab localhost/shotter:pw<ver>-<hash>
+  node /opt/lab/runner.mjs --out /lab/runs/<id> --url
+  http://app-daedalus:3000/<page> --label <label>` (use the PINNED
+  tag from `podman images`, NOT `:latest` — that's a stale pre-stack
+  leftover). Expect 2 baseline pageerrors in events.json on every run
+  this way: the HMR websocket 302s at the gate, and a pre-existing
+  Date.now() hydration mismatch — compare counts against those, not
+  against zero.
 - `app/package.json` → `sudo systemctl restart podman-app-daedalus`
   (re-runs `pnpm install --frozen-lockfile`; Verdaccio is a hard
   startup dependency, minutes on a cold cache).
