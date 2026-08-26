@@ -8,7 +8,8 @@ import { useEffect, useState } from 'react'
 // which reads node:fs), which is why its idle shape is restated below.
 import type { ClaudeRcStatus } from '../lib/claude-rc-request'
 import type { ClaudeData, ClaudeFacts, ClaudeSession, RcEvent } from '../lib/dashboard/claude'
-import type { ShotCounts, ShotRun, ShotterData } from '../lib/dashboard/shotter'
+import type { VersionGap } from '../lib/dashboard/github'
+import type { ShotCounts, ShotRun } from '../lib/dashboard/shotter'
 import { bytes, DASH, duration, ms, num, since, text, until } from '../lib/format'
 import { fetchClaudeRcStatusFn, requestClaudeRestartFn } from '../server/claude'
 import { LogBoard } from './logs'
@@ -329,9 +330,6 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           )}
         </Board>
 
-        <ShotterBoard shotter={data.shotter} />
-        <ShotRunsBoard shotter={data.shotter} />
-
         <Changelog
           gap={data.gap}
           span={12}
@@ -488,107 +486,201 @@ function RestartServerControl({ live }: { live: number }) {
 const shotUrl = (run: string, file: string) => `/api/shot-run/${run}/${file}`
 
 /**
- * Shotter, on the Claude page rather than anywhere else in the taxonomy,
- * because it is these sessions' eyes: `shot` is how an agent on this
- * GUI-less box looks at a web page (stacks/shotter — no daemon, a throwaway
- * Chromium per run), and the archive it leaves is what this pair of boards
- * reads. The thumbnails are the newest run's viewport slices, served through
- * api.shot-run out of the same read-only mount.
+ * The Shotter tab — the sessions' eyes, one tab over from the sessions.
+ *
+ * `shot` is how an agent on this GUI-less box looks at a web page
+ * (stacks/shotter — no daemon, a cold Chromium per run), and the archive it
+ * leaves is everything this tab reads. The thumbnails are the newest run's
+ * viewport slices, served through api.shot-run out of the same read-only
+ * mount. The version story is Playwright's: the image tag embeds the pin and
+ * the npm package inside must match it, so one number IS the running
+ * version, with microsoft/playwright's releases behind the changelog.
  */
-function ShotterBoard({ shotter }: { shotter: ShotterData }) {
-  const latest = shotter.latest
+export function ShotterView({ data }: { data: ClaudeData }) {
+  const sh = data.shotter
+  const latest = sh.latest
+  const verdict = shotterVerdict(data.shotterGap)
+
   return (
-    <Board
-      title="Shotter"
-      icon="panels"
-      span={4}
-      aside={<span className="board-note">the sessions&rsquo; eyes</span>}
-    >
-      {!shotter.available ? (
+    <>
+      <ServiceHead
+        logo="/icon-shotter.svg"
+        name="Shotter"
+        version={data.shotterGap.installed}
+        versionNote="Playwright — the pin in stacks/shotter/shotter.nix"
+        verdict={{ label: verdict.label, tone: verdict.tone }}
+        compare={[
+          {
+            k: 'Running',
+            v: data.shotterGap.installed,
+            note: 'the image tag embeds it; the npm package inside must match',
+          },
+          {
+            k: 'Latest release',
+            v: data.shotterGap.latest,
+            note: 'bump playwrightVersion + playwrightDigest together, then rebuild',
+          },
+          {
+            k: 'Base image',
+            v: 'playwright:noble',
+            note: 'mcr.microsoft.com — Chromium ships inside, digest-pinned',
+          },
+        ]}
+        lede={
+          <>
+            The box&rsquo;s standing headless-browser lab, and the standard way any agent session
+            verifies a web UI from a machine with no screen. Not a daemon: each{' '}
+            <span className="mono">shot</span> is a cold, throwaway Chromium, and what persists is
+            the image, the CLI and this archive. <span className="mono">shot help</span> on the
+            box is the manual.
+          </>
+        }
+        actions={<Chip tone="muted">no daemon — runs on demand</Chip>}
+      />
+
+      {!sh.available && (
         <p className="viz-empty">
           The <span className="mono">/shotter</span> mount is not answering — either the rebuild
-          that binds it has not landed, or the stack is gone.
+          that binds it has not landed, or the stack is gone. Nothing below is a reading.
         </p>
-      ) : (
-        <>
-          <Facts
-            list
-            rows={[
-              {
-                k: 'Runs',
-                v: `${num(shotter.totalRuns)} all-time · ${num(shotter.failedRuns)} failed`,
-              },
-              { k: 'Archive', v: `${num(shotter.archived)} kept · ${bytes(shotter.runsBytes)}` },
-              {
-                k: 'Last run',
-                v:
-                  shotter.updatedAt === null
-                    ? 'never'
-                    : since((Date.now() - shotter.updatedAt) / 1000),
-              },
-            ]}
-          />
-          {latest !== null && latest.shots.length > 0 && (
-            <div className="shot-strip">
-              {latest.shots.map((f) => (
-                <a key={f} href={shotUrl(latest.id, f)} target="_blank" rel="noreferrer">
-                  <img src={shotUrl(latest.id, f)} alt={`${latest.id} — ${f}`} loading="lazy" />
-                </a>
-              ))}
-            </div>
-          )}
-        </>
       )}
-      <p className="board-foot">
-        The headless-browser lab (<span className="mono">stacks/shotter</span>) — how a session
-        here looks at a page without a screen. Not a daemon: each run is a cold Chromium, and
-        what persists is this archive. The images are the newest run&rsquo;s viewport slices;{' '}
-        <span className="mono">shot help</span> on the box is the manual. &ldquo;Last run&rdquo;
-        carries no staleness alarm — a quiet week means nothing needed eyes.
-      </p>
-    </Board>
-  )
-}
 
-function ShotRunsBoard({ shotter }: { shotter: ShotterData }) {
-  const latest = shotter.latest
-  return (
-    <Board
-      title="Runs"
-      icon="logs"
-      span={8}
-      aside={
-        <span className="board-note">
-          {shotter.runs.length === 0 ? 'none yet' : `last ${num(shotter.runs.length)}, newest first`}
-        </span>
-      }
-    >
-      {shotter.runs.length === 0 ? (
-        <p className="viz-empty">
-          Nothing in the ledger. <span className="mono">shot quick &lt;url&gt;</span> writes the
-          first line.
-        </p>
-      ) : (
-        <ul className="itemlist">
-          {shotter.runs.map((r) => (
-            <ShotRunRow key={r.id} run={r} />
-          ))}
-        </ul>
-      )}
-      {latest !== null && latest.log.length > 0 && (
-        <pre className="shot-log">{latest.log.join('\n')}</pre>
-      )}
-      <p className="board-foot">
-        The append-only ledger, one line per <span className="mono">shot</span> invocation, with
-        the newest run&rsquo;s own log above. The verdict chip reads the run&rsquo;s event
-        counters, not its screenshots — events outrank pixels, because a page can render
-        beautifully over a broken deploy. <b>fail</b> is the runner itself dying; <b>issues</b> is
-        a page that answered with console errors, failed requests or 4xx/5xx underneath. The full
-        evidence for any run — every slice, <span className="mono">events.json</span>,{' '}
-        <span className="mono">log.txt</span> — is <span className="mono">shot show &lt;id&gt;</span>{' '}
-        on the box.
-      </p>
-    </Board>
+      <StatStrip>
+        <Stat
+          label="Runs"
+          value={sh.totalRuns}
+          sub="all-time, from the ledger"
+          title="Every shot invocation ever, counted by stats.json. Prune trims the archive, never this."
+        />
+        <Stat
+          label="Failed"
+          value={sh.failedRuns}
+          // A failure here is the runner dying, which an agent sees and acts
+          // on at the terminal — history, not an alarm.
+          tone={sh.failedRuns > 0 && sh.totalRuns > 0 && sh.failedRuns * 4 > sh.totalRuns ? 'warn' : undefined}
+          sub="runner died mid-run"
+        />
+        <Stat
+          label="Archive"
+          value={sh.archived}
+          sub={`run dirs · ${bytes(sh.runsBytes)}`}
+          title="What prune has kept: 30 days, at most 40 runs. The ledger remembers everything."
+        />
+        <Stat
+          label="Last run"
+          value={sh.updatedAt === null ? 'never' : since((Date.now() - sh.updatedAt) / 1000)}
+          // Deliberately never a warning tone: runs happen when an agent
+          // needs eyes, and a quiet week is a true reading, not staleness.
+          sub="quiet is a reading"
+        />
+      </StatStrip>
+
+      <BoardGrid>
+        <Board
+          title="Latest run"
+          icon="panels"
+          span={4}
+          aside={
+            latest === null ? undefined : <span className="board-note mono">{latest.id}</span>
+          }
+        >
+          {latest === null ? (
+            <p className="viz-empty">
+              No run directories yet. <span className="mono">shot quick &lt;url&gt;</span> makes
+              the first one.
+            </p>
+          ) : (
+            <>
+              {latest.shots.length > 0 && (
+                <div className="shot-strip">
+                  {latest.shots.map((f) => (
+                    <a key={f} href={shotUrl(latest.id, f)} target="_blank" rel="noreferrer">
+                      <img src={shotUrl(latest.id, f)} alt={`${latest.id} — ${f}`} loading="lazy" />
+                    </a>
+                  ))}
+                </div>
+              )}
+              {latest.log.length > 0 && <pre className="shot-log">{latest.log.join('\n')}</pre>}
+            </>
+          )}
+          <p className="board-foot">
+            The newest run&rsquo;s viewport slices — consecutive crops of one long page, each
+            linking to its full-size self — and the runner&rsquo;s own log under them. The full
+            evidence (every slice, <span className="mono">events.json</span>,{' '}
+            <span className="mono">log.txt</span>) is{' '}
+            <span className="mono">shot show &lt;id&gt;</span> on the box.
+          </p>
+        </Board>
+
+        <Board
+          title="Runs"
+          icon="logs"
+          span={8}
+          aside={
+            <span className="board-note">
+              {sh.runs.length === 0 ? 'none yet' : `last ${num(sh.runs.length)}, newest first`}
+            </span>
+          }
+        >
+          {sh.runs.length === 0 ? (
+            <p className="viz-empty">
+              Nothing in the ledger. <span className="mono">shot quick &lt;url&gt;</span> writes
+              the first line.
+            </p>
+          ) : (
+            <ul className="itemlist">
+              {sh.runs.map((r) => (
+                <ShotRunRow key={r.id} run={r} />
+              ))}
+            </ul>
+          )}
+          <p className="board-foot">
+            The append-only ledger, one line per <span className="mono">shot</span> invocation.
+            The verdict chip reads the run&rsquo;s event counters, not its screenshots — events
+            outrank pixels, because a page can render beautifully over a broken deploy.{' '}
+            <b>fail</b> is the runner itself dying; <b>issues</b> is a page that answered with
+            console errors, failed requests or 4xx/5xx underneath.
+          </p>
+        </Board>
+
+        <Changelog
+          gap={data.shotterGap}
+          span={12}
+          aside={<span className="board-note">microsoft/playwright</span>}
+          foot={
+            <p className="board-foot">
+              The one dependency under <span className="mono">shot</span> — Chromium arrives
+              inside Playwright&rsquo;s image, so this is the whole upgrade story. Moving is a
+              paired edit in <span className="mono">stacks/shotter/shotter.nix</span>:{' '}
+              <span className="mono">playwrightVersion</span> and{' '}
+              <span className="mono">playwrightDigest</span> together (Playwright refuses
+              browsers from a different revision), then a rebuild rebuilds the image. {verdict.note}
+            </p>
+          }
+        />
+
+        <LogBoard
+          source={{ unit: 'shotter-image.service' }}
+          title="Image build logs"
+          foot={
+            <p className="board-foot">
+              The rebuild-time image build — layer cache makes the no-change case near-silent, so
+              lines here mean the Playwright pin moved or a fresh box paid the base pull. The
+              runs themselves do NOT log here: each run&rsquo;s log lives in its own run
+              directory, excerpted above.
+            </p>
+          }
+          neighbours={[
+            {
+              source: { unit: 'shotter-prune.service' },
+              label: 'shotter-prune',
+              role: 'the weekly archive trim',
+              note: 'Sunday 04:20, 30 days back, at most 40 runs kept. Monitored — a failure mails the operator.',
+            },
+          ]}
+        />
+      </BoardGrid>
+    </>
   )
 }
 
@@ -610,6 +702,32 @@ function ShotRunRow({ run }: { run: ShotRun }) {
       <span className="item-side">{run.at === null ? DASH : since((Date.now() - run.at) / 1000)}</span>
     </li>
   )
+}
+
+/**
+ * Simpler than the Claude verdict on purpose: shotter has no restart-pending
+ * state to detect — the image tag embeds the pin, so a rebuild that moves it
+ * rebuilds the image, and every run after that is on the new one.
+ */
+function shotterVerdict(gap: VersionGap): { label: string; tone: Tone; note: string } {
+  if (gap.installed === null) {
+    return {
+      label: 'unknown',
+      tone: 'muted',
+      note: 'The pin has not reached this container — a rebuild older than the env var.',
+    }
+  }
+  if (gap.latest === null) {
+    return { label: 'unknown', tone: 'muted', note: gap.note ?? 'GitHub did not answer.' }
+  }
+  const behind = gap.behind.length
+  return behind === 0
+    ? { label: 'current', tone: 'ok', note: 'Nothing has been published above this one.' }
+    : {
+        label: behind === 1 ? '1 release behind' : `${String(behind)} releases behind`,
+        tone: 'warn',
+        note: '',
+      }
 }
 
 /** The counters that matter, compressed to one phrase; null = a clean page. */

@@ -32,7 +32,7 @@ import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '
 import { readSnapshot } from '../contract/snapshot'
 import { lokiStreams } from '../loki'
 import { type VersionGap, versionGap } from './github'
-import { loadShotter, type ShotterData } from './shotter'
+import { loadShotter, playwrightInstalled, type ShotterData } from './shotter'
 
 /* ── the snapshot ─────────────────────────────────────────────────────── */
 
@@ -236,6 +236,8 @@ export type ClaudeData = {
   gap: VersionGap
   /** The sessions' eyes — the shotter lab's ledger and archive. */
   shotter: ShotterData
+  /** Playwright's gap, for the Shotter tab — the one dependency under `shot`. */
+  shotterGap: VersionGap
 }
 
 export async function loadClaude(): Promise<ClaudeData> {
@@ -258,10 +260,11 @@ export async function loadClaude(): Promise<ClaudeData> {
   const installed = facts.remote.version ?? facts.cli.version
 
   // No cache of its own: `versionGap` already holds one, for the rate limit.
-  const [gap, log, shotter] = await Promise.all([
+  const [gap, log, shotter, shotterGap] = await Promise.all([
     versionGap('anthropics/claude-code', installed),
     events(),
     loadShotter(),
+    versionGap('microsoft/playwright', playwrightInstalled()),
   ])
 
   return {
@@ -273,6 +276,7 @@ export async function loadClaude(): Promise<ClaudeData> {
     drops: log.filter((e) => e.kind === 'drop').length,
     gap,
     shotter,
+    shotterGap,
   }
 }
 

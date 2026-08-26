@@ -95,6 +95,14 @@ const LOG_LINES = 30
 
 const shotterDir = () => process.env.SHOTTER_DIR ?? '/shotter'
 
+/**
+ * The Playwright pin, bound as an env var by the same module that mounts
+ * /shotter (stacks/shotter/shotter.nix) — the nix side already knows it, so
+ * TypeScript never restates it. This IS the running version: the image tag
+ * embeds it and the npm package inside is required to match.
+ */
+export const playwrightInstalled = () => process.env.SHOTTER_PLAYWRIGHT_VERSION ?? null
+
 function isoMs(s: string | null): number | null {
   if (s === null) return null
   const t = Date.parse(s)
