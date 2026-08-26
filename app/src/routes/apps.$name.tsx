@@ -10,7 +10,6 @@ import { Vpn } from '../components/apps/vpn'
 import { GuardedAwait } from '../components/error'
 import { GrafanaLogs } from '../components/logs'
 import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
-import { TabBar } from '../components/tabs'
 import { AppIcon, Segmented, StatePill } from '../components/ui'
 // ./access-window, NOT ./access — same split as env-groups below. The window
 // table is a value the picker and validateSearch both need in the browser;
@@ -25,7 +24,9 @@ import { fetchApp, fetchAppTab, saveApp } from '../server/registry'
 // checks. A URL naming a tab the app does not have renders an explanation of
 // how to turn the feature on, which is strictly more useful than silently
 // bouncing to the overview.
-const TABS = [
+// Exported for the shell: when this route is matched, the global rail swaps
+// to an app-scoped one (see __root.tsx) and renders these as its sections.
+export const APP_TABS = [
   'overview',
   'deployments',
   'database',
@@ -35,6 +36,7 @@ const TABS = [
   'secrets',
   'logs',
 ] as const
+const TABS = APP_TABS
 
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
@@ -202,23 +204,9 @@ function AppDetail() {
         </div>
       )}
 
-      {/* The two feature tabs are hidden rather than disabled when the
-          feature is off: a greyed-out "vpn" on an app with no egress is a
-          question the page has already answered. */}
-      <TabBar
-        tabs={TABS.filter(
-          (t) =>
-            (t !== 'database' || app.postgres) && (t !== 'vpn' || app.egressContainer !== null),
-        ).map((t) => ({ id: t, label: t }))}
-        active={tab}
-        linkTo={(t) => ({
-          to: '/apps/$name',
-          params: { name: app.name },
-          // Carry the rest of the search forward, so switching to another tab
-          // and back does not silently reset the access window.
-          search: (prev) => ({ ...prev, tab: t }),
-        })}
-      />
+      {/* No tab bar here: inside an app the sections live in the left rail —
+          the shell swaps the category nav for the app-scoped one while this
+          route is matched (__root.tsx). */}
 
       {tab === 'overview' && (
         <GuardedAwait
