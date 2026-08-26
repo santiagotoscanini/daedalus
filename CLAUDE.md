@@ -124,7 +124,10 @@ confirm before:
   `--dns 8.8.8.8` for npm-heavy installs so pi-hole's rate limit
   survives, `--store-dir` outside the tree), and trust a repo's
   *Dockerfile* build over a bare `pnpm build` — the contexts differ
-  and that difference has produced real bugs
+  and that difference has produced real bugs. Anything that needs a
+  real browser (screenshots, login flows, "does the page actually
+  render") goes through `shot` — see `stacks/shotter` in the quirks
+  table
 - Plane (`stacks/plane`, `plane.toscanini.me`) — issue tracker, 12
   containers. The one web UI deliberately NOT behind the SSO gate
 - Minecraft (`stacks/minecraft`) — Paper server on a router-forwarded
@@ -514,6 +517,7 @@ something, and the one fact from each that reaches beyond its module.
 | `stacks/app-db` | anything touching postgres | 16 databases share one cluster. A restart is a **fleet event** — see the pg cascade below. |
 | `stacks/plane` | its auth | 12 containers; the one UI not behind the SSO gate, deliberately. |
 | `stacks/minecraft` | the game server | itzg image traps (`--cap-drop=ALL` kills its privilege drop silently); backups must run as root or they lose `level.dat`. |
+| `stacks/shotter` | verifying any web UI, or reaching for a browser/screenshot | **`shot` is THE flow for browser verification** — never build an ad-hoc chromium container. `shot quick <url>` for one page, `shot run <driver.mjs>` for scripted flows (login, click); output is an agent-readable run dir of viewport-sliced PNGs + `events.json`. **Read `events.json` before trusting the pictures** — a page can screenshot perfectly over a broken deploy (iris's stylesheet-404 trap). `shot help` + the module header are the doc. |
 
 One netns fact that bites everywhere: **reaching the host from a netns
 tenant is `host.containers.internal`, never the LAN IP** — under pasta
