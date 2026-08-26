@@ -5,15 +5,21 @@
 :root {
   color-scheme: dark;
 
-  --bg: #08080a;
-  --panel: #111113;
-  --panel-2: #17171a;
-  --raise: #1d1d21;
-  --border: #232327;
-  --border-soft: #1b1b1f;
-  --text: #ededef;
-  --muted: #8b8b95;
-  --dim: #5f5f68;
+  /* Geist-style dark: the page and the cards share ONE surface, and the
+     border does the separating — a card is drawn, not raised. The old scale
+     stepped surfaces (#08080a → #111113 → #17171a) with borders too faint to
+     see, which is exactly the low-contrast wash that read as unfinished.
+     panel-2/raise remain for genuinely interactive layers (hover fills,
+     menus, toggles) — not for resting cards. */
+  --bg: #0a0a0a;
+  --panel: #0a0a0a;
+  --panel-2: #161616;
+  --raise: #1f1f1f;
+  --border: #2e2e2e;
+  --border-soft: #212121;
+  --text: #ededed;
+  --muted: #a1a1a1;
+  --dim: #737373;
 
   --accent: #e2795a;
   --accent-dim: #b8563a;
@@ -21,7 +27,7 @@
   --warn: #d9a441;
   --bad: #e05252;
 
-  --radius: 12px;
+  --radius: 10px;
 
   /* One definition, two consumers: the shell's first grid column and the
      apply bar's left offset. The bar is position:fixed, so it cannot inherit
@@ -99,10 +105,10 @@ a:hover {
 }
 
 h1 {
-  font-size: 1.55rem;
+  font-size: 1.45rem;
   letter-spacing: -0.02em;
   margin: 0;
-  font-weight: 620;
+  font-weight: 600;
 }
 
 h2 {
@@ -114,6 +120,7 @@ h2 {
 .lede {
   color: var(--muted);
   margin: 0.3rem 0 0;
+  font-size: 0.9rem;
 }
 
 .muted {
@@ -149,9 +156,9 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 1.4rem;
-  padding: 1.3rem 0.8rem 0.9rem;
+  padding: 1.1rem 0.7rem 0.9rem;
   border-right: 1px solid var(--border-soft);
-  background: #0b0b0d;
+  background: var(--bg);
   position: sticky;
   top: 0;
   height: 100vh;
@@ -201,24 +208,27 @@ h2 {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 9px;
+  gap: 0.65rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 7px;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   white-space: nowrap;
   transition:
-    background 0.12s ease,
-    color 0.12s ease;
+    background 0.15s ease,
+    color 0.15s ease;
 }
 .nav-item:hover {
   background: var(--panel-2);
   color: var(--text);
   text-decoration: none;
 }
+/* Quiet, not orange: the selected row is the one place the eye rests on
+   every glance, and a block of accent there outshouted every reading on the
+   page. The accent's job on this rail is the wordmark. */
 .nav-item.active {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  color: var(--accent);
+  background: var(--panel-2);
+  color: var(--text);
   font-weight: 550;
 }
 
@@ -446,13 +456,16 @@ h2 {
 
 .search {
   flex: 1 1 15rem;
-  padding: 0.52rem 0.8rem;
-  border-radius: 9px;
+  padding: 0.48rem 0.8rem;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--panel);
+  background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 /* Designed rather than defaulted: a 1px outline on a rounded field reads as
    the browser's own ring parked outside the border. The tinted border plus a
@@ -531,25 +544,28 @@ h2 {
 /* ── chips, dots, pills ─────────────────────────────────────────────────── */
 
 .chip {
-  font-size: 0.7rem;
-  padding: 0.12rem 0.5rem;
+  font-size: 0.68rem;
+  padding: 0.1rem 0.48rem;
   border-radius: 999px;
   border: 1px solid var(--border);
-  color: var(--dim);
+  color: var(--muted);
   white-space: nowrap;
   font-weight: 500;
 }
 .chip-live {
   color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
 }
 .chip-lab {
   color: #6f9bd1;
-  border-color: color-mix(in srgb, #6f9bd1 40%, transparent);
+  border-color: color-mix(in srgb, #6f9bd1 35%, transparent);
+  background: color-mix(in srgb, #6f9bd1 8%, transparent);
 }
 .chip-warn {
   color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
 }
 
 .dot {
@@ -664,9 +680,8 @@ h2 {
 }
 .hero-exposure-label {
   display: block;
-  font-size: 0.65rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 0.73rem;
+  letter-spacing: 0;
   color: var(--dim);
   margin-bottom: 0.4rem;
 }
@@ -683,13 +698,15 @@ h2 {
   border-bottom: 2px solid transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 0.92rem;
-  padding: 0.55rem 0.85rem;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
   cursor: pointer;
   text-transform: capitalize;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  transition: color 0.15s ease;
+  margin-bottom: -1px;
 }
 .tabs a:hover {
   color: var(--text);
@@ -996,26 +1013,36 @@ h2 {
 
 .btn {
   border: 1px solid var(--border);
-  background: var(--panel-2);
+  background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 0.85rem;
-  padding: 0.45rem 0.9rem;
-  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  padding: 0.42rem 0.85rem;
+  border-radius: 7px;
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 .btn:hover:not(:disabled) {
-  background: var(--raise);
+  background: var(--panel-2);
+  border-color: #3f3f3f;
   text-decoration: none;
 }
+/* The Geist signature: on a dark page the primary action is WHITE, not the
+   brand colour — the accent identifies the app, the white identifies the one
+   thing you came to press. */
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #1a0d08;
-  font-weight: 600;
+  background: var(--text);
+  border-color: var(--text);
+  color: #0a0a0a;
+  font-weight: 550;
 }
 .btn-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 85%, white);
+  background: #cfcfcf;
+  border-color: #cfcfcf;
 }
 .btn:disabled {
   opacity: 0.45;
@@ -2226,7 +2253,7 @@ h2 {
 .bigstat {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  background: linear-gradient(160deg, var(--panel-2), var(--panel));
+  background: var(--panel);
   padding: 0.85rem 1rem 0.9rem;
   display: flex;
   flex-direction: column;
@@ -2266,11 +2293,10 @@ h2 {
 }
 
 .bigstat-label {
-  color: var(--dim);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  font-weight: 500;
 }
 
 .bigstat-value {
@@ -2370,25 +2396,21 @@ h2 {
   padding: 0.7rem 0.95rem 0.55rem;
   border-bottom: 1px solid var(--border-soft);
 }
+/* Sentence case at reading weight, not an ALL-CAPS eyebrow: a page holds
+   eight of these, and eight tracked-out capitals labels read as decoration.
+   The icon glyphs went with the caps — a card is named by its title. */
 .board-head h3 {
   margin: 0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 0.85rem;
+  font-weight: 550;
+  letter-spacing: 0;
   color: var(--text);
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 .board-icon {
-  color: var(--accent-dim);
-  font-size: 0.95rem;
-}
-/* The h3 is a flex row, so a block SVG centres on the text without the
-   baseline wobble the typed glyphs have. */
-.board-icon .glyph {
-  display: block;
+  display: none;
 }
 .board-note {
   color: var(--dim);
@@ -2423,11 +2445,10 @@ h2 {
 
 .board-sub {
   margin: 0.35rem 0 -0.2rem;
-  font-size: 0.67rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 0.73rem;
+  letter-spacing: 0;
   color: var(--dim);
-  font-weight: 600;
+  font-weight: 550;
 }
 
 .board-foot {
@@ -2523,11 +2544,10 @@ h2 {
   gap: 0.15rem;
 }
 .stat-k {
-  font-size: 0.62rem;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--dim);
-  font-weight: 600;
+  font-size: 0.73rem;
+  letter-spacing: 0;
+  color: var(--muted);
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2615,9 +2635,8 @@ h2 {
 }
 .facts dt {
   color: var(--dim);
-  font-size: 0.67rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 0.73rem;
+  letter-spacing: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2638,10 +2657,15 @@ h2 {
 }
 .facts-list > div {
   display: flex;
+  /* Explicit, because `.facts > div` above sets `column` and this class does
+     not raise specificity — without the reset every "label left, value
+     right" list quietly rendered as a stack, one pair per two lines. */
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 1.25rem;
-  padding: 0.42rem 0;
+  gap: 0.2rem 1.25rem;
+  padding: 0.45rem 0;
   border-top: 1px solid var(--border-soft);
 }
 .facts-list > div:first-child {
@@ -3526,23 +3550,26 @@ h2 {
 /* A flat list of named things, each led by a chip saying what kind it is and
    trailed by whatever detail that kind has. Tools the gateway proxied, models
    and knowledge bases a chat window can reach. */
+/* Rows of a table, not a stack of pills: the filled-capsule look drew a box
+   per fact, and a board of twelve facts was mostly boxes. A hairline between
+   rows says the same thing at a fraction of the ink. */
 .itemlist {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.22rem;
 }
 .itemlist li {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.75rem;
-  padding: 0.2rem 0.45rem;
-  border-radius: 7px;
-  background: var(--panel-2);
+  font-size: 0.77rem;
+  padding: 0.34rem 0.1rem;
   min-width: 0;
+}
+.itemlist li + li {
+  border-top: 1px solid var(--border-soft);
 }
 /* The name takes the slack, so the detail is pushed right without a spacer.
    Both truncate: a latency is three characters but a tool's own description of
