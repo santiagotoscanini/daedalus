@@ -297,21 +297,16 @@ function ExternalRow({
   // the one workspace action these projects have (no detail page to put it
   // on — see the section comment above).
   return (
-    <li className={entry.repo === null ? undefined : 'external-item'}>
-      <a
-        href={`https://${entry.host}`}
-        target="_blank"
-        rel="noreferrer"
-        className="app-row app-row-external"
-      >
-        <AppIcon name={entry.id} hasIcon={entry.hasIcon} />
-
-        <div className="app-id">
-          <div className="app-name">{entry.name}</div>
-          <div className="app-sub">{entry.description}</div>
+    <li className="app-card">
+      <a href={`https://${entry.host}`} target="_blank" rel="noreferrer" className="app-card-link">
+        <div className="app-card-head">
+          <AppIcon name={entry.id} hasIcon={entry.hasIcon} size={30} />
+          <div className="app-id">
+            <div className="app-name">{entry.name}</div>
+            <code className="app-host">{entry.host}</code>
+          </div>
         </div>
-
-        <code className="app-host">{entry.host}</code>
+        <p className="app-desc">{entry.description}</p>
       </a>
       {entry.repo !== null && (
         <div className="external-actions">
@@ -340,7 +335,7 @@ function ExternalRow({
 
 function AppRow({ row }: { row: Row }) {
   return (
-    <li>
+    <li className="app-card">
       {/* `tab` is a required search param on the detail route (it is what
           makes the tab linkable and server-rendered), so the list has to name
           the landing tab explicitly. */}
@@ -348,51 +343,52 @@ function AppRow({ row }: { row: Row }) {
         to="/apps/$name"
         params={{ name: row.name }}
         search={{ tab: 'overview' as const }}
-        className="app-row"
+        className="app-card-link"
       >
-        <StateDot state={row.status.state} />
-        <AppIcon name={row.name} hasIcon={row.hasIcon} />
-
-        <div className="app-id">
-          <div className="app-name">
-            {row.name}
-            {row.managedInNix && (
-              <span className="chip chip-muted" title="Declared by hand in Nix, read-only here">
-                nix
-              </span>
-            )}
-            {!row.managedInNix && row.drift.length > 0 && (
-              <span className="chip chip-warn" title={`Changed: ${row.drift.join(', ')}`}>
-                unapplied
-              </span>
-            )}
+        <div className="app-card-head">
+          <AppIcon name={row.name} hasIcon={row.hasIcon} size={30} />
+          <div className="app-id">
+            <div className="app-name">
+              {row.name}
+              {row.managedInNix && (
+                <span className="chip chip-muted" title="Declared by hand in Nix, read-only here">
+                  nix
+                </span>
+              )}
+              {!row.managedInNix && row.drift.length > 0 && (
+                <span className="chip chip-warn" title={`Changed: ${row.drift.join(', ')}`}>
+                  unapplied
+                </span>
+              )}
+            </div>
+            <code className="app-host">{row.hostname}</code>
           </div>
-          <div className="app-sub">{row.description || '—'}</div>
+          <StateDot state={row.status.state} />
         </div>
 
-        <code className="app-host">{row.hostname}</code>
+        <p className="app-desc">{row.description || '—'}</p>
 
-        <span
-          className={
-            row.stage === 'live'
-              ? 'chip chip-live'
-              : row.stage === 'off'
-                ? 'chip chip-off'
-                : 'chip chip-lab'
-          }
-        >
-          {row.stage === 'live' ? 'external' : row.stage === 'off' ? 'not exposed' : 'internal'}
-        </span>
+        <div className="app-card-foot">
+          <span
+            className={
+              row.stage === 'live'
+                ? 'chip chip-live'
+                : row.stage === 'off'
+                  ? 'chip chip-off'
+                  : 'chip chip-lab'
+            }
+          >
+            {row.stage === 'live' ? 'external' : row.stage === 'off' ? 'not exposed' : 'internal'}
+          </span>
 
-        <div className="app-spark">
-          {/* Neutral unless the app is in trouble: the dot at the head of the
-              row already carries state, and a green line on every healthy app
+          {/* Neutral unless the app is in trouble: the dot in the head
+              already carries state, and a green line on every healthy app
               would make the one red line harder to find, not easier. */}
           <Spark
             values={row.status.spark}
             tone={row.status.state === 'attention' ? 'bad' : 'muted'}
-            width={88}
-            height={20}
+            width={72}
+            height={18}
           />
           <span className="rpm">
             {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)} rpm`}
