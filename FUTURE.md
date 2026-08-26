@@ -362,6 +362,16 @@ design decision, so none warrants a section of its own.
 
 **Small declarative fixes, deliberately not applied yet**
 
+- **A daedalus session-resume button on the Claude page** (2026-08-26).
+  Remote Control only bridges *starting* sessions — after the server
+  dies, claude.ai's "restart" on a dead session mints a fresh one and
+  the old context is reachable only via `claude --resume <id>` at the
+  console. The UI now says so; the actual fix would be a per-session
+  button (dead-session files in `~/.claude/sessions` are already in the
+  snapshot) that runs `claude --resume <id>` under Remote Control so
+  the session is exposed to the outside again. Needs a new file-drop
+  bridge on the host side — the container can't spawn host processes.
+
 - **A daedalus panel for shotter** (2026-08-26). The stack writes a
   stable, panel-ready surface on purpose —
   `<stateRoot>/shotter/stats.json` (totals + last run) and
