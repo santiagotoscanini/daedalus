@@ -68,8 +68,10 @@ export default defineConfig({
     // Vite rejects requests whose Host header it doesn't recognise with a bare
     // 403 and no explanation. Behind traefik every request arrives with the
     // public hostname, so without this the app is unreachable while looking
-    // perfectly healthy in the logs.
-    allowedHosts: [appHost],
+    // perfectly healthy in the logs. `app-daedalus` is the under-the-gate
+    // door: shotter joins iso-daedalus-net and dials the container by name
+    // for visual verification the SSO gate would otherwise block.
+    allowedHosts: [appHost, 'app-daedalus'],
 
     // The HMR websocket is the one connection the browser opens on its own, so
     // it does not inherit the proxy's scheme or port — left alone the client
