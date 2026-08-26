@@ -197,6 +197,16 @@ matrix motif and the portfolio's hand-drawn line art carry theirs.
 - Fonts bundled via `@fontsource-variable/*` (never Google-hosted;
   the `-variable` package name matters). `public/icon.svg` favicon in
   the motif.
+- **Two icon files, not one.** Beside the SVG favicon:
+  `public/apple-icon.png`, an OPAQUE 180×180 PNG linked
+  `rel="apple-touch-icon"` from the root head. iOS ignores SVG there
+  and paints transparency black, so without the PNG "Add to Home
+  Screen" gets a page snapshot — four of seven apps shipped that way
+  until 2026-08-26. A full-tile mark renders full-bleed on its own
+  tile color; a bare glyph (voyra) gets the app's background behind
+  it. Render via a `shot` driver (inline SVG in `page.setContent`, 180
+  viewport, screenshot) — that is also the only way a text-based mark
+  (chismed) rasterizes with its real font.
 - **Read two or three sibling landings before writing a word**
   (`~santiago/projects/{voyra,anansi,iris}`, santree's + daedalus's
   `website/`) — and read them, don't recall them. hermes's brief
