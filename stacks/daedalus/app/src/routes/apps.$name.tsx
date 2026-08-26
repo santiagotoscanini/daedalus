@@ -91,6 +91,7 @@ function AppDetail() {
     deployStatus,
     lastDeploy,
     pullBroken,
+    deployShot,
     takenHostnames,
     repo,
     workspace,
@@ -238,6 +239,7 @@ function AppDetail() {
                 deployStatus={deployStatus}
                 lastDeploy={lastDeploy}
                 pullBroken={pullBroken}
+                deployShot={deployShot}
                 repo={repo}
                 workspace={workspace}
                 workspaceRoot={workspaceRoot}

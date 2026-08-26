@@ -33,6 +33,7 @@ export function Overview({
   deployStatus,
   lastDeploy,
   pullBroken,
+  deployShot,
   repo,
   workspace,
   workspaceRoot,
@@ -44,6 +45,7 @@ export function Overview({
   deployStatus: NonNullable<LoaderData>['deployStatus']
   lastDeploy: NonNullable<LoaderData>['lastDeploy']
   pullBroken: NonNullable<LoaderData>['pullBroken']
+  deployShot: NonNullable<LoaderData>['deployShot']
   repo: NonNullable<LoaderData>['repo']
   workspace: NonNullable<LoaderData>['workspace']
   workspaceRoot: NonNullable<LoaderData>['workspaceRoot']
@@ -145,6 +147,24 @@ export function Overview({
             )
           }
         >
+          {/* What the app looked like moments after its last deploy — taken
+              by shot-deploy-<name> on the host, anonymous-visitor view. Not
+              live: it ages with the deploy, which is the point. */}
+          {deployShot !== null && (
+            <a
+              className="deploy-shot"
+              href={`/api/deploy-shot/${app.name}?v=${deployShot.v}`}
+              target="_blank"
+              rel="noreferrer"
+              title={
+                (deployShot.ok ? 'Taken right after the last deploy' : 'The page ERRORED under the camera right after the last deploy') +
+                (deployShot.at === null ? '' : ` — ${since((Date.now() - deployShot.at) / 1000)}`)
+              }
+            >
+              <img src={`/api/deploy-shot/${app.name}?v=${deployShot.v}`} alt={`${app.name} right after its last deploy`} loading="lazy" />
+              {!deployShot.ok && <span className="deploy-shot-flag">page errored</span>}
+            </a>
+          )}
           <Facts
             list
             rows={[

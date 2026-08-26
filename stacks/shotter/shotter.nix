@@ -32,6 +32,14 @@
 # Claude page in daedalus (src/lib/dashboard/shotter.ts) through the
 # read-only mount this module contributes below.
 #
+# DEPLOY SCREENSHOTS: per registry app, a path unit on the deploy state file
+# (/var/lib/app-deploy/<name> — written ONLY on real deploys; deploy.sh's
+# "no change" tick exits before touching it) fires `shot quick` at the app's
+# hostname and publishes <stateDir>/deploys/<name>.{png,json} — the newest
+# slice plus a pointer record. Daedalus's app Overview renders it as the
+# Vercel-style deployment preview. The run itself lands in the normal
+# archive/ledger under the label `deploy-<name>`.
+#
 # UPGRADING PLAYWRIGHT: bump playwrightVersion + playwrightDigest together
 # (skopeo inspect docker://mcr.microsoft.com/playwright:v<V>-noble). The npm
 # package version inside the image MUST match the image tag — Playwright
@@ -39,6 +47,7 @@
 
 {
   config,
+  lib,
   pkgs,
   mkLocalImage,
   ...
@@ -216,12 +225,13 @@ let
     '';
   };
 in
-{
-  fleet.statePaths."${stateDir}" = {
-    uid = 0;
-  };
+lib.mkMerge [
+  {
+    fleet.statePaths."${stateDir}" = {
+      uid = 0;
+    };
 
-  environment.systemPackages = [ shot ];
+    environment.systemPackages = [ shot ];
 
   # The Shotter tab on daedalus's Claude page reads the stats surface and
   # serves run screenshots out of the archive. Same list-merge idiom as
@@ -255,5 +265,75 @@ in
       RandomizedDelaySec = 1800;
     };
   };
-  fleet.monitoredJobs.shotter-prune = { };
-}
+    fleet.monitoredJobs.shotter-prune = { };
+  }
+
+  # ── deploy screenshots ──────────────────────────────────────────────────
+  # One path unit + oneshot per registry app. Local-source apps are excluded
+  # (no deploy timer, so the state file never moves), `stage = "off"` apps
+  # have no hostname to shoot. A proxy-auth'd app photographs its Pocket ID
+  # gate — which IS what an anonymous visitor sees, so it stays honest.
+  #
+  # The unit publishes even when the page errored (the failure shot is the
+  # useful one) but then exits with the runner's code, so a deploy whose
+  # page will not render shows up in `systemctl --failed` without email.
+  (let
+    shotApps = lib.filterAttrs (
+      _: a: a.stage != "off" && a.deploy.enable && a.source.mode != "local"
+    ) config.fleet.apps;
+    hostOf =
+      name: a: if a.hostname != null then a.hostname else "${name}.${config.fleet.baseDomain}";
+  in
+  {
+    systemd.services = lib.mapAttrs' (
+      name: a:
+      lib.nameValuePair "shot-deploy-${name}" {
+        description = "Screenshot ${name} after a deploy";
+        serviceConfig = {
+          Type = "oneshot";
+          # As santiago directly (shot re-execs to her anyway, and the sudo
+          # hop from a root unit would log a PAM session per deploy).
+          User = "santiago";
+          Group = "users";
+        };
+        path = [
+          shot
+          pkgs.coreutils
+          pkgs.findutils
+          pkgs.gnused
+          pkgs.jq
+        ];
+        script = ''
+          rc=0
+          out="$(shot quick "https://${hostOf name a}/" "deploy-${name}")" || rc=$?
+          dir="$(printf '%s\n' "$out" | tail -n1 | sed 's/^→ //')"
+          [ -d "$dir" ] || { echo "no run dir produced"; exit 1; }
+          first="$(find "$dir" -maxdepth 1 -name '*.png' | sort | head -n1)"
+          [ -n "$first" ] || { echo "run produced no screenshot"; exit 1; }
+          mkdir -p "${stateDir}/deploys"
+          # tmp+mv both files: daedalus reads them live off the mount.
+          install -m 0644 "$first" "${stateDir}/deploys/${name}.png.tmp"
+          mv "${stateDir}/deploys/${name}.png.tmp" "${stateDir}/deploys/${name}.png"
+          digest="$(cut -d' ' -f1 /var/lib/app-deploy/${name} 2>/dev/null || true)"
+          jq -n --arg run "$(basename "$dir")" --arg digest "$digest" \
+            --argjson ok "$([ "$rc" -eq 0 ] && echo true || echo false)" --arg at "$(date -Is)" \
+            '{runId:$run, digest:(if $digest == "" then null else $digest end), ok:$ok, at:$at}' \
+            > "${stateDir}/deploys/${name}.json.tmp"
+          mv "${stateDir}/deploys/${name}.json.tmp" "${stateDir}/deploys/${name}.json"
+          exit "$rc"
+        '';
+      }
+    ) shotApps;
+
+    systemd.paths = lib.mapAttrs' (
+      name: _:
+      lib.nameValuePair "shot-deploy-${name}" {
+        description = "Watch ${name}'s deploy state for the screenshot hook";
+        wantedBy = [ "multi-user.target" ];
+        # PathChanged (not PathModified): fires on close-after-write, which is
+        # deploy.sh finishing its state write — one shot per deploy.
+        pathConfig.PathChanged = "/var/lib/app-deploy/${name}";
+      }
+    ) shotApps;
+  })
+]
