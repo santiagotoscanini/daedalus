@@ -13,7 +13,14 @@ directory at /app and runs the Vite dev server against it.
 ## The dev loop (what restarts what)
 
 - `app/**` (routes, components, lib) → **nothing**. Vite is watching;
-  saving the file IS the deploy. Check the browser.
+  saving the file IS the deploy. Verify with `shot quick
+  https://daedalus-app.toscanini.me/<page>` — but the SSO gate stops an
+  unauthenticated browser at Pocket ID, so for content checks go UNDER
+  the gate instead (auth is traefik's job; the dev server trusts its
+  caller): `podman exec app-daedalus node -e
+  "fetch('http://localhost:3000/<page>').then(r=>r.text()).then(t=>console.log(t.includes('<needle>')))"`
+  renders the real SSR page, loaders included. Vite compile errors land
+  in `podman logs app-daedalus`.
 - `app/package.json` → `sudo systemctl restart podman-app-daedalus`
   (re-runs `pnpm install --frozen-lockfile`; Verdaccio is a hard
   startup dependency, minutes on a cold cache).

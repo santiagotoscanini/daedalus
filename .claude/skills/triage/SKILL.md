@@ -69,6 +69,12 @@ container→host connection stalling ~10s then working is the known
 first-SYN pasta stall, not the service. Netns tenants reach the host ONLY
 at `host.containers.internal`, never 192.168.0.2.
 
+When the complaint is VISUAL ("blank page", "renders wrong", "button does
+nothing"), curl cannot answer it — `shot quick <url>` (stacks/shotter)
+returns sliced PNGs plus `events.json`, and the events are the verdict:
+console errors, failed requests and 4xx/5xx under a perfect screenshot
+are the broken deploy.
+
 ## 4. Metrics for "since when" / "how bad"
 
 Prometheus (prefer the grafana MCP if connected): `container_up{name=…}`

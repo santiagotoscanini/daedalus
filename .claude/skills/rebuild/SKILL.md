@@ -66,6 +66,9 @@ Then per change class:
   output is NOT in journald); if it has a hostname:
   `curl -sk --resolve <host>:443:192.168.0.2 -o /dev/null -w '%{http_code}' https://<host>/`
   → expect 200/30x/401, never 5xx. Migrations may need 30–60s; retry twice.
+  If the change's point is VISUAL (a UI, a landing, a dashboard):
+  `shot quick https://<host>/` and read the run's `events.json` — a 200
+  can render broken, and events outrank pixels (stacks/shotter).
 - **secret**: if ANY `mkSecretRender` unit reads the rotated secret, the
   rebuild is NOT enough — `/rotate-secret` has the map; restart the render
   unit AND its consumer, then verify the consumer actually picked up the new

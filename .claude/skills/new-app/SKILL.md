@@ -215,12 +215,12 @@ matrix motif and the portfolio's hand-drawn line art carry theirs.
   Copy the technique, depict the real UI, and leave a re-sync note —
   they drift when the app changes.
 - **You cannot judge a landing from its source.** Screenshot it and
-  look: `node:24` + `apt-get install chromium` + puppeteer-core, run
-  from the dir where puppeteer-core was installed (ESM resolution
-  fails otherwise); reach the box with `--add-host=<host>:host-gateway`,
-  never the LAN IP (under pasta `192.168.0.2` is the container
-  itself). Read the PNGs back and iterate. hermes's first two landings
-  both came back green from every text check and were both rejected.
+  look: `shot quick https://<host>/` (stacks/shotter — THE browser
+  flow on this box; never hand-build a chromium container), then Read
+  the sliced PNGs from the run dir and iterate. Read `events.json`
+  before trusting the pictures — a landing can render perfectly over a
+  stylesheet 404. hermes's first two landings both came back green
+  from every text check and were both rejected on sight.
 
 ## 4. Register with daedalus + first image (subagent)
 
