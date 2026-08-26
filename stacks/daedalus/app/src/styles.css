@@ -310,10 +310,9 @@ h2 {
 
 /* ── the app-scoped rail ────────────────────────────────────────────────────
    Inside /apps/<name> the rail shows that app's sections (see __root.tsx).
-   Its entries are text-only, so the section links capitalize their ids and
-   the collapse affordance disappears — a 64px column of icon-less rows would
-   be a stack of nothing. The stored preference is suspended, not
-   overwritten: leaving the app restores the collapsed rail untouched.      */
+   Each entry carries an icon like the category rail, so the collapsed 64px
+   mode works here unchanged — only the app-name context line goes with the
+   labels when it collapses.                                                */
 
 .rail-app {
   padding: 0.15rem 0.65rem 0.4rem;
@@ -336,32 +335,9 @@ h2 {
 .app-rail .nav-item:first-child:hover {
   color: var(--text);
 }
-.app-rail .nav-collapse {
-  display: none;
-}
 
 @media (width > 52rem) {
-  :root[data-nav="collapsed"]:has(.app-rail) {
-    --sidebar-w: 232px;
-  }
-  :root[data-nav="collapsed"]:has(.app-rail) .sidebar {
-    padding-left: 0.7rem;
-    padding-right: 0.7rem;
-  }
-  :root[data-nav="collapsed"]:has(.app-rail) .brand {
-    justify-content: flex-start;
-    padding: 0.25rem 0.55rem;
-  }
-  :root[data-nav="collapsed"]:has(.app-rail) .brand > span,
-  :root[data-nav="collapsed"]:has(.app-rail) .nav-label {
-    display: revert;
-  }
-  :root[data-nav="collapsed"]:has(.app-rail) .nav-item {
-    justify-content: flex-start;
-    padding-left: 0.65rem;
-    padding-right: 0.65rem;
-  }
-  :root[data-nav="collapsed"]:has(.app-rail) .nav-item::after {
+  :root[data-nav="collapsed"] .rail-app {
     display: none;
   }
 }

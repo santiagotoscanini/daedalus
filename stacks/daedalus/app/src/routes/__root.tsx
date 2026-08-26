@@ -375,8 +375,9 @@ function AppRail({ app }: { app: AppRailContext }) {
           // Manual activeness only — Link's default activeProps matches by
           // location and would light every row (see components/tabs.tsx).
           activeProps={{}}
-          data-label={t}
+          data-label={t.charAt(0).toUpperCase() + t.slice(1)}
         >
+          <NavIcon name={t} />
           <span className="nav-label">{t}</span>
         </Link>
       ))}

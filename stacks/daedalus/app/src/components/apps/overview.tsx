@@ -3,17 +3,9 @@ import type { DeployStatus } from '../../lib/deploy'
 import { DASH, since } from '../../lib/format'
 import { type AppTabData, fetchDeployStatus, triggerDeploy } from '../../server/registry'
 import { usePolledStatus } from '../status'
-import { Bytes } from '../ui'
 import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
 import { CloneButton } from '../workspace'
 import type { AppRecord, LoaderData } from './shared'
-
-/** The auth mode as a person would say it, not as the column stores it. */
-const AUTH_WORD: Record<string, string> = {
-  none: 'none',
-  proxy: 'forward-auth',
-  native: 'app is the client',
-}
 
 /**
  * An image reference short enough to sit in a value column.
@@ -140,7 +132,7 @@ export function Overview({
         <Board
           title="Deployment"
           icon="◲"
-          span={4}
+          span={6}
           aside={
             app.sourceMode === 'local' ? null : (
               <RedeployButton name={app.name} initial={deployStatus} />
@@ -213,41 +205,9 @@ export function Overview({
           />
         </Board>
 
-        <Board title="Database" icon="◧" span={4}>
-          {app.postgres ? (
-            <Facts
-              list
-              rows={[
-                { k: 'cluster', v: 'shared pg' },
-                { k: 'database', v: <code>{app.name}</code> },
-                { k: 'size', v: <Bytes value={d.dbSize} /> },
-                { k: 'host', v: <code>pg:5432</code> },
-              ]}
-            />
-          ) : (
-            <p className="viz-empty">No database. Enable Postgres in Settings.</p>
-          )}
-        </Board>
-
-        <Board title="Access" icon="⛨" span={4}>
-          <Facts
-            list
-            rows={[
-              { k: 'auth', v: AUTH_WORD[app.authMode] ?? app.authMode },
-              { k: 'health path', v: <code>{app.authHealthPath ?? DASH}</code> },
-              { k: 'isolated', v: app.authIsolated ? 'yes' : 'no' },
-              { k: 'groups', v: app.authAllowedGroups?.join(', ') ?? 'admins' },
-              {
-                k: 'secrets',
-                v: app.operatorSecrets ? (
-                  <code>{app.name}-env.sops</code>
-                ) : (
-                  <span className="muted">none</span>
-                ),
-              },
-            ]}
-          />
-        </Board>
+        {/* No Database, Access or Egress boards here: each is a section in
+            the app rail with a fuller page, and the overview repeating their
+            facts was the rail's list restated as cards. */}
 
         {/* The clone of this app's repo under ~/projects on the host, where a
             Claude Code session works on it directly from this box. The host
@@ -257,7 +217,7 @@ export function Overview({
         <Board
           title="Workspace"
           icon="⎇"
-          span={4}
+          span={6}
           aside={<CloneButton repo={repo} cloned={workspace !== null} initial={workspaceStatus} />}
         >
           {workspace ? (
@@ -332,19 +292,6 @@ export function Overview({
             </p>
           )}
         </Board>
-
-        {app.egressContainer && (
-          <Board title="Egress" icon="⇄" span={4}>
-            <Facts
-              list
-              rows={[
-                { k: 'netns', v: <code>{app.egressContainer}</code> },
-                { k: 'host port', v: <code>{String(app.egressHostPort)}</code> },
-                { k: 'outbound', v: 'all through the VPN' },
-              ]}
-            />
-          </Board>
-        )}
 
         {notes.length > 0 && (
           <Board title="Why it is configured this way" icon="✎" span={12}>
