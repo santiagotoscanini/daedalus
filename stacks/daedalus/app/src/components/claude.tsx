@@ -74,7 +74,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         ]}
         lede={
           <>
-            The always-on Remote Control server. A session on this box can be picked up from
+            The always-on Remote Control server. A session on this box can be started from
             claude.ai/code or a phone at any time. It has no health endpoint of its own, so every
             number here is read from the unit, the session files and this unit's journal.
           </>
@@ -238,8 +238,12 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
             <b>Last seen</b> is the mtime of the session's own bridge debug log, which is the only
             clock a session has: the file in <span className="mono">~/.claude/sessions</span> is
             written once, at start, so it says when a session BEGAN and nothing about whether
-            anybody is still typing into it. A session idle for hours is normal — they stay
-            resumable for about four hours after the server itself stops.
+            anybody is still typing into it. A session idle for hours is normal. What a session
+            does not survive is the server: Remote Control is a bridge for STARTING sessions, not
+            for re-attaching to ones that lost their process, so once the server dies the web side
+            can only mint new sessions — the "restart" button claude.ai offers on a dead one
+            starts fresh. The transcript survives on this box, and{' '}
+            <span className="mono">claude --resume</span> at the console is the way back into it.
           </p>
         </Board>
 
@@ -420,9 +424,11 @@ function RestartServerControl({ live }: { live: number }) {
             : live === 1
               ? 'The one connected session dies with the server.'
               : `All ${num(live)} connected sessions die with the server.`}{' '}
-          Sessions stay resumable from claude.ai for about four hours, but the environment id is
-          minted per start, so the session link above becomes a new one. The box itself is
-          untouched.
+          Dead sessions cannot be picked back up from claude.ai — the server only bridges new
+          ones; their transcripts survive on this box and{' '}
+          <span className="mono">claude --resume</span> at the console is the way back in. The
+          environment id is minted per start, so the session link above becomes a new one. The box
+          itself is untouched.
         </p>
         <div className="restart-actions">
           <button
