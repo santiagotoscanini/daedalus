@@ -32,6 +32,7 @@ import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '
 import { readSnapshot } from '../contract/snapshot'
 import { lokiStreams } from '../loki'
 import { type VersionGap, versionGap } from './github'
+import { loadShotter, type ShotterData } from './shotter'
 
 /* ── the snapshot ─────────────────────────────────────────────────────── */
 
@@ -233,6 +234,8 @@ export type ClaudeData = {
   /** Drops in the window, which is the honest measure of "is it reachable". */
   drops: number
   gap: VersionGap
+  /** The sessions' eyes — the shotter lab's ledger and archive. */
+  shotter: ShotterData
 }
 
 export async function loadClaude(): Promise<ClaudeData> {
@@ -255,7 +258,11 @@ export async function loadClaude(): Promise<ClaudeData> {
   const installed = facts.remote.version ?? facts.cli.version
 
   // No cache of its own: `versionGap` already holds one, for the rate limit.
-  const [gap, log] = await Promise.all([versionGap('anthropics/claude-code', installed), events()])
+  const [gap, log, shotter] = await Promise.all([
+    versionGap('anthropics/claude-code', installed),
+    events(),
+    loadShotter(),
+  ])
 
   return {
     facts,
@@ -265,6 +272,7 @@ export async function loadClaude(): Promise<ClaudeData> {
     events: log,
     drops: log.filter((e) => e.kind === 'drop').length,
     gap,
+    shotter,
   }
 }
 

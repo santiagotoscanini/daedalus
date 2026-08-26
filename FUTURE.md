@@ -372,15 +372,6 @@ design decision, so none warrants a section of its own.
   the session is exposed to the outside again. Needs a new file-drop
   bridge on the host side — the container can't spawn host processes.
 
-- **A daedalus panel for shotter** (2026-08-26). The stack writes a
-  stable, panel-ready surface on purpose —
-  `<stateRoot>/shotter/stats.json` (totals + last run) and
-  `history.jsonl` (one line per run, append-only) — but no UI reads it
-  yet. When daedalus grows a spot for it: run count, failure count,
-  last run's error/4xx/5xx tallies, disk usage of `runs/`. Deliberately
-  deferred until the CLI has earned its keep; `shot stats` covers the
-  need meanwhile.
-
 - **`mkSecretRender` should derive `restartTriggers`** from the
   `sopsFile` store path of every secret its script reads, which would
   make a rotated secret actually reach the box on a rebuild instead of

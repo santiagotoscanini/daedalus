@@ -28,8 +28,9 @@
 # shell. The run is trusted local tooling; isolation buys nothing here.
 #
 # THE STATS SURFACE: <stateRoot>/shotter/stats.json (totals + last run) and
-# history.jsonl (one line per run, append-only). Stable schema — this is what
-# a daedalus panel reads if/when one is wired.
+# history.jsonl (one line per run, append-only). Stable schema — read by the
+# Claude page in daedalus (src/lib/dashboard/shotter.ts) through the
+# read-only mount this module contributes below.
 #
 # UPGRADING PLAYWRIGHT: bump playwrightVersion + playwrightDigest together
 # (skopeo inspect docker://mcr.microsoft.com/playwright:v<V>-noble). The npm
@@ -221,6 +222,14 @@ in
   };
 
   environment.systemPackages = [ shot ];
+
+  # The Claude page in daedalus reads the stats surface and serves run
+  # screenshots out of the archive. Same list-merge idiom as litellm's
+  # prometheus mount: the stack that OWNS the files contributes the bind,
+  # rather than the apps platform learning about shotter.
+  virtualisation.oci-containers.containers.app-daedalus.volumes = [
+    "${stateDir}:/shotter:ro"
+  ];
 
   systemd.services.shotter-image = labImage.service;
 
