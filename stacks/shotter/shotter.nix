@@ -305,7 +305,9 @@ lib.mkMerge [
         ];
         script = ''
           rc=0
-          out="$(shot quick "https://${hostOf name a}/" "deploy-${name}")" || rc=$?
+          # 16:10 viewport — the shape daedalus's preview frame draws, so the
+          # first slice fits it exactly instead of being cropped.
+          out="$(shot quick "https://${hostOf name a}/" "deploy-${name}" -- --viewport 1280x800)" || rc=$?
           dir="$(printf '%s\n' "$out" | tail -n1 | sed 's/^→ //')"
           [ -d "$dir" ] || { echo "no run dir produced"; exit 1; }
           first="$(find "$dir" -maxdepth 1 -name '*.png' | sort | head -n1)"

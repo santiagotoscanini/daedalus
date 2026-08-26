@@ -4,6 +4,7 @@ import {
   Link,
   Outlet,
   Scripts,
+  useMatches,
   useRouterState,
 } from '@tanstack/react-router'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
@@ -12,6 +13,7 @@ import { ErrorPanel } from '../components/error'
 import { NavIcon } from '../components/nav-icon'
 import { CATEGORIES } from '../lib/dashboard/nav'
 import appCss from '../styles.css?url'
+import { APP_TABS } from './apps.$name'
 
 /**
  * The collapsed/expanded rail, restored before the first paint.
@@ -125,6 +127,12 @@ function Shell({ children }: { children: ReactNode }) {
   // a menu you have to dismiss yourself after tapping a link is one tap too
   // many, every time.
   const path = useRouterState({ select: (s) => s.location.pathname })
+
+  // Inside an app the rail changes subject: the sections OF that app, with a
+  // way back, instead of the box's directory. Vercel's settings shape — a
+  // detail page with eight sections outgrows a horizontal tab row. Matched
+  // here (not in the route) because the rail is the shell's.
+  const app = useAppRailContext()
   // biome-ignore lint/correctness/useExhaustiveDependencies: `path` is not read in the body — it IS the trigger; the effect exists to run on navigation.
   useEffect(() => {
     setOpen(false)
@@ -202,7 +210,11 @@ function Shell({ children }: { children: ReactNode }) {
         aria-hidden="true"
       />
 
-      <aside id="nav" className="sidebar" data-open={open ? 'true' : 'false'}>
+      <aside
+        id="nav"
+        className={app !== null ? 'sidebar app-rail' : 'sidebar'}
+        data-open={open ? 'true' : 'false'}
+      >
         <div className="rail-head">
           <Link to="/apps" className="brand">
             <img src="/icon.svg" alt="" width={30} height={30} />
@@ -225,41 +237,45 @@ function Shell({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        {/* Apps is the management surface; everything below it is a
-            read-only view of one subject area. The split is by subject
-            rather than by service on purpose — "what is playing" and "what
-            is downloading" are one question and six containers. */}
-        <nav className="nav-primary" aria-label="Sections">
-          <Link to="/apps" className="nav-item" data-label="Apps">
-            <NavIcon name="apps" />
-            <span className="nav-label">Apps</span>
-          </Link>
-
-          <span className="nav-divider" aria-hidden="true" />
-
-          {CATEGORIES.map((c) => (
-            <Link
-              key={c.id}
-              to="/c/$category"
-              params={{ category: c.id }}
-              // The sub-tab is left off so the loader picks the category's
-              // first one; naming it here would mean the rail and the
-              // route disagreed the moment a tab was renamed.
-              search={{}}
-              className="nav-item"
-              // What the tooltip says when the rail is collapsed. An
-              // attribute rather than `title`: the native one waits a second
-              // and then appears under the cursor rather than beside the row.
-              data-label={c.label}
-            >
-              {/* The icon is keyed by the category id. It was a glyph on the
-                  spec until it turned out to be the id spelled a second
-                  way — see components/nav-icon.tsx. */}
-              <NavIcon name={c.id} />
-              <span className="nav-label">{c.label}</span>
+        {app !== null ? (
+          <AppRail app={app} />
+        ) : (
+          /* Apps is the management surface; everything below it is a
+             read-only view of one subject area. The split is by subject
+             rather than by service on purpose — "what is playing" and "what
+             is downloading" are one question and six containers. */
+          <nav className="nav-primary" aria-label="Sections">
+            <Link to="/apps" className="nav-item" data-label="Apps">
+              <NavIcon name="apps" />
+              <span className="nav-label">Apps</span>
             </Link>
-          ))}
-        </nav>
+
+            <span className="nav-divider" aria-hidden="true" />
+
+            {CATEGORIES.map((c) => (
+              <Link
+                key={c.id}
+                to="/c/$category"
+                params={{ category: c.id }}
+                // The sub-tab is left off so the loader picks the category's
+                // first one; naming it here would mean the rail and the
+                // route disagreed the moment a tab was renamed.
+                search={{}}
+                className="nav-item"
+                // What the tooltip says when the rail is collapsed. An
+                // attribute rather than `title`: the native one waits a second
+                // and then appears under the cursor rather than beside the row.
+                data-label={c.label}
+              >
+                {/* The icon is keyed by the category id. It was a glyph on the
+                    spec until it turned out to be the id spelled a second
+                    way — see components/nav-icon.tsx. */}
+                <NavIcon name={c.id} />
+                <span className="nav-label">{c.label}</span>
+              </Link>
+            ))}
+          </nav>
+        )}
 
         {/* Below everything, and pushed there rather than ordered there.
             The rail above is a directory of what this box RUNS, one entry
@@ -285,6 +301,86 @@ function Shell({ children }: { children: ReactNode }) {
 
       <main className="content">{children ?? <Outlet />}</main>
     </div>
+  )
+}
+
+type AppRailContext = {
+  name: string
+  tab: string
+  /** Feature tabs, hidden while unknown (loader still in flight). */
+  hasDatabase: boolean
+  hasVpn: boolean
+}
+
+/**
+ * Whether the app detail route is matched, and what its rail needs to know.
+ *
+ * Read through `useMatches` rather than passed up from the route: the rail
+ * renders in the shell, above the route in the tree. `loaderData` is
+ * undefined while the loader is in flight — the two conditional tabs stay
+ * hidden for those milliseconds rather than flashing in and out.
+ */
+function useAppRailContext(): AppRailContext | null {
+  return useMatches({
+    select: (matches) => {
+      const m = matches.find((x) => x.routeId === '/apps/$name')
+      if (m === undefined) return null
+      const data = m.loaderData as
+        | { app: { postgres: boolean; egressContainer: string | null } }
+        | null
+        | undefined
+      return {
+        name: (m.params as { name: string }).name,
+        tab: (m.search as { tab?: string }).tab ?? 'overview',
+        hasDatabase: data?.app.postgres === true,
+        hasVpn: (data?.app.egressContainer ?? null) !== null,
+      }
+    },
+    structuralSharing: true,
+  })
+}
+
+/**
+ * The app-scoped rail: a way back, whose app this is, and its sections.
+ *
+ * The two feature tabs are hidden rather than disabled when the feature is
+ * off — a greyed-out "vpn" on an app with no egress is a question the page
+ * has already answered (this rule moved here from the old tab bar).
+ */
+function AppRail({ app }: { app: AppRailContext }) {
+  const tabs = APP_TABS.filter(
+    (t) => (t !== 'database' || app.hasDatabase) && (t !== 'vpn' || app.hasVpn),
+  )
+  return (
+    <nav className="nav-primary" aria-label="App sections">
+      {/* activeProps muted: /apps prefix-matches every app detail URL, so the
+          default would keep this lit on every page of the section. */}
+      <Link to="/apps" className="nav-item" data-label="All apps" activeProps={{}}>
+        <NavIcon name="chevron" size={16} />
+        <span className="nav-label">All apps</span>
+      </Link>
+
+      <span className="nav-divider" aria-hidden="true" />
+      <span className="rail-app">{app.name}</span>
+
+      {tabs.map((t) => (
+        <Link
+          key={t}
+          to="/apps/$name"
+          params={{ name: app.name }}
+          // Carry the rest of the search forward, so switching to another
+          // section and back does not silently reset the access window.
+          search={(prev) => ({ ...prev, tab: t })}
+          className={t === app.tab ? 'nav-item active' : 'nav-item'}
+          // Manual activeness only — Link's default activeProps matches by
+          // location and would light every row (see components/tabs.tsx).
+          activeProps={{}}
+          data-label={t}
+        >
+          <span className="nav-label">{t}</span>
+        </Link>
+      ))}
+    </nav>
   )
 }
 

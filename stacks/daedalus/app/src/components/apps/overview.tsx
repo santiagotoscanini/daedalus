@@ -177,8 +177,12 @@ export function Overview({
                 v: <code title={app.effectiveImage}>{shortImage(app.effectiveImage)}</code>,
               },
               {
+                // The registry hook is the real trigger (zot POSTs
+                // api.deploy on every push — live in seconds); the timer is
+                // the safety net behind it. "Every 2 min" alone had the
+                // operator believing the poll was the mechanism.
                 k: 'auto-deploy',
-                v: app.sourceMode === 'local' ? 'n/a, source is live' : 'every 2 min',
+                v: app.sourceMode === 'local' ? 'n/a, source is live' : 'on push · 2-min fallback',
               },
               ...(lastDeploy
                 ? [
