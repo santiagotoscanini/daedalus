@@ -2,12 +2,12 @@
 #
 # Both halves of a client credential originate on this box: the client ID
 # is a plain nix string (the attr name), and the secret is generated here
-# the first time a client is declared. Pocket ID >= 2.12.0 accepts a
+# the first time a client is declared. Pocket ID accepts a
 # caller-supplied `id` on `POST /api/oidc/clients` and a caller-supplied
-# `secret` on `POST /api/oidc/clients/{id}/secret`, so nothing has to be
-# minted by the server and pasted back. A fresh `pocket_id` database
-# re-converges on the next boot instead of needing every client recreated
-# by hand.
+# `secret` on `POST /api/oidc/clients/{id}/secrets` — the singular
+# `/secret` it was until v2.13.0 — so nothing has to be minted by the
+# server and pasted back. A fresh `pocket_id` database re-converges on
+# the next boot instead of needing every client recreated by hand.
 #
 # ── the secret is machine-generated, not operator state ────────────────
 #
@@ -30,12 +30,13 @@
 # stacks/pocket-id/clients.sops` still has it, if a value is ever needed
 # from before the switch.
 #
-# Losing the state file costs nothing but a rotation. The sync PUTs our
-# secret to the IdP on every boot, so a regenerated one converges there,
-# and every consumer reads the same file through the renders below. That
-# is what makes generating it safe where an app's data would not be. The
-# one manual step after a rotation is bouncing traefik, which holds the
-# forward-auth secret in memory.
+# Losing the state file costs nothing but a rotation. The sync pushes
+# our secret to the IdP on every boot — adding it and pruning whatever
+# it supersedes, see assets/sync-clients.sh — so a regenerated one
+# converges there, and every consumer reads the same file through the
+# renders below. That is what makes generating it safe where an app's
+# data would not be. The one manual step after a rotation is bouncing
+# traefik, which holds the forward-auth secret in memory.
 #
 # Two consumer shapes, both fed from the same secret:
 #
@@ -188,6 +189,9 @@ let
       MANIFEST=${manifest}
       IDP_ENV=${config.sops.secrets."pocket-id-env".path}
       SECRETS=${secretsFile}
+      # Statically linked (musl), so it runs in the IdP's container
+      # whatever that image happens to contain. See sync-clients.sh.
+      CURL_BIN=${pkgs.pkgsStatic.curl}/bin/curl
 
       ${builtins.readFile ./assets/sync-clients.sh}
     '';
