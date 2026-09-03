@@ -32,7 +32,7 @@ recipe to onboard a new service or household member.
 | verdaccio | verdaccio-openid plugin baked into the custom image; web UI + `npm login --auth-type=web` | htpasswd + existing CLI tokens still work; registry API ungated so `npm install` is unaffected |
 | n8n | cweagans/n8n-oidc hook (pinned commit, bind-mounted hooks.js); SSO lands as owner | `/signin?showLogin=true`; webhooks untouched |
 | anansi | `fleet.apps.anansi.auth.mode = "native"` — Auth.js OIDC provider against Pocket ID, existing account matched by email; the platform supplies OIDC_* + OIDC_CLIENT_SECRET | own `AUTH_SECRET` sessions; DB password hashes are dormant, not a login path |
-| wg-easy | native generic OIDC (v15.4.0+, `OAUTH_PROVIDERS=oidc`), openid-client with PKCE + `client_secret_post`; `OAUTH_AUTO_REGISTER` creates the Pocket ID account as admin (upstream has no roles yet — safe only because the client is `admins`-only); `OAUTH_AUTO_LAUNCH` skips the form | `/login?auto_launch=false` shows the password form — the pre-OIDC local admin; set `DISABLE_PASSWORD_AUTH=true` in the module after the first successful passkey login. The tunnel (:51820) is unaffected by UI auth |
+| wg-easy | native generic OIDC (v15.4.0+, `OAUTH_PROVIDERS=oidc`), openid-client with PKCE + `client_secret_post`; `OAUTH_AUTO_REGISTER` creates the Pocket ID account as admin (upstream has no roles yet — safe only because the client is `admins`-only); `OAUTH_AUTO_LAUNCH` skips the form. **Requires `email_verified: true` in userinfo** (every provider, no override) — tick "Email verified" on the user in Pocket ID or the callback 401s "Email is not verified" | `/login?auto_launch=false` shows the password form — the pre-OIDC local admin; set `DISABLE_PASSWORD_AUTH=true` in the module after the first successful passkey login. The tunnel (:51820) is unaffected by UI auth |
 | home-assistant | [hass-oidc-auth](https://github.com/christiaangoossens/hass-oidc-auth) vendored from a pinned tag as a read-only `custom_components` bind mount (not HACS); confidential client, Pocket ID's `admins` group maps to the HA admin role | HA's own login stays enabled — onboarding needs it and it is the break-glass. Long-lived access tokens (companion app, `/api/*`) are untouched |
 
 ## Tier 2 — forward-auth + trusted header (auto-login, no second screen)
@@ -108,7 +108,9 @@ Each app also enforces its own per-user data isolation (sofi sees only her own
 immich/nextcloud data).
 
 Onboarding a household member: create their Pocket ID account, add to `family`,
-and (for nextcloud) set their `nextcloud_uid` custom claim = their NC username.
+tick "Email verified" on the user (wg-easy rejects an unverified email, and
+other native-OIDC apps may too), and (for nextcloud) set their `nextcloud_uid`
+custom claim = their NC username.
 
 ## Cross-cutting (implementation checklist)
 
