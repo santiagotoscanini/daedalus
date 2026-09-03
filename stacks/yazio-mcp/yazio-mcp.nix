@@ -120,10 +120,12 @@ in
   # Registration on the LiteLLM MCP gateway lives with the server that
   # backs it. `exposeRemotely` publishes /Yazio/mcp through the CF tunnel
   # for off-box MCP clients (the `claude` key tracks the published set);
-  # see stacks/litellm/mcp.nix. No logoUrl: dashboard-icons has no Yazio.
+  # see stacks/litellm/mcp.nix. The logo is the Play Store listing's icon
+  # (dashboard-icons has no Yazio).
   fleet.mcpServers.Yazio = {
     url = "http://mcp-yazio:8080/mcp";
     description = "Yazio nutrition diary: meals, water, weight, goals, food search";
+    logoUrl = "https://play-lh.googleusercontent.com/QqbWLtHPocHrgg03WyNqfmxVMBEEnvdavkz5xkdjwrr1MEpkez6f76_hsqxiTbg18M20oqN_k_DVlbG7C7s7kw=w240-h480-rw";
     exposeRemotely = true;
   };
 
