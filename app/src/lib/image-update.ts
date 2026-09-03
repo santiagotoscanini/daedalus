@@ -12,9 +12,24 @@ import { defineBridge } from './bridge'
 // No payload file, unlike Apply. Apply ships bytes because the app renders the
 // whole registry and the host copies it verbatim; here the app has nothing to
 // render — the host reads the pin out of the nix-generated registry, which is
-// also the allowlist. What crosses is a container name and a tag.
+// also the allowlist. What crosses is a list of container names and tags.
+//
+// ── a request carries several containers ──────────────────────────────────
+//
+// `targets` is the wire form, and one target is just a batch of one. The host
+// makes them ONE commit, ONE build and ONE switch, which is the whole reason
+// to queue several rather than press the button six times — and also why a
+// failure anywhere reverts all of them together. host/image-update.sh has that
+// argument in full.
 
 export type ImageUpdateState = 'idle' | 'running' | 'done' | 'failed'
+
+/** One container a request names, and where it should go. */
+export type ImageTarget = {
+  container: string
+  /** Absent means "re-resolve the tag it is already on". */
+  toTag?: string
+}
 
 /** One container this run moves — including lockstep members nobody picked. */
 export type ImageMove = {
@@ -30,8 +45,21 @@ export type ImageMove = {
 
 export type ImageUpdateStatus = {
   id: string | null
-  /** The container the request named. The lockstep members are in `moves`. */
+  /**
+   * The first container the request named.
+   *
+   * Kept because it is what the status file has always carried and the API
+   * response still reports; `targets` is the one to read.
+   */
   container: string
+  /**
+   * Every container the REQUEST named, which is not every container that
+   * moves — lockstep members are in `moves` and were nobody's choice.
+   *
+   * Normalised by `readImageUpdateStatus`, so a reader never has to handle the
+   * pre-batching shape where this field did not exist.
+   */
+  targets: string[]
   state: ImageUpdateState
   phase: string
   error: string
@@ -45,6 +73,7 @@ export type ImageUpdateStatus = {
 export const IDLE_UPDATE: ImageUpdateStatus = {
   id: null,
   container: '',
+  targets: [],
   state: 'idle',
   phase: '',
   error: '',
@@ -65,11 +94,15 @@ const bridge = defineBridge<ImageUpdateStatus>({
  *
  * The host rewrites the whole status file — `finishedAt` included — at every
  * phase transition, so that field is really "last written". Past the unit's
- * own `TimeoutStartSec` of 30 minutes, systemd has killed the run and no
+ * own `TimeoutStartSec` of 60 minutes, systemd has killed the run and no
  * further write is coming; five minutes of slack keeps a slow switch from
  * being declared dead while it is still going.
+ *
+ * Tied to that unit's timeout in daedalus.nix — a queue makes long runs
+ * ordinary, and declaring one dead while it is still pulling would put a
+ * failure on the page over a rebuild that then succeeds.
  */
-const RUNNING_MAX_MS = 35 * 60_000
+const RUNNING_MAX_MS = 65 * 60_000
 
 /**
  * The status, with a dead run reported as dead.
@@ -87,7 +120,16 @@ const RUNNING_MAX_MS = 35 * 60_000
  * and a rule only two of them applied is a rule that gets it wrong somewhere.
  */
 export async function readImageUpdateStatus(): Promise<ImageUpdateStatus> {
-  const s = await bridge.readStatus()
+  const raw = await bridge.readStatus()
+
+  // A status written before batching existed has no `targets`, and one written
+  // by a host agent that has not been rebuilt yet still will not. Filling it
+  // from `container` here means the three readers all see one shape instead of
+  // each remembering the old one — the same argument as the staleness rule
+  // below.
+  const s: ImageUpdateStatus =
+    raw.targets.length > 0 || raw.container === '' ? raw : { ...raw, targets: [raw.container] }
+
   if (s.state !== 'running') return s
 
   const last = Date.parse(s.finishedAt ?? '')
@@ -110,15 +152,26 @@ export async function readImageUpdateStatus(): Promise<ImageUpdateStatus> {
  * which is the entire update for a channel pin like `:latest` — the tag has
  * moved and the pin has not. For a release pin it is the tag the operator
  * chose off the candidate list after reading what changed.
+ *
+ * A one-target request ALSO carries the old top-level `container`/`toTag`.
+ * This app hot-reloads on save while the host agent only changes on a
+ * rebuild, so the two are never guaranteed to be the same age: writing both
+ * means a single update still works against an agent that has not learned
+ * about `targets` yet. A batch has no such fallback and does not pretend to.
  */
 export async function requestImageUpdate(input: {
-  container: string
-  toTag?: string
+  targets: ImageTarget[]
   actor: string
 }): Promise<string> {
+  const targets = input.targets.map((t) => ({
+    container: t.container,
+    ...(t.toTag === undefined ? {} : { toTag: t.toTag }),
+  }))
+  const only = targets.length === 1 ? targets[0] : undefined
+
   return bridge.request({
-    container: input.container,
-    ...(input.toTag === undefined ? {} : { toTag: input.toTag }),
+    targets,
+    ...(only === undefined ? {} : only),
     actor: input.actor,
   })
 }
