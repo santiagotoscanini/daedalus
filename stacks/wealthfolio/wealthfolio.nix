@@ -6,6 +6,21 @@
 #   echo -n "<pass>" | argon2 "<salt>" -id -m 12 -t 3 -p 1 -e
 # and add it to env.sops as WF_AUTH_PASSWORD_HASH, verbatim (single
 # `$`, no escaping). Then `systemctl restart podman-wealthfolio`.
+#
+# ── MCP (Settings › AI Agent Access) ───────────────────────────────────
+#
+# WF_MCP_ENABLED serves a streamable-HTTP MCP endpoint at /mcp on the
+# same port, authenticated by a Bearer token minted in the app's own UI
+# (Settings › AI Agent Access › Create token — shown once; pick the
+# scopes there, read-only is the default preset). It rides the LiteLLM
+# gateway like every other MCP server (fleet.mcpServers.Wealthfolio):
+# litellm dials http://wealthfolio:8088/mcp over traefik-net and injects
+# the token, so a gateway client presents its LiteLLM key and never
+# holds this one. The token lives in stacks/litellm/env.sops as
+# WEALTHFOLIO_MCP_TOKEN — litellm is the only thing that presents it,
+# which is the same reason TICKTICK_MCP_TOKEN lives there. Rotate:
+# create a new token in the UI, `sops stacks/litellm/env.sops`, rebuild,
+# `systemctl restart podman-litellm`.
 
 {
   config,
@@ -44,6 +59,20 @@
     consumerEnv.secret = "WF_OIDC_CLIENT_SECRET";
   };
 
+  # Registration on the LiteLLM MCP gateway lives with the app that serves
+  # it (see stacks/litellm/mcp.nix). `exposeRemotely` publishes
+  # /Wealthfolio/mcp through the CF tunnel for off-box MCP clients — the
+  # app's own hostname already is, and the path is double-gated (LiteLLM
+  # virtual key, then this app's scoped token).
+  fleet.mcpServers.Wealthfolio = {
+    url = "http://wealthfolio:8088/mcp";
+    authType = "bearer_token";
+    authValue = "os.environ/WEALTHFOLIO_MCP_TOKEN";
+    description = "Wealthfolio portfolio: accounts, holdings, performance, activities, planning";
+    logoUrl = "https://wealthfolio.app/favicon.png";
+    exposeRemotely = true;
+  };
+
   fleet.statePaths."${config.fleet.stateRoot}/wealthfolio/data".uid = 1000;
   fleet.webApps.wealthfolio = {
     serviceName = "wealthfolio";
@@ -77,6 +106,8 @@
       WF_OIDC_REDIRECT_URL = "https://wealthfolio.toscanini.me/api/v1/auth/oidc/callback";
       # santito's Pocket ID sub — the only allowed account.
       WF_OIDC_ALLOWED_SUBS = "1ae66034-d627-46f7-9c04-1d8c05639a1a";
+      # /mcp for the LiteLLM gateway — see the header.
+      WF_MCP_ENABLED = "true";
     };
 
     # WF_SECRET_KEY — the only actual secret; non-secret config lives

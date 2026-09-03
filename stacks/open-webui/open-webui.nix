@@ -85,6 +85,7 @@ in
       "TickTick"
       "Grocy"
       "Yazio"
+      "Wealthfolio"
     ];
     searchTools = [ "searxng" ];
     # Nothing here covers RAG_EXTERNAL_RERANKER_URL below: `/reranking`
@@ -197,7 +198,7 @@ in
       [ -n "$KEY" ] || { echo "open-webui litellm key missing" >&2; exit 1; }
     '';
     # TOOL_SERVER_CONNECTIONS declares the LiteLLM MCP gateways (TickTick,
-    # Grocy, Yazio) as Open WebUI tool servers DECLARATIVELY. They MUST live here,
+    # Grocy, Yazio, Wealthfolio) as Open WebUI tool servers DECLARATIVELY. They MUST live here,
     # not the UI: `tool_server.connections` is an env-backed PersistentConfig,
     # so with ENABLE_PERSISTENT_CONFIG=false a UI-added connection is wiped
     # to `[]` on the next restart. The Bearer key is injected here so it
@@ -205,7 +206,7 @@ in
     # /<alias>/mcp (aliases in stacks/litellm/assets/config.yaml), and the
     # key must be permitted to reach them — see `mcpServers` above.
     content = ''
-      TOOL_SERVER_CONNECTIONS=[{"type":"mcp","url":"http://litellm:4000/TickTick/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"ticktick","name":"TickTick","description":"TickTick tasks/lists/habits"}},{"type":"mcp","url":"http://litellm:4000/Grocy/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"grocy","name":"Grocy","description":"Grocy household inventory, chores, shopping lists"}},{"type":"mcp","url":"http://litellm:4000/Yazio/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"yazio","name":"Yazio","description":"Yazio nutrition diary: meals, water, weight, goals, food search"}}]
+      TOOL_SERVER_CONNECTIONS=[{"type":"mcp","url":"http://litellm:4000/TickTick/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"ticktick","name":"TickTick","description":"TickTick tasks/lists/habits"}},{"type":"mcp","url":"http://litellm:4000/Grocy/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"grocy","name":"Grocy","description":"Grocy household inventory, chores, shopping lists"}},{"type":"mcp","url":"http://litellm:4000/Yazio/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"yazio","name":"Yazio","description":"Yazio nutrition diary: meals, water, weight, goals, food search"}},{"type":"mcp","url":"http://litellm:4000/Wealthfolio/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"bearer","key":"$KEY","config":{"enable":true,"function_name_filter_list":"","access_grants":[]},"info":{"id":"wealthfolio","name":"Wealthfolio","description":"Wealthfolio portfolio: accounts, holdings, performance, activities, planning"}}]
     '';
   };
 
