@@ -135,7 +135,7 @@ in
   };
 
   virtualisation.oci-containers.containers.immich-redis = mkRootlessContainer {
-    image = "docker.io/valkey/valkey:9@sha256:3acc0687f2a2e1091fae6450d7842dd658c941338cf0a873ddd9e14b9e4ea4dd";
+    image = "docker.io/valkey/valkey:9@sha256:a91d34ab33975b1054e26f1bd9995b268f7e0c507b5ded7f3d181a1a25521630";
 
   };
 
