@@ -1,0 +1,12 @@
+<!-- plutus - the double rule.
+     The app's one motif at its smallest size: a short open entry, then the
+     thin-over-thick pair that closes a ledger column and means "total". The
+     thick half carries the accent, exactly as it does under a total on screen.
+     No letter, no monogram: the mark is the same object the product is. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="plutus">
+  <rect width="64" height="64" rx="6" fill="#f4f2ea"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="5.5" fill="none" stroke="#1c211c" stroke-opacity="0.16"/>
+  <rect x="13" y="16" width="22" height="3" fill="#1c211c" fill-opacity="0.24"/>
+  <rect x="13" y="31" width="38" height="3.5" fill="#1c211c"/>
+  <rect x="13" y="37.5" width="38" height="9" fill="#2c6b4f"/>
+</svg>
