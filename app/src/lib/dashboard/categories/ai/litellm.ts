@@ -367,7 +367,7 @@ async function loadNeighbours(): Promise<Neighbour[]> {
       container: 'mcp-grocy',
       label: 'Grocy MCP',
       role: 'the household tool server it proxies',
-      note: 'One of the two MCP servers that run on this box; TickTick is remote and logs nothing here. Grocy calls counted in “tools models called” above passed through this container.',
+      note: 'One of the MCP servers that run on this box (Wealthfolio serves its own inside its app; TickTick is remote and logs nothing here). Grocy calls counted in “tools models called” above passed through this container.',
       repo: 'miguelangel-nubla/mcp-grocy',
       version: grocy,
       gap: grocyGap,
