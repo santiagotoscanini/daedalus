@@ -190,7 +190,7 @@ in
   };
 
   virtualisation.oci-containers.containers.qbittorrent = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/qbittorrent:5.2.3_v2.0.13-ls469@sha256:b024436f8ca665d16d9a997d26fd27fdf867ee5566ba09f32764e7b2976d3e02";
+    image = "docker.io/linuxserver/qbittorrent:5.2.3_v2.0.14-ls474@sha256:a00b6a597a3832a1814cde0ef60abc55c94644f3f80902c3432f6af6de8d4a96";
 
     # No /downloads bind: everything lives under /data/torrents (the
     # atomic-move/hardlink layout radarr+sonarr import from). If
@@ -214,7 +214,7 @@ in
   };
 
   virtualisation.oci-containers.containers.nzbget = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/nzbget:v26.2-ls255@sha256:d79a67d21cf63431d9e08e7f10c920ef1f68f06e61c015e602c2c3f79d28a0ac";
+    image = "docker.io/linuxserver/nzbget:v26.3-ls261@sha256:5f3d3fa71029004156eff2cbf4ef4455ce4ce59517cf13fa7d1d7c8a4cd2c8a4";
 
     volumes = [
       "${config.fleet.stateRoot}/tv/nzbget:/config"
@@ -223,7 +223,7 @@ in
   };
 
   virtualisation.oci-containers.containers.prowlarr = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/prowlarr:2.5.2.5491-ls155@sha256:2f3d31307beba3ba2dd226d191f5f5c14ee3b4d8b49277c64683f5ed97083179";
+    image = "docker.io/linuxserver/prowlarr:2.5.2.5491-ls158@sha256:91844fa2c927ad6ede5630127183cc7868b175f6223e83e6a5da1fffea2aa782";
 
     volumes = [
       "${config.fleet.stateRoot}/tv/prowlarr:/config"
@@ -234,7 +234,7 @@ in
   # client" hardlinks across /downloads, /torrents, /media — all need
   # to be on the same filesystem under one bind mount.
   virtualisation.oci-containers.containers.radarr = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/radarr:6.3.0.10514-ls312@sha256:e35056574cdc695a9ee745aa1ecda9eab3842450bf4b7b8471b023790fa3861d";
+    image = "docker.io/linuxserver/radarr:6.3.0.10514-ls314@sha256:119aaa4a4f7349bcd2a136c5373a0d7925b5479915c7dfe0c0ad352db2a6d438";
 
     volumes = [
       "${config.fleet.stateRoot}/tv/radarr:/config"
@@ -243,7 +243,7 @@ in
   };
 
   virtualisation.oci-containers.containers.sonarr = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/sonarr:4.0.19.2979-ls320@sha256:24acea2956a0ccb11f103877d9f4f8576600fb34bff34820ed749c2256dab89f";
+    image = "docker.io/linuxserver/sonarr:4.0.19.2979-ls322@sha256:c19aa4ecdf03d73e1d5c901da33744cb7eb4d921f89bafed1ca264601d7fa224";
 
     volumes = [
       "${config.fleet.stateRoot}/tv/sonarr:/config"
@@ -253,7 +253,7 @@ in
 
   # bazarr only reads what the *arrs produce, so a narrower bind.
   virtualisation.oci-containers.containers.bazarr = mkNetnsTenant "gluetun" {
-    image = "docker.io/linuxserver/bazarr:v1.6.0-ls356@sha256:ab401a0f361cfad328e444838b13d5b334b189d0f556fc91a3623eb581df36df";
+    image = "docker.io/linuxserver/bazarr:v1.6.0-ls362@sha256:a20fb11a440d704a9d61c283aa26462aad33dc63223b173f8d8c77d33e8e9d59";
 
     volumes = [
       "${config.fleet.stateRoot}/tv/bazarr:/config"
@@ -288,7 +288,7 @@ in
   # owns the subtitle pipeline (whisper is fallback-only). faster-
   # whisper "small" on CPU; first start downloads into the cache bind.
   virtualisation.oci-containers.containers.subgen = mkNetnsTenant "gluetun" {
-    image = "docker.io/mccloud/subgen:cpu@sha256:7aa1e0dcca17cb93edb0ea00194f89c16949e4af406fc70375f7f4594dbb6627";
+    image = "docker.io/mccloud/subgen:cpu@sha256:d26f285ee7ab1f48d45a6b5aea7c1b1f999b16c3770b71eee10e8602ae374cc5";
 
     volumes = [
       "${config.fleet.stateRoot}/tv/subgen:/models"
@@ -316,7 +316,7 @@ in
   # If LAN client auto-discovery is ever needed back, SSDP 1900 + 7359
   # have to land on host networking — multicast doesn't cross bridges.
   virtualisation.oci-containers.containers.jellyfin = mkRootlessContainer {
-    image = "docker.io/linuxserver/jellyfin:10.11.11ubu2404-ls42@sha256:bb8d372e35d5c4a6cb61d830a06f5b5846528315b97cf5d38b80eea1e430efa7";
+    image = "docker.io/linuxserver/jellyfin:10.11.11ubu2604-ls47@sha256:438e44330078e6b1a810fdec9dc0f4773e6595edb137c5eb4417a516da4c7f0e";
 
     volumes = [
       "${config.fleet.stateRoot}/tv/jellyfin:/config"

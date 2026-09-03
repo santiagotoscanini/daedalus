@@ -98,7 +98,7 @@ in
   };
 
   virtualisation.oci-containers.containers.shelfmark = mkNetnsTenant "gluetun" {
-    image = "ghcr.io/calibrain/shelfmark:latest@sha256:056f02e28d446b128d91fa10451c7cc376392f7383bbb841deec49838a419d53";
+    image = "ghcr.io/calibrain/shelfmark:latest@sha256:9602290324993c801b319d3166b202b96bd9039af2416f0916dae03a5bdca815";
 
     environmentFiles = [ config.sops.secrets."shelfmark-env".path ];
 

@@ -39,7 +39,7 @@
   fleet.statePaths."${config.fleet.stateRoot}/tv/recyclarr".uid = 1000;
 
   virtualisation.oci-containers.containers.recyclarr = mkRootlessContainer {
-    image = "ghcr.io/recyclarr/recyclarr:8@sha256:2d6107f758d882a59fe9d646aa54fa8a5a4fb7a40995125fade575652a3f7871";
+    image = "ghcr.io/recyclarr/recyclarr:8@sha256:6e69e009e1cd7493ff6093e8e187b5d3788c75b4a2c0c5127b6a1beda1c19728";
 
     volumes = [
       "${config.fleet.stateRoot}/tv/recyclarr:/config"

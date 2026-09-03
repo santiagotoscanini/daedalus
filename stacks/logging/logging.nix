@@ -563,7 +563,7 @@ in
     # alloy pushes to it, and daedalus joins that bridge to query it.
 
     virtualisation.oci-containers.containers.loki = mkRootlessContainer {
-      image = "docker.io/grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc";
+      image = "docker.io/grafana/loki:3.7.7@sha256:d70e4659623f3e109af669cae76fe2a5dd5be54e2298fe8aed380d982fbc2500";
 
       cmd = [ "-config.file=/etc/loki/loki.yaml" ];
 
@@ -578,7 +578,7 @@ in
     };
 
     virtualisation.oci-containers.containers.alloy = mkRootlessContainer {
-      image = "docker.io/grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308";
+      image = "docker.io/grafana/alloy:v1.19.2@sha256:b8ec653c44235fbe910879145dac3597d66b0aaecf60bcbbe82580767771a839";
       dependsOn = [ "loki" ];
 
       cmd = [

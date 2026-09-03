@@ -78,7 +78,7 @@
   };
 
   virtualisation.oci-containers.containers.janitorr = mkRootlessContainer {
-    image = "ghcr.io/schaka/janitorr:jvm-stable@sha256:270e9113c71182d30929f253ff6ff49c63078f4556487a668602c4114c7d665a";
+    image = "ghcr.io/schaka/janitorr:jvm-stable@sha256:fa86a05778556958ddf070ff5ac81b50b76feb8d9db174a06d80c2b913361bf2";
 
     volumes = [
       "${./assets/application.yml}:/config/application.yml:ro"
