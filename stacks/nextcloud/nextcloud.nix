@@ -123,7 +123,7 @@ in
   };
 
   virtualisation.oci-containers.containers.nextcloud-redis = mkRootlessContainer {
-    image = "docker.io/library/redis:alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb";
+    image = "docker.io/library/redis:alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576";
 
     volumes = [
       "${config.fleet.stateRoot}/nextcloud/nc_redis:/data"
