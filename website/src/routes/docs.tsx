@@ -281,12 +281,6 @@ const SECTIONS: DocSection[] = [
         tag: "app state",
       },
       {
-        name: "admin panels",
-        body: "The issue tracker's god-mode is authoritative after first boot. The env vars only seed it. Its API key is minted by hand in the UI.",
-        via: "plane",
-        tag: "app state",
-      },
-      {
         name: "UI-minted tokens",
         body: "Dashboard service accounts and per-app API keys are created in each app and pasted into sops. Rotate them at the source.",
         via: "grafana · jellyfin · immich · nextcloud · grocy",

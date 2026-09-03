@@ -254,8 +254,8 @@ function sanCovers(san: string, host: string): boolean {
  * middleware is unambiguous: nothing reaches the app without passing the IdP.
  * Absent one, a Pocket ID client for the same hostname means the app does its
  * own OIDC, which the gateway cannot see and does not enforce. Everything else
- * is `app` — deliberately not called "open", because Jellyfin and Plane have
- * their own logins and this page has no way to know that. What it CAN say is
+ * is `app` — deliberately not called "open", because Jellyfin has its own
+ * login and this page has no way to know that. What it CAN say is
  * that the gateway is not the thing checking.
  */
 function buildRoutes(

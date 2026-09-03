@@ -53,8 +53,8 @@ const TWO_OR_THREE = /^v?(\d+\.\d+(?:\.\d+)?)$/
  * Container → where its release notes live.
  *
  * Keyed by CONTAINER, not by image: `immich` and `immich-machine-learning` are
- * one project and two containers, and the six plane containers are one repo
- * six times. Keying by image would make those separate questions.
+ * one project and two containers, and every *arr rides one packaging repo.
+ * Keying by image would make those separate questions.
  *
  * Every entry that a service tab also uses is the same repo and the same
  * options that tab passes — deliberately, so the Updates row and the service
@@ -92,23 +92,6 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   'stirling-pdf': { repo: 'Stirling-Tools/Stirling-PDF' },
   'pocket-id': { repo: 'pocket-id/pocket-id' },
   'nextcloud-redis': { repo: 'redis/redis', opts: { notesWhenUnknown: true } },
-
-  // Plane tags every image in a release with one version, so all six read the
-  // same notes — which is also why they move in one commit (fleet.imageUpdates).
-  'plane-api': { repo: 'makeplane/plane' },
-  'plane-web': { repo: 'makeplane/plane' },
-  'plane-space': { repo: 'makeplane/plane' },
-  'plane-admin': { repo: 'makeplane/plane' },
-  'plane-live': { repo: 'makeplane/plane' },
-  'plane-worker': { repo: 'makeplane/plane' },
-  'plane-beat': { repo: 'makeplane/plane' },
-  // The sidecars are NOT plane's release — each is its own upstream on its own
-  // cycle, which is exactly why they are absent from that lockstep group.
-  'plane-proxy': { repo: 'caddyserver/caddy' },
-  'plane-redis': { repo: 'valkey-io/valkey' },
-  'plane-minio': { repo: 'minio/minio', opts: { notesWhenUnknown: true } },
-  'plane-mq': { repo: 'rabbitmq/rabbitmq-server' },
-  'plane-otel': { repo: 'open-telemetry/opentelemetry-collector-releases' },
 
   // ── the edge ───────────────────────────────────────────────────────────
   traefik: { repo: 'traefik/traefik' },

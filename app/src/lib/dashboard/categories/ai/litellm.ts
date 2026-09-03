@@ -186,10 +186,11 @@ export async function loadLitellm(): Promise<LitellmData> {
       imageFreshness('litellm'),
       promScalar('sum(litellm_in_flight_requests)'),
       // The histogram's own sum and count, kept APART rather than divided in
-      // PromQL. Two keys can share a display name — this box has two virtual keys
-      // both aliased `plane` — and averaging two means is not the mean of the
-      // whole; the totals have to be added before the division, which can only
-      // happen after they are grouped by the name a reader sees.
+      // PromQL. Two keys can share a display name — a rotation leaves the old
+      // hash in the ledger under the same alias as the new one — and averaging
+      // two means is not the mean of the whole; the totals have to be added
+      // before the division, which can only happen after they are grouped by
+      // the name a reader sees.
       //
       // Joined on `hashed_api_key` because it is the ledger's own key, literals
       // and all (`litellm_proxy_master_key`). The `api_key_alias` label would
@@ -461,7 +462,7 @@ function callersOf(
           hash === 'litellm_proxy_master_key' ||
           hash === 'litellm-internal-health-check',
       }
-      // One live hash is enough: a rotated key keeps its alias, so `plane`
+      // One live hash is enough: a rotated key keeps its alias, so one name
       // legitimately covers one current key and one that was replaced.
       if (liveKeys?.has(hash) === true) at.live = true
       // Prometheus totals are per key, so they may only be added the first time
