@@ -16,7 +16,7 @@
 #     `--llamacpp-args "--device ROCM1"` if the iGPU interferes.
 #
 # Note: `docker.litellm.ai` is sinkholed by
-# pi-hole — use `ghcr.io/berriai/litellm:main-stable@sha256:65d84a2282137b4dc73bbe184650a7c807177c533e4223b3bfbc87963fe3fabe` instead.
+# pi-hole — use `ghcr.io/berriai/litellm:main-stable@sha256:a53a7d3ffebede1925bd3ee8a21e4a7b9b63e2e68ec883af136edcccb6eeb82c` instead.
 
 {
   config,
@@ -131,7 +131,7 @@ in
   fleet.grafanaDashboardsByFolder."AI".ai = builtins.readFile ./assets/dashboard.json;
 
   virtualisation.oci-containers.containers.litellm = mkRootlessContainer {
-    image = "ghcr.io/berriai/litellm:main-stable@sha256:65d84a2282137b4dc73bbe184650a7c807177c533e4223b3bfbc87963fe3fabe";
+    image = "ghcr.io/berriai/litellm:main-stable@sha256:a53a7d3ffebede1925bd3ee8a21e4a7b9b63e2e68ec883af136edcccb6eeb82c";
 
     # config.yaml enables the prometheus callback (without
     # `callbacks: ["prometheus"]` in litellm_settings, /metrics 404s).
