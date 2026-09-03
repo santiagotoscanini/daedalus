@@ -130,7 +130,7 @@ let
       // priority per line, so the keyword means what it says. A CONTAINER
       // does not: podman's journald driver stamps priority 6 on stdout
       // and priority 3 on stderr unconditionally, so every image that
-      // logs to stderr — factorio, seerr, healthchecks, plane, pg — had
+      // logs to stderr — factorio, seerr, healthchecks, pg — had
       // its entire output labelled `error`. The joined-labels regex fires
       // only when the container name is empty (relabel regexes are fully
       // anchored, so a non-empty name cannot match a pattern starting

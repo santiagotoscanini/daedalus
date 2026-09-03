@@ -13,8 +13,8 @@ import {
 //
 // The page this feeds is the only one in the app whose subject is not a
 // service. Sixty-five containers, and roughly a third of them — the exporters,
-// the redis and postgres sidecars, the *arr janitors, the six plane processes
-// behind one web app — have no tab and never will: nobody opens scraparr, and
+// the redis and postgres sidecars, the *arr janitors, the exporters behind one
+// dashboard — have no tab and never will: nobody opens scraparr, and
 // a Board about node-exporter would say nothing a person wants. What they DO
 // have is a pin that ages exactly like Jellyfin's, and until this page there
 // was nowhere in the app where that fact appeared at all.

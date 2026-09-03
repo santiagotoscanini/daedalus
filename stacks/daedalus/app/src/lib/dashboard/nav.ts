@@ -276,19 +276,12 @@ export const CATEGORIES: CategorySpec[] = [
       },
       // Past the rule: one person's, not the household's.
       {
-        id: 'projects',
-        label: 'Projects',
-        probe: 'plane',
-        boardSpans: [6, 6, 12],
-        statBand: false,
-        dividerBefore: true,
-      },
-      {
         id: 'finance',
         label: 'Finance',
         probe: 'wealthfolio',
         boardSpans: [12, 12, 12],
         statBand: false,
+        dividerBefore: true,
       },
       {
         id: 'tools',
@@ -463,7 +456,7 @@ export const CATEGORIES: CategorySpec[] = [
       // of the machine — every digest-pinned container and whether it is
       // behind. It sits here because it is the box's own maintenance state,
       // and because a third of what it lists (the exporters, the sidecars, the
-      // six plane processes) has no other page in this app to sit on.
+      // exporters and sidecars) has no other page in this app to sit on.
       //
       // No head, like its neighbours: sixty-five containers have no one
       // version and no one thing to open.

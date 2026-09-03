@@ -14,7 +14,7 @@ import { Board, BoardGrid, Chip, type Tone } from '../../viz'
 //
 // The one page here whose subject is the fleet rather than a service — and the
 // only place a third of these containers appear at all. The exporters, the
-// redis and postgres sidecars, the *arr janitors, the six plane processes
+// redis and postgres sidecars, the *arr janitors, the exporters
 // behind one web app: none has a tab, none will get one, and every one of them
 // carries a pin that ages exactly like Jellyfin's.
 //

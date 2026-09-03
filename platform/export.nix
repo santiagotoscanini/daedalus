@@ -81,8 +81,8 @@ let
   # fall out of the match.
   #
   # `digest` is the load-bearing field. It is the one part of a pin that is
-  # ALWAYS a literal in the .nix source — eight of these (plane's six,
-  # immich's two) interpolate a shared version variable into the tag, so the
+  # ALWAYS a literal in the .nix source — immich's two interpolate a shared
+  # version variable into the tag, so the
   # rendered `tag` appears nowhere in the file. The update agent anchors every
   # edit on the digest for exactly that reason; see host/image-update.sh.
   imagePins = lib.filterAttrs (_: v: v != null) (
@@ -146,8 +146,7 @@ in
 
                 Two shapes, both real here. Immich's server and
                 machine-learning read the same `immichVersion` and a version
-                skew between them is unsupported upstream; the six plane
-                containers share `planeVersion` the same way. The gluetun
+                skew between them is unsupported upstream. The gluetun
                 pair is the other shape — one literal image string reached by
                 two containers, so moving either moves both whether or not
                 anyone declared it.

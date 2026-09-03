@@ -1506,16 +1506,16 @@ in
   # other services' numbers with.
   #
   # `service-keys.sops` is the store: one encrypted file, all the keys minted by
-  # some OTHER service and handed to the control plane to read with. Two keys
-  # are NOT in it, on purpose — pocket-id's and plane's are minted by those
-  # stacks and already have an encrypted home there, so they are read straight
-  # out of it rather than copied here. Nothing in this box's secret tree exists
-  # twice; rotation always touches exactly one file.
+  # some OTHER service and handed to the control plane to read with. One key
+  # is NOT in it, on purpose — pocket-id's is minted by that stack and already
+  # has an encrypted home there, so it is read straight out of it rather than
+  # copied here. Nothing in this box's secret tree exists twice; rotation
+  # always touches exactly one file.
   #
   # `grep -m1` on each: a missing key renders empty rather than failing the
   # unit, and the panel that needs it degrades to "no data" instead of taking
-  # the whole page down. PLANE_API_KEY is empty until someone mints a
-  # workspace token in Plane's UI, so this is not hypothetical.
+  # the whole page down. That is not hypothetical — a key minted by hand in
+  # some app's UI is absent until someone goes and mints it.
   sops.secrets."daedalus-service-keys" = mkDotenvSecret ./service-keys.sops;
 
   systemd.services."daedalus-dashboard-keys" =
@@ -1563,18 +1563,6 @@ in
           "POCKETID_KEY=$(grep -m1 '^STATIC_API_KEY=' ${
             config.sops.secrets."pocket-id-env".path
           } | cut -d= -f2- || true)"
-          # Plane's public API is workspace-scoped and publishes NO endpoint
-          # that lists workspaces — `/api/v1/workspaces/` is a 404, and a
-          # token is only valid for the one it was minted in. So the slug is
-          # not derivable from the credential and has to travel with it; it
-          # lives in the same file for that reason rather than because it is
-          # secret (it is not — it is in every URL of the UI).
-          "PLANE_KEY=$(grep -m1 '^PLANE_API_KEY=' ${
-            config.sops.secrets."plane-env".path
-          } | cut -d= -f2- || true)"
-          "PLANE_WORKSPACE=$(grep -m1 '^PLANE_WORKSPACE=' ${
-            config.sops.secrets."plane-env".path
-          } | cut -d= -f2- || true)"
           # Reading the zone needs a DIFFERENT Cloudflare token from the one in
           # service-keys.sops: that one is account-scoped for the tunnel and
           # answers `Unauthorized` on /zones (verified). The zone-scoped token
@@ -1618,8 +1606,6 @@ in
         map (k: "DASH_${k}=\${${k}}") serviceKeys
         ++ [
           "DASH_POCKETID_KEY=\${POCKETID_KEY}"
-          "DASH_PLANE_KEY=\${PLANE_KEY}"
-          "DASH_PLANE_WORKSPACE=\${PLANE_WORKSPACE}"
           "DASH_GITHUB_TOKEN=\${GHTOKEN}"
           "DASH_CF_DNS_TOKEN=\${CF_DNS_TOKEN}"
         ]

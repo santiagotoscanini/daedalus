@@ -9,7 +9,7 @@
 #
 # The digest. A pin is `<repo>:<tag>@sha256:<digest>`, and of those three
 # parts the digest is the only one that is ALWAYS a literal in the source:
-# eight pins on this box (plane's six, immich's two) interpolate a shared
+# two pins on this box (immich's) interpolate a shared
 # version variable into the tag, so the rendered tag appears nowhere in the
 # file. A digest is also globally unique and 64 hex characters long, which
 # makes `grep -F` on it an exact, unambiguous locator with no escaping
@@ -263,8 +263,8 @@ while read -r m repo from_tag from_digest to_tag to_digest; do
       sed -i "s|= \"$(esc "$FROM_TAG")\";|= \"$TO_TAG\";|" "$files"
     elif grep -qE "= \"$(esc "$TO_TAG")\";" "$files"; then
       # A lockstep sibling arriving after the primary already moved the shared
-      # variable. immich's ML image and plane's other five reach the SAME
-      # `let` binding, so by the time they are processed the tag they were
+      # variable. immich's ML image reaches the SAME
+      # `let` binding as its server, so by the time it is processed the tag it was
       # looking for is gone and the one they want is in its place — which is
       # success, not the failure it looks like. Their own digests still had to
       # be rewritten individually, and that happened above.

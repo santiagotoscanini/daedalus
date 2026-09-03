@@ -39,8 +39,8 @@ rotate all three in one session or lego/tunnel/dashboard drift apart.
   `daedalus-litellm-key` render → prometheus + app-daedalus consumers.
 - `stacks/registry/env.sops` (deploy-hook token) → `daedalus-deploy-hook-token`
   render → app-daedalus.
-- `stacks/pocket-id` STATIC_API_KEY / `stacks/plane` PLANE_API_KEY →
-  `daedalus-dashboard-keys` render → app-daedalus.
+- `stacks/pocket-id` STATIC_API_KEY → `daedalus-dashboard-keys` render →
+  app-daedalus.
 
 ## 2. Rotate
 

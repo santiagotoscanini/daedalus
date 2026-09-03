@@ -128,8 +128,6 @@ confirm before:
   real browser (screenshots, login flows, "does the page actually
   render") goes through `shot` — see `stacks/shotter` in the quirks
   table
-- Plane (`stacks/plane`, `plane.toscanini.me`) — issue tracker, 12
-  containers. The one web UI deliberately NOT behind the SSO gate
 - Minecraft (`stacks/minecraft`) — Paper server on a router-forwarded
   port; the whitelist is empty on purpose (see operator decisions)
 - AI stack — LiteLLM gateway (`stacks/litellm`) + Open WebUI
@@ -182,11 +180,10 @@ the operator raises it — but don't open the topic unprompted.
 
 - **Jellyfin stays on native auth** — never forward-auth its hostname.
   TV and device logins can't do an OIDC redirect.
-- **Plane is deliberately not gated.** Community Edition has no OIDC, so
-  a forward-auth gate in front of it would create two unrelated identity
-  namespaces rather than SSO. Its magic-link login *is* the
-  authentication; exposure is LAN + WireGuard only. Re-read the auth
-  section of `stacks/plane/plane.nix` before re-adding a gate.
+- **Plane was removed on 2026-09-03** (`git log -- stacks/plane` has the
+  whole stack). The operator dropped it as a product; do not propose
+  reinstating an issue tracker, and do not read a bare `plane` in old
+  comments as a live service.
 - **Break-glass logins are kept on purpose** — grafana admin basic-auth,
   n8n owner password, Open WebUI's `/auth?form=true`. They sit *behind*
   the gate (defense in depth), not beside it. Don't "harden" them away.
@@ -518,7 +515,6 @@ something, and the one fact from each that reaches beyond its module.
 | `stacks/argus-vpn` | the second tunnel | A second `mkGluetunInstance`; each further instance takes the same in-netns ports +2. |
 | `stacks/nextcloud` | upgrades, redis, previews | Post-install the image reads **only `config.php`**, never `POSTGRES_*`. Version bumps need manual `occ` chores — in the header. Reference use of `mkLocalImage` + `mkSecretRender`. |
 | `stacks/app-db` | anything touching postgres | 16 databases share one cluster. A restart is a **fleet event** — see the pg cascade below. |
-| `stacks/plane` | its auth | 12 containers; the one UI not behind the SSO gate, deliberately. |
 | `stacks/minecraft` | the game server | itzg image traps (`--cap-drop=ALL` kills its privilege drop silently); backups must run as root or they lose `level.dat`. |
 | `stacks/shotter` | verifying any web UI, or reaching for a browser/screenshot | **`shot` is THE flow for browser verification** — never build an ad-hoc chromium container. `shot quick <url>` for one page, `shot run <driver.mjs>` for scripted flows (login, click); output is an agent-readable run dir of viewport-sliced PNGs + `events.json`. **Read `events.json` before trusting the pictures** — a page can screenshot perfectly over a broken deploy (iris's stylesheet-404 trap). `shot help` + the module header are the doc. |
 
@@ -563,7 +559,7 @@ start depend on the registry being reachable. Pull out-of-band.
   remembering it leaves the flake pin behind and a rebuild undoes it.
 
 Per-container policy for the first two lives in `fleet.imageUpdates`:
-`lockstep` (immich's two, plane's six — one release, one commit),
+`lockstep` (immich's two — one release, one commit),
 `ceremony` (blast radius the container's name does not carry; the UI
 demands the name typed), `updatable = false` (a move that is not a pin
 edit, e.g. immich-postgres's major).

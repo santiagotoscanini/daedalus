@@ -71,9 +71,9 @@ the safety net.
   `stacks/daedalus/service-keys.sops`.
 - **Per-service read-only API keys** (Jellyfin token, *arr keys, CF
   token — what daedalus reads numbers with) live together in
-  `stacks/daedalus/service-keys.sops`, rendered as `DASH_<n>`. Two are
-  deliberately NOT duplicated there: pocket-id's `STATIC_API_KEY` and
-  plane's `PLANE_API_KEY` are grepped out of their own stacks' secrets.
+  `stacks/daedalus/service-keys.sops`, rendered as `DASH_<n>`. One is
+  deliberately NOT duplicated there: pocket-id's `STATIC_API_KEY` is
+  grepped out of its own stack's secret.
 - **Argus's operator secrets** (index API key + peppers) live in tracked
   `stacks/apps/argus-env.sops`; the machine-generated
   `stacks/apps/secrets/argus/env` carries only `AUTH_SECRET`.
