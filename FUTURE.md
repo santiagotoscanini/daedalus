@@ -2,11 +2,11 @@
 
 Items consciously deferred from the 2026-07-15 gap-to-SOTA audit.
 
-## 1. Adopt native OIDC for wg-easy + seerr when upstream ships it
+## 1. Adopt native OIDC for seerr when upstream ships it
 
 The box-wide Pocket ID SSO migration (2026-07) is done — every web UI
-authenticates through Pocket ID (passkeys) except two, which keep their
-current local login to avoid a second login prompt until each ships
+authenticates through Pocket ID (passkeys) except one, which keeps its
+current local login to avoid a second login prompt until it ships
 native OIDC. Full per-service auth map, group access model, and the
 recipe to onboard a service/user live in `/etc/nixos/AUTH.md`.
 
@@ -15,24 +15,20 @@ recipe to onboard a service/user live in `/etc/nixos/AUTH.md`.
   v3.5.0 (testing: [discussion #2721](https://github.com/seerr-team/seerr/discussions/2721)).
   When released: create a Pocket ID client, enable OIDC in Seerr, add it
   to the `family` group.
-- **wg-easy** — v15 local account (+TOTP). OAuth **shipped** in
-  [v15.4.0-beta.1](https://github.com/wg-easy/wg-easy/releases/tag/v15.4.0-beta.1)
-  (`feat: oauth integration`): a generic OIDC provider configured via
-  `OAUTH_PROVIDERS` + `OAUTH_OIDC_SERVER` / `OAUTH_OIDC_CLIENT_ID` /
-  `OAUTH_OIDC_CLIENT_SECRET`, i.e. fully declarable. Still prerelease,
-  so we stay on 15.3.0. When it goes stable: Pocket ID client, the
-  three env vars into `stacks/wg-easy/env.sops`, drop the
-  `INIT_USERNAME`/`INIT_PASSWORD` local account, keep in `admins`.
-  Previously tracked as unshipped in
-  [issue #1923](https://github.com/wg-easy/wg-easy/issues/1923) (also #2374).
+- **wg-easy** — DONE 2026-09-03 on v15.4.0 (`feat: oauth integration`,
+  [v15.4.0](https://github.com/wg-easy/wg-easy/releases/tag/v15.4.0)):
+  Pocket ID client + `OAUTH_*` env in `stacks/wg-easy/wg-easy.nix`,
+  Tier 1 in AUTH.md. One follow-up remains: set
+  `DISABLE_PASSWORD_AUTH = "true"` in the module after the first
+  successful passkey login (upstream: link an admin before disabling
+  passwords; a passkey login can't be driven from the box).
 
 Not candidates (no viable OIDC path — stay on their own auth, documented
 in AUTH.md "Out of scope"): **jellyfin** (native TV/mobile clients can't
 do OIDC) and **factorio-admin** (OFSM unmaintained, login can't be
 disabled → would force a double login, explicitly not wanted).
 
-Trigger to revisit: seerr cuts a release with OIDC, or wg-easy 15.4.0
-leaves beta.
+Trigger to revisit: seerr cuts a release with OIDC.
 
 ## 2. Off-site ZFS sync to an external service
 

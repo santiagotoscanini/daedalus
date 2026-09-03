@@ -11,9 +11,9 @@ auth by header, not just by path) for apps without native OIDC.
 Rule of preference: native OIDC against Pocket ID > trusted-header
 behind forward-auth > bare forward-auth. No double logins: services
 whose local login can't be disabled and have OIDC coming upstream WAIT
-for the official implementation instead — seerr and wg-easy do that
-today (FUTURE.md #1), and jellyfin + factorio-admin are permanently
-out of scope (below).
+for the official implementation instead — seerr does that today
+(FUTURE.md #1; wg-easy graduated to Tier 1 with v15.4.0), and jellyfin
++ factorio-admin are permanently out of scope (below).
 
 This file is the operator reference for the box's auth: the
 per-service mechanism map (Tiers 1-3), the group access model, and the
@@ -32,6 +32,7 @@ recipe to onboard a new service or household member.
 | verdaccio | verdaccio-openid plugin baked into the custom image; web UI + `npm login --auth-type=web` | htpasswd + existing CLI tokens still work; registry API ungated so `npm install` is unaffected |
 | n8n | cweagans/n8n-oidc hook (pinned commit, bind-mounted hooks.js); SSO lands as owner | `/signin?showLogin=true`; webhooks untouched |
 | anansi | `fleet.apps.anansi.auth.mode = "native"` — Auth.js OIDC provider against Pocket ID, existing account matched by email; the platform supplies OIDC_* + OIDC_CLIENT_SECRET | own `AUTH_SECRET` sessions; DB password hashes are dormant, not a login path |
+| wg-easy | native generic OIDC (v15.4.0+, `OAUTH_PROVIDERS=oidc`), openid-client with PKCE + `client_secret_post`; `OAUTH_AUTO_REGISTER` creates the Pocket ID account as admin (upstream has no roles yet — safe only because the client is `admins`-only); `OAUTH_AUTO_LAUNCH` skips the form | `/login?auto_launch=false` shows the password form — the pre-OIDC local admin; set `DISABLE_PASSWORD_AUTH=true` in the module after the first successful passkey login. The tunnel (:51820) is unaffected by UI auth |
 | home-assistant | [hass-oidc-auth](https://github.com/christiaangoossens/hass-oidc-auth) vendored from a pinned tag as a read-only `custom_components` bind mount (not HACS); confidential client, Pocket ID's `admins` group maps to the HA admin role | HA's own login stays enabled — onboarding needs it and it is the break-glass. Long-lived access tokens (companion app, `/api/*`) are untouched |
 
 ## Tier 2 — forward-auth + trusted header (auto-login, no second screen)
@@ -65,9 +66,9 @@ paths.
 
 ## Waiting on upstream
 
-**seerr** and **wg-easy** keep their current local login until each ships
-native OIDC (no double login in the meantime). Tracked in `FUTURE.md` #1
-with the upstream issue links and the adopt-it recipe.
+**seerr** keeps its current local login until it ships native OIDC (no
+double login in the meantime). Tracked in `FUTURE.md` #1 with the
+upstream issue links and the adopt-it recipe.
 
 ## Out of scope — stays on native auth
 
