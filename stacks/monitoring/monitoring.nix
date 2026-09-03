@@ -496,7 +496,7 @@ in
   };
 
   virtualisation.oci-containers.containers.grafana = mkRootlessContainer {
-    image = "docker.io/grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b";
+    image = "docker.io/grafana/grafana:13.2.1@sha256:f772d434e8fab0049deb2b1b30abd43342bcfca1537614aa8d36080232cf4283";
     dependsOn = [ "prometheus" ];
 
     volumes = [
