@@ -244,11 +244,15 @@ scripted door is `podman exec app-daedalus` →
 Order is load-bearing — an Apply whose image doesn't exist fails the
 switch and reverts itself:
 
-1. **PAT scope.** If the fine-grained PAT in
-   `stacks/gha-runner/env.sops` is repo-scoped, add the new repo
-   BEFORE declaring the app, or `gha-runner-<name>` 404-loops on the
-   registration-token endpoint and mails alerts. (Docs conflict on
-   whether it's account-wide; that 404 is the tell.)
+1. **PAT scope — nothing to do. Do not ask the operator for this.**
+   The `s2-gha-runner` PAT in `stacks/gha-runner/env.sops` grants
+   "access to all repositories owned by you", so a new repo is covered
+   the moment it exists. Verified against the token's settings page
+   2026-09-03; earlier revisions of this skill and of the gha-runner
+   header both claimed repo-scoping, and every app since has paid for
+   it with a pointless operator round-trip. If `gha-runner-<name>` does
+   404-loop on the registration-token endpoint, the cause is the repo
+   not existing yet or a typo in its name, NOT the token's scope.
 2. Push the repo. The publishing workflow must be
    `runs-on: self-hosted`, push `zot:5000/<name>:latest`, carry
    `workflow_dispatch:`, and use no `services:`/`container:` jobs

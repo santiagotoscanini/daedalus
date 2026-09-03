@@ -26,14 +26,26 @@
 #     workflows); only CI jobs (lint/typecheck/e2e) run here.
 #     Corollary: workflow `container:`/`services:` jobs are unsupported
 #     (they need a Docker API) — keep workflows as plain `run:` steps.
-#   - The PAT in env.sops is fine-grained, no-expiration,
-#     "Administration: read+write" on ONLY the repos below (the
-#     registration-token endpoint's whole requirement) — and it NEVER
-#     enters the container. An ExecStartPre mints a registration token
-#     host-side (1-hour, single-purpose) and that is all the container
-#     sees; a compromised job reading /proc/1/environ gets a token
-#     that can only register runners on that one repo for <1 h, not
-#     the eternal PAT. If the PAT is ever rotated: regenerate at
+#   - The PAT in env.sops (`s2-gha-runner`) is fine-grained,
+#     no-expiration, "Administration: read+write" + "Actions and
+#     metadata: read" — the registration-token endpoint's whole
+#     requirement — and it covers **ALL repositories owned by
+#     santiagotoscanini**, not an enumerated list. Confirmed against
+#     the token's settings page 2026-09-03.
+#
+#     ADDING AN APP THEREFORE NEEDS NO TOKEN CHANGE. This comment
+#     previously said "ONLY the repos below", /new-app repeated it as
+#     a required step, and the result was a pointless operator
+#     round-trip on every new app. A 404 from the registration-token
+#     endpoint means the repo does not exist yet or its name is
+#     misspelled — never that the scope is too narrow.
+#
+#     Account-wide is acceptable ONLY because the PAT never enters the
+#     container: an ExecStartPre mints a registration token host-side
+#     (1 hour, single repo, single purpose) and that is all the
+#     container sees. A compromised job reading /proc/1/environ gets
+#     that, not the eternal PAT. The narrowness lives in the minted
+#     token, not in the PAT. If the PAT is ever rotated: regenerate at
 #     github.com/settings/personal-access-tokens, then
 #     `sops stacks/gha-runner/env.sops` + rebuild.
 #   - Trade-off of keeping the PAT out: the entrypoint's stop-time
