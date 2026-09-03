@@ -180,10 +180,6 @@ the operator raises it — but don't open the topic unprompted.
 
 - **Jellyfin stays on native auth** — never forward-auth its hostname.
   TV and device logins can't do an OIDC redirect.
-- **Plane was removed on 2026-09-03** (`git log -- stacks/plane` has the
-  whole stack). The operator dropped it as a product; do not propose
-  reinstating an issue tracker, and do not read a bare `plane` in old
-  comments as a live service.
 - **Break-glass logins are kept on purpose** — grafana admin basic-auth,
   n8n owner password, Open WebUI's `/auth?form=true`. They sit *behind*
   the gate (defense in depth), not beside it. Don't "harden" them away.
