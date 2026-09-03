@@ -32,6 +32,29 @@
 # host/image-freshness.sh for why candidates are shape-matched rather than
 # newest-wins.
 #
+# ── one request, several containers ───────────────────────────────────────
+#
+# A request carries `targets: [{container, toTag}]`. Everything below the
+# resolve step was already plural — lockstep has always moved containers the
+# operator did not name — so a batch is the same machinery with more entries
+# in MOVES: ONE commit, ONE build, ONE switch, ONE verify pass.
+#
+# That is the point of batching rather than an implementation detail. Six
+# updates run one at a time are six rebuilds and six rounds of restarts; run
+# as one they are a single rebuild, and the box passes through one
+# intermediate state instead of six.
+#
+# The price is atomicity, and it is a real price: if the build fails, or if
+# ANY container fails to come back on its new image, the whole commit is
+# reverted and every container in the batch goes back — including the ones
+# that were fine. That is the honest semantic for one commit, and the UI says
+# so before the button is pressed. Someone who wants a bad pin isolated should
+# update that container alone.
+#
+# `container`/`toTag` at the top level is the older single form. It is still
+# accepted, and normalised into a one-element `targets` immediately, because
+# the scriptable door (POST /api/image-update) documents it.
+#
 # ── failure ───────────────────────────────────────────────────────────────
 #
 # Identical to apply.sh, because it is the same risk: `build` before `switch`
@@ -56,9 +79,14 @@ LOGFILE="$APPLY_DIR/image-last.log"
 # members the operator never picked.
 MOVES='[]'
 
+# The containers the REQUEST named, as opposed to the ones that follow them.
+# The page needs both: `targets` is whose run this is and therefore which rows
+# may narrate it, `moves` is what it actually does.
+TARGET_NAMES='[]'
+
 write_status() {
   write_json_atomic "$STATUS" <<EOF
-{"id":"$REQ_ID","container":$(jq -Rn --arg c "${CONTAINER-}" '$c'),"state":"$1","phase":"$2","error":$(jq -Rn --arg e "${3-}" '$e'),"moves":$MOVES,"startedAt":"$STARTED_AT","finishedAt":"$(date -Is)","commit":"${COMMIT_SHA-}"}
+{"id":"$REQ_ID","container":$(jq -Rn --arg c "${CONTAINER-}" '$c'),"targets":$TARGET_NAMES,"state":"$1","phase":"$2","error":$(jq -Rn --arg e "${3-}" '$e'),"moves":$MOVES,"startedAt":"$STARTED_AT","finishedAt":"$(date -Is)","commit":"${COMMIT_SHA-}"}
 EOF
 }
 
@@ -94,8 +122,20 @@ if [ -f "$STATUS" ] && [ "$(jq -r '.id // ""' "$STATUS")" = "$REQ_ID" ]; then
   exit 0
 fi
 
-CONTAINER="$(jq -r '.container // ""' "$REQ")"
-TO_TAG="$(jq -r '.toTag // ""' "$REQ")"
+# One shape below this line. A `targets` array is the batch form; a top-level
+# `container`/`toTag` is the older single form, folded into a one-element array
+# here so nothing downstream has to know which door the request came through.
+TARGETS="$(jq -c '
+  if (.targets | type) == "array" and (.targets | length) > 0
+  then [ .targets[] | { container: (.container // ""), toTag: (.toTag // "") } ]
+  else [ { container: (.container // ""), toTag: (.toTag // "") } ]
+  end' "$REQ")"
+
+TARGET_NAMES="$(jq -c '[.[].container]' <<<"$TARGETS")"
+
+# Back-compat field on the status: the first target. Readers that predate
+# batching see the shape they always saw, and `targets` is where the truth is.
+CONTAINER="$(jq -r '.[0].container // ""' <<<"$TARGETS")"
 ACTOR="$(jq -r '.actor // "daedalus"' "$REQ")"
 
 git_() {
@@ -112,82 +152,131 @@ podman_() {
 }
 
 # --- validate -------------------------------------------------------------
+# Whole-request, before any of it runs: a batch that is going to be refused
+# should be refused while nothing has been pulled, edited or committed.
 write_status running validating ""
 
 [ -n "$CONTAINER" ] || fail validating "no container named in the request"
 
-# The pin registry is rendered by nix from the running config, so a container
-# absent from it is one that has no digest pin — a local build, or an app on
-# the registry loop, neither of which is updated by editing a pin. This is
-# also the allowlist: nothing reaches skopeo or sed that nix did not name.
-PIN="$(jq -c --arg c "$CONTAINER" '.[$c] // empty' "$PINS")"
-[ -n "$PIN" ] || fail validating "'$CONTAINER' has no digest-pinned image in this configuration"
+# The same container twice would pass validation and then fail in `writing`,
+# after the commit, because the second edit looks for a digest the first
+# already replaced. Cheaper and clearer to say so here.
+dupes="$(jq -r '[.[].container] | group_by(.) | map(select(length > 1) | .[0]) | join(", ")' <<<"$TARGETS")"
+[ -z "$dupes" ] || fail validating "named more than once in one request: $dupes"
 
-[ "$(jq -r '.updatable' <<<"$PIN")" = "true" ] ||
-  fail validating "'$CONTAINER' is declared not updatable from daedalus (fleet.imageUpdates)"
+while read -r c t; do
+  [ -n "$c" ] || fail validating "a target in this request names no container"
 
-FROM_TAG="$(jq -r '.tag' <<<"$PIN")"
-[ -n "$TO_TAG" ] || TO_TAG="$FROM_TAG"
+  # The pin registry is rendered by nix from the running config, so a container
+  # absent from it is one that has no digest pin — a local build, or an app on
+  # the registry loop, neither of which is updated by editing a pin. This is
+  # also the allowlist: nothing reaches skopeo or sed that nix did not name.
+  pin="$(jq -c --arg c "$c" '.[$c] // empty' "$PINS")"
+  [ -n "$pin" ] || fail validating "'$c' has no digest-pinned image in this configuration"
 
-# A tag is a registry reference that becomes part of a `docker://` URL and a
-# nix string literal. Constrain it to what a tag may actually contain rather
-# than trusting the picker to have offered only real ones.
-[[ "$TO_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]] ||
-  fail validating "'$TO_TAG' is not a well-formed image tag"
+  [ "$(jq -r '.updatable' <<<"$pin")" = "true" ] ||
+    fail validating "'$c' is declared not updatable from daedalus (fleet.imageUpdates)"
+
+  # A tag is a registry reference that becomes part of a `docker://` URL and a
+  # nix string literal. Constrain it to what a tag may actually contain rather
+  # than trusting the picker to have offered only real ones.
+  [ -n "$t" ] || t="$(jq -r '.tag' <<<"$pin")"
+  [[ "$t" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]] ||
+    fail validating "'$t' is not a well-formed image tag"
+done < <(jq -r '.[] | [.container, .toTag] | @tsv' <<<"$TARGETS")
 
 # --- resolve --------------------------------------------------------------
-# Every container that must move, and what each moves to. The primary is
-# whatever was asked for; a lockstep member follows by substituting the
-# primary's old tag for the new one inside its OWN tag, which is what carries
+# Every container that must move, and what each moves to. Each target expands
+# to itself plus its lockstep: a member follows by substituting the primary's
+# old tag for the new one inside its OWN tag, which is what carries
 # `v3.1.0-openvino` along with `v3.1.0`.
+#
+# `primaryFromTag`/`primaryToTag` ride along on every move because the write
+# step needs them and, in a batch, they are no longer one pair for the whole
+# run — the version-variable case looks up `immichVersion = "v3.1.0"` by the
+# tag of the group that member belongs to, and a batch has several groups.
 write_status running resolving ""
 
-members="$CONTAINER $(jq -r '.lockstep[]?' <<<"$PIN" | tr '\n' ' ')"
+# Space-separated `member:owner` pairs. A batch makes overlap reachable: queue
+# immich and immich-machine-learning and the second is already moving as the
+# first's lockstep member.
+#
+# Parameter expansion rather than awk: writeShellApplication puts only
+# `runtimeInputs` on PATH, so a coreutils habit picked up at an interactive
+# shell is a command-not-found at runtime. This costs no dependency at all.
+# Container names are [a-z0-9-], so `:` and space are safe delimiters.
+COVERED=""
 
-for m in $members; do
-  mpin="$(jq -c --arg c "$m" '.[$c] // empty' "$PINS")"
-  [ -n "$mpin" ] || fail resolving "lockstep member '$m' has no digest pin"
+while read -r c to_tag; do
+  pin="$(jq -c --arg c "$c" '.[$c] // empty' "$PINS")"
+  from_tag="$(jq -r '.tag' <<<"$pin")"
+  [ -n "$to_tag" ] || to_tag="$from_tag"
 
-  m_repo="$(jq -r '.repo' <<<"$mpin")"
-  m_tag="$(jq -r '.tag' <<<"$mpin")"
-  m_digest="$(jq -r '.digest' <<<"$mpin")"
+  members="$c $(jq -r '.lockstep[]?' <<<"$pin" | tr '\n' ' ')"
 
-  if [ "$m" = "$CONTAINER" ]; then
-    m_new_tag="$TO_TAG"
-  elif [ "$TO_TAG" = "$FROM_TAG" ]; then
-    # A same-tag re-resolve: every member keeps its own tag and only the
-    # digest moves. Nothing to substitute.
-    m_new_tag="$m_tag"
-  else
-    case "$m_tag" in
-    *"$FROM_TAG"*) m_new_tag="${m_tag//"$FROM_TAG"/"$TO_TAG"}" ;;
-    *)
-      # Refused rather than guessed. A member whose tag does not embed the
-      # primary's is not a variant of it, and inventing one would pull an
-      # unrelated image into a commit nobody reviewed.
-      fail resolving "cannot derive a tag for '$m': its tag '$m_tag' does not contain '$FROM_TAG'"
+  for m in $members; do
+    owner=""
+    case " $COVERED " in
+    *" $m:"*)
+      owner="${COVERED##*" $m:"}"
+      owner="${owner%% *}"
       ;;
     esac
-  fi
+    if [ -n "$owner" ]; then
+      # Refused rather than merged: two targets asking for one container may
+      # be asking for two different tags, and picking one of them is not a
+      # decision this script gets to make silently.
+      fail resolving "'$m' is already moving in this request as part of '$owner' — remove it and update '$owner' alone"
+    fi
+    COVERED="$COVERED $m:$c"
 
-  m_new_digest="$(timeout 60 skopeo inspect --no-tags --format '{{.Digest}}' \
-    "docker://$m_repo:$m_new_tag" 2>&1)" ||
-    fail resolving "the registry would not resolve $m_repo:$m_new_tag — $(printf '%s' "$m_new_digest" | tail -n 1 | cut -c1-200)"
+    mpin="$(jq -c --arg c "$m" '.[$c] // empty' "$PINS")"
+    [ -n "$mpin" ] || fail resolving "lockstep member '$m' has no digest pin"
 
-  # No-ops are carried through the list rather than dropped, so the status
-  # says "this one was already there" instead of silently omitting a
-  # container the operator was told would move.
-  changed=true
-  [ "$m_new_tag" = "$m_tag" ] && [ "$m_new_digest" = "$m_digest" ] && changed=false
+    m_repo="$(jq -r '.repo' <<<"$mpin")"
+    m_tag="$(jq -r '.tag' <<<"$mpin")"
+    m_digest="$(jq -r '.digest' <<<"$mpin")"
 
-  MOVES="$(jq -c \
-    --arg c "$m" --arg repo "$m_repo" \
-    --arg ft "$m_tag" --arg fd "$m_digest" \
-    --arg tt "$m_new_tag" --arg td "$m_new_digest" \
-    --argjson ch "$changed" \
-    '. + [{container:$c, repo:$repo, fromTag:$ft, fromDigest:$fd, toTag:$tt, toDigest:$td, changed:$ch}]' \
-    <<<"$MOVES")"
-done
+    if [ "$m" = "$c" ]; then
+      m_new_tag="$to_tag"
+    elif [ "$to_tag" = "$from_tag" ]; then
+      # A same-tag re-resolve: every member keeps its own tag and only the
+      # digest moves. Nothing to substitute.
+      m_new_tag="$m_tag"
+    else
+      case "$m_tag" in
+      *"$from_tag"*) m_new_tag="${m_tag//"$from_tag"/"$to_tag"}" ;;
+      *)
+        # Refused rather than guessed. A member whose tag does not embed the
+        # primary's is not a variant of it, and inventing one would pull an
+        # unrelated image into a commit nobody reviewed.
+        fail resolving "cannot derive a tag for '$m': its tag '$m_tag' does not contain '$from_tag'"
+        ;;
+      esac
+    fi
+
+    # stdin comes from the target list this loop is reading; skopeo has no
+    # business consuming it.
+    m_new_digest="$(timeout 60 skopeo inspect --no-tags --format '{{.Digest}}' \
+      "docker://$m_repo:$m_new_tag" 2>&1 </dev/null)" ||
+      fail resolving "the registry would not resolve $m_repo:$m_new_tag — $(printf '%s' "$m_new_digest" | tail -n 1 | cut -c1-200)"
+
+    # No-ops are carried through the list rather than dropped, so the status
+    # says "this one was already there" instead of silently omitting a
+    # container the operator was told would move.
+    changed=true
+    [ "$m_new_tag" = "$m_tag" ] && [ "$m_new_digest" = "$m_digest" ] && changed=false
+
+    MOVES="$(jq -c \
+      --arg c "$m" --arg repo "$m_repo" \
+      --arg ft "$m_tag" --arg fd "$m_digest" \
+      --arg tt "$m_new_tag" --arg td "$m_new_digest" \
+      --arg pf "$from_tag" --arg pt "$to_tag" \
+      --argjson ch "$changed" \
+      '. + [{container:$c, repo:$repo, fromTag:$ft, fromDigest:$fd, toTag:$tt, toDigest:$td, primaryFromTag:$pf, primaryToTag:$pt, changed:$ch}]' \
+      <<<"$MOVES")"
+  done
+done < <(jq -r '.[] | [.container, .toTag] | @tsv' <<<"$TARGETS")
 
 if [ "$(jq -r '[.[] | select(.changed)] | length' <<<"$MOVES")" = "0" ]; then
   write_status "done" "no-change" ""
@@ -227,7 +316,7 @@ esc() { printf '%s' "$1" | sed -e 's/[][\.*^$|]/\\&/g'; }
 
 TOUCHED=""
 
-while read -r m repo from_tag from_digest to_tag to_digest; do
+while read -r m repo from_tag from_digest to_tag to_digest primary_from primary_to; do
   [ -n "$m" ] || continue
 
   files="$(grep -rlF --include='*.nix' -- "$from_digest" "$FLAKE" || true)"
@@ -255,13 +344,15 @@ while read -r m repo from_tag from_digest to_tag to_digest; do
     if grep -qF -- ":$from_tag@$to_digest" "$files"; then
       # The literal case: `repo:6.3.0-ls312@sha256:…`.
       sed -i "s|:$(esc "$from_tag")@$(esc "$to_digest")|:$to_tag@$to_digest|g" "$files"
-    elif grep -qE "= \"$(esc "$FROM_TAG")\";" "$files"; then
+    elif grep -qE "= \"$(esc "$primary_from")\";" "$files"; then
       # The interpolated case: the tag is `${immichVersion}` and the version
-      # lives in a `let`. Matched on the PRIMARY's old tag, because that is
-      # what the variable holds — a member's `-openvino` suffix is in the
-      # image string, not in the variable.
-      sed -i "s|= \"$(esc "$FROM_TAG")\";|= \"$TO_TAG\";|" "$files"
-    elif grep -qE "= \"$(esc "$TO_TAG")\";" "$files"; then
+      # lives in a `let`. Matched on the PRIMARY of this move's own group,
+      # because that is what the variable holds — a member's `-openvino`
+      # suffix is in the image string, not in the variable. Per-move rather
+      # than one pair for the run: a batch carries several groups, each with
+      # its own primary.
+      sed -i "s|= \"$(esc "$primary_from")\";|= \"$primary_to\";|" "$files"
+    elif grep -qE "= \"$(esc "$primary_to")\";" "$files"; then
       # A lockstep sibling arriving after the primary already moved the shared
       # variable. immich's ML image reaches the SAME
       # `let` binding as its server, so by the time it is processed the tag it was
@@ -270,7 +361,7 @@ while read -r m repo from_tag from_digest to_tag to_digest; do
       # be rewritten individually, and that happened above.
       :
     else
-      fail writing "'$m' moves to tag '$to_tag' but neither a literal tag nor a version variable holding '$FROM_TAG' was found in $files"
+      fail writing "'$m' moves to tag '$to_tag' but neither a literal tag nor a version variable holding '$primary_from' was found in $files"
     fi
   fi
 
@@ -278,7 +369,7 @@ while read -r m repo from_tag from_digest to_tag to_digest; do
   *" $files "*) ;;
   *) TOUCHED="$TOUCHED $files" ;;
   esac
-done < <(jq -r '.[] | select(.changed) | [.container, .repo, .fromTag, .fromDigest, .toTag, .toDigest] | @tsv' <<<"$MOVES")
+done < <(jq -r '.[] | select(.changed) | [.container, .repo, .fromTag, .fromDigest, .toTag, .toDigest, .primaryFromTag, .primaryToTag] | @tsv' <<<"$MOVES")
 
 # Prove the rewrite landed before committing it. A sed that matched nothing
 # exits 0, so this is the only thing standing between a silent no-op and a

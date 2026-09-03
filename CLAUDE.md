@@ -546,8 +546,12 @@ start depend on the registry being reachable. Pull out-of-band.
   changelog, and a button that runs the whole cycle (resolve the
   digest, pre-pull, rewrite the pin, commit, build, switch, verify the
   container came back on the new image, revert if not, push). The
-  right tool for one container whose notes you have just read. The
-  same door is `POST /api/image-update {container, toTag?}`.
+  right tool for a container whose notes you have just read. Several
+  can be **queued** and applied as ONE commit + build + switch — which
+  also means one failure reverts all of them, so queue what you want to
+  move together and update alone what you want isolated. The same door
+  is `POST /api/image-update`, taking `{container, toTag?}` or
+  `{targets:[{container, toTag?}]}`.
 - **`/update-images`** — the fleet-wide audit: research every pin in
   parallel, pick by tier, then the **adoption review** the button does
   not do (what the new versions let us delete from our own config).

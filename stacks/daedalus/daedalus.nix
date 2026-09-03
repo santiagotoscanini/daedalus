@@ -475,6 +475,51 @@ let
     '';
   };
 
+  # The status file's undertaker.
+  #
+  # The agent writes its own terminal state, so this only ever fires when it
+  # did not get to: killed, out of memory, or dead on a line nobody tested.
+  # Without it that run stays `running` in the status file until the app's
+  # staleness clock expires — and because the flow refuses to start while one
+  # is running, a single crash disables every Update button on the box for the
+  # whole of that window. Observed: a `command not found` in the resolve loop.
+  #
+  # It matters more since queueing arrived. A batch is a longer run, so the
+  # unit's timeout and the app's clock both had to grow with it, and the wedge
+  # they leave behind on a crash grew in step. This bounds it to seconds.
+  #
+  # Reads the file rather than synthesising one: the id, the phase it died in
+  # and the targets are the only things that make the failure readable, and
+  # they are all already there.
+  imageUpdateReaper = pkgs.writeShellApplication {
+    name = "daedalus-image-update-reaper";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.coreutils
+    ];
+    text = ''
+      OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
+      OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
+      STATUS=${lib.escapeShellArg "${applyDir}/image-status.json"}
+
+      ${builtins.readFile ./host/lib.sh}
+
+      # $SERVICE_RESULT is systemd's, set for ExecStopPost. A clean exit is the
+      # overwhelmingly common case and has nothing to do here.
+      [ "''${SERVICE_RESULT:-success}" = "success" ] && exit 0
+      [ -f "$STATUS" ] || exit 0
+      [ "$(jq -r '.state // ""' "$STATUS")" = "running" ] || exit 0
+
+      jq --arg r "''${SERVICE_RESULT:-unknown}" '
+        .state = "failed"
+        | .finishedAt = (now | todate)
+        | .error = "the host agent died during \"" + (.phase // "?") + "\" (" + $r
+            + ") without reporting a result. Nothing was necessarily committed — check"
+            + " `journalctl -u daedalus-image-update` and `git log` in /etc/nixos."
+      ' "$STATUS" | write_json_atomic "$STATUS"
+    '';
+  };
+
   # What only the host can answer about this machine — SMART, self-test
   # history, scrub state, snapshot usage, replication lag, boot generations.
   # See host/system-snapshot.sh for why each of those has no other route in.
@@ -1265,9 +1310,17 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${imageUpdateScript}/bin/daedalus-image-update";
-      # Same budget as apply: a pull plus a build plus two switch attempts, on
-      # a cold cache. The default 90s would SIGTERM it mid-switch.
-      TimeoutStartSec = "30min";
+      # Marks a crashed run failed instead of leaving it "running" until the
+      # app's staleness clock expires — see the script's own header.
+      ExecStopPost = "${imageUpdateReaper}/bin/daedalus-image-update-reaper";
+      # A pull plus a build plus two switch attempts, on a cold cache — and
+      # since one request may carry a queue of containers, the pulls scale with
+      # it while the build and switch do not. Doubled from apply's 30min for
+      # that reason. The default 90s would SIGTERM it mid-switch.
+      #
+      # RUNNING_MAX_MS in app/src/lib/image-update.ts is this plus slack: past
+      # it the app declares a silent run dead, so the two must move together.
+      TimeoutStartSec = "60min";
     };
   };
 

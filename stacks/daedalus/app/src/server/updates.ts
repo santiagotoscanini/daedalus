@@ -33,20 +33,24 @@ export const fetchImageUpdateStatus = createServerFn().handler(async () => {
 })
 
 /**
- * Ask the host to move a pin and rebuild onto it.
+ * Ask the host to move one or more pins and rebuild onto them.
  *
  * Returns as soon as the request is published, which is before the host has
- * validated anything: the container may not be pinned, may be declared not
- * updatable, or the registry may refuse the tag. All three are reported
+ * validated anything: a container may not be pinned, may be declared not
+ * updatable, or the registry may refuse its tag. All three are reported
  * through the status file, which the caller polls — the same contract Apply
  * has, and the reason the button shows a phase rather than a spinner.
+ *
+ * Always a list, even for one: the button and the queue are the same call, so
+ * there is no single-container path that could behave differently from the
+ * batch one.
  */
 export const requestImageUpdateFn = createServerFn({ method: 'POST' })
-  .inputValidator((input: { container: string; toTag?: string }) => input)
+  .inputValidator((input: { targets: { container: string; toTag?: string }[] }) => input)
   .handler(async ({ data }) => {
     const { runImageUpdate } = await import('../lib/update-flow')
     // The forward-auth middleware forwards the Pocket ID claim, so the commit
     // this produces records a person rather than "daedalus".
     const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
-    return runImageUpdate({ ...data, actor })
+    return runImageUpdate({ targets: data.targets, actor })
   })

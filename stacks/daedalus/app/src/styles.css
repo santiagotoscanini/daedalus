@@ -6447,6 +6447,66 @@ h2 {
   color: var(--dim);
 }
 
+/* Update now, or add to the queue — side by side, because they are the same
+   decision with different timing and stacking them would read as a hierarchy
+   that does not exist. */
+.upd-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The queue: what a single rebuild is about to move. One row per container,
+   laid out like .upd-moves so the list you built and the list the host
+   resolved read as the same kind of thing. */
+.upd-queue {
+  list-style: none;
+  margin: 0 0 0.7rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.76rem;
+}
+.upd-queue li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+.upd-queue li:last-child {
+  border-bottom: 0;
+}
+.upd-queue-name {
+  min-width: 11rem;
+  color: var(--muted);
+}
+.upd-queue li .btn {
+  margin-left: auto;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.7rem;
+}
+
+/* Restated ceremonies. Each was already confirmed in its own row; by the time
+   several are queued that row is far up the page, and "what else does this
+   take down" is the one thing worth reading twice. */
+.upd-queue-warn {
+  list-style: none;
+  margin: 0 0 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  font-size: 0.76rem;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
 /* What the host resolved the run to be. A member that was already on target
    is shown struck through rather than omitted — a container silently missing
    from this list would read as one that was dropped from the commit. */

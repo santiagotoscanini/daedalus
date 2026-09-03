@@ -85,7 +85,8 @@ The app talks to the box through file-drop bridges under
 `request.json` → daedalus-apply (commit apps.json + rebuild),
 `deploy-request.json` → deploy trigger, `ci-request.json` → CI verbs,
 `power-request.json` → reboot, `image-request.json` →
-daedalus-image-update (rewrite a container's digest pin + rebuild),
+daedalus-image-update (rewrite one or more containers' digest pins +
+rebuild, as a single commit),
 `workspace-request.json` → daedalus-workspace-clone (clone/pull a
 project repo into `~/projects` over the operator's SSH identity; a
 30-min timer + a path unit on the deploy state files keep every clone

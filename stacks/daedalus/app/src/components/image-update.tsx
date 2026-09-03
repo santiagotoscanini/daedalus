@@ -21,6 +21,15 @@ import { Chip } from './viz'
 // the phase the host agent is actually in rather than spinning. The vocabulary
 // lives in host/image-update.sh; a phase this list has not heard of still
 // renders as progress rather than blanking the tracker.
+//
+// ── one run, one narrator ─────────────────────────────────────────────────
+//
+// A queued batch is one run over several containers, so exactly one place on
+// the page reports it: the queue panel. A row narrates only a run whose sole
+// target IS that row, which is why `mine` reads `targets` rather than matching
+// the status's back-compat `container` field. Sixty-five rows each drawing the
+// same phase tracker for the same rebuild would be sixty-five copies of one
+// fact — and the tracker in the row would be claiming the run belongs to it.
 
 const PHASES = [
   'validating',
@@ -50,12 +59,41 @@ export type UpdateTarget = {
   ceremony: string | null
 }
 
+/**
+ * The batch queue, on the one page that has one.
+ *
+ * Absent on the service tabs: those show a single container and have nowhere
+ * to put a list, so there the button is the only way to update and nothing
+ * about it changes.
+ */
+export type QueueBinding = {
+  queued: boolean
+  /**
+   * Set when another queued container already moves this one in lockstep.
+   *
+   * Adding it again would be refused by the host after the batch was already
+   * assembled, so the row says so instead of offering a button that cannot
+   * work.
+   */
+  blockedBy: string | null
+  /**
+   * `toTag` null means "re-pull the tag it is on" — the channel-pin case.
+   *
+   * Replaces an existing entry rather than adding a second, so the tag picker
+   * can call it again when the choice changes.
+   */
+  add: (toTag: string | null) => void
+  remove: () => void
+}
+
 export function UpdateControl({
   target: t,
   initialStatus,
+  queue,
 }: {
   target: UpdateTarget
   initialStatus: ImageUpdateStatus
+  queue?: QueueBinding
 }) {
   const router = useRouter()
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -73,10 +111,12 @@ export function UpdateControl({
     },
   })
 
-  // Only this container's run is ours to narrate. Another update in flight
-  // still disables the button (one rebuild at a time, enforced on the host),
-  // but its phases belong to its own row.
-  const mine = status.container === t.container && status.id !== null
+  // Only a run whose ONE target is this container is ours to narrate. Another
+  // update in flight still disables the button (one rebuild at a time,
+  // enforced on the host), but its phases belong to its own row — and a batch's
+  // belong to the queue panel, which is the only thing that can name all of it.
+  const mine =
+    status.id !== null && status.targets.length === 1 && status.targets[0] === t.container
 
   if (!t.updatable) {
     return (
@@ -94,22 +134,7 @@ export function UpdateControl({
   const sameTag = to === t.tag
   const armed = t.ceremony === null || typed.trim() === t.container
 
-  if (mine && running) {
-    const at = PHASES.indexOf(status.phase as (typeof PHASES)[number])
-    return (
-      <div className="upd-running">
-        <ol className="phases">
-          {PHASES.map((p, i) => (
-            <li key={p} className={p === status.phase ? 'now' : i < at ? 'past' : ''}>
-              {p}
-            </li>
-          ))}
-          {at === -1 && status.phase !== '' && <li className="now">{status.phase}</li>}
-        </ol>
-        <Moves status={status} />
-      </div>
-    )
-  }
+  if (mine && running) return <UpdateProgress status={status} />
 
   if (mine && status.state === 'failed') {
     return (
@@ -159,6 +184,12 @@ export function UpdateControl({
             value={to ?? ''}
             onChange={(e) => {
               setChosen(e.target.value)
+              // A queued entry holds the tag chosen when it was added, so the
+              // picker has to keep it current — otherwise the row shows one
+              // tag and the batch would move to another.
+              if (queue?.queued === true) {
+                queue.add(e.target.value === t.tag ? null : e.target.value)
+              }
             }}
           >
             {t.candidates.map((c) => (
@@ -195,31 +226,92 @@ export function UpdateControl({
 
       {refusal !== null && <p className="bad-text">{refusal}</p>}
 
-      <button
-        type="button"
-        className="btn btn-primary"
-        disabled={running || !armed}
-        onClick={() => {
-          setRefusal(null)
-          start(async () => {
-            const r = await requestImageUpdateFn({
-              data: {
-                container: t.container,
-                // Omitted for a same-tag move, so the host re-resolves the tag
-                // it is on rather than being told a tag it already knows.
-                ...(sameTag || to === null ? {} : { toTag: to }),
-              },
+      {queue?.blockedBy != null && (
+        <p className="upd-note">
+          Already queued as part of <span className="mono">{queue.blockedBy}</span>, which moves it
+          in lockstep.
+        </p>
+      )}
+
+      <div className="upd-actions">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={running || !armed}
+          onClick={() => {
+            setRefusal(null)
+            start(async () => {
+              const r = await requestImageUpdateFn({
+                data: {
+                  targets: [
+                    {
+                      container: t.container,
+                      // Omitted for a same-tag move, so the host re-resolves
+                      // the tag it is on rather than being told one it knows.
+                      ...(sameTag || to === null ? {} : { toTag: to }),
+                    },
+                  ],
+                },
+              })
+              if (!r.ok) {
+                setRefusal(r.reason)
+                return null
+              }
+              return r.id
             })
-            if (!r.ok) {
-              setRefusal(r.reason)
-              return null
-            }
-            return r.id
-          })
-        }}
-      >
-        {running ? 'Updating…' : sameTag ? `Re-pull ${t.tag}` : `Update to ${to ?? ''}`}
-      </button>
+          }}
+        >
+          {running ? 'Updating…' : sameTag ? `Re-pull ${t.tag}` : `Update to ${to ?? ''}`}
+        </button>
+
+        {/* Queueing is the same decision as updating, made now and spent
+            later — so it is gated on the same `armed`: a ceremony container
+            has its name typed HERE, at the moment it is chosen, rather than
+            at the end when six of them would ask at once. The panel restates
+            every warning before the batch runs. */}
+        {queue !== undefined &&
+          queue.blockedBy === null &&
+          (queue.queued ? (
+            <button type="button" className="btn" onClick={queue.remove} disabled={running}>
+              Remove from queue
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn"
+              disabled={running || !armed}
+              onClick={() => {
+                queue.add(sameTag || to === null ? null : to)
+              }}
+            >
+              Add to queue
+            </button>
+          ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The phase tracker, wherever the run is being narrated.
+ *
+ * Exported because a queued batch is narrated by the queue panel instead of by
+ * a row, and a second copy of the phase vocabulary is a second copy that falls
+ * behind host/image-update.sh.
+ */
+export function UpdateProgress({ status }: { status: ImageUpdateStatus }) {
+  const at = PHASES.indexOf(status.phase as (typeof PHASES)[number])
+  return (
+    <div className="upd-running">
+      <ol className="phases">
+        {PHASES.map((p, i) => (
+          <li key={p} className={p === status.phase ? 'now' : i < at ? 'past' : ''}>
+            {p}
+          </li>
+        ))}
+        {at === -1 && status.phase !== '' && <li className="now">{status.phase}</li>}
+      </ol>
+      <Moves status={status} />
     </div>
   )
 }
@@ -232,7 +324,7 @@ export function UpdateControl({
  * unchanged is the honest report that it was already there rather than a
  * container quietly dropped from the commit.
  */
-function Moves({ status }: { status: ImageUpdateStatus }) {
+export function Moves({ status }: { status: ImageUpdateStatus }) {
   if (status.moves.length === 0) return null
 
   return (
