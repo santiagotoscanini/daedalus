@@ -45,7 +45,7 @@ rec {
   # v3.41.2 ships an acknowledged port-forwarding deadlock triggered by
   # VPN_PORT_FORWARDING_UP_COMMAND — which stacks/downloads sets. Revisit
   # the stable line only once >= v3.41.3 exists.
-  gluetunImage = "docker.io/qmcgaw/gluetun:latest@sha256:e67bd4c664b103a6112a20e44384ce1cbe9394c41eb4de918693035699509956";
+  gluetunImage = "docker.io/qmcgaw/gluetun:latest@sha256:89e3cbe22e0d6f09a18d3e86269392fd9f7f08e8991040741e577f8f127cdfe4";
 
   # One exporter shape for every instance: polls the netns owner's
   # control API (localhost:8000 inside the shared netns) and serves
