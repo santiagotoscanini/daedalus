@@ -75,7 +75,7 @@
   };
 
   virtualisation.oci-containers.containers.wg-easy = mkRootlessContainer {
-    image = "ghcr.io/wg-easy/wg-easy:15.3.0@sha256:93bbd593e07bab98d02807a28770ac87ab6c48818e319e68c1f66561feb99876";
+    image = "ghcr.io/wg-easy/wg-easy:15.4.0@sha256:0e7bc9d34e86ddcaa92bc700d4d7dc9b33291dbc07ac8d13382f7c2095f949ec";
 
     ports = [
       "51820:51820/udp"
