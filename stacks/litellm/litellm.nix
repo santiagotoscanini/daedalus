@@ -20,11 +20,24 @@
 
 {
   config,
+  pkgs,
   mkDotenvSecret,
   mkRootlessContainer,
   mkSecretRender,
   ...
 }:
+
+let
+  # assets/config.yaml holds everything hand-maintained (models,
+  # callbacks, search tools, the pass-through); the `mcp_servers:` block
+  # is appended from the fleet.mcpServers registry so the servers are
+  # declared exactly once — see mcp.nix. Rendering rather than mounting
+  # the asset directly keeps the store path sensitive to an MCP change,
+  # so declaring a server still restarts the container.
+  configFile = pkgs.writeText "litellm-config.yaml" (
+    builtins.readFile ./assets/config.yaml + config.fleet.mcpConfigYaml
+  );
+in
 
 {
   # UI creds + LITELLM_MASTER_KEY + SSO client creds: sops-encrypted
@@ -124,7 +137,7 @@
     # `callbacks: ["prometheus"]` in litellm_settings, /metrics 404s).
     # Store-mounted so a config change restarts the container.
     volumes = [
-      "${./assets/config.yaml}:/app/config.yaml:ro"
+      "${configFile}:/app/config.yaml:ro"
     ];
 
     cmd = [

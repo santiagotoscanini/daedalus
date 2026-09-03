@@ -29,6 +29,17 @@
 
   fleet.logStacks."grocy-mcp" = [ "mcp-grocy" ];
 
+  # Registration on the LiteLLM MCP gateway lives with the server that
+  # backs it, not in litellm's config — the alias, the bridge and the
+  # secret are one decision. `exposeRemotely` publishes /Grocy/mcp
+  # through the CF tunnel for off-box MCP clients; see stacks/litellm/mcp.nix.
+  fleet.mcpServers.Grocy = {
+    url = "http://mcp-grocy:8080/mcp";
+    description = "Grocy household inventory, chores, shopping lists";
+    logoUrl = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/grocy.png";
+    exposeRemotely = true;
+  };
+
   # GROCY_API_KEY — operator-managed (Grocy -> Settings -> Manage API keys).
   sops.secrets."grocy-mcp-env" = mkDotenvSecret ./env.sops;
 

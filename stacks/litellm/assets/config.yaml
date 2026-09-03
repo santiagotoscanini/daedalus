@@ -240,27 +240,4 @@ model_list:
       api_key: os.environ/OPENAI_API_KEY
     model_info:
       mode: image_generation
-
-# TickTick tasks via the official remote MCP server. LiteLLM holds the
-# static personal API token (TICKTICK_MCP_TOKEN, from env.sops) and
-# injects it upstream, so any gateway client (Open WebUI) only presents
-# its LiteLLM key — no per-client OAuth.
-mcp_servers:
-  TickTick:
-    alias: "TickTick"
-    url: https://mcp.ticktick.com
-    transport: http
-    auth_type: bearer_token
-    auth_value: os.environ/TICKTICK_MCP_TOKEN
-    description: "TickTick tasks/lists/habits"
-    mcp_info:
-      server_name: "TickTick"
-      logo_url: "https://storage.ghost.io/c/cc/ab/ccab8320-6881-4f00-a181-c9547b33ad7a/content/images/2023/05/TickTick---logo.png"
-  Grocy:
-    alias: "Grocy"
-    url: http://mcp-grocy:8080/mcp
-    transport: http
-    description: "Grocy household inventory, chores, shopping lists"
-    mcp_info:
-      server_name: "Grocy"
-      logo_url: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/grocy.png"
+# mcp_servers: appended at build time from `fleet.mcpServers` (mcp.nix).
