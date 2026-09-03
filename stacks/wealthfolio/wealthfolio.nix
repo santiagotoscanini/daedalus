@@ -2,10 +2,53 @@
 # horizon publish. Joins traefik-net so traefik dials
 # `http://wealthfolio:8088` — no host port published.
 #
-# To enable password login alongside SSO, generate an argon2 hash:
+# Password login is ENABLED alongside SSO (WF_AUTH_PASSWORD_HASH in
+# env.sops) because /api/v1 accepts only a session JWT — a Personal
+# Access Token authenticates /mcp and NOTHING else — and a script cannot
+# follow an OIDC redirect. Humans still use "Sign in with SSO".
+# Rotate:
 #   echo -n "<pass>" | argon2 "<salt>" -id -m 12 -t 3 -p 1 -e
-# and add it to env.sops as WF_AUTH_PASSWORD_HASH, verbatim (single
-# `$`, no escaping). Then `systemctl restart podman-wealthfolio`.
+# into env.sops verbatim (single `$`, no escaping), then
+# `systemctl restart podman-wealthfolio` — activation rewrites
+# /run/secrets but does NOT restart the container, so a rebuild alone
+# leaves the old hash live. Scripted login:
+#   POST /api/v1/auth/login {"password":"…"}  → the JWT comes back ONLY
+#   in `Set-Cookie: wf_session=`, never the body. Reuse it as a cookie
+#   or as `Authorization: Bearer <that value>`. Login is rate-limited to
+#   5/60s per IP, so hold a jar; sessions slide past 50% of TTL.
+#
+# ── AI assistant (Settings › AI Providers) ─────────────────────────────
+#
+# Configured to run on the house gateway, NOT a vendor: provider
+# `openai`, customUrl http://litellm:4000, model gemma-4-12b, key =
+# fleet.litellmKeys.wealthfolio (declared below). This is APP state, not
+# nix — provider credentials live in the app's encrypted store
+# (/data/secrets.json, keyed `ai_openai`). Set over its own API:
+#   POST /api/v1/secrets            {"secretKey":"ai_openai","secret":"<key>"}
+#   PUT  /api/v1/ai/providers/settings
+#        {"providerId":"openai","enabled":true,
+#         "customUrl":"http://litellm:4000","selectedModel":"gemma-4-12b",
+#         "favoriteModels":["gemma-4-12b"],"priority":1,
+#         "modelCapabilityOverride":{"modelId":"gemma-4-12b",
+#           "overrides":{"tools":true,"streaming":true}}}
+#   POST /api/v1/ai/providers/default {"providerId":"openai"}
+# `modelCapabilityOverride.tools` is REQUIRED: an id absent from the
+# vendor catalog defaults to tools:false, and the assistant then answers
+# from memory instead of calling get_holdings/get_accounts — a wrong
+# answer, not an error. `favoriteModels` replaces the catalog list the
+# model picker shows (gpt-5.4*), which our key cannot reach anyway.
+#
+# Two upstream quirks, both cosmetic, neither fixable from config:
+#   • A request that omits `config.provider` falls back to a HARDCODED
+#     "ollama" (crates/ai/src/providers.rs) and dies on localhost:11434.
+#     The blob that would override it (`ai_settings`) has no writer on
+#     the server build. The UI always sends an explicit provider, so
+#     this only bites API callers — pass config.provider AND config.model.
+#   • Thread titles use a catalog constant `title_model_id` =
+#     gpt-5.4-nano with no override field, so every new thread logs a
+#     403 at the gateway ("key not allowed to access model"). Titles
+#     still appear via the heuristic fallback. Ignore the noise; do NOT
+#     widen the virtual key to silence it.
 #
 # ── MCP (Settings › AI Agent Access) ───────────────────────────────────
 #
