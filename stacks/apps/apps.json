@@ -172,6 +172,33 @@
       },
       "notes": {}
     },
+    "plutus": {
+      "stage": "lab",
+      "postgres": true,
+      "storage": false,
+      "litellm": false,
+      "prometheus": false,
+      "deploy": {
+        "enable": true
+      },
+      "image": null,
+      "hostname": null,
+      "egress": null,
+      "env": [],
+      "auth": {
+        "mode": "native",
+        "healthPath": "/api/healthz"
+      },
+      "presentation": {
+        "description": "Plutus · personal finance companion: stages Itau Uruguay activity and pushes approved rows to Wealthfolio."
+      },
+      "resources": {
+        "cpus": null,
+        "memoryMb": null,
+        "pids": null
+      },
+      "notes": {}
+    },
     "voyra": {
       "stage": "live",
       "postgres": true,
