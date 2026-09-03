@@ -74,19 +74,31 @@ let
     // lib.optionalAttrs (s.logoUrl != null) { logo_url = s.logoUrl; };
   };
 
-  # The OAuth discovery + flow paths. Published alongside any server so
-  # an MCP client that negotiates rather than carrying a static Bearer
-  # can complete the handshake. PathPrefix rather than an exact Path:
-  # the OpenAPI spec also carries per-server variants
-  # (/.well-known/oauth-protected-resource/<server>/mcp) which 404 today
-  # because neither server uses upstream OAuth — a prefix keeps working
-  # if one ever does. Neither namespace carries a secret; the documents
-  # are already served unauthenticated on the LAN.
-  oauthPaths = [
-    "PathPrefix(`/v1/mcp/oauth`)"
-    "PathPrefix(`/.well-known/oauth-protected-resource`)"
-    "PathPrefix(`/.well-known/oauth-authorization-server`)"
-  ];
+  # ── why the OAuth endpoints are NOT published ──────────────────────
+  #
+  # LiteLLM also serves an OAuth authorization server for MCP
+  # (/v1/mcp/oauth/{authorize,token} plus two /.well-known documents),
+  # and publishing it would let a client negotiate instead of carrying a
+  # static Bearer. It is left unrouted deliberately.
+  #
+  # Clients here authenticate with a virtual key
+  # (`Authorization: Bearer`), so the flow is never entered — and
+  # LiteLLM sends no `WWW-Authenticate` header on its 401s, so nothing
+  # steers a spec-compliant client toward discovery either. Routing them
+  # would buy nothing and cost the only UNAUTHENTICATED code path on the
+  # public surface: both endpoints parse attacker-controlled input
+  # before any credential is checked (/token validates a form body,
+  # /authorize a query string). Everything else published here either
+  # 401s before litellm does work, or 404s at traefik.
+  #
+  # Re-add these three prefixes if a client ever needs the negotiated
+  # flow — a claude.ai custom connector might:
+  #   PathPrefix(`/v1/mcp/oauth`)
+  #   PathPrefix(`/.well-known/oauth-protected-resource`)
+  #   PathPrefix(`/.well-known/oauth-authorization-server`)
+  # /authorize already enforces a loopback-only redirect_uri, which
+  # forecloses the code-interception attack, so it is a defensible thing
+  # to publish — just not for free.
 
   serverPaths = lib.mapAttrsToList (n: _: "PathPrefix(`/${n}/mcp`)") exposed;
 in
@@ -230,7 +242,7 @@ in
         http = {
           routers.litellm-mcp-cf = {
             entryPoints = [ "cfweb" ];
-            rule = "Host(`${hostname}`) && (${lib.concatStringsSep " || " (serverPaths ++ oauthPaths)})";
+            rule = "Host(`${hostname}`) && (${lib.concatStringsSep " || " serverPaths})";
             service = "litellm-mcp";
           };
           services.litellm-mcp.loadBalancer.servers = [ { url = "http://litellm:4000"; } ];
