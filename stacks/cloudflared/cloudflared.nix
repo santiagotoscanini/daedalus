@@ -121,7 +121,7 @@ in
   fleet.cloudflare = { inherit accountId tunnelId zoneId; };
 
   virtualisation.oci-containers.containers.cloudflared = mkRootlessContainer {
-    image = "docker.io/cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf";
+    image = "docker.io/cloudflare/cloudflared:2026.8.3@sha256:51c9cefcb4569df44e1ad403ab1d3d8065aa8e84339bcfc6aee75502e1140339";
     dependsOn = [ "traefik" ];
 
     volumes = [
