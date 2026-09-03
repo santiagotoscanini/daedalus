@@ -9,7 +9,6 @@
   lib,
   pkgs,
   nixpkgs,
-  nixpkgs-unstable,
   ...
 }:
 
@@ -132,27 +131,11 @@
     ];
     packages = with pkgs; [
       tree
+      # From nixos-unstable, and sometimes from ahead of it —
+      # platform/claude-code/ owns that overlay and explains why.
       claude-code
     ];
   };
-
-  # claude-code from the pinned nixos-unstable flake input (stable
-  # nixpkgs lags ~6 months). Locked in flake.lock; updated via
-  # `nix flake update`.
-  nixpkgs.overlays = [
-    (
-      _final: prev:
-      let
-        unstable = import nixpkgs-unstable {
-          inherit (prev.stdenv.hostPlatform) system;
-          config.allowUnfree = true;
-        };
-      in
-      {
-        inherit (unstable) claude-code;
-      }
-    )
-  ];
 
   # ── SSH ─────────────────────────────────────────────────────────────────────
 

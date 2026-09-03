@@ -69,7 +69,7 @@
       nixosConfigurations.s2-server = nixpkgs.lib.nixosSystem {
         inherit system;
         # Hand the unstable input to modules that cherry-pick from it
-        # (configuration.nix's claude-code overlay).
+        # (platform/claude-code's overlay).
         specialArgs = { inherit nixpkgs nixpkgs-unstable; };
         modules = [
           ./configuration.nix
