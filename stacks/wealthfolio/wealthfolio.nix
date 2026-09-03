@@ -78,6 +78,29 @@
     exposeRemotely = true;
   };
 
+  # The in-app assistant (Settings › AI Providers) runs on the house
+  # gateway, not a vendor: provider `openai`, base URL
+  # http://litellm:4000, this key. `models` is the single chat model it
+  # needs — the assistant does no embeddings, speech or images, so the
+  # narrow list is the whole list.
+  #
+  # `mcpServers` is deliberately EMPTY, which is the one case where the
+  # default-deny is the right answer: this assistant calls Wealthfolio's
+  # own in-process agent-tools (holdings, activities, drafts), never a
+  # tool server through the gateway. It is the OTHER end of the MCP
+  # registration above — open-webui's key reaches `Wealthfolio`, this
+  # key reaches nothing.
+  #
+  # No `consumers`/`consumerEnv`: this app does not read its AI key from
+  # the environment. Provider credentials live in Wealthfolio's own
+  # encrypted store (/data/secrets.json, keyed `ai_openai`) and are set
+  # through its REST API, so the key is minted and converged here and
+  # handed over once by hand. Rotating it means re-POSTing the provider
+  # settings, not just a rebuild.
+  fleet.litellmKeys.wealthfolio = {
+    models = [ "gemma-4-12b" ];
+  };
+
   fleet.statePaths."${config.fleet.stateRoot}/wealthfolio/data".uid = 1000;
   fleet.webApps.wealthfolio = {
     serviceName = "wealthfolio";
