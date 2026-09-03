@@ -18,10 +18,8 @@ recipe to onboard a service/user live in `/etc/nixos/AUTH.md`.
 - **wg-easy** — DONE 2026-09-03 on v15.4.0 (`feat: oauth integration`,
   [v15.4.0](https://github.com/wg-easy/wg-easy/releases/tag/v15.4.0)):
   Pocket ID client + `OAUTH_*` env in `stacks/wg-easy/wg-easy.nix`,
-  Tier 1 in AUTH.md. One follow-up remains: set
-  `DISABLE_PASSWORD_AUTH = "true"` in the module after the first
-  successful passkey login (upstream: link an admin before disabling
-  passwords; a passkey login can't be driven from the box).
+  Tier 1 in AUTH.md, password auth disabled after the first passkey
+  login the same day.
 
 Not candidates (no viable OIDC path — stay on their own auth, documented
 in AUTH.md "Out of scope"): **jellyfin** (native TV/mobile clients can't

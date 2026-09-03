@@ -40,14 +40,20 @@
 # sends /login straight to Pocket ID; `/login?auto_launch=false` shows
 # the password form.
 #
-# DISABLE_PASSWORD_AUTH is deliberately still off: upstream says to link
-# an admin BEFORE disabling passwords, and a passkey login cannot be
-# driven from this box. Flip it to "true" once one Pocket ID login has
-# succeeded — the INIT_* account then stays in wg-easy.db as dormant
-# rows, and INIT_USERNAME/INIT_PASSWORD (env.sops) keep mattering only
-# for a fresh-bootstrap first init, which is why they are not removed.
+# DISABLE_PASSWORD_AUTH is on (since 2026-09-03, after the first
+# Pocket ID login succeeded — upstream says to link an admin BEFORE
+# disabling passwords). The pre-OIDC admin stays in wg-easy.db as
+# dormant rows; INIT_USERNAME/INIT_PASSWORD (env.sops) matter only for
+# a fresh-bootstrap first init, which is why they are not removed.
+# Break-glass on a fresh bootstrap: comment the flag out, rebuild, log in
+# with INIT_*, let auto-register link the Pocket ID account, re-enable.
 # The WireGuard tunnel itself never depends on any of this: :51820 is
 # key-authenticated and stays up whether or not the UI can log in.
+#
+# The IdP side has one per-user requirement: wg-easy 401s
+# "Email is not verified" unless userinfo carries email_verified=true,
+# so every Pocket ID user that should reach this UI needs "Email
+# verified" ticked (AUTH.md onboarding recipe).
 
 {
   config,
@@ -163,6 +169,7 @@
       OAUTH_OIDC_NAME = "Pocket ID";
       OAUTH_AUTO_REGISTER = "true";
       OAUTH_AUTO_LAUNCH = "oidc";
+      DISABLE_PASSWORD_AUTH = "true";
     };
 
     # INIT_USERNAME + INIT_PASSWORD (first-init admin credentials; inert
