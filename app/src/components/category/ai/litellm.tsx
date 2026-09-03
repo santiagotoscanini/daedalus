@@ -238,7 +238,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
           <GrafanaLogs source={{ container: 'litellm' }} title="LiteLLM logs" />
         </Board>
 
-        {/* The three containers the gateway dials, each as a pair: what a
+        {/* The containers the gateway dials, each as a pair: what a
             re-pull would bring, and what it has been saying. They used to be
             three folded log frames and nothing else, which meant three pinned
             services could drift a year behind with nothing on this dashboard
@@ -264,19 +264,25 @@ type NeighbourData = Extract<AiData, { tab: 'litellm' }>['neighbours'][number]
  * These were three folded log frames and nothing else, which was the gap: the
  * logs were on the page and the UPDATES were not, so three pinned services
  * could drift a year behind with nothing on this dashboard reporting it.
+ *
+ * A container that is two projects (`via`) gets a third of the row for each:
+ * two changelogs and the one log, rather than one changelog silently speaking
+ * for both.
  */
 function NeighbourPair({ n }: { n: NeighbourData }) {
   const behind = n.gap?.behind.length ?? n.build?.behind.length ?? 0
   const unit =
     n.gap !== null ? (behind === 1 ? 'release behind' : 'releases behind') : 'commits behind'
   const count = String(behind)
+  const span = n.via === null ? 6 : 4
+  const viaBehind = n.via?.gap?.behind.length ?? 0
 
   return (
     <>
       <Changelog
         gap={n.gap}
         build={n.build}
-        span={6}
+        span={span}
         title={behind === 0 ? `${n.label} — current` : `${n.label} — ${count} ${unit}`}
         aside={
           <span className="board-note">
@@ -285,10 +291,30 @@ function NeighbourPair({ n }: { n: NeighbourData }) {
         }
         foot={<p className="board-foot">{n.note}</p>}
       />
+      {n.via !== null && (
+        <Changelog
+          gap={n.via.gap}
+          span={span}
+          title={
+            viaBehind === 0
+              ? `${n.via.label} — current`
+              : `${n.via.label} — ${String(viaBehind)} ${viaBehind === 1 ? 'release behind' : 'releases behind'}`
+          }
+          aside={
+            <span className="board-note">
+              {n.via.version === null ? (
+                'version unknown'
+              ) : (
+                <span className="mono">{n.via.version}</span>
+              )}
+            </span>
+          }
+        />
+      )}
       <Board
         title={`${n.label} logs`}
         icon="logs"
-        span={6}
+        span={span}
         aside={<span className="board-note">{n.role}</span>}
       >
         <GrafanaLogs source={{ container: n.container }} title={`${n.label} logs`} />
