@@ -293,7 +293,7 @@ in
     "fronts every published hostname, including this page — a bad switch reads as the dashboard going down";
 
   virtualisation.oci-containers.containers.traefik = mkRootlessContainer {
-    image = "docker.io/library/traefik:v3.7.9@sha256:652929a140a32d7cafafb13c6cdfab5376cfeff800f51397b87b524501ed02a8";
+    image = "docker.io/library/traefik:v3.7.12@sha256:9c2a54d87f76f5c2f5f2682c68394af92fb12c0a2686798d6462a3f84bd78eaf";
 
     ports = [
       # Publishing these is load-bearing beyond LAN ingress: it installs
