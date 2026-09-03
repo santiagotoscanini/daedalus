@@ -56,7 +56,7 @@
   sops.secrets."wealthfolio-env" = mkDotenvSecret ./env.sops;
 
   virtualisation.oci-containers.containers.wealthfolio = mkRootlessContainer {
-    image = "docker.io/afadil/wealthfolio:3.6.3@sha256:2c939f64043481d7c5e4fc737ed872518633c838bff9b9de699f0c158df4bc0b";
+    image = "docker.io/afadil/wealthfolio:3.7.0@sha256:de137d64acf712c5c71093b27ecc98ccc1dbbbf00befdb684bed531cdb40069a";
 
     volumes = [
       "${config.fleet.stateRoot}/wealthfolio/data:/data"
