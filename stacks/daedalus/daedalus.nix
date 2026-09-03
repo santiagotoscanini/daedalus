@@ -60,6 +60,22 @@ let
   # images export domain); `tagOf` above stays for the handful of named
   # *_VERSION variables whose consumers read them by name.
 
+  # `localhost/mcp-yazio:0.0.14-sg3.4.3-a4yhvmn9` → { yazio = "0.0.14";
+  # supergateway = "3.4.3"; }. One container, two projects: stacks/yazio-mcp
+  # builds fliptheweb/yazio-mcp behind supergateway, and its tag carries both
+  # versions precisely so they can be read back here. Empty on a mismatch,
+  # rendered as "unknown".
+  mcpYazio =
+    let
+      m = builtins.match ".*:([0-9.]+)-sg([0-9.]+)-[^-]*$" (
+        config.virtualisation.oci-containers.containers.mcp-yazio.image
+      );
+    in
+    {
+      yazio = if m == null then "" else builtins.elemAt m 0;
+      supergateway = if m == null then "" else builtins.elemAt m 1;
+    };
+
   # `localhost/litellm-pgvector:b553f84-a4yhvmn9` → `b553f84`. Not a version:
   # there is no published image and no release, so the flake pins a source
   # COMMIT and mkLocalImage puts its short form in the tag. That commit is what
@@ -852,11 +868,13 @@ in
       # which reports what the process is actually running rather than what
       # the flake asked for.
       POCKET_ID_VERSION = tagOf "pocket-id";
-      # The two containers standing beside LiteLLM whose version is knowable
-      # from the flake. The third — searxng — is a digest-pinned `:latest`, and
-      # states its build in its own startup banner instead, which daedalus
-      # reads back out of Loki.
+      # The containers standing beside LiteLLM whose version is knowable
+      # from the flake. The remaining one — searxng — is a digest-pinned
+      # `:latest`, and states its build in its own startup banner instead,
+      # which daedalus reads back out of Loki.
       MCP_GROCY_VERSION = tagOf "mcp-grocy";
+      YAZIO_MCP_VERSION = mcpYazio.yazio;
+      SUPERGATEWAY_VERSION = mcpYazio.supergateway;
       PGVECTOR_REV = pgvectorRev;
       # The full tag map rides /export/images.json now (platform/export.nix);
       # the named *_VERSION variables above predate it and stay because their

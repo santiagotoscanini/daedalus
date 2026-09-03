@@ -97,6 +97,15 @@ export type Neighbour = {
   version: string | null
   gap: VersionGap | null
   build: CommitGap | null
+  /**
+   * A second project inside the same container, with its own release cycle.
+   *
+   * mcp-yazio is fliptheweb/yazio-mcp wrapped in supergateway: one image, one
+   * log stream, but two upstreams that fall behind independently — and a
+   * single `gap` could only report one of them. Null for a container that is
+   * one project.
+   */
+  via: { label: string; repo: string; version: string | null; gap: VersionGap | null } | null
 }
 
 // ── LiteLLM ────────────────────────────────────────────────────────────────
@@ -315,17 +324,25 @@ export async function loadLitellm(): Promise<LitellmData> {
  *                      whose suffix is the commit. Read back out of Loki.
  *   mcp-grocy          cuts versioned releases and the flake pins an exact
  *                      tag, so this is the ordinary release-gap case.
+ *   mcp-yazio          two npm packages in one locally built image — the
+ *                      stdio server and the supergateway that fronts it —
+ *                      and the flake pins both versions into the tag, so
+ *                      this is the release-gap case twice over (`via`).
  *   litellm-pgvector   no published image at all — the flake pins a source
  *                      COMMIT and builds it, so commits-since is the only
  *                      question that has an answer.
  */
 async function loadNeighbours(): Promise<Neighbour[]> {
   const grocy = process.env.MCP_GROCY_VERSION || null
+  const yazio = process.env.YAZIO_MCP_VERSION || null
+  const supergateway = process.env.SUPERGATEWAY_VERSION || null
   const pgvectorRev = process.env.PGVECTOR_REV || null
 
-  const [searxBanner, grocyGap, pgvectorBuild] = await Promise.all([
+  const [searxBanner, grocyGap, yazioGap, supergatewayGap, pgvectorBuild] = await Promise.all([
     lokiLatest('{container="searxng"} |~ "^SearXNG [0-9]"'),
     versionGap('miguelangel-nubla/mcp-grocy', grocy),
+    versionGap('fliptheweb/yazio-mcp', yazio),
+    versionGap('supercorp-ai/supergateway', supergateway),
     commitsSince('BerriAI/litellm-pgvector', pgvectorRev, 'main'),
   ])
 
@@ -344,16 +361,34 @@ async function loadNeighbours(): Promise<Neighbour[]> {
       version: searx,
       gap: null,
       build: await commitsSince('searxng/searxng', searxCommit, 'master'),
+      via: null,
     },
     {
       container: 'mcp-grocy',
       label: 'Grocy MCP',
-      role: 'the local tool server it proxies',
-      note: 'The one MCP server that runs on this box. TickTick is remote and logs nothing here. Every call counted in “tools models called” above passed through this container.',
+      role: 'the household tool server it proxies',
+      note: 'One of the two MCP servers that run on this box; TickTick is remote and logs nothing here. Grocy calls counted in “tools models called” above passed through this container.',
       repo: 'miguelangel-nubla/mcp-grocy',
       version: grocy,
       gap: grocyGap,
       build: null,
+      via: null,
+    },
+    {
+      container: 'mcp-yazio',
+      label: 'Yazio MCP',
+      role: 'the nutrition tool server it proxies',
+      note: 'A stdio-only server, so supergateway sits in front of it and spawns one yazio-mcp per request — each request is a fresh Yazio login, and a wrong password shows here as “Failed to authenticate” on every call while the container itself stays up.',
+      repo: 'fliptheweb/yazio-mcp',
+      version: yazio,
+      gap: yazioGap,
+      build: null,
+      via: {
+        label: 'supergateway',
+        repo: 'supercorp-ai/supergateway',
+        version: supergateway,
+        gap: supergatewayGap,
+      },
     },
     {
       container: 'litellm-pgvector',
@@ -364,6 +399,7 @@ async function loadNeighbours(): Promise<Neighbour[]> {
       version: pgvectorRev,
       gap: null,
       build: pgvectorBuild,
+      via: null,
     },
   ]
 }

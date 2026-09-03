@@ -140,7 +140,10 @@ confirm before:
   `stacks/litellm-pgvector` fronts pgvector on the shared cluster
   behind LiteLLM's vector-store API; stores are DB state registered via
   `/vector_store/new` (STORE_MODEL_IN_DB drops the config registry), so
-  ingest via the connector's REST API, not the LiteLLM UI.
+  ingest via the connector's REST API, not the LiteLLM UI. MCP servers
+  ride the gateway via `fleet.mcpServers` (`stacks/litellm/mcp.nix`);
+  a stdio-only server gets wrapped in supergateway inside a local
+  image — `stacks/yazio-mcp` is the template.
 
 Ask what depends on a thing before touching it. The answers that cost
 real downtime to learn are in **Cross-cutting container gotchas**; the

@@ -113,8 +113,9 @@ in
         (`/<Alias>/mcp`) — one string, three uses.
 
         A stack that runs its own MCP server declares its entry itself
-        (see stacks/grocy-mcp); remote SaaS servers, which have no stack,
-        are declared below.
+        (see stacks/grocy-mcp; stacks/yazio-mcp for a stdio-only server
+        wrapped in supergateway); remote SaaS servers, which have no
+        stack, are declared below.
       '';
       type = lib.types.attrsOf (
         lib.types.submodule {
