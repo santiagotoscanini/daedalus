@@ -21,6 +21,11 @@
 # which is the same reason TICKTICK_MCP_TOKEN lives there. Rotate:
 # create a new token in the UI, `sops stacks/litellm/env.sops`, rebuild,
 # `systemctl restart podman-litellm`.
+#
+# The token carries the read + write + suggest preset ON PURPOSE
+# (operator decision, 2026-09-03): models may record and commit
+# activities, not just read. Wealthfolio's draft-then-commit tool pairs
+# are the guard rail. Don't re-propose a read-only token.
 
 {
   config,
