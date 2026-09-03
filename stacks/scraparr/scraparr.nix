@@ -50,7 +50,7 @@
   # stderr directly, bypassing Python logging — no level can silence
   # it without an upstream patch.
   virtualisation.oci-containers.containers.scraparr = mkRootlessContainer {
-    image = "ghcr.io/thecfu/scraparr:3.0.3@sha256:44f09d30009508a2a422ae7cd9cce38fa36122d6bd0592f2e4158398d9ccb7a6";
+    image = "ghcr.io/thecfu/scraparr:3.2.0@sha256:b9f79a85c33564dfdb1e50ab3d725faeb27b89f4ad5cae7013e39e2f572a8085";
 
     environment = {
       GENERAL_LOG_LEVEL = "WARNING";
