@@ -28,7 +28,9 @@ export type JellyfinData = {
 }
 
 export async function loadJellyfin(base: string): Promise<JellyfinData> {
-  const h = { headers: { 'X-Emby-Token': key('JELLYFIN_API_KEY') } }
+  // `Authorization: MediaBrowser Token=` is the only scheme Jellyfin 12 keeps;
+  // X-Emby-Token is gated behind EnableLegacyAuthorization there and removed next.
+  const h = { headers: { Authorization: `MediaBrowser Token="${key('JELLYFIN_API_KEY')}"` } }
   const now = Date.now()
 
   const [info, counts, sessions, users, disk, growth] = await Promise.all([
