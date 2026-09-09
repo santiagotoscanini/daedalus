@@ -1,155 +1,96 @@
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import type { FileDigest, SiteRepo, SiteRepoState } from '../../lib/contract/domains/repo'
+import type { RepoFacts, SiteDir, SiteFileStatus } from '../../lib/contract/domains/repo'
 import { repoFacts } from '../../lib/contract/domains/repo'
-import { requestSiteInit, type SiteFileName } from '../../lib/site-request'
+import { requestSiteWrite, type SiteFileName } from '../../lib/site-request'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
 import { renderSiteFile, renderSiteReadme, siteDocument } from './file'
 
-// The site repository, from this container's side: render what should be in
-// it, and say whether what IS in it agrees.
+// The site directory, from this container's side: render what should be in
+// it, say whether what IS in it agrees, and ask the host to write it.
 //
-// The comparison is by digest, never by content. The host publishes a sha256
-// per managed file (host/repo-snapshot.sh); this hashes the same bytes it
-// would write and compares. So "in sync" is a real claim about the committed
-// file, made without either side reading the other's copy — which is the
-// whole argument for calling the repo a verified mirror rather than a second
-// place to look.
+// "Current" is decided by digest, never by content. The host publishes a
+// sha256 per managed file (host/repo-snapshot.sh); this hashes the bytes it
+// would write and compares. So the claim is about the committed file, made
+// without either side reading the other's copy.
 //
-// ⚠ What the mirror holds is what the RUNNING SYSTEM WAS BUILT FROM, not what
-// daedalus would build next. For apps.json that distinction is the whole
-// thing: the registry's editing surface is a Postgres table, and between an
-// edit and an Apply the table and the committed file legitimately disagree.
-// Writing a fresh render of the table into this repository would commit
-// unapplied changes into the one file whose entire claim is that it describes
-// the machine as it is — and the drift the Apps page exists to report would
-// quietly become the site repo's version of the truth. So apps.json is copied
-// from /export/applied.json, the byte copy of the committed file that
-// daedalus-registry-snapshot publishes, and it moves when an Apply moves it.
-//
-// Server-only: it reads snapshots off the filesystem.
+// apps.json is NOT rendered here. Only an Apply writes it (from Phase 4), so
+// it can never hold unapplied drift; this module reports its status and
+// nothing more. Server-only: it reads snapshots off the filesystem and the
+// preferences store.
 
-export type MirrorState =
-  | 'in-sync'
-  /** Committed, but not what this box was built from. */
-  | 'differs'
-  /** The repository exists and this file is not in it. */
-  | 'missing'
-
-export type MirrorFile = {
-  name: SiteFileName
-  state: MirrorState
-  rendered: FileDigest
-  committed: FileDigest | null
+export type SiteFileView = {
+  name: 'site.json' | 'apps.json'
+  status: SiteFileStatus
+  /** Byte-identical to what this box would write now. Null = not compared
+      (apps.json, or the file is absent). */
+  current: boolean | null
 }
 
-export type SiteMirror = {
-  repo: SiteRepo
-  /** Empty until the repository exists — there is nothing to compare against. */
-  files: MirrorFile[]
-  inSync: boolean
+export type SiteState = {
+  dir: SiteDir
+  files: SiteFileView[]
+  /** The operator's switch: commit after every write (staging is not optional). */
+  commit: boolean
 }
 
-function digestOf(body: string): FileDigest {
-  return {
-    sha256: createHash('sha256').update(body, 'utf8').digest('hex'),
-    bytes: Buffer.byteLength(body, 'utf8'),
-  }
+function sha256(body: string): string {
+  return createHash('sha256').update(body, 'utf8').digest('hex')
 }
 
-/**
- * The bytes this box would commit right now.
- *
- * README.md is written once and never compared — see renderSiteReadme. It is
- * returned here anyway because Initialize writes it, and a repository whose
- * front page appeared only on a second run would be odd.
- *
- * Throws when the applied registry is unreadable. That is the correct
- * failure: a site repository without the registry the system was built from
- * is not a partial mirror, it is a misleading one.
- */
+const isBool = (v: unknown): v is boolean => typeof v === 'boolean'
+
+export async function readSiteCommit(ctx: Ctx): Promise<boolean> {
+  const { SETTING_KEYS } = await import('../../lib/repo/settings')
+  return (await ctx.store.read(SETTING_KEYS.siteCommit, isBool)) ?? false
+}
+
+export async function writeSiteCommit(ctx: Ctx, value: boolean): Promise<void> {
+  const { SETTING_KEYS } = await import('../../lib/repo/settings')
+  await ctx.store.write(SETTING_KEYS.siteCommit, value)
+}
+
+/** The bytes this box would write right now. */
 export async function renderSiteFiles(ctx: Ctx): Promise<Record<SiteFileName, string>> {
-  const applied = ctx.exportPath('applied.json')
-  const registry = await readFile(applied, 'utf8').catch((e: unknown) => {
-    throw new Error(
-      `could not read the applied registry at ${applied}: ${e instanceof Error ? e.message : String(e)}`,
-    )
-  })
-
   const doc = siteDocument(await readBoxSettings(ctx))
-
-  return {
-    'site.json': renderSiteFile(doc),
-    'apps.json': registry,
-    'README.md': renderSiteReadme(doc),
-  }
+  return { 'site.json': renderSiteFile(doc), 'README.md': renderSiteReadme(doc) }
 }
 
-/** The managed files, in the order the tab lists them. `README.md` is not one. */
-const COMPARED: SiteFileName[] = ['site.json', 'apps.json']
-
-export async function siteMirror(ctx: Ctx): Promise<SiteMirror> {
-  const facts = await repoFacts()
-  const repo = facts.data.site
-
-  if (repo.state !== ('ready' satisfies SiteRepoState)) {
-    return { repo, files: [], inSync: false }
-  }
-
+export async function siteState(ctx: Ctx, facts?: RepoFacts): Promise<SiteState> {
+  const dir = (facts ?? (await repoFacts()).data).site
   const bodies = await renderSiteFiles(ctx)
-  const committed: Record<string, FileDigest | null> = {
-    'site.json': repo.files.site,
-    'apps.json': repo.files.apps,
+  const rendered = sha256(bodies['site.json'])
+
+  const site = dir.files['site.json']
+  const apps = dir.files['apps.json']
+  return {
+    dir,
+    files: [
+      {
+        name: 'site.json',
+        status: site.status,
+        current: site.sha256 === null ? null : site.sha256 === rendered,
+      },
+      { name: 'apps.json', status: apps.status, current: null },
+    ],
+    commit: await readSiteCommit(ctx),
   }
-
-  const files = COMPARED.map((name): MirrorFile => {
-    const rendered = digestOf(bodies[name])
-    const c = committed[name] ?? null
-    return {
-      name,
-      rendered,
-      committed: c,
-      state: c === null ? 'missing' : c.sha256 === rendered.sha256 ? 'in-sync' : 'differs',
-    }
-  })
-
-  return { repo, files, inSync: files.every((f) => f.state === 'in-sync') }
 }
 
-export type InitOutcome = { ok: true; id: string } | { ok: false; reason: string }
+export type WriteOutcome = { ok: true; id: string } | { ok: false; reason: string }
 
-/**
- * Create or adopt the repository and commit the current render into it.
- *
- * Idempotent on the host side, so this does not try to decide whether there
- * is anything to do — it asks, and the agent reports "no change" when the
- * files it wrote were already the files that were there.
- */
-export async function initSite(
-  ctx: Ctx,
-  input: { actor: string; remote: string; createRemote: boolean },
-): Promise<InitOutcome> {
+/** Ask the host to write site.json (and the README) as this box is now. */
+export async function writeSite(ctx: Ctx, actor: string): Promise<WriteOutcome> {
   const { readSiteRequestStatus } = await import('../../lib/site-request')
-
   const inFlight = await readSiteRequestStatus()
   if (inFlight.state === 'running') {
     return { ok: false, reason: `the host is already working on this (${inFlight.phase})` }
   }
-
-  let files: Record<SiteFileName, string>
-  try {
-    files = await renderSiteFiles(ctx)
-  } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : String(e) }
-  }
-
-  const id = await requestSiteInit({
-    remote: input.remote,
-    createRemote: input.createRemote,
+  const id = await requestSiteWrite({
+    commit: await readSiteCommit(ctx),
     summary: 'site: what this box is',
-    actor: input.actor,
-    files,
+    actor,
+    files: await renderSiteFiles(ctx),
   })
   return { ok: true, id }
 }

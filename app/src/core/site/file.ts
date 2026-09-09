@@ -1,18 +1,17 @@
 import type { BoxSettings } from '../settings/types'
 
-// Renders the site repository's files — the exact bytes that land in it.
+// Renders the site directory's files — the exact bytes that land in it.
 //
 // The same division of labour as lib/registry-file.ts, for the same reason:
-// the host agent copies bytes and commits them, and every decision about
-// SHAPE is application logic, where it can be typed and tested. site-init.sh
+// the host agent copies bytes and stages them, and every decision about
+// SHAPE is application logic, where it can be typed and tested. site-write.sh
 // never builds JSON.
 //
 // What this file is: the box's own description of itself, in the one format
 // that is not code. Today it is written FROM what nix already says (the
-// /export domains and the env binds daedalus.nix makes), which makes it a
-// mirror worth nothing on its own — and that is exactly the point of this
-// phase. It has to be provably identical to what the system is built from
-// before anything is allowed to build from it instead.
+// /export domains and the env binds daedalus.nix makes) — a faithful copy that
+// nothing reads yet. It has to be provably identical to what the system is
+// built from before anything is allowed to build from it instead (Phase 5).
 //
 // Formatting is load-bearing, like the registry's: two spaces, trailing
 // newline, keys in a stable order, so that changing one setting later
@@ -20,8 +19,8 @@ import type { BoxSettings } from '../settings/types'
 
 const PREAMBLE = {
   _generated:
-    'Managed by daedalus. Written from the box’s running configuration and committed by the Initialize action in Settings › Site repository. Hand edits are kept — daedalus only rewrites this file when you ask it to — but anything it does rewrite comes from the UI.',
-  _why: 'Configuration that is data, not code: what THIS box is, separated from the engine that builds it. Nix reads it as a pinned flake input, so a change here is a commit and a rebuild, and the repository stays the whole account of how the machine got the way it is.',
+    'Managed by daedalus. Written from the box’s running configuration by Settings › Site. Hand edits are kept — daedalus only rewrites this file when you ask it to — but anything it does rewrite comes from the UI.',
+  _why: 'Configuration that is data, not code: what THIS box is, separated from the engine that builds it. Nix reads this directory as part of the flake, so a change here is a commit and a rebuild, and the repository stays the whole account of how the machine got the way it is.',
 }
 
 export type SiteDocument = {
@@ -89,36 +88,33 @@ export function renderSiteFile(doc: SiteDocument): string {
 }
 
 /**
- * The repository's front page.
- *
- * Written once, at Initialize, and never rewritten: an operator who edits it
- * is describing their own box, and the mirror check deliberately does not
- * look at it. It exists because this repo gets pushed to a git host, where
- * the first thing anyone sees is a directory of JSON with no explanation of
- * what would happen if they edited it.
+ * The directory's README. Rewritten with every write, like the rest — it is
+ * short and says what the directory is, which is the one thing a person
+ * landing in `site/` from a `git log` needs before touching anything.
  */
 export function renderSiteReadme(doc: SiteDocument): string {
-  return `# ${doc.identity.hostname} — site
+  return `# site/ — what ${doc.identity.hostname} is, as data
 
-What this machine is, as data. Managed by
-[daedalus](https://daedalus.toscanini.me), the control plane running on it.
+The one directory in this configuration that
+[daedalus](https://github.com/santiagotoscanini/daedalus) writes. Nothing else
+in the repository is touched by it.
 
 | File | What it holds |
 |---|---|
 | \`site.json\` | The box's identity: domain, addresses, mail, the Cloudflare ids. |
-| \`apps.json\` | The app registry — one entry per self-hosted app, exported from daedalus's database. |
+| \`apps.json\` | The app registry — one entry per self-hosted app, exported from daedalus's database by an Apply. |
 
 **Do not hand-edit \`apps.json\`.** It is generated from daedalus's \`apps\`
 table and overwritten on the next Apply; daedalus reports the app as drifted
 until then. Edit it in the UI instead.
 
-\`site.json\` is written by Settings › Site repository. Editing it by hand is
-allowed — it is a plain JSON file and git is the audit trail — but daedalus
-will show it as differing from what the running system was built with, which
-is the honest reading until a rebuild.
+\`site.json\` is written by Settings › Site. Editing it by hand is allowed —
+it is a plain JSON file and git is the audit trail — but daedalus will show
+it as differing from what it would write, which is the honest reading until
+the two agree again.
 
-Nothing secret is in here. Credentials live in the box's own encrypted secret
-tree; when this repository gains a vault, the values in it are encrypted with
+Nothing secret is in here. Credentials live in the box's encrypted secret
+tree; when this directory gains a vault, its values are encrypted with
 \`sops\` and only the box can read them.
 `
 }

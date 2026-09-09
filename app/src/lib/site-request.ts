@@ -1,40 +1,42 @@
 import { defineBridge } from './bridge'
 
-// Asking the host to create, adopt and commit to the site repository.
+// Asking the host to write the site files into the site directory — the one
+// directory daedalus owns inside the operator's configuration repository.
 //
-// The repository lives on the host at `fleet.site.path` and this container
-// never mounts it — the same boundary as the configuration repo. So the app
-// does what it does for Apply: it renders the exact bytes and hands them over,
-// and the host writes, commits and (if there is a remote) pushes them.
+// This container never mounts that repository, so the app does what it does
+// for Apply: it renders the exact bytes and hands them over, and the host
+// writes them, stages them if the directory is under source control (a flake
+// sees only tracked files — that part is not optional), and commits only if
+// the request says so. Whether to commit is an operator preference the app
+// passes along on every request; the agent keeps no state about it.
 //
-// One verb so far. `init` is idempotent by construction: it creates the repo
-// if it is not there, writes the files it is given, and commits only what
-// actually changed — so running it again on a configured box is a no-op that
-// reports itself as one, and running it after a setting changed is how the
-// mirror catches up.
+// One verb. `write` is idempotent by construction: it writes what it is given,
+// stages, finds nothing changed and says so — so running it on a current
+// directory is a no-op that reports itself as one.
 //
 // Bridge mechanics (temp + rename, payload-before-trigger): lib/bridge.ts.
 
-export type SiteAction = 'init'
+export type SiteAction = 'write'
 export type SiteRequestState = 'idle' | 'running' | 'done' | 'failed'
 
-/** The names the host is allowed to write. Fixed HERE and checked again on
-    the host: a filename that travelled in a payload is a path traversal. */
-export const SITE_FILES = ['site.json', 'apps.json', 'README.md'] as const
+/** The names the host is allowed to write, fixed HERE and again in the
+    agent: a filename that travelled in a payload is a path traversal.
+    apps.json is deliberately absent — only an Apply writes it. */
+export const SITE_FILES = ['site.json', 'README.md'] as const
 export type SiteFileName = (typeof SITE_FILES)[number]
 
 export type SiteRequestStatus = {
   id: string | null
   action: SiteAction | null
   state: SiteRequestState
-  /** Drives the progress display: creating, writing, committing, pushing. */
+  /** Drives the progress display: validating, writing, staging, committing. */
   phase: string
   /** What happened, in the host's words — shown verbatim on success. */
   detail: string
   error: string
   startedAt: string | null
   finishedAt: string | null
-  /** The commit this run created; empty when it changed nothing. */
+  /** The commit this run created; empty when it changed nothing or did not commit. */
   commit: string | null
 }
 
@@ -58,27 +60,22 @@ export async function readSiteRequestStatus(): Promise<SiteRequestStatus> {
   return bridge.readStatus()
 }
 
-export async function requestSiteInit(input: {
-  /** `owner/name`, or empty for a repository with no remote at all. */
-  remote: string
-  /** Create `remote` on GitHub, private, before pushing to it. */
-  createRemote: boolean
+export async function requestSiteWrite(input: {
+  commit: boolean
   summary: string
   actor: string
   files: Record<SiteFileName, string>
 }): Promise<string> {
   return bridge.request(
     {
-      action: 'init' satisfies SiteAction,
-      remote: input.remote,
-      createRemote: input.createRemote,
+      action: 'write' satisfies SiteAction,
+      commit: input.commit,
       summary: input.summary,
       actor: input.actor,
     },
-    // The files ride as one payload document rather than one file each: the
-    // bridge stamps a single payload with the request's id, which is what
-    // makes a queued second request unable to touch the bytes this one is
-    // committing.
+    // One payload document keyed by name: the bridge stamps it with the
+    // request's id, which is what keeps a queued second request from touching
+    // the bytes this one is writing.
     `${JSON.stringify({ files: input.files }, null, 2)}\n`,
   )
 }

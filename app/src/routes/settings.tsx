@@ -10,7 +10,7 @@ import { Network } from '../components/settings/network'
 import { Repository } from '../components/settings/repository'
 import { TabBar } from '../components/tabs'
 import { fetchBoxSettings, fetchIntegrationStatus, fetchTheme } from '../server/settings'
-import { fetchSiteMirror } from '../server/site'
+import { fetchSiteState } from '../server/site'
 
 // Settings — what this box IS, as opposed to what it runs.
 //
@@ -30,7 +30,7 @@ const TABS = [
   { id: 'general', label: 'General' },
   { id: 'network', label: 'Network' },
   { id: 'integrations', label: 'Integrations' },
-  { id: 'repository', label: 'Site repository' },
+  { id: 'repository', label: 'Site' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'developer', label: 'Developer' },
 ] as const
@@ -58,9 +58,9 @@ export const Route = createFileRoute('/settings')({
       theme,
       settings,
       integrations: deps.tab === 'integrations' ? fetchIntegrationStatus() : null,
-      // Deferred for the same reason: it reads two files off disk and hashes
-      // them, for the one tab that shows the answer.
-      site: deps.tab === 'repository' ? fetchSiteMirror() : null,
+      // Deferred for the same reason: it renders site.json to hash it, for the
+      // one tab that shows the answer.
+      site: deps.tab === 'repository' ? fetchSiteState() : null,
     }
   },
   component: SettingsPage,
@@ -108,10 +108,10 @@ function SettingsPage() {
           ))}
         {tab === 'repository' &&
           (site === null ? (
-            <Repository settings={settings} mirror={null} />
+            <Repository settings={settings} site={null} />
           ) : (
-            <Await promise={site} fallback={<Repository settings={settings} mirror={null} />}>
-              {(mirror) => <Repository settings={settings} mirror={mirror} />}
+            <Await promise={site} fallback={<Repository settings={settings} site={null} />}>
+              {(state) => <Repository settings={settings} site={state} />}
             </Await>
           ))}
         {tab === 'appearance' && (

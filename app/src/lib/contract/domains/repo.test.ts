@@ -8,7 +8,7 @@ import { NO_REPO, repoFacts } from './repo'
 // the script's own output, so a change to either side that the other does
 // not follow fails here rather than as an empty tab.
 
-const envelope = (data: unknown, generatedAt = new Date().toISOString(), schemaVersion = 2) =>
+const envelope = (data: unknown, generatedAt = new Date().toISOString(), schemaVersion = 3) =>
   JSON.stringify({
     daedalusExport: 1,
     domain: 'repo',
@@ -45,19 +45,14 @@ describe('repoFacts', () => {
         upstream: { ref: 'origin/main', ahead: 1, behind: 0 },
         lastApply: null,
         site: {
-          path: '/home/o/selfhost/apps/daedalus/site',
-          state: 'ready',
-          remote: null,
-          branch: 'main',
-          head: {
-            rev: 'def456',
-            subject: 'site: initialize',
-            committedAt: '2026-09-09T11:00:00-03:00',
+          path: '/etc/nixos/site',
+          exists: true,
+          toplevel: '/etc/nixos',
+          inThisRepo: true,
+          files: {
+            'site.json': { status: 'clean', sha256: 'aa'.repeat(32) },
+            'apps.json': { status: 'absent', sha256: null },
           },
-          tree: { modified: 0, untracked: 0 },
-          upstream: null,
-          lastApply: null,
-          files: { site: { sha256: 'aa'.repeat(32), bytes: 812 }, apps: null },
         },
       }),
     )
@@ -68,10 +63,9 @@ describe('repoFacts', () => {
     expect(r.data.tree).toEqual({ modified: 2, untracked: 1 })
     expect(r.data.upstream?.ahead).toBe(1)
     expect(r.data.lastApply).toBeNull()
-    expect(r.data.site.state).toBe('ready')
-    expect(r.data.site.head?.subject).toBe('site: initialize')
-    expect(r.data.site.files.site?.bytes).toBe(812)
-    expect(r.data.site.files.apps).toBeNull()
+    expect(r.data.site.inThisRepo).toBe(true)
+    expect(r.data.site.files['site.json'].status).toBe('clean')
+    expect(r.data.site.files['apps.json'].status).toBe('absent')
   })
 
   it('reads a v1 snapshot — the shape published before the site repo existed', async () => {
@@ -94,8 +88,8 @@ describe('repoFacts', () => {
     expect(r.available).toBe(true)
     expect(r.data.branch).toBe('main')
     // A reader newer than its producer: the minutes between a switch and the
-    // timer's next run must read as "no site repo", not as an unavailable tab.
-    expect(r.data.site.state).toBe('absent')
+    // timer's next run must read as "no site directory", not as an unavailable tab.
+    expect(r.data.site.exists).toBe(false)
     expect(r.data.site.path).toBe('')
   })
 
@@ -109,14 +103,14 @@ describe('repoFacts', () => {
         tree: { modified: 0, untracked: 0 },
         upstream: null,
         lastApply: null,
-        site: { path: '/site', state: 'absent', files: { site: null, apps: null } },
+        site: { path: '/site', exists: false },
       }),
     )
     const r = await repoFacts()
     expect(r.available).toBe(true)
     expect(r.data.remote).toBeNull()
     expect(r.data.head).toBeNull()
-    expect(r.data.site.state).toBe('absent')
+    expect(r.data.site.exists).toBe(false)
     expect(r.data.site.path).toBe('/site')
   })
 

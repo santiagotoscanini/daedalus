@@ -1,60 +1,48 @@
 import { useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import type { BoxSettings } from '../../core/settings/types'
-import type { MirrorFile, SiteMirror } from '../../core/site'
-import type { SiteRepo } from '../../lib/contract/domains/repo'
-import { bytes as fmtBytes } from '../../lib/format'
-import { fetchSiteRequestStatus, initSiteRepo } from '../../server/site'
+import type { SiteFileView, SiteState } from '../../core/site'
+import type { RepoFacts, SiteDir } from '../../lib/contract/domains/repo'
+import { fetchSiteRequestStatus, setSiteCommit, writeSiteFiles } from '../../server/site'
 import { usePolledStatus } from '../status'
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Button } from '../ui/button'
-import { Checkbox } from '../ui/checkbox'
-import { Field, FieldDescription, FieldLabel } from '../ui/field'
-import { Input } from '../ui/input'
 import { Skeleton } from '../ui/skeleton'
+import { Switch } from '../ui/switch'
 import { Chip } from '../viz'
 import { Commit, Mono, Section, SourceNote, Unset, Value } from './shared'
 
-// The two repositories this box is described by.
+// The configuration repository, and the one directory in it that daedalus
+// writes.
 //
-// The SITE repository is the one daedalus writes: plain JSON, no code, and
-// the only thing a web UI has any business committing to. Nothing reads it
-// yet — it is a mirror of what the running system was built from, and it has
-// to be provably identical to that for a while before anything is allowed to
-// build from it instead. Which is why the interesting row on this tab is not
-// the commit; it is whether the bytes agree.
+// `site/` is data, not code: what this box is, as JSON. Nothing is built from
+// it yet — it is written FROM the running configuration, and it has to be
+// provably identical to that for a while before anything is allowed to build
+// from it instead. So the interesting row is not the commit; it is whether the
+// file is what this box would write now.
 //
-// The CONFIGURATION repository below is the flake a rebuild reads. What this
-// tab says about either is what the host's snapshot says; the container never
-// mounts either tree.
+// Source control is the operator's. What the host cannot delegate is staging:
+// a flake sees only tracked files, so a file written here and never added
+// fails the very rebuild it was written for. The tab says which of the three
+// states the directory is in, in one sentence each.
 
 export function Repository({
   settings,
-  mirror,
+  site,
 }: {
   settings: BoxSettings
-  /** Null while the byte comparison is still in flight. */
-  mirror: SiteMirror | null
+  /** Null while the digest comparison is still in flight. */
+  site: SiteState | null
 }) {
   const r = settings.repository
   const f = r.facts
-  const site = f.site
   const dirty = f.tree.modified + f.tree.untracked > 0
   const running = r.runningRevision?.replace(/-dirty$/, '') ?? null
   const headRuns = running !== null && f.head !== null && f.head.rev === running
-  // Only suggested while there is no origin to overwrite. Repointing a remote
-  // that already works is a different act from attaching one, and not one a
-  // form on a settings page should make easy.
-  const suggested =
-    site.remote === null ? `${settings.general.owner}/${settings.general.hostname}-site` : ''
 
   return (
     <div className="flex flex-col gap-6">
-      {site.state === 'ready' ? (
-        <ConfiguredSite site={site} mirror={mirror} suggested={suggested} />
-      ) : (
-        <NewSite site={site} suggested={suggested} />
-      )}
+      <SiteSection dir={f.site} site={site} />
 
       <Section
         title="Configuration repository"
@@ -175,7 +163,7 @@ export function Repository({
   )
 }
 
-function AgainstOrigin({ upstream }: { upstream: SiteRepo['upstream'] }) {
+function AgainstOrigin({ upstream }: { upstream: RepoFacts['upstream'] }) {
   if (upstream === null) return <Unset label="no upstream" />
   if (upstream.ahead === 0 && upstream.behind === 0) {
     return (
@@ -200,105 +188,120 @@ function AgainstOrigin({ upstream }: { upstream: SiteRepo['upstream'] }) {
   )
 }
 
-/* ── Before it exists ──────────────────────────────────────────────────── */
+/* ── The site directory ────────────────────────────────────────────────── */
 
 /**
- * The call to action, and the whole of what this box will do when it is
- * pressed — including the part that leaves the machine.
- *
- * Creating a repository on somebody's GitHub account is the first thing
- * daedalus does that is visible outside the house, so it is opt-in, spelled
- * out, and private. Leaving the remote empty is a real answer: a repository
- * with no origin is still an audit trail, and one can be added later.
+ * One of three sentences, and the switch that only makes sense in one of
+ * them. The sentences are the whole point: each state has a consequence the
+ * operator should know about before pressing anything.
  */
-function NewSite({ site, suggested }: { site: SiteRepo; suggested: string }) {
+function SourceControl({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
+  const router = useRouter()
+  const [pending, start] = useTransition()
+  const [commit, setCommit] = useState(site?.commit ?? false)
+  const versioned = dir.toplevel !== null
+
+  return (
+    <div className="flex flex-col gap-3 border-(--border-soft) border-t pt-4">
+      <p className="m-0 text-[0.82rem] leading-[1.55]">
+        {!dir.exists ? (
+          <>
+            The directory does not exist yet. Writing it for the first time creates it inside the
+            configuration repository above
+            {dir.path !== '' && (
+              <>
+                {' '}
+                at <Mono>{dir.path}</Mono>
+              </>
+            )}
+            .
+          </>
+        ) : !versioned ? (
+          <>
+            <Chip tone="warn">not under source control</Chip> The directory is not inside a git work
+            tree. daedalus writes the files and stops; this disk holds the only copy of what it
+            wrote.
+          </>
+        ) : !dir.inThisRepo ? (
+          <>
+            <Chip tone="warn">another repository</Chip> The directory is under source control in{' '}
+            <Mono>{dir.toplevel}</Mono>, not in the configuration repository above. daedalus stages
+            what it writes there; a rebuild of this flake cannot see it.
+          </>
+        ) : commit ? (
+          <>
+            <Chip tone="ok">committed on every write</Chip> After each write daedalus commits,
+            scoped to <Mono>site/</Mono>, and pushes if the branch has an upstream.
+          </>
+        ) : (
+          <>
+            <Chip tone="info">staged, not committed</Chip> daedalus stages what it writes — a flake
+            sees only tracked files, so that part is not optional — and leaves committing to you.
+            Your next <Mono>git commit</Mono> will sweep those files in.
+          </>
+        )}
+      </p>
+
+      {versioned && dir.inThisRepo && (
+        <label className="flex items-center gap-3 text-[0.82rem]" htmlFor="site-commit">
+          <Switch
+            id="site-commit"
+            checked={commit}
+            disabled={site === null || pending}
+            onCheckedChange={(v) => {
+              setCommit(v)
+              start(async () => {
+                await setSiteCommit({ data: v })
+                await router.invalidate()
+              })
+            }}
+          />
+          Commit after every write
+        </label>
+      )}
+    </div>
+  )
+}
+
+function SiteSection({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
   return (
     <>
-      <Alert>
-        <AlertTitle>Site repository: not configured</AlertTitle>
-        <AlertDescription>
-          The JSON repository daedalus manages — what this box is, its app registry, and later its
-          encrypted secrets — does not exist yet. Until it does, the configuration repository below
-          is the whole truth and every Apply is a commit to it. Creating it changes nothing about
-          how this box is built: it is written from the running configuration, and nothing reads it
-          back.
-        </AlertDescription>
-      </Alert>
+      {!dir.exists && (
+        <Alert>
+          <AlertTitle>Site directory: not written yet</AlertTitle>
+          <AlertDescription>
+            <code>site/</code> is the one directory in the configuration repository that daedalus
+            writes — what this box is, as JSON. Nothing is built from it yet: it is written from the
+            running configuration, so writing it changes nothing about how this box runs.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Section
-        title="Site repository"
-        description="Created here, on this disk, and pushed to a remote only if you name one."
-        rows={[
-          { k: 'Path', v: <Value v={site.path} /> },
-          {
-            k: 'State',
-            v:
-              site.state === 'not-a-repo' ? (
-                <span className="inline-flex items-center gap-2">
-                  <Chip tone="warn">not a repository</Chip>
-                  <span className="text-[0.78rem] text-(--text-muted)">
-                    a directory is there, git is not
-                  </span>
-                </span>
-              ) : (
-                <Chip tone="muted">does not exist</Chip>
-              ),
-          },
-        ]}
+        title="Site"
+        description="What this box is, as data. Written by daedalus into the configuration repository; nothing is built from it yet."
+        rows={[{ k: 'Path', v: <Value v={dir.path} /> }]}
       >
-        <InitForm suggested={suggested} verb="Initialize" />
+        <SiteFiles dir={dir} site={site} />
+        <SourceControl dir={dir} site={site} />
+        <WriteControl />
       </Section>
     </>
   )
 }
 
-/* ── Once it exists ────────────────────────────────────────────────────── */
-
-function ConfiguredSite({
-  site,
-  mirror,
-  suggested,
-}: {
-  site: SiteRepo
-  mirror: SiteMirror | null
-  suggested: string
-}) {
-  return (
-    <Section
-      title="Site repository"
-      description="What this box is, as data. Written by daedalus; nothing is built from it yet."
-      rows={[
-        { k: 'Path', v: <Value v={site.path} /> },
-        { k: 'Remote', v: <Value v={site.remote} /> },
-        { k: 'Branch', v: <Value v={site.branch} /> },
-        {
-          k: 'Head',
-          v:
-            site.head === null ? (
-              <Unset label="no commits yet" />
-            ) : (
-              <Commit rev={site.head.rev} subject={site.head.subject} at={site.head.committedAt} />
-            ),
-        },
-        { k: 'Against origin', v: <AgainstOrigin upstream={site.upstream} /> },
-      ]}
-    >
-      <Mirror mirror={mirror} />
-      <InitForm suggested={suggested} verb={suggested === '' ? 'Re-sync' : 'Attach and push'} />
-    </Section>
-  )
+const STATUS_TONE: Record<SiteFileView['status'], 'ok' | 'warn' | 'info' | 'muted'> = {
+  clean: 'ok',
+  staged: 'info',
+  modified: 'info',
+  untracked: 'warn',
+  unversioned: 'muted',
+  absent: 'muted',
 }
 
-/**
- * Whether the committed files are the files this box would write.
- *
- * The comparison is by sha256 of the exact bytes, both sides — daedalus
- * hashes its own render, the host publishes a hash of the committed file, and
- * neither reads the other's copy. "In sync" is therefore a claim about the
- * file, not about when it was last written.
- */
-function Mirror({ mirror }: { mirror: SiteMirror | null }) {
-  if (mirror === null) {
+function SiteFiles({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
+  if (!dir.exists) return null
+  if (site === null) {
     return (
       <div className="flex flex-col gap-2">
         <Skeleton className="h-5 w-full" />
@@ -306,42 +309,43 @@ function Mirror({ mirror }: { mirror: SiteMirror | null }) {
       </div>
     )
   }
-
   return (
     <div className="flex flex-col gap-2">
-      {mirror.files.map((file) => (
-        <MirrorRow key={file.name} file={file} />
+      {site.files.map((file) => (
+        <div
+          key={file.name}
+          className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
+        >
+          <Mono>{file.name}</Mono>
+          <span className="inline-flex items-center gap-2">
+            {file.current === false && <Chip tone="warn">differs</Chip>}
+            {file.current === true && <Chip tone="ok">current</Chip>}
+            <Chip tone={STATUS_TONE[file.status]}>{file.status}</Chip>
+          </span>
+        </div>
       ))}
-      <p className="m-0 text-[0.78rem] text-(--text-muted)">
-        {mirror.inSync
-          ? 'Byte-identical to what this box would write now. That is the whole claim the mirror makes, and the reason it is safe to build from later.'
-          : 'The repository differs from what this box would write now. Re-sync commits the difference; nothing is rebuilt either way.'}
-      </p>
+      {site.files.some((f) => f.status === 'untracked') && (
+        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+          An untracked file is invisible to a rebuild. This should not happen — daedalus stages what
+          it writes — so something else put it there, or a <Mono>git reset</Mono> undid the add.
+        </p>
+      )}
+      {site.files.some((f) => f.current === false) && (
+        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+          <Mono>site.json</Mono> is not what this box would write now — the configuration changed
+          since, or it was edited by hand. Writing it again brings the two back together; nothing is
+          rebuilt.
+        </p>
+      )}
+      {site.files.find((f) => f.name === 'apps.json')?.status === 'absent' && (
+        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+          <Mono>apps.json</Mono> is written only by an Apply, and from here only once nix reads the
+          registry from this directory.
+        </p>
+      )}
     </div>
   )
 }
-
-function MirrorRow({ file }: { file: MirrorFile }) {
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-      <Mono>{file.name}</Mono>
-      <span className="inline-flex items-center gap-2">
-        <Chip tone={file.state === 'in-sync' ? 'ok' : file.state === 'missing' ? 'warn' : 'info'}>
-          {file.state === 'in-sync' ? 'in sync' : file.state}
-        </Chip>
-        <span className="text-[0.74rem] text-(--dim)">
-          {file.committed === null
-            ? `would write ${fmtBytes(file.rendered.bytes)}`
-            : file.state === 'in-sync'
-              ? fmtBytes(file.committed.bytes)
-              : `${fmtBytes(file.committed.bytes)} committed, ${fmtBytes(file.rendered.bytes)} rendered`}
-        </span>
-      </span>
-    </div>
-  )
-}
-
-/* ── The action ────────────────────────────────────────────────────────── */
 
 const IDLE = {
   id: null,
@@ -355,91 +359,45 @@ const IDLE = {
   commit: null,
 }
 
-function InitForm({ suggested, verb }: { suggested: string; verb: string }) {
-  const [remote, setRemote] = useState(suggested)
-  const [create, setCreate] = useState(false)
-  const [refusal, setRefusal] = useState('')
-  // Shown only when there is a remote to offer — before the repository exists,
-  // or after, while it still has no origin.
-  const offerRemote = suggested !== ''
-
+function WriteControl() {
   const router = useRouter()
+  const [refusal, setRefusal] = useState('')
   const { status, running, start } = usePolledStatus({
     initial: IDLE,
     fetch: fetchSiteRequestStatus,
     // The host refreshes the repository snapshot BEFORE it reports done, so
-    // the facts this re-reads are already current — the tab does not spend
-    // five minutes telling the operator that the repository they just made
-    // does not exist.
+    // the facts this re-reads are already current.
     onSettle: () => {
       void router.invalidate()
     },
   })
 
   return (
-    <form
-      className="flex flex-col gap-4 border-(--border-soft) border-t pt-4"
-      onSubmit={(e) => {
-        e.preventDefault()
-        setRefusal('')
-        start(async () => {
-          const out = await initSiteRepo({ data: { remote: remote.trim(), createRemote: create } })
-          if (!out.ok) {
-            setRefusal(out.reason)
-            return null
-          }
-          return out.id
-        })
-      }}
-    >
-      {offerRemote && (
-        <>
-          <Field>
-            <FieldLabel htmlFor="site-remote">Remote</FieldLabel>
-            <Input
-              id="site-remote"
-              value={remote}
-              placeholder="owner/name"
-              disabled={running}
-              onChange={(e) => {
-                setRemote(e.target.value)
-              }}
-            />
-            <FieldDescription>
-              Where to push it, written <code>owner/name</code>. Leave it empty for a repository
-              that lives only on this disk — which is not snapshotted, so it would be the only copy.
-            </FieldDescription>
-          </Field>
-
-          <Field orientation="horizontal">
-            <FieldLabel htmlFor="site-create" className="order-2 font-normal">
-              Create it on GitHub if it does not exist. It will be private.
-            </FieldLabel>
-            <Checkbox
-              id="site-create"
-              className="order-1"
-              checked={create}
-              disabled={running || remote.trim() === ''}
-              onCheckedChange={(v) => {
-                setCreate(v === true)
-              }}
-            />
-          </Field>
-        </>
+    <div className="flex flex-wrap items-center gap-3">
+      <Button
+        size="sm"
+        disabled={running}
+        onClick={() => {
+          setRefusal('')
+          start(async () => {
+            const out = await writeSiteFiles()
+            if (!out.ok) {
+              setRefusal(out.reason)
+              return null
+            }
+            return out.id
+          })
+        }}
+      >
+        {running ? (status.phase === '' ? 'working…' : `${status.phase}…`) : 'Write site.json'}
+      </Button>
+      {refusal !== '' && <span className="text-[0.78rem] text-danger">{refusal}</span>}
+      {refusal === '' && status.state === 'failed' && (
+        <span className="text-[0.78rem] text-danger">{status.error}</span>
       )}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" size="sm" disabled={running}>
-          {running ? (status.phase === '' ? 'working…' : `${status.phase}…`) : verb}
-        </Button>
-        {refusal !== '' && <span className="text-[0.78rem] text-danger">{refusal}</span>}
-        {refusal === '' && status.state === 'failed' && (
-          <span className="text-[0.78rem] text-danger">{status.error}</span>
-        )}
-        {refusal === '' && status.state === 'done' && status.detail !== '' && (
-          <span className="text-[0.78rem] text-(--text-muted)">{status.detail}</span>
-        )}
-      </div>
-    </form>
+      {refusal === '' && status.state === 'done' && status.detail !== '' && (
+        <span className="text-[0.78rem] text-(--text-muted)">{status.detail}</span>
+      )}
+    </div>
   )
 }

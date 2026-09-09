@@ -39,4 +39,6 @@ export const SETTING_KEYS = {
   theme: 'ui.theme',
   /** The off-box project list (lib/external-apps.ts is the seed). */
   externalApps: 'apps.external',
+  /** Whether the host commits what it writes under site/ (it always stages). */
+  siteCommit: 'site.commit',
 } as const
