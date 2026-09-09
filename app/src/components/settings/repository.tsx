@@ -42,13 +42,18 @@ export function Repository({
   const dirty = f.tree.modified + f.tree.untracked > 0
   const running = r.runningRevision?.replace(/-dirty$/, '') ?? null
   const headRuns = running !== null && f.head !== null && f.head.rev === running
+  // Only suggested while there is no origin to overwrite. Repointing a remote
+  // that already works is a different act from attaching one, and not one a
+  // form on a settings page should make easy.
+  const suggested =
+    site.remote === null ? `${settings.general.owner}/${settings.general.hostname}-site` : ''
 
   return (
     <div className="flex flex-col gap-6">
       {site.state === 'ready' ? (
-        <ConfiguredSite site={site} mirror={mirror} />
+        <ConfiguredSite site={site} mirror={mirror} suggested={suggested} />
       ) : (
-        <NewSite site={site} settings={settings} />
+        <NewSite site={site} suggested={suggested} />
       )}
 
       <Section
@@ -206,9 +211,7 @@ function AgainstOrigin({ upstream }: { upstream: SiteRepo['upstream'] }) {
  * out, and private. Leaving the remote empty is a real answer: a repository
  * with no origin is still an audit trail, and one can be added later.
  */
-function NewSite({ site, settings }: { site: SiteRepo; settings: BoxSettings }) {
-  const suggested = `${settings.general.owner}/${settings.general.hostname}-site`
-
+function NewSite({ site, suggested }: { site: SiteRepo; suggested: string }) {
   return (
     <>
       <Alert>
@@ -251,7 +254,15 @@ function NewSite({ site, settings }: { site: SiteRepo; settings: BoxSettings }) 
 
 /* ── Once it exists ────────────────────────────────────────────────────── */
 
-function ConfiguredSite({ site, mirror }: { site: SiteRepo; mirror: SiteMirror | null }) {
+function ConfiguredSite({
+  site,
+  mirror,
+  suggested,
+}: {
+  site: SiteRepo
+  mirror: SiteMirror | null
+  suggested: string
+}) {
   return (
     <Section
       title="Site repository"
@@ -273,7 +284,7 @@ function ConfiguredSite({ site, mirror }: { site: SiteRepo; mirror: SiteMirror |
       ]}
     >
       <Mirror mirror={mirror} />
-      <InitForm suggested="" verb="Re-sync" />
+      <InitForm suggested={suggested} verb={suggested === '' ? 'Re-sync' : 'Attach and push'} />
     </Section>
   )
 }
@@ -348,7 +359,9 @@ function InitForm({ suggested, verb }: { suggested: string; verb: string }) {
   const [remote, setRemote] = useState(suggested)
   const [create, setCreate] = useState(false)
   const [refusal, setRefusal] = useState('')
-  const first = suggested !== ''
+  // Shown only when there is a remote to offer — before the repository exists,
+  // or after, while it still has no origin.
+  const offerRemote = suggested !== ''
 
   const router = useRouter()
   const { status, running, start } = usePolledStatus({
@@ -379,7 +392,7 @@ function InitForm({ suggested, verb }: { suggested: string; verb: string }) {
         })
       }}
     >
-      {first && (
+      {offerRemote && (
         <>
           <Field>
             <FieldLabel htmlFor="site-remote">Remote</FieldLabel>
