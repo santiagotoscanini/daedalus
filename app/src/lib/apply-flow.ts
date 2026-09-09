@@ -45,6 +45,7 @@ async function locked(actor: string): Promise<ApplyOutcome> {
   const { manifestEntries } = await import('./nix-manifest')
   const { requestApply, summarise, readApplyStatus } = await import('./apply')
   const { renderRegistryFile } = await import('./registry-file')
+  const { readSetting, SETTING_KEYS } = await import('./repo/settings')
 
   // Refuse while one is in flight. The host script holds fleet.rebuildLock, so
   // a second apply could not corrupt anything — it would simply queue behind
@@ -89,6 +90,11 @@ async function locked(actor: string): Promise<ApplyOutcome> {
     fileBody: renderRegistryFile(toRegistryExport(records)),
     summary: summarise(changed),
     actor,
+    // Whether the host commits the write under site/ — the same switch the
+    // Site tab sets. Off means staged and left to the operator.
+    commit:
+      (await readSetting(SETTING_KEYS.siteCommit, (v): v is boolean => typeof v === 'boolean')) ??
+      false,
   })
   pending = { id, at: Date.now() }
 

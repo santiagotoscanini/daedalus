@@ -49,8 +49,13 @@ export async function requestApply(input: {
   fileBody: string
   summary: string
   actor: string
+  /** The operator's switch: commit what was written under site/ (staging is not optional). */
+  commit: boolean
 }): Promise<string> {
-  return bridge.request({ actor: input.actor, summary: input.summary }, input.fileBody)
+  return bridge.request(
+    { actor: input.actor, summary: input.summary, commit: input.commit },
+    input.fileBody,
+  )
 }
 
 /** Human-readable one-liner for the commit message. */

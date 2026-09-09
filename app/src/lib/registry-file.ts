@@ -1,6 +1,6 @@
 import type { ManifestApp } from './nix-manifest'
 
-// Renders stacks/apps/apps.json — the exact bytes that land in the flake.
+// Renders site/apps.json — the exact bytes that land in the configuration repo.
 //
 // This lives in TypeScript, not in the host script, on purpose. The host agent
 // should know as little as possible: it copies a file, commits it, and
