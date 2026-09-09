@@ -1,18 +1,22 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { Await, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState, useTransition } from 'react'
 
 import { PageHead } from '../components/page'
 import { Appearance } from '../components/settings/appearance'
+import { Developer } from '../components/settings/developer'
+import { General } from '../components/settings/general'
+import { Integrations } from '../components/settings/integrations'
+import { Network } from '../components/settings/network'
+import { Repository } from '../components/settings/repository'
 import { TabBar } from '../components/tabs'
-import { fetchTheme } from '../server/settings'
+import { fetchBoxSettings, fetchIntegrationStatus, fetchTheme } from '../server/settings'
 
 // Settings — what this box IS, as opposed to what it runs.
 //
-// The page frame lands before the sections that fill it, so the tab shape is
-// fixed now and each section arrives against it rather than reshaping the
-// page. Appearance is the only one that is editable today; the rest of this
-// page becomes the read-only view of the box's identity, network and
-// integrations, and later the place those are configured from.
+// Read-only, apart from Appearance. Each section shows what already reaches
+// the container — env bound by daedalus.nix, the /export domains, the host
+// snapshots — and says where it read it from. Nothing here is guessed, and
+// nothing here is editable until the site repository exists to edit it in.
 //
 // The dividing line every section on this page has to respect: a setting the
 // NixOS side consumes belongs in the site repository, where changing it is a
@@ -21,7 +25,14 @@ import { fetchTheme } from '../server/settings'
 // and nothing rebuilds. Appearance is deliberately the second kind, which is
 // why it can save on click with no Apply bar.
 
-const TABS = [{ id: 'appearance', label: 'Appearance' }] as const
+const TABS = [
+  { id: 'general', label: 'General' },
+  { id: 'network', label: 'Network' },
+  { id: 'integrations', label: 'Integrations' },
+  { id: 'repository', label: 'Site repository' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'developer', label: 'Developer' },
+] as const
 
 type SettingsTab = (typeof TABS)[number]['id']
 
@@ -36,16 +47,25 @@ export const Route = createFileRoute('/settings')({
   validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
   }),
-  // Awaited, unlike the dashboards: this page is small, has no upstream to
-  // wait on, and a skeleton for one database row would be theatre.
-  loader: async () => ({ theme: await fetchTheme() }),
+  loaderDeps: ({ search }) => ({ tab: search.tab }),
+  // The facts are awaited: files and one database row, no upstream to wait
+  // on. The integration checks are not — they ask Cloudflare and GitHub, so
+  // they stream in behind the page, and only for the tab that shows them.
+  loader: async ({ deps }) => {
+    const [theme, settings] = await Promise.all([fetchTheme(), fetchBoxSettings()])
+    return {
+      theme,
+      settings,
+      integrations: deps.tab === 'integrations' ? fetchIntegrationStatus() : null,
+    }
+  },
   component: SettingsPage,
 })
 
 function SettingsPage() {
-  const { theme } = Route.useLoaderData()
+  const { theme, settings, integrations } = Route.useLoaderData()
   const search = Route.useSearch()
-  const tab: SettingsTab = isTab(search.tab) ? search.tab : 'appearance'
+  const tab: SettingsTab = isTab(search.tab) ? search.tab : 'general'
 
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -58,8 +78,8 @@ function SettingsPage() {
   return (
     <>
       <PageHead title="Settings">
-        How this box is configured, and how it looks. Appearance is stored for this control plane
-        alone — it changes nothing the system runs.
+        How this box is configured, and how it looks. Everything but Appearance is read from what
+        the system declares; Appearance is stored for this control plane alone.
       </PageHead>
 
       <TabBar
@@ -69,6 +89,20 @@ function SettingsPage() {
       />
 
       <div className="mt-6 max-w-4xl pb-16">
+        {tab === 'general' && <General settings={settings} />}
+        {tab === 'network' && <Network settings={settings} />}
+        {tab === 'integrations' &&
+          (integrations === null ? (
+            <Integrations settings={settings.integrations} status={null} />
+          ) : (
+            <Await
+              promise={integrations}
+              fallback={<Integrations settings={settings.integrations} status={null} />}
+            >
+              {(status) => <Integrations settings={settings.integrations} status={status} />}
+            </Await>
+          ))}
+        {tab === 'repository' && <Repository settings={settings} />}
         {tab === 'appearance' && (
           <Appearance
             value={choice}
@@ -83,6 +117,7 @@ function SettingsPage() {
             }}
           />
         )}
+        {tab === 'developer' && <Developer settings={settings} />}
       </div>
     </>
   )

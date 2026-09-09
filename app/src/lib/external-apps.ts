@@ -1,11 +1,14 @@
 // Live projects hosted OFF this box — GitHub Pages, Vercel — so the app list
 // shows everything that is running somewhere, not only what this server runs.
 //
-// A hand-edited literal, deliberately: nothing on the box builds, serves or
-// monitors these, so there is no registry row or nix manifest entry to derive
-// them from. This array IS the source of truth — add an entry to add a card.
-// The hostname rule ("nix binds every hostname") does not apply here for the
-// same reason: the nix side has never heard of these hosts.
+// Nothing on the box builds, serves or monitors these, so there is no
+// registry row or nix manifest entry to derive them from, and nix never
+// consumes the list — which makes it a preference, not site configuration.
+// It lives in the settings store under `apps.external` (core/settings/
+// external-apps.ts reads it); this array is the SEED that renders until a
+// row exists there. The hostname rule ("nix binds every hostname") does not
+// apply here for the same reason: the nix side has never heard of these
+// hosts.
 
 import { OWNER } from './site'
 
@@ -50,7 +53,7 @@ export type ExternalApp = {
   repo: string | null
 }
 
-export const EXTERNAL_APPS: ExternalApp[] = [
+export const DEFAULT_EXTERNAL_APPS: ExternalApp[] = [
   {
     id: 'santree',
     name: 'santree',
@@ -89,5 +92,23 @@ export const EXTERNAL_APPS: ExternalApp[] = [
   },
 ]
 
-export const externalApp = (id: string): ExternalApp | null =>
-  EXTERNAL_APPS.find((e) => e.id === id) ?? null
+/**
+ * The guard a stored list is read back through. Structural, field by field:
+ * a row written by an older shape, or by hand with a platform this build
+ * does not know, degrades to the seed rather than reaching a component.
+ */
+export function isExternalAppList(v: unknown): v is ExternalApp[] {
+  if (!Array.isArray(v)) return false
+  return v.every((e: unknown) => {
+    if (e === null || typeof e !== 'object') return false
+    const o = e as Record<string, unknown>
+    return (
+      typeof o.id === 'string' &&
+      typeof o.name === 'string' &&
+      typeof o.host === 'string' &&
+      typeof o.description === 'string' &&
+      PLATFORMS.some((p) => p.id === o.platform) &&
+      (o.repo === null || typeof o.repo === 'string')
+    )
+  })
+}

@@ -75,7 +75,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
         }
         actions={
           <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
-            <a href="https://registry.toscanini.me" target="_blank" rel="noreferrer">
+            <a href={d.url} target="_blank" rel="noreferrer">
               ↗ Open
             </a>
           </Button>
@@ -224,7 +224,7 @@ export function PackagesView({ d }: { d: PackagesData }) {
         }
         actions={
           <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
-            <a href="https://verdaccio.toscanini.me" target="_blank" rel="noreferrer">
+            <a href={d.url} target="_blank" rel="noreferrer">
               ↗ Open
             </a>
           </Button>

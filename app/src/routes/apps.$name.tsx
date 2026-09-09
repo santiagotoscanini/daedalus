@@ -125,6 +125,7 @@ function AppDetail() {
     workspace,
     workspaceRoot,
     workspaceStatus,
+    stateRoot,
     tabData,
   } = Route.useLoaderData()
   const router = useRouter()
@@ -342,7 +343,13 @@ function AppDetail() {
       )}
 
       {tab === 'settings' && (
-        <Settings app={app} readOnly={readOnly} patch={patch} takenHostnames={takenHostnames} />
+        <Settings
+          app={app}
+          readOnly={readOnly}
+          patch={patch}
+          takenHostnames={takenHostnames}
+          stateRoot={stateRoot}
+        />
       )}
 
       {tab === 'secrets' && (

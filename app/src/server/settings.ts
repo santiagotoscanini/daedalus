@@ -1,12 +1,29 @@
 import { createServerFn } from '@tanstack/react-start'
+import type { BoxSettings, IntegrationStatus } from '../core/settings/types'
 import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../lib/theme'
 
-// Server functions behind the preferences in Settings. Values here never reach
-// the site repo and never trigger a rebuild — see the `settings` table comment
-// in lib/schema.ts for where that line is drawn.
+// Server functions behind Settings: the read-only facts (core/settings), the
+// live integration checks, and the one preference that is editable. Values
+// in the preference store never reach the site repo and never trigger a
+// rebuild — see the `settings` table comment in lib/schema.ts for where that
+// line is drawn.
 //
 // Value imports are dynamic so the database module is not pulled into a client
 // bundle by a type import, matching server/registry.ts.
+
+export const fetchBoxSettings = createServerFn().handler(async (): Promise<BoxSettings> => {
+  const { makeCtx } = await import('../core/ctx')
+  const { readBoxSettings } = await import('../core/settings')
+  return readBoxSettings(await makeCtx())
+})
+
+export const fetchIntegrationStatus = createServerFn().handler(
+  async (): Promise<IntegrationStatus> => {
+    const { makeCtx } = await import('../core/ctx')
+    const { integrationStatus } = await import('../core/settings/integrations')
+    return integrationStatus(await makeCtx())
+  },
+)
 
 export const fetchTheme = createServerFn().handler(async (): Promise<ThemeChoice> => {
   const { readSetting, SETTING_KEYS } = await import('../lib/repo/settings')

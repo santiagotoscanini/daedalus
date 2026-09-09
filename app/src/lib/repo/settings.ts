@@ -37,4 +37,6 @@ export async function writeSetting(key: string, value: unknown): Promise<void> {
 /** The keys this app uses, so a typo is a compile error rather than a default. */
 export const SETTING_KEYS = {
   theme: 'ui.theme',
+  /** The off-box project list (lib/external-apps.ts is the seed). */
+  externalApps: 'apps.external',
 } as const

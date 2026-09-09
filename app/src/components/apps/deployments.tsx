@@ -55,7 +55,7 @@ export function Deployments({
               <RunCiButton repo={app.name} publish={td.publish} />
               <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
                 <a
-                  href={`https://github.com/santiagotoscanini/${app.name}/actions`}
+                  href={`https://github.com/${OWNER}/${app.name}/actions`}
                   target="_blank"
                   rel="noreferrer"
                   className="hover:no-underline"

@@ -37,6 +37,8 @@ export type ImagesData = {
   version: string | null
   gap: VersionGap
   reachable: boolean
+  /** Where it is published, from the manifest — the header's link. */
+  url: string
 }
 
 export type PackagesData = {
@@ -51,6 +53,7 @@ export type PackagesData = {
   running: RunningVersion
   gap: VersionGap
   reachable: boolean
+  url: string
 }
 
 export async function loadImages(base: (app: string) => string): Promise<ImagesData> {
@@ -91,6 +94,7 @@ export async function loadImages(base: (app: string) => string): Promise<ImagesD
     version,
     gap: await versionGap('project-zot/zot', version),
     reachable: catalog !== null,
+    url: base('registry'),
   }
 }
 
@@ -129,5 +133,6 @@ export async function loadPackages(base: (app: string) => string): Promise<Packa
     running,
     gap: await versionGap('verdaccio/verdaccio', running.version),
     reachable: npm !== null,
+    url: base('verdaccio'),
   }
 }

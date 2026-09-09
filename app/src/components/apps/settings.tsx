@@ -16,11 +16,14 @@ export function Settings({
   readOnly,
   patch,
   takenHostnames,
+  stateRoot,
 }: {
   app: AppRecord
   readOnly: boolean
   patch: (p: Record<string, unknown>) => void
   takenHostnames: NonNullable<LoaderData>['takenHostnames']
+  /** `fleet.stateRoot` on the host, from the site export. */
+  stateRoot: string
 }) {
   return (
     <BoardGrid>
@@ -270,7 +273,14 @@ export function Settings({
         </p>
       </Board>
 
-      {!readOnly && <RemovePanel name={app.name} postgres={app.postgres} storage={app.storage} />}
+      {!readOnly && (
+        <RemovePanel
+          name={app.name}
+          postgres={app.postgres}
+          storage={app.storage}
+          dataDir={`${stateRoot}/apps/${app.name}/data`}
+        />
+      )}
     </BoardGrid>
   )
 }
@@ -293,10 +303,12 @@ function RemovePanel({
   name,
   postgres,
   storage,
+  dataDir,
 }: {
   name: string
   postgres: boolean
   storage: boolean
+  dataDir: string
 }) {
   const router = useRouter()
   const confirmId = useId()
@@ -331,7 +343,7 @@ function RemovePanel({
             <b>Not removed:</b>{' '}
             {[
               postgres && `the ${name} database and role on the shared cluster`,
-              storage && `/home/santiago/selfhost/apps/${name}/data`,
+              storage && dataDir,
               `stacks/apps/secrets/${name}/`,
               `any stacks/apps/${name}-env.sops`,
               'the GitHub repo and its published images',

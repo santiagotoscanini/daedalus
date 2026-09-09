@@ -27,7 +27,9 @@ export const fetchApps = createServerFn().handler(async () => {
   // appStatuses degrades per-app rather than rejecting, so a prometheus
   // outage costs the status column, not the page.
   const { appIcon, siteIcon } = await import('../lib/app-icon')
-  const { EXTERNAL_APPS } = await import('../lib/external-apps')
+  const { makeCtx } = await import('../core/ctx')
+  const { listExternalApps } = await import('../core/settings/external-apps')
+  const EXTERNAL_APPS = await listExternalApps(await makeCtx())
   const { readWorkspaces, readWorkspaceRequestStatus, workspaceFor } = await import(
     '../lib/workspaces'
   )
@@ -154,6 +156,7 @@ export const fetchApp = createServerFn()
       workspaces,
       workspaceStatus,
       deployShot,
+      site,
     ] = await Promise.all([
       appStatuses([name]),
       readApplyStatus(),
@@ -174,6 +177,7 @@ export const fetchApp = createServerFn()
       readWorkspaces(),
       readWorkspaceRequestStatus(),
       import('../lib/dashboard/shotter').then(({ deployShot: read }) => read(name)),
+      import('../lib/contract/domains/site').then(({ siteIdentity }) => siteIdentity()),
     ])
 
     return {
@@ -184,6 +188,10 @@ export const fetchApp = createServerFn()
       // From the snapshot when it has published, from the env binding before
       // the first publish — same value, different freshness.
       workspaceRoot: workspaces.data.root || (process.env.WORKSPACE_ROOT ?? ''),
+      // Where an app's data dir lives on the host, for the one panel that
+      // names it (what a removal leaves behind). From the export, so the
+      // path is the nix fact rather than a string typed into a component.
+      stateRoot: site.data.stateRoot,
       workspaceStatus,
       takenHostnames,
       // Authoritative record from the app's own deploy unit — a deploy also
@@ -702,9 +710,10 @@ export const cloneWorkspaceFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { requestWorkspaceClone } = await import('../lib/workspaces')
     const { listApps } = await import('../lib/repo/apps')
-    const { EXTERNAL_APPS } = await import('../lib/external-apps')
+    const { makeCtx } = await import('../core/ctx')
+    const { listExternalApps } = await import('../core/settings/external-apps')
 
-    const apps = await listApps()
+    const [apps, EXTERNAL_APPS] = await Promise.all([listApps(), makeCtx().then(listExternalApps)])
     const offered = new Set([
       ...apps.map((a) => `${OWNER}/${a.name}`.toLowerCase()),
       ...EXTERNAL_APPS.flatMap((e) => (e.repo === null ? [] : [e.repo.toLowerCase()])),

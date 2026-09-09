@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { makeCtx } from '../core/ctx'
+import { findExternalApp } from '../core/settings/external-apps'
 import { appIcon, type ResolvedIcon, siteIcon } from '../lib/app-icon'
-import { externalApp } from '../lib/external-apps'
 import { effectiveHostname } from '../lib/hostname'
 import { getApp } from '../lib/repo/apps'
 
@@ -26,7 +27,7 @@ export const Route = createFileRoute('/api/app-icon/$name')({
         // order that makes external ids forbidden from colliding with app
         // names (see lib/external-apps.ts).
         const record = await getApp(params.name)
-        const external = record ? null : externalApp(params.name)
+        const external = record ? null : await findExternalApp(await makeCtx(), params.name)
         if (!record && !external) return miss
 
         const icon: ResolvedIcon | null = record

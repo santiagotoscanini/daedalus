@@ -79,7 +79,18 @@ has been pushed. Commit often.
   (isomorphic formatters), `lib/keys.ts` (the DASH_* secrets
   accessor — the one process.env read, kept out of format.ts so
   components can import it).
-- `src/server/` — server functions (category, lemonade, registry).
+- `src/core/` — the productization core (plan, Phases 2+). `ctx.ts` is
+  the capability set a reader is handed instead of `process.env`
+  (env, secrets, snapshots, the preferences store, http, loki) —
+  server-only, imported dynamically like `lib/repo/*`; every module
+  loader receives one from Phase 10 on. `core/settings/` is the
+  read-only reader behind `/settings` (`index.ts` assembles env +
+  /export + snapshots into `BoxSettings`; `integrations.ts` is the
+  deferred, 5-min-cached live token checks; `external-apps.ts` reads
+  the off-box list from the store with `lib/external-apps.ts` as seed).
+  `types.ts` is client-safe; nothing else in `core/` is.
+- `src/server/` — server functions (category, lemonade, registry,
+  settings).
 - `src/lib/repo/` — drizzle repositories (apps, deployments);
   `src/lib/schema.ts` + `db.ts` for the database side
   (`pnpm db:generate` / `db:migrate` for schema changes).
@@ -92,7 +103,9 @@ has been pushed. Commit often.
 - Host facts arrive via **read-only /run snapshot mounts** (env at
   /env-snapshot, image labels at /images, SMART/ZFS at /system, CI at
   /ci, deploy state at /deploy-state, project workspace clones at
-  /workspaces) and the nix manifest at /registry/manifest.json. Never reach around them (no SSH-ing the
+  /workspaces, the configuration repo's git facts at /repo — remote,
+  head, dirty counts, drift, last Apply commit; never the repo itself)
+  and the nix manifest at /registry/manifest.json. Never reach around them (no SSH-ing the
   host, no reading host paths directly) — if a page needs a new host
   fact, extend the matching snapshot script in `stacks/daedalus/host/`
   and its nix wiring.
