@@ -367,7 +367,9 @@ function Shell({ children }: { children: ReactNode }) {
         )}
         data-open={open ? 'true' : 'false'}
       >
-        <div className="flex items-center gap-1.5">
+        {/* Collapsed, the row has no room beside the logo, so it becomes a
+            column: logo above, the chevron beneath it. */}
+        <div className="flex items-center gap-1.5 nav-collapsed:flex-col nav-collapsed:gap-2">
           <Link to="/apps" className={BRAND}>
             <img src="/icon.svg" alt="" width={30} height={30} className="flex-none" />
             <span className="nav-collapsed:hidden">
@@ -377,6 +379,22 @@ function Shell({ children }: { children: ReactNode }) {
               </small>
             </span>
           </Link>
+          {/* Desktop only: the drawer is dismissed by the scrim, not by this.
+              An icon and nothing else — `<` to close, `>` to open — beside
+              the wordmark rather than a labelled row of its own at the foot
+              of the rail, which cost a whole entry to say one word. */}
+          <button
+            type="button"
+            className={cn(
+              ICON_BUTTON,
+              'size-8 text-(--dim) max-rail:hidden nav-collapsed:[&>svg]:rotate-180',
+            )}
+            onClick={toggle}
+            aria-pressed={collapsed}
+            aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          >
+            <NavIcon name="chevron" size={17} />
+          </button>
           <button
             ref={closeButton}
             type="button"
@@ -467,29 +485,6 @@ function Shell({ children }: { children: ReactNode }) {
             <span className={NAV_LABEL}>Settings</span>
           </Link>
         </nav>
-
-        {/* Desktop only: the drawer is dismissed by the scrim, not by this. */}
-        <button
-          type="button"
-          className={cn(
-            'flex cursor-pointer items-center gap-[0.7rem] rounded-[9px] border-0 bg-transparent',
-            'px-[0.7rem] py-2 text-left text-(--dim) text-[0.82rem] [font:inherit]',
-            'hover:bg-(--panel-2) hover:text-(--text-muted)',
-            'focus-visible:outline-2 focus-visible:outline-(--brand-dim) focus-visible:outline-offset-2',
-            // Collapsing is meaningless for a drawer — it is already collapsed
-            // to nothing, and the scrim and the close button both dismiss it.
-            'max-rail:hidden',
-            'nav-collapsed:justify-center nav-collapsed:px-0 nav-collapsed:[&>svg]:rotate-180',
-          )}
-          onClick={toggle}
-          aria-pressed={collapsed}
-          // The label is hidden once collapsed, which would leave an icon-only
-          // button with no name.
-          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-        >
-          <NavIcon name="chevron" size={17} />
-          <span className={NAV_LABEL}>Collapse</span>
-        </button>
       </aside>
 
       <main className="min-w-0 px-[clamp(1rem,3.5vw,2.75rem)] pt-[1.9rem] pb-28 max-rail:pb-32">
