@@ -88,6 +88,15 @@ has been pushed. Commit often.
   /export + snapshots into `BoxSettings`; `integrations.ts` is the
   deferred, 5-min-cached live token checks; `external-apps.ts` reads
   the off-box list from the store with `lib/external-apps.ts` as seed).
+  `core/site/` is the site repository — the JSON description of this
+  box that daedalus creates and commits (`fleet.site.path`, the
+  `site-request.json` bridge). `file.ts` renders the exact bytes the
+  host writes; `index.ts` compares them against the digests
+  `/repo/repo.json` publishes, which is what "in sync" means on the
+  tab. **apps.json in it is copied from `/export/applied.json`, never
+  re-rendered from the apps table**: the mirror's claim is that it holds
+  what the running system was BUILT from, and between an edit and an
+  Apply those two legitimately differ.
   `types.ts` is client-safe; nothing else in `core/` is.
 - `src/server/` — server functions (category, lemonade, registry,
   settings).
@@ -103,8 +112,9 @@ has been pushed. Commit often.
 - Host facts arrive via **read-only /run snapshot mounts** (env at
   /env-snapshot, image labels at /images, SMART/ZFS at /system, CI at
   /ci, deploy state at /deploy-state, project workspace clones at
-  /workspaces, the configuration repo's git facts at /repo — remote,
-  head, dirty counts, drift, last Apply commit; never the repo itself)
+  /workspaces, both repositories' git facts at /repo — remote, head,
+  dirty counts, drift, last Apply commit, plus the site repo's state
+  and a digest per managed file; never either tree itself)
   and the nix manifest at /registry/manifest.json. Never reach around them (no SSH-ing the
   host, no reading host paths directly) — if a page needs a new host
   fact, extend the matching snapshot script in `stacks/daedalus/host/`
@@ -117,7 +127,7 @@ has been pushed. Commit often.
   (`DASH_*`). The app only ever GETs with them.
 - Writes to the box go through the file-drop bridges (`/apply`
   request.json / deploy-request.json / ci-request.json /
-  power-request.json / image-request.json) — the container
+  power-request.json / image-request.json / site-request.json) — the container
   deliberately holds no host privilege. Each has one flow module in
   `lib/` (`apply-flow.ts`, `update-flow.ts`) that BOTH doors — the
   button and the `api.*` route — go through, so the two cannot drift.

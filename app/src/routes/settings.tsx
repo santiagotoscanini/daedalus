@@ -10,6 +10,7 @@ import { Network } from '../components/settings/network'
 import { Repository } from '../components/settings/repository'
 import { TabBar } from '../components/tabs'
 import { fetchBoxSettings, fetchIntegrationStatus, fetchTheme } from '../server/settings'
+import { fetchSiteMirror } from '../server/site'
 
 // Settings — what this box IS, as opposed to what it runs.
 //
@@ -57,13 +58,16 @@ export const Route = createFileRoute('/settings')({
       theme,
       settings,
       integrations: deps.tab === 'integrations' ? fetchIntegrationStatus() : null,
+      // Deferred for the same reason: it reads two files off disk and hashes
+      // them, for the one tab that shows the answer.
+      site: deps.tab === 'repository' ? fetchSiteMirror() : null,
     }
   },
   component: SettingsPage,
 })
 
 function SettingsPage() {
-  const { theme, settings, integrations } = Route.useLoaderData()
+  const { theme, settings, integrations, site } = Route.useLoaderData()
   const search = Route.useSearch()
   const tab: SettingsTab = isTab(search.tab) ? search.tab : 'general'
 
@@ -102,7 +106,14 @@ function SettingsPage() {
               {(status) => <Integrations settings={settings.integrations} status={status} />}
             </Await>
           ))}
-        {tab === 'repository' && <Repository settings={settings} />}
+        {tab === 'repository' &&
+          (site === null ? (
+            <Repository settings={settings} mirror={null} />
+          ) : (
+            <Await promise={site} fallback={<Repository settings={settings} mirror={null} />}>
+              {(mirror) => <Repository settings={settings} mirror={mirror} />}
+            </Await>
+          ))}
         {tab === 'appearance' && (
           <Appearance
             value={choice}

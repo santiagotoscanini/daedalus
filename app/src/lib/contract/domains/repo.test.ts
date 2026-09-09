@@ -8,11 +8,11 @@ import { NO_REPO, repoFacts } from './repo'
 // the script's own output, so a change to either side that the other does
 // not follow fails here rather than as an empty tab.
 
-const envelope = (data: unknown, generatedAt = new Date().toISOString()) =>
+const envelope = (data: unknown, generatedAt = new Date().toISOString(), schemaVersion = 2) =>
   JSON.stringify({
     daedalusExport: 1,
     domain: 'repo',
-    schemaVersion: 1,
+    schemaVersion,
     source: 'host',
     revision: null,
     generatedAt,
@@ -44,6 +44,21 @@ describe('repoFacts', () => {
         tree: { modified: 2, untracked: 1 },
         upstream: { ref: 'origin/main', ahead: 1, behind: 0 },
         lastApply: null,
+        site: {
+          path: '/home/o/selfhost/apps/daedalus/site',
+          state: 'ready',
+          remote: null,
+          branch: 'main',
+          head: {
+            rev: 'def456',
+            subject: 'site: initialize',
+            committedAt: '2026-09-09T11:00:00-03:00',
+          },
+          tree: { modified: 0, untracked: 0 },
+          upstream: null,
+          lastApply: null,
+          files: { site: { sha256: 'aa'.repeat(32), bytes: 812 }, apps: null },
+        },
       }),
     )
     const r = await repoFacts()
@@ -53,6 +68,35 @@ describe('repoFacts', () => {
     expect(r.data.tree).toEqual({ modified: 2, untracked: 1 })
     expect(r.data.upstream?.ahead).toBe(1)
     expect(r.data.lastApply).toBeNull()
+    expect(r.data.site.state).toBe('ready')
+    expect(r.data.site.head?.subject).toBe('site: initialize')
+    expect(r.data.site.files.site?.bytes).toBe(812)
+    expect(r.data.site.files.apps).toBeNull()
+  })
+
+  it('reads a v1 snapshot — the shape published before the site repo existed', async () => {
+    await publish(
+      envelope(
+        {
+          path: '/etc/nixos',
+          remote: null,
+          branch: 'main',
+          head: { rev: 'abc123', subject: 'x', committedAt: '2026-09-09T10:00:00-03:00' },
+          tree: { modified: 0, untracked: 0 },
+          upstream: null,
+          lastApply: null,
+        },
+        new Date().toISOString(),
+        1,
+      ),
+    )
+    const r = await repoFacts()
+    expect(r.available).toBe(true)
+    expect(r.data.branch).toBe('main')
+    // A reader newer than its producer: the minutes between a switch and the
+    // timer's next run must read as "no site repo", not as an unavailable tab.
+    expect(r.data.site.state).toBe('absent')
+    expect(r.data.site.path).toBe('')
   })
 
   it('tolerates the null-heavy shape of a repo with no upstream and no head', async () => {
@@ -65,12 +109,15 @@ describe('repoFacts', () => {
         tree: { modified: 0, untracked: 0 },
         upstream: null,
         lastApply: null,
+        site: { path: '/site', state: 'absent', files: { site: null, apps: null } },
       }),
     )
     const r = await repoFacts()
     expect(r.available).toBe(true)
     expect(r.data.remote).toBeNull()
     expect(r.data.head).toBeNull()
+    expect(r.data.site.state).toBe('absent')
+    expect(r.data.site.path).toBe('/site')
   })
 
   it('reports a stopped producer as stale, not as empty', async () => {

@@ -18,7 +18,7 @@ export type BoxSettings = {
     baseDomain: string
     publicUrl: string
     timezone: string
-    operator: { user: string; email: string }
+    operator: { user: string; group: string; email: string }
     owner: string
     engine: {
       /** The commit the running generation was built from; null = built from a tree git did not describe. */

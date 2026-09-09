@@ -46,7 +46,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
       // TZ is bound to every container; the export states the same value
       // from the config. Prefer the export, keep env as the pre-export path.
       timezone: s.timezone || (ctx.env('TZ') ?? ''),
-      operator: { user: s.operator.user, email: s.mail.alertTo },
+      operator: { user: s.operator.user, group: s.operator.group, email: s.mail.alertTo },
       owner: s.owner,
       engine: { revision: site.revision, nixosVersion: s.nixosVersion },
     },
