@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="stacks/daedalus/app/public/icon.svg" width="96" height="96" alt="Daedalus" />
+  <img src="app/public/icon.svg" width="96" height="96" alt="Daedalus" />
 
   # Daedalus
 
   **A home server manager.** One app runs the box — NixOS is the
   backend that keeps it reproducible.
 
-  [daedalus.toscanini.me](https://daedalus.toscanini.me)
+  [daedalus.toscanini.me](https://daedalus.toscanini.me) · [docs](https://daedalus.toscanini.me/docs)
 </div>
 
 ---
@@ -20,9 +20,9 @@ match. The craftsman, not the labyrinth.
 
 ## Why it's different
 
-- **The repo IS the system.** Everything is a NixOS flake: every
-  package, container, route, dashboard and alert is declared here,
-  every input is pinned in `flake.lock`, and secrets are
+- **The repo IS the system.** The machine Daedalus manages is a NixOS
+  flake: every package, container, route, dashboard and alert is
+  declared, every input is pinned in `flake.lock`, and secrets are
   sops-encrypted in-tree. Any checkout plus a decryption key rebuilds
   the exact running machine.
 - **Every change is a commit.** Daedalus's Apply flow exports its
@@ -40,32 +40,24 @@ match. The craftsman, not the labyrinth.
   "couldn't ask": a dead probe renders as unknown, never as healthy;
   a stale snapshot is treated as absent, never served as current.
 
-## The shape of it
+## What's in this repository
 
 | Where | What |
 |---|---|
-| [`stacks/daedalus/app/`](stacks/daedalus/app/) | Daedalus itself — the TypeScript app (TanStack Start + React). |
-| [`stacks/daedalus/host/`](stacks/daedalus/host/) | Its host-side agents: the bridges that apply, deploy and snapshot on the app's behalf. |
-| [`stacks/apps/`](stacks/apps/) | The app platform it manages — `apps.json` is the committed contract between its database and the build. |
-| [`stacks/`](stacks/) | Everything else on the box: media, network, monitoring, identity. Each stack's header comment is its canonical doc. |
-| [`platform/`](platform/) | The OS layer: podman, publishing, ZFS, sops, mail, and the export domains Daedalus reads its facts from. |
+| [`app/`](app/) | Daedalus itself — the TypeScript app (TanStack Start + React 19, drizzle-orm, Tailwind v4). |
+| [`website/`](website/) | The landing site and the [external-setup docs](https://daedalus.toscanini.me/docs), deployed to GitHub Pages by [`.github/workflows/website.yml`](.github/workflows/website.yml). |
+| [`.claude/`](.claude/) | Path-scoped rules for Claude Code sessions working on the app and its UI. |
 
-## Documentation
+The NixOS module that runs the app is not in this repository yet. It
+lives in the author's machine configuration, alongside the host-side
+agents (the bridges that apply, deploy and snapshot on the app's
+behalf) and the platform layer it depends on. It moves here as an
+importable module in a later phase of the plan; today this repo is
+the app and its site.
 
-| Doc | Covers |
-|---|---|
-| [Operations](docs/operations.md) | The daily rebuild loop and upgrades. |
-| [Secrets](docs/secrets.md) | The two secret classes, sops recipients, rotation. |
-| [Adding a stack](docs/adding-a-stack.md) | Declaring a new self-hosted service. |
-| [Disaster recovery](docs/recovery.md) | Rebuilding the box from this repo and a key. |
-| [External setup](https://daedalus.toscanini.me/docs) | Everything configured outside the repo: Cloudflare, the router, VPN keys, GitHub, mail, key custody. Source: [`website/src/routes/docs.tsx`](website/src/routes/docs.tsx). |
-| [`CLAUDE.md`](CLAUDE.md) | The operator manual: hard rules, the `fleet.*` module system, cross-cutting gotchas, the debugging protocol, and the decisions that are settled. |
-| [`AUTH.md`](AUTH.md) | The per-service SSO migration plan. |
-| [`FUTURE.md`](FUTURE.md) | Deferred work and open follow-ups. |
-| [`HARDWARE.md`](HARDWARE.md) | Dated physical-layer event log. |
+## Developing
 
-The AI tooling is in-tree too: [`.claude/`](.claude/) carries the
-permission matrix and PreToolUse guard that mechanically enforce the
-operator manual's hard rules, plus path-scoped context, workflow
-skills and a pre-switch reviewer agent — a fresh checkout brings the
-guardrails with it, not just the system.
+The app runs as a `source.mode = "local"` app on the machine it
+manages: the container bind-mounts `app/` and runs the Vite dev server
+against it, so saving a file is the deploy. `CLAUDE.md` has the loop,
+the verification commands and where everything else lives.
