@@ -43,7 +43,7 @@ export function OpenSource() {
             Follow the thread.
           </h2>
           <p className="mx-auto mt-5 max-w-lg text-pretty text-[15px] leading-relaxed text-muted">
-            Read the code, steal the patterns, or run the whole thing.
+            Read the code, steal the patterns, run the app.
           </p>
         </Reveal>
         <Reveal delay={0.08}>

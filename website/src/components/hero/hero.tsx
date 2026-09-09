@@ -57,7 +57,7 @@ export function Hero() {
         <div className="rise rise-2 mt-10 flex flex-wrap items-center justify-center gap-3">
           <a href={REPO} className="btn btn-primary h-11 px-5">
             <GitHubLogo size={15} />
-            View on GitHub
+            The app on GitHub
           </a>
           <Link to="/docs" className="btn btn-ghost h-11 px-5">
             Read the docs
