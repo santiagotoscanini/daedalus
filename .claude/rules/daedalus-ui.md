@@ -1,8 +1,8 @@
 ---
 paths:
-  - "stacks/daedalus/app/src/components/**"
-  - "stacks/daedalus/app/src/routes/**"
-  - "stacks/daedalus/app/src/*.css"
+  - "app/src/components/**"
+  - "app/src/routes/**"
+  - "app/src/*.css"
 ---
 
 # daedalus — the UI layer

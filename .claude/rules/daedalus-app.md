@@ -1,14 +1,15 @@
 ---
 paths:
-  - "stacks/daedalus/app/**"
+  - "app/**"
 ---
 
 # daedalus — developing the control-plane app
 
 TanStack Start + React 19 + Vite 8, drizzle-orm on the shared pg
 cluster, pnpm 11, node ≥ 24, TS 6. This is the box's admin UI; it runs
-as a `source.mode = "local"` app — the container bind-mounts THIS
-directory at /app and runs the Vite dev server against it.
+as a `source.mode = "local"` app — the NixOS module that runs it lives
+in the s2-server repo (`stacks/daedalus/daedalus.nix`) and bind-mounts
+THIS repo's `app/` at /app, running the Vite dev server against it.
 
 ## The dev loop (what restarts what)
 
@@ -35,18 +36,19 @@ directory at /app and runs the Vite dev server against it.
 - `app/package.json` → `sudo systemctl restart podman-app-daedalus`
   (re-runs `pnpm install --frozen-lockfile`; Verdaccio is a hard
   startup dependency, minutes on a cold cache).
-- `assets/**` (the runtime image context) → `nixos-rebuild` (context
-  hash → new image tag → restart).
-- `daedalus.nix` → `nixos-rebuild`.
+- `stacks/daedalus/assets/**` in the s2-server repo (the runtime image
+  context) → `nixos-rebuild` there (context hash → new image tag →
+  restart).
+- `stacks/daedalus/daedalus.nix` in the s2-server repo → `nixos-rebuild`
+  there.
 
 **Before calling any change done: `pnpm typecheck`** (runs
-`tsr generate && tsc --noEmit`) from `stacks/daedalus/app/`.
+`tsr generate && tsc --noEmit`) from `app/`.
 `src/routeTree.gen.ts` is generated + gitignored — never edit it; if
 routes changed, `pnpm generate-routes` (or typecheck, which runs it).
 
-⚠ /etc/nixos lives on rpool/root — NO ZFS snapshots, NOT in the
-syncoid mirror. The only copy of this app outside this disk is what
-has been pushed. Commit often.
+This clone lives under `~/projects`, which is snapshotted and mirrored;
+the remote is still the copy that survives a disk. Commit often.
 
 ## Architecture map
 
@@ -117,12 +119,12 @@ has been pushed. Commit often.
   and a digest per managed file; never either tree itself)
   and the nix manifest at /registry/manifest.json. Never reach around them (no SSH-ing the
   host, no reading host paths directly) — if a page needs a new host
-  fact, extend the matching snapshot script in `stacks/daedalus/host/`
-  and its nix wiring.
-- Config values come from env vars bound in `daedalus.nix`
-  (`src/lib/env.ts` is the schema) — never hardcode hostnames, IPs,
-  versions, or tokens in TypeScript; the nix side already knows them
-  and binds them so they can't drift.
+  fact, extend the matching snapshot script in the s2-server repo's
+  `stacks/daedalus/host/` and its nix wiring.
+- Config values come from env vars bound in `daedalus.nix` (in the
+  s2-server repo's `stacks/daedalus/`; `src/lib/env.ts` is the schema)
+  — never hardcode hostnames, IPs, versions, or tokens in TypeScript;
+  the nix side already knows them and binds them so they can't drift.
 - Secrets (service API keys) arrive via rendered env files
   (`DASH_*`). The app only ever GETs with them.
 - Writes to the box go through the file-drop bridges (`/apply`

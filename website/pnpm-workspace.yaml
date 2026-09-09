@@ -2,7 +2,7 @@
 #
 # This file also makes website/ its OWN pnpm workspace root — pnpm stops
 # walking up here, so the website never becomes a member of the repo's
-# surrounding projects (stacks/daedalus/app has its own toolchain). That
+# surrounding projects (app/ in this repo has its own toolchain). That
 # isolation is deliberate: the website pins its own node/pnpm versions
 # (package.json engines + packageManager) and keeps its own lockfile, so
 # nothing here can drift the app's toolchain or CI.
