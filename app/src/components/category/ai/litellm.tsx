@@ -1,10 +1,27 @@
+import { cn } from '../../../lib/cn'
 import type { AiData } from '../../../lib/dashboard/categories/ai'
 import { compact, DASH, ms, num, pct } from '../../../lib/format'
 import { GrafanaLogs } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../service-head'
+import { Button } from '../../ui/button'
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../../viz'
-import { comparePinned } from './shared'
+import {
+  AXIS,
+  comparePinned,
+  EMPTY,
+  FOOT,
+  ITEM,
+  ITEM_MAIN,
+  ITEM_N,
+  ITEM_SIDE,
+  ITEMS,
+  LIVE,
+  MONO,
+  NOTE,
+  RANKS,
+  REJECTED,
+} from './shared'
 
 // `ReleaseBoard` is gone: it was `Changelog` with one of its two shapes, and
 // the neighbour panels below needed the other.
@@ -39,14 +56,11 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
           </>
         }
         actions={
-          <a
-            className="btn btn-primary"
-            href="https://litellm.toscanini.me/ui"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open the admin UI ↗
-          </a>
+          <Button asChild size="sm">
+            <a href="https://litellm.toscanini.me/ui" target="_blank" rel="noreferrer">
+              Open the admin UI ↗
+            </a>
+          </Button>
         }
       />
       <LinkRow
@@ -69,7 +83,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
           icon="◇"
           span={8}
           aside={
-            <span className="board-live">
+            <span className={LIVE}>
               <Pulse on={busy} tone="accent" />
               {busy ? `${num(data.inFlight)} in flight` : 'idle'}
             </span>
@@ -109,16 +123,16 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
             empty="the gateway’s ledger is empty"
           />
           {daily.length > 0 && (
-            <p className="colaxis">
+            <p className={AXIS}>
               <span>{firstDate.slice(5)}</span>
               <span>requests per day</span>
               <span>{todayDate.slice(5)}</span>
             </p>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             {data.endpoints.length > 0 && (
-              <span className="endpoints">
+              <span className="mb-[0.4rem] flex flex-wrap gap-x-4 gap-y-[0.1rem] [&_b]:font-semibold [&_b]:text-(--text-muted) [&_b]:tabular-nums">
                 {data.endpoints.map((e) => (
                   <span key={e.label}>
                     {e.label} <b>{num(e.value)}</b>
@@ -137,7 +151,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
           icon="hash"
           span={4}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {data.mcpServers.length === 0
                 ? `MCP, ${String(total.days)}d`
                 : data.mcpServers.map((s) => `${s.name} ${String(s.calls)}`).join(' · ')}
@@ -145,26 +159,26 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
           }
         >
           {data.mcp.length === 0 ? (
-            <p className="viz-empty">no tool calls in the window</p>
+            <p className={EMPTY}>no tool calls in the window</p>
           ) : (
-            <ul className="itemlist">
+            <ul className={ITEMS}>
               {data.mcp.map((t) => (
-                <li key={`${t.server}/${t.tool}`}>
+                <li key={`${t.server}/${t.tool}`} className={ITEM}>
                   <Chip tone="info">{t.server}</Chip>
-                  <span className="item-main mono" title={t.tool}>
+                  <span className={cn(ITEM_MAIN, MONO)} title={t.tool}>
                     {t.tool}
                   </span>
                   {/* The tool's own time, which is the only latency on this
                       page that is NOT mostly Lemonade — a tool call is the
                       gateway talking to a container on this box, so tens of
                       milliseconds is what right looks like. */}
-                  <span className="item-side">{ms(t.latencyMs)}</span>
-                  <span className="item-n">{num(t.calls)}</span>
+                  <span className={ITEM_SIDE}>{ms(t.latencyMs)}</span>
+                  <span className={ITEM_N}>{num(t.calls)}</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             The other direction: tools the gateway hands to a model mid-answer, counted when one was
             invoked. A registered server with no calls does not appear, and a tool whose counters
             were reset by a restart shows no time.
@@ -187,12 +201,12 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
           title="Who is calling"
           icon="◑"
           span={6}
-          aside={<span className="board-note">requests, {total.days}d</span>}
+          aside={<span className={NOTE}>requests, {total.days}d</span>}
         >
           {data.callers.length === 0 ? (
-            <p className="viz-empty">no keyed traffic in the window</p>
+            <p className={EMPTY}>no keyed traffic in the window</p>
           ) : (
-            <ul className="ranks">
+            <ul className={RANKS}>
               {data.callers.map((c) => (
                 <CallerRow
                   key={c.name}
@@ -209,7 +223,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
               tokens at all, so on a token ranking the eleven of them below
               scored zero and never appeared. */}
           {data.rejected.keys > 0 && (
-            <p className="rejected">
+            <p className={REJECTED}>
               <b>{num(data.rejected.keys)}</b> keys never completed a request.{' '}
               <b>{num(data.rejected.requests)}</b> attempts, last{' '}
               {ago(data.rejected.last, todayDate)}.{' '}
@@ -224,7 +238,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
             </p>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             Named by their key’s alias; a key with none shows as its hash, and one the gateway no
             longer holds is marked <b>revoked</b>. Hover any name for what it is. A key that fails
             authentication never reaches a model, so it has no tokens and no model against it. The
@@ -285,11 +299,11 @@ function NeighbourPair({ n }: { n: NeighbourData }) {
         span={span}
         title={behind === 0 ? `${n.label} — current` : `${n.label} — ${count} ${unit}`}
         aside={
-          <span className="board-note">
-            {n.version === null ? 'version unknown' : <span className="mono">{n.version}</span>}
+          <span className={NOTE}>
+            {n.version === null ? 'version unknown' : <span className={MONO}>{n.version}</span>}
           </span>
         }
-        foot={<p className="board-foot">{n.note}</p>}
+        foot={<p className={FOOT}>{n.note}</p>}
       />
       {n.via !== null && (
         <Changelog
@@ -301,11 +315,11 @@ function NeighbourPair({ n }: { n: NeighbourData }) {
               : `${n.via.label} — ${String(viaBehind)} ${viaBehind === 1 ? 'release behind' : 'releases behind'}`
           }
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {n.via.version === null ? (
                 'version unknown'
               ) : (
-                <span className="mono">{n.via.version}</span>
+                <span className={MONO}>{n.via.version}</span>
               )}
             </span>
           }
@@ -315,7 +329,7 @@ function NeighbourPair({ n }: { n: NeighbourData }) {
         title={`${n.label} logs`}
         icon="logs"
         span={span}
-        aside={<span className="board-note">{n.role}</span>}
+        aside={<span className={NOTE}>{n.role}</span>}
       >
         <GrafanaLogs source={{ container: n.container }} title={`${n.label} logs`} />
       </Board>
@@ -344,13 +358,13 @@ function CallerRow({ caller, max, today }: { caller: Caller; max: number; today:
         <>
           {caller.tokens > 0 && <span>{compact(caller.tokens)} tok</span>}
           {caller.latencyMs !== null && <span>{ms(caller.latencyMs)}</span>}
-          {caller.failed > 0 && <span className="bad-text">{num(caller.failed)} failed</span>}
+          {caller.failed > 0 && <span className="text-danger">{num(caller.failed)} failed</span>}
           {/* One name and a count. A caller reaching a single model is the
               norm, the master key reaches seven, and two full model names
               wrapped this line onto a second row for the one caller that did —
               the rest is a hover away. */}
           {caller.models[0] !== undefined && (
-            <span className="mono" title={caller.models.join(', ')}>
+            <span className={cn(MONO, 'truncate')} title={caller.models.join(', ')}>
               {caller.models[0]}
               {caller.models.length > 1 && ` +${String(caller.models.length - 1)}`}
             </span>

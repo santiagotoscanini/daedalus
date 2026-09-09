@@ -4,6 +4,7 @@ import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../service-head'
 import { Board, BoardGrid, Facts, Measures } from '../../viz'
+import { FOOT, MONO } from './shared'
 
 /* ── Calibre ──────────────────────────────────────────────────────────── */
 
@@ -32,7 +33,7 @@ export function CalibreView({ d }: { d: Calibre }) {
         lede={
           <>
             The shelf itself: Calibre-Web-Automated ingests whatever lands in{' '}
-            <span className="mono">/s2/books</span> and serves it to readers over OPDS and the web.
+            <span className={MONO}>/s2/books</span> and serves it to readers over OPDS and the web.
           </>
         }
         actions={<Open name="Calibre" host="calibre" />}
@@ -48,7 +49,7 @@ export function CalibreView({ d }: { d: Calibre }) {
               { k: 'Categories', v: num(calibre.categories) },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Read through the OPDS catalogue with its own credentials, the same endpoint an e-reader
             uses. It is the one path on this app that skips the Pocket ID gate.
           </p>

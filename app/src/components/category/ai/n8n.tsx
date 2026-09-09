@@ -3,8 +3,9 @@ import { DASH, ms, num, pct, until } from '../../../lib/format'
 import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
+import { Button } from '../../ui/button'
 import { Board, BoardGrid, Columns, Measures, Pulse, RankRow } from '../../viz'
-import { comparePinned } from './shared'
+import { AXIS, comparePinned, EMPTY, FOOT, LIVE, NOTE, RANKS, REJECTED } from './shared'
 
 // ── n8n ────────────────────────────────────────────────────────────────────
 
@@ -59,14 +60,11 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           </>
         }
         actions={
-          <a
-            className="btn btn-primary"
-            href="https://n8n.toscanini.me"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open n8n ↗
-          </a>
+          <Button asChild size="sm">
+            <a href="https://n8n.toscanini.me" target="_blank" rel="noreferrer">
+              Open n8n ↗
+            </a>
+          </Button>
         }
       />
       <LinkRow
@@ -85,7 +83,7 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           icon="⟳"
           span={8}
           aside={
-            <span className="board-live">
+            <span className={LIVE}>
               <Pulse on={total.running > 0} tone="accent" />
               {total.running > 0 ? `${num(total.running)} running` : 'idle'}
             </span>
@@ -119,7 +117,7 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
             empty={data.note ?? 'no executions in the window'}
           />
           {daily.length > 0 && (
-            <p className="colaxis">
+            <p className={AXIS}>
               <span>{firstDate.slice(5)}</span>
               <span>runs per day</span>
               <span>{lastDate.slice(5)}</span>
@@ -129,7 +127,7 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           {/* Few enough to name, which is the whole point of naming them: one
               failure a fortnight is a thing to go and read, not a rate. */}
           {data.failures.length > 0 && (
-            <p className="rejected">
+            <p className={REJECTED}>
               {data.failures.map((f, i) => (
                 <span key={`${f.name}-${String(i)}`}>
                   {i > 0 && ' · '}
@@ -139,7 +137,7 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
             </p>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             Counted from n8n’s own execution history, which it prunes on a schedule, so this window
             is what n8n still holds. An empty column early on may be forgetting rather than silence.
             A day that saw a failure is underlined in red; the stack trace is behind the Executions
@@ -153,12 +151,12 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
           title="Workflows"
           icon="panels"
           span={4}
-          aside={<span className="board-note">runs, {total.days}d</span>}
+          aside={<span className={NOTE}>runs, {total.days}d</span>}
         >
           {flows.length === 0 ? (
-            <p className="viz-empty">{data.note ?? 'nothing has run in the window'}</p>
+            <p className={EMPTY}>{data.note ?? 'nothing has run in the window'}</p>
           ) : (
-            <ul className="ranks">
+            <ul className={RANKS}>
               {flows.map((f) => (
                 <RankRow
                   key={f.id}
@@ -169,7 +167,7 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
                   max={flows[0]?.runs ?? 1}
                   meta={
                     f.runs === 0 ? (
-                      <span className="bad-text">nothing in {total.days} days</span>
+                      <span className="text-danger">nothing in {total.days} days</span>
                     ) : (
                       <>
                         {f.medianMs !== null && <span>{ms(f.medianMs)}</span>}
@@ -177,7 +175,9 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
                             latency formatter tops out at minutes — a daily
                             schedule read "1440m 0s". */}
                         {f.everyMs !== null && <span>every {until(f.everyMs / 1000)}</span>}
-                        {f.failed > 0 && <span className="bad-text">{num(f.failed)} failed</span>}
+                        {f.failed > 0 && (
+                          <span className="text-danger">{num(f.failed)} failed</span>
+                        )}
                         <span>{f.ago}</span>
                       </>
                     )
@@ -187,7 +187,7 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
             </ul>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             {/* Three of the four badges are states nothing else reports: a
                 schedule that quietly stopped, a workflow switched on that has
                 never fired, and a draft that has drifted ahead of what the

@@ -3,6 +3,44 @@ import type { LogNeighbour } from '../../logs'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
+/* The board vocabulary, spelled once for the eight tabs that share it.
+ *
+ * Constants rather than repeated literals because the tabs are read as one
+ * page — a caption or a list row that drifted by a hundredth of a rem on one
+ * tab would be invisible in review and obvious in use. */
+
+/** The reading in a board's header. */
+export const BOARD_NOTE = 'text-[0.73rem] text-muted-foreground'
+
+/** A heading inside a board body, between two groups of content. */
+export const BOARD_SUB =
+  'mt-[0.35rem] -mb-[0.2rem] text-[0.73rem] text-muted-foreground tracking-normal [font-weight:550]'
+
+/** The caption under a board: what the numbers above it actually mean. */
+export const BOARD_FOOT =
+  'mt-[0.15rem] text-[0.73rem] text-muted-foreground leading-[1.45] wrap-anywhere'
+
+/** Absent data, drawn as absent. */
+export const VIZ_EMPTY = 'py-[0.9rem] text-center text-[0.8rem] text-muted-foreground wrap-anywhere'
+
+/* A flat list of named things: rows of a table, not a stack of pills. The
+   hairline is on every row and removed from the first, which is what `li + li`
+   used to say. */
+export const LIST = 'flex flex-col'
+export const ROW =
+  'flex min-w-0 items-center gap-[0.45rem] border-(--border-soft) border-t px-[0.1rem] py-[0.34rem] text-[0.77rem] first:border-t-0'
+/** The name takes the slack, so the detail is pushed right without a spacer. */
+export const ROW_MAIN = 'min-w-0 flex-auto truncate text-foreground'
+export const ROW_SIDE =
+  'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-muted-foreground tabular-nums'
+export const ROW_N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
+
+/** Monospace without a size, for slots whose own rule sets one — putting both
+    here would emit two `text-*` utilities and leave the winner to the layer. */
+export const MONO_FACE = 'font-mono wrap-anywhere'
+/** Monospace at the size the legacy `.mono` carried: 0.86 of its context. */
+export const MONO = `${MONO_FACE} text-[0.86em]`
+
 /**
  * The host reader behind Disks, Pools and Backups.
  *
@@ -91,14 +129,24 @@ export const PARTS = {
   },
 } satisfies Record<string, Part>
 
+/* One vocabulary for every component panel, so a page of six parts reads as
+   one inventory rather than six designs. Photo beside identity — a physical
+   object named, pictured, and then measured underneath. The panels that build
+   their own `PartHead` (Host's case, Build's board, cpu, cooler, gpu and
+   supply) compose these directly. */
+export const PART = 'flex min-h-[2.6rem] items-center gap-[0.9rem] pb-[0.35rem]'
+export const PART_ID = 'flex min-w-0 flex-auto flex-col items-start gap-[0.25rem]'
+export const PART_NAME = 'text-[0.98rem] text-foreground tracking-[-0.01em] wrap-anywhere'
+export const PART_DETAIL = 'text-[0.73rem] text-(--text-muted) leading-[1.4]'
+
 /** A part's photo and name, for the panels that have artwork. */
 export function PartHead({ part }: { part: Part }) {
   return (
-    <div className="part">
+    <div className={PART}>
       <PartPhoto part={part} />
-      <div className="part-id">
-        <strong className="part-name">{part.name}</strong>
-        <span className="part-detail">{part.detail}</span>
+      <div className={PART_ID}>
+        <strong className={PART_NAME}>{part.name}</strong>
+        <span className={PART_DETAIL}>{part.detail}</span>
       </div>
     </div>
   )
@@ -108,7 +156,10 @@ export function PartPhoto({ part }: { part: Part }) {
   if (part.photo === null) return null
   return (
     <img
-      className="part-photo"
+      // A fraction of the board rather than a fixed size, because a board is
+      // anywhere from a third of the page to all of it; the maximum caps it on
+      // a phone, where a percentage would run away.
+      className="h-auto w-[clamp(78px,34%,128px)] flex-none object-contain"
       src={part.photo.src}
       alt=""
       width={part.photo.width}

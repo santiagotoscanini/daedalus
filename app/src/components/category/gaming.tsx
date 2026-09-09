@@ -2,6 +2,7 @@ import type { GamingData } from '../../lib/dashboard/categories/gaming'
 import { LogBoard } from '../logs'
 import { Changelog, ReleaseNotes, UpgradeChain } from '../release-notes'
 import { ServiceHead } from '../service-head'
+import { Button } from '../ui/button'
 import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../viz'
 
 // The Gaming page. Two servers, and the shape held.
@@ -21,6 +22,21 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../viz'
 // three unrelated versions competing for the same glance. They live behind
 // the chip that summarises them instead: the chip already says the answer
 // ("current"), and hovering it shows the working.
+
+/* The board vocabulary styles.css used to carry, as utilities. Restated per
+   category file rather than shared: the legacy sheet is being retired file by
+   file, so a common module would be a second place to keep in step. */
+const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
+const NOTE = 'text-[0.73rem] text-(--dim)'
+const FOOT = 'mt-[0.15rem] text-[0.73rem] leading-[1.45] text-(--dim) [overflow-wrap:anywhere]'
+const EMPTY = 'py-[0.9rem] text-center text-[0.8rem] text-(--dim) [overflow-wrap:anywhere]'
+
+/* A dated line — a blog post, an arrival, a departure. */
+const NEWS = 'flex list-none flex-col gap-[0.3rem]'
+const NEWS_ROW =
+  'grid min-w-0 grid-cols-[auto_1fr_auto] items-center gap-[0.6rem] rounded-[7px] bg-(--panel-2) px-[0.45rem] py-[0.3rem]'
+const NEWS_TITLE = 'truncate text-[0.8rem] text-foreground no-underline hover:underline'
+const NEWS_DATE = 'text-[0.72rem] whitespace-nowrap tabular-nums text-(--dim)'
 
 export function GamingView({ data }: { data: GamingData }) {
   if (data.tab === 'minecraft') return <MinecraftView data={data} />
@@ -74,7 +90,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
         ]}
         lede={
           <>
-            Paper, near-vanilla. Everyone connects to <span className="mono">{mc.connect}</span>.
+            Paper, near-vanilla. Everyone connects to <span className={MONO}>{mc.connect}</span>.
             That works at home and away because pi-hole answers the name with the LAN address and
             Cloudflare with the public one.
           </>
@@ -118,9 +134,9 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
         <Changelog
           build={builds}
           span={6}
-          aside={<span className="board-note">papermc</span>}
+          aside={<span className={NOTE}>papermc</span>}
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               Commits rather than releases: Paper cuts a build per handful of them, so the subjects
               matter more than the count. Each links to the real commit. The server jar is
               downloaded fresh for this version and build on every start, so a bump here is a
@@ -133,19 +149,19 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
           title="Comings and goings"
           icon="panels"
           span={6}
-          aside={<span className="board-note">last 7 days</span>}
+          aside={<span className={NOTE}>last 7 days</span>}
         >
           {events.length === 0 ? (
-            <p className="viz-empty">nobody has joined this week</p>
+            <p className={EMPTY}>nobody has joined this week</p>
           ) : (
-            <ul className="news">
+            <ul className={NEWS}>
               {events.map((e) => (
-                <li key={`${String(e.at)}-${e.who}`} className="news-row">
+                <li key={`${String(e.at)}-${e.who}`} className={NEWS_ROW}>
                   <Chip tone={e.kind === 'join' ? 'ok' : 'muted'}>
                     {e.kind === 'join' ? 'joined' : 'left'}
                   </Chip>
-                  <span className="news-title">{e.who}</span>
-                  <span className="news-date">
+                  <span className={NEWS_TITLE}>{e.who}</span>
+                  <span className={NEWS_DATE}>
                     {new Date(e.at).toLocaleString(undefined, {
                       month: 'short',
                       day: 'numeric',
@@ -160,7 +176,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
           {/* Read out of the server's own log rather than kept as a list here.
               The log already IS the record; a second one could only disagree
               with it. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             Parsed from the server’s log in Loki, newest first. The panel below is the whole log;
             this is the part about people.
           </p>
@@ -169,7 +185,7 @@ function MinecraftView({ data }: { data: Extract<GamingData, { tab: 'minecraft' 
         <Board title="How it is run" icon="⚒" span={12}>
           <Facts
             rows={[
-              { k: 'Address', v: <span className="mono">{mc.connect}</span> },
+              { k: 'Address', v: <span className={MONO}>{mc.connect}</span> },
               {
                 k: 'Who gets in',
                 v: 'Mojang session auth, plus an enforced whitelist pinned in nix',
@@ -235,14 +251,16 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
         lede={
           <>
             Headless server behind ofsm. Players connect to{' '}
-            <span className="mono">{factorio.connect}</span>, the one UDP port the router forwards
+            <span className={MONO}>{factorio.connect}</span>, the one UDP port the router forwards
             inward.
           </>
         }
         actions={
-          <a className="btn btn-primary" href={factorio.adminUrl} target="_blank" rel="noreferrer">
-            Open server manager ↗
-          </a>
+          <Button asChild size="sm">
+            <a href={factorio.adminUrl} target="_blank" rel="noreferrer">
+              Open server manager ↗
+            </a>
+          </Button>
         }
       />
 
@@ -288,7 +306,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           title={current ? 'Release notes' : `${String(behind)} to apply`}
           icon="logs"
           span={6}
-          aside={<span className="board-note">wiki.factorio.com</span>}
+          aside={<span className={NOTE}>wiki.factorio.com</span>}
         >
           {/* The chain lives here rather than in a panel of its own: when
               nothing is pending that panel was an empty box next to a full
@@ -298,7 +316,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           {/* These two captions sit side by side, so each says what it is
               rather than what logs are — and neither may claim the other's
               job. This one is the record of what changed. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             {current
               ? 'What the running build shipped, '
               : 'Everything between the running build and stable, '}
@@ -311,21 +329,21 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           title="From the devs"
           icon="panels"
           span={6}
-          aside={<span className="board-note">factorio.com/blog</span>}
+          aside={<span className={NOTE}>factorio.com/blog</span>}
         >
           {news.length === 0 ? (
-            <p className="viz-empty">could not read the feed</p>
+            <p className={EMPTY}>could not read the feed</p>
           ) : (
-            <ul className="news">
+            <ul className={NEWS}>
               {news.map((n) => (
-                <li key={n.url} className="news-row">
+                <li key={n.url} className={NEWS_ROW}>
                   <Chip tone={n.kind === 'release' ? 'ok' : n.kind === 'fff' ? 'info' : 'muted'}>
                     {n.kind === 'release' ? 'release' : n.kind === 'fff' ? 'FFF' : 'post'}
                   </Chip>
-                  <a href={n.url} target="_blank" rel="noreferrer" className="news-title">
+                  <a href={n.url} target="_blank" rel="noreferrer" className={NEWS_TITLE}>
                     {n.title}
                   </a>
-                  <span className="news-date">{n.date}</span>
+                  <span className={NEWS_DATE}>{n.date}</span>
                 </li>
               ))}
             </ul>
@@ -333,7 +351,7 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           {/* Was "release posts are the changelog — there is no structured
               one", which was true when this panel stood alone and is now flatly
               contradicted by the structured changelog sitting next to it. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             The studio’s own feed, which points forward: Friday Facts are about what is being built.
             What has landed is the panel beside this one.
           </p>
@@ -343,19 +361,19 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           title="Comings and goings"
           icon="panels"
           span={12}
-          aside={<span className="board-note">last 30 days</span>}
+          aside={<span className={NOTE}>last 30 days</span>}
         >
           {events.length === 0 ? (
-            <p className="viz-empty">nobody has joined this month</p>
+            <p className={EMPTY}>nobody has joined this month</p>
           ) : (
-            <ul className="news">
+            <ul className={NEWS}>
               {events.map((e) => (
-                <li key={`${String(e.at)}-${e.who}-${e.kind}`} className="news-row">
+                <li key={`${String(e.at)}-${e.who}-${e.kind}`} className={NEWS_ROW}>
                   <Chip tone={e.kind === 'join' ? 'ok' : 'muted'}>
                     {e.kind === 'join' ? 'joined' : 'left'}
                   </Chip>
-                  <span className="news-title">{e.who}</span>
-                  <span className="news-date">
+                  <span className={NEWS_TITLE}>{e.who}</span>
+                  <span className={NEWS_DATE}>
                     {new Date(e.at).toLocaleString(undefined, {
                       month: 'short',
                       day: 'numeric',
@@ -369,10 +387,10 @@ function FactorioView({ data }: { data: Extract<GamingData, { tab: 'factorio' }>
           )}
           {/* Same read as Minecraft's board of the same name: the log already
               IS the record, a second one could only disagree with it. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             Parsed from the server’s log in Loki, newest first: the game announces every arrival and
-            departure with a <span className="mono">[JOIN]</span>/
-            <span className="mono">[LEAVE]</span> line. The panel below is the whole log; this is
+            departure with a <span className={MONO}>[JOIN]</span>/
+            <span className={MONO}>[LEAVE]</span> line. The panel below is the whole log; this is
             the part about people.
           </p>
         </Board>

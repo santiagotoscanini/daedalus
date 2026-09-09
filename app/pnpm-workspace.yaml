@@ -39,3 +39,4 @@ engineStrict: true
 allowBuilds:
   esbuild: true # bundler binary behind drizzle-kit
   lightningcss: true # Vite's CSS transformer ships a native binary
+  "@tailwindcss/oxide": true # Tailwind 4's Rust scanner ships a native binary

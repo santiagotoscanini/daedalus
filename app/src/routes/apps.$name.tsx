@@ -6,16 +6,22 @@ import { Deployments } from '../components/apps/deployments'
 import { Overview } from '../components/apps/overview'
 import { Secrets } from '../components/apps/secrets'
 import { Settings } from '../components/apps/settings'
+import { CHIP, LEDE } from '../components/apps/shared'
 import { Vpn } from '../components/apps/vpn'
+import { AppIcon, type AppState, Segmented, StatePill } from '../components/controls'
 import { GuardedAwait } from '../components/error'
 import { GrafanaLogs } from '../components/logs'
+import { Crumbs, PageHead } from '../components/page'
 import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
-import { AppIcon, Segmented, StatePill } from '../components/ui'
+import { Alert, AlertDescription } from '../components/ui/alert'
+import { Badge } from '../components/ui/badge'
 // ./access-window, NOT ./access — same split as env-groups below. The window
 // table is a value the picker and validateSearch both need in the browser;
 // ./access talks to Loki and must never follow it there.
 import { type AccessWindow, DEFAULT_WINDOW, isAccessWindow } from '../lib/access-window'
+import { cn } from '../lib/cn'
 import { OWNER } from '../lib/site'
+import { type Tone, toneStyle } from '../lib/tone'
 import { fetchApp, fetchAppTab, saveApp } from '../server/registry'
 
 // Every tab this route can render. Two of them are conditional — `database`
@@ -37,6 +43,25 @@ export const APP_TABS = [
   'logs',
 ] as const
 const TABS = APP_TABS
+
+/* The hero: identity on the left, exposure on the right. Below the rail
+   breakpoint exposure becomes a full-width row under the title instead of a
+   third column — at that width it was overflowing the card's right edge. */
+const HERO =
+  'mb-6 grid grid-cols-[auto_1fr_auto] items-start gap-5 rounded-xl border border-(--border-soft) bg-card px-6 py-[1.35rem] max-rail:grid-cols-[auto_minmax(0,1fr)] max-rail:gap-x-4 max-rail:gap-y-[0.9rem] max-rail:p-[1.1rem]'
+const HERO_ICON =
+  'grid size-[54px] place-items-center rounded-[12px] border bg-(--panel-2) text-[1.4rem] text-(--dim) max-rail:size-[42px] max-rail:text-[1.15rem]'
+const HERO_ICON_TONED =
+  'border-[color-mix(in_srgb,var(--tone)_30%,transparent)] bg-[color-mix(in_srgb,var(--tone)_8%,transparent)] text-(--tone)'
+/** The two states that are verdicts. The rest get the frame's resting grey. */
+const ICON_TONE: Partial<Record<AppState, Tone>> = { running: 'ok', attention: 'bad' }
+const HERO_LINKS =
+  'mt-[0.65rem] mb-0 flex flex-wrap gap-x-[1.1rem] gap-y-[0.4rem] font-mono text-[0.85rem] max-[34rem]:flex-col max-[34rem]:gap-[0.35rem] max-[34rem]:[&>*]:wrap-anywhere'
+/* `Segmented` (components/controls.tsx) goes full-width below the rail
+   breakpoint when it sits here — it sits alone in its own hero column — and
+   the descendant rules are what tell it so, since it cannot know on its own. */
+const HERO_EXPOSURE =
+  'text-right max-rail:col-span-full max-rail:text-left max-rail:[&_[role=radiogroup]]:flex max-rail:[&_[role=radiogroup]]:w-full max-rail:[&_[role=radio]]:flex-1 max-rail:[&_[role=radio]]:justify-center'
 
 export const Route = createFileRoute('/apps/$name')({
   // The tab lives in the URL, not in component state: it survives a refresh,
@@ -72,11 +97,12 @@ export const Route = createFileRoute('/apps/$name')({
   component: AppDetail,
   notFoundComponent: () => (
     <>
-      <p className="crumbs">
-        <Link to="/apps">Apps</Link>
-      </p>
-      <h1>Not found</h1>
-      <p className="lede">No app by that name is in the registry.</p>
+      <Crumbs>
+        <Link to="/apps" className="hover:text-foreground">
+          Apps
+        </Link>
+      </Crumbs>
+      <PageHead title="Not found">No app by that name is in the registry.</PageHead>
     </>
   ),
 })
@@ -106,6 +132,7 @@ function AppDetail() {
 
   const readOnly = app.managedInNix
   const state = status?.state ?? 'unknown'
+  const iconTone = ICON_TONE[state]
 
   // What un-errors a failed tab body: anything that makes the loader hand
   // over a fresh tabData promise. The range is part of it so widening the
@@ -121,35 +148,45 @@ function AppDetail() {
 
   return (
     <>
-      <p className="crumbs">
-        <Link to="/apps">Apps</Link> <span>›</span> {app.name}
-      </p>
+      <Crumbs>
+        <Link to="/apps" className="hover:text-foreground">
+          Apps
+        </Link>{' '}
+        <span aria-hidden="true">›</span> {app.name}
+      </Crumbs>
 
-      <section className="hero">
+      <section className={HERO}>
         {/* The app's own icon, in a frame that keeps carrying state. Identity
             and health are different questions and the frame answers the second
             without spending the slot that answers the first. */}
-        <div className="hero-icon" data-state={state}>
+        <div
+          className={cn(HERO_ICON, iconTone !== undefined && HERO_ICON_TONED)}
+          style={iconTone === undefined ? undefined : toneStyle(iconTone)}
+        >
           <AppIcon name={app.name} hasIcon={app.hasIcon} size={34} />
         </div>
 
-        <div className="hero-main">
-          <h1>
+        <div>
+          <h1 className="m-0 flex flex-wrap items-center gap-[0.65rem] text-[1.45rem] font-semibold tracking-[-0.02em] max-[34rem]:text-[1.3rem]">
             {app.name}
             <StatePill state={state} />
-            {readOnly && <span className="chip chip-muted">nix-managed</span>}
+            {readOnly && (
+              <Badge variant="outline" className={cn(CHIP, 'text-(--text-muted)')}>
+                nix-managed
+              </Badge>
+            )}
           </h1>
-          <p className="lede">{app.description || 'No description.'}</p>
-          <p className="hero-links">
+          <p className={LEDE}>{app.description || 'No description.'}</p>
+          <p className={HERO_LINKS}>
             {app.stage === 'off' ? (
-              <span className="muted">⏻ not exposed</span>
+              <span className="text-(--text-muted)">⏻ not exposed</span>
             ) : (
               <a href={`https://${app.effectiveHostname}`} target="_blank" rel="noreferrer">
                 ↗ {app.effectiveHostname}
               </a>
             )}
             {app.sourceMode === 'local' ? (
-              <span className="muted">⎇ stacks/{app.name}/app</span>
+              <span className="text-(--text-muted)">⎇ stacks/{app.name}/app</span>
             ) : (
               <a href={`https://github.com/${OWNER}/${app.name}`} target="_blank" rel="noreferrer">
                 ⎇ {OWNER}/{app.name}
@@ -158,8 +195,8 @@ function AppDetail() {
           </p>
         </div>
 
-        <div className="hero-exposure">
-          <span className="hero-exposure-label">exposure</span>
+        <div className={HERO_EXPOSURE}>
+          <span className="mb-[0.4rem] block text-[0.73rem] text-(--dim)">exposure</span>
           <Segmented
             value={app.stage}
             disabled={readOnly}
@@ -192,16 +229,20 @@ function AppDetail() {
             ]}
           />
           {app.stage === 'off' && (
-            <p className="exposure-note">No route, DNS or probe. The container still runs.</p>
+            <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-(--dim)">
+              No route, DNS or probe. The container still runs.
+            </p>
           )}
         </div>
       </section>
 
       {readOnly && (
-        <div className="banner banner-muted">
-          Declared by hand in <code>stacks/daedalus/daedalus.nix</code>, so it is read-only here. An
-          Apply that broke this entry would take down the interface you would use to undo it.
-        </div>
+        <Alert className="mb-[1.35rem] text-(--text-muted)">
+          <AlertDescription>
+            Declared by hand in <code>stacks/daedalus/daedalus.nix</code>, so it is read-only here.
+            An Apply that broke this entry would take down the interface you would use to undo it.
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* No tab bar here: inside an app the sections live in the left rail —

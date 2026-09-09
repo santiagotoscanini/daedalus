@@ -30,12 +30,61 @@
 
 import { type ReactNode, useEffect, useState } from 'react'
 
+import { cn } from '../lib/cn'
+import { type ResolvedScheme, useScheme } from '../lib/scheme'
 import { GRAFANA_URL } from '../lib/site'
+import { GHOST_BTN } from './apps/shared'
+import { BOARD_FOOT } from './category/system/shared'
+import { Segmented } from './controls'
 import { Bar } from './skeleton'
-import { Segmented } from './ui'
+import { Button } from './ui/button'
 import { Board } from './viz'
 
 const GRAFANA = GRAFANA_URL
+
+/* An embedded Grafana panel. Sized rather than aspect-ratioed: a log view
+   wants a fixed number of visible lines, not a shape.
+
+   The WRAPPER owns the height and the border, and the iframe is absolutely
+   positioned over the skeleton inside it — so the box is the same size and
+   shape throughout, and uncovering it changes nothing but what is inside. */
+const EMBED_WRAP =
+  'relative h-[22rem] overflow-hidden rounded-[9px] border border-(--border-soft) bg-background max-[50rem]:h-[18rem]'
+/* Log-shaped: ragged lines of the app's own grey, so the wait looks like the
+   rest of the dashboard loading rather than like Grafana loading. */
+const EMBED_SKELETON =
+  'absolute inset-0 flex flex-col justify-center gap-[0.85rem] px-[1.2rem] py-[1.1rem]'
+/* Paints the embedded document's canvas in the page's scheme before Grafana's
+   own styles arrive, rather than the browser's default white — the one place
+   a utility reaches into content this app does not own. */
+const EMBED =
+  'absolute inset-0 block h-full w-full border-0 [color-scheme:light] dark:[color-scheme:dark]'
+/* Covered until Grafana has finished assembling itself — see LogFrame. The
+   animation is the backstop for a page whose JS never runs: zero duration on a
+   delay longer than LogFrame's own ceiling, so it only ever fires when both of
+   that component's timers failed to, and never races them. The keyframe stays
+   in styles.css — a keyframe name is not a class. */
+const EMBED_COVERED = 'animate-[embed-reveal_0s_linear_15s_forwards] opacity-0'
+const EMBED_READY = 'animate-none opacity-100 [transition:opacity_0.2s_ease]'
+
+/* A second log stream inside a Logs board, for the process that ships the
+   first one. Collapsed: it is diagnostics for the panel above rather than a
+   service anybody watches, so it should be one click away on the day the
+   panel goes quiet and invisible on every other day.
+
+   Stacked, they are a list of sibling streams rather than a series of
+   afterthoughts — the rule between them is enough separation, so the gap
+   above is dropped between neighbours. The range bar inside is laid out by
+   the same rules as the one above it and only needs the breathing room the
+   summary does not provide. */
+const SUBLOG =
+  'group mt-4 border-t border-(--border-soft) pt-[0.7rem] [&+&]:mt-0 [&>summary+div]:mt-[0.7rem]'
+const SUBLOG_SUMMARY = cn(
+  'flex cursor-pointer list-none items-center gap-[0.4rem] text-[0.74rem] text-muted-foreground',
+  'hover:text-primary [&::-webkit-details-marker]:hidden',
+  "before:text-[0.7rem] before:transition-transform before:duration-[0.12s] before:content-['▸']",
+  'group-open:before:rotate-90',
+)
 
 /**
  * One panel out of the provisioned dashboard, filtered to one container.
@@ -71,11 +120,15 @@ const GRAFANA = GRAFANA_URL
  * With it gone the frame renders exactly once per mount, which is what makes
  * the first-load cover below sufficient rather than a band-aid.
  */
-export function grafanaLogsEmbed(source: LogSource, from = 'now-7d'): string {
+export function grafanaLogsEmbed(
+  source: LogSource,
+  from = 'now-7d',
+  theme: ResolvedScheme = 'dark',
+): string {
   return (
     `${GRAFANA}/d-solo/container-logs/container-logs` +
     `?panelId=1&var-selector=${encodeURIComponent(`${label(source)}="${value(source)}"`)}` +
-    `&from=${from}&to=now&theme=dark`
+    `&from=${from}&to=now&theme=${theme}`
   )
 }
 
@@ -199,9 +252,9 @@ function LogFrame({ src, title, settle }: { src: string; title: string; settle: 
   }, [])
 
   return (
-    <div className="embed-wrap embed-logs">
+    <div className={EMBED_WRAP}>
       {!ready && (
-        <div className="embed-skeleton" aria-hidden="true">
+        <div className={EMBED_SKELETON} aria-hidden="true">
           <Bar w="26%" h={10} />
           <Bar w="88%" h={10} />
           <Bar w="71%" h={10} />
@@ -216,7 +269,7 @@ function LogFrame({ src, title, settle }: { src: string; title: string; settle: 
           Fetching with the page means the wait is spent while you are reading
           something else. */}
       <iframe
-        className={ready ? 'embed is-ready' : 'embed'}
+        className={cn(EMBED, ready ? EMBED_READY : EMBED_COVERED)}
         src={src}
         title={title}
         onLoad={() => {
@@ -266,12 +319,12 @@ export function LogDetails({
 
   return (
     <details
-      className="sublog"
+      className={SUBLOG}
       onToggle={(e) => {
         if (e.currentTarget.open) setSeen(true)
       }}
     >
-      <summary>{summary}</summary>
+      <summary className={SUBLOG_SUMMARY}>{summary}</summary>
       {seen && <GrafanaLogs source={source} title={title} foot={foot} />}
     </details>
   )
@@ -341,7 +394,7 @@ export function LogBoard({
           summary={`${n.label} — ${n.role}`}
           source={n.source}
           title={n.title ?? `${n.label} logs`}
-          foot={<p className="board-foot">{n.note}</p>}
+          foot={<p className={BOARD_FOOT}>{n.note}</p>}
         />
       ))}
     </Board>
@@ -362,38 +415,36 @@ export function GrafanaLogs({
   // quiet between restarts, and a short default shows nothing for a healthy
   // one.
   const [from, setFrom] = useState<Range>('now-7d')
+  const scheme = useScheme()
 
   return (
     <>
-      <div className="logs-bar">
+      <div className="mb-[0.55rem] flex flex-wrap items-center justify-between gap-2">
         <Segmented
           value={from}
           onChange={setFrom}
           label="Log range"
           options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
         />
-        <a
-          className="btn btn-ghost"
-          href={grafanaLogsFull(source, from)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          ↗ Search
-        </a>
+        <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
+          <a href={grafanaLogsFull(source, from)} target="_blank" rel="noreferrer">
+            ↗ Search
+          </a>
+        </Button>
       </div>
-      {/* `key` on the range so a change remounts the frame rather than
+      {/* `key` on the range (and the scheme) so a change remounts the frame rather than
           mutating src — Grafana keeps its own history otherwise, and the back
           button would start walking through time ranges instead of pages. It
           also resets the cover, so switching range gets the same skeleton the
           first load does rather than Grafana's boot in the raw. */}
       <LogFrame
-        key={from}
-        src={grafanaLogsEmbed(source, from)}
+        key={`${from}-${scheme}`}
+        src={grafanaLogsEmbed(source, from, scheme)}
         title={title}
         settle={SETTLE.get(from) ?? 1_200}
       />
       {foot ?? (
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Rendered by Grafana from <code>{value(source)}</code>, newest first. The default is seven
           days because most services here are quiet between restarts, and a short window shows
           nothing for a service that is perfectly healthy. If the frame shows a login screen, open

@@ -1,5 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
+import { cn } from '../../../lib/cn'
 import type {
   UpdateRow,
   UpdatesData,
@@ -12,10 +13,13 @@ import {
   fetchUpdateNotes,
   requestImageUpdateFn,
 } from '../../../server/updates'
+import { GHOST_BTN } from '../../apps/shared'
 import { UpdateControl, UpdateProgress } from '../../image-update'
 import { Changelog } from '../../release-notes'
 import { usePolledStatus } from '../../status'
+import { Button } from '../../ui/button'
 import { Board, BoardGrid, Chip, type Tone } from '../../viz'
+import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
 
 // Every pinned image on the box, and what it would take to move it.
 //
@@ -65,6 +69,20 @@ const VERDICT: Record<UpdateVerdict, { label: string; tone: Tone }> = {
   current: { label: 'current', tone: 'ok' },
   unknown: { label: 'no verdict', tone: 'muted' },
 }
+
+const ROWS = 'flex flex-col gap-[0.3rem]'
+
+/* A row is a disclosure, and the same disclosure idiom as a release entry —
+   same triangle, same hover, same open rotation. Deliberately: opening a
+   container here and opening a release inside it are the same gesture one
+   level apart, and two different affordances for that would read as two
+   different kinds of thing. */
+const SUMMARY = cn(
+  'flex min-w-0 cursor-pointer list-none items-baseline gap-[0.7rem] px-[0.7rem] py-[0.45rem]',
+  'hover:bg-(--raise) [&::-webkit-details-marker]:hidden',
+  "before:text-[0.7rem] before:text-muted-foreground before:transition-transform before:duration-[0.12s] before:content-['▸']",
+  'group-open:before:rotate-90',
+)
 
 /** One queued container: what the row had decided when it was added. */
 type QueueItem = {
@@ -131,7 +149,7 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         icon="logs"
         span={12}
         aside={
-          <span className="board-note">
+          <span className={BOARD_NOTE}>
             {d.probeMissing
               ? 'the registry probe has not run'
               : `registry checked ${(d.checkedAt ?? '').slice(0, 10)}`}
@@ -139,20 +157,20 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         }
       >
         {behind.length === 0 ? (
-          <p className="viz-empty">
+          <p className={VIZ_EMPTY}>
             Every digest-pinned container is on the newest tag of its shape, and no channel tag has
             moved since it was pinned.
           </p>
         ) : (
-          <ul className="upd-rows">
+          <ul className={ROWS}>
             {behind.map((r) => (
               <Row key={r.container} r={r} status={d.status} queue={bind(r)} />
             ))}
           </ul>
         )}
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Pins come from the flake; the verdicts from a daily registry probe. A tag that MOVED is a
-          channel pin like <span className="mono">:latest</span> whose image was replaced, so the
+          channel pin like <span className={MONO}>:latest</span> whose image was replaced, so the
           update is the same tag and a new digest. A NEWER TAG is a frozen release pin with a higher
           version published beside it, and the notes inside the row are what that version contains.
         </p>
@@ -162,14 +180,18 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
         title="On the newest tag"
         icon="logs"
         span={12}
-        aside={<span className="board-note">{String(rest.length)} containers</span>}
+        aside={<span className={BOARD_NOTE}>{String(rest.length)} containers</span>}
       >
-        <ul className="upd-rows is-quiet">
+        {/* The settled half of the page. Dimmed as a group rather than per
+            row: it is a long list whose whole message is "nothing to do here",
+            and sixty rows at full contrast compete with the eight that need
+            reading. */}
+        <ul className={cn(ROWS, 'opacity-[0.72] hover:opacity-100')}>
           {rest.map((r) => (
             <Row key={r.container} r={r} status={d.status} queue={bind(r)} />
           ))}
         </ul>
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Open one to read what its current version shipped. “No verdict” means the registry did not
           answer for it, or the pin names a channel with nothing to compare against. Treat it as
           unknown.
@@ -192,8 +214,9 @@ function Row({
   const [notes, setNotes] = useState<Notes | null>(null)
 
   return (
-    <li className="upd-row">
+    <li>
       <details
+        className="group overflow-hidden rounded-[9px] border border-(--border-soft) bg-(--panel-2)"
         onToggle={(e) => {
           // On open, once. `<details>` renders its children whether or not it
           // is open, so a fetch on mount would be every row on the page asking
@@ -206,26 +229,40 @@ function Row({
           })
         }}
       >
-        <summary>
-          <span className="upd-name">{r.container}</span>
-          <span className="upd-from mono">{r.running.version ?? r.tag}</span>
+        <summary className={SUMMARY}>
+          <span className="min-w-[11rem] text-[0.84rem] text-foreground">{r.container}</span>
+          <span className={cn(MONO_FACE, 'text-[0.76rem] text-(--text-muted)')}>
+            {r.running.version ?? r.tag}
+          </span>
           {/* For a moved CHANNEL pin both tags are the same string, so the
               only honest thing the digests can say is "new digest" — unless
               the image states its own version, in which case that IS the
-              answer and the one worth reading. */}
-          <span className="upd-to mono">
+              answer and the one worth reading.
+
+              The arrow is a ::before rather than markup: it is punctuation
+              between two versions, not content, and a JSX string would put it
+              in the accessibility tree as a word. */}
+          <span
+            className={cn(
+              MONO_FACE,
+              'text-[0.76rem] text-foreground',
+              "before:mr-[0.25em] before:text-muted-foreground before:content-['→']",
+            )}
+          >
             {r.verdict === 'tag-moved'
               ? (r.freshness?.remoteVersion ?? 'new digest')
               : (r.freshness?.newerTag ?? DASH)}
           </span>
-          <Chip tone={v.tone}>{v.label}</Chip>
-          {!r.updatable && <Chip tone="muted">pinned</Chip>}
-          {/* On the closed row, because the whole point of a queue is to build
-              it while scrolling past rows that are shut. */}
-          {queue?.queued === true && <Chip tone="ok">queued</Chip>}
+          <span className="ml-auto flex items-baseline gap-[0.4rem]">
+            <Chip tone={v.tone}>{v.label}</Chip>
+            {!r.updatable && <Chip tone="muted">pinned</Chip>}
+            {/* On the closed row, because the whole point of a queue is to
+                build it while scrolling past rows that are shut. */}
+            {queue?.queued === true && <Chip tone="ok">queued</Chip>}
+          </span>
         </summary>
 
-        <div className="upd-body">
+        <div className="flex flex-col gap-[0.7rem] border-(--border-soft) border-t px-3 pt-2 pb-[0.7rem]">
           <NotesPanel notes={notes} hasNotes={r.hasNotes} />
           <UpdateControl
             target={{
@@ -240,7 +277,12 @@ function Row({
             initialStatus={status}
             queue={queue}
           />
-          <p className="upd-ref mono">{`${r.image}@${r.digest.slice(0, 19)}…`}</p>
+          {/* The exact ref this row would rewrite, last and quiet — it is what
+              a person copies into a shell to check something by hand, and it
+              is not part of the decision. */}
+          <p className={cn(MONO_FACE, 'text-[0.68rem] text-muted-foreground')}>
+            {`${r.image}@${r.digest.slice(0, 19)}…`}
+          </p>
         </div>
       </details>
     </li>
@@ -314,7 +356,7 @@ function QueuePanel({
       title={title}
       icon="logs"
       span={12}
-      aside={<span className="board-note">one commit, one rebuild</span>}
+      aside={<span className={BOARD_NOTE}>one commit, one rebuild</span>}
     >
       {mine && running ? (
         <UpdateProgress status={status} />
@@ -324,45 +366,57 @@ function QueuePanel({
               it: a failed batch reverted everything, so the list that produced
               it is still what the operator wants and is still sitting there. */}
           {mine && status.state === 'failed' && (
-            <div className="upd-failed">
-              <strong>The batch failed at {status.phase}.</strong>{' '}
+            <div>
+              <strong className="text-[0.82rem]">The batch failed at {status.phase}.</strong>{' '}
               {status.commit === null || status.commit === ''
                 ? 'Nothing was committed.'
                 : 'The commit was reverted and the system rebuilt onto the previous pins — every container in it, including the ones that were fine.'}
-              <pre className="apply-error">{status.error}</pre>
+              <pre className="mt-[0.4rem] max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
+                {status.error}
+              </pre>
             </div>
           )}
 
           {mine && status.state === 'done' && (
-            <div className="upd-done">
+            <div className="flex flex-wrap items-center gap-[0.6rem]">
               <Chip tone="ok">{status.phase === 'no-change' ? 'already there' : 'updated'}</Chip>
               {status.commit !== null && status.commit !== '' && (
-                <span className="mono upd-commit">{status.commit}</span>
+                <span className={cn(MONO_FACE, 'text-[0.72rem] text-muted-foreground')}>
+                  {status.commit}
+                </span>
               )}
             </div>
           )}
 
-          <ul className="upd-queue">
+          {/* What a single rebuild is about to move. One row per container,
+              laid out like the host's own resolved list so the list you built
+              and the list it resolved read as the same kind of thing. */}
+          <ul className="mb-[0.7rem] flex flex-col gap-[0.35rem] text-[0.76rem]">
             {queue.map((q) => (
-              <li key={q.container}>
-                <span className="upd-queue-name">{q.container}</span>
-                <span className="mono">
+              <li
+                key={q.container}
+                className="flex flex-wrap items-center gap-[0.6rem] border-(--border-soft) border-b pb-[0.35rem] last:border-b-0"
+              >
+                <span className="min-w-[11rem] text-(--text-muted)">{q.container}</span>
+                <span className={MONO}>
                   {q.tag}
                   {q.toTag === null ? ' — re-pull' : ` → ${q.toTag}`}
                 </span>
                 {q.lockstep.length > 0 && (
-                  <span className="board-note">with {q.lockstep.join(', ')}</span>
+                  <span className={BOARD_NOTE}>with {q.lockstep.join(', ')}</span>
                 )}
-                <button
+                <Button
                   type="button"
-                  className="btn btn-ghost"
+                  variant="outline"
+                  size="sm"
+                  className={cn(GHOST_BTN, 'ml-auto h-auto px-[0.55rem] py-[0.2rem] text-[0.7rem]')}
                   disabled={running}
                   onClick={() => {
                     onRemove(q.container)
                   }}
                 >
                   Remove
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -371,7 +425,7 @@ function QueuePanel({
             // Restated here even though each was confirmed in its own row: by
             // the time six are queued, the one that takes the netns down with
             // it is three screens up.
-            <ul className="upd-queue-warn">
+            <ul className="mb-[0.7rem] flex flex-col gap-[0.3rem] rounded-[9px] border border-warning/45 bg-warning/8 px-[0.7rem] py-[0.55rem] text-[0.76rem] text-(--text-muted)">
               {ceremonies.map((q) => (
                 <li key={q.container}>
                   <strong>{q.container}</strong> {q.ceremony}.
@@ -380,12 +434,12 @@ function QueuePanel({
             </ul>
           )}
 
-          {refusal !== null && <p className="bad-text">{refusal}</p>}
+          {refusal !== null && <p className="text-danger">{refusal}</p>}
 
-          <div className="upd-actions">
-            <button
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
               type="button"
-              className="btn btn-primary"
+              size="sm"
               disabled={running || n === 0}
               onClick={() => {
                 setRefusal(null)
@@ -408,12 +462,12 @@ function QueuePanel({
               }}
             >
               {running ? 'Updating…' : `Update ${String(n)} container${n === 1 ? '' : 's'}`}
-            </button>
+            </Button>
           </div>
         </>
       )}
 
-      <p className="board-foot">
+      <p className={BOARD_FOOT}>
         All of it or none of it. The queue becomes one commit and one rebuild, so if the build fails
         — or if any one of these containers does not come back on its new image — the whole commit
         is reverted and every pin here goes back, including the ones that were fine. Update a
@@ -421,7 +475,7 @@ function QueuePanel({
         {alsoMoves.length > 0 && (
           <>
             {' '}
-            Moving with them: <span className="mono">{alsoMoves.join(', ')}</span>.
+            Moving with them: <span className={MONO}>{alsoMoves.join(', ')}</span>.
           </>
         )}
       </p>
@@ -435,7 +489,7 @@ type Notes = { loading: boolean; data: Awaited<ReturnType<typeof fetchUpdateNote
 function NotesPanel({ notes, hasNotes }: { notes: Notes | null; hasNotes: boolean }) {
   if (!hasNotes) {
     return (
-      <p className="viz-empty">
+      <p className={VIZ_EMPTY}>
         No release notes: nothing maps this container to a project whose changelog we can read. The
         tag delta above is still the real answer to what a re-pull would bring. See
         <code> lib/dashboard/image-repos.ts</code> for why a guess is not offered instead.
@@ -444,7 +498,7 @@ function NotesPanel({ notes, hasNotes }: { notes: Notes | null; hasNotes: boolea
   }
 
   if (notes === null || notes.data === null) {
-    return <p className="viz-empty">Reading the release notes…</p>
+    return <p className={VIZ_EMPTY}>Reading the release notes…</p>
   }
 
   return <Changelog gap={notes.data.gap} build={notes.data.build} span={12} />

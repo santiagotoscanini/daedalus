@@ -1,6 +1,8 @@
 import { Await, createFileRoute, notFound } from '@tanstack/react-router'
 
 import { CategoryBoards } from '../components/category/registry'
+import { StateDot } from '../components/controls'
+import { PageHead } from '../components/page'
 import { BoardsSkeleton, ServiceHeadSkeleton, StatBandSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { CATEGORIES, type CategoryName, type CategorySpec, resolveTab } from '../lib/dashboard/nav'
@@ -70,10 +72,7 @@ function CategoryPage() {
 
   return (
     <>
-      <header className="page-head">
-        <h1>{spec.label}</h1>
-      </header>
-      <p className="lede cat-lede">{spec.lede}</p>
+      <PageHead title={spec.label}>{spec.lede}</PageHead>
 
       {spec.tabs.length > 0 &&
         (tabStatus === null ? (
@@ -133,10 +132,9 @@ function TabNav({
           label: t.label,
           dividerBefore: t.dividerBefore,
           extra: dotted ? (
-            <span
-              className={`dot dot-${up === null ? 'unknown' : up ? 'running' : 'attention'}`}
-              role="img"
-              aria-label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
+            <StateDot
+              state={up === null ? 'unknown' : up ? 'running' : 'attention'}
+              label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
               title={
                 t.probe === undefined && t.probes === undefined && t.health === undefined
                   ? 'nothing probes this yet'

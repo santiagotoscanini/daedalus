@@ -20,10 +20,66 @@ import { DASH, num } from '../../lib/format'
 import { GrafanaLogs, LogDetails } from '../logs'
 import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../service-head'
+import { Button } from '../ui/button'
 import { Board, BoardGrid, Chip, Columns, Measures } from '../viz'
 
 /** How many registrations the list shows before it is asked for the rest. */
 const APPS_SHOWN = 5
+
+/* The board vocabulary styles.css used to carry, as utilities. Restated per
+   category file rather than shared: the legacy sheet is being retired file by
+   file, so a common module would be a second place to keep in step. */
+const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
+const NOTE = 'text-[0.73rem] text-(--dim)'
+const FOOT = 'mt-[0.15rem] text-[0.73rem] leading-[1.45] text-(--dim) [overflow-wrap:anywhere]'
+const SUB =
+  'mt-[0.35rem] mb-[-0.2rem] text-[0.73rem] tracking-normal text-(--dim) [font-weight:550]'
+const EMPTY = 'py-[0.9rem] text-center text-[0.8rem] text-(--dim) [overflow-wrap:anywhere]'
+
+/* A flat list of named things, each led by a chip saying what kind it is and
+   trailed by whatever detail that kind has. Rows of a table, not a stack of
+   pills: a hairline between rows says the same thing at a fraction of the ink.
+   The row rules hang off the list so the <li>s stay bare. */
+const LIST =
+  'flex list-none flex-col [&>li]:flex [&>li]:min-w-0 [&>li]:items-center [&>li]:gap-[0.45rem] [&>li]:px-[0.1rem] [&>li]:py-[0.34rem] [&>li]:text-[0.77rem] [&>li+li]:border-t [&>li+li]:border-(--border-soft)'
+/* The name takes the slack, so the detail is pushed right without a spacer.
+   Both truncate: one long row must not widen the panel. */
+const MAIN = 'min-w-0 flex-auto truncate text-foreground'
+const SIDE = 'max-w-[60%] min-w-0 flex-[0_1_auto] truncate text-[0.68rem] tabular-nums text-(--dim)'
+/* An identifier in the side slot keeps the slot's own size — the legacy
+   `.mono` sat earlier in the sheet and lost that half of the pair. */
+const SIDE_MONO = `${SIDE} font-mono`
+
+/* The ends of a column chart's window. Pulled inside the board body's own gap:
+   the axis belongs to the chart above it. */
+const COLAXIS =
+  'mt-[-0.35rem] flex justify-between gap-[0.6rem] text-[0.66rem] tabular-nums text-(--dim)'
+
+/* The "show all 33" toggle under the registration list, on `Button
+   variant="outline"`. Left-aligned with the rows rather than centred: it is
+   the continuation of the list, not a footer action. */
+const BTN_MORE =
+  'mt-[0.35rem] h-auto self-start px-[0.5rem] py-[0.18rem] text-[0.7rem] text-(--text-muted) hover:border-foreground/30'
+
+/* The registration list. Half-width board, so the name column gives before the
+   bar does: the bar is the comparison and a 3rem one compares nothing, while a
+   truncated name is still recognisable and has its full form on hover. */
+const APPS = 'mt-[0.5rem] flex list-none flex-col gap-[0.1rem]'
+const APP = '[&[open]>summary]:bg-(--panel-2)'
+const APP_SUMMARY =
+  'grid cursor-pointer list-none grid-cols-[minmax(6rem,11rem)_minmax(3rem,1fr)_2.2rem_auto] items-center gap-[0.6rem] rounded-[7px] px-[0.45rem] py-[0.3rem] text-[0.78rem] hover:bg-(--panel-2) [&::-webkit-details-marker]:hidden'
+/* The `em`s are the same badge the ranking rows wear, so a state that changes
+   what the row means reads identically wherever it appears. */
+const APP_NAME =
+  'flex min-w-0 items-center gap-[0.4rem] text-foreground [&>span:first-child]:truncate [&>em]:flex-none [&>em]:rounded-full [&>em]:border [&>em]:border-warning/40 [&>em]:px-[0.35rem] [&>em]:py-[0.02rem] [&>em]:text-[0.6rem] [&>em]:text-warning [&>em]:not-italic'
+const APP_WHEN = 'text-right text-[0.7rem] whitespace-nowrap tabular-nums text-(--dim)'
+const APP_BODY = 'flex flex-col gap-[0.35rem] pt-[0.3rem] pr-[0.45rem] pb-[0.7rem] pl-[1.2rem]'
+
+/* The usage bar the ORDER no longer carries. */
+const TRACK = 'h-[5px] overflow-hidden rounded-[3px] bg-(--raise)'
+const FILL =
+  'block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[3px] bg-info opacity-85 motion-reduce:animate-none'
+const COUNT = 'text-right text-[0.79rem] whitespace-nowrap tabular-nums text-foreground'
 
 /**
  * Pocket ID: who can get in, and who did.
@@ -73,14 +129,11 @@ export function IdpView({ d }: { d: IdpData }) {
           </>
         }
         actions={
-          <a
-            className="btn btn-primary"
-            href="https://id.toscanini.me"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open Pocket ID ↗
-          </a>
+          <Button asChild size="sm">
+            <a href="https://id.toscanini.me" target="_blank" rel="noreferrer">
+              Open Pocket ID ↗
+            </a>
+          </Button>
         }
       />
       <LinkRow
@@ -102,7 +155,7 @@ export function IdpView({ d }: { d: IdpData }) {
           icon="key"
           span={6}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {w.days} days · {d.clients.length} applications registered
             </span>
           }
@@ -127,7 +180,7 @@ export function IdpView({ d }: { d: IdpData }) {
             empty="nothing in the window"
           />
           {d.daily.length > 0 && (
-            <p className="colaxis">
+            <p className={COLAXIS}>
               <span>{d.daily[0]?.date.slice(5)}</span>
               <span>applications opened per day</span>
               <span>{d.daily[d.daily.length - 1]?.date.slice(5)}</span>
@@ -137,7 +190,7 @@ export function IdpView({ d }: { d: IdpData }) {
           <AppList clients={d.clients} max={max} />
 
           {shared.length > 0 && (
-            <p className="board-foot">
+            <p className={FOOT}>
               {/* This said "duplicate" and blamed a rename. Both were wrong:
                   the pair is declared, and the module that declares it says
                   why. Reading a coincidence as a defect is worse than not
@@ -152,7 +205,7 @@ export function IdpView({ d }: { d: IdpData }) {
             </p>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             The measures are the value of single sign-on stated as a subtraction:{' '}
             <b>{num(w.signIns)} passkey sign-ins</b> against{' '}
             <b>{num(w.authorizations)} applications opened</b> is{' '}
@@ -184,60 +237,60 @@ export function IdpView({ d }: { d: IdpData }) {
           icon="▣"
           span={12}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {num(d.nix.declared)} declared in nix · {num(d.clients.length)} live at the IdP
             </span>
           }
         >
           {!d.nix.available ? (
-            <p className="viz-empty">
+            <p className={EMPTY}>
               /export/sso.json is not published, so the declared side of the diff is missing and
               nothing here can be called an orphan yet.
             </p>
           ) : d.nix.orphans.length === 0 && d.nix.unsynced.length === 0 ? (
-            <p className="viz-empty">
-              Every live client is declared in <span className="mono">fleet.ssoClients</span>, and
+            <p className={EMPTY}>
+              Every live client is declared in <span className={MONO}>fleet.ssoClients</span>, and
               every declaration exists at the IdP. Nothing has outlived its stack.
             </p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {d.nix.orphans.map((c) => (
                 <li key={c.id}>
                   <Chip tone="warn">orphan</Chip>
-                  <span className="item-main">{c.name}</span>
-                  <span className="item-side mono">{c.id}</span>
-                  <span className="item-side">live at the IdP, declared nowhere</span>
+                  <span className={MAIN}>{c.name}</span>
+                  <span className={SIDE_MONO}>{c.id}</span>
+                  <span className={SIDE}>live at the IdP, declared nowhere</span>
                 </li>
               ))}
               {d.nix.unsynced.map((c) => (
                 <li key={c.id}>
                   <Chip tone="warn">not synced</Chip>
-                  <span className="item-main">{c.name}</span>
-                  <span className="item-side mono">{c.id}</span>
-                  <span className="item-side">declared, absent at the IdP</span>
+                  <span className={MAIN}>{c.name}</span>
+                  <span className={SIDE_MONO}>{c.id}</span>
+                  <span className={SIDE}>declared, absent at the IdP</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
-            <span className="mono">pocket-id-clients.service</span> converges every{' '}
-            <span className="mono">fleet.ssoClients</span> entry on each rebuild but{' '}
+          <p className={FOOT}>
+            <span className={MONO}>pocket-id-clients.service</span> converges every{' '}
+            <span className={MONO}>fleet.ssoClients</span> entry on each rebuild but{' '}
             <b>never deletes</b>, so an <b>orphan</b> is a client whose declaring stack is gone. It
             still holds trusted redirect URIs and still accepts logins, and only a hand edit in
             Pocket ID removes it. <b>Not synced</b> is the other direction and usually transient: a
             declaration the convergence job has not pushed yet, or a sync that failed. Its journal
             is in the Logs board below. Matched on the client id, because the nix attr name IS the
-            OIDC <span className="mono">client_id</span>.
+            OIDC <span className={MONO}>client_id</span>.
           </p>
         </Board>
 
         <Board title="Who" icon="◑" span={3}>
-          <ul className="itemlist">
+          <ul className={LIST}>
             {d.users.map((u) => (
               <li key={u.username} title={u.groups.join(', ')}>
-                <span className="item-main">
+                <span className={MAIN}>
                   {u.displayName}
-                  {u.admin && <span className="muted"> · admin</span>}
+                  {u.admin && <span className="text-(--text-muted)"> · admin</span>}
                 </span>
                 {u.disabled && <Chip tone="bad">disabled</Chip>}
                 {/* An admin account that is not a person, and the only place
@@ -249,19 +302,19 @@ export function IdpView({ d }: { d: IdpData }) {
                     </span>
                   </Chip>
                 )}
-                <span className="item-side">
+                <span className={SIDE}>
                   {u.service ? 'never signs in' : (u.lastSignInAgo ?? 'not in the window')}
                 </span>
               </li>
             ))}
           </ul>
 
-          <h4 className="board-sub">Groups</h4>
-          <ul className="itemlist">
+          <h4 className={SUB}>Groups</h4>
+          <ul className={LIST}>
             {d.groups.map((g) => (
               <li key={g.name}>
-                <span className="item-main">{g.name}</span>
-                <span className="item-side">
+                <span className={MAIN}>{g.name}</span>
+                <span className={SIDE}>
                   {g.members === 0
                     ? 'nobody in it'
                     : `${String(g.members)} member${g.members === 1 ? '' : 's'}`}
@@ -274,18 +327,18 @@ export function IdpView({ d }: { d: IdpData }) {
               the inventory of things that can authenticate as somebody. The
               raw stream of when each one did is a log, and Pocket ID's own
               audit page is the place for that. */}
-          <h4 className="board-sub">Devices that signed in</h4>
+          <h4 className={SUB}>Devices that signed in</h4>
           {d.devices.length === 0 ? (
-            <p className="viz-empty">nobody signed in during the window</p>
+            <p className={EMPTY}>nobody signed in during the window</p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {d.devices.map((v) => (
                 <li key={v.name}>
-                  <span className="item-main" title={v.name}>
+                  <span className={MAIN} title={v.name}>
                     {v.name}
                   </span>
-                  <span className="item-side">{v.lastAgo}</span>
-                  <span className="item-n">{num(v.signIns)}</span>
+                  <span className={SIDE}>{v.lastAgo}</span>
+                  <span className={COUNT}>{num(v.signIns)}</span>
                 </li>
               ))}
             </ul>
@@ -293,7 +346,7 @@ export function IdpView({ d }: { d: IdpData }) {
 
           {/* A quarter of the width, so this says the things that change what
               the three lists above mean, and stops. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             A group is what an application restricts itself to, so an empty one is an application
             nobody can reach through it. A passkey belongs to a device, so the devices are the
             credentials. One you do not recognise is the thing to notice here. Sign-ups are{' '}
@@ -316,7 +369,7 @@ export function IdpView({ d }: { d: IdpData }) {
             source={{ unit: 'pocket-id-clients.service' }}
             title="pocket-id-clients"
             foot={
-              <p className="board-foot">
+              <p className={FOOT}>
                 A systemd oneshot on the host, so these are journal lines rather than container
                 logs. Defined in <code>stacks/pocket-id/clients.nix</code>, ordered after the IdP,
                 and run on every rebuild: it upserts one OIDC client per{' '}
@@ -335,7 +388,7 @@ export function IdpView({ d }: { d: IdpData }) {
             source={{ unit: 'sso-client-secrets.service' }}
             title="sso-client-secrets"
             foot={
-              <p className="board-foot">
+              <p className={FOOT}>
                 The other host oneshot from the same file, and the one that runs first. It generates
                 a client secret per <code>fleet.ssoClients</code> entry into a gitignored file on
                 disk, so the credential never enters the nix store. That is also why it cannot be a
@@ -367,24 +420,24 @@ function AppList({ clients, max }: { clients: IdpData['clients']; max: number })
 
   return (
     <>
-      <h4 className="board-sub">
-        {all ? 'Every registration' : `Last ${String(APPS_SHOWN)} used`}
-      </h4>
-      <ul className="idp-apps">
+      <h4 className={SUB}>{all ? 'Every registration' : `Last ${String(APPS_SHOWN)} used`}</h4>
+      <ul className={APPS}>
         {shown.map((c) => (
           <AppRow key={c.id} c={c} max={max} />
         ))}
       </ul>
       {rest > 0 && (
-        <button
+        <Button
           type="button"
-          className="btn btn-ghost idp-more"
+          variant="outline"
+          size="sm"
+          className={BTN_MORE}
           onClick={() => {
             setAll(!all)
           }}
         >
           {all ? 'Show fewer' : `Show all ${String(clients.length)}`}
-        </button>
+        </Button>
       )}
     </>
   )
@@ -408,16 +461,17 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
 
   return (
     <li>
-      <details className="idp-app">
-        <summary>
-          <span className="idp-app-name">
+      <details className={APP}>
+        <summary className={APP_SUMMARY}>
+          <span className={APP_NAME}>
             <span title={c.host ?? c.name}>{c.name}</span>
             {!c.restricted && <em title="Open to every account, not a named group">any account</em>}
             {/* Which of a hostname's registrations this one is. Not a fault
-                badge — see the note on `role`. */}
+                badge — see the note on `role`. The legacy `is-muted` marker it
+                used to carry never resolved here (the rule for it is scoped to
+                `.rank-name`), so it is still drawn as one. */}
             {c.role !== null && (
               <em
-                className="is-muted"
                 title={
                   c.role === 'gate'
                     ? 'The credential traefik’s forward-auth middleware signs in with, before the request reaches the app'
@@ -431,26 +485,26 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
           {/* The bar carries the magnitude the ORDER no longer does. Muted
               for a row with nothing in it, so the tail of the list reads as
               a tail rather than as forty empty tracks. */}
-          <span className={idle ? 'rank-track is-idle' : 'rank-track'}>
+          <span className={idle ? `${TRACK} opacity-25` : TRACK}>
             {!idle && (
               <span
-                className="rank-fill"
+                className={FILL}
                 style={{ width: `${String(Math.max(1.5, (c.used / max) * 100))}%` }}
               />
             )}
           </span>
-          <span className="rank-n">{idle ? DASH : num(c.used)}</span>
-          <span className="idp-app-when">{c.lastAgo ?? 'not in the window'}</span>
+          <span className={COUNT}>{idle ? DASH : num(c.used)}</span>
+          <span className={APP_WHEN}>{c.lastAgo ?? 'not in the window'}</span>
         </summary>
 
-        <div className="idp-app-body">
+        <div className={APP_BODY}>
           {c.opens.length === 0 ? (
-            <p className="viz-empty">
+            <p className={EMPTY}>
               Nobody opened this in the window. For an app behind the proxy gate that means nobody
               visited it. The registration is what the middleware itself signs in with.
             </p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {c.opens.map((o) => (
                 <li key={o.id}>
                   {/* Not "first time": the event recurs, and an access older
@@ -462,15 +516,15 @@ function AppRow({ c, max }: { c: IdpData['clients'][number]; max: number }) {
                       </span>
                     </Chip>
                   )}
-                  <span className="item-main">{o.username}</span>
-                  <span className="item-side">{o.device}</span>
-                  <span className="item-side">{o.ago}</span>
+                  <span className={MAIN}>{o.username}</span>
+                  <span className={SIDE}>{o.device}</span>
+                  <span className={SIDE}>{o.ago}</span>
                 </li>
               ))}
             </ul>
           )}
           {c.used > c.opens.length && (
-            <p className="board-foot">
+            <p className={FOOT}>
               The {num(c.opens.length)} most recent of {num(c.used)}. The rest are in Pocket ID.
             </p>
           )}

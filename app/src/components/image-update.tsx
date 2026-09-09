@@ -1,8 +1,11 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
+import { cn } from '../lib/cn'
 import type { ImageUpdateStatus } from '../lib/image-update'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../server/updates'
+import { MONO, MONO_FACE } from './category/system/shared'
 import { usePolledStatus } from './status'
+import { Button } from './ui/button'
 import { Chip } from './viz'
 
 // The control that moves a pin.
@@ -43,6 +46,23 @@ const PHASES = [
   'verifying',
   'pushing',
 ] as const
+
+const NOTE = 'text-[0.76rem] text-muted-foreground'
+
+/* The two small controls keep the legacy field look — monospace at the note's
+   size, the panel fill, a 7px corner — rather than the shadcn field height: they
+   sit inside a disclosure row, where a 36px input is taller than the row that
+   opened it. */
+const FIELD = cn(
+  MONO_FACE,
+  'rounded-[7px] border border-(--border) bg-(--panel) px-[0.4rem] py-[0.25rem] text-[0.76rem] text-foreground',
+)
+
+/* The confirmation gate, drawn as a warning rather than as a form: its job is
+   to interrupt, and the blast radius sentence above the input is the reason it
+   exists — the typing is only what makes the interruption deliberate. */
+const CEREMONY =
+  'w-full rounded-[9px] border border-warning/45 bg-warning/8 px-[0.7rem] py-[0.55rem]'
 
 /** Everything the control needs, and nothing a caller cannot already answer. */
 export type UpdateTarget = {
@@ -120,7 +140,7 @@ export function UpdateControl({
 
   if (!t.updatable) {
     return (
-      <p className="upd-note">
+      <p className={NOTE}>
         Pinned by policy: moving this one is not a pin edit. See
         <code> fleet.imageUpdates</code>.
       </p>
@@ -138,49 +158,54 @@ export function UpdateControl({
 
   if (mine && status.state === 'failed') {
     return (
-      <div className="upd-failed">
-        <strong>Update failed at {status.phase}.</strong>{' '}
+      <div>
+        <strong className="text-[0.82rem]">Update failed at {status.phase}.</strong>{' '}
         {status.commit === null || status.commit === ''
           ? 'Nothing was committed.'
           : 'The change was reverted and the system rebuilt onto the previous pin.'}
-        <pre className="apply-error">{status.error}</pre>
-        <button type="button" className="btn" onClick={() => router.invalidate()}>
+        <pre className="mt-[0.4rem] max-h-28 overflow-auto whitespace-pre-wrap text-[0.74rem] text-danger">
+          {status.error}
+        </pre>
+        <Button type="button" variant="outline" size="sm" onClick={() => router.invalidate()}>
           Dismiss
-        </button>
+        </Button>
       </div>
     )
   }
 
   if (mine && status.state === 'done') {
     return (
-      <div className="upd-done">
+      <div className="flex flex-wrap items-center gap-[0.6rem]">
         <Chip tone="ok">{status.phase === 'no-change' ? 'already there' : 'updated'}</Chip>
         <Moves status={status} />
         {status.commit !== null && status.commit !== '' && (
-          <span className="mono upd-commit">{status.commit}</span>
+          <span className={cn(MONO_FACE, 'text-[0.72rem] text-muted-foreground')}>
+            {status.commit}
+          </span>
         )}
       </div>
     )
   }
 
-  if (nothingToDo) return <p className="upd-note">Nothing newer published.</p>
+  if (nothingToDo) return <p className={NOTE}>Nothing newer published.</p>
 
   return (
-    <div className="upd">
+    <div className="flex flex-col items-start gap-[0.55rem]">
       {/* The chain, stated before the button rather than after: a lockstep
           group moves containers the operator did not pick, and finding that
           out from a commit message afterwards is not consent. */}
       {t.lockstep.length > 0 && (
-        <p className="upd-note">
-          Moves with it: <span className="mono">{t.lockstep.join(', ')}</span>. One release, one
+        <p className={NOTE}>
+          Moves with it: <span className={MONO}>{t.lockstep.join(', ')}</span>. One release, one
           commit.
         </p>
       )}
 
       {t.candidates.length > 1 && (
-        <label className="upd-pick">
+        <label className={cn(NOTE, 'flex items-center gap-2')}>
           <span>Target tag</span>
           <select
+            className={FIELD}
             value={to ?? ''}
             onChange={(e) => {
               setChosen(e.target.value)
@@ -204,15 +229,16 @@ export function UpdateControl({
       )}
 
       {t.ceremony !== null && (
-        <div className="upd-ceremony">
-          <p>
+        <div className={CEREMONY}>
+          <p className="mb-2 text-[0.78rem] text-(--text-muted)">
             <strong>{t.container}</strong> {t.ceremony}.
           </p>
-          <label>
+          <label className="flex items-center gap-2 text-[0.74rem] text-muted-foreground">
             <span>
-              Type <span className="mono">{t.container}</span> to confirm
+              Type <span className={MONO}>{t.container}</span> to confirm
             </span>
             <input
+              className={cn(FIELD, 'px-[0.45rem]')}
               value={typed}
               onChange={(e) => {
                 setTyped(e.target.value)
@@ -224,19 +250,22 @@ export function UpdateControl({
         </div>
       )}
 
-      {refusal !== null && <p className="bad-text">{refusal}</p>}
+      {refusal !== null && <p className="text-danger">{refusal}</p>}
 
       {queue?.blockedBy != null && (
-        <p className="upd-note">
-          Already queued as part of <span className="mono">{queue.blockedBy}</span>, which moves it
+        <p className={NOTE}>
+          Already queued as part of <span className={MONO}>{queue.blockedBy}</span>, which moves it
           in lockstep.
         </p>
       )}
 
-      <div className="upd-actions">
-        <button
+      {/* Update now, or add to the queue — side by side, because they are the
+          same decision with different timing and stacking them would read as a
+          hierarchy that does not exist. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
           type="button"
-          className="btn btn-primary"
+          size="sm"
           disabled={running || !armed}
           onClick={() => {
             setRefusal(null)
@@ -262,7 +291,7 @@ export function UpdateControl({
           }}
         >
           {running ? 'Updating…' : sameTag ? `Re-pull ${t.tag}` : `Update to ${to ?? ''}`}
-        </button>
+        </Button>
 
         {/* Queueing is the same decision as updating, made now and spent
             later — so it is gated on the same `armed`: a ceremony container
@@ -272,20 +301,27 @@ export function UpdateControl({
         {queue !== undefined &&
           queue.blockedBy === null &&
           (queue.queued ? (
-            <button type="button" className="btn" onClick={queue.remove} disabled={running}>
-              Remove from queue
-            </button>
-          ) : (
-            <button
+            <Button
               type="button"
-              className="btn"
+              variant="outline"
+              size="sm"
+              onClick={queue.remove}
+              disabled={running}
+            >
+              Remove from queue
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               disabled={running || !armed}
               onClick={() => {
                 queue.add(sameTag || to === null ? null : to)
               }}
             >
               Add to queue
-            </button>
+            </Button>
           ))}
       </div>
     </div>
@@ -302,14 +338,22 @@ export function UpdateControl({
 export function UpdateProgress({ status }: { status: ImageUpdateStatus }) {
   const at = PHASES.indexOf(status.phase as (typeof PHASES)[number])
   return (
-    <div className="upd-running">
-      <ol className="phases">
+    <div>
+      <ol className="inline-flex gap-[0.85rem] text-[0.78rem] text-muted-foreground">
         {PHASES.map((p, i) => (
-          <li key={p} className={p === status.phase ? 'now' : i < at ? 'past' : ''}>
+          <li
+            key={p}
+            className={cn(
+              p === status.phase && 'font-semibold text-primary',
+              i < at && 'text-(--text-muted) line-through',
+            )}
+          >
             {p}
           </li>
         ))}
-        {at === -1 && status.phase !== '' && <li className="now">{status.phase}</li>}
+        {at === -1 && status.phase !== '' && (
+          <li className="font-semibold text-primary">{status.phase}</li>
+        )}
       </ol>
       <Moves status={status} />
     </div>
@@ -328,11 +372,14 @@ export function Moves({ status }: { status: ImageUpdateStatus }) {
   if (status.moves.length === 0) return null
 
   return (
-    <ul className="upd-moves">
+    <ul className="mt-2 flex flex-col gap-[0.2rem] text-[0.74rem]">
       {status.moves.map((m) => (
-        <li key={m.container} className={m.changed ? '' : 'is-noop'}>
-          <span className="upd-move-name">{m.container}</span>
-          <span className="mono">
+        <li
+          key={m.container}
+          className={cn('flex gap-[0.6rem]', !m.changed && 'text-muted-foreground')}
+        >
+          <span className="min-w-[11rem] text-(--text-muted)">{m.container}</span>
+          <span className={MONO}>
             {m.fromTag}
             {m.changed ? ` → ${m.toTag}` : ' — already there'}
           </span>

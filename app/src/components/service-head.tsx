@@ -2,8 +2,10 @@ import type { ReactNode } from 'react'
 import type { VersionGap } from '../lib/dashboard/github'
 import type { ImageFreshness, RunningVersion } from '../lib/dashboard/images'
 import { DASH } from '../lib/format'
+import type { Tone } from '../lib/tone'
 import { InfoHint } from './hint'
-import { Chip, type Tone } from './viz'
+import { Button } from './ui/button'
+import { Chip } from './viz'
 
 // The header a page gets when its subject is one identifiable SERVICE.
 //
@@ -22,6 +24,13 @@ export type CompareRow = {
   /** Why this number matters here. One short clause, not a sentence. */
   note: string
 }
+
+/** The header's outer box, shared with `ServiceHeadSkeleton` so the space the
+    placeholder reserves is the space the real header takes. */
+export const SVC_HEAD = 'mb-[1.1rem] flex items-start gap-[0.85rem] max-[44rem]:flex-wrap'
+
+/** The artwork slot, shared with `ServiceHeadSkeleton` for the same reason. */
+export const SVC_LOGO = 'block size-11 flex-none object-contain'
 
 export function ServiceHead({
   logo,
@@ -48,21 +57,36 @@ export function ServiceHead({
   actions?: ReactNode
 }) {
   return (
-    <div className="svc-head">
-      <img className="svc-logo" src={logo} alt="" width={44} height={44} />
-      <div className="svc-ident">
-        <h2>{name}</h2>
+    <div className={SVC_HEAD}>
+      <img className={SVC_LOGO} src={logo} alt="" width={44} height={44} />
+      <div className="min-w-0">
+        <h2 className="m-0 text-[1.15rem] font-semibold">{name}</h2>
         {/* The version, attached to the name it is the version OF, with its
             verdict beside it — the three are one sentence, so they sit on one
             line rather than in separate cards a screen apart. */}
-        <p className="svc-version">
-          <span className="mono">{version ?? DASH}</span>
-          {versionNote !== undefined && <span className="svc-version-note">{versionNote}</span>}
+        <p className="mt-[0.15rem] mb-0 flex flex-wrap items-baseline gap-2">
+          <span className="font-mono text-[1.05rem] font-semibold tracking-[-0.01em] text-foreground [overflow-wrap:anywhere]">
+            {version ?? DASH}
+          </span>
+          {versionNote !== undefined && (
+            <span className="text-[0.73rem] text-muted-foreground">{versionNote}</span>
+          )}
           {verdict !== undefined && <VersionCompare verdict={verdict} rows={compare ?? []} />}
         </p>
-        <p className="lede">{lede}</p>
+        {/* Out of the 74ch prose measure the rest of the app's ledes keep. That
+            cap is right for a paragraph read down a column and wrong here: this
+            is one sentence on a line with a 44px logo and a button beside it,
+            and the cap folded it in half while a third of the header sat
+            empty. The header is the measure. */}
+        <p className="mt-[0.3rem] mb-0 max-w-none text-[0.82rem] text-(--text-muted)">{lede}</p>
       </div>
-      {actions !== undefined && <div className="svc-actions">{actions}</div>}
+      {/* The status chip and the one action on the page, kept together at the
+          far end. */}
+      {actions !== undefined && (
+        <div className="ml-auto flex flex-none items-center gap-[0.6rem] max-[44rem]:ml-0 max-[44rem]:w-full">
+          {actions}
+        </div>
+      )}
     </div>
   )
 }
@@ -87,15 +111,22 @@ function VersionCompare({
 
   return (
     <InfoHint
-      className="vercmp"
-      cardClassName="vercmp-card"
+      // Position and size only — InfoHint owns the reveal and the card chrome.
+      className="inline-flex cursor-default rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      cardClassName="top-[calc(100%+0.45rem)] left-0 flex w-max max-w-[19rem] flex-col gap-[0.4rem] px-[0.7rem] py-[0.6rem]"
       trigger={<Chip tone={verdict.tone}>{verdict.label}</Chip>}
     >
       {rows.map((r) => (
-        <span key={r.k} className="vercmp-row">
-          <span className="vercmp-k">{r.k}</span>
-          <span className="vercmp-v mono">{r.v ?? DASH}</span>
-          <span className="vercmp-note">{r.note}</span>
+        <span key={r.k} className="grid grid-cols-[1fr_auto] items-baseline gap-x-[0.7rem] gap-y-0">
+          <span className="text-[0.62rem] font-semibold tracking-[0.1em] text-muted-foreground uppercase">
+            {r.k}
+          </span>
+          <span className="font-mono text-[0.95rem] font-semibold text-foreground tabular-nums [overflow-wrap:anywhere]">
+            {r.v ?? DASH}
+          </span>
+          <span className="col-span-full text-[0.7rem] leading-[1.35] text-(--text-muted)">
+            {r.note}
+          </span>
         </span>
       ))}
     </InfoHint>
@@ -248,23 +279,31 @@ export const SOURCE_NOTE: Record<RunningVersion['source'], string> = {
  */
 export function Open({ name, host }: { name: string; host: string }) {
   return (
-    <a
-      className="btn btn-primary"
-      href={`https://${host}.toscanini.me`}
-      target="_blank"
-      rel="noreferrer"
-    >
-      Open {name} ↗
-    </a>
+    // The default variant on purpose: the one thing you came to press is the
+    // primary action, and `Button` carries the argument for why that is the
+    // foreground colour rather than the brand.
+    <Button asChild size="sm">
+      <a href={`https://${host}.toscanini.me`} target="_blank" rel="noreferrer">
+        Open {name} ↗
+      </a>
+    </Button>
   )
 }
 
 /** A row of related links, for the ones worth one click but not a button. */
 export function LinkRow({ links }: { links: { label: string; href: string }[] }) {
   return (
-    <p className="svc-links">
+    // Indented past the logo so the row hangs under the header's text column
+    // rather than under its artwork.
+    <p className="mt-[0.35rem] mr-0 mb-[1.1rem] ml-[3.4rem] flex flex-wrap gap-x-4 gap-y-0 text-[0.74rem] max-[44rem]:ml-0">
       {links.map((l) => (
-        <a key={l.href} href={l.href} target="_blank" rel="noreferrer">
+        <a
+          key={l.href}
+          className="text-muted-foreground no-underline hover:text-primary"
+          href={l.href}
+          target="_blank"
+          rel="noreferrer"
+        >
           {l.label} ↗
         </a>
       ))}

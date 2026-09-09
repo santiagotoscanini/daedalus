@@ -1,13 +1,28 @@
 import { useEffect, useState } from 'react'
+import { cn } from '../../../lib/cn'
 import type { NetworkData } from '../../../lib/dashboard/categories/network'
 import { bytes, DASH, ms, num, since, until } from '../../../lib/format'
 import { BASE_DOMAIN, stripBaseDomain } from '../../../lib/site'
+import { Segmented } from '../../controls'
 import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
-import { Segmented } from '../../ui'
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse } from '../../viz'
-import { tone } from './shared'
+import {
+  ACTION,
+  AXIS,
+  EMPTY,
+  FOOT,
+  LIVE,
+  MAIN,
+  MONO,
+  NOTE,
+  ROW,
+  ROWS,
+  SIDE,
+  SWITCH_BAR,
+  tone,
+} from './shared'
 
 // ── Coming in ──────────────────────────────────────────────────────────────
 
@@ -50,7 +65,7 @@ export function InboundView({ data }: { data: Inbound }) {
           a name printed twice is a name the reader has to reconcile — this
           says it once, in the only place it can be read without selecting the
           route it belongs to. */}
-      <div className="tunnel-bar">
+      <div className={SWITCH_BAR}>
         <Segmented
           value={route}
           onChange={setRoute}
@@ -118,7 +133,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
         }
         actions={
           data.url === null ? undefined : (
-            <a className="btn btn-primary" href={data.url} target="_blank" rel="noreferrer">
+            <a className={ACTION} href={data.url} target="_blank" rel="noreferrer">
               Open wg-easy ↗
             </a>
           )
@@ -137,7 +152,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
           icon="key"
           span={8}
           aside={
-            <span className="board-live">
+            <span className={LIVE}>
               <Pulse on={live} tone="ok" />
               {live ? `${num(counts.connected)} connected` : 'nobody dialled in'}
             </span>
@@ -152,25 +167,50 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
           />
 
           {peers.length === 0 ? (
-            <p className="viz-empty">no peers configured</p>
+            <p className={EMPTY}>no peers configured</p>
           ) : (
-            <ul className="ranks">
+            <ul className="m-0 flex list-none flex-col gap-[0.1rem] p-0">
               {peers.map((p) => (
-                <li className="rank" key={p.name}>
-                  <span className="rank-name">
-                    <span title={p.name}>{p.name}</span>
-                    {!p.enabled && <em className="is-muted">disabled</em>}
-                    {p.handshakeAgo === null && <em>never used</em>}
+                // Fixed name and count tracks, not `auto`. Each row is its own
+                // grid container, so a content-sized column is measured per
+                // row — the bars would start at a different x on every line and
+                // stop at a different one, which is the entire comparison this
+                // list exists to make.
+                <li
+                  className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-[0.55rem] gap-y-[0.1rem] rounded-[7px] px-[0.45rem] py-[0.3rem] hover:bg-(--panel-2)"
+                  key={p.name}
+                >
+                  <span className="flex min-w-0 items-baseline gap-[0.35rem] text-[0.79rem]">
+                    <span className="min-w-0 truncate" title={p.name}>
+                      {p.name}
+                    </span>
+                    {/* Deliberately switched off is not a warning at all — it
+                        explains the silence rather than reporting it. */}
+                    {!p.enabled && (
+                      <em className="flex-none rounded-full border border-border px-[0.35rem] py-[0.02rem] text-[0.6rem] text-(--dim) not-italic">
+                        disabled
+                      </em>
+                    )}
+                    {p.handshakeAgo === null && (
+                      <em className="flex-none rounded-full border border-[color-mix(in_srgb,var(--warning)_40%,transparent)] px-[0.35rem] py-[0.02rem] text-[0.6rem] text-warning not-italic">
+                        never used
+                      </em>
+                    )}
                   </span>
-                  <span className="rank-track">
+                  <span className="block h-[5px] overflow-hidden rounded-[3px] bg-(--raise)">
                     <span
-                      className="rank-fill"
+                      className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[3px] bg-info opacity-85 motion-reduce:animate-none"
                       style={{ width: `${String(Math.max(1.5, ((p.rx + p.tx) / max) * 100))}%` }}
                     />
                   </span>
-                  <span className="rank-n">{bytes(p.rx + p.tx)}</span>
-                  <span className="rank-meta">
-                    {p.ipv4 !== null && <span className="mono">{p.ipv4}</span>}
+                  <span className="text-right text-[0.79rem] whitespace-nowrap tabular-nums">
+                    {bytes(p.rx + p.tx)}
+                  </span>
+                  {/* Interpuncts are generated between the items rather than
+                      typed, so a peer with no address does not trail a
+                      separator into empty space. */}
+                  <span className="col-span-full flex min-w-0 flex-wrap gap-x-[0.4rem] gap-y-0 text-[0.69rem] text-(--dim) tabular-nums [&>span+span]:before:mr-[0.4rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
+                    {p.ipv4 !== null && <span className={cn(MONO, 'truncate')}>{p.ipv4}</span>}
                     {/* Named rather than arrowed. An arrow on a VPN row is
                         ambiguous by construction — the same byte is the
                         peer's upload and the server's download — so these say
@@ -184,7 +224,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
             </ul>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             {/* The distinction that trips people up: WireGuard is
                 connectionless, so there is no session to be in or out of. */}
             Ranked by total traffic. WireGuard has no connections to count. A peer is
@@ -198,7 +238,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
           title="Anyone home"
           icon="clock"
           span={4}
-          aside={<span className="board-note">peak per day, 14d</span>}
+          aside={<span className={NOTE}>peak per day, 14d</span>}
         >
           <Columns
             points={daily.map((d) => ({
@@ -211,13 +251,13 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
             empty="no history yet"
           />
           {daily.length > 0 && (
-            <p className="colaxis">
+            <p className={AXIS}>
               <span>{daily[0]?.date.slice(5)}</span>
               <span>peers at peak</span>
               <span>{daily[daily.length - 1]?.date.slice(5)}</span>
             </p>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Peak rather than average, because the question is whether the tunnel got used at all and
             a twenty-minute session averages to nearly nothing over a day. An empty column is a day
             nobody was away from the house, not a fault.
@@ -277,7 +317,7 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
         }
         actions={
           <a
-            className="btn btn-primary"
+            className={ACTION}
             href="https://one.dash.cloudflare.com/"
             target="_blank"
             rel="noreferrer"
@@ -302,7 +342,7 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
           icon="⇥"
           span={8}
           aside={
-            <span className="board-live">
+            <span className={LIVE}>
               <Pulse on={healthy} tone={healthy ? 'ok' : 'bad'} />
               {t.status ?? 'unknown'}
             </span>
@@ -331,14 +371,14 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
             empty="no history yet"
           />
           {t.daily.length > 0 && (
-            <p className="colaxis">
+            <p className={AXIS}>
               <span>{t.daily[0]?.date.slice(5)}</span>
               <span>requests from outside, per day</span>
               <span>{t.daily[t.daily.length - 1]?.date.slice(5)}</span>
             </p>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             Four connections into{' '}
             {t.edges.length === 0
               ? 'the edge.'
@@ -354,21 +394,21 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
           title="Published to the world"
           icon="◍"
           span={4}
-          aside={<span className="board-note">{t.published.length} hostnames</span>}
+          aside={<span className={NOTE}>{t.published.length} hostnames</span>}
         >
           {t.published.length === 0 ? (
-            <p className="viz-empty">could not read the tunnel’s ingress rules</p>
+            <p className={EMPTY}>could not read the tunnel’s ingress rules</p>
           ) : (
-            <ul className="itemlist">
+            <ul className={ROWS}>
               {t.published.map((p) => (
-                <li key={p.hostname}>
-                  <span className="item-main">{stripBaseDomain(p.hostname)}</span>
-                  <span className="item-side mono">{p.service.replace(/^https?:\/\//, '')}</span>
+                <li key={p.hostname} className={ROW}>
+                  <span className={MAIN}>{stripBaseDomain(p.hostname)}</span>
+                  <span className={cn(MONO, SIDE)}>{p.service.replace(/^https?:\/\//, '')}</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Read back from the tunnel’s own ingress rules, which is the only list that decides
             anything. A hostname here is reachable from the internet; one that is not here is not,
             whatever DNS says. Every entry is generated by a <code>webApps.exposeRemotely</code>, so
@@ -451,7 +491,7 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           icon="◎"
           span={8}
           aside={
-            <span className="board-live">
+            <span className={LIVE}>
               <Pulse on={match} tone={known && !match ? 'bad' : 'ok'} />
               {!known ? 'cannot tell' : match ? 'matches' : 'does not match'}
             </span>
@@ -473,7 +513,7 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
             ]}
           />
 
-          <p className="board-foot">
+          <p className={FOOT}>
             {match ? (
               <>
                 The name resolves to the address the tunnel reports traffic arriving from, so
@@ -494,9 +534,10 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           </p>
 
           {/* The failure that has no other symptom. Counted from the log
-              because the unit exits 0 either way. */}
+              because the unit exits 0 either way. Warn rather than bad — it is
+              something to look into, not something that is currently broken. */}
           {(d.lookupFailures.month ?? 0) > 0 && (
-            <p className="rejected">
+            <p className="mt-[0.5rem] mb-0 rounded-[7px] border border-[color-mix(in_srgb,var(--warning)_32%,transparent)] bg-[color-mix(in_srgb,var(--warning)_7%,transparent)] px-[0.55rem] py-[0.4rem] text-[0.72rem] leading-[1.45] text-(--text-muted) [&_b]:font-semibold [&_b]:text-warning [&_b]:tabular-nums">
               ddclient could not work out this house’s address <b>{num(d.lookupFailures.day)}</b>{' '}
               times in the last day, <b>{num(d.lookupFailures.week)}</b> in the week and{' '}
               <b>{num(d.lookupFailures.month)}</b> in the month. Its lookup against{' '}
@@ -514,22 +555,22 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           title="What needs it"
           icon="⇥"
           span={4}
-          aside={<span className="board-note">router-forwarded</span>}
+          aside={<span className={NOTE}>router-forwarded</span>}
         >
           {d.needs.length === 0 ? (
-            <p className="viz-empty">nothing declares a direct port</p>
+            <p className={EMPTY}>nothing declares a direct port</p>
           ) : (
-            <ul className="itemlist">
+            <ul className={ROWS}>
               {d.needs.map((n) => (
-                <li key={n.name} title={n.note}>
+                <li key={n.name} className={ROW} title={n.note}>
                   <Chip tone="info">{n.proto}</Chip>
-                  <span className="item-main">{n.name}</span>
-                  <span className="item-side mono">{n.port}</span>
+                  <span className={MAIN}>{n.name}</span>
+                  <span className={cn(MONO, SIDE)}>{n.port}</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             From <code>fleet.directIngress</code>, which each service declares beside its own
             firewall rule. This is the one registry on the box recording something nix does not own:
             the router’s port-forward table lives in the router. It is written next to the service
@@ -545,13 +586,13 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           aside={<Countdown at={d.nextRunAt} />}
         >
           {d.history.length === 0 ? (
-            <p className="viz-empty">no change recorded in the log window</p>
+            <p className={EMPTY}>no change recorded in the log window</p>
           ) : (
-            <ul className="itemlist">
+            <ul className={ROWS}>
               {d.history.map((h) => (
-                <li key={h.at}>
-                  <span className="item-main mono">{h.ip}</span>
-                  <span className="item-side">
+                <li key={h.at} className={ROW}>
+                  <span className={cn(MAIN, MONO)}>{h.ip}</span>
+                  <span className={SIDE}>
                     {h.heldDays === null ? 'current' : `held ${String(h.heldDays)}d`} ·{' '}
                     {new Date(h.at).toLocaleDateString('en-CA')}
                   </span>
@@ -559,7 +600,7 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             {/* The pattern is the useful part: the changes and the failures
                 are the same event seen twice, which is worth saying because
                 otherwise the failures above look random. */}
@@ -578,7 +619,7 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
           source={{ unit: 'ddclient.service' }}
           title="ddclient logs"
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               ddclient is host plumbing rather than a container, so these are journal lines. It runs
               every {d.intervalSeconds === null ? 'five minutes' : until(d.intervalSeconds)} and
               says nothing on a successful run that changed nothing, which is most of them.
@@ -617,11 +658,11 @@ function Countdown({ at }: { at: number | null }) {
     }
   }, [])
 
-  if (at === null) return <span className="board-note">next run unknown</span>
+  if (at === null) return <span className={NOTE}>next run unknown</span>
 
   const left = now === null ? null : Math.max(0, Math.round((at - now) / 1000))
   return (
-    <span className="board-note">
+    <span className={NOTE}>
       next check{' '}
       {left === null ? (
         'soon'
@@ -631,7 +672,7 @@ function Countdown({ at }: { at: number | null }) {
       left === 0 ? (
         'due now'
       ) : (
-        <span className="mono">
+        <span className={MONO}>
           {String(Math.floor(left / 60)).padStart(2, '0')}:{String(left % 60).padStart(2, '0')}
         </span>
       )}

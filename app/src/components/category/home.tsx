@@ -16,6 +16,41 @@ import { IdpView } from './idp'
 // The rule on the tab row separates what the house shares from what one person
 // uses. See the note in the loader for why that is the line.
 
+/* The board vocabulary styles.css used to carry, as utilities. Restated per
+   category file rather than shared: the legacy sheet is being retired file by
+   file, so a common module would be a second place to keep in step. */
+const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
+const NOTE = 'text-[0.73rem] text-(--dim)'
+/* Split so the two coloured variants each state their own ink rather than
+   layering a second text utility over the first, where source order in the
+   emitted stylesheet — not the order in the string — would pick the winner. */
+const FOOT_BASE = 'mt-[0.15rem] text-[0.73rem] leading-[1.45] [overflow-wrap:anywhere]'
+const FOOT = `${FOOT_BASE} text-(--dim)`
+const FOOT_WARN = `${FOOT_BASE} text-warning`
+const SUB =
+  'mt-[0.35rem] mb-[-0.2rem] text-[0.73rem] tracking-normal text-(--dim) [font-weight:550]'
+const EMPTY = 'py-[0.9rem] text-center text-[0.8rem] text-(--dim) [overflow-wrap:anywhere]'
+
+/* A flat list of named things, each led by a chip saying what kind it is and
+   trailed by whatever detail that kind has. Rows of a table, not a stack of
+   pills: a hairline between rows says the same thing at a fraction of the ink.
+   The row rules hang off the list so the <li>s stay bare. */
+const LIST =
+  'flex list-none flex-col [&>li]:flex [&>li]:min-w-0 [&>li]:items-center [&>li]:gap-[0.45rem] [&>li]:px-[0.1rem] [&>li]:py-[0.34rem] [&>li]:text-[0.77rem] [&>li+li]:border-t [&>li+li]:border-(--border-soft)'
+/* The name takes the slack, so the detail is pushed right without a spacer.
+   Both truncate: one long row must not widen the panel. */
+const MAIN = 'min-w-0 flex-auto truncate text-foreground'
+const SIDE = 'max-w-[60%] min-w-0 flex-[0_1_auto] truncate text-[0.68rem] tabular-nums text-(--dim)'
+const NUM = 'min-w-[1.4rem] text-right tabular-nums text-foreground'
+
+/* One person, as a pill. The border is supplied by the caller either way —
+   "home" tints it, and a second border utility layered over a first would be
+   decided by the stylesheet's order rather than by the string's. */
+const PERSON =
+  'flex items-center gap-[0.4rem] rounded-full border bg-(--panel-2) px-[0.6rem] py-[0.3rem] text-[0.82rem] [&>em]:text-[0.72rem] [&>em]:not-italic [&>em]:text-(--dim)'
+const TEMP =
+  'flex max-w-[11rem] min-w-0 flex-col items-start rounded-[8px] bg-(--panel-2) px-[0.6rem] py-[0.35rem] [&>strong]:text-[1.05rem] [&>strong]:font-semibold [&>strong]:tabular-nums [&>em]:max-w-full [&>em]:truncate [&>em]:text-[0.67rem] [&>em]:not-italic [&>em]:text-(--dim)'
+
 export function HomeView({ data }: { data: HomeData }) {
   switch (data.tab) {
     case 'house':
@@ -68,18 +103,21 @@ function HouseView({ d }: { d: House }) {
           span={8}
           aside={
             d.reachable ? (
-              <span className="board-note">
+              <span className={NOTE}>
                 {num(d.entities)} entities · {num(d.integrations)} integrations
               </span>
             ) : (
-              <span className="board-note text-bad">not answering</span>
+              <span className="text-[0.73rem] text-danger">not answering</span>
             )
           }
         >
           {d.people.length > 0 && (
-            <ul className="people">
+            <ul className="flex list-none flex-row flex-wrap gap-[0.4rem]">
               {d.people.map((p) => (
-                <li key={p.name} className={p.home ? 'people-row people-home' : 'people-row'}>
+                <li
+                  key={p.name}
+                  className={`${PERSON} ${p.home ? 'border-success/35' : 'border-(--border-soft)'}`}
+                >
                   <Pulse on={p.home} tone="ok" />
                   <span>{p.name}</span>
                   <em>{p.home ? 'home' : 'away'}</em>
@@ -99,10 +137,10 @@ function HouseView({ d }: { d: House }) {
 
           {d.temperatures.length > 0 && (
             <>
-              <h4 className="board-sub">Temperature</h4>
-              <div className="temps">
+              <h4 className={SUB}>Temperature</h4>
+              <div className="flex flex-wrap gap-[0.5rem]">
                 {d.temperatures.map((t) => (
-                  <span key={t.label} className="temps-item">
+                  <span key={t.label} className={TEMP}>
                     <strong>{t.value.toFixed(1)}°</strong>
                     <em title={t.label}>{t.label}</em>
                   </span>
@@ -111,7 +149,7 @@ function HouseView({ d }: { d: House }) {
             </>
           )}
 
-          <h4 className="board-sub">Entities by domain</h4>
+          <h4 className={SUB}>Entities by domain</h4>
           <BarList items={d.domains} tone="info" empty="nothing to count" />
         </Board>
 
@@ -121,7 +159,7 @@ function HouseView({ d }: { d: House }) {
               lost their WiFi pairing — so the only reading worth having is
               whether the set has grown somewhere NEW. */}
           <BarList items={d.unavailableBy} tone="warn" empty="every entity is reporting" />
-          <p className="board-foot">
+          <p className={FOOT}>
             {num(d.unavailable)} of {num(d.entities)} entities are <b>unavailable</b> or{' '}
             <b>unknown</b>. Most of that is the Tuya lights, which have been off the network since
             they lost their pairing and need re-pairing from the app. That number will not fall on
@@ -148,7 +186,7 @@ function HouseView({ d }: { d: House }) {
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Read back from the instance rather than restated here. A time zone that has drifted from
             the host&rsquo;s is what makes an automation fire an hour late.
           </p>
@@ -203,9 +241,9 @@ function PhotosView({ d }: { d: Photos }) {
           title="Library"
           icon="◨"
           span={8}
-          aside={<span className="board-note">{num(total)} items</span>}
+          aside={<span className={NOTE}>{num(total)} items</span>}
         >
-          <div className="library-split">
+          <div className="flex items-center gap-[1.1rem] max-[30rem]:flex-col max-[30rem]:items-start [&>dl]:flex-auto">
             {/* The ring is the split between stills and video, which IS a
                 whole this data describes — unlike library size, which has no
                 honest denominator here. */}
@@ -224,7 +262,7 @@ function PhotosView({ d }: { d: Photos }) {
               ]}
             />
           </div>
-          <p className="board-foot">
+          <p className={FOOT}>
             Video is{' '}
             {pct(
               d.usageBytes === null || d.usageBytes === 0
@@ -251,8 +289,8 @@ function PhotosView({ d }: { d: Photos }) {
               { k: 'free', v: bytes(d.disk.freeBytes) },
             ]}
           />
-          <p className="board-foot">
-            The <span className="mono">/s2/immich</span> dataset, read from node_exporter.
+          <p className={FOOT}>
+            The <span className={MONO}>/s2/immich</span> dataset, read from node_exporter.
             Immich&rsquo;s own storage endpoint needs a permission this API key does not carry, and
             the dataset underneath is the same disk. Hourly, daily and weekly snapshots; on the
             mirror, so a single drive failure costs nothing.
@@ -260,19 +298,19 @@ function PhotosView({ d }: { d: Photos }) {
         </Board>
 
         <Board title="Who is backing up" icon="◑" span={4}>
-          <ul className="itemlist">
+          <ul className={LIST}>
             {d.users.map((u) => (
               <li key={u.name}>
-                <span className="item-main">{u.name}</span>
-                <span className="item-side">
+                <span className={MAIN}>{u.name}</span>
+                <span className={SIDE}>
                   {num(u.photos)} + {num(u.videos)} video
                 </span>
-                <span className="item-n">{bytes(u.usageBytes)}</span>
+                <span className={NUM}>{bytes(u.usageBytes)}</span>
               </li>
             ))}
           </ul>
-          {d.users.length === 0 && <p className="viz-empty">could not read the user list</p>}
-          <p className="board-foot">
+          {d.users.length === 0 && <p className={EMPTY}>could not read the user list</p>}
+          <p className={FOOT}>
             Quotas are unset on every account, so the only ceiling is the dataset above.
           </p>
         </Board>
@@ -283,7 +321,7 @@ function PhotosView({ d }: { d: Photos }) {
           source={{ stack: 'immich' }}
           title="Immich logs"
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               The whole stack rather than one container: the server, the machine-learning worker
               that does face and object recognition, and its Redis. A backup that appears to hang is
               usually the ML worker, which logs there and nowhere else.
@@ -326,7 +364,7 @@ function FilesView({ d }: { d: Files }) {
           title="Sharing"
           icon="⇗"
           span={8}
-          aside={<span className="board-note">{num(d.shares.total)} shares</span>}
+          aside={<span className={NOTE}>{num(d.shares.total)} shares</span>}
         >
           <Measures
             items={[
@@ -338,7 +376,7 @@ function FilesView({ d }: { d: Files }) {
           />
           {/* The one fact on this page that is worth acting on, and the one a
               tile of four stats had no room for. */}
-          <p className={openLinks > 0 ? 'board-foot text-warn' : 'board-foot'}>
+          <p className={openLinks > 0 ? FOOT_WARN : FOOT}>
             {openLinks > 0 ? (
               <>
                 <b>{num(openLinks)}</b> of {num(d.shares.link)} public links carry no password, so
@@ -374,7 +412,7 @@ function FilesView({ d }: { d: Files }) {
               { k: 'last week', v: num(d.active.d7) },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Sign-in is Pocket ID only. The login form is hidden, so there is no password on this
             instance to guess or reuse.
           </p>
@@ -393,7 +431,7 @@ function FilesView({ d }: { d: Files }) {
               { k: 'Distributed cache', v: (d.cache ?? DASH).replace(/^\\?OC\\Memcache\\/, '') },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             The database is a tenant of the shared cluster, not a container of its own. It appears
             on System &rsaquo; Database with every other app&rsquo;s.
           </p>
@@ -454,7 +492,7 @@ function PantryView({ d }: { d: Pantry }) {
           title="Stock"
           icon="◱"
           span={8}
-          aside={<span className="board-note">{num(d.inStock)} products on hand</span>}
+          aside={<span className={NOTE}>{num(d.inStock)} products on hand</span>}
         >
           <Measures
             items={[
@@ -464,7 +502,7 @@ function PantryView({ d }: { d: Pantry }) {
               { k: 'missing from stock', v: num(d.missing) },
             ]}
           />
-          <p className={alarm > 0 ? 'board-foot text-warn' : 'board-foot'}>
+          <p className={alarm > 0 ? FOOT_WARN : FOOT}>
             {alarm > 0 ? (
               <>
                 <b>{num(alarm)}</b> products are past their date. Grocy distinguishes the two:{' '}
@@ -489,7 +527,7 @@ function PantryView({ d }: { d: Pantry }) {
                 k: 'Chores overdue',
                 v:
                   (d.chores.overdue ?? 0) > 0 ? (
-                    <span className="text-warn">{num(d.chores.overdue)}</span>
+                    <span className="text-warning">{num(d.chores.overdue)}</span>
                   ) : (
                     num(d.chores.overdue)
                   ),
@@ -499,14 +537,14 @@ function PantryView({ d }: { d: Pantry }) {
                 k: 'Tasks overdue',
                 v:
                   (d.tasks.overdue ?? 0) > 0 ? (
-                    <span className="text-warn">{num(d.tasks.overdue)}</span>
+                    <span className="text-warning">{num(d.tasks.overdue)}</span>
                   ) : (
                     num(d.tasks.overdue)
                   ),
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Both lists are empty on this instance. The stock half is what it is used for.
           </p>
         </Board>
@@ -558,7 +596,7 @@ function FinanceView({ d }: { d: Finance }) {
                   d.running.revision === null ? (
                     DASH
                   ) : (
-                    <span className="mono">{d.running.revision}</span>
+                    <span className={MONO}>{d.running.revision}</span>
                   ),
               },
               {
@@ -577,7 +615,7 @@ function FinanceView({ d }: { d: Finance }) {
           {/* Said out loud rather than left as an empty page. A panel that is
               blank because nothing was asked and one that is blank because
               the answer is zero look identical otherwise. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             Deliberately thin. Every path under this hostname returns the single-page app, and the
             API behind it authenticates with a browser session rather than a key, so there is no
             holding, no balance and no transaction count this dashboard can read without being a
@@ -647,7 +685,7 @@ function ToolsView({ d }: { d: Tools }) {
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Stateless: documents are processed in memory and dropped, which is why this tab is a
             version and a log and stops there. It is also why this is the one application here that
             could be deleted and rebuilt from nothing with no loss.

@@ -57,6 +57,13 @@
       "when": 1786498710149,
       "tag": "0007_serious_sersi",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788876557982,
+      "tag": "0008_right_starfox",
+      "breakpoints": true
     }
   ]
 }

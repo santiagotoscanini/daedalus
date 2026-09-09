@@ -1,10 +1,11 @@
+import { cn } from '../../../lib/cn'
 import type { MediaData } from '../../../lib/dashboard/categories/media'
 import { bytes, num } from '../../../lib/format'
 import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../service-head'
 import { Board, BoardGrid, Chip, Facts, Progress, Pulse, Ring, Trend } from '../../viz'
-import { ago } from './shared'
+import { ago, EMPTY, FOOT, LIST, MONO, NOTE } from './shared'
 
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */
 
@@ -30,7 +31,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
         compare={compareOf(d.gap, 'from /System/Info')}
         lede={
           <>
-            Where everything on this page ends up. Streams from <span className="mono">/s2/tv</span>{' '}
+            Where everything on this page ends up. Streams from <span className={MONO}>/s2/tv</span>{' '}
             and transcodes on the iGPU. The one media container deliberately outside the VPN, so
             playing something at home does not go out through Switzerland and back.
           </>
@@ -45,23 +46,23 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
           span={8}
           aside={
             transcoding === 0 ? undefined : (
-              <span className="board-note">{num(transcoding)} transcoding</span>
+              <span className={NOTE}>{num(transcoding)} transcoding</span>
             )
           }
         >
           {d.playing.length === 0 ? (
-            <p className="viz-empty">Nobody is watching anything.</p>
+            <p className={EMPTY}>Nobody is watching anything.</p>
           ) : (
-            <ul className="playing">
+            <ul className={`${LIST} gap-[0.8rem]`}>
               {d.playing.map((s, i) => (
-                <li key={`${s.user}-${String(i)}`} className="playing-row">
-                  <div className="playing-head">
-                    <span className="playing-title">
+                <li key={`${s.user}-${String(i)}`} className="flex flex-col gap-[0.35rem]">
+                  <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-[0.7rem]">
+                    <span className="flex min-w-0 items-center gap-[0.45rem] truncate font-[550] [&_em]:font-normal [&_em]:text-(--text-muted) [&_em]:not-italic">
                       <Pulse on={!s.paused} tone="ok" />
                       {s.title}
                       {s.sub !== null && <em> — {s.sub}</em>}
                     </span>
-                    <span className="playing-tags">
+                    <span className="flex flex-wrap gap-[0.3rem]">
                       <Chip tone="info">{s.user}</Chip>
                       {s.device !== null && <Chip>{s.device}</Chip>}
                       {/* Transcode vs DirectPlay is the difference between a
@@ -82,7 +83,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Only sessions actually playing something. Every poller that has ever asked Jellyfin a
             question holds an idle session for a while afterwards, so the raw list reports an
             audience that is not in the room.
@@ -90,7 +91,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
         </Board>
 
         <Board title="Library" icon="grid" span={4}>
-          <div className="library-split">
+          <div className="flex items-center gap-[1.1rem] max-[30rem]:flex-col max-[30rem]:items-start">
             <Ring
               pct={
                 total === null || library.usedBytes === null
@@ -101,16 +102,22 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
               label="/s2/tv"
               tone="info"
             />
-            <Facts
-              rows={[
-                { k: 'Movies', v: num(counts.movies) },
-                { k: 'Series', v: num(counts.series) },
-                { k: 'Episodes', v: num(counts.episodes) },
-                { k: 'Free on pool', v: bytes(library.freeBytes) },
-              ]}
-            />
+            {/* The wrapper is what takes the slack beside the ring — `Facts`
+                draws its own grid and has no class of its own to stretch. */}
+            <div className="min-w-0 flex-auto">
+              <Facts
+                rows={[
+                  { k: 'Movies', v: num(counts.movies) },
+                  { k: 'Series', v: num(counts.series) },
+                  { k: 'Episodes', v: num(counts.episodes) },
+                  { k: 'Free on pool', v: bytes(library.freeBytes) },
+                ]}
+              />
+            </div>
           </div>
-          <h4 className="board-sub">Growth, 30 days</h4>
+          <h4 className="mt-[0.35rem] mb-[-0.2rem] text-[0.73rem] font-[550] tracking-normal text-muted-foreground">
+            Growth, 30 days
+          </h4>
           <Trend values={library.growth} tone="info" height={70} />
         </Board>
 
@@ -118,21 +125,23 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
           title="Who watches"
           icon="◍"
           span={4}
-          aside={<span className="board-note">{num(d.people.length)} accounts</span>}
+          aside={<span className={NOTE}>{num(d.people.length)} accounts</span>}
         >
           {d.people.length === 0 ? (
-            <p className="viz-empty">could not read the user list</p>
+            <p className={EMPTY}>could not read the user list</p>
           ) : (
-            <ul className="who">
+            <ul className={`${LIST} gap-[0.25rem]`}>
               {d.people.map((p) => (
-                <li key={p.name} className="who-row">
-                  <span className="who-name">{p.name}</span>
+                <li
+                  key={p.name}
+                  className="flex items-baseline justify-between gap-[0.7rem] text-[0.82rem]"
+                >
+                  <span>{p.name}</span>
                   <span
-                    className={
-                      p.lastSeenDays !== null && p.lastSeenDays > STALE_DAYS
-                        ? 'who-when is-muted'
-                        : 'who-when'
-                    }
+                    className={cn(
+                      'text-[0.75rem] text-muted-foreground',
+                      p.lastSeenDays !== null && p.lastSeenDays > STALE_DAYS && 'opacity-55',
+                    )}
                   >
                     {ago(p.lastSeenDays)}
                   </span>
@@ -140,7 +149,7 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Last activity, not last login. A client that stays signed in reports the second one once
             and never again, which is why an account in daily use can show a login from May.
           </p>
@@ -151,9 +160,9 @@ export function JellyfinView({ d }: { d: Extract<MediaData, { tab: 'jellyfin' }>
           span={8}
           aside={
             d.pendingRestart ? (
-              <span className="board-note text-warn">restart pending</span>
+              <span className={cn(NOTE, 'text-warning')}>restart pending</span>
             ) : (
-              <span className="board-note">github</span>
+              <span className={NOTE}>github</span>
             )
           }
         />

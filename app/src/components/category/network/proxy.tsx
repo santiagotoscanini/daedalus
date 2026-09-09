@@ -1,3 +1,4 @@
+import { cn } from '../../../lib/cn'
 import type { NetworkData } from '../../../lib/dashboard/categories/network'
 import { compact, DASH, ms, num, since } from '../../../lib/format'
 import { stripBaseDomain } from '../../../lib/site'
@@ -16,6 +17,7 @@ import {
   Progress,
   Pulse,
 } from '../../viz'
+import { ACTION, AXIS, EMPTY, FOOT, LIVE, MAIN, MONO, N, NOTE, ROW, SUB } from './shared'
 
 function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
   if (code.startsWith('2')) return 'ok'
@@ -23,6 +25,28 @@ function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
   if (code.startsWith('4')) return 'warn'
   return 'bad'
 }
+
+/**
+ * The digest's per-class ink, spelled out one literal string per class.
+ *
+ * Composed at runtime as code-<c>xx before, which is a name Tailwind's scanner cannot
+ * see — the utility has to appear in the source for the rule to be emitted at
+ * all. Only the tiny class label carries the colour; the numbers beside it
+ * keep the text tokens, so this stays inside the rule that colour never IS the
+ * information.
+ */
+const CODE_INK: Record<string, string> = {
+  '2': 'text-success',
+  '3': 'text-info',
+  '4': 'text-warning',
+  '5': 'text-danger',
+}
+
+/* What KIND of call, above the caption. Four short pairs on one line: it is a
+   breakdown of the chart directly above, not a ranking anyone needs bars for,
+   and at four classes a legend would be longer than the data. */
+const ENDPOINTS =
+  'mb-[0.4rem] flex flex-wrap gap-x-4 gap-y-[0.1rem] [&_b]:font-semibold [&_b]:text-(--text-muted) [&_b]:tabular-nums'
 
 // ── The proxy ──────────────────────────────────────────────────────────────
 
@@ -106,7 +130,7 @@ export function TraefikView({ d }: { d: Proxy }) {
         }
         actions={
           <a
-            className="btn btn-primary"
+            className={ACTION}
             href="https://traefik.toscanini.me/dashboard/"
             target="_blank"
             rel="noreferrer"
@@ -128,21 +152,27 @@ export function TraefikView({ d }: { d: Proxy }) {
           icon="⇄"
           span={12}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {d.routes.length} hostnames · {remote} also off-LAN
             </span>
           }
         >
           {groups.map((g) => (
-            <section key={g.p} className="routes-group">
-              <h4 className="board-sub">
+            <section key={g.p} className="flex flex-col gap-[0.4rem] not-first:mt-[0.9rem]">
+              {/* The count belongs to the heading, so it sits on the baseline
+                  with it rather than pushing the row taller. */}
+              <h4 className={cn(SUB, 'flex items-center gap-[0.45rem]')}>
                 {PROTECTION[g.p].title}
                 <Chip tone={PROTECTION[g.p].tone}>{g.rows.length}</Chip>
               </h4>
-              <ul className="itemlist routes">
+              {/* Forty-odd hostnames down a single column is a scroll, not a
+                  table. Columns as wide as the longest name and as many as
+                  fit, so the whole set is one glance — which is the only
+                  reading that answers "is anything unprotected". */}
+              <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-2 gap-y-[0.22rem] p-0">
                 {g.rows.map((r) => (
-                  <li key={r.host} title={r.via ?? undefined}>
-                    <span className="item-main mono">{stripBaseDomain(r.host)}</span>
+                  <li key={r.host} className={ROW} title={r.via ?? undefined}>
+                    <span className={cn(MAIN, MONO)}>{stripBaseDomain(r.host)}</span>
                     {/* The chip is the whole point of the row: off-LAN means
                         the internet can ask, and the protection column beside
                         it says what answers. */}
@@ -151,17 +181,15 @@ export function TraefikView({ d }: { d: Proxy }) {
                     {/* An em dash is not zero: traefik labels no request
                         counters for its own dashboard's router, and a 0 there
                         would read as "nobody has opened it". */}
-                    <span className="item-n">
-                      {r.requests === null ? DASH : compact(r.requests)}
-                    </span>
+                    <span className={N}>{r.requests === null ? DASH : compact(r.requests)}</span>
                   </li>
                 ))}
               </ul>
-              <p className="board-foot">{PROTECTION[g.p].note}</p>
+              <p className={FOOT}>{PROTECTION[g.p].note}</p>
             </section>
           ))}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             One row per hostname rather than per router, because a name published both on the LAN
             and through the tunnel is two routers for one thing. Read from the configuration traefik
             built, not from what the flake asked for, which is the point of looking. The count on
@@ -184,7 +212,7 @@ export function TraefikView({ d }: { d: Proxy }) {
           icon="◇"
           span={9}
           aside={
-            <span className="board-live">
+            <span className={LIVE}>
               <Pulse on={busy} tone="accent" />
               {busy ? `${num(traffic.rpm)}/min` : 'idle'}
             </span>
@@ -211,7 +239,7 @@ export function TraefikView({ d }: { d: Proxy }) {
             empty="nothing scraped yet"
           />
           {traffic.daily.length > 0 && (
-            <p className="colaxis">
+            <p className={AXIS}>
               <span>{traffic.daily[0]?.date.slice(5)}</span>
               <span>requests per day</span>
               <span>{traffic.daily[traffic.daily.length - 1]?.date.slice(5)}</span>
@@ -219,8 +247,8 @@ export function TraefikView({ d }: { d: Proxy }) {
           )}
 
           {traffic.byEntrypoint.length > 0 && (
-            <p className="board-foot">
-              <span className="endpoints">
+            <p className={FOOT}>
+              <span className={ENDPOINTS}>
                 {traffic.byEntrypoint.map((e) => (
                   <span key={e.label}>
                     {e.label === 'websecure' ? 'LAN' : e.label === 'cfweb' ? 'tunnel' : e.label}{' '}
@@ -239,30 +267,34 @@ export function TraefikView({ d }: { d: Proxy }) {
           title="Certificates"
           icon="⌸"
           span={3}
-          aside={<span className="board-note">the store</span>}
+          aside={<span className={NOTE}>the store</span>}
         >
-          <ul className="certs">
+          <ul className="m-0 flex list-none flex-col gap-[0.35rem] p-0">
             {d.certs.map((c) => (
-              <li key={c.cn} className="certs-row" title={c.sans.join(', ')}>
-                <span className="certs-name mono">{c.cn}</span>
+              <li
+                key={c.cn}
+                className="grid min-w-0 grid-cols-[minmax(6rem,12rem)_1fr_auto] items-center gap-[0.7rem] text-[0.8rem]"
+                title={c.sans.join(', ')}
+              >
+                <span className={cn(MONO, 'truncate text-(--text-muted)')}>{c.cn}</span>
                 {/* 90 days is Let's Encrypt's full lifetime, so the bar reads
                     as how much of this certificate is left. */}
                 <Progress
                   pct={Math.min(100, (c.days / 90) * 100)}
                   tone={c.days < 14 ? 'bad' : c.days < 30 ? 'warn' : 'ok'}
                 />
-                <span className="certs-days">{c.days.toFixed(0)}d</span>
+                <span className="whitespace-nowrap tabular-nums">{c.days.toFixed(0)}d</span>
               </li>
             ))}
           </ul>
-          {d.certs.length === 0 && <p className="viz-empty">no certificate in the store</p>}
+          {d.certs.length === 0 && <p className={EMPTY}>no certificate in the store</p>}
 
           {/* The join worth making on a page that has both: a certificate is
               only worth renewing if something published matches it, and traefik
               renews whatever is in the store regardless. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             {d.certs.map((c) => (
-              <span key={c.cn} className="endpoints">
+              <span key={c.cn} className={ENDPOINTS}>
                 <span>
                   <b>{c.cn}</b>{' '}
                   {c.covers === 0
@@ -284,7 +316,7 @@ export function TraefikView({ d }: { d: Proxy }) {
 
           {/* A quarter of the width now, so this keeps the two facts that
               change how the list is read and drops the tour. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             The store, not a probe. <b>Every</b> certificate this box serves HTTPS with is here, and
             one wildcard is why that is a short list. Issued over DNS-01 against Cloudflare, so a
             renewal needs nothing reachable from the internet.{' '}
@@ -302,7 +334,7 @@ export function TraefikView({ d }: { d: Proxy }) {
           title="Where it goes"
           icon="hash"
           span={3}
-          aside={<span className="board-note">req/min, 1h</span>}
+          aside={<span className={NOTE}>req/min, 1h</span>}
         >
           <BarList
             items={traffic.byService.map((s) => ({
@@ -324,7 +356,7 @@ export function TraefikView({ d }: { d: Proxy }) {
           source={{ container: 'traefik' }}
           title="Traefik logs"
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               The service log, not the access log: startup, certificate renewals, configuration
               reloads and the errors behind a router that refused to build. Per-request lines go to
               the access log, which is not shipped here; the metrics above are what that answers.
@@ -349,7 +381,7 @@ export function TraefikView({ d }: { d: Proxy }) {
  * that is what opening it is for.
  */
 function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] }) {
-  if (codes.length === 0) return <p className="viz-empty">no traffic</p>
+  if (codes.length === 0) return <p className={EMPTY}>no traffic</p>
 
   const classes = (['2', '3', '4', '5'] as const).map((c) => ({
     c,
@@ -360,19 +392,21 @@ function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] })
   const dropped = codes.filter((x) => x.label === '0').reduce((n, x) => n + x.value, 0)
 
   return (
-    <details className="codes">
+    <details className="mt-[0.5rem] [&>summary]:-mx-[0.35rem] [&>summary]:flex [&>summary]:cursor-pointer [&>summary]:list-none [&>summary]:flex-col [&>summary]:gap-[0.3rem] [&>summary]:rounded-[7px] [&>summary]:px-[0.35rem] [&>summary]:py-[0.25rem] [&>summary::-webkit-details-marker]:hidden [&>summary]:hover:bg-(--panel-2) [&[open]>summary]:bg-(--panel-2)">
       <summary>
-        <span className="board-sub">Response codes, 24h</span>
-        <span className="codes-digest">
+        <span className={cn(SUB, 'm-0 block')}>Response codes, 24h</span>
+        {/* The digest wraps rather than scrolls: four short pairs, and at a
+            quarter of the grid it lands on two lines, which is fine. */}
+        <span className="flex flex-wrap gap-x-[0.7rem] gap-y-[0.15rem] text-[0.72rem] text-(--dim) tabular-nums [&_b]:font-semibold [&_b]:text-foreground">
           {classes
             .filter((x) => x.total > 0)
             .map((x) => (
-              <span key={x.c} className={`code-${x.c}xx`}>
+              <span key={x.c} className={CODE_INK[x.c]}>
                 {x.c}xx <b>{compact(x.total)}</b>
               </span>
             ))}
           {dropped > 0 && (
-            <span className="code-0" title="Client hung up before an answer was written">
+            <span className="text-(--dim)" title="Client hung up before an answer was written">
               no reply <b>{compact(dropped)}</b>
             </span>
           )}
@@ -387,7 +421,7 @@ function CodeBreakdown({ codes }: { codes: { label: string; value: number }[] })
         }))}
         empty="no traffic"
       />
-      <p className="board-foot">
+      <p className={FOOT}>
         {/* 401 is the gate working, not a fault, and on a box where half the
             routers forward-auth it is one of the commonest codes. */}
         A 401 is usually the gate doing its job, a request arriving without a session on its way to

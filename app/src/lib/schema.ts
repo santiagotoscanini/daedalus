@@ -219,3 +219,25 @@ export const appEnvVarsRelations = relations(appEnvVars, ({ one }) => ({
 export type App = typeof apps.$inferSelect
 export type AppEnvVar = typeof appEnvVars.$inferSelect
 export type Deployment = typeof deployments.$inferSelect
+
+// Operator preferences that the NixOS side does not consume.
+//
+// The dividing line matters and is the whole reason this table exists.
+// Anything nix reads — the domain, the network, which modules are on, the app
+// registry — belongs in the site repo, where a change is a commit and a
+// rebuild. Anything nix does NOT read — the theme, UI preferences, onboarding
+// progress — belongs here, where a change is an UPDATE and nothing rebuilds.
+// Putting the theme in the site repo would mean a NixOS generation per colour
+// swap; putting the domain here would mean a setting the system never obeys.
+//
+// Deliberately a key/value table rather than one column per preference: these
+// are read individually by name, never queried across, and a new preference
+// should not be a migration. The value is jsonb so a preference can be an
+// object (a theme preset is one) without a second encoding to get wrong.
+export const settings = pgTable('settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export type Setting = typeof settings.$inferSelect

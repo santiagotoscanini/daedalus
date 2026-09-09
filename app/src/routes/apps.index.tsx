@@ -1,13 +1,19 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { type ReactNode, useMemo, useState } from 'react'
 import { ApplyBar } from '../components/apply-bar'
+import { CHIP, SECTION_HEAD, SECTION_HEAD_SMALL } from '../components/apps/shared'
+import { AppIcon, type AppState, Segmented, StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
+import { PageHead } from '../components/page'
 import { ImagesView, PackagesView } from '../components/registries'
 import { BoardsSkeleton, RowsSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
-import { AppIcon, type AppState, Segmented, StateDot } from '../components/ui'
+import { Badge } from '../components/ui/badge'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
 import { Spark } from '../components/viz'
 import { CloneButton } from '../components/workspace'
+import { cn } from '../lib/cn'
 import { PLATFORMS, type Platform } from '../lib/external-apps'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
 
@@ -52,18 +58,63 @@ type ListData = Awaited<ReturnType<typeof fetchApps>>
 type Row = ListData['apps'][number]
 type ExternalEntry = ListData['external'][number]
 
+/* A grid of project cards, the Vercel shape. Rows were tried first (one
+   bordered list, hairline separators) and spent a 1200px line on five facts:
+   the identity hugged the left edge, the readings the right, and the middle
+   was gap. A card puts the same facts in ~300px, three or four abreast, and
+   collapses to one column on a phone with no special-casing — which is also
+   why there is no narrow-viewport rule for it.
+
+   Exported for `RowsSkeleton`, so the placeholder reserves this grid and not
+   an approximation of it. */
+export const APP_LIST =
+  'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(19rem,100%),1fr))] gap-[0.8rem] p-0'
+
+const TALLIES =
+  'mb-[1.1rem] flex flex-wrap items-center gap-x-[1.6rem] gap-y-2 text-[0.88rem] text-(--text-muted) max-[34rem]:gap-x-4 max-[34rem]:gap-y-[0.4rem]'
+const TALLY = 'inline-flex items-center gap-[0.45rem]'
+const TALLY_COUNT = 'font-semibold text-foreground'
+
+const CARD =
+  'flex min-w-0 flex-col rounded-lg border border-(--border-soft) bg-card transition-colors duration-150 hover:border-foreground/30'
+/** Off-box and control-plane cards: dashed, the visual for "listed here, not
+    one of the things being managed". */
+const CARD_ASIDE = 'border-dashed bg-transparent'
+/* The whole card is the link; the foot rides inside it so one hover means
+   one destination. External cards break this on purpose — their actions bar
+   is a sibling of the anchor (a button in an anchor is one click with two
+   meanings, and invalid HTML besides). */
+const CARD_LINK =
+  'flex min-w-0 flex-1 flex-col gap-[0.55rem] px-4 pt-[0.85rem] pb-[0.9rem] text-inherit hover:no-underline'
+const CARD_HEAD = 'flex min-w-0 items-center gap-[0.65rem]'
+const APP_NAME = 'flex min-w-0 items-center gap-2 text-[0.95rem] [font-weight:550]'
+const APP_HOST = 'block truncate text-[0.76rem] text-(--dim)'
+/** Two lines, then quiet: a card column where one long description makes one
+    row twice as tall reads as a layout accident. */
+const APP_DESC = 'm-0 line-clamp-2 text-[0.8rem] leading-[1.45] text-(--text-muted)'
+/** The spark sizes itself from its height and is pushed to the right edge. */
+const CARD_FOOT = 'mt-auto flex items-center gap-[0.6rem] pt-[0.15rem] [&>svg]:ml-auto'
+
+/** The exposure chip, by stage. `lab` is the fourth status colour: a fact
+    about where the app is reachable, not a verdict on it. */
+const STAGE_CHIP: Record<
+  'live' | 'lab' | 'off',
+  { variant: 'success' | 'outline'; className: string }
+> = {
+  live: { variant: 'success', className: CHIP },
+  lab: { variant: 'outline', className: cn(CHIP, 'border-info/35 bg-info/8 text-info') },
+  off: { variant: 'outline', className: cn(CHIP, 'text-(--dim)') },
+}
+
 function AppsPage() {
   const { tab, list, images, packages } = Route.useLoaderData()
 
   return (
     <>
-      <header className="page-head">
-        <h1>Apps</h1>
-      </header>
-      <p className="lede cat-lede">
+      <PageHead title="Apps">
         What this box runs of its own, what lives on someone else's infrastructure, and the two
         registries everything here is built out of.
-      </p>
+      </PageHead>
 
       <TabBar tabs={TABS} active={tab} linkTo={(id) => ({ to: '/apps', search: { tab: id } })} />
 
@@ -148,28 +199,31 @@ export function AppsList({ data }: { data: ListData }) {
 
   return (
     <>
-      <div className="tallies">
-        <span>
-          <StateDot state="running" /> <b>{counts.running}</b> running
+      <div className={TALLIES}>
+        <span className={TALLY}>
+          <StateDot state="running" /> <b className={TALLY_COUNT}>{counts.running}</b> running
         </span>
-        <span>
-          <StateDot state="attention" /> <b>{counts.attention}</b> need attention
+        <span className={TALLY}>
+          <StateDot state="attention" /> <b className={TALLY_COUNT}>{counts.attention}</b> need
+          attention
         </span>
-        <span>
-          <StateDot state="stopped" /> <b>{counts.stopped}</b> stopped
+        <span className={TALLY}>
+          <StateDot state="stopped" /> <b className={TALLY_COUNT}>{counts.stopped}</b> stopped
         </span>
         {/* The create flow is a page rather than a dialog: it makes a GitHub
             round trip per repo it checks, and a checklist you can leave open
             in a tab while you go fix a workflow is worth more than one that
-            closes when you click outside it. */}
-        <Link to="/apps/new" className="btn btn-primary tallies-action">
-          Add an app
-        </Link>
+            closes when you click outside it. Parked at the end of the tally
+            line rather than in the page header — the header is shared by all
+            three tabs, and adding an app is only one of them. */}
+        <Button asChild size="sm" className="ml-auto">
+          <Link to="/apps/new">Add an app</Link>
+        </Button>
       </div>
 
-      <div className="filters">
-        <input
-          className="search"
+      <div className="mb-[1.3rem] flex flex-wrap gap-[0.6rem]">
+        <Input
+          className="flex-[1_1_15rem]"
           type="search"
           placeholder="Search apps…"
           value={search}
@@ -206,11 +260,11 @@ export function AppsList({ data }: { data: ListData }) {
         title="Daedalus"
         sub="deployed, watched and managed on this box"
       />
-      <ul className="app-list">
+      <ul className={APP_LIST}>
         {managed.map((r) => (
           <AppRow key={r.name} row={r} />
         ))}
-        {managed.length === 0 && <li className="empty">No apps match that filter.</li>}
+        {managed.length === 0 && <li className="py-10 text-(--dim)">No apps match that filter.</li>}
       </ul>
 
       {/* The control plane sits below its own rule rather than in the list.
@@ -219,13 +273,13 @@ export function AppsList({ data }: { data: ListData }) {
           read-only. Mixing it in invites you to try editing it. */}
       {platform.length > 0 && (
         <>
-          <h2 className="section-head">
+          <h2 className={SECTION_HEAD}>
             Control plane
-            <small>declared in Nix, not editable here</small>
+            <small className={SECTION_HEAD_SMALL}>declared in Nix, not editable here</small>
           </h2>
-          <ul className="app-list app-list-platform">
+          <ul className={APP_LIST}>
             {platform.map((r) => (
-              <AppRow key={r.name} row={r} />
+              <AppRow key={r.name} row={r} aside />
             ))}
           </ul>
         </>
@@ -241,7 +295,7 @@ export function AppsList({ data }: { data: ListData }) {
         return (
           <div key={p.id}>
             <SectionHead icon={PLATFORM_ICONS[p.id]} title={p.id} sub={p.description} />
-            <ul className="app-list app-list-platform">
+            <ul className={APP_LIST}>
               {entries.map((e) => (
                 <ExternalRow key={e.id} entry={e} workspaceStatus={workspaceStatus} />
               ))}
@@ -257,12 +311,14 @@ export function AppsList({ data }: { data: ListData }) {
 
 function SectionHead({ icon, title, sub }: { icon: ReactNode; title: string; sub: string }) {
   return (
-    <h2 className="section-head">
-      <span className="section-glyph" aria-hidden="true">
+    <h2 className={SECTION_HEAD}>
+      {/* Centred by hand because the head aligns its text on the baseline,
+          which an image does not have. */}
+      <span className="inline-flex self-center text-(--text-muted)" aria-hidden="true">
         {icon}
       </span>
       {title}
-      <small>{sub}</small>
+      <small className={SECTION_HEAD_SMALL}>{sub}</small>
     </h2>
   )
 }
@@ -295,22 +351,25 @@ function ExternalRow({
   // anchor is one click with two meanings, and invalid HTML besides. The row
   // still links to the site; the trailing cell links to the repo and holds
   // the one workspace action these projects have (no detail page to put it
-  // on — see the section comment above).
+  // on — see the section comment above). No dot and no spark — nothing on
+  // this box probes those sites — so the card simply doesn't draw the
+  // readings it doesn't have.
   return (
-    <li className="app-card">
-      <a href={`https://${entry.host}`} target="_blank" rel="noreferrer" className="app-card-link">
-        <div className="app-card-head">
+    <li className={cn(CARD, CARD_ASIDE)}>
+      <a href={`https://${entry.host}`} target="_blank" rel="noreferrer" className={CARD_LINK}>
+        <div className={CARD_HEAD}>
           <AppIcon name={entry.id} hasIcon={entry.hasIcon} size={30} />
-          <div className="app-id">
-            <div className="app-name">{entry.name}</div>
-            <code className="app-host">{entry.host}</code>
+          <div className="min-w-0 flex-1">
+            <div className={APP_NAME}>{entry.name}</div>
+            <code className={APP_HOST}>{entry.host}</code>
           </div>
         </div>
-        <p className="app-desc">{entry.description}</p>
+        <p className={APP_DESC}>{entry.description}</p>
       </a>
       {entry.repo !== null && (
-        <div className="external-actions">
+        <div className="flex min-w-0 items-center justify-between gap-[0.9rem] border-t border-t-(--border-soft) px-4 pt-[0.6rem] pb-[0.75rem] text-[0.8rem]">
           <a
+            className="min-w-0 truncate text-(--text-muted)"
             href={`https://github.com/${entry.repo}`}
             target="_blank"
             rel="noreferrer"
@@ -333,9 +392,11 @@ function ExternalRow({
   )
 }
 
-function AppRow({ row }: { row: Row }) {
+function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
+  const stage =
+    row.stage === 'live' ? STAGE_CHIP.live : row.stage === 'off' ? STAGE_CHIP.off : STAGE_CHIP.lab
   return (
-    <li className="app-card">
+    <li className={cn(CARD, aside && CARD_ASIDE)}>
       {/* `tab` is a required search param on the detail route (it is what
           makes the tab linkable and server-rendered), so the list has to name
           the landing tab explicitly. */}
@@ -343,43 +404,43 @@ function AppRow({ row }: { row: Row }) {
         to="/apps/$name"
         params={{ name: row.name }}
         search={{ tab: 'overview' as const }}
-        className="app-card-link"
+        className={CARD_LINK}
       >
-        <div className="app-card-head">
+        <div className={CARD_HEAD}>
           <AppIcon name={row.name} hasIcon={row.hasIcon} size={30} />
-          <div className="app-id">
-            <div className="app-name">
+          <div className="min-w-0 flex-1">
+            <div className={APP_NAME}>
               {row.name}
               {row.managedInNix && (
-                <span className="chip chip-muted" title="Declared by hand in Nix, read-only here">
+                <Badge
+                  variant="outline"
+                  className={cn(CHIP, 'text-(--text-muted)')}
+                  title="Declared by hand in Nix, read-only here"
+                >
                   nix
-                </span>
+                </Badge>
               )}
               {!row.managedInNix && row.drift.length > 0 && (
-                <span className="chip chip-warn" title={`Changed: ${row.drift.join(', ')}`}>
+                <Badge
+                  variant="warning"
+                  className={CHIP}
+                  title={`Changed: ${row.drift.join(', ')}`}
+                >
                   unapplied
-                </span>
+                </Badge>
               )}
             </div>
-            <code className="app-host">{row.hostname}</code>
+            <code className={APP_HOST}>{row.hostname}</code>
           </div>
           <StateDot state={row.status.state} />
         </div>
 
-        <p className="app-desc">{row.description || '—'}</p>
+        <p className={APP_DESC}>{row.description || '—'}</p>
 
-        <div className="app-card-foot">
-          <span
-            className={
-              row.stage === 'live'
-                ? 'chip chip-live'
-                : row.stage === 'off'
-                  ? 'chip chip-off'
-                  : 'chip chip-lab'
-            }
-          >
+        <div className={CARD_FOOT}>
+          <Badge variant={stage.variant} className={stage.className}>
             {row.stage === 'live' ? 'external' : row.stage === 'off' ? 'not exposed' : 'internal'}
-          </span>
+          </Badge>
 
           {/* Neutral unless the app is in trouble: the dot in the head
               already carries state, and a green line on every healthy app
@@ -390,7 +451,7 @@ function AppRow({ row }: { row: Row }) {
             width={72}
             height={18}
           />
-          <span className="rpm">
+          <span className="text-[0.74rem] text-(--dim) tabular-nums">
             {row.status.rpm === null ? '—' : `${row.status.rpm.toFixed(1)} rpm`}
           </span>
         </div>

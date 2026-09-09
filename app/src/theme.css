@@ -1,0 +1,275 @@
+/* The palette, and the only place a colour is written down.
+   ─────────────────────────────────────────────────────────────────────────
+   Two vocabularies live here on purpose.
+
+   The SOURCE vocabulary is shadcn's (`--background`, `--foreground`,
+   `--primary`, `--muted-foreground`, …) in OKLCH. That is not a style
+   preference: a theme preset — the ones tweakcn emits, and the ones the
+   Appearance page stores — is exactly a `{light, dark}` map over these
+   names. Authoring in any other vocabulary would mean translating every
+   preset by hand.
+
+   The LEGACY vocabulary is this app's original one (`--bg`, `--text`,
+   `--brand`, …). ~600 hand-written selectors in styles.css read it, and
+   rewriting them all before anything is themeable would be the big-bang
+   this migration is avoiding. So those names survive as ALIASES onto the
+   shadcn tokens. The consequence is the point: swapping a preset
+   restyles the 6,600 lines of hand-written CSS at the same time as the
+   shadcn components, with no per-selector work.
+
+   Three legacy names were renamed rather than aliased, because shadcn
+   already uses them for something else and one scope cannot hold both:
+
+     --muted       → --text-muted   (shadcn's --muted is a BACKGROUND)
+     --accent      → --brand        (shadcn's --accent is a hover fill)
+     --accent-dim  → --brand-dim
+
+   `--border` and `--radius` mean the same thing in both and stay shared.
+
+   The dark values are the exact OKLCH of the hex palette this app shipped
+   with (#0a0a0a, #ededed, #e2795a …), converted losslessly, so adopting
+   Tailwind changed no pixel. Light is new — the app was dark-only — and
+   is the mirror of the same hues. */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.1448 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.1448 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.1448 0 0);
+
+  /* Primary is the brand orange. It carries dark text, not white: at
+     L≈0.69 the contrast against white text is 2.4:1, which fails on a
+     button label. */
+  --primary: oklch(0.6881 0.1381 37.27);
+  --primary-foreground: oklch(0.1448 0 0);
+
+  --secondary: oklch(0.968 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.968 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.968 0 0);
+  --accent-foreground: oklch(0.2 0 0);
+  --destructive: oklch(0.5794 0.1776 23.72);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  --border: oklch(0.9 0 0);
+  --input: oklch(0.9 0 0);
+  --ring: oklch(0.6881 0.1381 37.27);
+
+  /* The status triad. `success`/`warning`/`danger` are not shadcn names —
+     shadcn only ships `destructive` — but every board on this dashboard
+     renders a verdict, so they are first-class tokens rather than a tone
+     computed in a component. */
+  --success: oklch(0.5637 0.1114 158.88);
+  --warning: oklch(0.6507 0.1295 79.85);
+  --danger: oklch(0.5794 0.1776 23.72);
+  /* The fourth status colour: "this is a fact, not a verdict" — a count, a
+     rate, a reading with nothing wrong or right about it. It was a bare
+     #5b8dd9 repeated in seven places before the tone system moved into
+     lib/tone.ts, which is why it is a token now. */
+  --info: oklch(0.552 0.1269 258.52);
+  /* The veil under a drawer or a dialog. Black in both modes on purpose — a
+     scrim dims the page rather than tinting it — and a token so the one
+     place a literal colour lives is this file. Callers add the opacity. */
+  --overlay: oklch(0 0 0);
+
+  --chart-1: oklch(0.6881 0.1381 37.27);
+  --chart-2: oklch(0.5637 0.1114 158.88);
+  --chart-3: oklch(0.6507 0.1295 79.85);
+  --chart-4: oklch(0.5794 0.1776 23.72);
+  --chart-5: oklch(0.5 0 0);
+
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.1448 0 0);
+  --sidebar-primary: oklch(0.6881 0.1381 37.27);
+  --sidebar-primary-foreground: oklch(0.1448 0 0);
+  --sidebar-accent: oklch(0.968 0 0);
+  --sidebar-accent-foreground: oklch(0.2 0 0);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0.6881 0.1381 37.27);
+
+  --radius: 10px;
+
+  /* Legacy aliases. Light needs its own surface ladder rather than a
+     mirror of the dark one: on a light page the RAISED layers go darker,
+     not lighter, so they cannot be derived from the dark definitions. */
+  --bg: var(--background);
+  --panel: var(--card);
+  --panel-2: oklch(0.968 0 0);
+  --raise: oklch(0.94 0 0);
+  --border-soft: oklch(0.93 0 0);
+  --text: var(--foreground);
+  --text-muted: oklch(0.44 0 0);
+  --dim: var(--muted-foreground);
+  --brand: var(--primary);
+  --brand-dim: oklch(0.5698 0.134 36.78);
+  --ok: var(--success);
+  --warn: var(--warning);
+  --bad: var(--danger);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Geist-style dark: the page and the cards share ONE surface and the
+     border does the separating — a card is drawn, not raised. Stepping
+     the surfaces instead (#08080a → #111113 → #17171a) with borders too
+     faint to see is the low-contrast wash that read as unfinished. So
+     `--card` equals `--background` deliberately; `--panel-2`/`--raise`
+     below remain for genuinely interactive layers (hover fills, menus,
+     toggles), never for a resting card. */
+  --background: oklch(0.1448 0 0);
+  --foreground: oklch(0.9461 0 0);
+  --card: oklch(0.1448 0 0);
+  --card-foreground: oklch(0.9461 0 0);
+  --popover: oklch(0.2002 0 0);
+  --popover-foreground: oklch(0.9461 0 0);
+
+  --primary: oklch(0.6881 0.1381 37.27);
+  --primary-foreground: oklch(0.1448 0 0);
+
+  --secondary: oklch(0.2002 0 0);
+  --secondary-foreground: oklch(0.9461 0 0);
+  --muted: oklch(0.2002 0 0);
+  --muted-foreground: oklch(0.709 0 0);
+  --accent: oklch(0.2393 0 0);
+  --accent-foreground: oklch(0.9461 0 0);
+  --destructive: oklch(0.6294 0.1776 23.72);
+  --destructive-foreground: oklch(0.1448 0 0);
+
+  --border: oklch(0.3012 0 0);
+  --input: oklch(0.3012 0 0);
+  --ring: oklch(0.6881 0.1381 37.27);
+
+  --success: oklch(0.6637 0.1114 158.88);
+  --warning: oklch(0.7507 0.1295 79.85);
+  --danger: oklch(0.6294 0.1776 23.72);
+  --info: oklch(0.642 0.1269 258.52);
+  --overlay: oklch(0 0 0);
+
+  --chart-1: oklch(0.6881 0.1381 37.27);
+  --chart-2: oklch(0.6637 0.1114 158.88);
+  --chart-3: oklch(0.7507 0.1295 79.85);
+  --chart-4: oklch(0.6294 0.1776 23.72);
+  --chart-5: oklch(0.709 0 0);
+
+  --sidebar: oklch(0.1448 0 0);
+  --sidebar-foreground: oklch(0.9461 0 0);
+  --sidebar-primary: oklch(0.6881 0.1381 37.27);
+  --sidebar-primary-foreground: oklch(0.1448 0 0);
+  --sidebar-accent: oklch(0.2393 0 0);
+  --sidebar-accent-foreground: oklch(0.9461 0 0);
+  --sidebar-border: oklch(0.3012 0 0);
+  --sidebar-ring: oklch(0.6881 0.1381 37.27);
+
+  --panel-2: oklch(0.2002 0 0);
+  --raise: oklch(0.2393 0 0);
+  --border-soft: oklch(0.2478 0 0);
+  --text-muted: oklch(0.709 0 0);
+  --brand-dim: oklch(0.5698 0.134 36.78);
+}
+
+/* One definition, three consumers: the shell's first grid column, the
+   apply bar's left offset, and the collapsed rail that narrows it. The
+   bar is position:fixed, so it cannot inherit the sidebar's width — it
+   used to hardcode 232px, which meant the mobile breakpoint had to
+   remember to move it too. Not themeable, so it sits outside both
+   blocks. */
+:root {
+  --sidebar-w: 232px;
+}
+
+/* The rail collapsed to a column of icons. Desktop only — the media query
+   is what keeps a phone from inheriting it, see below. */
+@media (width >= 52rem) {
+  :root[data-nav="collapsed"] {
+    --sidebar-w: 64px;
+  }
+}
+
+/* The rail is out of flow below the breakpoint — a drawer, not a column —
+   so it occupies no width at all, and `--sidebar-w` is what tells the
+   grid and the apply bar so. Keyed on the same media query the `rail:`
+   variant generates, and it also has to beat `data-nav="collapsed"`,
+   because that preference is remembered per browser and a phone must not
+   inherit a 64px rail from a laptop. */
+@media (width < 52rem) {
+  :root,
+  :root[data-nav="collapsed"] {
+    --sidebar-w: 0px;
+  }
+}
+
+/* Not `@theme inline`: a breakpoint is a build-time constant that Tailwind
+   compiles into media queries, and there is nothing to swap at runtime.
+
+   52rem is the shell's one real breakpoint — where the rail stops being a
+   column and becomes a drawer. Naming it means `rail:` and `max-rail:` are
+   generated as exact complements of each other, which hand-written
+   `min-width`/`max-width` arithmetic on rem values gets wrong in both
+   directions: overlapping at the boundary, or leaving a gap. */
+@theme {
+  --breakpoint-rail: 52rem;
+}
+
+/* Tailwind's utility namespace, mapped onto the tokens above.
+   `inline` is required: without it Tailwind copies the token's VALUE at
+   build time and a runtime theme swap would move nothing. With it the
+   utility emits `var(--color-background)` → `var(--background)`, so
+   overriding the token on `<html>` restyles the page live — which is
+   exactly what the Appearance page does. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-overlay: var(--overlay);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* The two families the hand-written CSS already used. Restated as
+     Tailwind tokens so `font-sans` / `font-mono` and the legacy `.mono`
+     class cannot drift apart. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}

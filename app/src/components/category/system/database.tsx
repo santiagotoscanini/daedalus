@@ -1,9 +1,11 @@
+import { cn } from '../../../lib/cn'
 import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { bytes, DASH, duration, num, pct } from '../../../lib/format'
 import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { compareOf, ServiceHead, verdictOf } from '../../service-head'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../../viz'
+import { BOARD_FOOT, BOARD_NOTE, LIST, MONO, ROW, ROW_MAIN, ROW_N, ROW_SIDE } from './shared'
 
 /* ── Database ─────────────────────────────────────────────────────────── */
 
@@ -39,7 +41,7 @@ export function DatabaseView({ d }: { d: Database }) {
           icon="◱"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={BOARD_NOTE}>
               {d.version ?? ''} · {num(d.databases.length)} databases
             </span>
           }
@@ -55,10 +57,10 @@ export function DatabaseView({ d }: { d: Database }) {
               { k: 'longest transaction', v: duration(d.totals.longestTxSeconds) },
             ]}
           />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             One cluster, every app a tenant with its own role and database, replacing a postgres
             container per stack. That is why a mid-life restart here is felt everywhere: Pocket ID
-            fails its health check the moment it cannot resolve <span className="mono">pg</span>,
+            fails its health check the moment it cannot resolve <span className={MONO}>pg</span>,
             and every SSO app follows it down. <b>Longest transaction</b> is the stuck-query signal.
             A number that climbs and does not reset is something holding a lock nobody is waiting on
             any more.
@@ -87,33 +89,33 @@ export function DatabaseView({ d }: { d: Database }) {
               { k: 'in', v: worstCache?.name ?? DASH },
             ]}
           />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             A cache hit rate below about 99% means the cluster is going to disk for pages it should
             have had in memory. Temp bytes are queries that outgrew{' '}
-            <span className="mono">work_mem</span> and spilled. Both are tuning signals rather than
+            <span className={MONO}>work_mem</span> and spilled. Both are tuning signals rather than
             faults, and neither shows in the size column.
           </p>
         </Board>
 
         <Board title="Tenants" icon="rows" span={12}>
-          <ul className="itemlist">
+          <ul className={LIST}>
             {d.databases.map((db) => (
-              <li key={db.name}>
-                <span className="item-main mono">{db.name}</span>
-                <span className="item-side">{num(db.connections)} conn</span>
-                <span className="item-side">{pct(db.cacheHitPct, 2)} cached</span>
-                <span className="item-side">
+              <li key={db.name} className={ROW}>
+                <span className={cn(ROW_MAIN, MONO)}>{db.name}</span>
+                <span className={ROW_SIDE}>{num(db.connections)} conn</span>
+                <span className={ROW_SIDE}>{pct(db.cacheHitPct, 2)} cached</span>
+                <span className={ROW_SIDE}>
                   {(db.deadlocks ?? 0) > 0 ? (
-                    <span className="text-warn">{num(db.deadlocks)} deadlocks</span>
+                    <span className="text-warning">{num(db.deadlocks)} deadlocks</span>
                   ) : (
                     `${num(db.rollbacks)} rollbacks`
                   )}
                 </span>
-                <span className="item-n">{bytes(db.sizeBytes)}</span>
+                <span className={ROW_N}>{bytes(db.sizeBytes)}</span>
               </li>
             ))}
           </ul>
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             Rollbacks are shown rather than commits because the ratio is what carries information. A
             tenant rolling back a large share of its transactions is either retrying or erroring,
             and neither shows up in its own logs as clearly as it does here. A database that appears
@@ -124,14 +126,14 @@ export function DatabaseView({ d }: { d: Database }) {
         <Changelog
           gap={d.gap}
           span={12}
-          aside={<span className="board-note">postgresql.org</span>}
+          aside={<span className={BOARD_NOTE}>postgresql.org</span>}
           foot={
-            <p className="board-foot">
+            <p className={BOARD_FOOT}>
               Not from GitHub, unlike every other changelog here: the{' '}
-              <span className="mono">postgres/postgres</span> mirror carries tags and publishes no
+              <span className={MONO}>postgres/postgres</span> mirror carries tags and publishes no
               releases at all, so the usual reader reports the one service on this box whose minors
               are pure security fixes as having nothing to show. These come from{' '}
-              <span className="mono">postgresql.org/docs/release</span> instead. Only the running
+              <span className={MONO}>postgresql.org/docs/release</span> instead. Only the running
               MAJOR is counted. A major upgrade is a pg_upgrade with every tenant offline, which is
               not what &ldquo;behind&rdquo; means anywhere else on this dashboard. Read the{' '}
               <b>Migration</b> section first: it is the one paragraph that says whether the restart

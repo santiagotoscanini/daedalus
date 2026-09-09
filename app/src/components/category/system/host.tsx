@@ -1,14 +1,44 @@
 import { useEffect, useRef, useState } from 'react'
+import { cn } from '../../../lib/cn'
 import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { DASH, duration, num, pct } from '../../../lib/format'
 import { fetchPowerRequestStatus, requestRebootFn } from '../../../server/host'
+import { GHOST_BTN } from '../../apps/shared'
 import { LogBoard } from '../../logs'
+import { Button } from '../../ui/button'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../viz'
-import { HOST_READERS, PARTS, PartPhoto } from './shared'
+import {
+  BOARD_FOOT,
+  BOARD_NOTE,
+  HOST_READERS,
+  LIST,
+  MONO,
+  PART,
+  PART_DETAIL,
+  PART_ID,
+  PART_NAME,
+  PARTS,
+  PartPhoto,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+  VIZ_EMPTY,
+} from './shared'
 
 /* ── Host ─────────────────────────────────────────────────────────────── */
 
 type Host = Extract<SystemData, { tab: 'host' }>
+
+/* The restart control, under the case photo. Quiet at rest and deliberately
+   not primary: it is one ghost button with no colour of its own, because a
+   control that looks important gets clicked to find out what it does. The cost
+   — and the red — appear only once it is armed, which is the step where they
+   can still change the answer. */
+const RESTART =
+  'mt-[0.7rem] flex flex-col items-start gap-[0.55rem] border-(--border-soft) border-t pt-[0.75rem]'
+const RESTART_COST = 'text-[0.78rem] text-(--text-muted) leading-[1.5]'
+const RESTART_STATE = 'text-[0.78rem] leading-[1.5]'
+const RESTART_NOTE = 'text-[0.7rem] text-muted-foreground leading-[1.5]'
 
 /** How long an armed restart stays armed. Short enough that a control left
     armed by a distraction cannot be finished by an accidental click later. */
@@ -132,18 +162,24 @@ function RestartControl({
 
   if (phase === 'armed') {
     return (
-      <div className="restart is-armed">
-        <p className="restart-cost">
+      <div
+        className={cn(
+          RESTART,
+          'border-t-[color-mix(in_srgb,var(--danger)_40%,var(--border-soft))]',
+        )}
+      >
+        <p className={RESTART_COST}>
           Everything on this box stops for a couple of minutes.{' '}
-          <strong>LAN DNS goes down with it</strong>: pi-hole is this machine, so no device in the
-          house resolves a name until it is back.{' '}
+          <strong className="font-medium text-warning">LAN DNS goes down with it</strong>: pi-hole
+          is this machine, so no device in the house resolves a name until it is back.{' '}
           {containers === null ? 'Every container' : `All ${num(containers)} containers`} stop and
           start again, and {duration(uptimeSeconds)} of uptime goes back to zero.
         </p>
-        <div className="restart-actions">
-          <button
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
             type="button"
-            className="btn btn-danger"
+            variant="destructive"
+            size="sm"
             onClick={() => {
               setRefusal('')
               gone.current = false
@@ -160,17 +196,19 @@ function RestartControl({
             }}
           >
             Confirm restart
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="btn btn-ghost"
+            variant="outline"
+            size="sm"
+            className={GHOST_BTN}
             onClick={() => {
               setPhase('idle')
             }}
           >
             Cancel
-          </button>
-          <span className="restart-note">disarms on its own in {ARM_MS / 1000}s</span>
+          </Button>
+          <span className={RESTART_NOTE}>disarms on its own in {ARM_MS / 1000}s</span>
         </div>
       </div>
     )
@@ -178,37 +216,41 @@ function RestartControl({
 
   if (phase === 'dispatching' || phase === 'down') {
     return (
-      <div className="restart is-running">
-        <p className="restart-state">
+      <div className={RESTART}>
+        <p className={RESTART_STATE}>
           {phase === 'dispatching'
             ? 'Asking the host to restart…'
             : sawDown
               ? 'The box is down. Waiting for it to answer again…'
               : 'Restarting. This page will stop responding shortly.'}
         </p>
-        <p className="restart-note">
+        <p className={RESTART_NOTE}>
           Nothing will report this finished: the server goes down with the box. This is watching{' '}
-          <span className="mono">/api/healthz</span> instead.
+          <span className={MONO}>/api/healthz</span> instead.
         </p>
       </div>
     )
   }
 
   return (
-    <div className="restart">
+    <div className={RESTART}>
       {phase === 'back' && (
-        <p className="restart-state ok-text">The box is back, and this page is talking to it.</p>
+        <p className={cn(RESTART_STATE, 'text-success')}>
+          The box is back, and this page is talking to it.
+        </p>
       )}
-      {phase === 'refused' && <p className="restart-state bad-text">{refusal}</p>}
-      <button
+      {phase === 'refused' && <p className={cn(RESTART_STATE, 'text-danger')}>{refusal}</p>}
+      <Button
         type="button"
-        className="btn btn-ghost"
+        variant="outline"
+        size="sm"
+        className={GHOST_BTN}
         onClick={() => {
           setPhase('armed')
         }}
       >
         Restart the box
-      </button>
+      </Button>
     </div>
   )
 }
@@ -220,7 +262,7 @@ export function HostView({ d }: { d: Host }) {
         title="Load"
         icon="◔"
         span={8}
-        aside={<span className="board-note">{num(d.cores)} threads</span>}
+        aside={<span className={BOARD_NOTE}>{num(d.cores)} threads</span>}
       >
         <Trend values={d.cpuSpark} tone="accent" height={90} />
         <Measures
@@ -231,7 +273,7 @@ export function HostView({ d }: { d: Host }) {
             { k: 'load 15m', v: num(d.load.m15, 2) },
           ]}
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Six hours of cpu, and the load averages beside it for scale: on {num(d.cores)} threads a
           load of {num(d.cores)} is fully committed, not overloaded. What load cannot tell you is
           what those tasks were waiting FOR, which is the panel to the right.
@@ -248,7 +290,7 @@ export function HostView({ d }: { d: Host }) {
             { k: 'Memory stalled', v: pct(d.pressure.memory, 2) },
           ]}
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           The share of time in which <em>something</em> was waiting on each resource rather than
           running. Zero is the healthy reading and the usual one; I/O climbing while cpu stays flat
           is a disk problem wearing a performance problem&rsquo;s clothes.
@@ -273,11 +315,11 @@ export function HostView({ d }: { d: Host }) {
           control that acts on the object rather than on a service belongs on
           the panel that IS the object. */}
       <Board title="The box" icon="▣" span={4}>
-        <div className="part">
+        <div className={PART}>
           <PartPhoto part={PARTS.case} />
-          <div className="part-id">
-            <strong className="part-name">{PARTS.case.name}</strong>
-            <span className="part-detail">
+          <div className={PART_ID}>
+            <strong className={PART_NAME}>{PARTS.case.name}</strong>
+            <span className={PART_DETAIL}>
               {d.kernel === null ? 'kernel unread' : `Linux ${d.kernel}`}, up{' '}
               {duration(d.uptimeSeconds)}.
             </span>
@@ -290,7 +332,7 @@ export function HostView({ d }: { d: Host }) {
         <Facts
           rows={[
             { k: 'Uptime', v: duration(d.uptimeSeconds) },
-            { k: 'Kernel', v: d.kernel === null ? DASH : <span className="mono">{d.kernel}</span> },
+            { k: 'Kernel', v: d.kernel === null ? DASH : <span className={MONO}>{d.kernel}</span> },
             { k: 'Containers', v: num(d.containers.total) },
             {
               k: 'Failed units',
@@ -307,7 +349,9 @@ export function HostView({ d }: { d: Host }) {
         />
         {d.containers.down.length > 0 && (
           // Named, not counted — "3 containers down" makes you go hunting.
-          <p className="board-foot text-bad">Not answering: {d.containers.down.join(', ')}</p>
+          <p className={cn(BOARD_FOOT, 'text-danger')}>
+            Not answering: {d.containers.down.join(', ')}
+          </p>
         )}
       </Board>
 
@@ -324,25 +368,25 @@ export function HostView({ d }: { d: Host }) {
         }
       >
         {d.failedUnitsList.length === 0 ? (
-          <p className="viz-empty">
+          <p className={VIZ_EMPTY}>
             No systemd unit on the box is in the failed state. Everything that ran either succeeded
             or is still running.
           </p>
         ) : (
-          <ul className="itemlist">
+          <ul className={LIST}>
             {d.failedUnitsList.map((u) => (
-              <li key={u.unit}>
+              <li key={u.unit} className={ROW}>
                 <Chip tone="bad">{u.subState ?? 'failed'}</Chip>
-                <span className="item-main mono">{u.unit}</span>
-                <span className="item-side">{u.description ?? ''}</span>
+                <span className={cn(ROW_MAIN, MONO)}>{u.unit}</span>
+                <span className={ROW_SIDE}>{u.description ?? ''}</span>
               </li>
             ))}
           </ul>
         )}
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Named, from the host snapshot. The count in the panel above is prometheus&rsquo;s and can
           lead this list by up to ten minutes. Empty is a weaker claim than it sounds on this box:
-          every container unit is a green <span className="mono">Type=oneshot</span> whose container
+          every container unit is a green <span className={MONO}>Type=oneshot</span> whose container
           can die without the unit noticing, so &ldquo;no failed units&rdquo; and &ldquo;every
           container alive&rdquo; are different questions. The second is the Containers row and its
           list of who is not answering.
@@ -353,15 +397,15 @@ export function HostView({ d }: { d: Host }) {
         title="Generations"
         icon="⎌"
         span={4}
-        aside={<span className="board-note">{num(d.generations.length)} on disk</span>}
+        aside={<span className={BOARD_NOTE}>{num(d.generations.length)} on disk</span>}
       >
-        <ul className="itemlist">
+        <ul className={LIST}>
           {[...d.generations]
             .reverse()
             .slice(0, 6)
             .map((g) => (
-              <li key={g.id}>
-                <span className="item-main">
+              <li key={g.id} className={ROW}>
+                <span className={ROW_MAIN}>
                   #{g.id}
                   {g.current && (
                     <>
@@ -370,13 +414,13 @@ export function HostView({ d }: { d: Host }) {
                     </>
                   )}
                 </span>
-                <span className="item-side">{g.date}</span>
+                <span className={ROW_SIDE}>{g.date}</span>
               </li>
             ))}
         </ul>
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           The rollback path: reboot and pick one from the systemd-boot menu.{' '}
-          <span className="mono">configurationLimit = 10</span> bounds that MENU. It does not prune
+          <span className={MONO}>configurationLimit = 10</span> bounds that MENU. It does not prune
           the profile, which is why {num(d.generations.length)} are on disk. They cost store space
           until a garbage collection runs, and nothing here schedules one.
         </p>
@@ -387,7 +431,7 @@ export function HostView({ d }: { d: Host }) {
         title="Host journal"
         neighbours={HOST_READERS}
         foot={
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             PID 1&rsquo;s own stream: unit starts, stops and failures for the whole box. Systemd
             files its &ldquo;Starting&rdquo; and &ldquo;Finished&rdquo; lines here rather than under
             the unit they are about, which is why a oneshot that succeeded looks silent in its own

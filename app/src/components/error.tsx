@@ -14,6 +14,9 @@
 
 import { Await, CatchBoundary, type ErrorComponentProps, useRouter } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
+import { PageHead } from './page'
+import { Alert } from './ui/alert'
+import { Button } from './ui/button'
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -37,18 +40,15 @@ export function ErrorPanel({ error, reset }: ErrorComponentProps) {
   const retry = useRetry(reset)
   return (
     <>
-      <header className="page-head">
-        <h1>Something broke</h1>
-      </header>
-      <p className="lede">
+      <PageHead title="Something broke">
         The page hit an error it could not render past. Reload re-runs its loaders; if it lands back
         here, the message below is where to start.
-      </p>
-      <p className="error-detail">{message(error)}</p>
+      </PageHead>
+      <p className="my-3 font-mono text-danger text-sm break-words">{message(error)}</p>
       <p>
-        <button type="button" className="btn btn-primary" onClick={retry}>
+        <Button type="button" onClick={retry}>
           Reload
-        </button>
+        </Button>
       </p>
     </>
   )
@@ -57,14 +57,18 @@ export function ErrorPanel({ error, reset }: ErrorComponentProps) {
 export function AwaitError({ error, reset }: ErrorComponentProps) {
   const retry = useRetry(reset)
   return (
-    <div className="banner banner-bad">
+    <Alert
+      variant="destructive"
+      className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2"
+    >
       <span>
-        This section failed to load. <span className="error-detail">{message(error)}</span>
+        This section failed to load.{' '}
+        <span className="font-mono text-xs break-words">{message(error)}</span>
       </span>
-      <button type="button" className="btn" onClick={retry}>
+      <Button type="button" variant="outline" size="sm" onClick={retry}>
         Retry
-      </button>
-    </div>
+      </Button>
+    </Alert>
   )
 }
 

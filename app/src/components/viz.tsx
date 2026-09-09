@@ -16,14 +16,37 @@
 //   decoration: a bar shimmers while a download is actually moving, a dot
 //   pulses while a stream is actually playing. Idle content sits still, so
 //   movement in the corner of your eye is always worth looking at.
+//
+// Every primitive that takes a `tone` arms `--tone` on its own root with
+// `toneStyle()` and its parts read it back — see lib/tone.ts for why that is a
+// variable rather than a class per family per tone.
 
 import { type ReactNode, useId } from 'react'
+import { cn } from '../lib/cn'
 import { num } from '../lib/format'
+import { type Tone, toneStyle } from '../lib/tone'
 import { Glyph, type GlyphName, isGlyph } from './glyph'
 
-export type Tone = 'accent' | 'ok' | 'warn' | 'bad' | 'info' | 'muted'
+export type { Tone }
+
+/** "There is nothing to draw here", in the one shape all five charts use. */
+const EMPTY = 'm-0 py-[0.9rem] text-center text-[0.8rem] text-(--dim)'
 
 /* ── headline numbers ─────────────────────────────────────────────────── */
+
+/* The boxes below are exported by name so components/skeleton.tsx can reserve
+   exactly the space the real thing will take — the same pattern as
+   service-head.tsx's SVC_HEAD. A skeleton that restates the box drifts. */
+
+/** `BigStat`'s outer box. The ::before hairline is the stat's own colour
+    along the top edge — enough to group the band by meaning without painting
+    four large blocks of colour. */
+export const BIG_STAT =
+  'relative flex min-w-0 flex-col gap-[0.15rem] overflow-hidden rounded-lg border border-(--border-soft) bg-card px-4 pt-[0.85rem] pb-[0.9rem] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-(--tone) before:opacity-85'
+
+/** `StatBand`'s grid. */
+export const STAT_BAND =
+  'mb-6 grid grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))] gap-[0.7rem]'
 
 /**
  * One large number with its label — the top band of every category page.
@@ -48,20 +71,28 @@ export function BigStat({
   spark?: number[]
 }) {
   return (
-    <div className={`bigstat bigstat-${tone}`}>
-      <span className="bigstat-label">{label}</span>
-      <span className="bigstat-value">
+    <div className={BIG_STAT} style={toneStyle(tone)}>
+      <span className="text-xs font-medium text-(--text-muted)">{label}</span>
+      <span className="text-[1.75rem] leading-[1.15] font-semibold tracking-[-0.02em] tabular-nums [overflow-wrap:anywhere]">
         {value}
-        {unit !== undefined && <em>{unit}</em>}
+        {unit !== undefined && (
+          <em className="ml-[0.2rem] text-[0.85rem] font-medium text-(--text-muted) not-italic">
+            {unit}
+          </em>
+        )}
       </span>
       {spark !== undefined && spark.length > 1 && <MicroSpark values={spark} tone={tone} />}
-      {sub !== undefined && <span className="bigstat-sub">{sub}</span>}
+      {sub !== undefined && (
+        <span className="flex min-w-0 items-center gap-[0.35rem] text-[0.76rem] text-(--text-muted)">
+          {sub}
+        </span>
+      )}
     </div>
   )
 }
 
 export function StatBand({ children }: { children: ReactNode }) {
-  return <div className="statband">{children}</div>
+  return <div className={STAT_BAND}>{children}</div>
 }
 
 /* ── ring gauge ───────────────────────────────────────────────────────── */
@@ -96,12 +127,15 @@ export function Ring({
   const dash = (clamped / 100) * circumference
 
   return (
-    <div className={`ring ring-${tone}`} style={{ width: size }}>
-      <svg viewBox="0 0 108 108" aria-hidden="true">
-        <circle className="ring-track" cx="54" cy="54" r={r} />
+    <div className="relative aspect-square flex-none" style={toneStyle(tone, { width: size })}>
+      <svg viewBox="0 0 108 108" className="block h-full w-full" aria-hidden="true">
+        <circle className="fill-none stroke-(--raise) [stroke-width:9]" cx="54" cy="54" r={r} />
         {pct !== null && (
           <circle
-            className="ring-fill"
+            // ring-sweep runs once on mount so the page reads as its numbers
+            // arriving; the keyframe stays in styles.css because Tailwind has
+            // no dasharray animation.
+            className="animate-[ring-sweep_900ms_cubic-bezier(0.2,0.8,0.2,1)_both] fill-none stroke-(--tone) [stroke-linecap:round] [stroke-width:9] motion-reduce:animate-none"
             cx="54"
             cy="54"
             r={r}
@@ -113,9 +147,13 @@ export function Ring({
           />
         )}
       </svg>
-      <div className="ring-text">
-        <strong>{value}</strong>
-        {label !== undefined && <span>{label}</span>}
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[0.05rem]">
+        <strong className="text-[0.95rem] tracking-[-0.01em] tabular-nums [font-weight:620]">
+          {value}
+        </strong>
+        {label !== undefined && (
+          <span className="text-[0.63rem] tracking-[0.06em] text-(--dim) uppercase">{label}</span>
+        )}
       </div>
     </div>
   )
@@ -144,23 +182,29 @@ export function BarList({
   max?: number
   empty?: string
 }) {
-  if (items.length === 0) return <p className="viz-empty">{empty}</p>
+  if (items.length === 0) return <p className={EMPTY}>{empty}</p>
   const ceiling = max ?? Math.max(...items.map((i) => i.value), 0.0001)
 
   return (
-    <ul className="barlist">
+    <ul className="m-0 flex list-none flex-col gap-[0.32rem] p-0">
       {items.map((i) => (
-        <li key={i.label} className={`barlist-row barlist-${i.tone ?? tone}`}>
-          <span className="barlist-label" title={i.label}>
+        <li
+          key={i.label}
+          className="grid min-w-0 grid-cols-[minmax(4.5rem,8rem)_1fr_auto] items-center gap-[0.6rem]"
+          style={toneStyle(i.tone ?? tone)}
+        >
+          <span className="truncate text-[0.78rem] text-(--text-muted)" title={i.label}>
             {i.label}
           </span>
-          <span className="barlist-track">
+          <span className="block h-[7px] min-w-0 overflow-hidden rounded-[4px] bg-(--raise)">
             <span
-              className="barlist-fill"
+              className="block h-full origin-left animate-[bar-grow_700ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[4px] bg-(--tone) motion-reduce:animate-none"
               style={{ width: `${String(Math.max(1.5, (i.value / ceiling) * 100))}%` }}
             />
           </span>
-          <span className="barlist-value">{i.display ?? i.value.toLocaleString('en-US')}</span>
+          <span className="text-[0.8rem] whitespace-nowrap tabular-nums [font-weight:560]">
+            {i.display ?? i.value.toLocaleString('en-US')}
+          </span>
         </li>
       ))}
     </ul>
@@ -205,27 +249,56 @@ export function RankRow({
   meta: ReactNode
 }) {
   return (
-    <li className="rank">
-      <span className={note === null ? 'rank-name' : 'rank-name rank-noted'}>
-        <span title={note ?? name}>{name}</span>
+    // Fixed name and count tracks, not `auto`. Each row is its own grid
+    // container, so a content-sized column is measured per row — the bars
+    // would start at a different x on every line and stop at a different one,
+    // which is the entire comparison this list exists to make.
+    <li className="grid min-w-0 grid-cols-[9.5rem_minmax(2rem,1fr)_2.6rem] items-center gap-x-[0.55rem] gap-y-[0.1rem] rounded-[7px] px-[0.45rem] py-[0.3rem] hover:bg-(--panel-2)">
+      <span className="flex min-w-0 items-baseline gap-[0.35rem] text-[0.79rem]">
+        <span
+          // A name that cannot be read at face value — an internal credential,
+          // or a hash — carries its explanation on a hover, and says so with
+          // the same dotted underline the host strip uses for the same promise.
+          className={cn('min-w-0 truncate', note !== null && 'cursor-help border-b border-dotted')}
+          title={note ?? name}
+        >
+          {name}
+        </span>
         {badges.map((b) => (
           <em
             key={b.text}
-            className={b.tone === 'muted' ? 'is-muted' : undefined}
+            // Warn, not bad: a state that changes what the numbers mean is
+            // something to look into, not something that is on fire. Muted is
+            // "deliberately switched off", which explains the silence rather
+            // than reporting it.
+            className={cn(
+              'flex-none rounded-full border px-[0.35rem] py-[0.02rem] text-[0.6rem] not-italic',
+              b.tone === 'muted'
+                ? 'border-border text-(--dim)'
+                : 'border-[color-mix(in_srgb,var(--warning)_40%,transparent)] text-warning',
+            )}
             title={b.why ?? note ?? undefined}
           >
             {b.text}
           </em>
         ))}
       </span>
-      <span className="rank-track">
+      <span className="block h-[5px] overflow-hidden rounded-[3px] bg-(--raise)">
         <span
-          className="rank-fill"
+          // Same growth as every other bar on these pages — `bar-grow` scales
+          // on X from the left, so the origin has to be set for it to read as
+          // filling rather than as sliding in.
+          className="block h-full origin-left animate-[bar-grow_600ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-[3px] bg-info opacity-85 motion-reduce:animate-none"
           style={{ width: `${String(Math.max(1.5, (value / max) * 100))}%` }}
         />
       </span>
-      <span className="rank-n">{num(value)}</span>
-      <span className="rank-meta">{meta}</span>
+      <span className="text-right text-[0.79rem] whitespace-nowrap tabular-nums">{num(value)}</span>
+      {/* Interpuncts are generated between the items rather than typed, so a
+          caller with no tokens and no latency does not trail a separator into
+          empty space. */}
+      <span className="col-span-full flex min-w-0 flex-wrap gap-x-[0.4rem] gap-y-0 text-[0.69rem] text-(--dim) tabular-nums [&>span+span]:before:mr-[0.4rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']">
+        {meta}
+      </span>
     </li>
   )
 }
@@ -263,19 +336,29 @@ export function Columns({
   height?: number
   empty?: string
 }) {
-  if (points.length === 0) return <p className="viz-empty">{empty}</p>
+  if (points.length === 0) return <p className={EMPTY}>{empty}</p>
   const max = Math.max(...points.map((p) => p.value), 0.0001)
 
   return (
-    <div className={`columns columns-${tone}`} style={{ height }}>
+    <div className="flex w-full items-end gap-[2px]" style={toneStyle(tone, { height })}>
       {points.map((p, i) => (
         <div
           key={`${p.label}-${String(i)}`}
-          className={p.flag === true ? 'columns-col columns-col-flag' : 'columns-col'}
+          // The flag rule is drawn under the baseline and tracks the bar's own
+          // cap, not the slot, so it sits under the column it belongs to
+          // rather than under the gap on either side of it.
+          className={cn(
+            'group flex h-full min-w-0 flex-1 items-end justify-center',
+            p.flag === true &&
+              'relative after:absolute after:-bottom-[3px] after:left-1/2 after:h-0.5 after:w-[min(100%,2.75rem)] after:-translate-x-1/2 after:rounded-[1px] after:bg-danger',
+          )}
           title={`${p.label}: ${p.display ?? p.value.toLocaleString('en-US')}`}
         >
           <span
-            className="columns-bar"
+            // Capped and centred rather than filling its slot: a fortnight
+            // across a full-width board gives each column eighty-odd pixels,
+            // and a saturated block that wide reads as a filled area chart.
+            className="block w-full max-w-[2.75rem] origin-bottom animate-[col-grow_550ms_cubic-bezier(0.2,0.9,0.2,1)_both] rounded-t-[2px] bg-(--tone) opacity-85 group-hover:opacity-100 motion-reduce:animate-none"
             style={{
               height: `${String(Math.max(2, (p.value / max) * 100))}%`,
               // Staggered so the band fills left-to-right on load. Capped so a
@@ -310,7 +393,7 @@ export function Trend({
   // that sibling is off-screen.
   const gradientId = useId()
 
-  if (values.length < 2) return <p className="viz-empty">{empty}</p>
+  if (values.length < 2) return <p className={EMPTY}>{empty}</p>
 
   const w = 600
   const max = Math.max(...values, 0.0001)
@@ -320,16 +403,18 @@ export function Trend({
 
   return (
     <svg
-      className={`trend trend-${tone}`}
+      // The stroke is scoped to the polyline: `stroke` inherits, and on the
+      // svg it would outline the gradient-filled path too.
+      className="block w-full [&>polyline]:stroke-(--tone)"
       viewBox={`0 0 ${String(w)} ${String(height)}`}
       preserveAspectRatio="none"
-      style={{ height }}
+      style={toneStyle(tone, { height })}
       aria-hidden="true"
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" className="trend-top" />
-          <stop offset="100%" className="trend-bottom" />
+          <stop offset="0%" className="[stop-color:var(--tone)] [stop-opacity:0.28]" />
+          <stop offset="100%" className="[stop-color:var(--tone)] [stop-opacity:0]" />
         </linearGradient>
       </defs>
       <path
@@ -379,10 +464,13 @@ export function Spark({
   })
 
   return (
+    // No width: the box it lands in decides. `Stat` stretches it across the
+    // cell; the app cards size it from its height and push it right.
     <svg
-      className={`spark2 spark2-${tone}`}
+      className="h-4 self-end stroke-(--tone)"
       viewBox={`0 0 ${String(width)} ${String(height)}`}
       preserveAspectRatio="none"
+      style={toneStyle(tone)}
       aria-hidden="true"
     >
       <polyline
@@ -394,6 +482,18 @@ export function Spark({
     </svg>
   )
 }
+
+/** `StatStrip`'s box. The 1px grid gap IS the divider — the container's border
+    colour showing through — which a per-cell border-left cannot promise once
+    cells wrap. */
+export const STAT_STRIP =
+  'mb-[0.8rem] grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-px overflow-hidden rounded-lg border border-(--border-soft) bg-(--border-soft)'
+
+/** One `Stat` cell. Every cell reserves the third row under the value, so a
+    strip mixing cells that have a sparkline with cells that have a caption —
+    or neither — keeps one baseline instead of stepping. */
+export const STAT =
+  'grid min-w-0 grid-rows-[auto_auto_1rem] content-start gap-[0.15rem] bg-card px-[0.9rem] pt-[0.7rem] pb-[0.75rem] [&>svg]:w-full'
 
 /**
  * The row of live readings at the top of a page — one bordered strip with
@@ -407,7 +507,7 @@ export function Spark({
  * stands at twice the height of one carrying a caption.
  */
 export function StatStrip({ children }: { children: ReactNode }) {
-  return <div className="strip">{children}</div>
+  return <div className={STAT_STRIP}>{children}</div>
 }
 
 /**
@@ -437,16 +537,23 @@ export function Stat({
   title?: string
 }) {
   return (
-    <div className={tone === undefined ? 'stat' : `stat stat-${tone}`} title={title}>
-      <span className="stat-k">{label}</span>
-      <span className="stat-v">
+    <div className={STAT} title={title} style={tone === undefined ? undefined : toneStyle(tone)}>
+      <span className="truncate text-[0.73rem] font-medium text-(--text-muted)">{label}</span>
+      <span
+        className={cn(
+          'text-[1.3rem] leading-[1.15] tracking-[-0.015em] tabular-nums max-[34rem]:text-[1.15rem] [font-weight:550] [overflow-wrap:anywhere]',
+          tone !== undefined && 'text-(--tone)',
+        )}
+      >
         {value}
-        {unit !== undefined && <em>{unit}</em>}
+        {unit !== undefined && (
+          <em className="ml-[0.3rem] text-[0.72rem] font-normal text-(--dim) not-italic">{unit}</em>
+        )}
       </span>
       {spark !== undefined && spark.length > 1 ? (
         <Spark values={spark} tone={tone ?? 'muted'} />
       ) : sub !== undefined ? (
-        <span className="stat-sub">{sub}</span>
+        <span className="truncate text-[0.7rem] leading-4 text-(--dim)">{sub}</span>
       ) : null}
     </div>
   )
@@ -460,9 +567,10 @@ function MicroSpark({ values, tone }: { values: number[]; tone: Tone }) {
   const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`)
   return (
     <svg
-      className={`microspark microspark-${tone}`}
+      className="mt-[0.2rem] mb-[0.1rem] h-5 w-full stroke-(--tone) opacity-75"
       viewBox={`0 0 ${String(w)} ${String(h)}`}
       preserveAspectRatio="none"
+      style={toneStyle(tone)}
       aria-hidden="true"
     >
       <polyline
@@ -498,11 +606,17 @@ export function Progress({
 }) {
   return (
     <span
-      className={`progress progress-${tone}${active ? ' progress-active' : ''}`}
-      style={{ height }}
+      className="block w-full overflow-hidden rounded-full bg-(--raise)"
+      style={toneStyle(tone, { height })}
     >
       <span
-        className="progress-fill"
+        className={cn(
+          'block h-full rounded-full bg-(--tone) [transition:width_400ms_ease] motion-reduce:transition-none',
+          // The sheen is drawn from --foreground rather than white so it stays
+          // a highlight in the light theme instead of vanishing into the page.
+          active &&
+            'animate-[sheen_1.6s_linear_infinite] [background-image:linear-gradient(100deg,transparent_20%,color-mix(in_srgb,var(--foreground)_22%,transparent)_50%,transparent_80%)] [background-size:240%_100%] motion-reduce:animate-none',
+        )}
         style={{ width: `${String(Math.max(0, Math.min(100, pct ?? 0)))}%` }}
       />
     </span>
@@ -512,12 +626,54 @@ export function Progress({
 /* ── small parts ──────────────────────────────────────────────────────── */
 
 export function Pulse({ on, tone = 'ok' }: { on: boolean; tone?: Tone }) {
-  return <span className={`pulse pulse-${tone}${on ? ' pulse-on' : ''}`} aria-hidden="true" />
+  return (
+    <span
+      className={cn(
+        'inline-block size-[7px] flex-none rounded-full',
+        on
+          ? 'animate-[pulse-beat_2s_ease-in-out_infinite] bg-(--tone) motion-reduce:animate-none'
+          : 'bg-(--dim)',
+      )}
+      style={toneStyle(tone)}
+      aria-hidden="true"
+    />
+  )
 }
 
 export function Chip({ children, tone = 'muted' }: { children: ReactNode; tone?: Tone }) {
-  return <span className={`vchip vchip-${tone}`}>{children}</span>
+  return (
+    <span
+      className="inline-flex items-center rounded-[5px] border border-[color-mix(in_srgb,var(--tone)_40%,transparent)] bg-(--raise) px-[0.4rem] py-[0.05rem] text-[0.68rem] whitespace-nowrap text-(--tone) [font-weight:550]"
+      style={toneStyle(tone)}
+    >
+      {children}
+    </span>
+  )
 }
+
+/** `Board`'s section. Full width on a phone, double the declared span on a
+    laptop, the declared span on a desktop — the board grid is 12 wide at
+    every size. */
+export const BOARD =
+  'flex min-w-0 flex-col overflow-hidden rounded-lg border border-(--border-soft) bg-card [grid-column:span_var(--span,6)] max-[78rem]:[grid-column:span_min(12,calc(var(--span,6)*2))] max-[50rem]:[grid-column:span_12]'
+
+/** `Board`'s header row. */
+export const BOARD_HEAD =
+  'flex items-baseline justify-between gap-[0.6rem] border-b border-(--border-soft) px-[0.95rem] pt-[0.7rem] pb-[0.55rem]'
+
+/** `Board`'s body. A query container, so controls inside a board lay
+    themselves out from the width they actually got: one viewport width gives
+    a board anywhere from a quarter of the page to all of it. `flex-1` puts
+    the grid row's surplus here rather than under the header. */
+export const BOARD_BODY =
+  '@container/board flex flex-1 flex-col gap-[0.7rem] px-[0.95rem] pt-[0.85rem] pb-[0.95rem]'
+
+/** `BoardGrid`'s grid. Boards in the same row share a bottom edge: `stretch`
+    is the grid default and it is left alone deliberately. Which sibling is
+    taller depends on live data, on the width that decides how a list wraps,
+    and on whether a reader has opened a <details> — so every per-board `fill`
+    opt-in was a guess about a value that changes after the guess. */
+export const BOARD_GRID = 'grid grid-cols-12 gap-[0.8rem]'
 
 /**
  * A labelled box. Distinct from the existing `Panel` (used on the app detail
@@ -543,25 +699,29 @@ export function Board({
   children: ReactNode
 }) {
   return (
-    <section className="board" style={{ ['--span' as string]: String(span ?? 6) }}>
-      <header className="board-head">
-        <h3>
+    <section className={BOARD} style={{ ['--span' as string]: String(span ?? 6) }}>
+      <header className={BOARD_HEAD}>
+        {/* Sentence case at reading weight, not an ALL-CAPS eyebrow: a page
+            holds eight of these, and eight tracked-out capitals read as
+            decoration. The icon went with the caps — a card is named by its
+            title — so the slot is kept but not drawn. */}
+        <h3 className="m-0 flex items-center gap-2 text-[0.85rem] [font-weight:550]">
           {icon !== undefined && (
-            <span className="board-icon" aria-hidden="true">
+            <span className="hidden" aria-hidden="true">
               {isGlyph(icon) ? <Glyph name={icon} /> : icon}
             </span>
           )}
           {title}
         </h3>
-        {aside !== undefined && <div className="board-aside">{aside}</div>}
+        {aside !== undefined && <div>{aside}</div>}
       </header>
-      <div className="board-body">{children}</div>
+      <div className={BOARD_BODY}>{children}</div>
     </section>
   )
 }
 
 export function BoardGrid({ children }: { children: ReactNode }) {
-  return <div className="board-grid">{children}</div>
+  return <div className={BOARD_GRID}>{children}</div>
 }
 
 /**
@@ -580,11 +740,22 @@ export function BoardGrid({ children }: { children: ReactNode }) {
  */
 export function Measures({ items }: { items: { k: string; v: ReactNode; tone?: Tone }[] }) {
   return (
-    <dl className="measures">
+    <dl className="m-0 flex flex-wrap gap-x-[1.4rem] gap-y-[0.4rem]">
       {items.map((m) => (
-        <div key={m.k} className={m.tone === undefined ? undefined : `measures-${m.tone}`}>
-          <dt>{m.k}</dt>
-          <dd>{m.v}</dd>
+        <div
+          key={m.k}
+          className="flex flex-col gap-[0.05rem]"
+          style={m.tone === undefined ? undefined : toneStyle(m.tone)}
+        >
+          <dt className="text-[0.6rem] tracking-[0.08em] text-(--dim) uppercase">{m.k}</dt>
+          <dd
+            className={cn(
+              'm-0 text-[0.85rem] tabular-nums',
+              m.tone === undefined ? 'text-(--text-muted)' : 'text-(--tone)',
+            )}
+          >
+            {m.v}
+          </dd>
         </div>
       ))}
     </dl>
@@ -603,11 +774,44 @@ export function Measures({ items }: { items: { k: string; v: ReactNode; tone?: T
  */
 export function Facts({ rows, list }: { rows: { k: string; v: ReactNode }[]; list?: boolean }) {
   return (
-    <dl className={list === true ? 'facts facts-list' : 'facts'}>
+    <dl
+      className={cn(
+        'm-0',
+        list === true
+          ? // Hairline separators instead of a box per row: at eight rows the
+            // boxes were most of what the panel drew.
+            'block'
+          : 'grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-x-4 gap-y-[0.45rem]',
+      )}
+    >
       {rows.map((r) => (
-        <div key={r.k}>
-          <dt>{r.k}</dt>
-          <dd>{r.v}</dd>
+        <div
+          key={r.k}
+          className={cn(
+            'min-w-0',
+            list === true
+              ? 'flex flex-row flex-wrap items-baseline justify-between gap-x-[1.25rem] gap-y-[0.2rem] border-t border-(--border-soft) py-[0.45rem] first:border-t-0 first:pt-0'
+              : 'flex flex-col gap-[0.05rem]',
+          )}
+        >
+          <dt
+            className={cn(
+              'text-(--dim)',
+              list === true ? 'flex-none text-[0.82rem]' : 'truncate text-[0.73rem]',
+            )}
+          >
+            {r.k}
+          </dt>
+          <dd
+            className={cn(
+              'm-0',
+              list === true
+                ? 'min-w-0 text-right text-[0.84rem] [font-weight:450]'
+                : 'text-[0.92rem] tabular-nums [font-weight:550] [overflow-wrap:anywhere]',
+            )}
+          >
+            {r.v}
+          </dd>
         </div>
       ))}
     </dl>

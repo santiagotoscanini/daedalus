@@ -1,8 +1,28 @@
+import { cn } from '../../../lib/cn'
 import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { DASH, num, pct } from '../../../lib/format'
 import { LogBoard } from '../../logs'
 import { BarList, Board, BoardGrid, Facts, Measures } from '../../viz'
-import { HOST_READERS, PARTS, PartHead, PartPhoto } from './shared'
+import {
+  BOARD_FOOT,
+  BOARD_NOTE,
+  BOARD_SUB,
+  HOST_READERS,
+  LIST,
+  MONO,
+  MONO_FACE,
+  PART,
+  PART_DETAIL,
+  PART_ID,
+  PART_NAME,
+  PARTS,
+  PartHead,
+  PartPhoto,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+  VIZ_EMPTY,
+} from './shared'
 
 /* ── Build ────────────────────────────────────────────────────────────── */
 
@@ -20,15 +40,15 @@ export function BuildView({ d }: { d: Build }) {
         icon="hash"
         span={4}
         aside={
-          <span className="board-note">
+          <span className={BOARD_NOTE}>
             {board.bios.version === null ? 'no BIOS reading' : `BIOS ${board.bios.version}`}
           </span>
         }
       >
-        <div className="part">
-          <div className="part-id">
-            <strong className="part-name">{board.model ?? DASH}</strong>
-            <span className="part-detail">
+        <div className={PART}>
+          <div className={PART_ID}>
+            <strong className={PART_NAME}>{board.model ?? DASH}</strong>
+            <span className={PART_DETAIL}>
               {board.vendor === null ? 'unknown vendor' : shortVendor(board.vendor)}
               {board.version !== null && ` · board rev ${board.version}`}
             </span>
@@ -36,7 +56,7 @@ export function BuildView({ d }: { d: Build }) {
         </div>
         <Facts
           rows={[
-            { k: 'BIOS', v: <span className="mono">{board.bios.version ?? DASH}</span> },
+            { k: 'BIOS', v: <span className={MONO}>{board.bios.version ?? DASH}</span> },
             { k: 'Built', v: board.bios.date ?? DASH },
             {
               k: 'BIOS vendor',
@@ -46,7 +66,7 @@ export function BuildView({ d }: { d: Build }) {
             { k: 'VRM temp', v: temp(d.temps.find((t) => t.label === 'VRM MOS')?.value ?? null) },
           ]}
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Read from SMBIOS, so a BIOS update appears here on its own. It is deliberately not
           compared against anything: MSI publishes no machine-readable list of releases, and the
           only way to claim &ldquo;two behind&rdquo; would be to scrape a vendor page that will
@@ -59,12 +79,12 @@ export function BuildView({ d }: { d: Build }) {
         title="Processor"
         icon="◈"
         span={4}
-        aside={<span className="board-note">{temp(d.cpu.tempC)}</span>}
+        aside={<span className={BOARD_NOTE}>{temp(d.cpu.tempC)}</span>}
       >
-        <div className="part">
-          <div className="part-id">
-            <strong className="part-name">{cpuName(hw.cpu.model)}</strong>
-            <span className="part-detail">
+        <div className={PART}>
+          <div className={PART_ID}>
+            <strong className={PART_NAME}>{cpuName(hw.cpu.model)}</strong>
+            <span className={PART_DETAIL}>
               {hw.cpu.cores === null || hw.cpu.threads === null
                 ? 'core count unread'
                 : `${num(hw.cpu.cores)} cores, ${num(hw.cpu.threads)} threads`}
@@ -83,7 +103,7 @@ export function BuildView({ d }: { d: Build }) {
             { k: 'socket', v: hw.cpu.socket ?? DASH },
           ]}
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Ten cores and sixteen threads is not an error: six of them are efficiency cores with no
           hyperthread. That asymmetry is why the per-core temperature list on Host is uneven. The
           two kinds of core do not run at the same clock and are not meant to.
@@ -95,39 +115,39 @@ export function BuildView({ d }: { d: Build }) {
         icon="❋"
         span={4}
         aside={
-          <span className="board-note">
+          <span className={BOARD_NOTE}>
             {spinning.length === 0
               ? 'nothing spinning'
               : `${num(spinning.length)} of ${num(d.fans.length)} headers`}
           </span>
         }
       >
-        <div className="part">
-          <div className="part-id">
-            <strong className="part-name">Noctua NH-L9x65</strong>
-            <span className="part-detail">
+        <div className={PART}>
+          <div className={PART_ID}>
+            <strong className={PART_NAME}>Noctua NH-L9x65</strong>
+            <span className={PART_DETAIL}>
               65 mm tall, chosen against the case&rsquo;s 70 mm ceiling. The whole build turns on
               that number.
             </span>
           </div>
         </div>
-        <h4 className="board-sub">Fan headers</h4>
-        <ul className="itemlist">
+        <h4 className={BOARD_SUB}>Fan headers</h4>
+        <ul className={LIST}>
           {d.fans.map((f) => (
-            <li key={f.label}>
-              <span className="item-main">{f.label}</span>
-              <span className="item-side">
+            <li key={f.label} className={ROW}>
+              <span className={ROW_MAIN}>{f.label}</span>
+              <span className={ROW_SIDE}>
                 {f.rpm > 0 ? (
-                  <span className="mono">{num(f.rpm)} rpm</span>
+                  <span className={MONO}>{num(f.rpm)} rpm</span>
                 ) : (
-                  <span className="text-dim">not connected</span>
+                  <span className="text-muted-foreground">not connected</span>
                 )}
               </span>
             </li>
           ))}
-          {d.fans.length === 0 && <p className="viz-empty">no fan sensors; see the note below</p>}
+          {d.fans.length === 0 && <p className={VIZ_EMPTY}>no fan sensors; see the note below</p>}
         </ul>
-        <h4 className="board-sub">Board temperatures</h4>
+        <h4 className={BOARD_SUB}>Board temperatures</h4>
         <BarList
           items={d.temps.map((t) => ({
             label: t.label,
@@ -137,7 +157,7 @@ export function BuildView({ d }: { d: Build }) {
           tone="info"
           empty="no board sensors"
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           These readings exist because a driver was added for the board&rsquo;s Nuvoton super-I/O
           chip; without it Linux sees three sensors and counts no revolutions at all, which on a
           machine that lives in a cupboard makes a dead fan silent until it is thermal. Headers
@@ -150,7 +170,7 @@ export function BuildView({ d }: { d: Build }) {
         icon="rows"
         span={4}
         aside={
-          <span className="board-note">
+          <span className={BOARD_NOTE}>
             {hw.memory.populated === null || hw.memory.slots === null
               ? DASH
               : `${num(hw.memory.populated)} of ${num(hw.memory.slots)} slots`}
@@ -174,7 +194,7 @@ export function BuildView({ d }: { d: Build }) {
             },
             {
               k: 'Part',
-              v: <span className="mono">{hw.memory.modules[0]?.partNumber ?? DASH}</span>,
+              v: <span className={MONO}>{hw.memory.modules[0]?.partNumber ?? DASH}</span>,
             },
             {
               k: 'Room left',
@@ -185,18 +205,18 @@ export function BuildView({ d }: { d: Build }) {
             },
           ]}
         />
-        <h4 className="board-sub">Slots</h4>
-        <ul className="itemlist">
+        <h4 className={BOARD_SUB}>Slots</h4>
+        <ul className={LIST}>
           {hw.memory.modules.map((m) => (
-            <li key={m.locator ?? '?'}>
-              <span className="item-main">{(m.locator ?? '?').replace('Controller', 'Ch ')}</span>
-              <span className="item-side">{m.sizeGb === null ? DASH : `${num(m.sizeGb)} GB`}</span>
-              <span className="item-side">{m.rank === null ? DASH : `${num(m.rank)}R`}</span>
+            <li key={m.locator ?? '?'} className={ROW}>
+              <span className={ROW_MAIN}>{(m.locator ?? '?').replace('Controller', 'Ch ')}</span>
+              <span className={ROW_SIDE}>{m.sizeGb === null ? DASH : `${num(m.sizeGb)} GB`}</span>
+              <span className={ROW_SIDE}>{m.rank === null ? DASH : `${num(m.rank)}R`}</span>
             </li>
           ))}
-          {hw.memory.modules.length === 0 && <p className="viz-empty">no modules read</p>}
+          {hw.memory.modules.length === 0 && <p className={VIZ_EMPTY}>no modules read</p>}
         </ul>
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Both modules sit in the second slot of each channel, which is the pairing the board wants
           for dual channel. The empty slots are the two that would break it if filled wrong. Two
           free slots and a 128 GB ceiling is the upgrade this machine has left.
@@ -208,15 +228,15 @@ export function BuildView({ d }: { d: Build }) {
         icon="◐"
         span={4}
         aside={
-          <span className="board-note">
+          <span className={BOARD_NOTE}>
             {d.gpu.clients === null ? DASH : `${num(d.gpu.clients)} clients`}
           </span>
         }
       >
-        <div className="part">
-          <div className="part-id">
-            <strong className="part-name">Intel UHD Graphics 770</strong>
-            <span className="part-detail">
+        <div className={PART}>
+          <div className={PART_ID}>
+            <strong className={PART_NAME}>Intel UHD Graphics 770</strong>
+            <span className={PART_DETAIL}>
               Integrated in the CPU; there is no card in this machine. It transcodes for Jellyfin
               and runs Immich&rsquo;s vision models.
             </span>
@@ -239,7 +259,7 @@ export function BuildView({ d }: { d: Build }) {
             },
           ]}
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           A parked graphics engine reads zero watts and zero megahertz. That is the honest number
           rather than a broken one: it wakes when something asks it to. The package figure beside it
           is the whole chip including the cpu cores, which is why the two are shown together — on an
@@ -249,30 +269,30 @@ export function BuildView({ d }: { d: Build }) {
         </p>
       </Board>
 
-      <Board title="Power" icon="⚡" span={4} aside={<span className="board-note">650 W</span>}>
-        <div className="part">
-          <div className="part-id">
-            <strong className="part-name">EVGA SuperNOVA 650 GM</strong>
-            <span className="part-detail">
+      <Board title="Power" icon="⚡" span={4} aside={<span className={BOARD_NOTE}>650 W</span>}>
+        <div className={PART}>
+          <div className={PART_ID}>
+            <strong className={PART_NAME}>EVGA SuperNOVA 650 GM</strong>
+            <span className={PART_DETAIL}>
               SFX, 80+ Gold, fully modular. The case dictates the form factor.
             </span>
           </div>
         </div>
-        <h4 className="board-sub">Rails, as the board sees them</h4>
-        <ul className="itemlist">
+        <h4 className={BOARD_SUB}>Rails, as the board sees them</h4>
+        <ul className={LIST}>
           {['+12V', '+5V', '+3.3V'].map((rail) => {
             const v = d.volts.find((x) => x.label === rail)
             return (
-              <li key={rail}>
-                <span className="item-main">{rail}</span>
-                <span className="item-side mono">
+              <li key={rail} className={ROW}>
+                <span className={ROW_MAIN}>{rail}</span>
+                <span className={cn(ROW_SIDE, MONO_FACE)}>
                   {v === undefined ? DASH : `${v.value.toFixed(3)} V`}
                 </span>
               </li>
             )
           })}
         </ul>
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           The supply itself reports nothing. This model has no monitoring interface, so there is no
           temperature, no load and no fan speed to show, and none of those will ever appear here.
           What the board CAN see is what arrives on each rail, which is the next best question: a
@@ -281,15 +301,32 @@ export function BuildView({ d }: { d: Build }) {
       </Board>
 
       <Board title="The case" icon="▣" span={12}>
-        <div className="part part-wide">
+        {/* The full-width panel: the photo earns real size here and the specs
+            sit beside it rather than under it — at twelve columns a spec list
+            below a picture leaves half the row empty. The photo is sized from
+            the parent because `PartPhoto` carries the narrow-board width; the
+            container query is on the BOARD's width, not the viewport's, since
+            a span-12 board is full width on a phone and a third of the page on
+            a desktop. */}
+        <div
+          className={cn(
+            PART,
+            'items-start gap-[1.4rem]',
+            '[&>img]:w-[clamp(140px,26%,300px)]',
+            '@max-[30rem]/board:flex-col @max-[30rem]/board:items-center',
+            '@max-[30rem]/board:[&>img]:w-[clamp(140px,60%,260px)]',
+          )}
+        >
           <PartPhoto part={PARTS.case} />
-          <div className="part-id">
-            <strong className="part-name">{PARTS.case.name}</strong>
-            <span className="part-detail">{PARTS.case.detail}</span>
-            <Facts rows={PARTS.case.specs} />
+          <div className={PART_ID}>
+            <strong className={PART_NAME}>{PARTS.case.name}</strong>
+            <span className={PART_DETAIL}>{PARTS.case.detail}</span>
+            <div className="mt-2 w-full">
+              <Facts rows={PARTS.case.specs} />
+            </div>
           </div>
         </div>
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Six drive bays with two filled, and a 70 mm cooler ceiling that picked the cooler. This is
           the one part on the page that nothing in the machine can report: SMBIOS gives the board
           vendor as the chassis vendor, because a case has no firmware and no way to introduce

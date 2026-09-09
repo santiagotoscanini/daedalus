@@ -187,7 +187,7 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
 export function NavIcon({ name, size = 19 }: { name: NavIconName; size?: number }) {
   return (
     <svg
-      className="nav-icon"
+      className="flex-none opacity-75 transition-opacity duration-[120ms]"
       viewBox="0 0 24 24"
       width={size}
       height={size}

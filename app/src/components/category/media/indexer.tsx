@@ -4,7 +4,7 @@ import { LogBoard, type LogNeighbour } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { compareOf, Open, ServiceHead, verdictOf } from '../../service-head'
 import { Board, BoardGrid, RankRow } from '../../viz'
-import { HealthChecks } from './shared'
+import { EMPTY, FOOT, HealthChecks, LIST, MONO, NOTE } from './shared'
 
 /* ── Indexer: Prowlarr ────────────────────────────────────────────────── */
 
@@ -51,16 +51,16 @@ export function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> 
           icon="⌕"
           span={12}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {num(d.counts.enabled)} enabled
               {(d.counts.disabled ?? 0) > 0 && ` · ${num(d.counts.disabled)} off`}
             </span>
           }
         >
           {d.indexers.length === 0 ? (
-            <p className="viz-empty">no indexer statistics</p>
+            <p className={EMPTY}>no indexer statistics</p>
           ) : (
-            <ul className="ranks">
+            <ul className={`${LIST} gap-[0.1rem]`}>
               {d.indexers.map((i) => (
                 <RankRow
                   key={i.name}
@@ -84,16 +84,16 @@ export function ProwlarrView({ d }: { d: Extract<MediaData, { tab: 'indexer' }> 
                       <span>{num(i.grabs)} grabs</span>
                       {i.responseMs !== null && <span>{num(i.responseMs)} ms</span>}
                       {i.failedQueries > 0 && (
-                        <span className="bad-text">{num(i.failedQueries)} failed</span>
+                        <span className="text-danger">{num(i.failedQueries)} failed</span>
                       )}
-                      <span className="mono">{i.protocol}</span>
+                      <span className={MONO}>{i.protocol}</span>
                     </>
                   }
                 />
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Queries are the bar, because that is what the *arrs spend. Grabs beside it is the yield:
             an indexer with thousands of queries and no grabs is being searched and never has the
             answer, which is a reason to turn it off rather than a fault.

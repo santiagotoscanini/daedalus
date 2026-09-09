@@ -2,12 +2,25 @@ import { useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { rollUp } from '../../lib/ci-lines'
 import type { CiRequestStatus } from '../../lib/ci-request'
+import { cn } from '../../lib/cn'
 import { logTime, ms, when } from '../../lib/format'
 import { OWNER } from '../../lib/site'
+import { toneStyle } from '../../lib/tone'
 import { type AppTabData, fetchCiRequestStatus, runCiFn } from '../../server/registry'
 import { usePolledStatus } from '../status'
+import { Badge } from '../ui/badge'
+import { Button } from '../ui/button'
 import { Board, BoardGrid, Chip, Progress } from '../viz'
-import type { AppRecord } from './shared'
+import {
+  type AppRecord,
+  BOARD_FOOT,
+  CHIP,
+  GHOST_BTN,
+  LEDE,
+  SECTION_HEAD,
+  SECTION_HEAD_SMALL,
+  VIZ_EMPTY,
+} from './shared'
 
 type CiData = Extract<AppTabData, { kind: 'deployments' }>['ci']
 type ActivityData = Extract<AppTabData, { kind: 'deployments' }>['activity']
@@ -21,28 +34,35 @@ export function Deployments({
 }) {
   return (
     <>
-      <p className="deploy-meta">
+      {/* Three items of very different widths — a repo link, a sentence, a
+          button. Without wrapping, flex's default `flex-shrink: 1` squeezes
+          each of them below its content instead, which is what broke the glyph
+          away from the repo name onto its own line. `shrink-0` on the children
+          makes them wrap as whole units. */}
+      <p className="mt-0 mr-0 mb-[1.2rem] ml-0 flex flex-wrap items-center gap-x-[1.1rem] gap-y-[0.6rem] font-mono text-[0.82rem] [&>*]:shrink-0">
         {app.sourceMode === 'local' ? (
           <>
-            <span className="muted">⎇ stacks/{app.name}/app</span>
-            <span className="muted">source is live, nothing to deploy</span>
+            <span className="text-(--text-muted)">⎇ stacks/{app.name}/app</span>
+            <span className="text-(--text-muted)">source is live, nothing to deploy</span>
           </>
         ) : (
           <>
             <a href={`https://github.com/${OWNER}/${app.name}`} target="_blank" rel="noreferrer">
               ⎇ {OWNER}/{app.name}
             </a>
-            <span className="muted">builds run on self-hosted runners</span>
-            <span className="deploy-actions">
+            <span className="text-(--text-muted)">builds run on self-hosted runners</span>
+            <span className="ml-auto">
               <RunCiButton repo={app.name} publish={td.publish} />
-              <a
-                href={`https://github.com/santiagotoscanini/${app.name}/actions`}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-ghost"
-              >
-                ↗ GitHub Actions
-              </a>
+              <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
+                <a
+                  href={`https://github.com/santiagotoscanini/${app.name}/actions`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:no-underline"
+                >
+                  ↗ GitHub Actions
+                </a>
+              </Button>
             </span>
           </>
         )}
@@ -51,46 +71,78 @@ export function Deployments({
       {app.sourceMode !== 'local' && <Runners ci={td.ci} activity={td.activity} />}
 
       {td.deployments.length === 0 ? (
-        <p className="lede">
+        <p className={LEDE}>
           {app.sourceMode === 'local'
             ? 'Local-source apps have no deploy history. The running code is the working tree.'
             : 'No deploys recorded yet. History starts from the first deploy where the image digest actually moved.'}
         </p>
       ) : (
         <>
-          <h2 className="section-head">
+          <h2 className={SECTION_HEAD}>
             Deploy history
-            <small>only the runs where the digest actually moved</small>
+            <small className={SECTION_HEAD_SMALL}>
+              only the runs where the digest actually moved
+            </small>
           </h2>
-          <ol className="timeline">
+          {/* The rail is the list's own ::before, inset top and bottom so it
+              starts and ends at the first and last node rather than running
+              past them. */}
+          <ol className="relative m-0 list-none p-0 pl-6 before:absolute before:top-3 before:bottom-3 before:left-[5px] before:w-px before:bg-border before:content-['']">
             {td.deployments.map((d) => (
-              <li key={d.id} className={d.isCurrent ? 'current' : d.result}>
-                <span className={`node node-${d.isCurrent ? 'current' : d.result}`} />
-                <div className={d.isCurrent ? 'deploy-card is-current' : 'deploy-card'}>
-                  <div className="deploy-head">
-                    <code className="deploy-rev">{d.shortRevision ?? d.digest.slice(0, 12)}</code>
-                    <span
-                      className={
-                        d.isCurrent
-                          ? 'chip chip-warn'
-                          : d.result === 'ok'
-                            ? 'chip chip-live'
-                            : 'chip chip-bad'
-                      }
-                    >
-                      {d.isCurrent ? 'current' : d.result === 'ok' ? 'success' : 'failed'}
-                    </span>
+              <li key={d.id} className="relative mb-[0.6rem]">
+                <span
+                  className={cn(
+                    'absolute top-[1.15rem] -left-6 size-[11px] rounded-full border-2 border-background bg-background shadow-[0_0_0_1.5px_var(--tone)]',
+                    d.isCurrent && 'bg-(--tone)',
+                  )}
+                  style={toneStyle(
+                    d.isCurrent
+                      ? 'accent'
+                      : d.result === 'ok'
+                        ? 'ok'
+                        : d.result === 'failed'
+                          ? 'bad'
+                          : 'muted',
+                  )}
+                />
+                <div
+                  className={cn(
+                    'rounded-lg border border-(--border-soft) bg-(--panel) px-[1.05rem] py-[0.8rem]',
+                    d.isCurrent &&
+                      'border-primary/40 bg-[color-mix(in_srgb,var(--brand)_6%,var(--panel))]',
+                  )}
+                >
+                  <div className="flex flex-wrap items-center gap-x-[0.85rem] gap-y-[0.4rem]">
+                    <code className="text-[0.95rem] font-semibold">
+                      {d.shortRevision ?? d.digest.slice(0, 12)}
+                    </code>
+                    {d.isCurrent ? (
+                      <Badge variant="warning" className={cn(CHIP, 'ml-auto')}>
+                        current
+                      </Badge>
+                    ) : d.result === 'ok' ? (
+                      <Badge variant="success" className={cn(CHIP, 'ml-auto')}>
+                        success
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className={cn(CHIP, 'ml-auto border-danger/45 text-danger')}
+                      >
+                        failed
+                      </Badge>
+                    )}
                     {d.commitUrl ? (
                       <a href={d.commitUrl} target="_blank" rel="noreferrer">
                         view commit ↗
                       </a>
                     ) : (
-                      <span className="muted">
+                      <span className="text-(--text-muted)">
                         {d.shortRevision ? 'no source link' : 'image labels unavailable'}
                       </span>
                     )}
                   </div>
-                  <div className="deploy-sub">
+                  <div className="mt-[0.4rem] flex flex-wrap gap-[1.1rem] text-[0.78rem] text-(--dim)">
                     <span>{when(d.startedAt)}</span>
                     <span>{ms(d.durationMs)}</span>
                     <code>{d.digest.slice(0, 12)}</code>
@@ -150,28 +202,40 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
         }
       >
         {!ci.available ? (
-          <p className="viz-empty">
+          <p className={VIZ_EMPTY}>
             No CI snapshot yet. <code>gha-ci-snapshot</code> has not run since boot.
           </p>
         ) : !ci.ok ? (
-          <p className="viz-empty text-bad">
+          <p className={cn(VIZ_EMPTY, 'text-danger')}>
             Could not reach the GitHub API on the last sweep. This is the snapshot from{' '}
             {ci.takenAt ? when(ci.takenAt) : 'an earlier run'}, not a statement about the runners.
           </p>
         ) : ci.runners.length === 0 ? (
-          <p className="viz-empty">
+          <p className={VIZ_EMPTY}>
             None registered. Ephemeral runners de-register between jobs, so this is normal for a few
             seconds after a build finishes.
           </p>
         ) : (
+          // No card around the runner: it is the only thing in its board, so a
+          // second border inside the first was drawing a box around a box. Only
+          // the busy one gets a rule — idle is the resting state of an ephemeral
+          // runner, and colouring it would make the normal case look like an event.
           ci.runners.map((r) => (
-            <div key={r.name} className={r.busy ? 'runner runner-busy' : 'runner'}>
-              <code className="runner-name">{r.name}</code>
-              <div className="runner-labels">
+            <div
+              key={r.name}
+              className={cn(
+                'min-w-0',
+                r.busy && '-ml-[0.1rem] border-l-2 border-l-primary pl-[0.6rem]',
+              )}
+            >
+              <code className="block text-[0.82rem] text-(--text-muted) [overflow-wrap:anywhere]">
+                {r.name}
+              </code>
+              <div className="mt-2 flex flex-wrap gap-[0.3rem]">
                 {r.labels.map((l) => (
-                  <span key={l} className="chip chip-muted">
+                  <Badge key={l} variant="outline" className={cn(CHIP, 'text-(--dim) opacity-80')}>
                     {l}
-                  </span>
+                  </Badge>
                 ))}
               </div>
               {job && job.runnerName === r.name && <JobProgress job={job} />}
@@ -181,7 +245,7 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
 
         {job && !ci.runners.some((r) => r.name === job.runnerName) && <JobProgress job={job} />}
 
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           One job per runner, then a fresh container replaces it. The name changes on every build,
           and a gap between two jobs is the design working.
         </p>
@@ -191,20 +255,34 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
         title="Build &amp; deploy activity"
         icon="logs"
         span={8}
-        aside={<span className="board-note">last 6 hours</span>}
+        aside={<span className="text-[0.73rem] text-(--dim)">last 6 hours</span>}
       >
         {rolled.length === 0 ? (
-          <p className="viz-empty">Nothing in the last 6 hours.</p>
+          <p className={VIZ_EMPTY}>Nothing in the last 6 hours.</p>
         ) : (
-          <div className="acts">
+          // Scrolls inside its own bordered box, and takes no negative margins
+          // to bleed to the board's edges: a caption follows it, and margins
+          // that pulled outward would pull that caption up over the last rows.
+          <div className="max-h-80 overflow-auto overscroll-contain rounded-[9px] border border-(--border-soft) bg-background font-mono text-[0.75rem]">
             {rolled.map((l) => (
-              <div key={l.key} className={`act act-${l.source}`}>
-                <time>{logTime(l.ts)}</time>
-                <span className="act-src">{l.source}</span>
-                <span className="act-msg">{l.line}</span>
+              <div
+                key={l.key}
+                className="grid grid-cols-[6.5rem_3.6rem_1fr_auto] items-baseline gap-[0.7rem] border-t border-t-(--border-soft) px-[0.7rem] py-[0.26rem] first:border-t-0"
+              >
+                <time className="whitespace-nowrap text-(--dim)">{logTime(l.ts)}</time>
+                {/* The two halves of the pipeline read differently, so they
+                    look different. */}
+                <span className={l.source === 'build' ? 'text-info' : 'text-(--dim)'}>
+                  {l.source}
+                </span>
+                <span className="min-w-0 text-(--text-muted) [overflow-wrap:anywhere]">
+                  {l.line}
+                </span>
                 {l.count > 1 && (
+                  // The repeat count for a folded run. Right-aligned in its own
+                  // column so the messages stay on one left edge.
                   <span
-                    className="act-n"
+                    className="rounded-[5px] bg-(--panel-2) px-1 tabular-nums whitespace-nowrap text-(--dim)"
                     title={`Repeated ${String(l.count)} times, most recently at ${logTime(l.lastTs)}`}
                   >
                     ×{l.count}
@@ -214,7 +292,7 @@ function Runners({ ci, activity }: { ci: CiData; activity: ActivityData }) {
             ))}
           </div>
         )}
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           The deploy half is the journal: pull, restart, health-check. The build half is only the
           runner announcing a job starting and finishing — it streams step output to GitHub and
           never writes it to its own stdout, so the full build log lives behind the link above.
@@ -232,12 +310,14 @@ function JobProgress({ job }: { job: NonNullable<CiData['activeJobs'][number]> }
   const pct = total > 0 ? (done / total) * 100 : 0
 
   return (
-    <div className="job">
-      <div className="job-head">
-        <span className="job-name">⚙ {job.name}</span>
-        {job.startedAt && <span className="job-elapsed">{fmtElapsed(job.startedAt)}</span>}
+    <div className="mt-3 rounded-[9px] border bg-(--panel) px-3 py-[0.65rem]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-[0.7rem] gap-y-[0.3rem]">
+        <span className="text-[0.88rem] [font-weight:550]">⚙ {job.name}</span>
+        {job.startedAt && (
+          <span className="font-mono text-[0.76rem] text-(--dim)">{fmtElapsed(job.startedAt)}</span>
+        )}
       </div>
-      <div className="job-step">
+      <div className="mt-[0.3rem] font-mono text-[0.8rem] text-(--text-muted) [overflow-wrap:anywhere]">
         {job.status === 'queued'
           ? 'queued, no runner has picked it up yet'
           : running
@@ -303,7 +383,10 @@ function RunCiButton({
 
   if (publish.workflow === null) {
     return (
-      <span className="muted" title="No workflow in this repo pushes to the box's registry.">
+      <span
+        className="text-(--text-muted)"
+        title="No workflow in this repo pushes to the box's registry."
+      >
         no publishing workflow
       </span>
     )
@@ -311,7 +394,7 @@ function RunCiButton({
   if (!publish.dispatchable) {
     return (
       <span
-        className="muted"
+        className="text-(--text-muted)"
         title={`${publish.workflow} has no workflow_dispatch trigger, so it can only be started by a push.`}
       >
         {publish.workflow} is not dispatchable
@@ -320,16 +403,18 @@ function RunCiButton({
   }
 
   return (
-    <span className="redeploy">
+    <span className="inline-flex items-center gap-[0.6rem] text-[0.76rem]">
       {failed && !running && (
-        <span className="bad-text" title={message}>
+        <span className="text-danger" title={message}>
           dispatch failed
         </span>
       )}
-      {status.state === 'done' && <span className="ok-text">dispatched</span>}
-      <button
+      {status.state === 'done' && <span className="text-success">dispatched</span>}
+      <Button
         type="button"
-        className="btn btn-ghost"
+        variant="outline"
+        size="sm"
+        className={GHOST_BTN}
         disabled={running}
         title={`Dispatch ${publish.workflow}`}
         onClick={() => {
@@ -346,7 +431,7 @@ function RunCiButton({
         }}
       >
         {running ? '⚙ dispatching…' : '⚙ Run CI'}
-      </button>
+      </Button>
     </span>
   )
 }

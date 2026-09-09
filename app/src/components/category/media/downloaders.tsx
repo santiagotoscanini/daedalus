@@ -1,11 +1,31 @@
 import { useState } from 'react'
+import { cn } from '../../../lib/cn'
 import type { MediaData } from '../../../lib/dashboard/categories/media'
 import { bytes, DASH, flag, num, rate, since, until } from '../../../lib/format'
 import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../../service-head'
 import { Board, BoardGrid, Chip, Facts, Measures, Progress, Pulse } from '../../viz'
-import { ServiceBar, tone, VERSION_SNAPSHOT } from './shared'
+import {
+  EMPTY,
+  FEED,
+  FEED_EVENT,
+  FEED_ROW,
+  FEED_TITLE,
+  FOOT,
+  MONO,
+  NOTE,
+  PROV,
+  PROVS,
+  ServiceBar,
+  TRANSFER_HEAD,
+  TRANSFER_META,
+  TRANSFER_NAME,
+  TRANSFER_ROW,
+  TRANSFERS,
+  tone,
+  VERSION_SNAPSHOT,
+} from './shared'
 
 /* ── Downloaders: qBittorrent, NZBGet, MeTube, Shelfmark ──────────────── */
 
@@ -57,7 +77,7 @@ export function DownloadersView({ d }: { d: Downloaders }) {
 function TunnelBoard({ vpn, span }: { vpn: Downloaders['vpn']; span: 4 | 6 }) {
   return (
     <Board title="The tunnel" icon="⛨" span={span}>
-      <div className="vpn-state">
+      <div className="flex items-center gap-[0.5rem] text-[0.95rem]">
         <Pulse on={vpn.up === true} tone={vpn.up === true ? 'ok' : 'bad'} />
         <strong>{vpn.up === null ? 'unknown' : vpn.up ? 'connected' : 'down'}</strong>
       </div>
@@ -68,14 +88,14 @@ function TunnelBoard({ vpn, span }: { vpn: Downloaders['vpn']; span: 4 | 6 }) {
             k: 'Forwarded port',
             v:
               vpn.port === null ? (
-                <span className="text-bad">not forwarded</span>
+                <span className="text-danger">not forwarded</span>
               ) : (
-                <span className="mono">{vpn.port}</span>
+                <span className={MONO}>{vpn.port}</span>
               ),
           },
         ]}
       />
-      <p className="board-foot">
+      <p className={FOOT}>
         Every downloader on this tab shares gluetun&rsquo;s network namespace, so every byte crossed
         this tunnel. The full picture is on Network › Going out; what is here is what changes the
         meaning of the panels beside it.
@@ -112,7 +132,7 @@ function QbtPage({ d }: { d: Downloaders }) {
           icon="down"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               <Pulse on={(qbt.down ?? 0) + (qbt.up ?? 0) > 0} tone="accent" />
               {qbt.connection ?? DASH}
             </span>
@@ -127,20 +147,20 @@ function QbtPage({ d }: { d: Downloaders }) {
             ]}
           />
           {qbt.transfers.length === 0 ? (
-            <p className="viz-empty">
+            <p className={EMPTY}>
               {qbt.reachable
                 ? 'Nothing downloading. Completed torrents are removed after import.'
                 : 'qBittorrent did not accept the login.'}
             </p>
           ) : (
-            <ul className="transfers">
+            <ul className={TRANSFERS}>
               {qbt.transfers.map((t) => (
-                <li key={t.name} className="transfers-row">
-                  <div className="transfers-head">
-                    <span className="transfers-name" title={t.name}>
+                <li key={t.name} className={TRANSFER_ROW}>
+                  <div className={TRANSFER_HEAD}>
+                    <span className={TRANSFER_NAME} title={t.name}>
                       {t.name}
                     </span>
-                    <span className="transfers-meta">
+                    <span className={TRANSFER_META}>
                       {t.active && <>{rate(t.down)} · </>}
                       {t.pct.toFixed(0)}% of {bytes(t.size)}
                       {t.etaSeconds !== null && <> · {until(t.etaSeconds)} left</>}
@@ -167,7 +187,7 @@ function QbtPage({ d }: { d: Downloaders }) {
                   qbt.counts.stalled === 0 ? (
                     num(0)
                   ) : (
-                    <span className="text-warn">{num(qbt.counts.stalled)}</span>
+                    <span className="text-warning">{num(qbt.counts.stalled)}</span>
                   ),
               },
               {
@@ -176,18 +196,18 @@ function QbtPage({ d }: { d: Downloaders }) {
                   qbt.counts.errored === 0 ? (
                     num(0)
                   ) : (
-                    <span className="text-bad">{num(qbt.counts.errored)}</span>
+                    <span className="text-danger">{num(qbt.counts.errored)}</span>
                   ),
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Stalled is the state that needs reading in context: with a forwarded port it usually
             means no seeders, and without one it means every torrent will end up here.
           </p>
         </Board>
 
-        <Changelog gap={qbt.gap} span={8} aside={<span className="board-note">qbittorrent</span>} />
+        <Changelog gap={qbt.gap} span={8} aside={<span className={NOTE}>qbittorrent</span>} />
 
         <LogBoard source={{ container: 'qbittorrent' }} title="qBittorrent logs" />
       </BoardGrid>
@@ -225,7 +245,7 @@ function NzbPage({ d }: { d: Downloaders }) {
           icon="down"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               <Pulse on={(nzb.rate ?? 0) > 0} tone="accent" />
               {nzb.paused ? 'paused' : nzb.standby ? 'idle' : 'active'}
             </span>
@@ -240,16 +260,16 @@ function NzbPage({ d }: { d: Downloaders }) {
             ]}
           />
           {nzb.groups.length === 0 ? (
-            <p className="viz-empty">Nothing in the queue.</p>
+            <p className={EMPTY}>Nothing in the queue.</p>
           ) : (
-            <ul className="transfers">
+            <ul className={TRANSFERS}>
               {nzb.groups.map((g) => (
-                <li key={g.name} className="transfers-row">
-                  <div className="transfers-head">
-                    <span className="transfers-name" title={g.name}>
+                <li key={g.name} className={TRANSFER_ROW}>
+                  <div className={TRANSFER_HEAD}>
+                    <span className={TRANSFER_NAME} title={g.name}>
                       {g.name}
                     </span>
-                    <span className="transfers-meta">
+                    <span className={TRANSFER_META}>
                       {g.pct.toFixed(0)}% · {bytes(g.remainingBytes)} left
                     </span>
                   </div>
@@ -268,20 +288,20 @@ function NzbPage({ d }: { d: Downloaders }) {
           span={4}
           aside={
             inactive === 0 ? (
-              <span className="board-note">all active</span>
+              <span className={NOTE}>all active</span>
             ) : (
-              <span className="board-note text-bad">{num(inactive)} inactive</span>
+              <span className={cn(NOTE, 'text-danger')}>{num(inactive)} inactive</span>
             )
           }
         >
           {nzb.servers.length === 0 ? (
-            <p className="viz-empty">could not read the server list</p>
+            <p className={EMPTY}>could not read the server list</p>
           ) : (
-            <ul className="provs">
+            <ul className={PROVS}>
               {nzb.servers.map((s) => (
-                <li key={s.id} className="prov">
+                <li key={s.id} className={PROV}>
                   <Chip tone={s.active ? 'ok' : 'bad'}>{s.active ? 'active' : 'inactive'}</Chip>
-                  <span className="prov-name mono">server {s.id}</span>
+                  <span className={MONO}>server {s.id}</span>
                 </li>
               ))}
             </ul>
@@ -293,17 +313,13 @@ function NzbPage({ d }: { d: Downloaders }) {
               { k: 'Free where it writes', v: bytes(total) },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             A provider whose subscription lapses goes inactive and everything stops being found.
             From Sonarr&rsquo;s side that is indistinguishable from the release not existing.
           </p>
         </Board>
 
-        <Changelog
-          gap={nzb.gap}
-          span={8}
-          aside={<span className="board-note">nzbgetcom/nzbget</span>}
-        />
+        <Changelog gap={nzb.gap} span={8} aside={<span className={NOTE}>nzbgetcom/nzbget</span>} />
 
         <LogBoard source={{ container: 'nzbget' }} title="NZBGet logs" />
       </BoardGrid>
@@ -337,28 +353,28 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
           icon="down"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {num(d.queued)} queued · {num(d.pending)} pending
             </span>
           }
         >
           {d.recent.length === 0 ? (
-            <p className="viz-empty">Nothing downloaded yet.</p>
+            <p className={EMPTY}>Nothing downloaded yet.</p>
           ) : (
-            <ul className="feed">
+            <ul className={FEED}>
               {d.recent.map((r, i) => (
-                <li key={`${r.title}-${String(i)}`} className="feed-row">
-                  <span className={r.status === 'finished' ? 'feed-event' : 'feed-event text-bad'}>
+                <li key={`${r.title}-${String(i)}`} className={FEED_ROW}>
+                  <span className={cn(FEED_EVENT, r.status !== 'finished' && 'text-danger')}>
                     {r.status}
                   </span>
-                  <span className="feed-title" title={r.title}>
+                  <span className={FEED_TITLE} title={r.title}>
                     {r.title}
                   </span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             The most recent finished items. MeTube keeps its history in the browser session as well
             as on the server, so this list and the one in its own UI can differ.
           </p>
@@ -378,7 +394,7 @@ function MetubePage({ d }: { d: Downloaders['metube'] }) {
           gap={d.gap}
           span={12}
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               MeTube ships a new dated build most weeks and almost all of them are a yt-dlp bump,
               which is what fixes a site that suddenly stopped downloading. It is the one service on
               this page where being behind is usually the whole explanation.
@@ -429,25 +445,25 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
           span={8}
           aside={
             counts === null ? (
-              <span className="board-note">did not answer</span>
+              <span className={NOTE}>did not answer</span>
             ) : (
-              <span className="board-note">
+              <span className={NOTE}>
                 {num(counts.done)} completed · {num(counts.errors)} failed
               </span>
             )
           }
         >
           {shelfmark.jobs.length === 0 ? (
-            <p className="viz-empty">Queue is empty.</p>
+            <p className={EMPTY}>Queue is empty.</p>
           ) : (
-            <ul className="transfers">
+            <ul className={TRANSFERS}>
               {shelfmark.jobs.map((j, i) => (
-                <li key={`${j.title}-${String(i)}`} className="transfers-row">
-                  <div className="transfers-head">
-                    <span className="transfers-name" title={j.title}>
+                <li key={`${j.title}-${String(i)}`} className={TRANSFER_ROW}>
+                  <div className={TRANSFER_HEAD}>
+                    <span className={TRANSFER_NAME} title={j.title}>
                       {j.title}
                     </span>
-                    <span className="transfers-meta">
+                    <span className={TRANSFER_META}>
                       <Chip tone={j.state === 'error' ? 'bad' : 'info'}>{j.state}</Chip>
                     </span>
                   </div>
@@ -464,7 +480,7 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
 
         <Board title="Queue" icon="clock" span={4}>
           {counts === null ? (
-            <p className="viz-empty">no reading</p>
+            <p className={EMPTY}>no reading</p>
           ) : (
             <Measures
               items={[
@@ -486,14 +502,14 @@ function ShelfmarkPage({ d }: { d: Downloaders }) {
           span={12}
           aside={
             shelfmark.running.revision === null ? (
-              <span className="board-note">calibrain/shelfmark</span>
+              <span className={NOTE}>calibrain/shelfmark</span>
             ) : (
-              <span className="board-note mono">{shelfmark.running.revision}</span>
+              <span className={cn(NOTE, MONO)}>{shelfmark.running.revision}</span>
             )
           }
           foot={
-            <p className="board-foot">
-              The pin is a moving <span className="mono">:latest</span> by digest, so the tag says
+            <p className={FOOT}>
+              The pin is a moving <span className={MONO}>:latest</span> by digest, so the tag says
               nothing. The image does: its OCI labels carry the version and the commit it was built
               from, which is what makes this a real gap rather than a list of everything that has
               ever shipped.

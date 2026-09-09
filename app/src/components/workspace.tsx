@@ -2,6 +2,7 @@ import { useRouter } from '@tanstack/react-router'
 import type { WorkspaceRequestStatus } from '../lib/workspaces'
 import { cloneWorkspaceFn, fetchWorkspaceRequestStatus } from '../server/registry'
 import { usePolledStatus } from './status'
+import { Button } from './ui/button'
 
 // The one workspace action, shared by the app detail page and the off-box
 // project rows. "Clone" and "Pull now" are the same request — the host
@@ -35,15 +36,16 @@ export function CloneButton({
   const busyLabel = cloned ? '⇣ pulling…' : '⇣ cloning…'
 
   return (
-    <span className="redeploy">
+    <span className="inline-flex items-center gap-2">
       {status.state === 'failed' && mine && (
-        <span className="bad-text" title={status.error}>
+        <span className="text-danger text-xs" title={status.error}>
           failed
         </span>
       )}
-      <button
+      <Button
         type="button"
-        className="btn btn-ghost"
+        variant="outline"
+        size="sm"
         disabled={running}
         onClick={() => {
           start(async () => (await cloneWorkspaceFn({ data: { repo } })).id)
@@ -58,7 +60,7 @@ export function CloneButton({
           : cloned
             ? '⇣ Pull now'
             : '⇣ Clone'}
-      </button>
+      </Button>
     </span>
   )
 }

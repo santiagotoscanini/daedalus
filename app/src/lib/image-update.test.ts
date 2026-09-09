@@ -52,16 +52,19 @@ describe('a run that stopped writing is reported as failed', () => {
     expect(s.error).toBe('')
   })
 
-  // The unit's own TimeoutStartSec is 30 minutes, so a switch still going at
-  // 29 is slow rather than dead — and declaring it dead would let a second
+  // The unit's own TimeoutStartSec is 60 minutes, so a switch still going at
+  // 59 is slow rather than dead — and declaring it dead would let a second
   // rebuild start against a flake the first one is mid-way through changing.
+  // These two numbers are the ones that moved when queued updates doubled the
+  // unit's timeout; keep them either side of RUNNING_MAX_MS, not of a
+  // remembered value.
   it('a slow-but-live run inside the unit timeout is left alone', async () => {
-    await status('running', 29)
+    await status('running', 59)
     expect((await readImageUpdateStatus()).state).toBe('running')
   })
 
   it('a running status past the unit timeout becomes failed', async () => {
-    await status('running', 40)
+    await status('running', 70)
     const s = await readImageUpdateStatus()
     expect(s.state).toBe('failed')
     // The phase is kept: which step it died on is the whole diagnostic value.

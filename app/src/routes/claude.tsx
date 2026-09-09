@@ -1,6 +1,6 @@
 import { Await, createFileRoute } from '@tanstack/react-router'
-
 import { ClaudeView, ShotterView } from '../components/claude'
+import { PageHead } from '../components/page'
 import { BoardsSkeleton, ServiceHeadSkeleton, StatBandSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { fetchClaude } from '../server/claude'
@@ -61,10 +61,7 @@ function ClaudePage() {
 
   return (
     <>
-      <header className="page-head">
-        <h1>Claude</h1>
-      </header>
-      <p className="lede cat-lede">{LEDE[active]}</p>
+      <PageHead title="Claude">{LEDE[active]}</PageHead>
 
       <TabBar
         tabs={[

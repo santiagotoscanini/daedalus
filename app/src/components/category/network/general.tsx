@@ -1,7 +1,9 @@
+import { cn } from '../../../lib/cn'
 import type { NetworkData } from '../../../lib/dashboard/categories/network'
 import { bytes, compact, DASH, num, pct } from '../../../lib/format'
 import { LogBoard, type LogNeighbour } from '../../logs'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Pulse, Trend } from '../../viz'
+import { ACTION, EMPTY, FOOT, MONO, MORE, NOTE, SUB } from './shared'
 
 type General = Extract<NetworkData, { tab: 'general' }>
 
@@ -62,15 +64,15 @@ export function GeneralView({ data }: { data: General }) {
           icon="⇅"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               24 hours ·{' '}
               {wire.linkMbps === null ? 'one NIC' : `${num(wire.linkMbps / 1000, 1)} Gbps link`}
             </span>
           }
         >
-          <h4 className="board-sub">Receiving, Mbps</h4>
+          <h4 className={SUB}>Receiving, Mbps</h4>
           <Trend values={wire.inHistory} height={72} />
-          <h4 className="board-sub">Sending, Mbps</h4>
+          <h4 className={SUB}>Sending, Mbps</h4>
           <Trend values={wire.outHistory} tone="info" height={56} />
           <Measures
             items={[
@@ -82,7 +84,7 @@ export function GeneralView({ data }: { data: General }) {
               { k: 'Peak out', v: `${num(Math.max(...wire.outHistory, 0), 1)} Mbps` },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Every byte over this box’s one network interface, which is not the same thing as
             internet traffic and is usually much more of it. A film streamed to the TV crosses this
             cable in full and never leaves the house. The line’s own capacity is the board below;
@@ -104,32 +106,51 @@ export function GeneralView({ data }: { data: General }) {
             </Chip>
           }
         >
-          <div className="origin">
-            <span className="origin-label">public address</span>
-            <strong className="origin-ip">{router.wan ?? DASH}</strong>
-            <span className="origin-note">this house, as Cloudflare’s edge sees it arrive</span>
+          {/* The one number on this page that cannot be read anywhere else on
+              the box, so it gets the treatment of a headline rather than a
+              table row. */}
+          <div className="mb-[0.7rem] flex flex-col gap-[0.1rem] rounded-[9px] border border-(--border-soft) bg-[linear-gradient(150deg,var(--panel-2),var(--panel))] px-3 py-[0.6rem]">
+            <span className="text-[0.66rem] tracking-[0.09em] text-(--dim) uppercase">
+              public address
+            </span>
+            <strong className="font-mono text-[1.3rem] tracking-[-0.01em] tabular-nums">
+              {router.wan ?? DASH}
+            </strong>
+            <span className="text-[0.7rem] text-(--dim)">
+              this house, as Cloudflare’s edge sees it arrive
+            </span>
           </div>
-          <ul className="hops">
+          {/* One row per hop: a light, the name, the round trip, and six hours
+              of it. The sparkline sits last and unlabelled on purpose — it is
+              context for the number beside it, not a chart anyone reads on its
+              own, and a heading would promote it above the reading that
+              matters. */}
+          <ul className="mx-0 mt-[0.7rem] mb-0 list-none p-0">
             {hops.map((h) => (
-              <li key={h.id} className="hop">
+              <li
+                key={h.id}
+                className="grid grid-cols-[auto_1fr_auto_minmax(3rem,5rem)] items-center gap-2 py-[0.3rem] not-first:border-t not-first:border-(--border-soft)"
+              >
                 <Pulse on={h.up === true} tone={h.up === true ? 'ok' : 'bad'} />
-                <span className="hop-label">{h.label}</span>
-                <span className="hop-rtt mono">{rtt(h.rttMs)}</span>
+                <span className="text-[0.78rem] text-foreground">{h.label}</span>
+                <span className={cn(MONO, 'text-[0.74rem] text-foreground tabular-nums')}>
+                  {rtt(h.rttMs)}
+                </span>
                 <Trend values={h.history} height={22} tone="muted" empty="" />
               </li>
             ))}
           </ul>
           <Facts
             rows={[
-              { k: 'Default route', v: <span className="mono">{router.gateway}</span> },
-              { k: 'This box', v: <span className="mono">{router.lan}</span> },
+              { k: 'Default route', v: <span className={MONO}>{router.gateway}</span> },
+              { k: 'This box', v: <span className={MONO}>{router.lan}</span> },
               {
                 k: 'Link',
                 v: wire.linkMbps === null ? DASH : `${num(wire.linkMbps)} Mbps negotiated`,
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Two probes a minute rather than one: the router answering while the far side does not is
             the ISP, and neither answering is this box’s own link. The public address is the one
             fact that cannot be measured from inside. Behind NAT nothing here can see it, so it is
@@ -142,21 +163,38 @@ export function GeneralView({ data }: { data: General }) {
           icon="hash"
           span={4}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {router.firmware === null ? 'not answering' : `firmware ${router.firmware}`}
             </span>
           }
         >
-          <div className="router">
-            <img className="router-photo" src="/router-axe75.png" alt="" width={150} height={150} />
-            <div className="router-id">
-              <strong className="router-model">
+          {/* The picture earns its space by being the one panel on this page
+              whose subject is a physical object in the house — everything else
+              here is a counter. Sized to the type beside it rather than to the
+              artwork, and it shrinks first when the column narrows. */}
+          <div className="flex items-center gap-[0.9rem] pb-[0.4rem]">
+            <img
+              className="h-auto w-[clamp(72px,34%,132px)] flex-none object-contain"
+              src="/router-axe75.png"
+              alt=""
+              width={150}
+              height={150}
+            />
+            <div className="flex min-w-0 flex-col items-start gap-[0.3rem]">
+              <strong className="flex items-baseline gap-[0.35rem] text-[1.05rem] tracking-[-0.01em] text-foreground">
                 {router.model ?? 'Unknown'}
-                {router.hardware !== null && <span className="router-rev">{router.hardware}</span>}
+                {/* The hardware revision is part of the identity and never the
+                    thing you are looking for, so it rides the model at the size
+                    of a footnote. */}
+                {router.hardware !== null && (
+                  <span className="text-[0.7rem] font-normal text-(--dim)">{router.hardware}</span>
+                )}
               </strong>
-              <span className="router-product">{router.product}</span>
+              <span className="text-[0.72rem] leading-[1.3] text-(--text-muted)">
+                {router.product}
+              </span>
               <a
-                className="btn btn-primary router-open"
+                className={cn(ACTION, 'mt-[0.15rem]')}
                 href={router.adminUrl}
                 target="_blank"
                 rel="noreferrer"
@@ -167,13 +205,13 @@ export function GeneralView({ data }: { data: General }) {
           </div>
           <Facts
             rows={[
-              { k: 'Firmware', v: <span className="mono">{router.firmware ?? DASH}</span> },
+              { k: 'Firmware', v: <span className={MONO}>{router.firmware ?? DASH}</span> },
               { k: 'Built', v: router.built ?? DASH },
-              { k: 'Address', v: <span className="mono">{router.gateway}</span> },
+              { k: 'Address', v: <span className={MONO}>{router.gateway}</span> },
               { k: 'Round trip', v: rtt(gateway?.rttMs ?? null) },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Read from the router, not typed here. It answers every configuration call with a login
             page — there is no API — but that page carries a build stamp in a meta tag, and the
             model, hardware revision, firmware and build date all come out of it. So a firmware
@@ -186,10 +224,10 @@ export function GeneralView({ data }: { data: General }) {
           title="Which services move the bytes"
           icon="grid"
           span={8}
-          aside={<span className="board-note">{bytes(moved)} over 24 hours</span>}
+          aside={<span className={NOTE}>{bytes(moved)} over 24 hours</span>}
         >
           <TrafficList rows={services} />
-          <p className="board-foot">
+          <p className={FOOT}>
             Counted inside each container’s own network namespace, so this is traffic the app itself
             moved rather than a share of the total guessed from anything. Two kinds are absent by
             construction and not by omission: a container on the host’s network has no figures
@@ -203,7 +241,7 @@ export function GeneralView({ data }: { data: General }) {
           title="The line itself"
           icon="◎"
           span={4}
-          aside={<span className="board-note">7 days, hourly</span>}
+          aside={<span className={NOTE}>7 days, hourly</span>}
         >
           <Measures
             items={[
@@ -212,14 +250,14 @@ export function GeneralView({ data }: { data: General }) {
               { k: 'Latency', v: `${num(line.ping, 1)} ms` },
             ]}
           />
-          <h4 className="board-sub">Download, Mbps</h4>
+          <h4 className={SUB}>Download, Mbps</h4>
           <Trend values={line.downHistory} height={64} />
-          <h4 className="board-sub">Upload, Mbps</h4>
+          <h4 className={SUB}>Upload, Mbps</h4>
           <Trend values={line.upHistory} tone="info" height={48} />
           {/* The hourly test saturates the WAN for a couple of minutes and has
               historically taken LAN DNS down with it — worth knowing when a
               gap in another chart lines up with the top of an hour. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             What the connection can do rather than what it is doing, measured hourly by{' '}
             {line.url === null ? (
               'MySpeed'
@@ -237,10 +275,10 @@ export function GeneralView({ data }: { data: General }) {
           title="What this house asks for"
           icon="◈"
           span={8}
-          aside={<span className="board-note">{compact(dns.queries)} lookups today</span>}
+          aside={<span className={NOTE}>{compact(dns.queries)} lookups today</span>}
         >
           <BarList items={dns.topDomains} tone="accent" empty="no queries recorded" />
-          <p className="board-foot">
+          <p className={FOOT}>
             The names most looked up, which is the closest thing to a list of what this house
             depends on outside itself.{' '}
             {dns.fromBox === null || dns.queries === null
@@ -265,7 +303,7 @@ export function GeneralView({ data }: { data: General }) {
           title="MySpeed logs"
           neighbours={UPLINK_READERS}
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               The hourly speed test behind the capacity chart. It saturates the link while it runs,
               which is why nothing network-heavy is ever scheduled on the hour on this box. A test
               at :00 once took DNS down for two minutes for the whole house.
@@ -286,7 +324,7 @@ export function GeneralView({ data }: { data: General }) {
  * much in both directions. The direction still shows: it is the split.
  */
 function TrafficList({ rows }: { rows: General['services'] }) {
-  if (rows.length === 0) return <p className="viz-empty">no per-container counters yet</p>
+  if (rows.length === 0) return <p className={EMPTY}>no per-container counters yet</p>
 
   const top = rows.slice(0, 12)
   const rest = rows.slice(12)
@@ -294,17 +332,17 @@ function TrafficList({ rows }: { rows: General['services'] }) {
 
   return (
     <>
-      <ul className="traffic">
+      <ul className="m-0 list-none p-0">
         {top.map((r) => (
           <TrafficRow key={r.name} row={r} ceiling={ceiling} />
         ))}
       </ul>
       {rest.length > 0 && (
-        <details className="more">
+        <details className={MORE}>
           <summary>
             {rest.length} quieter container{rest.length === 1 ? '' : 's'}
           </summary>
-          <ul className="traffic">
+          <ul className="m-0 list-none p-0">
             {rest.map((r) => (
               <TrafficRow key={r.name} row={r} ceiling={ceiling} />
             ))}
@@ -320,23 +358,23 @@ function TrafficRow({ row, ceiling }: { row: General['services'][number]; ceilin
   const width = (n: number) => `${String((n / ceiling) * 100)}%`
 
   return (
-    <li className="traffic-row">
-      <span className="traffic-name" title={row.name}>
+    <li className="grid grid-cols-[minmax(4rem,10rem)_1fr_auto] items-center gap-[0.6rem] py-[0.22rem] text-[0.75rem]">
+      <span className="truncate text-foreground" title={row.name}>
         {row.name}
       </span>
-      <span className="traffic-track">
+      <span className="flex h-2 min-w-0 overflow-hidden rounded-full bg-(--panel-2)">
         <span
-          className="traffic-in"
+          className="bg-primary"
           style={{ width: width(row.in) }}
           title={`${bytes(row.in)} in`}
         />
         <span
-          className="traffic-out"
+          className="bg-info"
           style={{ width: width(row.out) }}
           title={`${bytes(row.out)} out`}
         />
       </span>
-      <span className="traffic-total mono">{bytes(total)}</span>
+      <span className={cn(MONO, 'text-[0.7rem] text-(--dim) tabular-nums')}>{bytes(total)}</span>
     </li>
   )
 }

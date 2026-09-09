@@ -7,16 +7,55 @@ import { useEffect, useState } from 'react'
 // reason. claude-rc-request is under the same rule (it imports the bridge,
 // which reads node:fs), which is why its idle shape is restated below.
 import type { ClaudeRcStatus } from '../lib/claude-rc-request'
+import { cn } from '../lib/cn'
 import type { ClaudeData, ClaudeFacts, ClaudeSession, RcEvent } from '../lib/dashboard/claude'
 import type { VersionGap } from '../lib/dashboard/github'
 import type { ShotCounts, ShotRun } from '../lib/dashboard/shotter'
 import { bytes, DASH, duration, ms, num, since, text, until } from '../lib/format'
 import { fetchClaudeRcStatusFn, requestClaudeRestartFn } from '../server/claude'
+import { GHOST_BTN } from './apps/shared'
+import {
+  BOARD_FOOT,
+  BOARD_NOTE,
+  LIST,
+  MONO,
+  MONO_FACE,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+  VIZ_EMPTY,
+} from './category/system/shared'
 import { LogBoard } from './logs'
 import { Changelog } from './release-notes'
 import { ServiceHead } from './service-head'
 import { usePolledStatus } from './status'
+import { Button } from './ui/button'
 import { Board, BoardGrid, Chip, Facts, Stat, StatStrip, type Tone } from './viz'
+
+/* A detail that earns its place on a wide row and not on a narrow one. Every
+   side slot truncates, so a row of seven on a phone technically fits — as a
+   chip, a clipped name and five ellipses, which is width spent to say nothing.
+   Dropping the least important outright gives the rest room to be read. */
+const NARROW_HIDE = 'max-[50rem]:hidden'
+
+/* The restart control, the same shape as the box's on the Host tab: quiet at
+   rest, and the cost — and the red — appear only once it is armed. */
+const RESTART =
+  'mt-[0.7rem] flex flex-col items-start gap-[0.55rem] border-(--border-soft) border-t pt-[0.75rem]'
+const RESTART_ARMED = 'border-t-[color-mix(in_srgb,var(--danger)_40%,var(--border-soft))]'
+const RESTART_COST = 'text-[0.78rem] text-(--text-muted) leading-[1.5]'
+const RESTART_STATE = 'text-[0.78rem] leading-[1.5]'
+const RESTART_NOTE = 'text-[0.7rem] text-muted-foreground leading-[1.5]'
+
+/* The strip holds one run's viewport slices — consecutive crops of a single
+   long page — so they lay out as a film row: fixed height, natural width, side
+   scroll. Each image is also the link to its full-size self. */
+const SHOT_STRIP = 'mt-[0.6rem] mb-[0.2rem] flex gap-2 overflow-x-auto'
+const SHOT_IMG = 'block h-[150px] w-auto rounded-[6px] border border-(--border) bg-(--panel-2)'
+/* An excerpt, not the artifact: it scrolls rather than grows, and keeps the
+   runner's own line breaks. */
+const SHOT_LOG =
+  'mt-2 max-h-36 overflow-auto rounded-[6px] border border-(--border-soft) bg-(--panel-2) px-[0.6rem] py-2 text-[0.72rem] leading-[1.5] whitespace-pre-wrap text-(--text-muted)'
 
 // The Claude page.
 //
@@ -85,14 +124,15 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           envId === null ? (
             <Chip tone={up ? 'muted' : 'bad'}>{up ? 'no environment yet' : 'not running'}</Chip>
           ) : (
-            <a
-              className="btn"
-              href={`https://claude.ai/code?environment=${envId}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              ↗ Open a session
-            </a>
+            <Button asChild variant="outline" size="sm">
+              <a
+                href={`https://claude.ai/code?environment=${envId}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                ↗ Open a session
+              </a>
+            </Button>
           )
         }
       />
@@ -101,12 +141,12 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           the snapshot has stopped the whole page is a photograph, and a
           reader who has been told that can discount all of it at once. */}
       {!data.available ? (
-        <p className="viz-empty">
+        <p className={VIZ_EMPTY}>
           The host snapshot has never been written, so nothing below is a reading.{' '}
-          <span className="mono">daedalus-claude-snapshot.service</span> is what produces it.
+          <span className={MONO}>daedalus-claude-snapshot.service</span> is what produces it.
         </p>
       ) : data.stale ? (
-        <p className="viz-empty">
+        <p className={VIZ_EMPTY}>
           The snapshot is <b>{since((data.ageMs ?? 0) / 1000)}</b> and its timer promises one a
           minute, so the sessions and the unit state below are a photograph rather than a reading.
         </p>
@@ -159,7 +199,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           icon="panels"
           span={4}
           aside={
-            <span className="board-note">
+            <span className={BOARD_NOTE}>
               {facts.remote.spawnMode === null ? 'not announced' : facts.remote.spawnMode}
             </span>
           }
@@ -170,13 +210,13 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
               { k: 'Unit', v: <UnitState data={data} /> },
               {
                 k: 'Environment',
-                v: <span className="mono">{text(envId)}</span>,
+                v: <span className={MONO}>{text(envId)}</span>,
               },
               {
                 k: 'Capacity',
                 v: `${num(live.length)} / ${facts.remote.maxSessions === null ? DASH : num(facts.remote.maxSessions)}`,
               },
-              { k: 'Default model', v: <span className="mono">{text(facts.settings.model)}</span> },
+              { k: 'Default model', v: <span className={MONO}>{text(facts.settings.model)}</span> },
               { k: 'Effort', v: text(facts.settings.effortLevel) },
               { k: 'Plan', v: text(facts.credentials.subscriptionType) },
               {
@@ -193,12 +233,12 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             The environment id is what a phone connects to, and it is minted per server start — the
             link in the header carries it, so a restart changes the link and the old one stops
-            resolving. Spawn mode <span className="mono">same-dir</span> means a session started
-            from claude.ai lands in <span className="mono">/etc/nixos</span>, this repo, with the
-            permission matrix and <span className="mono">bash-guard.sh</span> in force exactly as
+            resolving. Spawn mode <span className={MONO}>same-dir</span> means a session started
+            from claude.ai lands in <span className={MONO}>/etc/nixos</span>, this repo, with the
+            permission matrix and <span className={MONO}>bash-guard.sh</span> in force exactly as
             they are on the console. Memory and CPU are the whole unit including every session under
             it, which is why they are large.
           </p>
@@ -210,42 +250,42 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           icon="panels"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={BOARD_NOTE}>
               {live.length === 0 ? 'none connected' : `${num(live.length)} connected`}
             </span>
           }
         >
           {live.length === 0 ? (
-            <p className="viz-empty">
+            <p className={VIZ_EMPTY}>
               Nothing is connected. The server is still listening, and a session appears here within
               a minute of being started from claude.ai or the app.
             </p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {live.map((s) => (
                 <SessionRow key={s.pid} session={s} />
               ))}
             </ul>
           )}
           {facts.sessions.some((s) => !s.alive) && (
-            <p className="board-foot">
+            <p className={BOARD_FOOT}>
               {num(facts.sessions.filter((s) => !s.alive).length)} session{' '}
               {facts.sessions.filter((s) => !s.alive).length === 1 ? 'file' : 'files'} in{' '}
-              <span className="mono">~/.claude/sessions</span> have no process behind them. Not
+              <span className={MONO}>~/.claude/sessions</span> have no process behind them. Not
               shown above, and not an error either: a session that exits uncleanly leaves its file.
               The count is only worth watching if it grows without bound.
             </p>
           )}
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             <b>Last seen</b> is the mtime of the session's own bridge debug log, which is the only
-            clock a session has: the file in <span className="mono">~/.claude/sessions</span> is
+            clock a session has: the file in <span className={MONO}>~/.claude/sessions</span> is
             written once, at start, so it says when a session BEGAN and nothing about whether
-            anybody is still typing into it. A session idle for hours is normal. What a session
-            does not survive is the server: Remote Control is a bridge for STARTING sessions, not
-            for re-attaching to ones that lost their process, so once the server dies the web side
-            can only mint new sessions — the "restart" button claude.ai offers on a dead one
-            starts fresh. The transcript survives on this box, and{' '}
-            <span className="mono">claude --resume</span> at the console is the way back into it.
+            anybody is still typing into it. A session idle for hours is normal. What a session does
+            not survive is the server: Remote Control is a bridge for STARTING sessions, not for
+            re-attaching to ones that lost their process, so once the server dies the web side can
+            only mint new sessions — the "restart" button claude.ai offers on a dead one starts
+            fresh. The transcript survives on this box, and{' '}
+            <span className={MONO}>claude --resume</span> at the console is the way back into it.
           </p>
         </Board>
 
@@ -253,24 +293,24 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           title="Connection"
           icon="logs"
           span={6}
-          aside={<span className="board-note">last 14 days</span>}
+          aside={<span className={BOARD_NOTE}>last 14 days</span>}
         >
           {data.events.length === 0 ? (
-            <p className="viz-empty">
+            <p className={VIZ_EMPTY}>
               Nothing in the window. Either the server has been up and connected throughout, or its
               journal has been rotated past. These lines are read back out of Loki.
             </p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {data.events.slice(0, 14).map((e) => (
                 <EventRow key={`${String(e.at)}-${e.text}`} event={e} />
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             A <b>drop</b> is the server losing its link to Anthropic and backing off; it retries on
             an escalating ladder and the sessions survive, so a burst of these followed by a
-            reconnect is the system working. Bursts landing at <span className="mono">:00</span> are
+            reconnect is the system working. Bursts landing at <span className={MONO}>:00</span> are
             worth reading as the box rather than the network: myspeed runs a speedtest on the hour
             and saturates the uplink for a minute or two, which is the same blackout that eats DNS
             house-wide. A <b>token refresh</b> is routine bookkeeping on a long-lived session.
@@ -279,8 +319,8 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
 
         <Board title="Sign-in" icon="▣" span={6}>
           {!facts.credentials.present ? (
-            <p className="viz-empty">
-              No credentials file. Nobody has run <span className="mono">/login</span> on this box,
+            <p className={VIZ_EMPTY}>
+              No credentials file. Nobody has run <span className={MONO}>/login</span> on this box,
               which means Remote Control cannot connect at all.
             </p>
           ) : (
@@ -291,7 +331,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
                   { k: 'Plan', v: text(facts.credentials.subscriptionType) },
                   {
                     k: 'Rate limit tier',
-                    v: <span className="mono">{text(facts.credentials.rateLimitTier)}</span>,
+                    v: <span className={MONO}>{text(facts.credentials.rateLimitTier)}</span>,
                   },
                   {
                     k: 'Access token',
@@ -307,7 +347,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
                   {
                     k: 'Scopes',
                     v: (
-                      <span className="mono">
+                      <span className={MONO}>
                         {facts.credentials.scopes.length === 0
                           ? DASH
                           : facts.credentials.scopes.join(' · ')}
@@ -316,15 +356,15 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
                   },
                 ]}
               />
-              <p className="board-foot">
+              <p className={BOARD_FOOT}>
                 Two clocks, and only the second is a date to act on. The access token is refreshed
                 automatically about once an hour and its expiry is never the problem. The{' '}
                 <b>refresh</b> token running out is: Remote Control stops connecting, with no other
                 warning anywhere on this box. The fix is manual and takes a minute: SSH in, run{' '}
-                <span className="mono">claude</span> in <span className="mono">/etc/nixos</span>,{' '}
-                <span className="mono">/login</span>, then the restart control on this page. Neither
-                token is in the snapshot this page reads; only the two dates and the plan are
-                copied out.
+                <span className={MONO}>claude</span> in <span className={MONO}>/etc/nixos</span>,{' '}
+                <span className={MONO}>/login</span>, then the restart control on this page. Neither
+                token is in the snapshot this page reads; only the two dates and the plan are copied
+                out.
               </p>
             </>
           )}
@@ -333,12 +373,12 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         <Changelog
           gap={data.gap}
           span={12}
-          aside={<span className="board-note">anthropics/claude-code</span>}
+          aside={<span className={BOARD_NOTE}>anthropics/claude-code</span>}
           foot={
-            <p className="board-foot">
+            <p className={BOARD_FOOT}>
               The store binary cannot update itself, so being behind here is not a thing that
-              resolves on its own. The path is <span className="mono">nix flake update</span>, or
-              the weekly <span className="mono">flake-autoupgrade.timer</span> that runs it. A
+              resolves on its own. The path is <span className={MONO}>nix flake update</span>, or
+              the weekly <span className={MONO}>flake-autoupgrade.timer</span> that runs it. A
               rebuild deliberately does NOT restart this unit onto the new build — it once killed
               its own activation doing so — so after the bump the server runs the old binary until
               the next reboot, or the restart control on this page. {verdict.note}
@@ -350,12 +390,12 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           source={{ unit: 'claude-remote-control.service' }}
           title="Remote Control logs"
           foot={
-            <p className="board-foot">
+            <p className={BOARD_FOOT}>
               The unit's whole journal, which is mostly not events: every remote session writes its
               full stream-json transcript to this same stdout, so a search here is searching
               transcripts as well as the server's own lines. The Connection board above is the
               filtered view: the server's lines are the ones prefixed{' '}
-              <span className="mono">[HH:MM:SS]</span>, which a transcript line cannot be.
+              <span className={MONO}>[HH:MM:SS]</span>, which a transcript line cannot be.
             </p>
           }
         />
@@ -411,31 +451,31 @@ function RestartServerControl({ live }: { live: number }) {
 
   if (running) {
     return (
-      <div className="restart is-running">
-        <p className="restart-state">Restarting the server…</p>
+      <div className={RESTART}>
+        <p className={RESTART_STATE}>Restarting the server…</p>
       </div>
     )
   }
 
   if (armed) {
     return (
-      <div className="restart is-armed">
-        <p className="restart-cost">
+      <div className={cn(RESTART, RESTART_ARMED)}>
+        <p className={RESTART_COST}>
           {live === 0
             ? 'Nothing is connected, so this costs nothing right now.'
             : live === 1
               ? 'The one connected session dies with the server.'
               : `All ${num(live)} connected sessions die with the server.`}{' '}
-          Dead sessions cannot be picked back up from claude.ai — the server only bridges new
-          ones; their transcripts survive on this box and{' '}
-          <span className="mono">claude --resume</span> at the console is the way back in. The
-          environment id is minted per start, so the session link above becomes a new one. The box
-          itself is untouched.
+          Dead sessions cannot be picked back up from claude.ai — the server only bridges new ones;
+          their transcripts survive on this box and <span className={MONO}>claude --resume</span> at
+          the console is the way back in. The environment id is minted per start, so the session
+          link above becomes a new one. The box itself is untouched.
         </p>
-        <div className="restart-actions">
-          <button
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
             type="button"
-            className="btn btn-danger"
+            variant="destructive"
+            size="sm"
             onClick={() => {
               setArmed(false)
               start(async () => {
@@ -445,40 +485,46 @@ function RestartServerControl({ live }: { live: number }) {
             }}
           >
             Confirm restart
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="btn btn-ghost"
+            variant="outline"
+            size="sm"
+            className={GHOST_BTN}
             onClick={() => {
               setArmed(false)
             }}
           >
             Cancel
-          </button>
-          <span className="restart-note">disarms on its own in {RC_ARM_MS / 1000}s</span>
+          </Button>
+          <span className={RESTART_NOTE}>disarms on its own in {RC_ARM_MS / 1000}s</span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="restart">
+    <div className={RESTART}>
       {status.state === 'done' && (
-        <p className="restart-state ok-text">
-          {status.detail || 'The server restarted.'} The boards above catch up within a minute —
-          the snapshot is on a timer.
+        <p className={cn(RESTART_STATE, 'text-success')}>
+          {status.detail || 'The server restarted.'} The boards above catch up within a minute — the
+          snapshot is on a timer.
         </p>
       )}
-      {status.state === 'failed' && <p className="restart-state bad-text">{status.error}</p>}
-      <button
+      {status.state === 'failed' && (
+        <p className={cn(RESTART_STATE, 'text-danger')}>{status.error}</p>
+      )}
+      <Button
         type="button"
-        className="btn btn-ghost"
+        variant="outline"
+        size="sm"
+        className={GHOST_BTN}
         onClick={() => {
           setArmed(true)
         }}
       >
         Restart the server
-      </button>
+      </Button>
     </div>
   )
 }
@@ -530,17 +576,17 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           <>
             The box&rsquo;s standing headless-browser lab, and the standard way any agent session
             verifies a web UI from a machine with no screen. Not a daemon: each{' '}
-            <span className="mono">shot</span> is a cold, throwaway Chromium, and what persists is
-            the image, the CLI and this archive. <span className="mono">shot help</span> on the
-            box is the manual.
+            <span className={MONO}>shot</span> is a cold, throwaway Chromium, and what persists is
+            the image, the CLI and this archive. <span className={MONO}>shot help</span> on the box
+            is the manual.
           </>
         }
         actions={<Chip tone="muted">no daemon — runs on demand</Chip>}
       />
 
       {!sh.available && (
-        <p className="viz-empty">
-          The <span className="mono">/shotter</span> mount is not answering — either the rebuild
+        <p className={VIZ_EMPTY}>
+          The <span className={MONO}>/shotter</span> mount is not answering — either the rebuild
           that binds it has not landed, or the stack is gone. Nothing below is a reading.
         </p>
       )}
@@ -557,7 +603,11 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           value={sh.failedRuns}
           // A failure here is the runner dying, which an agent sees and acts
           // on at the terminal — history, not an alarm.
-          tone={sh.failedRuns > 0 && sh.totalRuns > 0 && sh.failedRuns * 4 > sh.totalRuns ? 'warn' : undefined}
+          tone={
+            sh.failedRuns > 0 && sh.totalRuns > 0 && sh.failedRuns * 4 > sh.totalRuns
+              ? 'warn'
+              : undefined
+          }
           sub="runner died mid-run"
         />
         <Stat
@@ -581,34 +631,41 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           icon="panels"
           span={4}
           aside={
-            latest === null ? undefined : <span className="board-note mono">{latest.id}</span>
+            latest === null ? undefined : (
+              <span className={cn(BOARD_NOTE, MONO_FACE)}>{latest.id}</span>
+            )
           }
         >
           {latest === null ? (
-            <p className="viz-empty">
-              No run directories yet. <span className="mono">shot quick &lt;url&gt;</span> makes
-              the first one.
+            <p className={VIZ_EMPTY}>
+              No run directories yet. <span className={MONO}>shot quick &lt;url&gt;</span> makes the
+              first one.
             </p>
           ) : (
             <>
               {latest.shots.length > 0 && (
-                <div className="shot-strip">
+                <div className={SHOT_STRIP}>
                   {latest.shots.map((f) => (
                     <a key={f} href={shotUrl(latest.id, f)} target="_blank" rel="noreferrer">
-                      <img src={shotUrl(latest.id, f)} alt={`${latest.id} — ${f}`} loading="lazy" />
+                      <img
+                        className={SHOT_IMG}
+                        src={shotUrl(latest.id, f)}
+                        alt={`${latest.id} — ${f}`}
+                        loading="lazy"
+                      />
                     </a>
                   ))}
                 </div>
               )}
-              {latest.log.length > 0 && <pre className="shot-log">{latest.log.join('\n')}</pre>}
+              {latest.log.length > 0 && <pre className={SHOT_LOG}>{latest.log.join('\n')}</pre>}
             </>
           )}
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             The newest run&rsquo;s viewport slices — consecutive crops of one long page, each
             linking to its full-size self — and the runner&rsquo;s own log under them. The full
-            evidence (every slice, <span className="mono">events.json</span>,{' '}
-            <span className="mono">log.txt</span>) is{' '}
-            <span className="mono">shot show &lt;id&gt;</span> on the box.
+            evidence (every slice, <span className={MONO}>events.json</span>,{' '}
+            <span className={MONO}>log.txt</span>) is{' '}
+            <span className={MONO}>shot show &lt;id&gt;</span> on the box.
           </p>
         </Board>
 
@@ -617,44 +674,44 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           icon="logs"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={BOARD_NOTE}>
               {sh.runs.length === 0 ? 'none yet' : `last ${num(sh.runs.length)}, newest first`}
             </span>
           }
         >
           {sh.runs.length === 0 ? (
-            <p className="viz-empty">
-              Nothing in the ledger. <span className="mono">shot quick &lt;url&gt;</span> writes
-              the first line.
+            <p className={VIZ_EMPTY}>
+              Nothing in the ledger. <span className={MONO}>shot quick &lt;url&gt;</span> writes the
+              first line.
             </p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {sh.runs.map((r) => (
                 <ShotRunRow key={r.id} run={r} />
               ))}
             </ul>
           )}
-          <p className="board-foot">
-            The append-only ledger, one line per <span className="mono">shot</span> invocation.
-            The verdict chip reads the run&rsquo;s event counters, not its screenshots — events
-            outrank pixels, because a page can render beautifully over a broken deploy.{' '}
-            <b>fail</b> is the runner itself dying; <b>issues</b> is a page that answered with
-            console errors, failed requests or 4xx/5xx underneath.
+          <p className={BOARD_FOOT}>
+            The append-only ledger, one line per <span className={MONO}>shot</span> invocation. The
+            verdict chip reads the run&rsquo;s event counters, not its screenshots — events outrank
+            pixels, because a page can render beautifully over a broken deploy. <b>fail</b> is the
+            runner itself dying; <b>issues</b> is a page that answered with console errors, failed
+            requests or 4xx/5xx underneath.
           </p>
         </Board>
 
         <Changelog
           gap={data.shotterGap}
           span={12}
-          aside={<span className="board-note">microsoft/playwright</span>}
+          aside={<span className={BOARD_NOTE}>microsoft/playwright</span>}
           foot={
-            <p className="board-foot">
-              The one dependency under <span className="mono">shot</span> — Chromium arrives
-              inside Playwright&rsquo;s image, so this is the whole upgrade story. Moving is a
-              paired edit in <span className="mono">stacks/shotter/shotter.nix</span>:{' '}
-              <span className="mono">playwrightVersion</span> and{' '}
-              <span className="mono">playwrightDigest</span> together (Playwright refuses
-              browsers from a different revision), then a rebuild rebuilds the image. {verdict.note}
+            <p className={BOARD_FOOT}>
+              The one dependency under <span className={MONO}>shot</span> — Chromium arrives inside
+              Playwright&rsquo;s image, so this is the whole upgrade story. Moving is a paired edit
+              in <span className={MONO}>stacks/shotter/shotter.nix</span>:{' '}
+              <span className={MONO}>playwrightVersion</span> and{' '}
+              <span className={MONO}>playwrightDigest</span> together (Playwright refuses browsers
+              from a different revision), then a rebuild rebuilds the image. {verdict.note}
             </p>
           }
         />
@@ -663,11 +720,11 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           source={{ unit: 'shotter-image.service' }}
           title="Image build logs"
           foot={
-            <p className="board-foot">
+            <p className={BOARD_FOOT}>
               The rebuild-time image build — layer cache makes the no-change case near-silent, so
-              lines here mean the Playwright pin moved or a fresh box paid the base pull. The
-              runs themselves do NOT log here: each run&rsquo;s log lives in its own run
-              directory, excerpted above.
+              lines here mean the Playwright pin moved or a fresh box paid the base pull. The runs
+              themselves do NOT log here: each run&rsquo;s log lives in its own run directory,
+              excerpted above.
             </p>
           }
           neighbours={[
@@ -687,19 +744,21 @@ export function ShotterView({ data }: { data: ClaudeData }) {
 function ShotRunRow({ run }: { run: ShotRun }) {
   const bad = issueSummary(run.counts)
   return (
-    <li title={run.id}>
+    <li className={ROW} title={run.id}>
       <Chip tone={!run.ok ? 'bad' : bad === null ? 'ok' : 'warn'}>
         {!run.ok ? 'fail' : bad === null ? 'clean' : 'issues'}
       </Chip>
-      <span className="item-main">{run.label === '' ? run.id : run.label}</span>
-      {bad !== null && <span className="item-side">{bad}</span>}
-      <span className="item-side">
+      <span className={ROW_MAIN}>{run.label === '' ? run.id : run.label}</span>
+      {bad !== null && <span className={ROW_SIDE}>{bad}</span>}
+      <span className={ROW_SIDE}>
         {num(run.shots)} shot{run.shots === 1 ? '' : 's'}
       </span>
-      <span className="item-side item-min">
+      <span className={cn(ROW_SIDE, NARROW_HIDE)}>
         {run.durationMs === null ? DASH : ms(run.durationMs)}
       </span>
-      <span className="item-side">{run.at === null ? DASH : since((Date.now() - run.at) / 1000)}</span>
+      <span className={ROW_SIDE}>
+        {run.at === null ? DASH : since((Date.now() - run.at) / 1000)}
+      </span>
     </li>
   )
 }
@@ -749,7 +808,7 @@ function UnitState({ data }: { data: ClaudeData }) {
     <>
       <Chip tone={tone}>{subState === '' ? activeState : `${activeState} (${subState})`}</Chip>
       {restarts !== null && restarts > 0 && (
-        <span className="item-side">
+        <span className={ROW_SIDE}>
           {num(restarts)} restart{restarts === 1 ? '' : 's'}
         </span>
       )}
@@ -769,25 +828,25 @@ function SessionRow({ session }: { session: ClaudeSession }) {
   const idle = session.lastActivityAt === null ? null : (Date.now() - session.lastActivityAt) / 1000
 
   return (
-    <li title={session.transcriptId ?? undefined}>
+    <li className={ROW} title={session.transcriptId ?? undefined}>
       {/* Working means "touched in the last minute", which for a session
           being driven from a phone is the honest reading of active. */}
       <Chip tone={idle !== null && idle < 60 ? 'ok' : 'muted'}>
         {idle !== null && idle < 60 ? 'working' : 'idle'}
       </Chip>
-      <span className="item-main">{session.name ?? `pid ${String(session.pid)}`}</span>
+      <span className={ROW_MAIN}>{session.name ?? `pid ${String(session.pid)}`}</span>
       {/* `item-min` on the four that a phone drops. What survives is the
           answer to "which session is this and is anything happening in it";
           the id, the directory and the two resource figures are the answer
           to a question you would be at a desk to ask. */}
-      <span className="item-side item-min mono">{text(session.remoteId)}</span>
-      <span className="item-side item-min mono">{text(session.cwd)}</span>
-      <span className="item-side">
+      <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{text(session.remoteId)}</span>
+      <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{text(session.cwd)}</span>
+      <span className={ROW_SIDE}>
         {session.startedAt === null ? DASH : duration((Date.now() - session.startedAt) / 1000)} old
       </span>
-      <span className="item-side">last seen {idle === null ? DASH : since(idle)}</span>
-      <span className="item-side item-min">{bytes(session.rssBytes)}</span>
-      <span className="item-side item-min">{ms(session.cpuMs)} cpu</span>
+      <span className={ROW_SIDE}>last seen {idle === null ? DASH : since(idle)}</span>
+      <span className={cn(ROW_SIDE, NARROW_HIDE)}>{bytes(session.rssBytes)}</span>
+      <span className={cn(ROW_SIDE, NARROW_HIDE)}>{ms(session.cpuMs)} cpu</span>
     </li>
   )
 }
@@ -810,10 +869,10 @@ const EVENT_LABEL: Record<RcEvent['kind'], string> = {
 
 function EventRow({ event }: { event: RcEvent }) {
   return (
-    <li>
+    <li className={ROW}>
       <Chip tone={EVENT_TONE[event.kind]}>{EVENT_LABEL[event.kind]}</Chip>
-      <span className="item-main">{event.text}</span>
-      <span className="item-side">{since((Date.now() - event.at) / 1000)}</span>
+      <span className={ROW_MAIN}>{event.text}</span>
+      <span className={ROW_SIDE}>{since((Date.now() - event.at) / 1000)}</span>
     </li>
   )
 }

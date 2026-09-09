@@ -8,9 +8,12 @@
 // closer to creatable rather than staying a wall of seven equal rows.
 
 import type { ReactNode } from 'react'
+import { cn } from '../../lib/cn'
 import type { Check, CheckState } from '../../lib/github-repos'
 import type { BlockedCheck, Readiness } from '../../lib/readiness'
-import { RefreshButton } from '../ui'
+import { type Tone, toneStyle } from '../../lib/tone'
+import { RefreshButton } from '../controls'
+import { SECTION_HEAD, SECTION_HEAD_SMALL } from './shared'
 
 /** What the host said back about an action fired from one of these rows. */
 export type HostNote = {
@@ -21,8 +24,32 @@ export type HostNote = {
 
 const MARK: Record<CheckState, string> = { ok: '✓', warn: '!', bad: '✗', unknown: '?' }
 
+/** `unknown` is grey rather than red on purpose: an image on a registry this
+    box cannot see is unverified, not broken, and painting that as a failure is
+    how a checklist becomes something you click past. */
+const STATE_TONE: Record<CheckState, Tone> = {
+  ok: 'ok',
+  warn: 'warn',
+  bad: 'bad',
+  unknown: 'muted',
+}
+
 /** Enough for the whole graph; past it the plain number still reads. */
 const NUMERALS = '①②③④⑤⑥⑦⑧⑨'
+
+/** The two folds under the verdict, and the one that replaces it when ready. */
+const FOLD_SUMMARY = cn(
+  "flex cursor-pointer list-none items-center gap-[0.45rem] px-4 py-[0.6rem] text-[0.8rem] text-(--text-muted) before:text-[0.7rem] before:text-(--dim) before:transition-transform before:duration-[120ms] before:content-['▸']",
+  '[&::-webkit-details-marker]:hidden',
+  'group-open:border-b group-open:border-b-(--border-soft) group-open:before:rotate-90',
+  'hover:bg-(--panel-2) hover:text-foreground',
+  // Inset: the summary is full-bleed inside a clipping panel, so an outward
+  // offset would be cut off by the panel's own rounded edge.
+  'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--brand-dim)',
+)
+
+/** One list of checks, hairline-separated. */
+const CHECKLIST = 'm-0 list-none p-0 [&>li+li]:border-t [&>li+li]:border-t-(--border-soft)'
 
 export function ReadinessPanel({
   plan,
@@ -46,28 +73,35 @@ export function ReadinessPanel({
 
   return (
     <>
-      <h2 className="section-head">
+      <h2 className={SECTION_HEAD}>
         3. Readiness
-        <small>can this repo publish an image?</small>
+        <small className={SECTION_HEAD_SMALL}>can this repo publish an image?</small>
         <RefreshButton busy={refreshing} label="Re-run the checks" onClick={onRefresh} />
       </h2>
 
-      <div className="readiness">
+      {/* Step 3 asks one question and gets one answer, so it is drawn as one
+          panel: the verdict, then whatever is still to be done about it, then
+          two folds. A card per check drew seven rectangles around seven rows
+          that are the same kind of thing; the hairline between them is enough. */}
+      <div className="mb-[1.2rem] overflow-hidden rounded-lg border border-(--border-soft) bg-(--panel) [&>*+*]:border-t [&>*+*]:border-t-(--border-soft)">
         {plan.ready ? (
           <>
             {orphans.map((n) => (
-              <p key={n.id} className="readiness-said">
+              <p key={n.id} className="m-0 px-4 py-[0.6rem]">
                 <Said note={n} />
               </p>
             ))}
-            <details className="fold fold-ready">
-              <summary>
-                <span className="ok-text" aria-hidden="true">
+            {/* The whole step, once there is nothing left to do about it. It is
+                the answer now, not a fold under one, so it is drawn at the
+                panel's own weight. */}
+            <details className="group">
+              <summary className={cn(FOLD_SUMMARY, 'py-[0.85rem] text-[0.92rem] text-foreground')}>
+                <span className="text-success" aria-hidden="true">
                   ✓
                 </span>{' '}
                 Ready: image published, workflows fine
               </summary>
-              <ul className="checklist">
+              <ul className={CHECKLIST}>
                 {plan.settled.map((c) => (
                   <Row key={c.id} check={c} />
                 ))}
@@ -76,13 +110,21 @@ export function ReadinessPanel({
           </>
         ) : (
           <>
-            <div className={`verdict verdict-${plan.verdict.state}`}>
-              <span className="verdict-mark" aria-hidden="true">
+            {/* The answer, with its own root cause already absorbed into it. */}
+            <div
+              className="grid grid-cols-[1.6rem_minmax(0,1fr)] items-baseline gap-[0.6rem] border-l-[3px] border-l-(--tone) px-4 py-[0.9rem]"
+              style={toneStyle(STATE_TONE[plan.verdict.state])}
+            >
+              <span className="font-bold text-(--tone)" aria-hidden="true">
                 {MARK[plan.verdict.state]}
               </span>
-              <span className="verdict-body">
+              <span className="grid min-w-0 gap-[0.2rem]">
                 <span>{plan.verdict.headline}</span>
-                <span className="verdict-subject mono">{plan.verdict.subject}</span>
+                {/* The image reference the verdict is about, in the face it is
+                    written in. */}
+                <span className="font-mono text-[0.86em] text-(--text-muted) [overflow-wrap:anywhere]">
+                  {plan.verdict.subject}
+                </span>
                 {orphans.map((n) => (
                   <Said key={n.id} note={n} />
                 ))}
@@ -90,7 +132,7 @@ export function ReadinessPanel({
             </div>
 
             {plan.act.length > 0 && (
-              <ol className="checklist acts">
+              <ol className={CHECKLIST}>
                 {plan.act.map((c, i) => (
                   <Row
                     key={c.id}
@@ -103,13 +145,18 @@ export function ReadinessPanel({
               </ol>
             )}
 
+            {/* What cannot be judged until something above it is fixed, and
+                what is already fine. Both folded shut: neither is in the way,
+                and neither is thrown away — the rows inside carry their full
+                copy. Native <details>, so this costs no JavaScript and works
+                before hydration. */}
             {plan.blocked.length > 0 && (
-              <details className="fold">
-                <summary>
+              <details className="group">
+                <summary className={FOLD_SUMMARY}>
                   {plan.blocked.length} {plan.blocked.length === 1 ? 'check' : 'checks'} waiting on{' '}
                   {plan.waitingOn}
                 </summary>
-                <ul className="checklist">
+                <ul className={CHECKLIST}>
                   {plan.blocked.map((c) => (
                     <Row key={c.id} check={c} blocked={c.waitingOn} />
                   ))}
@@ -118,9 +165,9 @@ export function ReadinessPanel({
             )}
 
             {plan.settled.length > 0 && (
-              <details className="fold">
-                <summary>{plan.settled.length} already fine</summary>
-                <ul className="checklist">
+              <details className="group">
+                <summary className={FOLD_SUMMARY}>{plan.settled.length} already fine</summary>
+                <ul className={CHECKLIST}>
                   {plan.settled.map((c) => (
                     <Row key={c.id} check={c} />
                   ))}
@@ -156,26 +203,61 @@ function Row({
   action?: ReactNode
   note?: HostNote | null
 }) {
+  // Not judged yet, and therefore not coloured — the row it waits on is the
+  // one to read.
+  const isBlocked = blocked !== undefined
+
   return (
-    <li className={blocked === undefined ? `check check-${check.state}` : 'check check-blocked'}>
-      <span className="check-mark" aria-hidden="true">
+    <li
+      className={cn(
+        'grid grid-cols-[1.6rem_minmax(0,1fr)_auto] items-baseline gap-x-[0.6rem] gap-y-[0.2rem] px-4 py-[0.7rem]',
+        isBlocked && 'text-(--dim)',
+      )}
+      style={isBlocked ? undefined : toneStyle(STATE_TONE[check.state])}
+    >
+      <span
+        className={cn(
+          'font-bold',
+          isBlocked
+            ? 'text-(--dim)'
+            : // Numbered rather than marked: everything in the act list has
+              // already failed, so the useful thing to print is the order the
+              // fixes have to happen in.
+              step === undefined
+              ? 'text-(--tone)'
+              : 'font-normal text-danger',
+        )}
+        aria-hidden="true"
+      >
         {step === undefined ? MARK[check.state] : (NUMERALS[step - 1] ?? String(step))}
       </span>
-      <span className="check-body">
+      <span className="grid min-w-0 gap-[0.15rem]">
         <b>{check.label}</b>
-        <span className="check-detail">{check.detail}</span>
-        {check.fix !== undefined && <span className="check-fix">{check.fix}</span>}
-        {blocked !== undefined && <span className="check-fix">waiting on {blocked}</span>}
+        <span className={cn('text-[0.85rem]', isBlocked ? 'text-(--dim)' : 'text-(--text-muted)')}>
+          {check.detail}
+        </span>
+        {check.fix !== undefined && (
+          <span className="text-[0.82rem] text-(--dim)">{check.fix}</span>
+        )}
+        {isBlocked && <span className="text-[0.82rem] text-(--dim)">waiting on {blocked}</span>}
         {note !== undefined && note !== null && <Said note={note} />}
       </span>
-      {action !== undefined && action !== null && <span className="check-action">{action}</span>}
+      {action !== undefined && action !== null && (
+        <span className="whitespace-nowrap">{action}</span>
+      )}
     </li>
   )
 }
 
+/** What the host answered. On the row that asked, not in a banner. */
 function Said({ note }: { note: HostNote }) {
   return (
-    <span className={note.state === 'failed' ? 'check-said bad-text' : 'check-said ok-text'}>
+    <span
+      className={cn(
+        'mt-[0.15rem] text-[0.82rem]',
+        note.state === 'failed' ? 'text-danger' : 'text-success',
+      )}
+    >
       {note.message}
     </span>
   )

@@ -6,12 +6,27 @@
 // category of their own because their only consumer is the apps beside them.
 
 import type { ImagesData, PackagesData } from '../lib/apps/registries'
+import { cn } from '../lib/cn'
 import { bytes, DASH, num } from '../lib/format'
 import { BASE_DOMAIN, REGISTRY_HOST } from '../lib/site'
+import { GHOST_BTN } from './apps/shared'
+import { BOARD_FOOT, BOARD_SUB, VIZ_EMPTY } from './category/system/shared'
 import { LogBoard, type LogNeighbour } from './logs'
 import { Changelog } from './release-notes'
 import { compareOf, ServiceHead, verdictOf } from './service-head'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
 import { BarList, Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
+
+/* A repository name as a small monospace pill. Badge's outline shape, taken
+   down to the size the list was drawn at: forty of these in a 4-span board
+   have to read as a cloud of names, not a row of buttons. */
+const REPOS = 'mb-[0.7rem] flex flex-wrap gap-[0.35rem]'
+const REPO =
+  'gap-[0.35rem] rounded-full border-(--border-soft) bg-(--panel-2) px-[0.55rem] py-[0.2rem] font-mono text-[0.74rem] font-normal'
+/* Pull-through copies of upstream images: present, but not something built
+   here, so they read as background against the app repositories. */
+const REPO_MUTED = 'bg-transparent text-muted-foreground'
 
 /* ── container registry ───────────────────────────────────────────────── */
 
@@ -59,14 +74,11 @@ export function ImagesView({ d }: { d: ImagesData }) {
           </>
         }
         actions={
-          <a
-            href="https://registry.toscanini.me"
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-ghost"
-          >
-            ↗ Open
-          </a>
+          <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
+            <a href="https://registry.toscanini.me" target="_blank" rel="noreferrer">
+              ↗ Open
+            </a>
+          </Button>
         }
       />
 
@@ -105,7 +117,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
       <BoardGrid>
         <Board title="Storage by repository" icon="rows" span={8}>
           <BarList items={d.byRepo} tone="info" empty="nothing stored" />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             A <code>cache/&lt;app&gt;</code> repository is the pull-through copy of an upstream base
             image, not something built here, which is why they usually outweigh the apps themselves.
             Counted separately above for the same reason.
@@ -113,32 +125,32 @@ export function ImagesView({ d }: { d: ImagesData }) {
         </Board>
 
         <Board title="Repositories" icon="◲" span={4}>
-          <div className="reg-repos">
+          <div className={REPOS}>
             {d.repositories.map((r) => (
-              <span key={r} className="reg-repo">
+              <Badge key={r} variant="outline" className={REPO}>
                 {r}
-              </span>
+              </Badge>
             ))}
             {d.repositories.length === 0 && (
-              <p className="viz-empty">
+              <p className={VIZ_EMPTY}>
                 {d.reachable ? 'nothing published yet' : 'could not read the catalogue'}
               </p>
             )}
           </div>
-          <h4 className="board-sub">Cached from upstream</h4>
-          <div className="reg-repos">
+          <h4 className={BOARD_SUB}>Cached from upstream</h4>
+          <div className={REPOS}>
             {d.cachedRepos.map((r) => (
-              <span key={r} className="reg-repo is-muted">
+              <Badge key={r} variant="outline" className={cn(REPO, REPO_MUTED)}>
                 {r}
-              </span>
+              </Badge>
             ))}
-            {d.cachedRepos.length === 0 && <p className="viz-empty">none</p>}
+            {d.cachedRepos.length === 0 && <p className={VIZ_EMPTY}>none</p>}
           </div>
         </Board>
 
         <Board title="Pulls since zot started" icon="↓" span={8}>
           <BarList items={d.pulls} empty="no pulls recorded" />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             Each app’s deploy timer pulls by tag every two minutes and restarts only when the digest
             actually moved, so these climb steadily on a box where nothing is being deployed. A flat
             counter is the thing worth noticing, not a large one.
@@ -156,7 +168,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
               { k: 'pushed by', v: 'Actions runners' },
             ]}
           />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             Anonymous read is deliberate: it is what lets every deploy work with no credential at
             all, so a token expiry can never stop one. Writing still needs the htpasswd.
           </p>
@@ -211,14 +223,11 @@ export function PackagesView({ d }: { d: PackagesData }) {
           </>
         }
         actions={
-          <a
-            href="https://verdaccio.toscanini.me"
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-ghost"
-          >
-            ↗ Open
-          </a>
+          <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
+            <a href="https://verdaccio.toscanini.me" target="_blank" rel="noreferrer">
+              ↗ Open
+            </a>
+          </Button>
         }
       />
 
@@ -276,7 +285,7 @@ export function PackagesView({ d }: { d: PackagesData }) {
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             A pull-through cache first: a package counts as cached the moment its manifest is
             resolved, which is why that number leads the tarball count: resolving a dependency tree
             records a manifest even when no tarball is ever fetched. Publishing here is opt-in and
@@ -298,7 +307,7 @@ export function PackagesView({ d }: { d: PackagesData }) {
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             The request figures above come from traefik, not from verdaccio: it publishes no
             prometheus endpoint at all (upstream issue #1815, open since 2020), which is also why
             its Grafana dashboard is built out of proxy metrics.

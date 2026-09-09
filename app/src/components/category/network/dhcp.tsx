@@ -1,13 +1,30 @@
+import { cn } from '../../../lib/cn'
 import type { NetworkData } from '../../../lib/dashboard/categories/network'
 import { DASH, num, since } from '../../../lib/format'
 import { LogBoard } from '../../logs'
 import { LinkRow, ServiceHead } from '../../service-head'
 import { Board, BoardGrid, Chip, Facts } from '../../viz'
+import { ACTION, EMPTY, FOOT, MONO, MORE, NOTE, SUB } from './shared'
 
 /** A device that has asked for a name today is a device that is switched on. */
 const ACTIVE = 24 * 3600
 
 type Device = Dhcp['devices'][number]
+
+/* Sixty-odd rows of four short fields. Wrapping columns rather than one tall
+   list: a full-width board holding a single column of 9rem-wide content is a
+   page of nothing on the right, and these rows are read by scanning down the
+   addresses. */
+const DEVICE_LIST =
+  'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(26rem,1fr))] gap-x-[1.6rem] p-0'
+
+/* On a phone the MAC goes before anything else does. Not at half width — below
+   78rem every board is already full width, so the row has MORE room there, not
+   less; the only place four columns genuinely do not fit is the narrowest
+   breakpoint, where the name and address are what gets scanned and the MAC is
+   what gets looked up once. */
+const DEVICE_ROW =
+  'grid grid-cols-[1fr_6.6rem_9.4rem_4.6rem] items-center gap-2 border-t border-(--border-soft) py-[0.26rem] text-[0.74rem] text-(--dim) max-[34rem]:grid-cols-[1fr_6.6rem_4.6rem]'
 
 /**
  * The LAN, in two sections that are one list.
@@ -24,7 +41,7 @@ type Device = Dhcp['devices'][number]
  * worth acting on.
  */
 function LanDevices({ devices }: { devices: Device[] }) {
-  if (devices.length === 0) return <p className="viz-empty">no devices recorded</p>
+  if (devices.length === 0) return <p className={EMPTY}>no devices recorded</p>
 
   const fixed = devices.filter((d) => d.reserved)
   const rest = devices.filter((d) => !d.reserved)
@@ -35,8 +52,8 @@ function LanDevices({ devices }: { devices: Device[] }) {
     <>
       {fixed.length > 0 && (
         <>
-          <h4 className="board-sub">Fixed here, {fixed.length} declared</h4>
-          <ul className="devices">
+          <h4 className={SUB}>Fixed here, {fixed.length} declared</h4>
+          <ul className={DEVICE_LIST}>
             {fixed.map((d) => (
               <DeviceRow key={d.mac} d={d} />
             ))}
@@ -44,16 +61,16 @@ function LanDevices({ devices }: { devices: Device[] }) {
         </>
       )}
 
-      <h4 className="board-sub">Given whatever was free, {rest.length} seen</h4>
-      <ul className="devices">
+      <h4 className={SUB}>Given whatever was free, {rest.length} seen</h4>
+      <ul className={DEVICE_LIST}>
         {recent.map((d) => (
           <DeviceRow key={d.mac} d={d} />
         ))}
       </ul>
       {quiet.length > 0 && (
-        <details className="more">
+        <details className={MORE}>
           <summary>{quiet.length} not seen today</summary>
-          <ul className="devices">
+          <ul className={DEVICE_LIST}>
             {quiet.map((d) => (
               <DeviceRow key={d.mac} d={d} />
             ))}
@@ -64,24 +81,29 @@ function LanDevices({ devices }: { devices: Device[] }) {
   )
 }
 
+/* Dimmed unless the thing has asked for a name today, which is the whole
+   difference between "on the network" and "was, once" — and the reason the
+   inactive ones are still printed rather than filtered out. */
 function DeviceRow({ d }: { d: Device }) {
   const active = d.lastSeenAgo !== null && d.lastSeenAgo < ACTIVE
   return (
-    <li className={active ? 'device is-active' : 'device'}>
-      <span className="device-name">{d.name ?? <span className="muted">unnamed</span>}</span>
-      <span className="device-ip mono">{d.ip}</span>
+    <li className={DEVICE_ROW}>
+      <span className={cn('truncate', active ? 'text-foreground' : 'text-(--text-muted)')}>
+        {d.name ?? <span className="text-(--text-muted)">unnamed</span>}
+      </span>
+      <span className={cn(MONO, 'tabular-nums', active && 'text-(--text-muted)')}>{d.ip}</span>
       <span
-        className="device-mac mono"
+        className={cn(MONO, 'text-[0.66rem] max-[34rem]:hidden')}
         title={
           d.knownForDays === null ? 'never seen' : `first seen ${num(d.knownForDays)} days ago`
         }
       >
         {d.mac}
       </span>
-      <span className="device-seen">
+      <span className="text-right text-[0.68rem]">
         {d.lastSeenAgo === null ? (
           <span
-            className="warn-text"
+            className="text-warning"
             title="declared, but the resolver has never seen this address answer"
           >
             never
@@ -143,12 +165,7 @@ export function DhcpView({ data }: { data: Dhcp }) {
         }
         actions={
           admin !== null && (
-            <a
-              className="btn btn-primary"
-              href={`${admin}/settings-dhcp`}
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a className={ACTION} href={`${admin}/settings-dhcp`} target="_blank" rel="noreferrer">
               DHCP settings ↗
             </a>
           )
@@ -175,26 +192,29 @@ export function DhcpView({ data }: { data: Dhcp }) {
               {
                 k: 'Range',
                 v: (
-                  <span className="mono">
+                  <span className={MONO}>
                     {dhcp.start} – {dhcp.end}
                   </span>
                 ),
               },
               { k: 'Lease', v: dhcp.leaseTime },
-              { k: 'Gateway offered', v: <span className="mono">{dhcp.router}</span> },
+              { k: 'Gateway offered', v: <span className={MONO}>{dhcp.router}</span> },
               {
                 k: 'Fixed addresses',
                 v: dhcp.reservationsKnown ? (
                   num(dhcp.reservations.length)
                 ) : (
-                  <span className="warn-text" title="the reservations hostsfile could not be read">
+                  <span
+                    className="text-warning"
+                    title="the reservations hostsfile could not be read"
+                  >
                     unknown
                   </span>
                 ),
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             The resolver is the DHCP server too, so addresses on this LAN are decided by this box
             rather than by the router, which is also why the device list below can exist. Everything
             without a reservation gets whatever is free in that range, for {dhcp.leaseTime} at a
@@ -208,7 +228,7 @@ export function DhcpView({ data }: { data: Dhcp }) {
           title="Leases"
           icon="⇌"
           span={6}
-          aside={<span className="board-note">since FTL started</span>}
+          aside={<span className={NOTE}>since FTL started</span>}
         >
           <Facts
             rows={[
@@ -220,9 +240,9 @@ export function DhcpView({ data }: { data: Dhcp }) {
                   dhcp.counters.declines === null ? (
                     DASH
                   ) : dhcp.counters.declines === 0 ? (
-                    <span className="ok-text">0</span>
+                    <span className="text-success">0</span>
                   ) : (
-                    <span className="warn-text">{num(dhcp.counters.declines)}</span>
+                    <span className="text-warning">{num(dhcp.counters.declines)}</span>
                   ),
               },
               {
@@ -231,14 +251,14 @@ export function DhcpView({ data }: { data: Dhcp }) {
                   dhcp.counters.nak === null ? (
                     DASH
                   ) : dhcp.counters.nak === 0 ? (
-                    <span className="ok-text">0</span>
+                    <span className="text-success">0</span>
                   ) : (
-                    <span className="warn-text">{num(dhcp.counters.nak)}</span>
+                    <span className="text-warning">{num(dhcp.counters.nak)}</span>
                   ),
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Offers vastly outnumber acceptances and that is normal. A device wakes, is offered an
             address, and often already has one it is happy with. The two to watch are the bottom
             pair: a <b>decline</b> means a client found the address already in use, a <b>refusal</b>{' '}
@@ -252,13 +272,13 @@ export function DhcpView({ data }: { data: Dhcp }) {
           icon="rows"
           span={12}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {active.length} active · {devices.length} known · {dhcp.reservations.length} fixed
             </span>
           }
         >
           <LanDevices devices={devices} />
-          <p className="board-foot">
+          <p className={FOOT}>
             Two lists joined on the hardware address. Everything in the house resolves through this
             box, so anything that ever asked for a name has a row here whether or not it took a
             lease. That is what makes this more than the leases above. The <b>fixed</b> ones are the
@@ -282,8 +302,8 @@ export function DhcpView({ data }: { data: Dhcp }) {
           source={{ unit: 'pihole-ftl.service' }}
           title="pihole-FTL logs"
           foot={
-            <p className="board-foot">
-              Shipped out of <span className="mono">/var/log/pihole/FTL.log</span> rather than the
+            <p className={FOOT}>
+              Shipped out of <span className={MONO}>/var/log/pihole/FTL.log</span> rather than the
               journal. FTL keeps its own file, and the unit&rsquo;s journal lines are
               systemd&rsquo;s rather than its own. Every lease offered, acknowledged and declined is
               in here by hardware address, which is the only place the counters above can be turned

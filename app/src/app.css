@@ -1,0 +1,81 @@
+/* The stylesheet the document links. Everything else is imported here.
+   ─────────────────────────────────────────────────────────────────────────
+   The cascade layers are the whole design, and the order below is what
+   lets Tailwind and 6,600 lines of hand-written CSS share one page
+   without a rewrite:
+
+     theme       Tailwind token declarations (@theme)
+     base        Tailwind preflight — the element reset
+     legacy      styles.css, this app's original hand-written CSS
+     components  shadcn primitives (src/components/ui/*)
+     utilities   Tailwind utility classes
+
+   `legacy` sits ABOVE `base`, so preflight cannot reset anything the old
+   stylesheet styles — that reset is why "just add Tailwind" normally
+   breaks an existing design (it zeroes heading sizes, list markers and
+   button chrome). It sits BELOW `utilities`, so a `className="flex"`
+   added while restyling a component beats the `.barlist-row` rule it is
+   replacing. Both directions matter; getting either backwards makes the
+   migration impossible to do file by file.
+
+   Layered CSS always loses to UNLAYERED CSS, so nothing here may be
+   imported outside a layer — a single stray unlayered rule would outrank
+   every utility on the page.
+
+   `source(none)` and explicit `@source` dirs, not automatic detection.
+   Tailwind's scanner otherwise walks the tree honouring .gitignore, which
+   makes the emitted CSS depend on which files happen to be present — and
+   the fleet has already been bitten by that: inside an image build the
+   client and SSR passes scanned different trees, emitted different bytes,
+   and the SSR bundle linked a stylesheet hash that was never published.
+   Every first paint 404'd. Pinning the sources makes the output a
+   function of the source tree alone.
+
+   `tw-animate-css` is the Tailwind 4 replacement for the
+   `tailwindcss-animate` plugin: the animate-in / fade-in /
+   slide-in-from-* utilities every shadcn overlay is written against.
+   Without it those components mount with no transition. */
+@layer theme, base, legacy, components, utilities;
+
+@import "tailwindcss" source(none);
+@import "./theme.css" layer(theme);
+@import "./styles.css" layer(legacy);
+@import "tw-animate-css";
+
+@source "./routes";
+@source "./components";
+@source "./lib";
+
+/* The dark theme is an explicit attribute, never `prefers-color-scheme`.
+   The preference is stored server-side and applied by the boot script in
+   __root.tsx before first paint, so the OS setting must not get a second,
+   contradictory vote. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* The rail collapsed to 64px of icons. Desktop only, and the media query
+   is what makes that true: `data-nav` is remembered per browser, so
+   without it a phone that had collapsed the rail on a laptop would open a
+   64px drawer of unlabelled icons.
+
+   A variant rather than a class on each element because the state lives on
+   `<html>` and is read by a dozen descendants — the brand, every label,
+   the padding, the chevron's rotation. */
+@custom-variant nav-collapsed {
+  @media (width >= 52rem) {
+    :where(html[data-nav="collapsed"]) & {
+      @slot;
+    }
+  }
+}
+
+@layer base {
+  /* Preflight leaves `border-color` at `currentColor`; every shadcn
+     component assumes it is the theme's border token instead. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border);
+  }
+}

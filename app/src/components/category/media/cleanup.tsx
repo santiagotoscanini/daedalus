@@ -12,7 +12,7 @@ import {
   verdictOf,
 } from '../../service-head'
 import { Board, BoardGrid, Chip, Measures } from '../../viz'
-import { ServiceBar, tone, VERSION_SNAPSHOT } from './shared'
+import { EMPTY, FOOT, MONO, NOTE, PROV, PROVS, ServiceBar, tone, VERSION_SNAPSHOT } from './shared'
 
 /* ── Cleanup: Cleanuparr, Janitorr ────────────────────────────────────── */
 
@@ -70,12 +70,7 @@ function CleanuparrPage({ d }: { d: Cleanup }) {
       />
 
       <BoardGrid>
-        <Board
-          title="What it did"
-          icon="⌫"
-          span={8}
-          aside={<span className="board-note">{window}</span>}
-        >
+        <Board title="What it did" icon="⌫" span={8} aside={<span className={NOTE}>{window}</span>}>
           <Measures
             items={[
               { k: 'Stuck items removed', v: num(cleanuparr.removed) },
@@ -87,14 +82,14 @@ function CleanuparrPage({ d }: { d: Cleanup }) {
               { k: 'Replacement searches', v: num(cleanuparr.searches) },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Counted out of its own log lines in Loki. Cleanuparr publishes no metrics and 2.10.1
             closed the API that used to report this, so these three phrases are the interface.
           </p>
         </Board>
 
         <Board title="Why it is here" icon="◈" span={4}>
-          <p className="board-foot">
+          <p className={FOOT}>
             A download that stalls does not fail. It sits in the queue at 97% forever, and the *arr
             goes on believing the episode is handled. Nothing else on this box notices. Cleanuparr
             strikes it, removes it, blocks the release and asks for another one.
@@ -148,21 +143,21 @@ function JanitorrPage({ d }: { d: Cleanup }) {
           title="Schedules"
           icon="clock"
           span={8}
-          aside={<span className="board-note">as it reports them hourly</span>}
+          aside={<span className={NOTE}>as it reports them hourly</span>}
         >
           {janitorr.schedules.length === 0 ? (
-            <p className="viz-empty">nothing in the last day&rsquo;s log</p>
+            <p className={EMPTY}>nothing in the last day&rsquo;s log</p>
           ) : (
-            <ul className="provs">
+            <ul className={PROVS}>
               {janitorr.schedules.map((s) => (
-                <li key={s.name} className="prov">
+                <li key={s.name} className={PROV}>
                   <Chip tone={s.enabled ? 'warn' : 'muted'}>{s.enabled ? 'enabled' : 'off'}</Chip>
-                  <span className="prov-name">{s.name} based cleanup</span>
+                  <span>{s.name} based cleanup</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             The schedules that announce themselves, every hour, whether or not they do anything. Off
             here is what a deliberately disarmed retention service looks like, and without this
             panel it is indistinguishable from a broken one. It is not a list of everything Janitorr
@@ -173,9 +168,9 @@ function JanitorrPage({ d }: { d: Cleanup }) {
 
         <Board title="Would delete" icon="⌦" span={4}>
           <Measures items={[{ k: `Last ${String(d.days)} days`, v: num(janitorr.wouldDelete) }]} />
-          <p className="board-foot">
+          <p className={FOOT}>
             Dry-run: nothing is removed, so this is what it decided it would take if it were armed.
-            The image is pinned to a moving <span className="mono">jvm-stable</span>, which carries
+            The image is pinned to a moving <span className={MONO}>jvm-stable</span>, which carries
             no version; the one in the header comes from the image&rsquo;s own OCI label.
           </p>
         </Board>
@@ -183,7 +178,7 @@ function JanitorrPage({ d }: { d: Cleanup }) {
         <Changelog
           gap={janitorr.gap}
           span={12}
-          aside={<span className="board-note">Schaka/janitorr</span>}
+          aside={<span className={NOTE}>Schaka/janitorr</span>}
         />
 
         <LogBoard

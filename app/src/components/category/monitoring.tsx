@@ -26,6 +26,28 @@ import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../viz'
 // and nothing else, so the only part of this box whose upgrades you could not
 // see from the dashboard was the part that does the watching.
 
+/* The board vocabulary styles.css used to carry, as utilities. Restated per
+   category file rather than shared: the legacy sheet is being retired file by
+   file, so a common module would be a second place to keep in step. */
+const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
+const NOTE = 'text-[0.73rem] text-(--dim)'
+const FOOT = 'mt-[0.15rem] text-[0.73rem] leading-[1.45] text-(--dim) [overflow-wrap:anywhere]'
+const SUB =
+  'mt-[0.35rem] mb-[-0.2rem] text-[0.73rem] tracking-normal text-(--dim) [font-weight:550]'
+const EMPTY = 'py-[0.9rem] text-center text-[0.8rem] text-(--dim) [overflow-wrap:anywhere]'
+
+/* A flat list of named things, each led by a chip saying what kind it is and
+   trailed by whatever detail that kind has. Rows of a table, not a stack of
+   pills: a hairline between rows says the same thing at a fraction of the ink.
+   The row rules hang off the list so the <li>s stay bare. */
+const LIST =
+  'flex list-none flex-col [&>li]:flex [&>li]:min-w-0 [&>li]:items-center [&>li]:gap-[0.45rem] [&>li]:px-[0.1rem] [&>li]:py-[0.34rem] [&>li]:text-[0.77rem] [&>li+li]:border-t [&>li+li]:border-(--border-soft)'
+/* The name takes the slack, so the detail is pushed right without a spacer.
+   Both truncate: one long row must not widen the panel. */
+const MAIN = 'min-w-0 flex-auto truncate text-foreground'
+const SIDE = 'max-w-[60%] min-w-0 flex-[0_1_auto] truncate text-[0.68rem] tabular-nums text-(--dim)'
+const NUM = 'min-w-[1.4rem] text-right tabular-nums text-foreground'
+
 export function MonitoringView({ data }: { data: MonitoringData }) {
   switch (data.tab) {
     case 'alerts':
@@ -77,7 +99,7 @@ function AlertsView({ d }: { d: Alerts }) {
           <>
             Every alert rule on this box is Grafana-managed and provisioned from files, so this both
             draws the graphs and decides when one of them is worth an email. Its own state — users,
-            service accounts, alert history — lives in the <span className="mono">grafana</span>{' '}
+            service accounts, alert history — lives in the <span className={MONO}>grafana</span>{' '}
             database on the shared cluster, which is the half of it that is not in the rebuild
             trail.
           </>
@@ -90,28 +112,28 @@ function AlertsView({ d }: { d: Alerts }) {
           title={d.active.length === 0 ? 'Nothing firing' : 'Firing now'}
           icon="⚑"
           span={8}
-          aside={<span className="board-note">{num(d.rules)} rules</span>}
+          aside={<span className={NOTE}>{num(d.rules)} rules</span>}
         >
           {d.active.length === 0 ? (
-            <p className="viz-empty">
+            <p className={EMPTY}>
               No rule is firing or pending. All {num(d.rules)} are evaluating and quiet.
             </p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {d.active.map((a) => (
                 <li key={`${a.folder}-${a.name}`}>
                   <Chip tone={SEVERITY[a.severity] ?? 'muted'}>{a.severity}</Chip>
-                  <span className="item-main" title={a.summary}>
+                  <span className={MAIN} title={a.summary}>
                     {a.name}
                   </span>
-                  <span className="item-side">{a.folder}</span>
+                  <span className={SIDE}>{a.folder}</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             These are Grafana&rsquo;s rules, not prometheus&rsquo;s. Prometheus&rsquo;s own{' '}
-            <span className="mono">/rules</span> endpoint is empty and would report zero on a box
+            <span className={MONO}>/rules</span> endpoint is empty and would report zero on a box
             with {num(d.rules)}. Severity is a label on the generated alert instance rather than on
             the rule, which is why only active ones carry it.
           </p>
@@ -119,9 +141,9 @@ function AlertsView({ d }: { d: Alerts }) {
 
         <Board title="Rules by folder" icon="rows" span={4}>
           <BarList items={d.byFolder} tone="info" empty="no rules" />
-          <p className="board-foot">
+          <p className={FOOT}>
             Folders are the provisioning files in{' '}
-            <span className="mono">assets/provisioning/alerting/</span>. UI edits do not survive.
+            <span className={MONO}>assets/provisioning/alerting/</span>. UI edits do not survive.
             The files are source of truth.
           </p>
         </Board>
@@ -135,9 +157,9 @@ function AlertsView({ d }: { d: Alerts }) {
               { k: 'Dashboards', v: num(d.grafana.dashboards) },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             A firing rule reaches a person by email through the same relay smartd and every{' '}
-            <span className="mono">OnFailure</span> unit use. There is no phone alert on this box.
+            <span className={MONO}>OnFailure</span> unit use. There is no phone alert on this box.
             The escalation path is a mailbox.
           </p>
         </Board>
@@ -145,13 +167,13 @@ function AlertsView({ d }: { d: Alerts }) {
         <Board title="Deliberately silent" icon="🔇" span={8}>
           {/* Not a fault, and the page has to say so — a muted alert path and an
             alert path that was never built look identical from here. */}
-          <p className="board-foot">
+          <p className={FOOT}>
             Every Home Assistant alert path on this box is <b>switched off on purpose</b>,
             indefinitely. The one that used to fire was the television being turned off, so{' '}
-            <span className="mono">media_player</span> and <span className="mono">remote</span> are
+            <span className={MONO}>media_player</span> and <span className={MONO}>remote</span> are
             excluded. The 25 Tuya lights sitting unavailable in the floor are genuinely not healthy,
             which is why the entity-count rule could not be re-armed with a higher threshold. Grep{' '}
-            <span className="mono">HA-MUTED</span> in <span className="mono">/etc/nixos</span> to
+            <span className={MONO}>HA-MUTED</span> in <span className={MONO}>/etc/nixos</span> to
             find every switch. Nothing above will ever mention Home Assistant while that holds, and
             a quiet board is not evidence that it is well.
           </p>
@@ -163,7 +185,7 @@ function AlertsView({ d }: { d: Alerts }) {
           span={12}
           aside={
             d.mail.failures.length === 0 ? (
-              <span className="board-note">
+              <span className={NOTE}>
                 {d.mail.sent30d === null ? DASH : num(d.mail.sent30d)} sent in 30 days
               </span>
             ) : (
@@ -197,7 +219,7 @@ function AlertsView({ d }: { d: Alerts }) {
                   d.mail.failed30d === null ? (
                     DASH
                   ) : d.mail.failed30d > 0 ? (
-                    <span className="text-warn">{num(d.mail.failed30d)}</span>
+                    <span className="text-warning">{num(d.mail.failed30d)}</span>
                   ) : (
                     <Chip tone="ok">none</Chip>
                   ),
@@ -205,21 +227,21 @@ function AlertsView({ d }: { d: Alerts }) {
             ]}
           />
           {d.mail.failures.length > 0 && (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {d.mail.failures.map((f) => (
                 <li key={`${f.unit}-${String(f.agoSeconds)}`}>
                   <Chip tone="bad">failed</Chip>
-                  <span className="item-main mono">{f.unit}</span>
-                  <span className="item-side">{f.error}</span>
-                  <span className="item-side">{since(f.agoSeconds)}</span>
+                  <span className={`${MAIN} ${MONO}`}>{f.unit}</span>
+                  <span className={SIDE}>{f.error}</span>
+                  <span className={SIDE}>{since(f.agoSeconds)}</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Read back from what the relay logged: msmtp writes one journal line per delivery
             attempt, filed under the unit that was sending, so this is every mail the box tried to
-            send (smartd, ZED, each <span className="mono">OnFailure</span> hook), not just
+            send (smartd, ZED, each <span className={MONO}>OnFailure</span> hook), not just
             Grafana&rsquo;s. This path has no watcher of its own: a dead Gmail app password makes
             the box <b>quieter</b>, not louder, because the failure notice would have to travel the
             path that just broke. A long gap since the last send is normal, since alerts are rare,
@@ -235,7 +257,7 @@ function AlertsView({ d }: { d: Alerts }) {
           source={{ container: 'grafana' }}
           title="Grafana logs"
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               Rule evaluation, provisioning and notification delivery all land here. An alert that
               should have arrived and did not is either a contact point erroring in this log or a
               rule that never left the pending state.
@@ -281,35 +303,35 @@ function ProbesView({ d }: { d: Probes }) {
           icon="◎"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {num(d.up)} up · {num(d.down)} down
             </span>
           }
         >
           {d.failing.length === 0 ? (
-            <p className="viz-empty">All {num(d.up)} endpoints answered their last probe.</p>
+            <p className={EMPTY}>All {num(d.up)} endpoints answered their last probe.</p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {d.failing.map((f) => (
                 <li key={f}>
                   <Chip tone="bad">down</Chip>
-                  <span className="item-main">{f}</span>
+                  <span className={MAIN}>{f}</span>
                 </li>
               ))}
             </ul>
           )}
 
-          <h4 className="board-sub">Worst week</h4>
-          <ul className="itemlist">
+          <h4 className={SUB}>Worst week</h4>
+          <ul className={LIST}>
             {d.worst.map((w) => (
               <li key={w.name}>
-                <span className="item-main">{w.name}</span>
-                <span className="item-n">{pct(w.uptime, 2)}</span>
+                <span className={MAIN}>{w.name}</span>
+                <span className={NUM}>{pct(w.uptime, 2)}</span>
               </li>
             ))}
           </ul>
 
-          <p className="board-foot">
+          <p className={FOOT}>
             Ranked by the WORST seven days rather than the average, because an average over
             thirty-eight endpoints hides the one that is broken. Some of what you see here is not an
             outage: traefik dials the *arrs at a port published out of gluetun&rsquo;s rootless
@@ -328,8 +350,8 @@ function ProbesView({ d }: { d: Probes }) {
               { k: '24h uptime', v: pct(d.uptime24h, 2) },
             ]}
           />
-          <p className="board-foot">
-            One entrypoint-level wildcard covers <span className="mono">*.{BASE_DOMAIN}</span>, so
+          <p className={FOOT}>
+            One entrypoint-level wildcard covers <span className={MONO}>*.{BASE_DOMAIN}</span>, so
             this is one certificate for every hostname on the box. Renewal is DNS-01 through
             Cloudflare and automatic. A number falling below thirty means lego is failing, and the
             store is a single file that is in no backup.
@@ -338,7 +360,7 @@ function ProbesView({ d }: { d: Probes }) {
 
         <Board title="Slowest to answer" icon="⏱" span={4}>
           <BarList items={d.slowest} tone="warn" empty="nothing measured" />
-          <p className="board-foot">
+          <p className={FOOT}>
             Probed from outside over HTTPS, so this includes TLS, the proxy and the forward-auth
             round trip, not just the app.
           </p>
@@ -350,11 +372,11 @@ function ProbesView({ d }: { d: Probes }) {
           source={{ container: 'gatus' }}
           title="Gatus logs"
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               Gatus fetches the OIDC discovery document while starting and panics if it is not being
               served yet, which is why it is one of the containers gated behind a bounded probe of
               the real discovery URL rather than ordered after Pocket ID. See{' '}
-              <span className="mono">fleet.sso.discoveryConsumers</span>.
+              <span className={MONO}>fleet.sso.discoveryConsumers</span>.
             </p>
           }
         />
@@ -406,9 +428,9 @@ function MetricsView({ d }: { d: Metrics }) {
           <>
             Every number on this dashboard that is a rate, a trend or a seven-day anything came from
             here. It publishes no host port and runs without{' '}
-            <span className="mono">--web.enable-lifecycle</span>, and its scrape list is generated
+            <span className={MONO}>--web.enable-lifecycle</span>, and its scrape list is generated
             from nix. Each stack contributes its own{' '}
-            <span className="mono">fleet.prometheusScrapes</span>, so a target that is missing is a
+            <span className={MONO}>fleet.prometheusScrapes</span>, so a target that is missing is a
             stack that never declared one rather than a file somebody forgot to edit.
           </>
         }
@@ -421,27 +443,27 @@ function MetricsView({ d }: { d: Metrics }) {
           icon="◉"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {num(d.targetsUp)} up · {num(d.targetsDown)} down
             </span>
           }
         >
           {d.down.length === 0 ? (
-            <p className="viz-empty">All {num(d.targetsUp)} scrape targets answered.</p>
+            <p className={EMPTY}>All {num(d.targetsUp)} scrape targets answered.</p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {d.down.map((t) => (
                 <li key={`${t.job}-${t.instance}`}>
                   <Chip tone="bad">{t.job}</Chip>
-                  <span className="item-main mono">{t.instance}</span>
-                  <span className="item-side">{t.error}</span>
+                  <span className={`${MAIN} ${MONO}`}>{t.instance}</span>
+                  <span className={SIDE}>{t.error}</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Read from prometheus&rsquo;s own API rather than from{' '}
-            <span className="mono">up == 0</span>, because only the API carries the last error: the
+            <span className={MONO}>up == 0</span>, because only the API carries the last error: the
             difference between &ldquo;prometheus cannot reach this&rdquo; and &ldquo;this answered
             401&rdquo;. Both look like a dead target on a graph.
           </p>
@@ -472,7 +494,7 @@ function MetricsView({ d }: { d: Metrics }) {
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             The two retention rows are the reading: if the oldest sample is well short of the
             window, the disk cap bit before the time limit did and the history is shorter than
             configured.
@@ -481,7 +503,7 @@ function MetricsView({ d }: { d: Metrics }) {
 
         <Board title="Series, seven days" icon="panels" span={8}>
           <Trend values={d.seriesTrend} tone="accent" height={110} />
-          <p className="board-foot">
+          <p className={FOOT}>
             Active series is what memory here is spent on. A step up that never comes back down is a
             new label with unbounded values. That is how a TSDB usually gets into trouble, and a
             total sample count would not show it.
@@ -490,7 +512,7 @@ function MetricsView({ d }: { d: Metrics }) {
 
         <Board title="Slowest scrapes" icon="⏱" span={4}>
           <BarList items={d.slowestScrapes} tone="warn" empty="nothing measured" />
-          <p className="board-foot">
+          <p className={FOOT}>
             A scrape that approaches its interval is a target about to start missing samples.
           </p>
         </Board>
@@ -537,10 +559,10 @@ function LogsView({ d }: { d: Logs }) {
           title="Volume"
           icon="logs"
           span={8}
-          aside={<span className="board-note">{compact(d.lines1h)} lines in the last hour</span>}
+          aside={<span className={NOTE}>{compact(d.lines1h)} lines in the last hour</span>}
         >
           <Trend values={d.volumeHistory} tone="info" height={90} />
-          <h4 className="board-sub">Errors only, same day</h4>
+          <h4 className={SUB}>Errors only, same day</h4>
           <Trend values={d.errorHistory} tone="bad" height={70} />
           <Measures
             items={[
@@ -548,7 +570,7 @@ function LogsView({ d }: { d: Logs }) {
               { k: 'ingest', v: `${bytes(d.ingestRate)}/s` },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Two lines rather than one chart: total volume moves with how busy the box is and says
             nothing on its own, while the error line is the one worth reading. A spike in the second
             without a spike in the first is a service failing rather than a service working hard.
@@ -561,9 +583,9 @@ function LogsView({ d }: { d: Logs }) {
 
         <Board title="Noisiest errors, 24h" icon="warn" span={4}>
           <BarList items={d.noisiest} tone="warn" empty="no errors" />
-          <p className="board-foot">
-            Host journal lines carry <span className="mono">unit</span> rather than{' '}
-            <span className="mono">container</span>, so they group together rather than appearing as
+          <p className={FOOT}>
+            Host journal lines carry <span className={MONO}>unit</span> rather than{' '}
+            <span className={MONO}>container</span>, so they group together rather than appearing as
             a missing name.
           </p>
         </Board>
@@ -581,10 +603,10 @@ function LogsView({ d }: { d: Logs }) {
           }
         >
           <BarList items={d.byStack} tone="accent" empty="no stack labels" />
-          <p className="board-foot">
+          <p className={FOOT}>
             Every container&rsquo;s lines are labelled with the stack it belongs to, generated from{' '}
-            <span className="mono">fleet.logStacks</span>; an unregistered container falls back to
-            its own name. The <span className="mono">adhoc</span> bucket is the one worth watching:
+            <span className={MONO}>fleet.logStacks</span>; an unregistered container falls back to
+            its own name. The <span className={MONO}>adhoc</span> bucket is the one worth watching:
             it catches containers started by hand rather than by a unit, which once minted 77
             phantom services in Loki before it existed.
           </p>
@@ -597,7 +619,7 @@ function LogsView({ d }: { d: Logs }) {
           title="Shipping"
           icon="⇥"
           span={4}
-          aside={<span className="board-note">alloy → loki</span>}
+          aside={<span className={NOTE}>alloy → loki</span>}
         >
           <Facts
             rows={[
@@ -626,7 +648,7 @@ function LogsView({ d }: { d: Logs }) {
                   d.ship.dropped24h === null ? (
                     DASH
                   ) : d.ship.dropped24h > 0 ? (
-                    <span className="text-warn">{num(d.ship.dropped24h)}</span>
+                    <span className="text-warning">{num(d.ship.dropped24h)}</span>
                   ) : (
                     <Chip tone="ok">none</Chip>
                   ),
@@ -637,7 +659,7 @@ function LogsView({ d }: { d: Logs }) {
                   d.ship.retries24h === null ? (
                     DASH
                   ) : d.ship.retries24h > 0 ? (
-                    <span className="text-warn">{num(d.ship.retries24h)}</span>
+                    <span className="text-warning">{num(d.ship.retries24h)}</span>
                   ) : (
                     <Chip tone="ok">none</Chip>
                   ),
@@ -655,10 +677,10 @@ function LogsView({ d }: { d: Logs }) {
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             The write path, from alloy&rsquo;s own scraped metrics rather than from Loki. These are
             the only numbers here that keep talking when shipping stops. Read minus filtered is
-            shipped: the gap is <span className="mono">stacks/logging</span>&rsquo;s deliberate
+            shipped: the gap is <span className={MONO}>stacks/logging</span>&rsquo;s deliberate
             noise-drop stages, not loss. Loss is the <b>dropped</b> row. Lag includes
             journald&rsquo;s batching, so about a second standing is normal; a retry is Loki pushing
             back and the batch trying again.
@@ -668,19 +690,13 @@ function LogsView({ d }: { d: Logs }) {
         {/* Two, because this tab has two subjects on two release cycles. The
           same shape the Downloaders and Cleanup tabs use for the services
           they hold side by side. */}
-        <Changelog
-          gap={d.loki.gap}
-          span={6}
-          aside={<span className="board-note">grafana/loki</span>}
-        />
+        <Changelog gap={d.loki.gap} span={6} aside={<span className={NOTE}>grafana/loki</span>} />
         <Changelog
           gap={d.alloy.gap}
           span={6}
-          aside={
-            <span className="board-note">grafana/alloy · {d.alloy.running.version ?? DASH}</span>
-          }
+          aside={<span className={NOTE}>grafana/alloy · {d.alloy.running.version ?? DASH}</span>}
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               The collector, on its own release cycle. Its version is read{' '}
               {SOURCE_NOTE[d.alloy.running.source]} rather than from the process: alloy shares a
               stack with Loki here and publishes no hostname, so there is nothing to ask.
@@ -700,9 +716,9 @@ function LogsView({ d }: { d: Logs }) {
             },
           ]}
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               Loki&rsquo;s own stream, with the collector one disclosure below it. They were one
-              panel under the shared <span className="mono">stack=logging</span> label, which
+              panel under the shared <span className={MONO}>stack=logging</span> label, which
               interleaved two services whose failures mean opposite things. Loki refuses a query
               longer than about thirty days: a wider range on any log panel in this dashboard
               returns an error rather than fewer results.
@@ -746,15 +762,15 @@ function JobsView({ d }: { d: Jobs }) {
           icon="⏲"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {num(d.jobs.length)} declared · {num(d.emailOnly)} by mail only
             </span>
           }
         >
-          <ul className="itemlist">
+          <ul className={LIST}>
             {d.jobs.map((j) => (
               <li key={j.unit}>
-                <span className="item-main mono">{j.unit}</span>
+                <span className={`${MAIN} ${MONO}`}>{j.unit}</span>
                 {j.slug === null ? (
                   <Chip tone="muted">mail on failure</Chip>
                 ) : j.status === null ? (
@@ -770,7 +786,7 @@ function JobsView({ d }: { d: Jobs }) {
                     timer — boot oneshots and path units — whose absence from
                     the timer table is information, not a gap. */}
                 {j.result === null ? (
-                  <span className="item-side">{DASH}</span>
+                  <span className={SIDE}>{DASH}</span>
                 ) : j.result === 'success' ? (
                   <Chip tone="ok">success</Chip>
                 ) : (
@@ -780,7 +796,7 @@ function JobsView({ d }: { d: Jobs }) {
                       : `${j.result} (${String(j.exitStatus)})`}
                   </Chip>
                 )}
-                <span className="item-side">
+                <span className={SIDE}>
                   {j.lastRunAgo === null ? DASH : `ran ${since(j.lastRunAgo)}`}
                   {' · '}
                   {j.nextIn === null ? DASH : `next ${until(j.nextIn)}`}
@@ -788,8 +804,8 @@ function JobsView({ d }: { d: Jobs }) {
               </li>
             ))}
           </ul>
-          <p className="board-foot">
-            The registry from <span className="mono">fleet.monitoredJobs</span>, joined to what
+          <p className={FOOT}>
+            The registry from <span className={MONO}>fleet.monitoredJobs</span>, joined to what
             healthchecks knows. The two are different guarantees: <b>mail on failure</b> means a run
             that fails tells you, and <b>pinging</b> means a run that stops happening at all tells
             you. Only the second catches a timer that was disabled, never fired, or whose service
@@ -809,20 +825,20 @@ function JobsView({ d }: { d: Jobs }) {
           span={4}
           aside={
             d.summary === null ? undefined : (
-              <span className="board-note">
+              <span className={NOTE}>
                 {num(d.summary.up)} up · {num(d.summary.late)} late · {num(d.summary.down)} down
               </span>
             )
           }
         >
           {d.checks.length === 0 ? (
-            <p className="viz-empty">healthchecks did not answer</p>
+            <p className={EMPTY}>healthchecks did not answer</p>
           ) : (
-            <ul className="itemlist">
+            <ul className={LIST}>
               {d.checks.map((c) => (
                 <li key={c.name}>
-                  <span className="item-main">{c.name}</span>
-                  <span className="item-side">
+                  <span className={MAIN}>{c.name}</span>
+                  <span className={SIDE}>
                     {c.status === 'up' ? (
                       <Chip tone="ok">up</Chip>
                     ) : c.status === 'grace' ? (
@@ -831,14 +847,14 @@ function JobsView({ d }: { d: Jobs }) {
                       <Chip tone="bad">{c.status}</Chip>
                     )}
                   </span>
-                  <span className="item-side">
+                  <span className={SIDE}>
                     {c.dueIn === null ? DASH : c.dueIn < 0 ? 'overdue' : `due ${until(c.dueIn)}`}
                   </span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Each job pings on success; healthchecks alerts when a ping does not arrive inside the
             period plus its grace. <b>Late</b> is the state worth seeing: inside the grace window,
             not yet an alert.
@@ -850,15 +866,15 @@ function JobsView({ d }: { d: Jobs }) {
           // on its own: nix believes the job is watched, healthchecks has never
           // heard of it, and nothing compares the two.
           <Board title="Armed but never fired" icon="warn" span={12}>
-            <ul className="itemlist">
+            <ul className={LIST}>
               {d.orphaned.map((u) => (
                 <li key={u}>
                   <Chip tone="bad">no check</Chip>
-                  <span className="item-main mono">{u}</span>
+                  <span className={`${MAIN} ${MONO}`}>{u}</span>
                 </li>
               ))}
             </ul>
-            <p className="board-foot">
+            <p className={FOOT}>
               These declare a healthchecks slug that healthchecks does not have a check for, so the
               dead-man&rsquo;s switch reads as armed in nix and does not exist. A check is created
               by its first ping, which means either the job has never once succeeded, or the ping is
@@ -872,9 +888,9 @@ function JobsView({ d }: { d: Jobs }) {
           gap={d.gap}
           span={12}
           foot={
-            <p className="board-foot">
-              Its releases are numbered with two segments — <span className="mono">v4.2</span>, not{' '}
-              <span className="mono">v4.2.0</span> — so this panel matches them with its own
+            <p className={FOOT}>
+              Its releases are numbered with two segments — <span className={MONO}>v4.2</span>, not{' '}
+              <span className={MONO}>v4.2.0</span> — so this panel matches them with its own
               pattern; the shared three-segment one would report a project with sixty releases as
               having none. A tag ahead of the newest RELEASE is normal here and is why the verdict
               can read &ldquo;current&rdquo; against an empty list: the image is built from the git

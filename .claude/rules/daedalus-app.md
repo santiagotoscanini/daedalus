@@ -119,3 +119,9 @@ Match the existing code: server functions + repos, no client-side
 secrets, tables/tiles composed from the shared UI primitives already
 in `src/components/`. Comments follow the repo rule: only constraints
 the code can't show.
+
+Anything visual — a component, a route, a stylesheet — has its own
+rule: **`.claude/rules/daedalus-ui.md`**, which loads alongside this
+one. Tailwind v4 + shadcn over runtime-swappable tokens; the cascade
+layer order is load-bearing, colour literals are banned outside
+`theme.css`, and `src/styles.css` only ever shrinks.

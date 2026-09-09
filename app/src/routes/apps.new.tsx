@@ -1,13 +1,20 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { type HostNote, ReadinessPanel } from '../components/apps/readiness'
 import { RepoPicker } from '../components/apps/repo-picker'
+import { BOARD_FOOT, GHOST_BTN, SECTION_HEAD, SECTION_HEAD_SMALL } from '../components/apps/shared'
+import { RefreshButton, Segmented, Toggle } from '../components/controls'
 import { GuardedAwait } from '../components/error'
+import { Crumbs, PageHead } from '../components/page'
 import { NewAppSkeleton } from '../components/skeleton'
 import { usePolledStatus } from '../components/status'
-import { RefreshButton, Segmented, Toggle } from '../components/ui'
+import { Alert, AlertDescription } from '../components/ui/alert'
+import { Button } from '../components/ui/button'
+import { Field, FieldDescription, FieldError, FieldLabel } from '../components/ui/field'
+import { Input } from '../components/ui/input'
 import { Board, BoardGrid } from '../components/viz'
 import type { CiRequestStatus } from '../lib/ci-request'
+import { cn } from '../lib/cn'
 import type { Check, Repo } from '../lib/github-repos'
 import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import { readiness } from '../lib/readiness'
@@ -61,21 +68,40 @@ const CI_IDLE: CiRequestStatus = {
 type Options = Awaited<ReturnType<typeof fetchNewAppOptions>>
 type Preflight = Awaited<ReturnType<typeof fetchAppPreflight>>
 
+/* The flow's vertical rhythm lives here, not on the steps. Each step opens
+   with a section head, whose top rule and 2.5rem margin already separate it
+   from the step above — so the only two edges left are the wizard's own: the
+   gap under the lede, and a first step that must NOT draw that rule, where it
+   would read as an underline on the lede rather than the start of a step.
+
+   Flex rather than block so nothing collapses its margin through the
+   container: the loading placeholder and the real thing then begin at exactly
+   the same y, which is the whole point of a shape-matched skeleton — and why
+   these three are exported to `NewAppSkeleton` rather than restated there. */
+export const WIZARD = 'mt-[1.6rem] flex flex-col'
+/** No margin of its own — see above. `min-width: 0` because the board grid
+    inside is wider than its content and a flex item floors at min-content. */
+export const WIZARD_STEP = 'min-w-0'
+export const FIRST_STEP_HEAD = cn(SECTION_HEAD, 'mt-0 border-t-0 pt-0')
+
+const WARN_BANNER = 'mb-[1.35rem] text-foreground'
+const MUTED_BANNER = 'mb-[1.35rem] text-(--text-muted)'
+
 function NewAppPage() {
   const { options } = Route.useLoaderData()
 
   return (
     <>
-      <p className="crumbs">
-        <Link to="/apps">Apps</Link> <span>›</span> new
-      </p>
-      <header className="page-head">
-        <h1>Add an app</h1>
-      </header>
-      <p className="lede">
+      <Crumbs>
+        <Link to="/apps" className="hover:text-foreground">
+          Apps
+        </Link>{' '}
+        <span aria-hidden="true">›</span> new
+      </Crumbs>
+      <PageHead title="Add an app">
         One repository under <code>github.com/{OWNER}</code> becomes one entry in the registry. The
         container, hostname, TLS, DNS, probe, deploy timer and CI runner are all derived from it.
-      </p>
+      </PageHead>
 
       <GuardedAwait resetKey="options" promise={options} fallback={<NewAppSkeleton />}>
         {(data) => <Wizard options={data} />}
@@ -269,9 +295,11 @@ function Wizard({ options }: { options: Options }) {
     if (c.id === 'image') {
       if (preflight.imageState !== 'missing' || !preflight.dispatchable) return null
       return (
-        <button
+        <Button
           type="button"
-          className="btn"
+          variant="outline"
+          size="sm"
+          className={GHOST_BTN}
           disabled={host?.state === 'running'}
           onClick={() => {
             hostAction('image', () =>
@@ -282,21 +310,23 @@ function Wizard({ options }: { options: Options }) {
           {host?.id === 'image' && host.state === 'running'
             ? 'Dispatching…'
             : `Run ${preflight.publishWorkflow ?? 'CI'}`}
-        </button>
+        </Button>
       )
     }
     if (c.id === 'registry-secret' && c.state === 'bad') {
       return (
-        <button
+        <Button
           type="button"
-          className="btn"
+          variant="outline"
+          size="sm"
+          className={GHOST_BTN}
           disabled={host?.state === 'running'}
           onClick={() => {
             hostAction('registry-secret', () => setRegistrySecretFn({ data: { repo: repo.name } }))
           }}
         >
           {host?.id === 'registry-secret' && host.state === 'running' ? 'Setting…' : 'Set it'}
-        </button>
+        </Button>
       )
     }
     return null
@@ -350,32 +380,43 @@ function Wizard({ options }: { options: Options }) {
   }
 
   return (
-    <div className="wizard">
-      <section className="wizard-step">
-        <h2 className="section-head">
+    <div className={WIZARD}>
+      <section className={WIZARD_STEP}>
+        <h2 className={FIRST_STEP_HEAD}>
           1. Repository
-          <small>the app key, the image name and the CI runner all come from it</small>
-          <RefreshButton
-            busy={reloading}
-            label="Re-read the repository list"
-            onClick={reloadRepos}
-          />
+          <small className={SECTION_HEAD_SMALL}>
+            the app key, the image name and the CI runner all come from it
+          </small>
+          {/* RefreshButton (components/controls.tsx) sizes and right-aligns
+              itself against a `.section-head` ancestor. This head is utilities
+              now, so the same two rules reach it from here instead. */}
+          <span className="ml-auto self-center [&>button]:size-[30px] [&>button]:text-[0.95rem]">
+            <RefreshButton
+              busy={reloading}
+              label="Re-read the repository list"
+              onClick={reloadRepos}
+            />
+          </span>
         </h2>
 
         {repoList.error !== null && (
-          <p className="banner">
-            {repoList.error}. The list below is whatever could be read; you can still create an app
-            by picking a repo once GitHub answers again.
-          </p>
+          <Alert variant="warning" className={WARN_BANNER}>
+            <AlertDescription>
+              {repoList.error}. The list below is whatever could be read; you can still create an
+              app by picking a repo once GitHub answers again.
+            </AlertDescription>
+          </Alert>
         )}
         {repoList.error === null && !repoList.authenticated && (
-          <p className="banner banner-muted">
-            No GitHub token in the container’s environment, so this lists <b>public</b>
-            repositories only and the checks below that need authentication will say so. The fleet’s
-            GitHub credential is rendered by <code>daedalus-dashboard-keys.service</code>; a{' '}
-            <code>GITHUB_REPO_TOKEN</code> in <code>stacks/daedalus/service-keys.sops</code>
-            overrides it.
-          </p>
+          <Alert className={MUTED_BANNER}>
+            <AlertDescription>
+              No GitHub token in the container’s environment, so this lists <b>public</b>
+              repositories only and the checks below that need authentication will say so. The
+              fleet’s GitHub credential is rendered by <code>daedalus-dashboard-keys.service</code>
+              {'; '}a <code>GITHUB_REPO_TOKEN</code> in{' '}
+              <code>stacks/daedalus/service-keys.sops</code> overrides it.
+            </AlertDescription>
+          </Alert>
         )}
 
         <RepoPicker
@@ -401,17 +442,23 @@ function Wizard({ options }: { options: Options }) {
 
       {repo && (
         <>
-          <section className="wizard-step">
-            <h2 className="section-head">
+          <section className={WIZARD_STEP}>
+            <h2 className={SECTION_HEAD}>
               2. What it gets
-              <small>every one of these is editable afterwards</small>
+              <small className={SECTION_HEAD_SMALL}>
+                every one of these is editable afterwards
+              </small>
             </h2>
 
-            {nameErr !== null && <p className="banner">{nameErr}</p>}
+            {nameErr !== null && (
+              <Alert variant="warning" className={WARN_BANNER}>
+                <AlertDescription>{nameErr}</AlertDescription>
+              </Alert>
+            )}
 
             <BoardGrid>
               <Board title="Identity" icon="✦" span={4}>
-                <Field
+                <WizardField
                   label="Name"
                   value={name}
                   disabled
@@ -426,7 +473,7 @@ function Wizard({ options }: { options: Options }) {
                   }
                   onChange={() => undefined}
                 />
-                <Field
+                <WizardField
                   label="Description"
                   value={description}
                   placeholder="what it is, in one line"
@@ -464,7 +511,7 @@ function Wizard({ options }: { options: Options }) {
                   label="Prometheus scrape"
                   hint="Only once the app actually serves /metrics. Otherwise it is a permanently-down target."
                 />
-                <p className="board-foot">
+                <p className={BOARD_FOOT}>
                   Not here, on purpose. <b>SSO</b> is a second, deliberate step on the app’s own
                   page: its client secret is generated on the box, so there is nothing to author
                   first. <b>Operator secrets</b> have no switch at all. Commit a{' '}
@@ -485,14 +532,14 @@ function Wizard({ options }: { options: Options }) {
                     { value: 'live', label: 'External', icon: '↗' },
                   ]}
                 />
-                <p className="board-foot">
+                <p className={BOARD_FOOT}>
                   {stage === 'off'
                     ? 'No traefik router, no DNS, no probe. The container still runs and still deploys.'
                     : stage === 'lab'
                       ? 'LAN only: HTTPS through traefik with the wildcard certificate, resolved by pi-hole.'
                       : 'Also published through the Cloudflare tunnel, with a public CNAME. Anyone on the internet can reach it.'}
                 </p>
-                <Field
+                <WizardField
                   label="Hostname"
                   value={hostname}
                   placeholder={`${name}.${BASE_DOMAIN}`}
@@ -505,7 +552,7 @@ function Wizard({ options }: { options: Options }) {
                   }
                   onChange={setHostname}
                 />
-                <Field
+                <WizardField
                   label="Image override"
                   value={image}
                   placeholder={defaultImage(name)}
@@ -516,14 +563,16 @@ function Wizard({ options }: { options: Options }) {
             </BoardGrid>
           </section>
 
-          <section className="wizard-step">
+          <section className={WIZARD_STEP}>
             {plan === null ? (
               <>
-                <h2 className="section-head">
+                <h2 className={SECTION_HEAD}>
                   3. Readiness
-                  <small>can this repo publish an image?</small>
+                  <small className={SECTION_HEAD_SMALL}>can this repo publish an image?</small>
                 </h2>
-                <p className="banner banner-muted">Checking the repository…</p>
+                <Alert className={MUTED_BANNER}>
+                  <AlertDescription>Checking the repository…</AlertDescription>
+                </Alert>
               </>
             ) : (
               <ReadinessPanel
@@ -535,18 +584,17 @@ function Wizard({ options }: { options: Options }) {
               />
             )}
 
-            {error !== null && <p className="banner">{error}</p>}
+            {error !== null && (
+              <Alert variant="warning" className={WARN_BANNER}>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-            <div className="wizard-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!canCreate}
-                onClick={create}
-              >
+            <div className="flex flex-wrap items-center gap-4">
+              <Button type="button" size="sm" disabled={!canCreate} onClick={create}>
                 {busy ? 'Creating…' : 'Create entry'}
-              </button>
-              <p className="footnote">
+              </Button>
+              <p className="m-0 max-w-[46rem] text-[0.8rem] text-(--dim)">
                 {imageMissing
                   ? 'Blocked until the image exists. Run CI above; a one-shot runner is started for the repo, since it has no runner of its own until it is an app. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
                   : 'Writes the registry row. Nothing is built, routed or started until you Apply, which commits stacks/apps/apps.json and rebuilds.'}
@@ -566,7 +614,7 @@ function Wizard({ options }: { options: Options }) {
  * it edits a record that already exists, and every keystroke here belongs to a
  * form that has not been submitted yet.
  */
-function Field({
+function WizardField({
   label,
   value,
   placeholder,
@@ -583,12 +631,20 @@ function Field({
   validate?: (v: string) => string | null
   onChange: (v: string) => void
 }) {
+  const id = useId()
   const error = validate ? validate(value) : null
   return (
-    <label className={error === null ? 'field' : 'field field-bad'}>
-      <span>{label}</span>
-      <input
+    // `has-[:disabled]:opacity-100`: the Name row is disabled by design — the
+    // repo decides it — and dimming its label would say "locked" about the one
+    // field the reader most needs to read. The input dims itself.
+    <Field className="gap-[0.3rem] py-2 has-[:disabled]:opacity-100">
+      <FieldLabel htmlFor={id} className="text-[0.76rem] font-normal text-(--dim)">
+        {label}
+      </FieldLabel>
+      <Input
+        id={id}
         type="text"
+        className="h-auto rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.45rem] md:text-[0.87rem] dark:bg-(--panel-2)"
         value={value}
         placeholder={placeholder}
         disabled={disabled}
@@ -598,10 +654,12 @@ function Field({
         }}
       />
       {error !== null ? (
-        <small className="field-error">{error}</small>
+        <FieldError className="text-[0.76rem] leading-[1.45]">{error}</FieldError>
       ) : (
-        hint !== undefined && <small className="field-hint">{hint}</small>
+        hint !== undefined && (
+          <FieldDescription className="text-[0.76rem] leading-[1.45]">{hint}</FieldDescription>
+        )
       )}
-    </label>
+    </Field>
   )
 }

@@ -3,9 +3,10 @@ import type { DeployStatus } from '../../lib/deploy'
 import { DASH, since } from '../../lib/format'
 import { type AppTabData, fetchDeployStatus, triggerDeploy } from '../../server/registry'
 import { usePolledStatus } from '../status'
+import { Button } from '../ui/button'
 import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
 import { CloneButton } from '../workspace'
-import type { AppRecord, LoaderData } from './shared'
+import { type AppRecord, GHOST_BTN, type LoaderData, STRIP_FOOT, VIZ_EMPTY } from './shared'
 
 /**
  * An image reference short enough to sit in a value column.
@@ -122,7 +123,7 @@ export function Overview({
         />
       </StatStrip>
 
-      <p className="strip-foot">
+      <p className={STRIP_FOOT}>
         CPU and memory come from cgroup v2 at 60-second resolution. Memory is{' '}
         <code>memory.current</code>, which counts page cache, so an app doing file I/O sits at its
         limit and is fine. The signal that a cap is too tight is the OOM counter moving.
@@ -144,17 +145,32 @@ export function Overview({
               live: it ages with the deploy, which is the point. */}
           {deployShot !== null && (
             <a
-              className="deploy-shot"
+              // A fixed 16:10 frame at the board's width — the same shape the
+              // capture uses (shot-deploy passes --viewport 1280x800), so a
+              // fresh shot fits exactly and an older, taller one crops from
+              // the top rather than squashing.
+              className="relative mb-[0.6rem] block aspect-16/10 overflow-hidden rounded-lg border bg-(--panel-2)"
               href={`/api/deploy-shot/${app.name}?v=${deployShot.v}`}
               target="_blank"
               rel="noreferrer"
               title={
-                (deployShot.ok ? 'Taken right after the last deploy' : 'The page ERRORED under the camera right after the last deploy') +
+                (deployShot.ok
+                  ? 'Taken right after the last deploy'
+                  : 'The page ERRORED under the camera right after the last deploy') +
                 (deployShot.at === null ? '' : ` — ${since((Date.now() - deployShot.at) / 1000)}`)
               }
             >
-              <img src={`/api/deploy-shot/${app.name}?v=${deployShot.v}`} alt={`${app.name} right after its last deploy`} loading="lazy" />
-              {!deployShot.ok && <span className="deploy-shot-flag">page errored</span>}
+              <img
+                className="block size-full object-cover object-top"
+                src={`/api/deploy-shot/${app.name}?v=${deployShot.v}`}
+                alt={`${app.name} right after its last deploy`}
+                loading="lazy"
+              />
+              {!deployShot.ok && (
+                <span className="absolute top-2 right-2 rounded-full bg-danger px-[0.45rem] py-[0.1rem] text-[0.7rem] text-foreground">
+                  page errored
+                </span>
+              )}
             </a>
           )}
           <Facts
@@ -185,7 +201,9 @@ export function Overview({
                     {
                       k: 'last deploy',
                       v: (
-                        <span className={lastDeploy.result === 'ok' ? 'ok-text' : 'bad-text'}>
+                        <span
+                          className={lastDeploy.result === 'ok' ? 'text-success' : 'text-danger'}
+                        >
                           {lastDeploy.result}
                         </span>
                       ),
@@ -196,7 +214,7 @@ export function Overview({
                 ? [
                     {
                       k: 'pulls',
-                      v: <span className="bad-text">failing, check the registry</span>,
+                      v: <span className="text-danger">failing, check the registry</span>,
                     },
                   ]
                 : []),
@@ -247,7 +265,7 @@ export function Overview({
                 {
                   k: 'tree',
                   v: workspace.dirty ? (
-                    <span className="warn-text">uncommitted changes</span>
+                    <span className="text-warning">uncommitted changes</span>
                   ) : (
                     'clean'
                   ),
@@ -270,7 +288,7 @@ export function Overview({
                   k: 'last sync',
                   v: workspace.sync ? (
                     <span
-                      className={workspace.sync.result === 'failed' ? 'bad-text' : undefined}
+                      className={workspace.sync.result === 'failed' ? 'text-danger' : undefined}
                       title={workspace.sync.detail || undefined}
                     >
                       {workspace.sync.result} ·{' '}
@@ -283,7 +301,7 @@ export function Overview({
               ]}
             />
           ) : (
-            <p className="viz-empty">
+            <p className={VIZ_EMPTY}>
               Not cloned on this box.{' '}
               <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
                 {repo}
@@ -295,11 +313,16 @@ export function Overview({
 
         {notes.length > 0 && (
           <Board title="Why it is configured this way" icon="✎" span={12}>
-            <dl className="notes">
+            {/* Columns rather than one stack: these are several short
+                rationales, not one long document, and full-width paragraphs in
+                a 12-span board leave most of the row empty. */}
+            <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] gap-x-[1.8rem] gap-y-[0.9rem]">
               {notes.map(([k, v]) => (
-                <div key={k}>
-                  <dt>{k}</dt>
-                  <dd>{v}</dd>
+                <div key={k} className="min-w-0">
+                  <dt className="text-[0.66rem] font-semibold tracking-[0.13em] text-(--dim) uppercase">
+                    {k}
+                  </dt>
+                  <dd className="mt-1 mr-0 mb-0 ml-0 text-[0.88rem] text-(--text-muted)">{v}</dd>
                 </div>
               ))}
             </dl>
@@ -326,22 +349,24 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
   })
 
   return (
-    <span className="redeploy">
+    <span className="inline-flex items-center gap-[0.6rem] text-[0.76rem]">
       {status.state === 'failed' && status.app === name && (
-        <span className="bad-text" title={status.error}>
+        <span className="text-danger" title={status.error}>
           last attempt failed
         </span>
       )}
-      <button
+      <Button
         type="button"
-        className="btn btn-ghost"
+        variant="outline"
+        size="sm"
+        className={GHOST_BTN}
         disabled={running}
         onClick={() => {
           start(async () => (await triggerDeploy({ data: name })).id)
         }}
       >
         {running ? '↻ deploying…' : '↻ Redeploy'}
-      </button>
+      </Button>
     </span>
   )
 }

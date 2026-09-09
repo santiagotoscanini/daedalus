@@ -1,11 +1,15 @@
 import { useRouter } from '@tanstack/react-router'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 import { BASE_DOMAIN, hostnameError } from '../../lib/hostname'
 import { defaultImage } from '../../lib/site'
 import { deleteAppFn } from '../../server/registry'
-import { Segmented, Slider, Toggle } from '../ui'
+import { Segmented, Slider, Toggle } from '../controls'
+import { Alert, AlertDescription } from '../ui/alert'
+import { Button } from '../ui/button'
+import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
+import { Input } from '../ui/input'
 import { Board, BoardGrid, Facts } from '../viz'
-import type { AppRecord, LoaderData } from './shared'
+import { type AppRecord, BOARD_FOOT, type LoaderData } from './shared'
 
 export function Settings({
   app,
@@ -65,12 +69,12 @@ export function Settings({
               v: app.operatorSecrets ? (
                 <code>{app.name}-env.sops</code>
               ) : (
-                <span className="muted">none</span>
+                <span className="text-(--text-muted)">none</span>
               ),
             },
           ]}
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Secrets have no switch because the file is the switch: a tracked{' '}
           <code>stacks/apps/{app.name}-env.sops</code> is loaded into the container, and nothing
           else decides it. Author it with <code>sops</code>, <code>git add</code> it, and the next
@@ -96,7 +100,7 @@ export function Settings({
           }}
         />
         <Facts list rows={[{ k: 'published at', v: <code>{app.effectiveHostname}</code> }]} />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Renaming moves the traefik router, the pi-hole record, the gatus probe, the Cloudflare
           route and <code>AUTH_URL</code>. The container, the database, the sops file and the GitHub
           repo stay keyed by <code>{app.name}</code>. An SSO app cannot complete a login for the
@@ -188,7 +192,7 @@ export function Settings({
             patch({ limitPids: v })
           }}
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           Enforced by cgroup v2, and only because systemd delegates <code>cpu io memory pids</code>{' '}
           down to <code>user@1000.service</code>. Without that, podman would accept the flags and
           the kernel would ignore them. CPU throttles rather than kills. Memory is the resident cap:
@@ -225,7 +229,7 @@ export function Settings({
             { value: 'native', label: 'App is the client', icon: '⚿' },
           ]}
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           {app.authMode === 'none'
             ? 'No SSO. Whatever login the app ships is the only one — for an app with its own accounts that means its own password form.'
             : app.authMode === 'proxy'
@@ -256,7 +260,7 @@ export function Settings({
             },
           ]}
         />
-        <p className="board-foot">
+        <p className={BOARD_FOOT}>
           The client is declared, not clicked: this materializes{' '}
           <code>fleet.ssoClients.{app.name}</code>, and a oneshot creates it at the IdP on the next
           Apply. Its secret is generated on the box the first time the client is declared, so there
@@ -295,6 +299,7 @@ function RemovePanel({
   storage: boolean
 }) {
   const router = useRouter()
+  const confirmId = useId()
   const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -312,13 +317,17 @@ function RemovePanel({
 
   return (
     <Board title="Remove" icon="⌫" span={12}>
-      <div className="danger">
-        <div className="danger-text">
+      {/* The explanation and the control side by side rather than stacked: what
+          is NOT removed is the part worth reading, and it has to be in view at
+          the moment the name is being typed rather than scrolled past to reach
+          the box. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(15rem,20rem)] items-start gap-6 max-[50rem]:grid-cols-[minmax(0,1fr)]">
+        <div className="[&>p]:mt-0 [&>p]:mr-0 [&>p]:mb-2 [&>p]:ml-0 [&>p]:text-[0.85rem] [&>p]:leading-[1.55] [&>p]:text-(--text-muted)">
           <p>
             Deletes the registry entry. The next Apply removes the container, the traefik router,
             the pi-hole record, the gatus probe, the Cloudflare route and this app’s CI runner.
           </p>
-          <p className="board-foot">
+          <p className="mb-0 text-[0.73rem] leading-[1.45] text-(--dim)">
             <b>Not removed:</b>{' '}
             {[
               postgres && `the ${name} database and role on the shared cluster`,
@@ -332,26 +341,38 @@ function RemovePanel({
             . Those are data, and removing them is a separate, deliberate act.
           </p>
         </div>
-        <div className="danger-act">
-          <label className="field">
-            <span>Type “{name}” to confirm</span>
-            <input
+        <div className="flex flex-col items-stretch gap-[0.6rem]">
+          <Field className="gap-[0.3rem] p-0 has-[:disabled]:opacity-100">
+            <FieldLabel htmlFor={confirmId} className="text-[0.76rem] font-normal text-(--dim)">
+              Type “{name}” to confirm
+            </FieldLabel>
+            <Input
+              id={confirmId}
               type="text"
+              className="h-auto rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.45rem] md:text-[0.87rem] dark:bg-(--panel-2)"
               value={confirm}
               onChange={(e) => {
                 setConfirm(e.target.value)
               }}
             />
-          </label>
-          {error !== null && <p className="banner">{error}</p>}
-          <button
+          </Field>
+          {error !== null && (
+            <Alert variant="warning" className="mb-[1.35rem] text-foreground">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {/* Destructive, and coloured like it — but only on hover, so the
+              panel does not read as an alarm just for existing. */}
+          <Button
             type="button"
-            className="btn btn-danger"
+            variant="outline"
+            size="sm"
+            className="border-danger/50 bg-transparent text-[0.84rem] text-danger hover:bg-danger/12 hover:text-danger dark:bg-transparent"
             disabled={confirm !== name || busy}
             onClick={remove}
           >
             {busy ? 'Removing…' : 'Remove from registry'}
-          </button>
+          </Button>
         </div>
       </div>
     </Board>
@@ -377,14 +398,21 @@ function TextField({
   validate?: (v: string) => string | null
   onSave: (v: string) => void
 }) {
+  const id = useId()
   const [draft, setDraft] = useState(value)
   const error = validate ? validate(draft) : null
 
   return (
-    <label className={error === null ? 'field' : 'field field-bad'}>
-      <span>{label}</span>
-      <input
+    // `has-[:disabled]:opacity-100`: a disabled row dims its INPUT, not its
+    // label — the label is what says which field is locked.
+    <Field className="gap-[0.3rem] py-2 has-[:disabled]:opacity-100">
+      <FieldLabel htmlFor={id} className="text-[0.76rem] font-normal text-(--dim)">
+        {label}
+      </FieldLabel>
+      <Input
+        id={id}
         type="text"
+        className="h-auto rounded-[8px] bg-(--panel-2) px-[0.65rem] py-[0.45rem] md:text-[0.87rem] dark:bg-(--panel-2)"
         value={draft}
         placeholder={placeholder}
         disabled={disabled}
@@ -405,10 +433,12 @@ function TextField({
         }}
       />
       {error !== null ? (
-        <small className="field-error">{error}</small>
+        <FieldError className="text-[0.76rem] leading-[1.45]">{error}</FieldError>
       ) : (
-        hint !== undefined && <small className="field-hint">{hint}</small>
+        hint !== undefined && (
+          <FieldDescription className="text-[0.76rem] leading-[1.45]">{hint}</FieldDescription>
+        )
       )}
-    </label>
+    </Field>
   )
 }

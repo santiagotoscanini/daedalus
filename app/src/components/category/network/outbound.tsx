@@ -1,13 +1,14 @@
 import { useState } from 'react'
+import { cn } from '../../../lib/cn'
 import type { NetworkData } from '../../../lib/dashboard/categories/network'
 import { DASH, flag, pct, until } from '../../../lib/format'
+import { Segmented } from '../../controls'
 import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { LinkRow, ServiceHead } from '../../service-head'
-import { Segmented } from '../../ui'
 import type { Tone } from '../../viz'
 import { Board, BoardGrid, Chip, Columns, Facts, Measures, Pulse } from '../../viz'
-import { tone } from './shared'
+import { AXIS, EMPTY, FOOT, LIVE, MAIN, MONO, NOTE, ROW, ROWS, SWITCH_BAR, tone } from './shared'
 
 // ── Going out: the egress tunnels ──────────────────────────────────────────
 
@@ -30,7 +31,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
     return (
       <BoardGrid>
         <Board title="Going out" icon="⇤" span={12}>
-          <p className="viz-empty">{data.note ?? 'no VPN egress declared'}</p>
+          <p className={EMPTY}>{data.note ?? 'no VPN egress declared'}</p>
         </Board>
       </BoardGrid>
     )
@@ -100,17 +101,17 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
               : `gluetun · ${String(data.gluetun.behind.length)} commits behind`
           }
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {data.gluetun.running === null ? (
                 'build unknown'
               ) : (
-                <span className="mono">{data.gluetun.running}</span>
+                <span className={MONO}>{data.gluetun.running}</span>
               )}
               {data.gluetun.builtOn !== null && ` · built ${data.gluetun.builtOn}`}
             </span>
           }
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               {/* Why this is not the release-notes panel every other service
                   gets — a correctness point, not a shortcut. */}
               Commits, not releases, and deliberately: this image is a digest-pinned{' '}
@@ -128,9 +129,9 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           gap={data.exporter}
           span={6}
           title="gluetun-exporter"
-          aside={<span className="board-note">version unknowable</span>}
+          aside={<span className={NOTE}>version unknowable</span>}
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               What has been <b>published</b>. Which of it is running cannot be said: the image is a
               digest-pinned <code>:latest</code> and the exporter prints no version in its log,
               serves none on <code>/metrics</code>, and has no endpoint that would answer. So this
@@ -146,11 +147,11 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           one thing here that genuinely differs between them. The switch sits
           on the boundary rather than in the header, so it is visibly the thing
           that governs what follows it and not what precedes it. */}
-      <div className="tunnel-bar">
+      <div className={SWITCH_BAR}>
         {/* What the switch cannot say, and only that: where the selected
             tunnel comes out. Its name and its health are on the button. */}
-        <span className="tunnel-id">
-          <span className="mono">{t.exit.ip ?? DASH}</span>
+        <span className="inline-flex min-w-0 items-baseline gap-[0.55rem] text-[0.86rem] text-(--text-muted)">
+          <span className={cn(MONO, 'text-[0.78rem] text-(--dim)')}>{t.exit.ip ?? DASH}</span>
           <span>{flag(t.exit.country)}</span>
           {t.portForwarding && t.port !== null && <span>port {t.port}</span>}
         </span>
@@ -175,7 +176,7 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           icon="⛨"
           span={8}
           aside={
-            <span className="board-live">
+            <span className={LIVE}>
               <Pulse on={t.up === true} tone={t.up === true ? 'ok' : 'bad'} />
               {t.up === null ? 'unknown' : t.up ? 'tunnel up' : 'tunnel down'}
             </span>
@@ -207,14 +208,14 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
             empty="no history yet"
           />
           {t.daily.length > 0 && (
-            <p className="colaxis">
+            <p className={AXIS}>
               <span>{t.daily[0]?.date.slice(5)}</span>
               <span>share of the day connected</span>
               <span>{t.daily[t.daily.length - 1]?.date.slice(5)}</span>
             </p>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             {/* A near-full column is the normal state, so the axis starting at
                 zero is the honest choice AND the useless one — the flag is what
                 carries a bad day. */}
@@ -230,19 +231,19 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           title="What rides it"
           icon="panels"
           span={4}
-          aside={<span className="board-note">{t.tenants.length} containers</span>}
+          aside={<span className={NOTE}>{t.tenants.length} containers</span>}
         >
-          <ul className="itemlist">
+          <ul className={ROWS}>
             {t.tenants.map((c) => (
-              <li key={c.name}>
+              <li key={c.name} className={ROW}>
                 <Chip tone={c.up === null ? 'muted' : c.up ? 'ok' : 'bad'}>
                   {c.up === null ? '?' : c.up ? 'up' : 'down'}
                 </Chip>
-                <span className="item-main mono">{c.name}</span>
+                <span className={cn(MAIN, MONO)}>{c.name}</span>
               </li>
             ))}
           </ul>
-          <p className="board-foot">
+          <p className={FOOT}>
             Read from each container’s own <code>--network=container:{t.container}</code>, so this
             is the set that actually shares the namespace rather than a list kept beside it. They
             publish no ports of their own — only a namespace’s owner can — which is why every one of
@@ -255,7 +256,9 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
           icon="◍"
           span={12}
           aside={
-            <span className="board-brand">
+            // A provider's mark beside the title — the network a tunnel comes
+            // out on is a brand, and the logo says it faster than the word.
+            <span className="inline-flex items-center gap-[0.35rem] text-[0.72rem] text-(--dim) [&_img]:block [&_img]:rounded-[3px]">
               <img src="/icon-protonvpn.svg" alt="" width={16} height={16} />
               {t.provider}
             </span>
@@ -266,12 +269,12 @@ export function OutboundView({ data }: { data: Extract<NetworkData, { tab: 'outb
               // `flag` already emits the country name beside the emoji.
               { k: 'Country', v: flag(t.exit.country) },
               { k: 'City', v: place(t.exit.city, t.exit.region) },
-              { k: 'Address', v: <span className="mono">{t.exit.ip ?? DASH}</span> },
+              { k: 'Address', v: <span className={MONO}>{t.exit.ip ?? DASH}</span> },
               { k: 'Carrier', v: t.exit.org ?? DASH },
               { k: 'Timezone', v: t.exit.timezone ?? DASH },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Asked of gluetun’s control API, which asks the provider. Nothing on this box can answer
             it: the container only ever sees a private tunnel address and the exit is only knowable
             from outside. The carrier is what an observer on the far side attributes this traffic

@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
@@ -58,6 +59,18 @@ function keepServingOnRejection(): Plugin {
 export default defineConfig({
   resolve: { tsconfigPaths: true },
 
+  ssr: {
+    // lucide-react publishes no `exports` map — just `main` (CJS) and
+    // `module` (ESM). Left external, the SSR runner resolves `main` and gets
+    // a CJS build that `require`s its own copy of React, while the browser
+    // loads the ESM one. Two React instances in one tree, and every page
+    // importing an icon dies on hydration with "Invalid hook call" —
+    // server-rendered HTML that looks perfect over a page that never becomes
+    // interactive. Bundling it for SSR is what makes both sides share the
+    // one React.
+    noExternal: ['lucide-react'],
+  },
+
   server: {
     // The container has no host port; traefik dials app-daedalus:3000 over the
     // private iso-daedalus-net bridge, so Vite must listen on all interfaces.
@@ -92,7 +105,8 @@ export default defineConfig({
     },
   },
 
-  // Plugin order matters: Start must run before the React plugin. The guard
-  // transforms nothing, so it is free to sit first.
-  plugins: [keepServingOnRejection(), tanstackStart(), viteReact()],
+  // Plugin order: Start must run before React. Tailwind is a CSS transform
+  // with no opinion about the others, and the guard transforms nothing, so
+  // both are free to sit first.
+  plugins: [keepServingOnRejection(), tailwindcss(), tanstackStart(), viteReact()],
 })

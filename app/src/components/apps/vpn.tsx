@@ -1,7 +1,7 @@
 import { DASH } from '../../lib/format'
 import type { AppTabData } from '../../server/registry'
 import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
-import type { AppRecord } from './shared'
+import { type AppRecord, BOARD_FOOT, LEDE, STRIP_FOOT } from './shared'
 
 /**
  * The VPN this app's traffic exits through.
@@ -21,7 +21,7 @@ export function Vpn({
 }) {
   if (app.egressContainer === null) {
     return (
-      <p className="lede">
+      <p className={LEDE}>
         This app’s traffic leaves the house directly. Egress is set in Nix rather than here: it
         pairs a gluetun container with a host port, and both move together.
       </p>
@@ -58,7 +58,7 @@ export function Vpn({
               { k: 'scrape job', v: <code>{app.egressContainer}</code> },
             ]}
           />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             The app runs with <code>--network=container:{app.egressContainer}</code>, so it has no
             interfaces of its own. Only the namespace owner may publish a port, which is why the
             app’s host port is declared on gluetun.
@@ -74,14 +74,14 @@ export function Vpn({
               { k: 'DNS', v: 'resolved inside the namespace' },
             ]}
           />
-          <p className="board-foot">
+          <p className={BOARD_FOOT}>
             If the tunnel drops, the app loses the network rather than falling back to the house
             connection. That is the point of borrowing the namespace instead of routing.
           </p>
         </Board>
       </BoardGrid>
 
-      <p className="strip-foot">
+      <p className={STRIP_FOOT}>
         Read from the gluetun exporter’s prometheus job rather than from gluetun’s control API, so
         it works the same for every instance and needs no per-app port table.
       </p>

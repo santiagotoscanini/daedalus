@@ -1,11 +1,37 @@
 import { useState } from 'react'
+import { cn } from '../../../lib/cn'
 import type { MediaData } from '../../../lib/dashboard/categories/media'
 import { bytes, DASH, num } from '../../../lib/format'
 import { LogBoard, type LogNeighbour } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../../service-head'
 import { Board, BoardGrid, Chip, Facts, Measures, Progress, RankRow } from '../../viz'
-import { ago, HealthChecks, inDays, ServiceBar, tone, VERSION_SNAPSHOT } from './shared'
+import {
+  ago,
+  CHECK_ROW,
+  EMPTY,
+  FEED,
+  FEED_EVENT,
+  FEED_ROW,
+  FEED_TITLE,
+  FEED_WHEN,
+  FOOT,
+  HealthChecks,
+  inDays,
+  LIST,
+  MONO,
+  NOTE,
+  PROV,
+  PROVS,
+  ServiceBar,
+  TRANSFER_HEAD,
+  TRANSFER_META,
+  TRANSFER_NAME,
+  TRANSFER_ROW,
+  TRANSFERS,
+  tone,
+  VERSION_SNAPSHOT,
+} from './shared'
 
 /* ── Wanted: Seerr, Sonarr, Radarr, Recyclarr, Bazarr ─────────────────── */
 
@@ -23,6 +49,37 @@ const WANTED_NEIGHBOURS: readonly LogNeighbour[] = [
     note: 'Polls Sonarr, Radarr, Prowlarr and Bazarr on a timer and republishes what they say as prometheus metrics. Nothing on this tab reads it; every number here comes from the *arrs directly. The dashboards on the Monitoring page do, so a flat line there starts here. Expect periodic “scrape failed” and “No data found” errors: those four are dialled at a rootless-published host port, where a new connection occasionally hangs ~10.5s, and scraparr gives up at a hardcoded 10 with no retry. The scrape after it succeeds and the previous value is kept, so the metrics stay correct, but scraparr_services_up dips while it happens.',
   },
 ]
+
+/* Status first, because it is the column that decides whether the row needs
+   you. The title takes the slack; requester and age are fixed so the eye can
+   run down them. Below 34rem the five stack. */
+const REQS = `${LIST} gap-[0.2rem]`
+const REQ =
+  'grid grid-cols-[5.6rem_minmax(0,1fr)_3.6rem_6rem_5rem] items-center gap-[0.6rem] py-[0.22rem] text-[0.82rem] max-[34rem]:grid-cols-[minmax(0,1fr)] max-[34rem]:gap-[0.15rem]'
+const REQ_SIDE = 'text-[0.75rem] text-muted-foreground'
+const REQ_WHEN = `${REQ_SIDE} text-right max-[34rem]:text-left`
+
+/* What is coming: a title with its episode under it, and a date on the right.
+   The date is brand-coloured because it is the reading; one already on disk
+   goes grey, since there is nothing left to wait for. */
+const UPNEXT = `${LIST} gap-[0.3rem]`
+const UPNEXT_ROW = 'flex items-baseline justify-between gap-[0.7rem] text-[0.82rem]'
+const UPNEXT_TITLE = 'min-w-0 truncate'
+const UPNEXT_SUB = 'block truncate text-[0.72rem] text-muted-foreground not-italic'
+const UPNEXT_WHEN = 'whitespace-nowrap text-[0.75rem]'
+
+/* Only failures are coloured in the feed; a tone per event, as literal strings
+   so the scanner sees them. */
+const EVENT_INK: Record<Wanted['sonarr']['history'][number]['tone'], string> = {
+  ok: 'text-success',
+  warn: 'text-warning',
+  bad: 'text-danger',
+  muted: '',
+}
+
+/** A heading inside a board's body. */
+const SUB =
+  'mx-0 mt-[0.35rem] -mb-[0.2rem] text-[0.73rem] font-[550] tracking-normal text-muted-foreground'
 
 type Wanted = Extract<MediaData, { tab: 'wanted' }>
 
@@ -93,24 +150,24 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
           title="Recent requests"
           icon="✧"
           span={8}
-          aside={<span className="board-note">{num(counts.total)} all time</span>}
+          aside={<span className={NOTE}>{num(counts.total)} all time</span>}
         >
           {d.requests.length === 0 ? (
-            <p className="viz-empty">Nothing has been requested.</p>
+            <p className={EMPTY}>Nothing has been requested.</p>
           ) : (
-            <ul className="reqs">
+            <ul className={REQS}>
               {d.requests.map((r, i) => (
-                <li key={`${r.title}-${String(i)}`} className="req">
+                <li key={`${r.title}-${String(i)}`} className={REQ}>
                   <Chip tone={r.tone}>{r.status}</Chip>
-                  <span className="req-title">{r.title}</span>
-                  <span className="req-kind">{r.kind === 'tv' ? 'series' : 'film'}</span>
-                  <span className="req-by">{r.by}</span>
-                  <span className="req-when">{ago(r.ageDays)}</span>
+                  <span className="truncate">{r.title}</span>
+                  <span className={REQ_SIDE}>{r.kind === 'tv' ? 'series' : 'film'}</span>
+                  <span className={REQ_SIDE}>{r.by}</span>
+                  <span className={REQ_WHEN}>{ago(r.ageDays)}</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Titles are looked up per request: a request record carries a TMDB id and nothing else,
             so Seerr resolves the name the same way its own interface does.
           </p>
@@ -130,7 +187,7 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
               { k: 'Declined', v: num(counts.declined) },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             Pending is the only one that needs a person: everything else is either the machinery
             working or a decision already taken.
           </p>
@@ -138,9 +195,9 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
 
         <Board title="Who asks" icon="◍" span={4}>
           {d.people.length === 0 ? (
-            <p className="viz-empty">no requests yet</p>
+            <p className={EMPTY}>no requests yet</p>
           ) : (
-            <ul className="ranks">
+            <ul className={`${LIST} gap-[0.1rem]`}>
               {d.people.map((p) => (
                 <RankRow
                   key={p.name}
@@ -159,9 +216,9 @@ function SeerrPage({ d }: { d: Wanted['seerr'] }) {
           span={8}
           aside={
             d.selfBehind !== null && d.selfBehind > 0 ? (
-              <span className="board-note">{num(d.selfBehind)} commits behind, it says</span>
+              <span className={NOTE}>{num(d.selfBehind)} commits behind, it says</span>
             ) : (
-              <span className="board-note">github</span>
+              <span className={NOTE}>github</span>
             )
           }
         />
@@ -223,7 +280,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
           title="What it says is wrong"
           icon="warn"
           span={8}
-          aside={<span className="board-note">its own health checks</span>}
+          aside={<span className={NOTE}>its own health checks</span>}
         >
           <HealthChecks checks={d.health} reachable={reachable} />
         </Board>
@@ -240,14 +297,14 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
                   (counts.wanted ?? 0) === 0 ? (
                     num(counts.wanted)
                   ) : (
-                    <span className="text-warn">{num(counts.wanted)}</span>
+                    <span className="text-warning">{num(counts.wanted)}</span>
                   ),
               },
             ]}
           />
           {d.disk.map((disk) => (
             <div key={disk.path}>
-              <h4 className="board-sub">{disk.path}</h4>
+              <h4 className={SUB}>{disk.path}</h4>
               <Progress
                 pct={
                   disk.totalBytes > 0
@@ -256,7 +313,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
                 }
                 tone="info"
               />
-              <p className="board-foot">
+              <p className={FOOT}>
                 {bytes(disk.freeBytes)} free of {bytes(disk.totalBytes)}
               </p>
             </div>
@@ -268,26 +325,26 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
           icon="down"
           span={8}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {num(counts.queued)} item{counts.queued === 1 ? '' : 's'}
             </span>
           }
         >
           {d.queue.length === 0 ? (
-            <p className="viz-empty">
+            <p className={EMPTY}>
               Nothing in the queue. Completed downloads are removed once imported.
             </p>
           ) : (
-            <ul className="transfers">
+            <ul className={TRANSFERS}>
               {d.queue.map((q, i) => (
-                <li key={`${q.title}-${String(i)}`} className="transfers-row">
-                  <div className="transfers-head">
-                    <span className="transfers-name" title={q.title}>
+                <li key={`${q.title}-${String(i)}`} className={TRANSFER_ROW}>
+                  <div className={TRANSFER_HEAD}>
+                    <span className={TRANSFER_NAME} title={q.title}>
                       {q.title}
                     </span>
-                    <span className="transfers-meta">
+                    <span className={TRANSFER_META}>
                       {q.pct.toFixed(0)}% of {bytes(q.sizeBytes)}
-                      {q.issue !== null && <span className="bad-text"> · {q.issue}</span>}
+                      {q.issue !== null && <span className="text-danger"> · {q.issue}</span>}
                     </span>
                   </div>
                   <Progress
@@ -299,7 +356,7 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             An item stuck at 100% with a note against it is the failure this panel exists for: the
             download finished and the import did not, so nothing is moving and nothing is wrong
             anywhere else.
@@ -308,16 +365,18 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
 
         <Board title={copy.upcoming} icon="clock" span={4}>
           {d.upcoming.length === 0 ? (
-            <p className="viz-empty">Nothing scheduled in the next fortnight.</p>
+            <p className={EMPTY}>Nothing scheduled in the next fortnight.</p>
           ) : (
-            <ul className="upnext">
+            <ul className={UPNEXT}>
               {d.upcoming.map((u, i) => (
-                <li key={`${u.title}-${String(i)}`} className="upnext-row">
-                  <span className="upnext-title" title={u.sub ?? u.title}>
+                <li key={`${u.title}-${String(i)}`} className={UPNEXT_ROW}>
+                  <span className={UPNEXT_TITLE} title={u.sub ?? u.title}>
                     {u.title}
-                    {u.sub !== null && <em>{u.sub}</em>}
+                    {u.sub !== null && <em className={UPNEXT_SUB}>{u.sub}</em>}
                   </span>
-                  <span className={u.have ? 'upnext-when is-muted' : 'upnext-when'}>
+                  <span
+                    className={cn(UPNEXT_WHEN, u.have ? 'text-muted-foreground' : 'text-primary')}
+                  >
                     {u.have ? 'have it' : inDays(u.inDays)}
                   </span>
                 </li>
@@ -328,23 +387,21 @@ function ArrPage({ d }: { d: Wanted['sonarr'] }) {
 
         <Board title="Lately" icon="≋" span={12}>
           {d.history.length === 0 ? (
-            <p className="viz-empty">no recorded activity</p>
+            <p className={EMPTY}>no recorded activity</p>
           ) : (
-            <ul className="feed">
+            <ul className={FEED}>
               {d.history.map((h, i) => (
-                <li key={`${h.title}-${String(i)}`} className="feed-row">
-                  <span className={h.tone === 'muted' ? 'feed-event' : `feed-event text-${h.tone}`}>
-                    {h.event}
-                  </span>
-                  <span className="feed-title" title={h.title}>
+                <li key={`${h.title}-${String(i)}`} className={FEED_ROW}>
+                  <span className={cn(FEED_EVENT, EVENT_INK[h.tone])}>{h.event}</span>
+                  <span className={FEED_TITLE} title={h.title}>
                     {h.title}
                   </span>
-                  <span className="feed-when">{ago(h.ageDays)}</span>
+                  <span className={FEED_WHEN}>{ago(h.ageDays)}</span>
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             Only failures are coloured. A grab and an import are the machine working, and colouring
             those would bury the two events that mean somebody has to look.
           </p>
@@ -402,26 +459,28 @@ function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
           span={8}
           aside={
             throttled.length === 0 ? (
-              <span className="board-note">all answering</span>
+              <span className={NOTE}>all answering</span>
             ) : (
-              <span className="board-note text-warn">{num(throttled.length)} throttled</span>
+              <span className={cn(NOTE, 'text-warning')}>{num(throttled.length)} throttled</span>
             )
           }
         >
           {d.providers.length === 0 ? (
-            <p className="viz-empty">could not read the provider list</p>
+            <p className={EMPTY}>could not read the provider list</p>
           ) : (
-            <ul className="provs">
+            <ul className={PROVS}>
               {d.providers.map((p) => (
-                <li key={p.name} className="prov">
+                <li key={p.name} className={PROV}>
                   <Chip tone={p.ok ? 'ok' : 'warn'}>{p.status}</Chip>
-                  <span className="prov-name mono">{p.name}</span>
-                  {p.retry !== '-' && <span className="prov-retry">retry {p.retry}</span>}
+                  <span className={MONO}>{p.name}</span>
+                  {p.retry !== '-' && (
+                    <span className="text-[0.72rem] text-warning">retry {p.retry}</span>
+                  )}
                 </li>
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             The panel that explains a subtitle which never arrives. A throttled provider answers
             nothing and reports no error, so &ldquo;none found&rdquo; and &ldquo;we are not
             currently allowed to ask&rdquo; look identical everywhere except here.
@@ -433,11 +492,11 @@ function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
             rows={[
               { k: 'Episodes', v: num(d.wanted.episodes) },
               { k: 'Movies', v: num(d.wanted.movies) },
-              { k: 'Sees Sonarr', v: <span className="mono">{d.linked.sonarr ?? DASH}</span> },
-              { k: 'Sees Radarr', v: <span className="mono">{d.linked.radarr ?? DASH}</span> },
+              { k: 'Sees Sonarr', v: <span className={MONO}>{d.linked.sonarr ?? DASH}</span> },
+              { k: 'Sees Radarr', v: <span className={MONO}>{d.linked.radarr ?? DASH}</span> },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             The two versions are Bazarr&rsquo;s own view of the *arrs it is wired to. It is a cheap
             cross-check that both connections are live, since a broken one reports zero missing
             rather than an error.
@@ -449,10 +508,10 @@ function BazarrPage({ d }: { d: Wanted['bazarr'] }) {
           span={12}
           aside={
             d.subgen === null ? (
-              <span className="board-note">github</span>
+              <span className={NOTE}>github</span>
             ) : (
-              <span className="board-note">
-                Subgen <span className="mono">{d.subgen}</span>
+              <span className={NOTE}>
+                Subgen <span className={MONO}>{d.subgen}</span>
               </span>
             )
           }
@@ -508,16 +567,18 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
           title="Last sync"
           icon="⟳"
           span={8}
-          aside={<span className="board-note">{recyclarr.lastRun?.day ?? DASH}</span>}
+          aside={<span className={NOTE}>{recyclarr.lastRun?.day ?? DASH}</span>}
         >
           {recyclarr.synced.length === 0 ? (
-            <p className="viz-empty">no sync recorded in the window</p>
+            <p className={EMPTY}>no sync recorded in the window</p>
           ) : (
-            <ul className="hchecks">
+            <ul className={`${LIST} gap-[0.3rem]`}>
               {recyclarr.synced.map((s) => (
-                <li key={s.instance} className="hcheck">
-                  <span className="hcheck-src">{s.instance}</span>
-                  <span className="hcheck-msg">
+                <li key={s.instance} className={CHECK_ROW}>
+                  <span className="text-[0.72rem] uppercase tracking-[0.04em] text-muted-foreground">
+                    {s.instance}
+                  </span>
+                  <span className="min-w-0 text-foreground">
                     {s.updated === 0 ? (
                       'nothing changed'
                     ) : (
@@ -532,7 +593,7 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
               ))}
             </ul>
           )}
-          <p className="board-foot">
+          <p className={FOOT}>
             The last run&rsquo;s numbers, not a total: a nightly job that changed two formats every
             night for a week did not change fourteen. Read out of its log, because Recyclarr has no
             API, no metrics and no interface.
@@ -549,7 +610,7 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
               },
             ]}
           />
-          <p className="board-foot">
+          <p className={FOOT}>
             It runs once a day and exits. There is no process to probe between runs, so the only
             evidence it is working is the line its cron wrapper writes when it finishes.
           </p>
@@ -560,14 +621,14 @@ function RecyclarrPage({ d }: { d: Wanted['recyclarr'] }) {
           span={12}
           aside={
             recyclarr.running.revision === null ? (
-              <span className="board-note">recyclarr/recyclarr</span>
+              <span className={NOTE}>recyclarr/recyclarr</span>
             ) : (
-              <span className="board-note mono">{recyclarr.running.revision}</span>
+              <span className={cn(NOTE, MONO)}>{recyclarr.running.revision}</span>
             )
           }
           foot={
-            <p className="board-foot">
-              Recyclarr is pinned to a bare major (<span className="mono">:8</span>), which is a
+            <p className={FOOT}>
+              Recyclarr is pinned to a bare major (<span className={MONO}>:8</span>), which is a
               channel rather than a version. It prints no banner, exposes no API and logs nothing
               about itself. This page used to say its version could not be established. It can: the
               image records it, along with the commit it was built from.

@@ -1,10 +1,12 @@
+import { cn } from '../../../lib/cn'
 import type { AiData } from '../../../lib/dashboard/categories/ai'
 import { num } from '../../../lib/format'
 import { LogBoard } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../service-head'
+import { Button } from '../../ui/button'
 import { Board, BoardGrid, Chip, Measures, Pulse } from '../../viz'
-import { comparePinned } from './shared'
+import { comparePinned, EMPTY, FOOT, ITEM, ITEM_MAIN, ITEM_SIDE, ITEMS, LIVE } from './shared'
 
 // ── Open WebUI ─────────────────────────────────────────────────────────────
 
@@ -45,14 +47,11 @@ export function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-web
           </>
         }
         actions={
-          <a
-            className="btn btn-primary"
-            href="https://chat.toscanini.me"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open the chat ↗
-          </a>
+          <Button asChild size="sm">
+            <a href="https://chat.toscanini.me" target="_blank" rel="noreferrer">
+              Open the chat ↗
+            </a>
+          </Button>
         }
       />
       <LinkRow
@@ -73,7 +72,7 @@ export function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-web
           icon="rows"
           span={6}
           aside={
-            <span className="board-live">
+            <span className={LIVE}>
               <Pulse on={busy} tone="accent" />
               {busy ? `${num(data.generating)} mid-answer` : 'idle'}
             </span>
@@ -88,16 +87,16 @@ export function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-web
           />
 
           {data.reach.length === 0 ? (
-            <p className="viz-empty">{data.note ?? 'nothing registered'}</p>
+            <p className={EMPTY}>{data.note ?? 'nothing registered'}</p>
           ) : (
-            <ul className="itemlist">
+            <ul className={ITEMS}>
               {data.reach.map((r) => (
-                <li key={`${r.kind}-${r.name}`}>
+                <li key={`${r.kind}-${r.name}`} className={ITEM}>
                   <Chip tone={r.kind === 'model' ? 'info' : r.kind === 'tool' ? 'accent' : 'muted'}>
                     {r.kind}
                   </Chip>
-                  <span className="item-main">{r.name}</span>
-                  <span className={r.flag ? 'item-side bad-text' : 'item-side'} title={r.detail}>
+                  <span className={ITEM_MAIN}>{r.name}</span>
+                  <span className={cn(ITEM_SIDE, r.flag && 'text-danger')} title={r.detail}>
                     {r.detail}
                   </span>
                 </li>
@@ -105,7 +104,7 @@ export function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-web
             </ul>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             Read back from the running instance, not from the config that was meant to produce it.
             That is the only way to catch the two ways these disappear quietly. An env-backed
             setting the database had already overridden leaves the models list short, and a virtual

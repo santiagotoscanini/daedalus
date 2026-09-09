@@ -1,5 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
+import { cn } from '../../../lib/cn'
 import type { AiData } from '../../../lib/dashboard/categories/ai'
 import { compact, DASH, num, pct } from '../../../lib/format'
 import { switchLemonadeModel, unloadLemonadeModel } from '../../../server/lemonade'
@@ -7,8 +8,9 @@ import { InfoHint } from '../../hint'
 import { LogBoard, type LogNeighbour } from '../../logs'
 import { Changelog } from '../../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
+import { Button } from '../../ui/button'
 import { Board, BoardGrid, Chip, Measures, Pulse } from '../../viz'
-import { comparePinned } from './shared'
+import { comparePinned, EMPTY, FOOT, MONO, NOTE } from './shared'
 
 // ── Lemonade ───────────────────────────────────────────────────────────────
 
@@ -32,9 +34,11 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
           </>
         }
         actions={
-          <a className="btn btn-primary" href={data.baseUrl} target="_blank" rel="noreferrer">
-            Open Lemonade ↗
-          </a>
+          <Button asChild size="sm">
+            <a href={data.baseUrl} target="_blank" rel="noreferrer">
+              Open Lemonade ↗
+            </a>
+          </Button>
         }
       />
       {/* The machine, as a strip rather than a panel. It was eight facts in a
@@ -63,7 +67,7 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
           icon="rows"
           span={6}
           aside={
-            <span className="board-note">
+            <span className={NOTE}>
               {installed} · {num(data.catalog.sizeGb, 1)} GB
             </span>
           }
@@ -72,11 +76,11 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
               of everything else: it is the one thing here that is mid-change
               and the one thing that will look wrong if unexplained. */}
           {data.downloads.length > 0 && (
-            <ul className="mdl-dl">
+            <ul className={DOWNLOADS}>
               {data.downloads.map((d) => (
-                <li key={d.model}>
+                <li key={d.model} className={DOWNLOAD}>
                   <span>{d.model}</span>
-                  <span className="mono">
+                  <span className={cn(MONO, 'ml-auto text-primary')}>
                     {d.status}
                     {d.percent === null ? '' : ` · ${num(d.percent)}%`}
                   </span>
@@ -86,7 +90,7 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
           )}
 
           {categories.length === 0 ? (
-            <p className="viz-empty">Lemonade did not answer</p>
+            <p className={EMPTY}>Lemonade did not answer</p>
           ) : (
             categories.map((c) => <ModelKind key={c.type} kind={c} />)
           )}
@@ -97,14 +101,19 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
               NUMBER, and it moves far more often than a Lemonade release does
               — it is the thing that changes how fast a model runs. */}
           {data.backends.length > 0 && (
-            <p className="mbuilds">
+            <p className={BUILDS}>
               {data.backends.map((b) => (
-                <span key={`${b.recipe}-${b.backend}`}>
+                <span key={`${b.recipe}-${b.backend}`} className="inline-flex gap-[0.35rem]">
                   {b.recipe}
                   {b.url === null ? (
-                    <span className="mono">{b.version}</span>
+                    <span className={cn(MONO, 'text-(--text-muted)')}>{b.version}</span>
                   ) : (
-                    <a className="mono" href={b.url} target="_blank" rel="noreferrer">
+                    <a
+                      className={cn(MONO, 'text-(--text-muted) no-underline hover:text-primary')}
+                      href={b.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       {b.version}
                     </a>
                   )}
@@ -113,7 +122,7 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
             </p>
           )}
 
-          <p className="board-foot">
+          <p className={FOOT}>
             Lemonade keeps one model of each kind in VRAM, so picking a different chat model means
             putting down the current one. <b>Switch</b> does both in order, because a pinned model
             is exempt from eviction and the incoming load is refused if the slot is not freed first.
@@ -132,7 +141,7 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
           source={{ stack: 'lemonade' }}
           title="Lemonade server logs"
           foot={
-            <p className="board-foot">
+            <p className={FOOT}>
               Lemonade’s own log, streamed off the gaming PC over its <code>/logs/stream</code>{' '}
               WebSocket and pushed to Loki by the bridge below. Timestamps are the ones Lemonade
               recorded, not the ones Loki received.
@@ -144,6 +153,70 @@ export function LemonadeView({ data }: { data: Extract<AiData, { tab: 'lemonade'
     </>
   )
 }
+
+/* ── the model widget ─────────────────────────────────────────────────── */
+
+/* Grouped by KIND, because the constraint is per kind: one model of each type
+   may be resident, so a category's installed models are competing answers to a
+   single question rather than a list. Styled as a sibling of the changelog's
+   release rows on purpose — the two half-width panels are both "a stack of
+   things you open", and looking alike is the point. */
+const KIND =
+  'border-b border-(--border-soft) last-of-type:border-b-0 [&[open]>summary]:before:rotate-90'
+const KIND_SUMMARY =
+  "flex min-w-0 cursor-pointer list-none items-baseline gap-[0.55rem] px-[0.15rem] py-[0.5rem] hover:bg-(--raise) [&::-webkit-details-marker]:hidden before:text-[0.7rem] before:text-(--dim) before:transition-transform before:duration-[0.12s] before:ease-[ease] before:content-['▸']"
+const KIND_TYPE = 'text-[0.68rem] font-semibold tracking-[0.11em] text-primary uppercase'
+const KIND_FREE =
+  'rounded-full border border-warning/40 px-[0.35rem] py-[0.02rem] text-[0.62rem] text-warning'
+/* The aggregate for the whole kind, so a collapsed row still says something.
+   Interpuncts between, generated rather than typed, so a missing figure does
+   not leave a dangling separator. */
+const KIND_AGG =
+  "ml-auto flex gap-[0.45rem] whitespace-nowrap text-[0.7rem] text-(--dim) tabular-nums [&>span+span]:before:mr-[0.45rem] [&>span+span]:before:text-border [&>span+span]:before:content-['·']"
+const KIND_BODY = 'pt-[0.1rem] pb-[0.7rem]'
+const KIND_EMPTY = 'm-0 text-[0.78rem] text-warning'
+
+/* Only present mid-download, so it is allowed to be loud. */
+const DOWNLOADS = 'm-0 mb-[0.6rem] flex list-none flex-col gap-[0.2rem] p-0'
+const DOWNLOAD =
+  'flex gap-[0.6rem] rounded-[6px] bg-[color-mix(in_srgb,var(--primary)_10%,var(--panel-2))] px-[0.45rem] py-[0.2rem] text-[0.74rem] text-(--text-muted)'
+
+/* The model in the slot. Given real weight — it is the answer to the
+   category's question, and everything below it is an alternative. Two literal
+   fills rather than an override, so the hot one cannot lose to the resting
+   one through class merging. */
+const HERO = 'group/hero rounded-[9px] px-[0.6rem] py-[0.5rem]'
+const HERO_FILL = 'bg-(--panel-2)'
+const HERO_FILL_HOT = 'bg-[color-mix(in_srgb,var(--primary)_8%,var(--panel-2))]'
+const HERO_NAME = 'min-w-0 truncate text-[0.85rem] font-semibold text-foreground'
+
+/* The other models of this kind — one click from the slot. Below 46rem the
+   row wraps and the figures start a fresh line. */
+const ALTS = 'm-0 mt-[0.3rem] flex list-none flex-col gap-[0.15rem] p-0'
+const ALT =
+  'group/alt flex min-w-0 items-center gap-[0.6rem] rounded-[7px] px-[0.6rem] py-[0.22rem] hover:bg-(--panel-2) max-[46rem]:flex-wrap'
+const ALT_NAME = 'min-w-0 truncate text-[0.8rem] text-(--text-muted)'
+const ALT_META =
+  'ml-auto flex gap-x-[0.9rem] gap-y-0 whitespace-nowrap text-[0.7rem] text-(--dim) tabular-nums max-[46rem]:ml-0'
+
+/* The row's button. `Button variant="outline"` shrunk to the row and quiet
+   until wanted: the row is information first and an action second, and six
+   always-lit buttons would compete with the model that is running. The caller
+   adds the group-hover that lights it, since which row it belongs to differs. */
+const QUIET_BTN =
+  'h-auto flex-none px-[0.5rem] py-[0.15rem] text-[0.68rem] text-(--text-muted) opacity-45 transition-opacity duration-[0.12s] focus-visible:opacity-100'
+
+/* Build numbers for the runtimes named on the models above. One line, because
+   that is all they are worth once the runtime itself is stated per model. */
+const BUILDS =
+  'mx-0 mt-[1.1rem] mb-0 flex flex-wrap gap-x-[1.1rem] gap-y-[0.2rem] border-t border-(--border-soft) pt-[0.7rem] text-[0.68rem] text-(--dim)'
+
+/* The machine a service runs on, as a line of phrases under the description.
+   Indented past the logo so it hangs under the header's text column. */
+const HOST_STRIP =
+  'mt-[0.5rem] mr-0 mb-0 ml-[3.4rem] flex flex-wrap gap-x-[0.9rem] gap-y-[0.15rem] text-[0.73rem] text-(--text-muted) max-[44rem]:ml-0'
+const HOST_FACT =
+  'rounded-[4px] border-b border-dotted border-(--border) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--brand)'
 
 /**
  * Every model of one kind, folded away until asked for.
@@ -173,16 +246,16 @@ function ModelKind({ kind }: { kind: Extract<AiData, { tab: 'lemonade' }>['categ
   const tokens = sum((m) => (m.stats?.inputTokens ?? 0) + (m.stats?.outputTokens ?? 0))
 
   return (
-    <details className="mkind">
-      <summary>
-        <span className="mkind-type">{kind.type}</span>
+    <details className={KIND}>
+      <summary className={KIND_SUMMARY}>
+        <span className={KIND_TYPE}>{kind.type}</span>
         {/* The one thing that is a fault rather than a statistic, so it is the
             one thing that gets a colour in a collapsed row. */}
-        {resident === null && <span className="mkind-free">slot free</span>}
+        {resident === null && <span className={KIND_FREE}>slot free</span>}
         {/* Abbreviated, because these are a sense of scale rather than
             quantities — 976k answers "has anything been using these", and
             976,228 answers it no better while costing half the row. */}
-        <span className="mkind-agg">
+        <span className={KIND_AGG}>
           <span>
             {kind.models.length === 1 ? '1 model' : `${String(kind.models.length)} models`}
           </span>
@@ -192,15 +265,15 @@ function ModelKind({ kind }: { kind: Extract<AiData, { tab: 'lemonade' }>['categ
         </span>
       </summary>
 
-      <div className="mkind-body">
+      <div className={KIND_BODY}>
         {resident === null ? (
-          <p className="mkind-empty">nothing loaded. The next request will cold-load one</p>
+          <p className={KIND_EMPTY}>nothing loaded. The next request will cold-load one</p>
         ) : (
           <ModelHero model={resident} />
         )}
 
         {others.length > 0 && (
-          <ul className="malts">
+          <ul className={ALTS}>
             {others.map((m) => (
               <ModelAlt key={m.name} model={m} replacing={resident} />
             ))}
@@ -230,7 +303,7 @@ type Model = Lemonade['categories'][number]['models'][number]
  */
 function HostStrip({ host, live }: { host: Lemonade['host']; live: Lemonade['live'] }) {
   return (
-    <p className="hoststrip">
+    <p className={HOST_STRIP}>
       <HostFact
         short={shortGpu(host.gpu)}
         detail={host.gpu ?? 'GPU not reported'}
@@ -279,12 +352,14 @@ function HostFact({
 }) {
   return (
     <InfoHint
-      className={muted === true ? 'hfact hfact-muted' : 'hfact'}
-      cardClassName="hfact-card"
+      className={cn(HOST_FACT, muted === true && 'text-(--dim)')}
+      cardClassName="top-[calc(100%+0.4rem)] left-0 flex w-max max-w-[20rem] flex-col gap-[0.25rem]"
       trigger={short}
     >
-      <span className="hfact-detail">{detail}</span>
-      {note !== undefined && <span className="hfact-note">{note}</span>}
+      <span className="text-[0.78rem] text-foreground">{detail}</span>
+      {note !== undefined && (
+        <span className="text-[0.7rem] leading-[1.4] text-(--text-muted)">{note}</span>
+      )}
     </InfoHint>
   )
 }
@@ -328,16 +403,16 @@ function ModelHero({ model }: { model: Model }) {
         ].filter((f) => f.on)
 
   return (
-    <div className={model.hot ? 'mhero mhero-hot' : 'mhero'}>
+    <div className={cn(HERO, model.hot ? HERO_FILL_HOT : HERO_FILL)}>
       {/* Name and action on one line, attributes on the next. At half width
           they cannot share a line without the name being truncated to nothing,
           and the name is the part being identified. */}
-      <div className="mhero-id">
+      <div className="flex min-w-0 items-center gap-[0.5rem]">
         <Pulse on={model.hot} tone="accent" />
-        <span className="mhero-name">{model.name}</span>
+        <span className={HERO_NAME}>{model.name}</span>
         <EvictButton model={model} />
       </div>
-      <div className="mhero-tags">
+      <div className="mt-[0.35rem] flex flex-wrap gap-[0.25rem]">
         {model.recipe !== '?' && <Chip tone="info">{model.recipe}</Chip>}
         {model.backend !== null && (
           <Chip tone={model.backend === 'rocm' ? 'ok' : 'muted'}>{model.backend}</Chip>
@@ -357,7 +432,11 @@ function ModelHero({ model }: { model: Model }) {
           Zero is dropped rather than shown because in every one of these the
           quantity is cumulative-or-latest: nothing has happened yet, which is
           what an absent row already says. */}
-      {stats.length > 0 && <Measures items={stats} />}
+      {stats.length > 0 && (
+        <div className="mt-[0.55rem]">
+          <Measures items={stats} />
+        </div>
+      )}
     </div>
   )
 }
@@ -373,11 +452,11 @@ function ModelAlt({ model, replacing }: { model: Model; replacing: Model | null 
   const [error, setError] = useState<string | null>(null)
 
   return (
-    <li className="malt">
-      <span className="malt-name" title={model.name}>
+    <li className={ALT}>
+      <span className={ALT_NAME} title={model.name}>
         {model.name}
       </span>
-      <span className="malt-meta">
+      <span className={ALT_META}>
         {model.sizeGb !== null && <span>{num(model.sizeGb, 1)} GB</span>}
         {/* Its throughput last time it ran — the one number that actually
             decides between two chat models you already have on disk. Requests
@@ -388,13 +467,15 @@ function ModelAlt({ model, replacing }: { model: Model; replacing: Model | null 
         )}
       </span>
       {error !== null && (
-        <span className="bad-text" title={error}>
+        <span className="text-danger" title={error}>
           failed
         </span>
       )}
-      <button
+      <Button
         type="button"
-        className="btn btn-ghost"
+        variant="outline"
+        size="sm"
+        className={cn(QUIET_BTN, 'group-hover/alt:opacity-100')}
         disabled={busy}
         title={
           replacing === null
@@ -423,7 +504,7 @@ function ModelAlt({ model, replacing }: { model: Model; replacing: Model | null 
         }}
       >
         {busy ? 'Switching…' : 'Switch'}
-      </button>
+      </Button>
     </li>
   )
 }
@@ -439,9 +520,14 @@ function EvictButton({ model }: { model: Model }) {
   const [busy, setBusy] = useState(false)
 
   return (
-    <button
+    // Quieter still than the Switch buttons: six lit Evict buttons down the
+    // widget competed with the six models they belong to, and evicting is a
+    // thing you do occasionally rather than a thing you read.
+    <Button
       type="button"
-      className="btn btn-ghost mhero-evict"
+      variant="outline"
+      size="sm"
+      className={cn(QUIET_BTN, 'ml-auto py-[0.18rem] opacity-40 group-hover/hero:opacity-100')}
       disabled={busy}
       title={`Unload ${model.name}, leaving this slot empty`}
       onClick={() => {
@@ -454,7 +540,7 @@ function EvictButton({ model }: { model: Model }) {
       }}
     >
       {busy ? 'Evicting…' : 'Evict'}
-    </button>
+    </Button>
   )
 }
 
