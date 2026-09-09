@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { VersionGap } from '../lib/dashboard/github'
 import type { ImageFreshness, RunningVersion } from '../lib/dashboard/images'
 import { DASH } from '../lib/format'
+import { BASE_DOMAIN } from '../lib/site'
 import type { Tone } from '../lib/tone'
 import { InfoHint } from './hint'
 import { Button } from './ui/button'
@@ -283,7 +284,7 @@ export function Open({ name, host }: { name: string; host: string }) {
     // primary action, and `Button` carries the argument for why that is the
     // foreground colour rather than the brand.
     <Button asChild size="sm">
-      <a href={`https://${host}.toscanini.me`} target="_blank" rel="noreferrer">
+      <a href={`https://${host}.${BASE_DOMAIN}`} target="_blank" rel="noreferrer">
         Open {name} ↗
       </a>
     </Button>
