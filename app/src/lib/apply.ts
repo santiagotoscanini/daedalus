@@ -68,7 +68,10 @@ export function summarise(changed: { name: string; fields: string[] }[]): string
   if (changed.length === 1) {
     const only = changed[0]
     if (!only) return 'update app registry'
-    return `${only.name}: ${only.fields.join(', ')}`
+    // The host prefixes the subject with what it wrote (`site:`, `apps:`), so a
+    // site-only change names its fields and nothing else.
+    if (only.name === 'site') return only.fields.join(', ')
+    return `: `
   }
   return `${String(changed.length)} apps updated (${changed.map((c) => c.name).join(', ')})`
 }

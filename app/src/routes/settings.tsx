@@ -100,8 +100,8 @@ function SettingsPage() {
   return (
     <>
       <PageHead title="Settings">
-        How this box is configured, and how it looks. Everything but Appearance is read from what
-        the system declares; Appearance is stored for this control plane alone.
+        How this box is configured, and how it looks. What nix builds from is edited here and
+        applied as a rebuild; Appearance is stored for this control plane alone.
       </PageHead>
 
       <TabBar
