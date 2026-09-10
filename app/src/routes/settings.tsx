@@ -1,6 +1,7 @@
 import { Await, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState, useTransition } from 'react'
 
+import { ApplyBar } from '../components/apply-bar'
 import { PageHead } from '../components/page'
 import { Appearance } from '../components/settings/appearance'
 import { Developer } from '../components/settings/developer'
@@ -8,16 +9,21 @@ import { General } from '../components/settings/general'
 import { Integrations } from '../components/settings/integrations'
 import { Network } from '../components/settings/network'
 import { Repository } from '../components/settings/repository'
+import { SiteDiff } from '../components/settings/site-fields'
 import { TabBar } from '../components/tabs'
+import { fetchApplyStatus } from '../server/registry'
 import { fetchBoxSettings, fetchIntegrationStatus, fetchTheme } from '../server/settings'
-import { fetchSiteState } from '../server/site'
+import { fetchSiteEdit, fetchSiteState } from '../server/site'
 
 // Settings — what this box IS, as opposed to what it runs.
 //
-// Read-only, apart from Appearance. Each section shows what already reaches
-// the container — env bound by daedalus.nix, the /export domains, the host
-// snapshots — and says where it read it from. Nothing here is guessed, and
-// nothing here is editable until the site repository exists to edit it in.
+// Each section shows what reaches the container — env bound by daedalus.nix,
+// the /export domains, the host snapshots — and says where it read it from.
+// Nothing here is guessed. The rows nix sources from site/site.json are
+// editable (core/site EDITABLE — the domain, the addresses, DHCP, the DNS
+// upstreams, the two mail addresses); an edit is a stored draft against the
+// committed file, shown as `pending` beside the row, and the Apply bar at the
+// foot is what writes the file and rebuilds. Everything else is read-only.
 //
 // The dividing line every section on this page has to respect: a setting the
 // NixOS side consumes belongs in the site repository, where changing it is a
@@ -50,13 +56,22 @@ export const Route = createFileRoute('/settings')({
   }),
   loaderDeps: ({ search }) => ({ tab: search.tab }),
   // The facts are awaited: files and one database row, no upstream to wait
-  // on. The integration checks are not — they ask Cloudflare and GitHub, so
-  // they stream in behind the page, and only for the tab that shows them.
+  // on. So is the site edit (two file reads and a row) and the apply status,
+  // because the Apply bar is on every tab. The integration checks are not —
+  // they ask Cloudflare and GitHub, so they stream in behind the page, and
+  // only for the tab that shows them.
   loader: async ({ deps }) => {
-    const [theme, settings] = await Promise.all([fetchTheme(), fetchBoxSettings()])
+    const [theme, settings, edit, applyStatus] = await Promise.all([
+      fetchTheme(),
+      fetchBoxSettings(),
+      fetchSiteEdit(),
+      fetchApplyStatus(),
+    ])
     return {
       theme,
       settings,
+      edit,
+      applyStatus,
       integrations: deps.tab === 'integrations' ? fetchIntegrationStatus() : null,
       // Deferred for the same reason: it renders site.json to hash it, for the
       // one tab that shows the answer.
@@ -67,7 +82,10 @@ export const Route = createFileRoute('/settings')({
 })
 
 function SettingsPage() {
-  const { theme, settings, integrations, site } = Route.useLoaderData()
+  const { theme, settings, integrations, site, edit, applyStatus } = Route.useLoaderData()
+  // The bar's vocabulary is the registry's — a list of named things and the
+  // fields that changed — so the site document is one entry named `site`.
+  const changed = edit.changes.length > 0 ? [{ name: 'site', fields: [...edit.changes] }] : []
   const search = Route.useSearch()
   const tab: SettingsTab = isTab(search.tab) ? search.tab : 'general'
 
@@ -92,18 +110,24 @@ function SettingsPage() {
         linkTo={(id) => ({ to: '/settings', search: { tab: id } })}
       />
 
-      <div className="mt-6 max-w-4xl pb-16">
-        {tab === 'general' && <General settings={settings} />}
-        {tab === 'network' && <Network settings={settings} />}
+      <div className="mt-6 flex max-w-4xl flex-col gap-6 pb-24">
+        {/* One place for the bytes an Apply would write, whichever tab the
+            edit was made on — the tabs show fields, this shows the file. */}
+        <SiteDiff edit={edit} />
+
+        {tab === 'general' && <General settings={settings} edit={edit} />}
+        {tab === 'network' && <Network settings={settings} edit={edit} />}
         {tab === 'integrations' &&
           (integrations === null ? (
-            <Integrations settings={settings.integrations} status={null} />
+            <Integrations settings={settings.integrations} status={null} edit={edit} />
           ) : (
             <Await
               promise={integrations}
-              fallback={<Integrations settings={settings.integrations} status={null} />}
+              fallback={<Integrations settings={settings.integrations} status={null} edit={edit} />}
             >
-              {(status) => <Integrations settings={settings.integrations} status={status} />}
+              {(status) => (
+                <Integrations settings={settings.integrations} status={status} edit={edit} />
+              )}
             </Await>
           ))}
         {tab === 'repository' &&
@@ -130,6 +154,8 @@ function SettingsPage() {
         )}
         {tab === 'developer' && <Developer settings={settings} />}
       </div>
+
+      <ApplyBar changed={changed} initialStatus={applyStatus} />
     </>
   )
 }

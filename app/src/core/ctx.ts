@@ -37,13 +37,15 @@ export type Ctx = {
   store: {
     read<T>(key: string, guard: (v: unknown) => v is T): Promise<T | undefined>
     write(key: string, value: unknown): Promise<void>
+    /** Drop the key. The way to unset: the column refuses null. */
+    delete(key: string): Promise<void>
   }
   http: { getJson: typeof getJson }
   loki: { latest: typeof lokiLatest; entries: typeof lokiEntries }
 }
 
 export async function makeCtx(): Promise<Ctx> {
-  const { readSetting, writeSetting } = await import('../lib/repo/settings')
+  const { readSetting, writeSetting, deleteSetting } = await import('../lib/repo/settings')
   const exportDir = process.env.EXPORT_DIR ?? '/export'
   return {
     env: (name) => {
@@ -53,7 +55,7 @@ export async function makeCtx(): Promise<Ctx> {
     secret: key,
     exportPath: (file) => join(exportDir, file),
     snapshot: readSnapshot,
-    store: { read: readSetting, write: writeSetting },
+    store: { read: readSetting, write: writeSetting, delete: deleteSetting },
     http: { getJson },
     loki: { latest: lokiLatest, entries: lokiEntries },
   }

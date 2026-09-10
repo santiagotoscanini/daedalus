@@ -16,6 +16,7 @@ import { CloneButton } from '../components/workspace'
 import { cn } from '../lib/cn'
 import { PLATFORMS, type Platform } from '../lib/external-apps'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
+import { fetchSiteEdit } from '../server/site'
 
 // The app list. Every row joins three sources: the registry (Postgres — what
 // daedalus believes), the Nix manifest (what the box was actually built from,
@@ -47,14 +48,24 @@ export const Route = createFileRoute('/apps/')({
   // Postgres read — pairing them cost the fast one every time.
   loader: ({ deps }) => ({
     tab: deps.tab,
-    list: deps.tab === 'apps' ? fetchApps() : null,
+    list: deps.tab === 'apps' ? fetchAppsTab() : null,
     images: deps.tab === 'images' ? fetchImagesTab() : null,
     packages: deps.tab === 'packages' ? fetchPackagesTab() : null,
   }),
   component: AppsPage,
 })
 
-type ListData = Awaited<ReturnType<typeof fetchApps>>
+/**
+ * The app list plus the site document's pending fields. One Apply writes
+ * both files and rebuilds once, so the bar at the foot of this page has to
+ * say everything that Apply will do — not just the apps' half of it.
+ */
+async function fetchAppsTab() {
+  const [list, site] = await Promise.all([fetchApps(), fetchSiteEdit()])
+  return { ...list, siteChanges: site.changes }
+}
+
+type ListData = Awaited<ReturnType<typeof fetchAppsTab>>
 type Row = ListData['apps'][number]
 type ExternalEntry = ListData['external'][number]
 
@@ -193,9 +204,12 @@ export function AppsList({ data }: { data: ListData }) {
   // section head borrows it rather than probing again.
   const selfHasIcon = apps.find((a) => a.name === 'daedalus')?.hasIcon ?? false
 
-  const changed = apps
-    .filter((a) => !a.managedInNix && a.drift.length > 0)
-    .map((a) => ({ name: a.name, fields: a.drift }))
+  const changed = [
+    ...apps
+      .filter((a) => !a.managedInNix && a.drift.length > 0)
+      .map((a) => ({ name: a.name, fields: a.drift })),
+    ...(data.siteChanges.length > 0 ? [{ name: 'site', fields: [...data.siteChanges] }] : []),
+  ]
 
   return (
     <>

@@ -6,28 +6,39 @@ import type {
   IntegrationStatus,
   TokenCheck,
 } from '../../core/settings/types'
+import type { SiteEdit } from '../../core/site'
 import { since, when } from '../../lib/format'
+import { mailAddressError } from '../../lib/site-fields'
 import { Skeleton } from '../ui/skeleton'
 import { Chip } from '../viz'
 import { ExtLink, Mono, Section, Unset, Value } from './shared'
+import { SiteText, SiteUnwritten } from './site-fields'
 
 // Two kinds of fact side by side: what is CONFIGURED (ids and whether a
 // credential is present — known at once, from env) and whether it WORKS
 // (asked of the service — deferred, cached five minutes). `status` is null
 // while the second kind is in flight, and each live cell draws a skeleton
 // rather than the section waiting as a whole.
+//
+// The two mail addresses are the only editable rows: nix sources them from
+// site.json. The ids and tokens are not — the ids are read from the running
+// configuration, the tokens live in the secret tree.
 
 export function Integrations({
   settings,
   status,
+  edit,
 }: {
   settings: BoxSettings['integrations']
   status: IntegrationStatus | null
+  edit: SiteEdit
 }) {
   const cf = settings.cloudflare
   const gh = settings.github
   return (
     <div className="flex flex-col gap-6">
+      <SiteUnwritten edit={edit} />
+
       <Section
         title="Cloudflare"
         description="The zone every hostname lives in, the tunnel public traffic arrives through, and the two tokens that drive them."
@@ -116,8 +127,28 @@ export function Integrations({
         title="Mail relay"
         description="Every alert and failure mail on the box leaves through one Gmail relay."
         rows={[
-          { k: 'Sender', v: <Value v={settings.mail.sender} /> },
-          { k: 'Alerts to', v: <Value v={settings.mail.alertTo} /> },
+          {
+            k: 'Sender',
+            v: (
+              <SiteText
+                edit={edit}
+                field="mail.sender"
+                label="Sender"
+                validate={mailAddressError}
+              />
+            ),
+          },
+          {
+            k: 'Alerts to',
+            v: (
+              <SiteText
+                edit={edit}
+                field="mail.alertTo"
+                label="Alerts to"
+                validate={mailAddressError}
+              />
+            ),
+          },
           {
             k: 'Last send',
             v:

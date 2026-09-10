@@ -34,6 +34,16 @@ export async function writeSetting(key: string, value: unknown): Promise<void> {
     })
 }
 
+/**
+ * Forget a preference. The column is `jsonb NOT NULL`, so "no value" is the
+ * absence of the row, not a null in it — `writeSetting(key, null)` is a
+ * constraint violation, and a reader's guard would have treated a JSON null
+ * as the default anyway. Deleting a key that is not there is a no-op.
+ */
+export async function deleteSetting(key: string): Promise<void> {
+  await db.delete(settings).where(eq(settings.key, key))
+}
+
 /** The keys this app uses, so a typo is a compile error rather than a default. */
 export const SETTING_KEYS = {
   theme: 'ui.theme',

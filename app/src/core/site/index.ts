@@ -186,7 +186,10 @@ export async function saveSiteEdit(
   decodeSiteDocument(JSON.parse(renderSiteFile(next)))
   const committed = await readCommittedSite()
   if (committed.present && changesBetween(committed.doc, next).length === 0) {
-    await ctx.store.write(SETTING_KEYS.siteDraft, null)
+    // Dropped, not nulled: the settings column is NOT NULL, and writing null
+    // here was the one way to make "put it back" fail while every other edit
+    // succeeded.
+    await ctx.store.delete(SETTING_KEYS.siteDraft)
   } else {
     await ctx.store.write(SETTING_KEYS.siteDraft, next)
   }

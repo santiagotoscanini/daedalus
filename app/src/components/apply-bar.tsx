@@ -24,6 +24,21 @@ const PHASES = [
   'pushing',
 ] as const
 
+/**
+ * "2 apps changed", "The site changed", "1 app and the site changed". The
+ * entry named `site` is the site document (lib/apply-flow.ts), not an app,
+ * and counting it as one would misstate what the rebuild is for.
+ */
+function heading(changed: { name: string }[]): string {
+  const apps = changed.filter((c) => c.name !== 'site').length
+  const site = changed.some((c) => c.name === 'site')
+  const parts = [apps > 0 && `${String(apps)} app${apps === 1 ? '' : 's'}`, site && 'the site']
+    .filter((p): p is string => typeof p === 'string')
+    .join(' and ')
+  const s = `${parts} changed`
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 export function ApplyBar({
   changed,
   initialStatus,
@@ -98,9 +113,7 @@ export function ApplyBar({
           </>
         ) : (
           <>
-            <strong>
-              {changed.length} app{changed.length === 1 ? '' : 's'} changed
-            </strong>
+            <strong>{heading(changed)}</strong>
             <span className="ml-2.5 text-(--dim)">
               {changed.map((c) => `${c.name} (${c.fields.join(', ')})`).join(' · ')}
             </span>

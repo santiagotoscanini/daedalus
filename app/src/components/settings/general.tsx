@@ -1,8 +1,11 @@
 import type { BoxSettings } from '../../core/settings/types'
+import type { SiteEdit } from '../../core/site'
+import { baseDomainError } from '../../lib/site-fields'
 import { Chip } from '../viz'
 import { ExtLink, Mono, Section, SourceNote, Unset, Value } from './shared'
+import { SiteText, SiteUnwritten } from './site-fields'
 
-export function General({ settings }: { settings: BoxSettings }) {
+export function General({ settings, edit }: { settings: BoxSettings; edit: SiteEdit }) {
   const g = settings.general
   const rev = g.engine.revision
   const dirty = rev?.endsWith('-dirty') ?? false
@@ -10,12 +13,24 @@ export function General({ settings }: { settings: BoxSettings }) {
 
   return (
     <div className="flex flex-col gap-6">
+      <SiteUnwritten edit={edit} />
+
       <Section
         title="Identity"
         description="What this box calls itself. Every hostname it publishes is exactly one label under the domain."
         rows={[
           { k: 'Hostname', v: <Value v={g.hostname} /> },
-          { k: 'Domain', v: <Value v={g.baseDomain} /> },
+          {
+            k: 'Domain',
+            v: (
+              <SiteText
+                edit={edit}
+                field="identity.baseDomain"
+                label="Domain"
+                validate={baseDomainError}
+              />
+            ),
+          },
           {
             k: 'This control plane',
             v: g.publicUrl === '' ? <Unset /> : <ExtLink href={g.publicUrl} />,
@@ -37,7 +52,13 @@ export function General({ settings }: { settings: BoxSettings }) {
           },
           { k: 'GitHub owner', v: <Value v={g.owner} /> },
         ]}
-      />
+      >
+        <p className="m-0 text-[0.78rem] text-(--text-muted)">
+          Changing the domain renames every hostname on the box and reissues its wildcard
+          certificate — every published URL, tunnel route and login redirect moves with it. It is
+          allowed, and it is the most drastic edit on this page.
+        </p>
+      </Section>
 
       <Section
         title="Engine"
