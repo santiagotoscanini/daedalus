@@ -41,4 +41,6 @@ export const SETTING_KEYS = {
   externalApps: 'apps.external',
   /** Whether the host commits what it writes under site/ (it always stages). */
   siteCommit: 'site.commit',
+  /** The operator's desired site.json — the editing surface for site values (core/site). */
+  siteDraft: 'site.draft',
 } as const

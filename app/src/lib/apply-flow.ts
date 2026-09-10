@@ -7,6 +7,7 @@
 
 export type ApplyOutcome =
   | { ok: true; id: string; changed: { name: string; fields: string[] }[] }
+  | { ok: true; id: string; changed: { name: string; fields: string[] }[] }
   | { ok: false; code: 'busy' | 'noop'; reason: string }
 
 /**
@@ -75,19 +76,35 @@ async function locked(actor: string): Promise<ApplyOutcome> {
   const records = await listApps()
   const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
 
-  const changed = records
+  const appChanges = records
     .filter((r) => !r.managedInNix)
     .map((r) => ({ name: r.name, fields: driftOf(r, manifest.get(r.name)) }))
     .filter((c) => c.fields.length > 0)
+
+  // The site document rides the same Apply: one rebuild for everything that
+  // changed, in whichever file. Its changes are listed under the name `site`
+  // so the bar can say what they are beside the apps.
+  const { makeCtx } = await import('../core/ctx')
+  const { siteEdit } = await import('../core/site')
+  const site = await siteEdit(await makeCtx())
+  const changed =
+    site.changes.length > 0
+      ? [...appChanges, { name: 'site', fields: [...site.changes] }]
+      : appChanges
 
   if (changed.length === 0) {
     return { ok: false, code: 'noop', reason: 'nothing to apply' }
   }
 
   const id = await requestApply({
-    // The finished file, not a data structure: the host agent copies these
-    // bytes into the flake verbatim and never parses the registry.
-    fileBody: renderRegistryFile(toRegistryExport(records)),
+    // Finished files, not data structures: the host agent writes these bytes
+    // verbatim and never parses either. apps.json always — its render is
+    // idempotent and the agent reports no-change; site.json only when its
+    // desired document differs from the committed one.
+    files: {
+      'apps.json': renderRegistryFile(toRegistryExport(records)),
+      ...(site.changes.length > 0 ? { 'site.json': site.render.after } : {}),
+    },
     summary: summarise(changed),
     actor,
     // Whether the host commits the write under site/ — the same switch the

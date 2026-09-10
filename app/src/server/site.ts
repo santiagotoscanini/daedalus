@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
-import type { SiteState } from '../core/site'
+import type { SiteEdit, SiteField, SiteState } from '../core/site'
 import type { SiteRequestStatus } from '../lib/site-request'
 
 // Server functions behind Settings › Site: the directory's state against what
@@ -46,3 +46,29 @@ export const writeSiteFiles = createServerFn({ method: 'POST' }).handler(async (
   const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
   return writeSite(await makeCtx(), actor)
 })
+
+/** Committed, desired and the difference — the editable tabs render from this. */
+export const fetchSiteEdit = createServerFn().handler(async (): Promise<SiteEdit> => {
+  const { makeCtx } = await import('../core/ctx')
+  const { siteEdit } = await import('../core/site')
+  return siteEdit(await makeCtx())
+})
+
+/**
+ * Record an edit to the desired document. Validated as a WHOLE document by
+ * the decoder (core/site), so a value of the wrong type is refused rather
+ * than stored; the field list is closed — only what nix sources from
+ * site.json may be edited here.
+ */
+export const saveSiteEditFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): Partial<Record<SiteField, unknown>> => {
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('expected a patch object')
+    }
+    return data as Partial<Record<SiteField, unknown>>
+  })
+  .handler(async ({ data }): Promise<SiteEdit> => {
+    const { makeCtx } = await import('../core/ctx')
+    const { saveSiteEdit } = await import('../core/site')
+    return saveSiteEdit(await makeCtx(), data)
+  })

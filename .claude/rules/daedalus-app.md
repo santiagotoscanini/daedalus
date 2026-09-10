@@ -117,7 +117,10 @@ the remote is still the copy that survives a disk. Commit often.
   /workspaces, both repositories' git facts at /repo — remote, head,
   dirty counts, drift, last Apply commit, plus the site repo's state
   and a digest per managed file; never either tree itself)
-  and the nix manifest at /registry/manifest.json. Never reach around them (no SSH-ing the
+  and the committed site directory at /site (read-only; the one directory
+  daedalus writes, via the bridge — since Phase 5 its site.json is THE
+  source of the site constants nix builds with, so the settings tabs edit
+  against it), and the nix manifest at /registry/manifest.json. Never reach around them (no SSH-ing the
   host, no reading host paths directly) — if a page needs a new host
   fact, extend the matching snapshot script in the s2-server repo's
   `stacks/daedalus/host/` and its nix wiring.

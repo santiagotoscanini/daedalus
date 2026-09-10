@@ -40,13 +40,17 @@ export async function readApplyStatus(): Promise<ApplyStatus> {
 }
 
 /**
- * Publish an apply request: the exact bytes to land in the flake, rendered
- * here (see lib/registry-file.ts) so the host agent never manipulates JSON —
- * it copies the id-stamped payload verbatim. request.json carries metadata
+ * Publish an apply request: the exact bytes to land under site/, rendered here
+ * (lib/registry-file.ts, core/site/file.ts) so the host agent never
+ * manipulates JSON — it writes each file of the id-stamped payload verbatim.
+ * The payload is a map keyed by file name; the names the host will write are
+ * fixed in the agent, never taken from the map. request.json carries metadata
  * only; the payload's name is derived from the id on both sides.
  */
+export type ApplyFiles = { 'apps.json'?: string; 'site.json'?: string }
+
 export async function requestApply(input: {
-  fileBody: string
+  files: ApplyFiles
   summary: string
   actor: string
   /** The operator's switch: commit what was written under site/ (staging is not optional). */
@@ -54,7 +58,7 @@ export async function requestApply(input: {
 }): Promise<string> {
   return bridge.request(
     { actor: input.actor, summary: input.summary, commit: input.commit },
-    input.fileBody,
+    `${JSON.stringify({ files: input.files }, null, 2)}\n`,
   )
 }
 
