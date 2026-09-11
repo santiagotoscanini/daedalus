@@ -1,13 +1,19 @@
+import { useRouter } from '@tanstack/react-router'
+import { useEffect, useState, useTransition } from 'react'
+
 import type { BoxSettings, GeneralLive, NixosRelease, ZoneList } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
 import type { NixosFacts } from '../../lib/contract/domains/site'
 import { num, since } from '../../lib/format'
 import { builtOn, type Support } from '../../lib/nixos'
+import { controlPlaneLabelError } from '../../lib/site-fields'
 import { groupZones } from '../../lib/timezones'
+import { saveSiteEditFn } from '../../server/site'
 import { ReleaseNotes, UpgradeChain } from '../release-notes'
+import { Button } from '../ui/button'
 import { Chip } from '../viz'
 import { ExtLink, Mono, Pending, Section, SourceNote, Unset, Value } from './shared'
-import { type SelectGroupSpec, SiteSelect, SiteUnwritten } from './site-fields'
+import { type SelectGroupSpec, SiteSelect, SiteText, SiteUnwritten } from './site-fields'
 
 // Settings › General: what the box calls itself, and what it runs.
 //
@@ -59,10 +65,7 @@ export function General({
         rows={[
           { k: 'Hostname', v: <Value v={g.hostname} /> },
           { k: 'Domain', v: <DomainPicker edit={edit} zones={live?.zones} /> },
-          {
-            k: 'This control plane',
-            v: g.publicUrl === '' ? <Unset /> : <ExtLink href={g.publicUrl} />,
-          },
+          { k: 'This control plane', v: <ControlPlane edit={edit} /> },
           {
             k: 'Timezone',
             v: (
@@ -75,20 +78,6 @@ export function General({
               />
             ),
           },
-          {
-            k: 'Operator',
-            v:
-              g.operator.user === '' ? (
-                <Unset />
-              ) : (
-                <span className="inline-flex flex-col items-end gap-[0.1rem]">
-                  <Mono>{g.operator.user}</Mono>
-                  {g.operator.email !== '' && (
-                    <span className="text-[0.78rem] text-(--text-muted)">{g.operator.email}</span>
-                  )}
-                </span>
-              ),
-          },
         ]}
       >
         <p className={NOTE}>
@@ -97,6 +86,11 @@ export function General({
           hostname on the box and reissues its wildcard certificate — every published URL, tunnel
           route and login redirect moves with it. It is allowed, and it is the most drastic edit on
           this page.
+        </p>
+        <p className={NOTE}>
+          The control plane's name is the part in front of the domain. Once a rename is applied, the
+          old address keeps working beside the new one until you confirm from the new address, so a
+          name that turns out not to work cannot lock you out of this page.
         </p>
         <p className={NOTE}>
           Every container is started with the timezone, so applying a new one restarts all of them.
@@ -209,6 +203,83 @@ function DomainPicker({ edit, zones }: { edit: SiteEdit; zones: ZoneList | undef
     )
   }
   return picker
+}
+
+/**
+ * The control plane's own address. Only the label is a choice: the scheme is
+ * always https and the domain is the one picked above, so those are drawn
+ * around the box rather than typed into it. A rename keeps the old address
+ * answering (core/site keepPreviousAddress), and the old one is retired from
+ * the new address — reaching this page there is the proof it works.
+ */
+function ControlPlane({ edit }: { edit: SiteEdit }) {
+  const was = edit.committed?.identity ?? null
+  // Where the page was actually reached, which only the browser knows; null on
+  // the server render, so nothing here depends on it until hydration.
+  const [here, setHere] = useState<string | null>(null)
+  useEffect(() => {
+    setHere(window.location.hostname)
+  }, [])
+  const current = was === null ? null : `${was.controlPlane}.${was.baseDomain}`
+  const old =
+    was === null || was.controlPlanePrevious === null
+      ? null
+      : `${was.controlPlanePrevious}.${was.baseDomain}`
+  return (
+    <span className={STACK}>
+      <SiteText
+        edit={edit}
+        field="identity.controlPlane"
+        label="Control plane name"
+        validate={controlPlaneLabelError}
+        prefix="https://"
+        suffix={`.${edit.desired.identity.baseDomain}`}
+        className="w-[11rem]"
+      />
+      {old !== null &&
+        current !== null &&
+        (here === current ? (
+          <RetireOldAddress old={old} />
+        ) : (
+          <span className={ASIDE}>
+            Moved to <ExtLink href={`https://${current}`}>{current}</ExtLink>. Confirm it from
+            there; {old} keeps working until you do.
+          </span>
+        ))}
+    </span>
+  )
+}
+
+function RetireOldAddress({ old }: { old: string }) {
+  const router = useRouter()
+  const [saving, start] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <span className={STACK}>
+      <span className={LINE}>
+        <span className={ASIDE}>{old} still answers too.</span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={saving}
+          onClick={() => {
+            setError(null)
+            start(async () => {
+              try {
+                await saveSiteEditFn({ data: { 'identity.controlPlanePrevious': null } })
+                await router.invalidate()
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e))
+              }
+            })
+          }}
+        >
+          Confirm this address
+        </Button>
+      </span>
+      {error !== null && <span className={ASIDE}>{error}</span>}
+    </span>
+  )
 }
 
 function SupportChip({ support }: { support: Support | null }) {

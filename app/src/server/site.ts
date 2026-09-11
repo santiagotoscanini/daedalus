@@ -70,5 +70,10 @@ export const saveSiteEditFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<SiteEdit> => {
     const { makeCtx } = await import('../core/ctx')
     const { saveSiteEdit } = await import('../core/site')
-    return saveSiteEdit(await makeCtx(), data)
+    // The address this request reached the box at — traefik passes the Host
+    // through. Retiring the control plane's old address is only accepted from
+    // the new one (core/site refuseUnknown).
+    const raw = getRequestHeader('x-forwarded-host') ?? getRequestHeader('host') ?? ''
+    const requestHost = raw.split(',')[0]?.trim().replace(/:\d+$/, '') || null
+    return saveSiteEdit(await makeCtx(), data, { requestHost })
   })

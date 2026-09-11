@@ -12,6 +12,8 @@ const doc: SiteDocument = {
   identity: {
     hostname: 'box',
     baseDomain: 'example.test',
+    controlPlane: 'ctl',
+    controlPlanePrevious: null,
     timezone: 'UTC',
     owner: 'o',
     operator: { user: 'u', group: 'g' },
@@ -50,6 +52,15 @@ describe('site.json round trip', () => {
       /mail\.sender/,
     )
   })
+
+  it('reads a site.json from before the control plane was part of it', () => {
+    const parsed = JSON.parse(renderSiteFile(doc)) as { identity: Record<string, unknown> }
+    delete parsed.identity.controlPlane
+    delete parsed.identity.controlPlanePrevious
+    const back = decodeSiteDocument(parsed)
+    expect(back.identity.controlPlane).toBe('')
+    expect(back.identity.controlPlanePrevious).toBeNull()
+  })
 })
 
 describe('changesBetween', () => {
@@ -74,6 +85,16 @@ describe('changesBetween', () => {
       'identity.baseDomain',
       'identity.timezone',
       'cloudflare.zoneId',
+    ])
+  })
+
+  it('reports a rename as the label and the address kept serving beside it', () => {
+    const edited = structuredClone(doc)
+    edited.identity.controlPlane = 'admin'
+    edited.identity.controlPlanePrevious = 'ctl'
+    expect(changesBetween(doc, edited)).toEqual([
+      'identity.controlPlane',
+      'identity.controlPlanePrevious',
     ])
   })
 

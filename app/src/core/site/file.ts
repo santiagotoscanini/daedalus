@@ -28,6 +28,10 @@ export type SiteDocument = {
   identity: {
     hostname: string
     baseDomain: string
+    /** The control plane answers at `https://<controlPlane>.<baseDomain>`. '' = not written yet. */
+    controlPlane: string
+    /** The label before a rename, served beside the new one until it is confirmed. */
+    controlPlanePrevious: string | null
     timezone: string
     /** The GitHub account the app repos and CI live under. */
     owner: string
@@ -61,6 +65,8 @@ export function siteDocument(s: BoxSettings): SiteDocument {
     identity: {
       hostname: s.general.hostname,
       baseDomain: s.general.baseDomain,
+      controlPlane: s.general.controlPlane.label,
+      controlPlanePrevious: s.general.controlPlane.previousLabel,
       timezone: s.general.timezone,
       owner: s.general.owner,
       operator: { user: s.general.operator.user, group: s.general.operator.group },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   baseDomainError,
+  controlPlaneLabelError,
   hostnameShapeError,
   interfaceError,
   ipv4Error,
@@ -9,6 +10,19 @@ import {
   parseUpstreams,
   upstreamsError,
 } from './site-fields'
+
+describe('controlPlaneLabelError', () => {
+  it('takes one lower-case label and refuses the landing page’s name', () => {
+    expect(controlPlaneLabelError('daedalus-app')).toBeNull()
+    expect(controlPlaneLabelError(' admin ')).toBeNull()
+    expect(controlPlaneLabelError('daedalus')).toMatch(/landing page/)
+    expect(controlPlaneLabelError('')).not.toBeNull()
+    expect(controlPlaneLabelError('Admin')).not.toBeNull()
+    expect(controlPlaneLabelError('a.b')).not.toBeNull()
+    expect(controlPlaneLabelError('-edge')).not.toBeNull()
+    expect(controlPlaneLabelError('x'.repeat(64))).not.toBeNull()
+  })
+})
 
 describe('ipv4Error', () => {
   it('accepts a dotted quad and refuses everything else', () => {

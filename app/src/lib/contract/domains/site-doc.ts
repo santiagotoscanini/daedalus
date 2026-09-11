@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { SiteDocument } from '../../../core/site/file'
-import { arrayOf, bool, decode, literal, nullable, obj, str } from '../decode'
+import { arrayOf, bool, decode, literal, nullable, obj, optional, str } from '../decode'
 
 // /site/site.json — the committed document, read from the site directory
 // mounted read-only into the container. Since Phase 5 this is THE source of
@@ -13,6 +13,10 @@ const shape = obj({
   identity: obj({
     hostname: str,
     baseDomain: str,
+    // Optional: a site.json written before the control plane's address was
+    // part of it still reads, and nix keeps the address stacks/daedalus names.
+    controlPlane: optional(str, ''),
+    controlPlanePrevious: optional(nullable(str), null),
     timezone: str,
     owner: str,
     operator: obj({ user: str, group: str }),

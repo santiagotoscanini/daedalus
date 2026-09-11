@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { RepoFacts, SiteDir, SiteFileStatus } from '../../lib/contract/domains/repo'
 import { repoFacts } from '../../lib/contract/domains/repo'
 import { decodeSiteDocument, readCommittedSite } from '../../lib/contract/domains/site-doc'
+import { controlPlaneLabelError } from '../../lib/site-fields'
 import { requestSiteWrite, type SiteFileName } from '../../lib/site-request'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
@@ -44,6 +45,8 @@ export type SiteState = {
 /** One field of the document that the UI may edit. Dotted path into SiteDocument. */
 export type SiteField =
   | 'identity.baseDomain'
+  | 'identity.controlPlane'
+  | 'identity.controlPlanePrevious'
   | 'identity.timezone'
   | 'network.lanIp'
   | 'network.interface'
@@ -63,6 +66,8 @@ export type SiteField =
     Everything else in the document is still a copy of the configuration. */
 export const EDITABLE: readonly SiteField[] = [
   'identity.baseDomain',
+  'identity.controlPlane',
+  'identity.controlPlanePrevious',
   'identity.timezone',
   'network.lanIp',
   'network.interface',
@@ -148,20 +153,41 @@ export function changesBetween(committed: SiteDocument, desired: SiteDocument): 
   return EDITABLE.filter((f) => !sameValue(getField(committed, f), getField(desired, f)))
 }
 
+/**
+ * A document written before the control plane's label was part of site.json
+ * reads it as '' — and nix, seeing no label, keeps the address stacks/daedalus
+ * declares. Filled from `from` (the running box), so the page shows the real
+ * label and an old file is not reported as a pending rename.
+ */
+function withControlPlane(doc: SiteDocument, from: SiteDocument): SiteDocument {
+  if (doc.identity.controlPlane !== '') return doc
+  return {
+    ...doc,
+    identity: {
+      ...doc.identity,
+      controlPlane: from.identity.controlPlane,
+      controlPlanePrevious: doc.identity.controlPlanePrevious ?? from.identity.controlPlanePrevious,
+    },
+  }
+}
+
 /** Committed, desired, and the difference — what the editable tabs render from. */
 export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
   const committed = await readCommittedSite()
-  const base = committed.present ? committed.doc : await runningSite(ctx)
-  const draft = await readDraft(ctx)
+  const running = await runningSite(ctx)
+  const committedDoc = committed.present ? withControlPlane(committed.doc, running) : null
+  const base = committedDoc ?? running
+  const stored = await readDraft(ctx)
+  const draft = stored === null ? null : withControlPlane(stored, base)
   // A draft only carries the editable fields' intent: everything else comes
   // from the base, so a hostname or Cloudflare id the configuration moved
   // can never be pinned to a stale value by an old draft.
   const desired =
     draft === null ? base : EDITABLE.reduce((acc, f) => setField(acc, f, getField(draft, f)), base)
   return {
-    committed: committed.present ? committed.doc : null,
+    committed: committedDoc,
     desired,
-    changes: committed.present ? changesBetween(committed.doc, desired) : [],
+    changes: committedDoc === null ? [] : changesBetween(committedDoc, desired),
     render: { before: committed.present ? committed.bytes : null, after: renderSiteFile(desired) },
   }
 }
@@ -177,10 +203,59 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
  * one. Putting a field back to its committed value is always allowed, so an
  * edit can be undone while Cloudflare is unreachable.
  */
-async function refuseUnknown(ctx: Ctx, patch: Partial<Record<SiteField, unknown>>): Promise<void> {
-  const committed = await readCommittedSite()
+async function refuseUnknown(
+  ctx: Ctx,
+  patch: Partial<Record<SiteField, unknown>>,
+  committed: SiteDocument | null,
+  next: SiteDocument,
+  requestHost: string | null,
+): Promise<void> {
   const unchanged = (f: SiteField) =>
-    committed.present && sameValue(getField(committed.doc, f), patch[f])
+    committed !== null && sameValue(getField(committed, f), patch[f])
+
+  // The control plane's name. A label the build would refuse, the landing
+  // page's name, or a hostname some other app already answers at never gets
+  // as far as a draft.
+  if ('identity.controlPlane' in patch && !unchanged('identity.controlPlane')) {
+    const label = patch['identity.controlPlane']
+    const problem =
+      typeof label === 'string' ? controlPlaneLabelError(label) : 'the name must be text'
+    if (problem !== null) throw new Error(problem)
+    if (committed !== null && committed.identity.baseDomain !== next.identity.baseDomain) {
+      throw new Error(
+        'Change the domain and the control plane’s name in separate Applies: the old address is only kept answering under the domain it was on.',
+      )
+    }
+    const domain = next.identity.baseDomain
+    const host = `${String(label)}.${domain}`
+    const own = [committed?.identity.controlPlane, committed?.identity.controlPlanePrevious]
+      .filter((l): l is string => typeof l === 'string' && l !== '')
+      .map((l) => `${l}.${domain}`)
+    const { publishingFacts } = await import('../../lib/contract/domains/publishing')
+    const { takenHostnames } = await publishingFacts()
+    if (takenHostnames.includes(host) && !own.includes(host)) {
+      throw new Error(`${host} is already published on this box.`)
+    }
+  }
+
+  // Retiring the old address. Only from the new one, since reaching the page
+  // there is the proof that it works — the one thing the old address being
+  // kept was waiting for.
+  if ('identity.controlPlanePrevious' in patch && !unchanged('identity.controlPlanePrevious')) {
+    if (patch['identity.controlPlanePrevious'] !== null) {
+      throw new Error('the earlier address is kept by a rename, not set by hand')
+    }
+    const was = committed?.identity
+    if (was === undefined || was.controlPlanePrevious === null) {
+      throw new Error('there is no earlier address to retire')
+    }
+    const confirmed = `${was.controlPlane}.${was.baseDomain}`
+    if (requestHost !== confirmed) {
+      throw new Error(
+        `Confirm from https://${confirmed} itself — reaching this page there is what proves the new address works.`,
+      )
+    }
+  }
 
   if ('identity.timezone' in patch && !unchanged('identity.timezone')) {
     const { readTimezones } = await import('../settings/timezones')
@@ -213,9 +288,41 @@ async function refuseUnknown(ctx: Ctx, patch: Partial<Record<SiteField, unknown>
  * undone; when nothing differs the draft is dropped rather than kept as a
  * copy.
  */
+/**
+ * Serve-both-until-confirmed, decided here and not by the page: renaming the
+ * control plane keeps the committed label as the previous address, which nix
+ * serves as an alias, so a rename can never lock the operator out of the page
+ * that would undo it. Putting the label back restores what was committed. A
+ * second rename while one is unconfirmed is refused — there would be two old
+ * addresses and a single alias.
+ */
+function keepPreviousAddress(
+  committed: SiteDocument | null,
+  patch: Partial<Record<SiteField, unknown>>,
+  next: SiteDocument,
+): SiteDocument {
+  if (committed === null || !('identity.controlPlane' in patch)) return next
+  if ('identity.controlPlanePrevious' in patch) return next
+  const was = committed.identity
+  if (next.identity.controlPlane === was.controlPlane) {
+    return setField(next, 'identity.controlPlanePrevious', was.controlPlanePrevious)
+  }
+  if (was.controlPlanePrevious !== null) {
+    throw new Error(
+      `Confirm the move to ${was.controlPlane} first — ${was.controlPlanePrevious} is still answering beside it.`,
+    )
+  }
+  return setField(
+    next,
+    'identity.controlPlanePrevious',
+    was.controlPlane === '' ? null : was.controlPlane,
+  )
+}
+
 export async function saveSiteEdit(
   ctx: Ctx,
   patch: Partial<Record<SiteField, unknown>>,
+  opts: { requestHost: string | null } = { requestHost: null },
 ): Promise<SiteEdit> {
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
   const current = await siteEdit(ctx)
@@ -224,13 +331,13 @@ export async function saveSiteEdit(
     if (!EDITABLE.includes(field)) throw new Error(`${field} is not editable`)
     next = setField(next, field, value)
   }
-  await refuseUnknown(ctx, patch)
+  next = keepPreviousAddress(current.committed, patch, next)
+  await refuseUnknown(ctx, patch, current.committed, next, opts.requestHost)
   // Validate the whole document, not the patch: a field's type is decided by
   // the decoder, and a patch that produces an undecodable document is refused
   // before it is stored.
   decodeSiteDocument(JSON.parse(renderSiteFile(next)))
-  const committed = await readCommittedSite()
-  if (committed.present && changesBetween(committed.doc, next).length === 0) {
+  if (current.committed !== null && changesBetween(current.committed, next).length === 0) {
     // Dropped, not nulled: the settings column is NOT NULL, and writing null
     // here was the one way to make "put it back" fail while every other edit
     // succeeded.

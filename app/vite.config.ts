@@ -20,6 +20,10 @@ import { defineConfig, type Plugin } from 'vite'
 // of truth; the fallback keeps a bare `pnpm dev` on a laptop working.
 const appHost = process.env.APP_HOSTNAME ?? 'localhost'
 
+// A rename in progress: the old address keeps being served (fleet.webApps
+// aliases) until the operator confirms the new one, so Vite accepts both.
+const appHostAliases = (process.env.APP_HOSTNAME_ALIASES ?? '').split(',').filter((h) => h !== '')
+
 // Node turns an unhandled rejection into an uncaught exception and exits, so
 // one rejected promise in one server function took the whole dev server with
 // it — and the container with that. Nothing noticed: the unit is
@@ -84,7 +88,7 @@ export default defineConfig({
     // perfectly healthy in the logs. `app-daedalus` is the under-the-gate
     // door: shotter joins iso-daedalus-net and dials the container by name
     // for visual verification the SSO gate would otherwise block.
-    allowedHosts: [appHost, 'app-daedalus'],
+    allowedHosts: [appHost, ...appHostAliases, 'app-daedalus'],
 
     // The HMR websocket is the one connection the browser opens on its own, so
     // it does not inherit the proxy's scheme or port — left alone the client

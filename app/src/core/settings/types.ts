@@ -19,6 +19,8 @@ export type BoxSettings = {
     hostname: string
     baseDomain: string
     publicUrl: string
+    /** The control plane's hostname label, and the one a rename left answering beside it. */
+    controlPlane: { label: string; previousLabel: string | null }
     timezone: string
     operator: { user: string; group: string; email: string }
     owner: string
@@ -103,6 +105,31 @@ export type IntegrationStatus = {
   github: { token: GithubCheck; repoToken: GithubCheck }
   mail: { lastSentAt: string | null; lastRecipient: string | null }
 }
+
+/** Settings › Profile: the signed-in person's Pocket ID account. */
+export type Profile = {
+  id: string
+  username: string
+  firstName: string
+  lastName: string
+  displayName: string
+  email: string
+  emailVerified: boolean
+  isAdmin: boolean
+  /** Pocket ID group names, friendly name where there is one. */
+  groups: string[]
+  /** An LDAP-synced account; Pocket ID refuses edits to it. */
+  managedByLdap: boolean
+  /** Pocket ID's own account page, where passkeys are managed. '' when unknown. */
+  accountUrl: string
+}
+
+export type ProfileRead = { ok: true; profile: Profile } | { ok: false; reason: string }
+
+/** The fields the page may change; everything else is re-sent as read. */
+export type ProfilePatch = Partial<
+  Pick<Profile, 'username' | 'firstName' | 'lastName' | 'displayName' | 'email'>
+>
 
 /** A zone the Cloudflare API token can see. */
 export type CloudflareZone = { id: string; name: string; status: string }

@@ -51,6 +51,7 @@ const INPUT = cn(
 )
 
 const ASIDE = 'text-[0.72rem] text-(--dim)'
+const AFFIX = 'font-mono text-[0.8rem] text-(--dim)'
 
 function useSiteSave() {
   const router = useRouter()
@@ -134,6 +135,9 @@ type TextProps = {
   /** An empty box saves `null` rather than `""` (interface, gateway). */
   nullable?: boolean
   className?: string
+  /** Fixed text drawn around the box — the parts of a value that are not a choice. */
+  prefix?: string
+  suffix?: string
 }
 
 /** A string field. Saves on blur or Enter; Escape puts the desired value back. */
@@ -153,6 +157,8 @@ function TextInner({
   validate,
   nullable,
   className,
+  prefix,
+  suffix,
   value,
 }: TextProps & { value: string }) {
   const id = useId()
@@ -170,6 +176,7 @@ function TextInner({
   }
   return (
     <Control edit={edit} field={field} error={error} saving={saving}>
+      {prefix !== undefined && <span className={AFFIX}>{prefix}</span>}
       <Input
         id={id}
         type="text"
@@ -187,6 +194,7 @@ function TextInner({
           if (e.key === 'Escape') setDraft(value)
         }}
       />
+      {suffix !== undefined && <span className={AFFIX}>{suffix}</span>}
     </Control>
   )
 }

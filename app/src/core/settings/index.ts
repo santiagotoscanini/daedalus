@@ -1,7 +1,7 @@
 import { readApplyStatus } from '../../lib/apply'
 import { networkSnapshot } from '../../lib/contract/domains/network'
 import { repoFacts } from '../../lib/contract/domains/repo'
-import { siteIdentity } from '../../lib/contract/domains/site'
+import { type SiteIdentity, siteIdentity } from '../../lib/contract/domains/site'
 import type { SnapshotResult } from '../../lib/contract/snapshot'
 import { manifestEntries } from '../../lib/nix-manifest'
 import type { Ctx } from '../ctx'
@@ -24,6 +24,21 @@ const meta = (r: SnapshotResult<unknown>): SourceMeta => ({
   error: r.error,
 })
 
+/**
+ * The control plane's label: site.json's when it carries one, else read off
+ * the address the box answers at (the export's, or this container's own
+ * APP_HOSTNAME before the export carries it).
+ */
+function controlPlaneOf(
+  s: SiteIdentity,
+  appHostname: string,
+): BoxSettings['general']['controlPlane'] {
+  const host = s.controlPlane.hostname ?? appHostname
+  const suffix = `.${s.baseDomain}`
+  const derived = s.baseDomain !== '' && host.endsWith(suffix) ? host.slice(0, -suffix.length) : ''
+  return { label: s.controlPlane.label ?? derived, previousLabel: s.controlPlane.previousLabel }
+}
+
 export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
   const [site, network, repo, applyStatus, entries] = await Promise.all([
     siteIdentity(),
@@ -43,6 +58,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
       hostname: s.hostname,
       baseDomain: s.baseDomain,
       publicUrl: ctx.env('APP_PUBLIC_URL') ?? '',
+      controlPlane: controlPlaneOf(s, ctx.env('APP_HOSTNAME') ?? ''),
       // TZ is bound to every container; the export states the same value
       // from the config. Prefer the export, keep env as the pre-export path.
       timezone: s.timezone || (ctx.env('TZ') ?? ''),

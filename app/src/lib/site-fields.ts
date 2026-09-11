@@ -49,6 +49,23 @@ export function baseDomainError(value: string): string | null {
   return null
 }
 
+/**
+ * The control plane's name: the one label in front of the domain. Lower-case,
+ * because that is what the build asserts for every published hostname, and
+ * never `daedalus` — that name is the project's public landing page, a
+ * hand-managed record the tunnel's reconciler would overwrite.
+ */
+export function controlPlaneLabelError(value: string): string | null {
+  const v = value.trim()
+  if (v === '') return 'a name is required.'
+  if (v.length > 63) return '63 characters at most.'
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(v)) {
+    return 'lower-case letters, digits and inner hyphens — it is one part of a hostname.'
+  }
+  if (v === 'daedalus') return 'daedalus is the project’s public landing page; pick another name.'
+  return null
+}
+
 /** dnsmasq's lease syntax: a number with an optional unit, or `infinite`. */
 export function leaseTimeError(value: string): string | null {
   const v = value.trim()

@@ -8,9 +8,11 @@ import { Developer } from '../components/settings/developer'
 import { General } from '../components/settings/general'
 import { Integrations } from '../components/settings/integrations'
 import { Network } from '../components/settings/network'
+import { ProfileTab } from '../components/settings/profile'
 import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
 import { TabBar } from '../components/tabs'
+import { fetchProfile } from '../server/profile'
 import { fetchApplyStatus } from '../server/registry'
 import {
   fetchBoxSettings,
@@ -36,13 +38,16 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // commit and a rebuild. A setting it does not — the theme, and every UI
 // preference after it — belongs in Postgres, where changing it is an UPDATE
 // and nothing rebuilds. Appearance is deliberately the second kind, which is
-// why it can save on click with no Apply bar.
+// why it can save on click with no Apply bar. Profile is a third kind: it is
+// state inside Pocket ID, written through Pocket ID's API, and also saves at
+// once.
 
 const TABS = [
   { id: 'general', label: 'General' },
   { id: 'network', label: 'Network' },
   { id: 'integrations', label: 'Integrations' },
   { id: 'repository', label: 'Site' },
+  { id: 'profile', label: 'Profile' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'developer', label: 'Developer' },
 ] as const
@@ -86,6 +91,8 @@ export const Route = createFileRoute('/settings')({
       // GitHub, so they stream in behind the tab like the integration checks.
       live: general ? fetchGeneralLive() : null,
       integrations: deps.tab === 'integrations' ? fetchIntegrationStatus() : null,
+      // Asks Pocket ID, so it streams in the same way.
+      profile: deps.tab === 'profile' ? fetchProfile() : null,
       // Deferred for the same reason: it renders site.json to hash it, for the
       // one tab that shows the answer.
       site: deps.tab === 'repository' ? fetchSiteState() : null,
@@ -95,7 +102,7 @@ export const Route = createFileRoute('/settings')({
 })
 
 function SettingsPage() {
-  const { theme, settings, integrations, site, edit, applyStatus, timezones, live } =
+  const { theme, settings, integrations, profile, site, edit, applyStatus, timezones, live } =
     Route.useLoaderData()
   // The bar's vocabulary is the registry's — a list of named things and the
   // fields that changed — so the site document is one entry named `site`.
@@ -115,7 +122,8 @@ function SettingsPage() {
     <>
       <PageHead title="Settings">
         How this box is configured, and how it looks. What nix builds from is edited here and
-        applied as a rebuild; Appearance is stored for this control plane alone.
+        applied as a rebuild; Profile saves to your Pocket ID account and Appearance to this control
+        plane, both at once.
       </PageHead>
 
       <TabBar
@@ -162,6 +170,17 @@ function SettingsPage() {
           ) : (
             <Await promise={site} fallback={<Repository settings={settings} site={null} />}>
               {(state) => <Repository settings={settings} site={state} />}
+            </Await>
+          ))}
+        {tab === 'profile' &&
+          (profile === null ? (
+            <ProfileTab operator={settings.general.operator} profile={null} />
+          ) : (
+            <Await
+              promise={profile}
+              fallback={<ProfileTab operator={settings.general.operator} profile={null} />}
+            >
+              {(p) => <ProfileTab operator={settings.general.operator} profile={p} />}
             </Await>
           ))}
         {tab === 'appearance' && (

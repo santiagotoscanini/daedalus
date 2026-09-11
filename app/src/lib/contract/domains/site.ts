@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { nullable, num, obj, optional, str } from '../decode'
+import { arrayOf, nullable, num, obj, optional, str } from '../decode'
 import { readSnapshot, type SnapshotResult } from '../snapshot'
 
 // /export/site.json — the box's identity. The client-visible half already
@@ -23,6 +23,17 @@ export type NixosFacts = {
   stateVersion: string
 }
 
+/** The control plane's address, as platform/export.nix states it (`site.controlPlane`). */
+export type ControlPlaneFacts = {
+  /** The label site.json carries; null before a site.json that has one. */
+  label: string | null
+  /** The label before a rename, still served until the new one is confirmed. */
+  previousLabel: string | null
+  /** Where the control plane answers; null before the export carries it. */
+  hostname: string | null
+  aliases: string[]
+}
+
 export type SiteIdentity = {
   hostname: string
   baseDomain: string
@@ -39,6 +50,7 @@ export type SiteIdentity = {
   registryUrl: string
   grafanaUrl: string
   mail: MailIdentity
+  controlPlane: ControlPlaneFacts
 }
 
 const shape = obj({
@@ -77,6 +89,15 @@ const shape = obj({
     sender: '',
     alertTo: '',
   }),
+  controlPlane: optional(
+    obj({
+      label: optional(nullable(str), null),
+      previousLabel: optional(nullable(str), null),
+      hostname: optional(nullable(str), null),
+      aliases: optional(arrayOf(str), []),
+    }),
+    { label: null, previousLabel: null, hostname: null, aliases: [] },
+  ),
 })
 
 export const NO_SITE: SiteIdentity = {
@@ -94,6 +115,7 @@ export const NO_SITE: SiteIdentity = {
   registryUrl: '',
   grafanaUrl: '',
   mail: { sender: '', alertTo: '' },
+  controlPlane: { label: null, previousLabel: null, hostname: null, aliases: [] },
 }
 
 /**
