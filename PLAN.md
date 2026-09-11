@@ -5,7 +5,7 @@ engine that any NixOS machine imports, configured from its own UI. Written
 2026-09-08 as draft v3, executed phase by phase since; each phase carries an
 **Outcome** paragraph once it lands, and the table below is the index.
 
-## Status (2026-09-10)
+## Status (2026-09-11)
 
 | Phase | What | State |
 |---|---|---|
@@ -15,7 +15,7 @@ engine that any NixOS machine imports, configured from its own UI. Written
 | 3 | `site/` directory in the config repo, written from the UI | landed 2026-09-10 (s2-server `8f77a00`, engine `870493b`) |
 | 4 | Nix reads the app registry from `site/` | landed 2026-09-10 (s2-server `b09957f`, engine `4c64c81`) |
 | 5 | `site.json` is the source of the site constants, editable | landed 2026-09-10 (s2-server `c6ad8d0`, engine `2aceab5`, `ac60f42`) |
-| 6 | Secrets vault v1: the Cloudflare token | next |
+| 6 | Secrets vault v1: the Cloudflare token | in progress (started 2026-09-11) |
 | 7 | GitHub: device flow, HTTPS pushes, JIT runners | not started |
 | 8 | Auth hardening | not started |
 | 9 | Nix: enable surface, literals, state out of the tree | not started |
@@ -23,10 +23,12 @@ engine that any NixOS machine imports, configured from its own UI. Written
 | 11 | The engine becomes importable | not started |
 | 12 | Onboarding, init, catalog, release | not started |
 
-Open inside Phase 5: the Apply BUTTON has not been pressed from the UI.
-Every UI Apply also carries the apps table, and `chismed`/`voyra` have
-unapplied drift (stage live→lab) that is the operator's decision. The Apply
-of 2026-09-10 went through the bridge by hand and ended `done / no-change`.
+Open inside Phase 5: the Apply BUTTON has not been pressed from the UI. The
+`chismed`/`voyra` drift that made every UI Apply carry an unwanted change is
+gone: on 2026-09-11 the operator decided both stay public, and their draft
+stage was put back to `live` through `saveApp`, so the apps table matches
+`site/apps.json` again. The Apply of 2026-09-10 went through the bridge by
+hand and ended `done / no-change`.
 
 Cross-cutting items from §4 not yet done: the `just census` target, the
 nightly `git bundle` of the config repo into the state root, the nix+app
@@ -42,21 +44,56 @@ rendered `--config` files (re-rendered by `restartUnits` when the sops secret
 changes) instead of `-H` arguments visible in `ps`. The curl-config renders
 are the shape Phase 7 step 2 will reuse when the token becomes UI-managed.
 
+Outside the plan, landed 2026-09-11:
+
+- **One Cloudflare API token** (s2-server `0b8e0e1`, engine `398374b`). Three
+  credentials had drifted — a DNS token copied into two env files, an account
+  token Cloudflare no longer accepted (the tunnel panels had gone silently
+  blank), and ddclient on the Global API Key. Now one token (Zone:Read,
+  DNS:Edit, Account "Cloudflare One Connector: cloudflared" Read; all zones)
+  lives only in `stacks/cloudflared/env.sops`; traefik, route-sync, ddclient
+  and daedalus read it from there (s2-server `6966a4d` dropped the last
+  alias). A refused Cloudflare read now says which permission is missing
+  (`getJsonResult`, `cfReadError`). This shrinks Phase 6: the rotate-together
+  set it was written against no longer exists.
+- **Settings › Profile** (engine `f451143`, `c67cfe9`): the signed-in person's
+  Pocket ID account, read and written through Pocket ID's admin API (the
+  operator's choice of source); the account is resolved from forward-auth
+  headers, including a new `X-Forwarded-User` = `sub`, which is also the
+  first half of Phase 8's `actorOf(request)`. The rail's Settings row became
+  an account menu (Profile, Settings, theme, passkeys, sign out).
+- **The control plane's address is a site field** (s2-server `25e7c59`,
+  engine `f451143`): `identity.controlPlane` under the domain, with
+  `webApps.<n>.aliases` keeping the old name served until the operator
+  confirms the new one from it. One of Phase 9b's literals, done early.
+
 ## What remains, in order
 
-**Phase 6 — the first UI-managed secret.** The site directory gains
-`.sops.yaml` and `secrets/`; the container gets the static `sops` binary and
-read-only binds of both. Nix declares the Cloudflare token from there and
-renders three `sops.templates` (traefik ACME, cloudflared, daedalus's DNS
-tab), each with `restartUnits`, behind a per-consumer toggle that defaults to
-the old `env.sops`. Settings › Integrations › Cloudflare gets "Set token":
-verify against the API, encrypt in the container to the age recipients, send
-the ciphertext through the bridge, `apply.sh` writes + commits + rebuilds.
-Write-only and never logged (a lint rule plus a test over status files and
-logs). Gate: flip the three toggles, rotate from the UI, all three consumers
-pick it up with no manual restart — `restartUnits` on the fleet's oneshot
-container units is untested and is the risk of the phase. Then delete the
-value from the three old env files.
+**Phase 6 — the first UI-managed secret** (revised 2026-09-11 for the single
+token). The site directory gains `.sops.yaml` (the host and operator age
+recipients) and `vault/cloudflare-api-token.sops`, a binary sops file
+holding the raw token — `vault/`, not `secrets/`, because across the config
+repo `secrets/` is the gitignored, permission-fenced home of machine-generated
+plaintext, and this is ciphertext the flake must see. The container gets a
+static sops (nixpkgs' build without cgo, bind-mounted; it holds no age
+identity, so it can encrypt but never decrypt). Nix declares it and renders ONE `sops.template`,
+`CF_DNS_API_TOKEN=<token>`, which is what all four consumers already read
+(traefik's DNS-01, route-sync, ddclient's render, daedalus's render); each
+consumer contributes its own unit to the template's `restartUnits`, and
+`fleet.cloudflare.tokenEnvFile` is the one path they all take. One toggle,
+`fleet.cloudflare.tokenFromSite` (default off), flips all four at once — they
+are one token, so per-consumer toggles would only allow a split the box no
+longer has. Settings › Integrations › Cloudflare gets "Replace token":
+verify against the API (zones, the tunnel), encrypt in the container with
+sops to the recipients in `/site/.sops.yaml`, hand the ciphertext to the
+bridge as `vault/cloudflare-api-token.sops` in the Apply file map
+(`apply.sh` gains a fixed allowlist entry and subdirectory writes), commit
+and rebuild. Refused while other changes are pending, so a rotation is its
+own Apply. Write-only and never logged (a test over status files and the
+payload). Gate: flip the toggle, rotate from the UI, all four consumers pick
+up the new value with no manual restart — `restartUnits` on the fleet's
+oneshot container units is still the untested risk. Then delete
+`stacks/cloudflared/env.sops`.
 
 **Phase 7 — GitHub without classic PATs.** A daedalus OAuth App with device
 flow; Settings › GitHub shows the code, polls, checks scopes and stores the
@@ -750,6 +787,10 @@ unapplied drift (stage live→lab) that is the operator's decision, not a
 gate's. The first button press is theirs.
 
 ### Phase 6 — Secrets vault v1: the Cloudflare token (2–3 days, app + nix)
+
+> Revised 2026-09-11: the steps below predate the single-token change. Where
+> they say three consumers, three templates or per-consumer toggles, read the
+> "What remains" paragraph above — one template, four consumers, one toggle.
 
 The first UI-managed secret, chosen because it is the documented
 rotate-together set (traefik, cloudflared, daedalus) and the false-success
