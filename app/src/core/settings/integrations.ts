@@ -141,11 +141,17 @@ async function checkGithub(token: string): Promise<GithubCheck> {
 
   for (const ms of ATTEMPT_MS) {
     let res: Response
+    let body: { login?: string } = {}
     try {
       res = await fetch('https://api.github.com/user', {
         headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(ms),
       })
+      // The body is read INSIDE the attempt: the timeout covers it too, and a
+      // body cut off by it used to throw outside this try — rejecting every
+      // integration check at once and taking Settings › Integrations down with
+      // it, on the first visit after a container restart.
+      if (res.ok) body = (await res.json()) as { login?: string }
     } catch {
       continue
     }
@@ -162,7 +168,6 @@ async function checkGithub(token: string): Promise<GithubCheck> {
             : `GitHub answered ${String(res.status)}`,
       }
     }
-    const body = (await res.json()) as { login?: string }
     const scopeHeader = res.headers.get('x-oauth-scopes')
     const scopes = (scopeHeader ?? '')
       .split(',')
@@ -202,12 +207,49 @@ async function mail(ctx: Ctx): Promise<IntegrationStatus['mail']> {
   }
 }
 
+/**
+ * A check that failed outright reads as "did not answer", never as a broken
+ * tab. These promises stream into an <Await>, and a rejection there is a
+ * render error for the whole page — one slow upstream must not cost the
+ * operator the other three answers.
+ */
+async function settled<T>(work: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await work
+  } catch {
+    return fallback
+  }
+}
+
+function failedToken(configured: boolean, error: string): TokenCheck {
+  return { configured, ok: false, status: null, expiresOn: null, error: configured ? error : null }
+}
+
+function failedGithub(token: string): GithubCheck {
+  return {
+    configured: token !== '',
+    ok: false,
+    login: null,
+    kind: 'unknown',
+    scopes: [],
+    rateLimit: null,
+    error: token === '' ? null : 'the check failed; it is asked again within five minutes',
+  }
+}
+
 async function load(ctx: Ctx): Promise<IntegrationStatus> {
+  const cfToken = ctx.secret('CF_API_TOKEN')
+  const ghToken = ctx.secret('GITHUB_TOKEN')
+  const ghRepoToken = ctx.secret('GITHUB_REPO_TOKEN')
   const [cf, token, repoToken, m] = await Promise.all([
-    cloudflare(ctx),
-    checkGithub(ctx.secret('GITHUB_TOKEN')),
-    checkGithub(ctx.secret('GITHUB_REPO_TOKEN')),
-    mail(ctx),
+    settled(cloudflare(ctx), {
+      token: failedToken(cfToken !== '', 'the check failed; it is asked again within five minutes'),
+      zone: null,
+      tunnel: null,
+    }),
+    settled(checkGithub(ghToken), failedGithub(ghToken)),
+    settled(checkGithub(ghRepoToken), failedGithub(ghRepoToken)),
+    settled(mail(ctx), { lastSentAt: null, lastRecipient: null }),
   ])
   return {
     checkedAt: new Date().toISOString(),

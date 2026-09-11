@@ -1,4 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeader } from '@tanstack/react-start/server'
+import type { TokenReplaceOutcome } from '../core/settings/cloudflare-token'
 import type { BoxSettings, GeneralLive, IntegrationStatus } from '../core/settings/types'
 import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../lib/theme'
 
@@ -39,6 +41,25 @@ export const fetchGeneralLive = createServerFn().handler(async (): Promise<Gener
   const [zones, nixos] = await Promise.all([listZones(ctx), nixosRelease(site.data.nixos)])
   return { zones, nixos }
 })
+
+/**
+ * Settings › Integrations › Cloudflare › Replace token. The token is checked
+ * against Cloudflare, encrypted in this container and handed to Apply as
+ * ciphertext (core/settings/cloudflare-token.ts); it is never stored, logged
+ * or sent back.
+ */
+export const replaceCloudflareTokenFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { token: string } => {
+    const token = (data as { token?: unknown } | null)?.token
+    if (typeof token !== 'string') throw new Error('expected a token')
+    return { token }
+  })
+  .handler(async ({ data }): Promise<TokenReplaceOutcome> => {
+    const { makeCtx } = await import('../core/ctx')
+    const { replaceCloudflareToken } = await import('../core/settings/cloudflare-token')
+    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+    return replaceCloudflareToken(await makeCtx(), actor, data.token)
+  })
 
 /** The zone names this system's tzdata carries: the timezone picker's list. */
 export const fetchTimezones = createServerFn().handler(async (): Promise<string[]> => {

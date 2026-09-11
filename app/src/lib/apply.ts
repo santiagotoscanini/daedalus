@@ -47,7 +47,12 @@ export async function readApplyStatus(): Promise<ApplyStatus> {
  * fixed in the agent, never taken from the map. request.json carries metadata
  * only; the payload's name is derived from the id on both sides.
  */
-export type ApplyFiles = { 'apps.json'?: string; 'site.json'?: string }
+export type ApplyFiles = {
+  'apps.json'?: string
+  'site.json'?: string
+  /** Ciphertext only — encrypted in this container (core/settings/cloudflare-token.ts). */
+  'vault/cloudflare-api-token.sops'?: string
+}
 
 export async function requestApply(input: {
   files: ApplyFiles

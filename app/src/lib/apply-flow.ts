@@ -4,11 +4,14 @@
 // POST /api/registry/apply — call runApply and only translate its outcome
 // into their own response shape. Before this module they were two hand-copied
 // bodies that could drift; the route's header even claimed otherwise.
+//
+// runSecretApply is the third door, for a vault secret replaced from Settings
+// (core/settings/cloudflare-token.ts). It shares the lock, the busy checks and
+// the pickup window, and differs in one rule: it is always its own Apply.
 
 export type ApplyOutcome =
   | { ok: true; id: string; changed: { name: string; fields: string[] }[] }
-  | { ok: true; id: string; changed: { name: string; fields: string[] }[] }
-  | { ok: false; code: 'busy' | 'noop'; reason: string }
+  | { ok: false; code: 'busy' | 'noop' | 'pending'; reason: string }
 
 /**
  * How long a published request may sit unclaimed before a new apply is
@@ -35,18 +38,19 @@ let pending: { id: string; at: number } | null = null
 /** Serialises appliers: the check-then-write below must not interleave. */
 let chain: Promise<unknown> = Promise.resolve()
 
-export function runApply(actor: string): Promise<ApplyOutcome> {
-  const outcome = chain.then(() => locked(actor))
+function serialised(work: () => Promise<ApplyOutcome>): Promise<ApplyOutcome> {
+  const outcome = chain.then(work)
   chain = outcome.catch(() => undefined)
   return outcome
 }
 
-async function locked(actor: string): Promise<ApplyOutcome> {
-  const { listApps, toRegistryExport, driftOf } = await import('./repo/apps')
-  const { manifestEntries } = await import('./nix-manifest')
-  const { requestApply, summarise, readApplyStatus } = await import('./apply')
-  const { renderRegistryFile } = await import('./registry-file')
-  const { readSetting, SETTING_KEYS } = await import('./repo/settings')
+export function runApply(actor: string): Promise<ApplyOutcome> {
+  return serialised(() => locked(actor))
+}
+
+/** Why a new apply may not start now, or null when it may. */
+async function refuseBusy(): Promise<ApplyOutcome | null> {
+  const { readApplyStatus } = await import('./apply')
 
   // Refuse while one is in flight. The host script holds fleet.rebuildLock, so
   // a second apply could not corrupt anything — it would simply queue behind
@@ -72,6 +76,13 @@ async function locked(actor: string): Promise<ApplyOutcome> {
       pending = null
     }
   }
+  return null
+}
+
+/** What an Apply would carry right now: app drift and site-document edits. */
+async function currentChanges() {
+  const { listApps, driftOf } = await import('./repo/apps')
+  const { manifestEntries } = await import('./nix-manifest')
 
   const records = await listApps()
   const manifest = new Map((await manifestEntries()).map((m) => [m.name, m]))
@@ -92,6 +103,28 @@ async function locked(actor: string): Promise<ApplyOutcome> {
       ? [...appChanges, { name: 'site', fields: [...site.changes] }]
       : appChanges
 
+  return { records, site, changed }
+}
+
+async function commitSwitch(): Promise<boolean> {
+  const { readSetting, SETTING_KEYS } = await import('./repo/settings')
+  // Whether the host commits the write under site/ — the same switch the
+  // Site tab sets. Off means staged and left to the operator.
+  return (
+    (await readSetting(SETTING_KEYS.siteCommit, (v): v is boolean => typeof v === 'boolean')) ??
+    false
+  )
+}
+
+async function locked(actor: string): Promise<ApplyOutcome> {
+  const { toRegistryExport } = await import('./repo/apps')
+  const { requestApply, summarise } = await import('./apply')
+  const { renderRegistryFile } = await import('./registry-file')
+
+  const blocked = await refuseBusy()
+  if (blocked !== null) return blocked
+
+  const { records, site, changed } = await currentChanges()
   if (changed.length === 0) {
     return { ok: false, code: 'noop', reason: 'nothing to apply' }
   }
@@ -107,13 +140,47 @@ async function locked(actor: string): Promise<ApplyOutcome> {
     },
     summary: summarise(changed),
     actor,
-    // Whether the host commits the write under site/ — the same switch the
-    // Site tab sets. Off means staged and left to the operator.
-    commit:
-      (await readSetting(SETTING_KEYS.siteCommit, (v): v is boolean => typeof v === 'boolean')) ??
-      false,
+    commit: await commitSwitch(),
   })
   pending = { id, at: Date.now() }
 
   return { ok: true, id, changed }
+}
+
+export type VaultFile = 'vault/cloudflare-api-token.sops'
+
+/**
+ * Replace one vault secret. Always its own Apply: refused while anything else
+ * is pending, so a rotation never rides along with an unrelated change (nor an
+ * unrelated change with it), and its commit names only which secret moved —
+ * never a value, which this function only ever holds as ciphertext.
+ */
+export function runSecretApply(
+  actor: string,
+  secret: { file: VaultFile; name: string; ciphertext: string },
+): Promise<ApplyOutcome> {
+  return serialised(async () => {
+    const { requestApply } = await import('./apply')
+
+    const blocked = await refuseBusy()
+    if (blocked !== null) return blocked
+
+    const { changed: other } = await currentChanges()
+    if (other.length > 0) {
+      return {
+        ok: false,
+        code: 'pending',
+        reason: `Apply or undo the pending changes first (${other.map((c) => c.name).join(', ')}): replacing a secret is its own Apply.`,
+      }
+    }
+
+    const id = await requestApply({
+      files: { [secret.file]: secret.ciphertext },
+      summary: `replace ${secret.name}`,
+      actor,
+      commit: await commitSwitch(),
+    })
+    pending = { id, at: Date.now() }
+    return { ok: true, id, changed: [{ name: 'vault', fields: [secret.name] }] }
+  })
 }

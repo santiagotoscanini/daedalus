@@ -48,6 +48,8 @@ export type BoxSettings = {
       tunnelId: string
       /** The one Cloudflare API token (DASH_CF_API_TOKEN) is present. */
       tokenConfigured: boolean
+      /** The box reads it from site/vault/, so it can be replaced from here (Phase 6). */
+      tokenFromSite: boolean
     }
     github: { owner: string; tokenConfigured: boolean; repoTokenConfigured: boolean }
     mail: { sender: string; alertTo: string }

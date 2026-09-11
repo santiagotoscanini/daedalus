@@ -15,7 +15,7 @@ engine that any NixOS machine imports, configured from its own UI. Written
 | 3 | `site/` directory in the config repo, written from the UI | landed 2026-09-10 (s2-server `8f77a00`, engine `870493b`) |
 | 4 | Nix reads the app registry from `site/` | landed 2026-09-10 (s2-server `b09957f`, engine `4c64c81`) |
 | 5 | `site.json` is the source of the site constants, editable | landed 2026-09-10 (s2-server `c6ad8d0`, engine `2aceab5`, `ac60f42`) |
-| 6 | Secrets vault v1: the Cloudflare token | in progress (started 2026-09-11) |
+| 6 | Secrets vault v1: the Cloudflare token | in progress — vault copy, toggle ON and Replace token landed 2026-09-11 (s2-server `cf697b6`, `94d6415`); remaining: the gate (a real rotation from the UI) and deleting `stacks/cloudflared/env.sops` |
 | 7 | GitHub: device flow, HTTPS pushes, JIT runners | not started |
 | 8 | Auth hardening | not started |
 | 9 | Nix: enable surface, literals, state out of the tree | not started |
