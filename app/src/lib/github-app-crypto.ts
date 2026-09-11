@@ -22,7 +22,7 @@ const HEX = /^[0-9a-f]+$/i
 /**
  * GitHub's `X-Hub-Signature-256`: HMAC-SHA256 of the raw body, hex, prefixed
  * `sha256=`. The body must be the exact bytes received, so only bytes are
- * accepted (the route reads `arrayBuffer()`): a string has already been
+ * accepted (the route streams the body into a capped `Uint8Array`): a string has already been
  * decoded, and a re-serialised JSON object never matches.
  *
  * A blank secret is refused rather than verified: HMAC with an empty key is a
