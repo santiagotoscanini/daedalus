@@ -1,3 +1,4 @@
+| [`PLAN.md`](PLAN.md) | The productization plan: twelve phases, each with its outcome once it lands, and a status table at the top. |
 <div align="center">
   <img src="app/public/icon.svg" width="96" height="96" alt="Daedalus" />
 
@@ -47,12 +48,13 @@ match. The craftsman, not the labyrinth.
 | [`app/`](app/) | Daedalus itself — the TypeScript app (TanStack Start + React 19, drizzle-orm, Tailwind v4). |
 | [`website/`](website/) | The landing site and the [external-setup docs](https://daedalus.toscanini.me/docs), deployed to GitHub Pages by [`.github/workflows/website.yml`](.github/workflows/website.yml). |
 | [`.claude/`](.claude/) | Path-scoped rules for Claude Code sessions working on the app and its UI. |
+| [`PLAN.md`](PLAN.md) | The productization plan: twelve phases, each with its outcome once it lands, and a status table at the top. |
 
 The NixOS module that runs the app is not in this repository yet. It
 lives in the author's machine configuration, alongside the host-side
 agents (the bridges that apply, deploy and snapshot on the app's
 behalf) and the platform layer it depends on. It moves here as an
-importable module in a later phase of the plan; today this repo is
+importable module in Phase 11 of [`PLAN.md`](PLAN.md); today this repo is
 the app and its site.
 
 ## Developing
