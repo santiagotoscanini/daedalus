@@ -24,7 +24,9 @@ export const Route = createFileRoute('/api/profile-picture')({
         return new Response(new Uint8Array(picture.bytes), {
           headers: {
             'content-type': picture.contentType,
-            'cache-control': 'private, no-cache',
+            // A change through daedalus is a new `?v=` on the URL, so a short
+            // cache only delays an edit made in Pocket ID's own UI.
+            'cache-control': 'private, max-age=300',
             'x-content-type-options': 'nosniff',
           },
         })

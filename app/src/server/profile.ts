@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
-import type { ProfilePatch, ProfileRead } from '../core/settings/types'
+import type { Account, ProfilePatch, ProfileRead } from '../core/settings/types'
 import { PICTURE_TYPES, type PictureType } from '../lib/profile-fields'
 
 // Server functions behind Settings › Profile — see core/settings/profile.ts.
@@ -24,6 +24,20 @@ export const fetchProfile = createServerFn().handler(async (): Promise<ProfileRe
   const { makeCtx } = await import('../core/ctx')
   const { readProfile } = await import('../core/settings/profile')
   return readProfile(await makeCtx(), who())
+})
+
+/**
+ * The rail's account button, on every page. Never throws: a shell that cannot
+ * say who is signed in still has to render, so any failure reads as "nobody".
+ */
+export const fetchAccount = createServerFn().handler(async (): Promise<Account | null> => {
+  try {
+    const { makeCtx } = await import('../core/ctx')
+    const { readAccount } = await import('../core/settings/profile')
+    return await readAccount(await makeCtx(), who())
+  } catch {
+    return null
+  }
 })
 
 export const saveProfileFn = createServerFn({ method: 'POST' })

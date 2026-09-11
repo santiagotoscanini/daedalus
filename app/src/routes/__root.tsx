@@ -9,12 +9,15 @@ import {
 } from '@tanstack/react-router'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import appCss from '../app.css?url'
+import { AccountMenu } from '../components/account-menu'
 import { ErrorPanel } from '../components/error'
 import { NavIcon } from '../components/nav-icon'
+import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
 import { CATEGORIES } from '../lib/dashboard/nav'
 import { useResolvedScheme } from '../lib/scheme'
-import { presetById, themeCss } from '../lib/theme'
+import { presetById, type ThemeChoice, themeCss } from '../lib/theme'
+import { fetchAccount } from '../server/profile'
 import { fetchTheme } from '../server/settings'
 import { APP_TABS } from './apps.$name'
 
@@ -121,7 +124,11 @@ export const Route = createRootRoute({
   // The theme is the one thing the shell cannot render without, so it is
   // loaded here rather than by the page: every route renders inside this
   // document, and a per-route load would repaint the palette on navigation.
-  loader: async () => ({ theme: await fetchTheme() }),
+  //
+  // The signed-in account is the opposite case: it asks Pocket ID, so it is
+  // handed over as a promise and streams in behind the page — the rail's
+  // account button draws a placeholder until then, and no page waits on it.
+  loader: async () => ({ theme: await fetchTheme(), account: fetchAccount() }),
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
@@ -164,6 +171,7 @@ export const Route = createRootRoute({
 
 function RootDocument({ children }: { children: ReactNode }) {
   const theme = Route.useLoaderData({ select: (d) => d.theme })
+  const account = Route.useLoaderData({ select: (d) => d.account })
   const preset = presetById(theme.presetId)
   const scheme = useResolvedScheme(theme.scheme)
   const css = themeCss(preset)
@@ -190,7 +198,9 @@ function RootDocument({ children }: { children: ReactNode }) {
       </head>
       <body>
         <RouteProgress />
-        <Shell>{children}</Shell>
+        <Shell theme={theme} account={account}>
+          {children}
+        </Shell>
         <Scripts />
       </body>
     </html>
@@ -207,7 +217,15 @@ function RootDocument({ children }: { children: ReactNode }) {
  * apart entirely in CSS, at the same 52rem breakpoint the rest of the layout
  * uses.
  */
-function Shell({ children }: { children: ReactNode }) {
+function Shell({
+  children,
+  theme,
+  account,
+}: {
+  children: ReactNode
+  theme: ThemeChoice
+  account: Promise<Account | null>
+}) {
   const [collapsed, setCollapsed] = useState(false)
   const [open, setOpen] = useState(false)
   const openButton = useRef<HTMLButtonElement>(null)
@@ -473,17 +491,18 @@ function Shell({ children }: { children: ReactNode }) {
             <NavIcon name="claude" />
             <span className={NAV_LABEL}>Claude</span>
           </Link>
-          {/* Beside Claude rather than above with the categories, by the same
-              rule: this is the box itself, not one of the subjects it serves. */}
-          <Link
-            to="/settings"
-            className={NAV_ITEM}
-            activeProps={{ className: NAV_ITEM_ACTIVE }}
-            data-label="Settings"
-          >
-            <NavIcon name="settings" />
-            <span className={NAV_LABEL}>Settings</span>
-          </Link>
+          {/* The person, last: who is signed in, and behind it Profile,
+              Settings, the theme, passkeys and signing out
+              (components/account-menu.tsx). Settings lives in there now; the
+              button lights while a settings page is open, as its row did. */}
+          <AccountMenu
+            account={account}
+            theme={theme}
+            active={path.startsWith('/settings')}
+            triggerClassName={NAV_ITEM}
+            activeClassName={NAV_ITEM_ACTIVE}
+            labelClassName={NAV_LABEL}
+          />
         </nav>
       </aside>
 

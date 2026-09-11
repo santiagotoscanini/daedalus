@@ -122,6 +122,18 @@ export type Profile = {
   managedByLdap: boolean
   /** Pocket ID's own account page, where passkeys are managed. '' when unknown. */
   accountUrl: string
+  /** Changes when the picture does; it goes on the picture's URL so browsers ask again. */
+  pictureVersion: number
+}
+
+/** The account button at the foot of the rail. */
+export type Account = {
+  /** Display name, else first and last name, else username. */
+  name: string
+  username: string
+  email: string
+  pictureVersion: number
+  accountUrl: string
 }
 
 export type ProfileRead = { ok: true; profile: Profile } | { ok: false; reason: string }

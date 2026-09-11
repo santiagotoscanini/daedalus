@@ -7,9 +7,10 @@ import {
 } from '../../lib/profile-fields'
 import { mailAddressError } from '../../lib/site-fields'
 import type { Ctx } from '../ctx'
-import type { Profile, ProfilePatch, ProfileRead } from './types'
+import type { Account, Profile, ProfilePatch, ProfileRead } from './types'
 
-// Settings › Profile: the person behind the passkey, as Pocket ID knows them.
+// Settings › Profile, and the account button at the foot of the rail: the
+// person behind the passkey, as Pocket ID knows them.
 //
 // Pocket ID is the source — the operator's call (2026-09-11). The name,
 // username, email and picture already live on the IdP account every app signs
@@ -29,10 +30,11 @@ import type { Profile, ProfilePatch, ProfileRead } from './types'
 // an admin editing another account Pocket ID applies `isAdmin`, `disabled` and
 // `emailVerified` straight from the body — its self-edit guard only covers
 // PUT /api/users/me, which an API key cannot use. So every save re-sends those
-// three exactly as read, and refuses to write at all if the read did not carry
-// them: a missing boolean decodes as false, which would take the operator's
-// admin rights (and every gated app with them) along with a name change.
-// `userGroupIds` is left out; that endpoint ignores it.
+// three exactly as read — read fresh, never from the cache below — and refuses
+// to write at all if the read did not carry them: a missing boolean decodes as
+// false, which would take the operator's admin rights (and every gated app
+// with them) along with a name change. `userGroupIds` is left out; that
+// endpoint ignores it.
 
 /** Who a request signed in as, per the forward-auth headers traefik sets. */
 export type Who = { sub: string | null; email: string | null }
@@ -61,6 +63,23 @@ type Call =
 // Pocket ID answering and is returned as it is. Every request here is safe to
 // repeat — GETs, and a PUT or DELETE that replaces the whole thing.
 const LADDER = [1_000, 2_500, 10_000]
+
+// The rail shows the signed-in person on every page and Pocket ID is a network
+// hop away, so accounts and pictures are held briefly. Every write through this
+// module drops what it touched; an edit made in Pocket ID's own UI shows up
+// within the TTL. One operator, one process: a Map is the whole cache.
+const ACCOUNT_TTL_MS = 60_000
+const PICTURE_TTL_MS = 5 * 60_000
+const accounts = new Map<string, { at: number; user: PocketUser }>()
+const pictures = new Map<string, { at: number; bytes: ArrayBuffer; contentType: string }>()
+// When each picture last changed through here — the version on its URL. Starts
+// at boot, so a restart is also a new URL and no browser keeps an old picture.
+const BOOT = Date.now()
+const pictureChangedAt = new Map<string, number>()
+
+function fresh<T extends { at: number }>(entry: T | undefined, ttl: number): T | undefined {
+  return entry !== undefined && Date.now() - entry.at < ttl ? entry : undefined
+}
 
 async function pocketHost(): Promise<string | null> {
   return (await webAppHosts())['pocket-id'] ?? null
@@ -117,14 +136,15 @@ function json<T>(call: { bytes: ArrayBuffer }): T {
 
 type Found = { ok: true; user: PocketUser } | { ok: false; reason: string }
 
-async function findUser(ctx: Ctx, who: Who): Promise<Found> {
-  if (who.sub === null && who.email === null) {
-    return {
-      ok: false,
-      reason:
-        'This request carries no signed-in identity, so it did not come through the Pocket ID gate.',
-    }
-  }
+const NO_IDENTITY: Found = {
+  ok: false,
+  reason:
+    'This request carries no signed-in identity, so it did not come through the Pocket ID gate.',
+}
+
+/** The account, asked of Pocket ID now. What every write reads before writing. */
+async function lookUp(ctx: Ctx, who: Who): Promise<Found> {
+  if (who.sub === null && who.email === null) return NO_IDENTITY
   if (who.sub !== null) {
     const r = await pocket(ctx, `/api/users/${encodeURIComponent(who.sub)}`)
     if (r.ok) return { ok: true, user: json<PocketUser>(r) }
@@ -140,6 +160,17 @@ async function findUser(ctx: Ctx, who: Who): Promise<Found> {
     if (user !== undefined) return { ok: true, user }
   }
   return { ok: false, reason: 'No Pocket ID account matches the signed-in identity.' }
+}
+
+/** The account for reading: from the cache when it is fresh. */
+async function findUser(ctx: Ctx, who: Who): Promise<Found> {
+  if (who.sub === null && who.email === null) return NO_IDENTITY
+  const key = who.sub !== null ? `sub:${who.sub}` : `email:${(who.email ?? '').toLowerCase()}`
+  const hit = fresh(accounts.get(key), ACCOUNT_TTL_MS)
+  if (hit !== undefined) return { ok: true, user: hit.user }
+  const found = await lookUp(ctx, who)
+  if (found.ok) accounts.set(key, { at: Date.now(), user: found.user })
+  return found
 }
 
 const fromLdap = (u: PocketUser) => typeof u.ldapId === 'string' && u.ldapId !== ''
@@ -161,12 +192,33 @@ async function toProfile(u: PocketUser): Promise<Profile> {
       .sort(),
     managedByLdap: fromLdap(u),
     accountUrl: host === null ? '' : `https://${host}/settings/account`,
+    pictureVersion: pictureChangedAt.get(u.id) ?? BOOT,
   }
+}
+
+/** What the person is called: the display name, else first and last, else the username. */
+export function nameOf(p: Pick<Profile, 'displayName' | 'firstName' | 'lastName' | 'username'>) {
+  const full = [p.firstName, p.lastName].filter((s) => s !== '').join(' ')
+  return p.displayName || full || p.username
 }
 
 export async function readProfile(ctx: Ctx, who: Who): Promise<ProfileRead> {
   const found = await findUser(ctx, who)
   return found.ok ? { ok: true, profile: await toProfile(found.user) } : found
+}
+
+/** The rail's account button. Null when nobody is signed in or Pocket ID cannot say. */
+export async function readAccount(ctx: Ctx, who: Who): Promise<Account | null> {
+  const found = await findUser(ctx, who)
+  if (!found.ok) return null
+  const p = await toProfile(found.user)
+  return {
+    name: nameOf(p),
+    username: p.username,
+    email: p.email,
+    pictureVersion: p.pictureVersion,
+    accountUrl: p.accountUrl,
+  }
 }
 
 function checkPatch(patch: ProfilePatch): void {
@@ -185,7 +237,9 @@ function checkPatch(patch: ProfilePatch): void {
 
 export async function updateProfile(ctx: Ctx, who: Who, patch: ProfilePatch): Promise<ProfileRead> {
   checkPatch(patch)
-  const found = await findUser(ctx, who)
+  // Fresh, not cached: the three booleans below are re-sent as read, and a
+  // minute-old copy could undo a change just made in Pocket ID's own UI.
+  const found = await lookUp(ctx, who)
   if (!found.ok) throw new Error(found.reason)
   const u = found.user
   if (fromLdap(u)) {
@@ -220,8 +274,14 @@ export async function updateProfile(ctx: Ctx, who: Who, patch: ProfilePatch): Pr
     body: JSON.stringify(body),
   })
   if (!r.ok) throw new Error(r.message)
+  accounts.clear()
   // By id from here: an email edit has just made the email header stale.
   return readProfile(ctx, { sub: u.id, email: null })
+}
+
+function pictureChanged(id: string): void {
+  pictures.delete(id)
+  pictureChangedAt.set(id, Date.now())
 }
 
 export async function uploadPicture(
@@ -245,6 +305,7 @@ export async function uploadPicture(
     body: form,
   })
   if (!r.ok) throw new Error(r.message)
+  pictureChanged(found.user.id)
 }
 
 /** Back to Pocket ID's generated initials. */
@@ -255,6 +316,7 @@ export async function resetPicture(ctx: Ctx, who: Who): Promise<void> {
     method: 'DELETE',
   })
   if (!r.ok) throw new Error(r.message)
+  pictureChanged(found.user.id)
 }
 
 /** The picture's bytes, or null when there is no account to show one for. */
@@ -264,6 +326,12 @@ export async function profilePicture(
 ): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
   const found = await findUser(ctx, who)
   if (!found.ok) return null
-  const r = await pocket(ctx, `/api/users/${encodeURIComponent(found.user.id)}/profile-picture.png`)
-  return r.ok ? { bytes: r.bytes, contentType: r.contentType || 'image/png' } : null
+  const id = found.user.id
+  const hit = fresh(pictures.get(id), PICTURE_TTL_MS)
+  if (hit !== undefined) return hit
+  const r = await pocket(ctx, `/api/users/${encodeURIComponent(id)}/profile-picture.png`)
+  if (!r.ok) return null
+  const picture = { at: Date.now(), bytes: r.bytes, contentType: r.contentType || 'image/png' }
+  pictures.set(id, picture)
+  return picture
 }
