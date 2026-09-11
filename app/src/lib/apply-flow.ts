@@ -171,10 +171,15 @@ export async function secretApplyBlocker(): Promise<string | null> {
  * is pending, so a rotation never rides along with an unrelated change (nor an
  * unrelated change with it), and its commit names only which secret moved —
  * never a value, which this function only ever holds as ciphertext.
+ *
+ * `extraFiles` ride the same request, for a secret whose public half belongs
+ * in site.json (the GitHub App's id beside its sealed key): rendered by the
+ * caller from the COMMITTED document, since anything pending is refused here.
  */
 export function runSecretApply(
   actor: string,
   secret: { file: VaultFile; name: string; ciphertext: string },
+  opts?: { extraFiles?: Pick<import('./apply').ApplyFiles, 'site.json'> },
 ): Promise<ApplyOutcome> {
   return serialised(async () => {
     const { requestApply } = await import('./apply')
@@ -188,7 +193,7 @@ export function runSecretApply(
     }
 
     const id = await requestApply({
-      files: { [secret.file]: secret.ciphertext },
+      files: { ...opts?.extraFiles, [secret.file]: secret.ciphertext },
       summary: `replace ${secret.name}`,
       actor,
       commit: await commitSwitch(),

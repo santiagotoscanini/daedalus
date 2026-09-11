@@ -58,6 +58,11 @@ function recordOf(entry: ManifestEntry): AppRecord {
   return {
     id,
     ...toRow(entry),
+    githubRepoId: null,
+    buildStrategy: 'auto',
+    buildPublish: 'live',
+    buildEnvPlaceholders: {},
+    railpackEnv: {},
     createdAt: NOW,
     updatedAt: NOW,
     envVars: entry.env.map((e, i) => ({
@@ -96,6 +101,46 @@ describe('the export round-trip', () => {
     managed.managedInNix = true
     const out = toRegistryExport([managed, recordOf(RICH)])
     expect(Object.keys(out.apps)).toEqual(['demo'])
+  })
+})
+
+// The build columns are engine state nix never reads. If one leaked into the
+// export, every app would show drift the moment a build recorded its repo id,
+// and the Apply bar would light for an edit that ships nothing.
+describe('engine-only columns', () => {
+  const plain = recordOf(RICH)
+  const built: AppRecord = {
+    ...plain,
+    githubRepoId: 987_654_321,
+    buildStrategy: 'dockerfile',
+    buildPublish: 'candidate',
+    buildEnvPlaceholders: { VITE_PUBLIC_KEY: 'placeholder', DATABASE_URL: 'postgres://build' },
+    railpackEnv: { RAILPACK_NODE_PLAYWRIGHT_INSTALL: 'true' },
+  }
+
+  it('render byte-identical apps.json', () => {
+    expect(renderRegistryFile(toRegistryExport([built]))).toBe(
+      renderRegistryFile(toRegistryExport([plain])),
+    )
+  })
+
+  it('show no drift against the applied registry', () => {
+    const [entry] = reparse(renderRegistryFile(toRegistryExport([plain])))
+    expect(entry).toBeDefined()
+    expect(driftOf(built, entry)).toEqual([])
+  })
+
+  it('survive a re-sync from Nix — toRow never carries them', () => {
+    const row = toRow(RICH)
+    for (const k of [
+      'githubRepoId',
+      'buildStrategy',
+      'buildPublish',
+      'buildEnvPlaceholders',
+      'railpackEnv',
+    ]) {
+      expect(row).not.toHaveProperty(k)
+    }
   })
 })
 

@@ -1,6 +1,14 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { ciphertextError, type VaultFile } from '../lib/vault'
+import {
+  ciphertextError,
+  jsonCiphertextError,
+  jsonVaultValuesError,
+  VAULT_JSON_KEYS,
+  type VaultFile,
+  type VaultJsonFile,
+  type VaultJsonValues,
+} from '../lib/vault'
 
 // Encrypting a secret for site/vault/, in this container.
 //
@@ -14,6 +22,12 @@ import { ciphertextError, type VaultFile } from '../lib/vault'
 
 export type Sealed = { ok: true; ciphertext: string } | { ok: false; reason: string }
 
+/** Longest first, so a value never survives as the tail of a shorter match. */
+function redact(text: string, secrets: string[]): string {
+  const needles = [...new Set(secrets.filter((s) => s !== ''))].sort((a, b) => b.length - a.length)
+  return needles.reduce((acc, s) => acc.replaceAll(s, '[secret]'), text)
+}
+
 /**
  * Encrypt with the mounted static sops. Resolves with the file sops wrote.
  *
@@ -23,7 +37,12 @@ export type Sealed = { ok: true; ciphertext: string } | { ok: false; reason: str
  * directory, because the creation rule's `^vault/…` is matched against the
  * `--filename-override` path relative to where sops stands.
  */
-function encrypt(file: VaultFile, value: string): Promise<string> {
+function encrypt(
+  file: VaultFile,
+  type: 'binary' | 'json',
+  input: string,
+  secrets: string[],
+): Promise<string> {
   const site = process.env.SITE_PATH ?? '/site'
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -33,9 +52,9 @@ function encrypt(file: VaultFile, value: string): Promise<string> {
         join(site, '.sops.yaml'),
         'encrypt',
         '--input-type',
-        'binary',
+        type,
         '--output-type',
-        'binary',
+        type,
         '--filename-override',
         file,
       ],
@@ -62,10 +81,10 @@ function encrypt(file: VaultFile, value: string): Promise<string> {
         resolve(out)
         return
       }
-      const said = err.replaceAll(value, '[secret]').trim().split('\n')[0] ?? ''
+      const said = redact(err, secrets).trim().split('\n')[0] ?? ''
       reject(new Error(`sops failed${said === '' ? '' : `: ${said}`}`))
     })
-    child.stdin.end(value)
+    child.stdin.end(input)
   })
 }
 
@@ -76,7 +95,7 @@ function encrypt(file: VaultFile, value: string): Promise<string> {
 export async function sealForVault(file: VaultFile, value: string): Promise<Sealed> {
   let out: string
   try {
-    out = await encrypt(file, value)
+    out = await encrypt(file, 'binary', value, [value])
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : 'sops failed' }
   }
@@ -84,4 +103,45 @@ export async function sealForVault(file: VaultFile, value: string): Promise<Seal
   return bad === null
     ? { ok: true, ciphertext: out }
     : { ok: false, reason: `Nothing was sent: ${bad}.` }
+}
+
+/**
+ * Several values, encrypted as one sops JSON file for `file` — one encrypted
+ * string per key, in the order VAULT_JSON_KEYS declares — and checked like
+ * sealForVault.
+ *
+ * Before anything else, every declared key must hold a non-empty string with
+ * no surrounding whitespace (jsonVaultValuesError); a key the file does not
+ * declare is neither sealed nor looked at. Every declared value, each of its
+ * lines and its JSON-escaped form are redacted from what sops says on failure:
+ * a PEM line alone is still the key. Never throws — every failure is a reason.
+ */
+export async function sealJsonForVault<F extends VaultJsonFile>(
+  file: F,
+  values: VaultJsonValues<F>,
+): Promise<Sealed> {
+  try {
+    const invalid = jsonVaultValuesError(file, values)
+    if (invalid !== null) return { ok: false, reason: `Nothing was sent: ${invalid}.` }
+    const plain: Record<string, string> = values
+    const keys: readonly string[] = VAULT_JSON_KEYS[file]
+    const declared = keys.map((k): [string, string] => [k, plain[k] ?? ''])
+    const secrets = declared.flatMap(([, v]) => [
+      v,
+      JSON.stringify(v).slice(1, -1),
+      ...v.split(/\r?\n/).map((l) => l.trim()),
+    ])
+    let out: string
+    try {
+      out = await encrypt(file, 'json', JSON.stringify(Object.fromEntries(declared)), secrets)
+    } catch (e) {
+      return { ok: false, reason: e instanceof Error ? e.message : 'sops failed' }
+    }
+    const bad = jsonCiphertextError(file, out, values)
+    return bad === null
+      ? { ok: true, ciphertext: out }
+      : { ok: false, reason: `Nothing was sent: ${bad}.` }
+  } catch {
+    return { ok: false, reason: 'Nothing was sent: the values could not be sealed.' }
+  }
 }

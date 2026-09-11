@@ -1,5 +1,5 @@
-import { timingSafeEqual } from 'node:crypto'
 import { createFileRoute } from '@tanstack/react-router'
+import { safeEqual } from '../lib/github-app-crypto'
 
 // "A new image landed — redeploy this app."
 //
@@ -181,16 +181,4 @@ function authFailure(request: Request): Response | null {
     return Response.json({ status: 'error', error: 'bad or missing token' }, { status: 401 })
   }
   return null
-}
-
-/**
- * Constant-time compare. `===` on a secret leaks its length and prefix through
- * timing; irrelevant over a LAN in practice, but this is the one credential
- * standing in front of an unauthenticated path that starts privileged units.
- */
-function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a)
-  const bb = Buffer.from(b)
-  if (ab.length !== bb.length) return false
-  return timingSafeEqual(ab, bb)
 }

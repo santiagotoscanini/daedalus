@@ -1,6 +1,8 @@
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
+  bigint,
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -122,6 +124,27 @@ export const apps = pgTable(
     // explaining is open-ended and none of it is queried.
     notes: jsonb('notes').$type<Record<string, string>>().notNull().default({}),
 
+    // Engine-only: how the box's own builder treats this app. Nix never reads
+    // these, so toRegistryExport and driftOf leave them out — an edit here
+    // ships nothing and must not light the Apply bar (apps.test.ts asserts it).
+    //
+    // GitHub's numeric repository id, filled by the build scheduler. A push is
+    // matched on it rather than on the name, which a rename or transfer moves.
+    githubRepoId: bigint('github_repo_id', { mode: 'number' }),
+    // "auto" | "railpack" | "dockerfile" — what each build is asked to use.
+    buildStrategy: text('build_strategy').notNull().default('auto'),
+    // "live" | "candidate" — a candidate is pushed but never deployed.
+    buildPublish: text('build_publish').notNull().default('live'),
+    // Build-time env names the app needs set but not real, name → placeholder
+    // value. Never secrets: they reach the build in the clear.
+    buildEnvPlaceholders: jsonb('build_env_placeholders')
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    // Env handed to Railpack — its RAILPACK_* switches, such as
+    // RAILPACK_NODE_PLAYWRIGHT_INSTALL.
+    railpackEnv: jsonb('railpack_env').$type<Record<string, string>>().notNull().default({}),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -198,7 +221,95 @@ export const deployments = pgTable(
   (t) => [uniqueIndex('deployments_app_digest_started_idx').on(t.appId, t.digest, t.startedAt)],
 )
 
-// The three `relations` blocks below look unreferenced to any search for their
+// Builds run by the box's own builder (BuildKit + Railpack, driven by the
+// GitHub App). One row per build; the host's status file is the live truth
+// while one runs, and the scheduler folds it in here so the history outlives
+// the host's logs.
+//
+// `builds_one_queued_per_lane` is what supersede leans on: at most one queued
+// row per app and lane, so a newer push marks the queued row `superseded` and
+// inserts its own, in one transaction (lib/repo/builds.ts), instead of stacking
+// a build of a sha that is already stale. The 'queued' literal is written inside the template
+// on purpose — an interpolated value becomes a bound parameter, which
+// drizzle-kit cannot put into CREATE INDEX.
+export const builds = pgTable(
+  'builds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    appId: uuid('app_id')
+      .notNull()
+      .references(() => apps.id, { onDelete: 'cascade' }),
+
+    // 'main' in v1; pull-request lanes come later, with prNumber set.
+    lane: text('lane').notNull().default('main'),
+    prNumber: integer('pr_number'),
+    sha: text('sha').notNull(),
+
+    // As requested: "auto" | "railpack" | "dockerfile". The host resolves
+    // "auto"; what it chose lands in resolvedStrategy.
+    strategy: text('strategy').notNull(),
+    resolvedStrategy: text('resolved_strategy'),
+    // "live" | "candidate", copied from the app at request time.
+    publish: text('publish').notNull().default('live'),
+
+    requestedBy: text('requested_by').notNull(),
+    actor: text('actor'),
+    // X-GitHub-Delivery of the push that asked. Not unique: operator and sweep
+    // builds have none, and the replay guard is github_deliveries' primary
+    // key, not this.
+    deliveryId: text('delivery_id'),
+
+    // queued → cloning → detecting → checking → building → publishing →
+    // succeeded | failed | cancelled | superseded.
+    state: text('state').notNull().default('queued'),
+    phase: text('phase'),
+    error: text('error'),
+    // When the request was handed to the host; null while queued. The hard cap
+    // counts from here — from createdAt, a build that waited behind another
+    // would time out the moment it started. updatedAt is the last word heard
+    // from the host, which is what the staleness check reads.
+    startedAt: timestamp('started_at', { withTimezone: true }),
+
+    // Shapes are owned by the status decoder in lib/builds.ts, not here.
+    detected: jsonb('detected'),
+    warnings: jsonb('warnings'),
+    checks: jsonb('checks'),
+    timings: jsonb('timings'),
+
+    // GitHub's ids for what this build posted. Numbers, not bigint: both are
+    // far below 2^53, and a bigint would not survive the server-function wire.
+    checkRunId: bigint('check_run_id', { mode: 'number' }),
+    deploymentId: bigint('deployment_id', { mode: 'number' }),
+    // The final state has been sent to GitHub.
+    reported: boolean('reported').notNull().default(false),
+
+    digest: text('digest'),
+    imageRef: text('image_ref'),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('builds_app_created_idx').on(t.appId, t.createdAt),
+    uniqueIndex('builds_one_queued_per_lane').on(t.appId, t.lane).where(sql`${t.state} = 'queued'`),
+  ],
+)
+
+// Every X-GitHub-Delivery the webhook has accepted, pruned after 7 days. The
+// primary key IS the replay guard: GitHub's redelivery reuses the id, so
+// inserting it in the same transaction as the enqueue turns a replayed push
+// into a no-op instead of a second build.
+export const githubDeliveries = pgTable('github_deliveries', {
+  id: text('id').primaryKey(),
+  event: text('event').notNull(),
+  action: text('action'),
+  // What the route did with it.
+  outcome: text('outcome').notNull(),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// The `relations` blocks below look unreferenced to any search for their
 // names, and are not: `lib/db.ts` does `import * as schema` and hands the whole
 // module to drizzle, which is what makes the relational query API work — the
 // `with: { envVars: … }` in lib/repo/apps.ts is these. Deleting them as dead
@@ -206,10 +317,15 @@ export const deployments = pgTable(
 export const appsRelations = relations(apps, ({ many }) => ({
   envVars: many(appEnvVars),
   deployments: many(deployments),
+  builds: many(builds),
 }))
 
 export const deploymentsRelations = relations(deployments, ({ one }) => ({
   app: one(apps, { fields: [deployments.appId], references: [apps.id] }),
+}))
+
+export const buildsRelations = relations(builds, ({ one }) => ({
+  app: one(apps, { fields: [builds.appId], references: [apps.id] }),
 }))
 
 export const appEnvVarsRelations = relations(appEnvVars, ({ one }) => ({

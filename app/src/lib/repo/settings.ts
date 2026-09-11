@@ -53,4 +53,10 @@ export const SETTING_KEYS = {
   siteCommit: 'site.commit',
   /** The operator's desired site.json — the editing surface for site values (core/site). */
   siteDraft: 'site.draft',
+  /** An in-flight GitHub App manifest creation — hashed state, actor, owner id, expiry. */
+  githubAppCreation: 'github.app.creation',
+  /** A created GitHub App whose Apply was refused, kept for "Retry Apply". */
+  githubAppPendingApply: 'github.app.pendingApply',
+  /** When the build scheduler last ran its sweep. */
+  buildsLastSweep: 'builds.lastSweep',
 } as const

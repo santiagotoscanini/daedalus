@@ -77,7 +77,7 @@ export function summarise(changed: { name: string; fields: string[] }[]): string
     // The host prefixes the subject with what it wrote (`site:`, `apps:`), so a
     // site-only change names its fields and nothing else.
     if (only.name === 'site') return only.fields.join(', ')
-    return `: `
+    return `${only.name}: ${only.fields.join(', ')}`
   }
   return `${String(changed.length)} apps updated (${changed.map((c) => c.name).join(', ')})`
 }

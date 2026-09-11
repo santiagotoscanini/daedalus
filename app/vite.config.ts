@@ -88,7 +88,19 @@ export default defineConfig({
     // perfectly healthy in the logs. `app-daedalus` is the under-the-gate
     // door: shotter joins iso-daedalus-net and dials the container by name
     // for visual verification the SSO gate would otherwise block.
-    allowedHosts: [appHost, ...appHostAliases, 'app-daedalus'],
+    //
+    // APP_EXTRA_HOSTS: other public names routed to this server, such as the
+    // GitHub webhook's `hooks.<baseDomain>`, bound by daedalus.nix.
+    // Comma-separated; unset or empty adds nothing.
+    allowedHosts: [
+      appHost,
+      ...appHostAliases,
+      'app-daedalus',
+      ...(process.env.APP_EXTRA_HOSTS ?? '')
+        .split(',')
+        .map((h) => h.trim())
+        .filter((h) => h !== ''),
+    ],
 
     // The HMR websocket is the one connection the browser opens on its own, so
     // it does not inherit the proxy's scheme or port — left alone the client

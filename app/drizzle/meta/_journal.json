@@ -64,6 +64,13 @@
       "when": 1788876557982,
       "tag": "0008_right_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789162504988,
+      "tag": "0009_silent_kronos",
+      "breakpoints": true
     }
   ]
 }

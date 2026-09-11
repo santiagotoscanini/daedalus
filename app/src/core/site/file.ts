@@ -23,6 +23,17 @@ const PREAMBLE = {
   _why: 'Configuration that is data, not code: what THIS box is, separated from the engine that builds it. Nix reads this directory as part of the flake, so a change here is a commit and a rebuild, and the repository stays the whole account of how the machine got the way it is.',
 }
 
+/** The GitHub App this box created. Identifiers only: its private key, webhook
+    secret and client secret are sealed in the vault, never in this file. */
+export type SiteGithubApp = {
+  id: number
+  slug: string
+  clientId: string
+  htmlUrl: string
+  owner: string
+  ownerId: number
+}
+
 export type SiteDocument = {
   schemaVersion: 1
   identity: {
@@ -50,6 +61,10 @@ export type SiteDocument = {
   /** Identifiers, not credentials — the ids in every dash.cloudflare.com URL.
       The tokens stay in the secret tree; this repo gains a vault in Phase 6. */
   cloudflare: { accountId: string; zoneId: string; tunnelId: string }
+  /** Absent means no App, the same as `app: null`. No settings tab edits it:
+      it is carried from the committed document, and only the App-creation
+      callback writes a new one. */
+  github?: { app: SiteGithubApp | null }
 }
 
 /**
@@ -58,6 +73,11 @@ export type SiteDocument = {
  * Built from `BoxSettings` rather than from the export domains directly, so
  * the file and the page can never disagree about what this box is: if the
  * page is showing it, this is what gets written.
+ *
+ * It carries no `github` block, because the settings page does not know one.
+ * That is safe only because core/site edits against this document solely when
+ * no site.json exists yet; once one does, the committed document is the base,
+ * and it carries the block.
  */
 export function siteDocument(s: BoxSettings): SiteDocument {
   return {
@@ -89,8 +109,45 @@ export function siteDocument(s: BoxSettings): SiteDocument {
   }
 }
 
+/**
+ * The inverse of the decoder's fallbacks. A field the decoder fills in when it
+ * is absent is left out again while it holds exactly that fallback, so a file
+ * written before the field existed re-renders to its own bytes. Nix reads the
+ * absent label and the empty one alike, as unset.
+ */
+function identityAsWritten(identity: SiteDocument['identity']): Record<string, unknown> {
+  if (identity.controlPlane !== '' || identity.controlPlanePrevious !== null) return identity
+  return Object.fromEntries(
+    Object.entries(identity).filter(([k]) => k !== 'controlPlane' && k !== 'controlPlanePrevious'),
+  )
+}
+
 export function renderSiteFile(doc: SiteDocument): string {
-  return `${JSON.stringify({ ...PREAMBLE, ...doc }, null, 2)}\n`
+  const { github, ...rest } = doc
+  const app = github?.app ?? null
+  const body = {
+    ...PREAMBLE,
+    ...rest,
+    identity: identityAsWritten(rest.identity),
+    // Last, and copied key by key. The fixed order keeps a new App a single
+    // block in the diff, and nothing else on the caller's object can reach a
+    // committed file (the manifest conversion reply also carries the private key).
+    ...(app === null
+      ? {}
+      : {
+          github: {
+            app: {
+              id: app.id,
+              slug: app.slug,
+              clientId: app.clientId,
+              htmlUrl: app.htmlUrl,
+              owner: app.owner,
+              ownerId: app.ownerId,
+            },
+          },
+        }),
+  }
+  return `${JSON.stringify(body, null, 2)}\n`
 }
 
 /**

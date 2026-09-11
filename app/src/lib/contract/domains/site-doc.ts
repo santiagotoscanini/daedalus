@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { SiteDocument } from '../../../core/site/file'
-import { arrayOf, bool, decode, literal, nullable, obj, optional, str } from '../decode'
+import { arrayOf, bool, decode, literal, nullable, num, obj, optional, str } from '../decode'
 
 // /site/site.json — the committed document, read from the site directory
 // mounted read-only into the container. Since Phase 5 this is THE source of
@@ -32,6 +32,25 @@ const shape = obj({
   }),
   mail: obj({ sender: str, alertTo: str }),
   cloudflare: obj({ accountId: str, zoneId: str, tunnelId: str }),
+  // The GitHub App's public half. Last, and it must stay last: `obj` copies
+  // only the keys named here, so a key missing from this shape is dropped by
+  // the next write, and the renderer puts this block after everything else.
+  // A file from before the App reads as none, and renders without it.
+  github: optional(
+    obj({
+      app: nullable(
+        obj({
+          id: num,
+          slug: str,
+          clientId: str,
+          htmlUrl: str,
+          owner: str,
+          ownerId: num,
+        }),
+      ),
+    }),
+    { app: null },
+  ),
 })
 
 // `schemaVersion` is a number in the document; `literal` is string-only, so it
