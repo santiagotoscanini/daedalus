@@ -34,6 +34,7 @@
 
 import { getJson } from '../../http'
 import { lokiEntries } from '../../loki'
+import { decodeEntities } from '../../plain-text'
 import { promScalar, promScalars, promSeries, promVector } from '../../prom'
 import type { Commit, CommitGap } from '../github'
 
@@ -303,7 +304,7 @@ async function fetchFeed(): Promise<FactorioData['news']> {
         const url = /<link[^>]*href="([^"]+)"/.exec(body)?.[1] ?? 'https://factorio.com/blog'
         const date = (/<updated>([^<]+)<\/updated>/.exec(body)?.[1] ?? '').slice(0, 10)
         return {
-          title: decode(title),
+          title: decodeEntities(title),
           url,
           date,
           // A release post is the one entry type that is actually a changelog,
@@ -320,15 +321,6 @@ async function fetchFeed(): Promise<FactorioData['news']> {
   } catch {
     return []
   }
-}
-
-function decode(s: string): string {
-  return s
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
 }
 
 /**

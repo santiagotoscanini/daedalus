@@ -26,6 +26,7 @@
 
 import { swrCache } from '../cache'
 import { key } from '../keys'
+import { stripTags } from '../plain-text'
 
 /**
  * How long a repo's release list is reused.
@@ -349,12 +350,12 @@ function parseBody(md: string): { sections: ReleaseNote['sections']; truncated: 
 
 /** Markdown → plain text. Only the markup these four projects actually use. */
 function clean(s: string): string {
+  const unlinked = s
+    // Images first: `![alt](url)` would otherwise leave a stray `!`.
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
   return (
-    s
-      // Images first: `![alt](url)` would otherwise leave a stray `!`.
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/<[^>]+>/g, '')
+    stripTags(unlinked)
       .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')
       .replace(/\*\*([^*]*)\*\*/g, '$1')
       .replace(/(?<!\w)_([^_]+)_(?!\w)/g, '$1')

@@ -4,6 +4,8 @@
 // into the shape components/release-notes.tsx already renders. Pure and
 // client-safe; the fetching is core/settings/nixos.ts's.
 
+import { stripComments } from './plain-text'
+
 export type NixosCycle = {
   /** `26.05` */
   cycle: string
@@ -152,11 +154,10 @@ function leadOnly(text: string): string {
 /** The manual's inline markdown as plain text. */
 export function plain(s: string): string {
   return (
-    s
+    stripComments(s)
       // `[](#opt-services.foo.enable)` renders as the option's own name.
       .replace(/\[\]\(#opt-([^)]+)\)/g, '$1')
       .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/<!--.*?-->/g, '')
       .replace(/`([^`]*)`/g, '$1')
       .replace(/\*\*([^*]*)\*\*/g, '$1')
       .replace(/(?<!\w)_([^_]+)_(?!\w)/g, '$1')

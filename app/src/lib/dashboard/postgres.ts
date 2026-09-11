@@ -30,6 +30,7 @@
 // panel.
 
 import { swrCache } from '../cache'
+import { decodeEntities, stripTags } from '../plain-text'
 import type { ReleaseNote, VersionGap } from './github'
 import { EMPTY_GAP } from './github'
 
@@ -151,14 +152,7 @@ async function notesFor(version: string): Promise<ReleaseNote | null> {
 /** Docs HTML → plain text. Only the markup these pages actually use. */
 function strip(s: string): string {
   return (
-    s
-      .replace(/<[^>]+>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#8212;/g, '—')
-      .replace(/&quot;/g, '"')
+    decodeEntities(stripTags(s))
       // The § that links each change to its commit — a link with no text once
       // the tags are gone, and it ends every single bullet. A change backed by
       // several commits carries one per commit, so this strips a RUN of them;
