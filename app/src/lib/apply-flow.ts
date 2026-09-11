@@ -5,8 +5,8 @@
 // into their own response shape. Before this module they were two hand-copied
 // bodies that could drift; the route's header even claimed otherwise.
 //
-// runSecretApply is the third door, for a vault secret replaced from Settings
-// (core/settings/cloudflare-token.ts). It shares the lock, the busy checks and
+// runSecretApply is the third door, for a vault secret set from Settings
+// (core/settings/cloudflare-token.ts, core/settings/github-signin.ts). It shares the lock, the busy checks and
 // the pickup window, and differs in one rule: it is always its own Apply.
 
 export type ApplyOutcome =
@@ -147,7 +147,24 @@ async function locked(actor: string): Promise<ApplyOutcome> {
   return { ok: true, id, changed }
 }
 
-export type VaultFile = 'vault/cloudflare-api-token.sops'
+export type VaultFile = import('./vault').VaultFile
+
+const pendingReason = (other: { name: string }[]) =>
+  `Apply or undo the pending changes first (${other.map((c) => c.name).join(', ')}): replacing a secret is its own Apply.`
+
+/**
+ * Why a vault secret could not be applied right now, or null when it could.
+ *
+ * For work that cannot be repeated for free, asked before it starts: a GitHub
+ * sign-in mints a token, and one minted and then refused here is a token
+ * nobody can use. runSecretApply asks again at the moment it writes.
+ */
+export async function secretApplyBlocker(): Promise<string | null> {
+  const blocked = await refuseBusy()
+  if (blocked !== null && !blocked.ok) return blocked.reason
+  const { changed } = await currentChanges()
+  return changed.length > 0 ? pendingReason(changed) : null
+}
 
 /**
  * Replace one vault secret. Always its own Apply: refused while anything else
@@ -167,11 +184,7 @@ export function runSecretApply(
 
     const { changed: other } = await currentChanges()
     if (other.length > 0) {
-      return {
-        ok: false,
-        code: 'pending',
-        reason: `Apply or undo the pending changes first (${other.map((c) => c.name).join(', ')}): replacing a secret is its own Apply.`,
-      }
+      return { ok: false, code: 'pending', reason: pendingReason(other) }
     }
 
     const id = await requestApply({

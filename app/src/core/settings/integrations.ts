@@ -1,4 +1,5 @@
 import { swrValue } from '../../lib/cache'
+import { githubTokenKind } from '../../lib/github-signin'
 import { ATTEMPT_MS } from '../../lib/http'
 import type { Ctx } from '../ctx'
 import type { CloudflareStatus, GithubCheck, IntegrationStatus, TokenCheck } from './types'
@@ -133,11 +134,7 @@ async function checkGithub(token: string): Promise<GithubCheck> {
   // token minted before GitHub prefixed them is forty hex characters and
   // says nothing about itself — but only a classic token gets an
   // X-OAuth-Scopes header back, so the answer is in the reply.
-  let kind: GithubCheck['kind'] = token.startsWith('github_pat_')
-    ? 'fine-grained'
-    : token.startsWith('ghp_')
-      ? 'classic'
-      : 'unknown'
+  let kind: GithubCheck['kind'] = githubTokenKind(token)
 
   for (const ms of ATTEMPT_MS) {
     let res: Response

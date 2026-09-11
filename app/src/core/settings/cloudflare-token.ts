@@ -1,13 +1,11 @@
-import { spawn } from 'node:child_process'
-import { join } from 'node:path'
 import {
   CLOUDFLARE_TOKEN_FILE,
   CLOUDFLARE_TOKEN_SECRET,
-  ciphertextError,
   tokenShapeError,
 } from '../../lib/cloudflare-token'
 import { getJsonResult } from '../../lib/http'
 import type { Ctx } from '../ctx'
+import { sealForVault } from '../vault'
 
 // Settings › Integrations › Cloudflare › Replace token — Phase 6, the first
 // secret set from the UI.
@@ -16,11 +14,9 @@ import type { Ctx } from '../ctx'
 // everything the box does with a token — seeing the zone, reading DNS,
 // writing a TXT record and taking it away again (a certificate renewal's two
 // calls), reading the tunnel — so a token that would break the box is refused
-// before anything changes. Only then is it encrypted, HERE, with the static
-// sops mounted into this container and the public recipients in
-// /site/.sops.yaml: the container holds no age identity, so it can write the
-// secret and never read it back, and the bridge directory (on a snapshotted
-// dataset) only ever sees ciphertext. The ciphertext goes to Apply as its own
+// before anything changes. Only then is it encrypted, HERE, for site/vault/
+// (core/vault.ts): the container holds no age identity, so it can write the
+// secret and never read it back. The ciphertext goes to Apply as its own
 // change (lib/apply-flow.ts runSecretApply); nix renders it for all four
 // consumers and restarts them (stacks/cloudflared, fleet.cloudflare.tokenFromSite).
 //
@@ -130,61 +126,6 @@ async function check(ctx: Ctx, token: string): Promise<Checked> {
   return { ok: true, zones: names }
 }
 
-/**
- * Encrypt with the mounted static sops. Resolves with the file sops wrote.
- *
- * Two details that each cost a failed run. The value goes in on stdin with NO
- * file argument: node's pipes are sockets, which `/dev/stdin` cannot open
- * (ENXIO), while sops reading its own stdin can. And sops runs FROM the site
- * directory, because the creation rule's `^vault/…` is matched against the
- * `--filename-override` path relative to where sops stands.
- */
-function encrypt(token: string): Promise<string> {
-  const site = process.env.SITE_PATH ?? '/site'
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      '/usr/local/bin/sops',
-      [
-        '--config',
-        join(site, '.sops.yaml'),
-        'encrypt',
-        '--input-type',
-        'binary',
-        '--output-type',
-        'binary',
-        '--filename-override',
-        CLOUDFLARE_TOKEN_FILE,
-      ],
-      // A bare environment: nothing of the app's own secrets is handed to it.
-      {
-        cwd: site,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { PATH: '/usr/bin:/bin', HOME: '/tmp' },
-      },
-    )
-    let out = ''
-    let err = ''
-    child.stdout.setEncoding('utf8').on('data', (c: string) => {
-      out += c
-    })
-    child.stderr.setEncoding('utf8').on('data', (c: string) => {
-      err += c
-    })
-    child.on('error', (e) => {
-      reject(new Error(`sops could not run (${e.message})`))
-    })
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve(out)
-        return
-      }
-      const said = err.replaceAll(token, '[token]').trim().split('\n')[0] ?? ''
-      reject(new Error(`sops failed${said === '' ? '' : `: ${said}`}`))
-    })
-    child.stdin.end(token)
-  })
-}
-
 export async function replaceCloudflareToken(
   ctx: Ctx,
   actor: string,
@@ -208,20 +149,14 @@ export async function replaceCloudflareToken(
   const checked = await check(ctx, token)
   if (!checked.ok) return checked
 
-  let ciphertext: string
-  try {
-    ciphertext = await encrypt(token)
-  } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : 'sops failed' }
-  }
-  const bad = ciphertextError(ciphertext, token)
-  if (bad !== null) return { ok: false, reason: `Nothing was sent: ${bad}.` }
+  const sealed = await sealForVault(CLOUDFLARE_TOKEN_FILE, token)
+  if (!sealed.ok) return sealed
 
   const { runSecretApply } = await import('../../lib/apply-flow')
   const outcome = await runSecretApply(actor, {
     file: CLOUDFLARE_TOKEN_FILE,
     name: CLOUDFLARE_TOKEN_SECRET,
-    ciphertext,
+    ciphertext: sealed.ciphertext,
   })
   return outcome.ok
     ? { ok: true, id: outcome.id, zones: checked.zones }

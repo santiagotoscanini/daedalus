@@ -1,6 +1,7 @@
 import type { ApplyStatus } from '../../lib/apply'
 import type { RepoFacts } from '../../lib/contract/domains/repo'
 import type { NixosFacts } from '../../lib/contract/domains/site'
+import type { GithubTokenKind } from '../../lib/github-signin'
 import type { NixosCycle, NixosNotes, Support } from '../../lib/nixos'
 
 // What the settings page renders. Types only — this file is imported by
@@ -51,7 +52,15 @@ export type BoxSettings = {
       /** The box reads it from site/vault/, so it can be replaced from here (Phase 6). */
       tokenFromSite: boolean
     }
-    github: { owner: string; tokenConfigured: boolean; repoTokenConfigured: boolean }
+    github: {
+      owner: string
+      tokenConfigured: boolean
+      repoTokenConfigured: boolean
+      /** The box's GitHub consumers read the token the sign-in wrote to site/vault/ (Phase 7). */
+      tokenFromSite: boolean
+      /** An OAuth App client id is known, so Sign in can be offered. */
+      signInReady: boolean
+    }
     mail: { sender: string; alertTo: string }
     registryUrl: string
     grafanaUrl: string
@@ -95,7 +104,7 @@ export type GithubCheck = {
   ok: boolean
   login: string | null
   /** From the token's prefix; a fine-grained token reports no scopes header. */
-  kind: 'classic' | 'fine-grained' | 'unknown'
+  kind: GithubTokenKind
   scopes: string[]
   rateLimit: { remaining: number; limit: number; resetAt: string } | null
   error: string | null

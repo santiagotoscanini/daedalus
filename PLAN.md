@@ -836,7 +836,7 @@ Compatibility: the toggle defaults to the old path; flipping is one option.
 1. Register the daedalus OAuth App (device flow enabled); `client_id` in
    `site.json` (overridable). Settings › GitHub: "Sign in" shows the 8-char
    code, polls, verifies scopes (`repo workflow`), stores the token as
-   `secrets/github-token.sops` via the Phase 6 path; "Paste a fine-grained
+   `vault/github-token.sops` via the Phase 6 path; "Paste a fine-grained
    PAT" as the fallback with a per-endpoint self-test that names the missing
    permission (Administration, Contents, Workflows, Secrets, Actions).
 2. Nix consumers behind toggles: `DASH_GITHUB_TOKEN` (replaces the ghcr-auth
