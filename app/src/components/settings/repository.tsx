@@ -46,6 +46,8 @@ export function Repository({
 
       <Section
         title="Configuration repository"
+        icon="/icon-github.svg"
+        mono
         description="The flake a rebuild reads. Facts, not the repo: the tree is never mounted into this container."
         rows={[
           { k: 'Path', v: <Value v={f.path} /> },
@@ -96,6 +98,7 @@ export function Repository({
 
       <Section
         title="What runs"
+        icon="/icon-nixos.webp"
         description="The generation that is live now, against the commit at the head of the repository."
         rows={[
           {
@@ -279,6 +282,7 @@ function SiteSection({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
 
       <Section
         title="Site"
+        icon="/icon-git.svg"
         description="What this box is, as data. Written by daedalus into the configuration repository; nothing is built from it yet."
         rows={[{ k: 'Path', v: <Value v={dir.path} /> }]}
       >

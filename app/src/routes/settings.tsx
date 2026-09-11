@@ -1,5 +1,14 @@
 import { Await, createFileRoute, useRouter } from '@tanstack/react-router'
-import { useState, useTransition } from 'react'
+import {
+  CodeIcon,
+  FolderGit2Icon,
+  NetworkIcon,
+  PaletteIcon,
+  PlugIcon,
+  SlidersHorizontalIcon,
+  UserIcon,
+} from 'lucide-react'
+import { type ReactNode, useState, useTransition } from 'react'
 
 import { ApplyBar } from '../components/apply-bar'
 import { PageHead } from '../components/page'
@@ -42,14 +51,26 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // state inside Pocket ID, written through Pocket ID's API, and also saves at
 // once.
 
+/** A tab's label with its icon: drawn quieter than the word, which carries the meaning. */
+function TabLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <>
+      <span aria-hidden="true" className="inline-flex opacity-70 [&>svg]:size-[15px]">
+        {icon}
+      </span>
+      {children}
+    </>
+  )
+}
+
 const TABS = [
-  { id: 'general', label: 'General' },
-  { id: 'network', label: 'Network' },
-  { id: 'integrations', label: 'Integrations' },
-  { id: 'repository', label: 'Site' },
-  { id: 'profile', label: 'Profile' },
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'developer', label: 'Developer' },
+  { id: 'general', label: <TabLabel icon={<SlidersHorizontalIcon />}>General</TabLabel> },
+  { id: 'network', label: <TabLabel icon={<NetworkIcon />}>Network</TabLabel> },
+  { id: 'integrations', label: <TabLabel icon={<PlugIcon />}>Integrations</TabLabel> },
+  { id: 'repository', label: <TabLabel icon={<FolderGit2Icon />}>Site</TabLabel> },
+  { id: 'profile', label: <TabLabel icon={<UserIcon />}>Profile</TabLabel> },
+  { id: 'appearance', label: <TabLabel icon={<PaletteIcon />}>Appearance</TabLabel> },
+  { id: 'developer', label: <TabLabel icon={<CodeIcon />}>Developer</TabLabel> },
 ] as const
 
 type SettingsTab = (typeof TABS)[number]['id']

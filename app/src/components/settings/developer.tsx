@@ -1,3 +1,4 @@
+import { FileCodeIcon } from 'lucide-react'
 import type { BoxSettings } from '../../core/settings/types'
 import { Chip } from '../viz'
 import { Section, Value } from './shared'
@@ -13,6 +14,7 @@ export function Developer({ settings }: { settings: BoxSettings }) {
     <div className="flex flex-col gap-6">
       <Section
         title="This instance"
+        icon="/icon.svg"
         description="How the control plane itself is run. Declared in the flake, not here."
         rows={[
           {
@@ -39,6 +41,7 @@ export function Developer({ settings }: { settings: BoxSettings }) {
 
       <Section
         title="Paths inside the container"
+        icon={<FileCodeIcon />}
         description="Where the host publishes what this app reads, and where the app drops what the host acts on."
         rows={[
           { k: 'Exports', v: <Value v={d.exportDir} /> },

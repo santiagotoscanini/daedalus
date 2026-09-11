@@ -1,3 +1,4 @@
+import { RouterIcon } from 'lucide-react'
 import type { BoxSettings } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
 import {
@@ -21,6 +22,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
 
       <Section
         title="Addresses"
+        icon={<RouterIcon />}
         description="Where the box is on the LAN, and the one name that reaches it from anywhere."
         rows={[
           {
@@ -85,6 +87,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
 
       <Section
         title="Dynamic DNS"
+        icon="/icon-cloudflare.svg"
         description="ddclient keeps the public record on the ISP's current address."
         rows={[
           { k: 'Record', v: <Value v={n.ddns.host} /> },
@@ -94,6 +97,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
 
       <Section
         title="DHCP"
+        icon="/icon-pihole.svg"
         description="Pi-hole's scope for the household. Reservations live in an encrypted hosts file and are on the Network › DHCP tab."
         rows={[
           {
@@ -156,6 +160,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
 
       <Section
         title="DNS"
+        icon="/icon-pihole.svg"
         description="Every device in the house resolves through Pi-hole; these are what Pi-hole itself asks."
         rows={[
           {

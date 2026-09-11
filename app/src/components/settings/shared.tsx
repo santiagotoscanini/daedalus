@@ -17,13 +17,20 @@ export const MONO = 'font-mono text-[0.8rem] [overflow-wrap:anywhere]'
 export function Section({
   title,
   icon,
+  mono,
   description,
   rows,
   children,
 }: {
   title: string
-  /** A logo under public/, drawn before the title. */
-  icon?: string
+  /**
+   * Drawn before the title. A path under public/ is a service's own logo —
+   * used when the section IS that service (Cloudflare, Pi-hole, Pocket ID);
+   * an element is a lucide icon, for sections that are a concept instead.
+   */
+  icon?: string | ReactNode
+  /** A logo drawn in black (GitHub's mark): inverted under the dark scheme so it stays visible. */
+  mono?: boolean
   description?: ReactNode
   rows?: { k: string; v: ReactNode }[]
   children?: ReactNode
@@ -32,15 +39,22 @@ export function Section({
     <Card>
       <CardHeader>
         <CardTitle className={icon === undefined ? undefined : 'flex items-center gap-2'}>
-          {icon !== undefined && (
+          {typeof icon === 'string' ? (
             <img
               src={icon}
               alt=""
               width={20}
               height={20}
-              className="size-5 flex-none object-contain"
+              className={cn('size-5 flex-none object-contain', mono === true && 'dark:invert')}
             />
-          )}
+          ) : icon !== undefined ? (
+            <span
+              aria-hidden="true"
+              className="inline-flex size-5 flex-none items-center justify-center text-(--text-muted) [&>svg]:size-[18px]"
+            >
+              {icon}
+            </span>
+          ) : null}
           {title}
         </CardTitle>
         {description !== undefined && <CardDescription>{description}</CardDescription>}

@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import { ExternalLinkIcon, LogOutIcon } from 'lucide-react'
+import { ExternalLinkIcon, KeyRoundIcon, LogOutIcon } from 'lucide-react'
 import { useId, useRef, useState, useTransition } from 'react'
 
 import type { BoxSettings, Profile, ProfilePatch, ProfileRead } from '../../core/settings/types'
@@ -56,13 +56,14 @@ export function ProfileTab({
       ) : profile.ok ? (
         <Account profile={profile.profile} />
       ) : (
-        <Section title="Profile">
+        <Section title="Profile" icon="/icon-pocket-id.svg" mono>
           <p className={NOTE}>{profile.reason}</p>
         </Section>
       )}
 
       <Section
         title="On this box"
+        icon="/icon-nixos.webp"
         rows={[
           {
             k: 'Linux account',
@@ -97,6 +98,8 @@ function Account({ profile: p }: { profile: Profile }) {
 
       <Section
         title="Details"
+        icon="/icon-pocket-id.svg"
+        mono
         description="Saved to your Pocket ID account when you leave a field."
       >
         {locked && (
@@ -148,7 +151,11 @@ function Account({ profile: p }: { profile: Profile }) {
         </div>
       </Section>
 
-      <Section title="Sign-in" description="Your passkeys are kept by Pocket ID, not by this box.">
+      <Section
+        title="Sign-in"
+        icon={<KeyRoundIcon />}
+        description="Your passkeys are kept by Pocket ID, not by this box."
+      >
         <div className="flex flex-wrap items-center gap-2">
           {p.accountUrl !== '' && (
             <a

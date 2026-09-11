@@ -1,4 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
+import { BookOpenIcon, IdCardIcon } from 'lucide-react'
 import { useEffect, useState, useTransition } from 'react'
 
 import type { BoxSettings, GeneralLive, NixosRelease, ZoneList } from '../../core/settings/types'
@@ -61,6 +62,7 @@ export function General({
 
       <Section
         title="Identity"
+        icon={<IdCardIcon />}
         description="What this box calls itself. Every hostname it publishes is exactly one label under the domain."
         rows={[
           { k: 'Hostname', v: <Value v={g.hostname} /> },
@@ -385,6 +387,7 @@ function Notes({ facts, release }: { facts: NixosFacts; release: NixosRelease | 
   return (
     <Section
       title="Release notes"
+      icon={<BookOpenIcon />}
       description={
         next === null
           ? `What ${facts.release} shipped.`

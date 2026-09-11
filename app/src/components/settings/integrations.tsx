@@ -1,4 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
+import { ServerIcon } from 'lucide-react'
 import { type ReactNode, useId, useState, useTransition } from 'react'
 
 import type {
@@ -45,6 +46,7 @@ export function Integrations({
 
       <Section
         title="Cloudflare"
+        icon="/icon-cloudflare.svg"
         description="The zone every hostname lives in, the tunnel public traffic arrives through, and the one token that drives both."
         rows={[
           { k: 'Account', v: <Value v={cf.accountId} /> },
@@ -90,6 +92,8 @@ export function Integrations({
 
       <Section
         title="GitHub"
+        icon="/icon-github.svg"
+        mono
         description="Where the app repos live, and the tokens the box uses to read releases and drive CI."
         rows={[
           {
@@ -124,6 +128,7 @@ export function Integrations({
 
       <Section
         title="Mail relay"
+        icon="/icon-gmail.svg"
         description="Every alert and failure mail on the box leaves through one Gmail relay."
         rows={[
           {
@@ -171,14 +176,25 @@ export function Integrations({
 
       <Section
         title="On this box"
+        icon={<ServerIcon />}
         rows={[
           {
             k: 'Image registry',
-            v: settings.registryUrl === '' ? <Unset /> : <ExtLink href={settings.registryUrl} />,
+            v:
+              settings.registryUrl === '' ? (
+                <Unset />
+              ) : (
+                <AppLink icon="/icon-zot.png" href={settings.registryUrl} />
+              ),
           },
           {
             k: 'Grafana',
-            v: settings.grafanaUrl === '' ? <Unset /> : <ExtLink href={settings.grafanaUrl} />,
+            v:
+              settings.grafanaUrl === '' ? (
+                <Unset />
+              ) : (
+                <AppLink icon="/icon-grafana.svg" href={settings.grafanaUrl} />
+              ),
           },
         ]}
       />
@@ -190,6 +206,16 @@ export function Integrations({
         </p>
       )}
     </div>
+  )
+}
+
+/** A link to one of the box's own services, beside that service's mark. */
+function AppLink({ icon, href }: { icon: string; href: string }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <img src={icon} alt="" width={16} height={16} className="size-4 flex-none object-contain" />
+      <ExtLink href={href} />
+    </span>
   )
 }
 
