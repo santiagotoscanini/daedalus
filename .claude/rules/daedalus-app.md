@@ -90,6 +90,10 @@ the remote is still the copy that survives a disk. Commit often.
   /export + snapshots into `BoxSettings`; `integrations.ts` is the
   deferred, 5-min-cached live token checks; `external-apps.ts` reads
   the off-box list from the store with `lib/external-apps.ts` as seed;
+  `profile.ts` is the Profile tab — the signed-in person's Pocket ID
+  account, resolved from the forward-auth headers and written through
+  Pocket ID's admin API (every write re-sends isAdmin/disabled/
+  emailVerified; the file header says why);
   `zones.ts`, `timezones.ts` and `nixos.ts` feed General's two pickers
   and its Engine card: the Cloudflare zones the API token can see,
   tzdata's `zone.tab` from /export, and the release's support window,
