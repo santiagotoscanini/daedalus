@@ -1,0 +1,152 @@
+# Checks the engine on every push and pull request.
+#
+# On GitHub-hosted runners, deliberately — never the box's own self-hosted
+# runners (s2-server's stacks/gha-runner). This is the CI for the thing that
+# runs the box, so it has to keep answering when the box is down, and the repo
+# is public, so hosted minutes cost nothing.
+#
+# What each job proves:
+#   app        frozen install, route generation + tsc, biome, vitest, the
+#              production build, and that src/lib/schema.ts and drizzle/ agree
+#   workflows  actionlint and zizmor over every file in .github/workflows
+#   codeql     CodeQL's JavaScript/TypeScript and Actions queries; findings land
+#              in the Security tab rather than failing the run
+#
+# The app job runs every check even after one fails, so a lint error does not
+# hide a broken test. There is no nix or shell in this repository yet: the NixOS
+# module lives in the private s2-server repo until PLAN.md Phase 11 moves it
+# here, and the nix checks join this file then.
+#
+# website/ has its own workflow (website.yml) and does not trigger this one.
+#
+# Convention (same as website.yml): third-party actions are pinned to full
+# commit SHAs, and container images to digests.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "website/**"
+  pull_request:
+    paths-ignore:
+      - "website/**"
+  # Weekly as well: CodeQL's queries and the npm registry both move without a
+  # push, and a lockfile that stops installing should be found before a deploy.
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: App (typecheck, lint, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Reads the pnpm version from app/package.json's packageManager.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: app/package.json
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      # pnpm-workspace.yaml sends every install to the box's Verdaccio, which a
+      # hosted runner cannot reach. What pins a tarball is the lockfile's
+      # integrity hash, not the registry it came from, so npmjs has to serve the
+      # same bytes, and minimumReleaseAge still applies to every entry.
+      - name: Install
+        id: install
+        run: pnpm install --frozen-lockfile --registry https://registry.npmjs.org/
+
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm typecheck
+
+      - name: Lint and format
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm exec biome ci --reporter=github .
+
+      - name: Test
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm test
+
+      - name: Build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm build
+
+      # drizzle.config.ts refuses to load without a DATABASE_URL; `check` and
+      # `generate` never connect, so an address nothing listens on is enough.
+      # A schema edit without its migration makes `generate` write a new file,
+      # and that file is the failure.
+      - name: Migrations match the schema
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          DATABASE_URL: postgres://ci@127.0.0.1:1/ci
+        run: |
+          pnpm exec drizzle-kit check
+          pnpm exec drizzle-kit generate </dev/null
+          if [ -n "$(git status --porcelain -- drizzle)" ]; then
+            git status --short -- drizzle
+            echo "::error file=app/src/lib/schema.ts::schema.ts changed without a migration. Run pnpm db:generate inside the app-daedalus container and commit app/drizzle/."
+            exit 1
+          fi
+
+  workflows:
+    name: Workflows (actionlint, zizmor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The image carries shellcheck, so every `run:` block is linted too.
+      - name: actionlint
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
+        with:
+          args: -color
+
+      - name: zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          version: 1.30.1
+          # Fail the run on a finding instead of uploading SARIF: a workflow
+          # finding is a one-line fix and belongs in front of the push.
+          advanced-security: false
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          languages: javascript-typescript, actions
+          build-mode: none
+
+      - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0

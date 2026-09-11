@@ -66,6 +66,17 @@ Outside the plan, landed 2026-09-11:
   engine `f451143`): `identity.controlPlane` under the domain, with
   `webApps.<n>.aliases` keeping the old name served until the operator
   confirms the new one from it. One of Phase 9b's literals, done early.
+- **Engine CI** (`.github/workflows/ci.yml`), on GitHub-hosted runners, never
+  the box's own, so it answers while the box is down. It runs on every push, pull request and
+  weekly. The `app` job: a frozen install against npmjs (Verdaccio is
+  unreachable from a hosted runner; the lockfile's integrity hashes pin the
+  bytes), `tsr generate` + tsc, `biome ci`, vitest, `vite build`, and
+  `drizzle-kit check` + `generate` with a clean `app/drizzle/` as the
+  schema/migration agreement. Plus actionlint + zizmor over the workflows and
+  CodeQL (JS/TS and Actions). Vitest now sets its own unreachable
+  `DATABASE_URL`, so no test can reach the live database even in the dev
+  container. No nix or shell lives in this repo yet; those checks join in
+  Phase 11.
 
 ## What remains, in order
 
@@ -1003,10 +1014,10 @@ Registrar API (beta); generated-secrets-as-sops (Clan-vars style) — later;
 
 ## 7. Open questions (defaults stated)
 
-- **CI on the engine repo** — "CI flake builds" is on the rejected list; the
-  plan runs `nix flake check` and the schema fixtures in the *engine* repo's
-  Actions from Phase 11 on, treating it as a different repo. Say so if you
-  want local `just check` targets instead.
+- **CI on the engine repo** — settled 2026-09-11: `ci.yml` runs the app's
+  checks on GitHub-hosted runners today. "CI flake builds" stays rejected for
+  the private config repo; `nix flake check` and the schema fixtures join the
+  *engine's* `ci.yml` in Phase 11, when the nix moves in.
 - Site directory on this box: `/etc/nixos/site`, source-controlled with the
   rest of the config; commit-on-change switch ON here (this box's repo is the
   only copy of its configuration). Default: yes.

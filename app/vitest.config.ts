@@ -9,5 +9,12 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    // Some tested modules import lib/db, which builds its client at import time
+    // from DATABASE_URL (lib/env refuses a missing one). postgres-js does not
+    // connect until the first query, so an address nothing listens on satisfies
+    // the import — on a CI runner with no database, and in the dev container,
+    // where it also turns an accidental query into a loud connection refusal
+    // instead of a read or write against the box's real database.
+    env: { DATABASE_URL: 'postgres://vitest@127.0.0.1:1/vitest' },
   },
 })
