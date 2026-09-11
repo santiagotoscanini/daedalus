@@ -1,5 +1,7 @@
 import type { ApplyStatus } from '../../lib/apply'
 import type { RepoFacts } from '../../lib/contract/domains/repo'
+import type { NixosFacts } from '../../lib/contract/domains/site'
+import type { NixosCycle, NixosNotes, Support } from '../../lib/nixos'
 
 // What the settings page renders. Types only — this file is imported by
 // components, so nothing in it may pull a server module in by value.
@@ -24,6 +26,8 @@ export type BoxSettings = {
       /** The commit the running generation was built from; null = built from a tree git did not describe. */
       revision: string | null
       nixosVersion: string | null
+      /** The release in detail; null before the export carries it. */
+      nixos: NixosFacts | null
     }
   }
   network: {
@@ -100,3 +104,35 @@ export type IntegrationStatus = {
   github: { token: GithubCheck; repoToken: GithubCheck }
   mail: { lastSentAt: string | null; lastRecipient: string | null }
 }
+
+/** A zone the Cloudflare DNS token can see. */
+export type CloudflareZone = { id: string; name: string; status: string }
+
+/** What the domain picker offers, or why it cannot offer anything. */
+export type ZoneList = { ok: true; zones: CloudflareZone[] } | { ok: false; reason: string }
+
+/** The live half of the Engine card: support, the channel, the notes. */
+export type NixosRelease = {
+  checkedAt: string
+  /** The running release as endoflife.date lists it; null when it did not answer. */
+  running: NixosCycle | null
+  support: Support | null
+  /** The newest release already out, which may be the running one. */
+  latest: NixosCycle | null
+  latestSupport: Support | null
+  channel: {
+    /** `nixos-25.11` */
+    branch: string
+    /** The channel's newest commit; null when GitHub did not answer. */
+    head: { sha: string; date: string } | null
+    /** Commits on the channel past the locked revision; null when not compared. */
+    newer: number | null
+  }
+  /** Newest release first: the latest release's notes, then the running one's. */
+  notes: NixosNotes[]
+  /** What could not be asked, as a sentence; null when everything answered. */
+  note: string | null
+}
+
+/** Settings › General's deferred half. */
+export type GeneralLive = { zones: ZoneList; nixos: NixosRelease }

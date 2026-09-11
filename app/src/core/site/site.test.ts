@@ -65,6 +65,18 @@ describe('changesBetween', () => {
     ])
   })
 
+  it('reports the timezone and the zone, which nix sources from site.json', () => {
+    const edited = structuredClone(doc)
+    edited.identity.timezone = 'Europe/Oslo'
+    edited.identity.baseDomain = 'other.test'
+    edited.cloudflare.zoneId = 'zone-2'
+    expect(changesBetween(doc, edited)).toEqual([
+      'identity.baseDomain',
+      'identity.timezone',
+      'cloudflare.zoneId',
+    ])
+  })
+
   it('does not report a field nix does not source from site.json', () => {
     const edited = structuredClone(doc)
     edited.identity.hostname = 'renamed'

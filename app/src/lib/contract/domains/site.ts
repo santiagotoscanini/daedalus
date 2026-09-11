@@ -9,6 +9,20 @@ import { readSnapshot, type SnapshotResult } from '../snapshot'
 
 export type MailIdentity = { sender: string; alertTo: string }
 
+/** The release, as platform/export.nix states it (`site.nixos`). */
+export type NixosFacts = {
+  /** `25.11.20260630.b6018f8` */
+  version: string
+  /** `25.11`; the channel is `nixos-<release>`. */
+  release: string
+  codeName: string
+  /** The nixpkgs commit the flake locked. Null when nixpkgs was not a git input. */
+  revision: string | null
+  /** This generation's kernel, which a switch without a reboot can leave ahead of the running one. */
+  kernel: string
+  stateVersion: string
+}
+
 export type SiteIdentity = {
   hostname: string
   baseDomain: string
@@ -17,6 +31,8 @@ export type SiteIdentity = {
   stateRoot: string
   timezone: string
   nixosVersion: string | null
+  /** Null until the export carries it. */
+  nixos: NixosFacts | null
   network: { interface: string | null; gateway: string | null }
   owner: string
   operator: { user: string; group: string; uid: number | null }
@@ -33,6 +49,19 @@ const shape = obj({
   stateRoot: optional(str, ''),
   timezone: optional(str, ''),
   nixosVersion: optional(nullable(str), null),
+  nixos: optional(
+    nullable(
+      obj({
+        version: optional(str, ''),
+        release: optional(str, ''),
+        codeName: optional(str, ''),
+        revision: optional(nullable(str), null),
+        kernel: optional(str, ''),
+        stateVersion: optional(str, ''),
+      }),
+    ),
+    null,
+  ),
   network: optional(
     obj({ interface: optional(nullable(str), null), gateway: optional(nullable(str), null) }),
     { interface: null, gateway: null },
@@ -58,6 +87,7 @@ export const NO_SITE: SiteIdentity = {
   stateRoot: '',
   timezone: '',
   nixosVersion: null,
+  nixos: null,
   network: { interface: null, gateway: null },
   owner: '',
   operator: { user: '', group: '', uid: null },

@@ -48,7 +48,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
       timezone: s.timezone || (ctx.env('TZ') ?? ''),
       operator: { user: s.operator.user, group: s.operator.group, email: s.mail.alertTo },
       owner: s.owner,
-      engine: { revision: site.revision, nixosVersion: s.nixosVersion },
+      engine: { revision: site.revision, nixosVersion: s.nixosVersion, nixos: s.nixos },
     },
     network: {
       lanIp: s.lanIp || (ctx.env('LAN_IP') ?? ''),

@@ -4,6 +4,7 @@ import type { SourceMeta } from '../../core/settings/types'
 import { cn } from '../../lib/cn'
 import { since, when } from '../../lib/format'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Skeleton } from '../ui/skeleton'
 import { Chip, Facts } from '../viz'
 
 // What the read-only settings tabs are built from: a card of labelled rows,
@@ -15,11 +16,14 @@ export const MONO = 'font-mono text-[0.8rem] [overflow-wrap:anywhere]'
 
 export function Section({
   title,
+  icon,
   description,
   rows,
   children,
 }: {
   title: string
+  /** A logo under public/, drawn before the title. */
+  icon?: string
   description?: ReactNode
   rows?: { k: string; v: ReactNode }[]
   children?: ReactNode
@@ -27,7 +31,18 @@ export function Section({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className={icon === undefined ? undefined : 'flex items-center gap-2'}>
+          {icon !== undefined && (
+            <img
+              src={icon}
+              alt=""
+              width={20}
+              height={20}
+              className="size-5 flex-none object-contain"
+            />
+          )}
+          {title}
+        </CardTitle>
         {description !== undefined && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -51,6 +66,11 @@ export function Value({ v, unit }: { v: string | null | undefined; unit?: string
       {unit !== undefined && <span className="text-(--dim)"> {unit}</span>}
     </Mono>
   )
+}
+
+/** A live value still being asked for. */
+export function Pending({ className }: { className?: string }) {
+  return <Skeleton className={cn('inline-block h-4 w-28 align-middle', className)} />
 }
 
 export function Unset({ label = 'not set' }: { label?: string }) {

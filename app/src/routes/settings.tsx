@@ -12,7 +12,13 @@ import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
 import { TabBar } from '../components/tabs'
 import { fetchApplyStatus } from '../server/registry'
-import { fetchBoxSettings, fetchIntegrationStatus, fetchTheme } from '../server/settings'
+import {
+  fetchBoxSettings,
+  fetchGeneralLive,
+  fetchIntegrationStatus,
+  fetchTheme,
+  fetchTimezones,
+} from '../server/settings'
 import { fetchSiteEdit, fetchSiteState } from '../server/site'
 
 // Settings — what this box IS, as opposed to what it runs.
@@ -21,7 +27,7 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // the /export domains, the host snapshots — and says where it read it from.
 // Nothing here is guessed. The rows nix sources from site/site.json are
 // editable (core/site EDITABLE — the domain, the addresses, DHCP, the DNS
-// upstreams, the two mail addresses); an edit is a stored draft against the
+// upstreams, the two mail addresses, the timezone); an edit is a stored draft against the
 // committed file, shown as `pending` beside the row, and the Apply bar at the
 // foot is what writes the file and rebuilds. Everything else is read-only.
 //
@@ -61,17 +67,24 @@ export const Route = createFileRoute('/settings')({
   // they ask Cloudflare and GitHub, so they stream in behind the page, and
   // only for the tab that shows them.
   loader: async ({ deps }) => {
-    const [theme, settings, edit, applyStatus] = await Promise.all([
+    const general = !isTab(deps.tab) || deps.tab === 'general'
+    const [theme, settings, edit, applyStatus, timezones] = await Promise.all([
       fetchTheme(),
       fetchBoxSettings(),
       fetchSiteEdit(),
       fetchApplyStatus(),
+      // A file read, so awaited like the facts; only General has the picker.
+      general ? fetchTimezones() : Promise.resolve<string[]>([]),
     ])
     return {
       theme,
       settings,
       edit,
       applyStatus,
+      timezones,
+      // The zone list and the NixOS release ask Cloudflare, endoflife.date and
+      // GitHub, so they stream in behind the tab like the integration checks.
+      live: general ? fetchGeneralLive() : null,
       integrations: deps.tab === 'integrations' ? fetchIntegrationStatus() : null,
       // Deferred for the same reason: it renders site.json to hash it, for the
       // one tab that shows the answer.
@@ -82,7 +95,8 @@ export const Route = createFileRoute('/settings')({
 })
 
 function SettingsPage() {
-  const { theme, settings, integrations, site, edit, applyStatus } = Route.useLoaderData()
+  const { theme, settings, integrations, site, edit, applyStatus, timezones, live } =
+    Route.useLoaderData()
   // The bar's vocabulary is the registry's — a list of named things and the
   // fields that changed — so the site document is one entry named `site`.
   const changed = edit.changes.length > 0 ? [{ name: 'site', fields: [...edit.changes] }] : []
@@ -115,7 +129,19 @@ function SettingsPage() {
             edit was made on — the tabs show fields, this shows the file. */}
         <SiteDiff edit={edit} />
 
-        {tab === 'general' && <General settings={settings} edit={edit} />}
+        {tab === 'general' &&
+          (live === null ? (
+            <General settings={settings} edit={edit} timezones={timezones} live={null} />
+          ) : (
+            <Await
+              promise={live}
+              fallback={
+                <General settings={settings} edit={edit} timezones={timezones} live={null} />
+              }
+            >
+              {(l) => <General settings={settings} edit={edit} timezones={timezones} live={l} />}
+            </Await>
+          ))}
         {tab === 'network' && <Network settings={settings} edit={edit} />}
         {tab === 'integrations' &&
           (integrations === null ? (

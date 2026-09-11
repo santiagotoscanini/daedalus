@@ -15,6 +15,15 @@ import { saveSiteEditFn } from '../../server/site'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Field, FieldError } from '../ui/field'
 import { Input } from '../ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select'
 import { Switch } from '../ui/switch'
 import { Textarea } from '../ui/textarea'
 import { Chip } from '../viz'
@@ -262,6 +271,66 @@ function ListInner({
           if (e.key === 'Escape') setDraft(text)
         }}
       />
+    </Control>
+  )
+}
+
+export type SelectGroupSpec = { label: string; options: { value: string; label: string }[] }
+
+type SelectProps = {
+  edit: SiteEdit
+  /** The field the trigger shows, and whose provenance the row carries. */
+  field: SiteField
+  label: string
+  groups: SelectGroupSpec[]
+  /**
+   * The patch a choice saves; the field alone by default. The domain uses it
+   * to carry its zone id in the same request, because the two are one fact.
+   */
+  patchFor?: (value: string) => Partial<Record<SiteField, unknown>>
+  /** No list to choose from yet, or none could be read. */
+  disabled?: boolean
+}
+
+/** A closed list. Saves on choice. */
+export function SiteSelect({ edit, field, label, groups, patchFor, disabled }: SelectProps) {
+  const value = getSiteField(edit.desired, field)
+  const current = typeof value === 'string' ? value : ''
+  const { save, saving, refused } = useSiteSave()
+  // A value the list does not carry (a zone the token stopped seeing, a name
+  // tzdata renamed) is still shown, as its own group, rather than leaving an
+  // empty trigger that reads as "not set".
+  const known = groups.some((g) => g.options.some((o) => o.value === current))
+  const shown =
+    known || current === ''
+      ? groups
+      : [{ label: 'Current', options: [{ value: current, label: current }] }, ...groups]
+  return (
+    <Control edit={edit} field={field} error={refused} saving={saving}>
+      <Select
+        value={current}
+        disabled={edit.committed === null || saving || disabled === true}
+        onValueChange={(v) => {
+          if (v === current) return
+          save(patchFor === undefined ? { [field]: v } : patchFor(v))
+        }}
+      >
+        <SelectTrigger size="sm" aria-label={label} className={cn(INPUT, 'justify-between')}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="max-h-80">
+          {shown.map((g) => (
+            <SelectGroup key={g.label}>
+              {shown.length > 1 && <SelectLabel>{g.label}</SelectLabel>}
+              {g.options.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="font-mono text-[0.8rem]">
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
+        </SelectContent>
+      </Select>
     </Control>
   )
 }

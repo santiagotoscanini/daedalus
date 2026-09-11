@@ -120,7 +120,7 @@ type GhRelease = {
  * of. So the token expiring costs nothing here — it is caught by the deploys
  * that actually need it.
  */
-function auth(): Record<string, string> {
+export function githubHeaders(): Record<string, string> {
   const token = key('GITHUB_TOKEN')
   return {
     Accept: 'application/vnd.github+json',
@@ -138,7 +138,7 @@ async function releases(repo: string): Promise<GhRelease[] | null> {
   return cache.get(`releases:${repo}`, async (): Promise<GhRelease[] | null> => {
     try {
       const res = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=60`, {
-        headers: auth(),
+        headers: githubHeaders(),
         signal: AbortSignal.timeout(6_000),
       })
       if (res.ok) return (await res.json()) as GhRelease[]
@@ -423,7 +423,7 @@ export async function commitsSince(
       let body: Compare | null = null
       try {
         const res = await fetch(`https://api.github.com/repos/${repo}/compare/${sha}...${branch}`, {
-          headers: auth(),
+          headers: githubHeaders(),
           signal: AbortSignal.timeout(6_000),
         })
         if (res.ok) body = (await res.json()) as Compare

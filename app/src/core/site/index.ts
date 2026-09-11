@@ -44,6 +44,7 @@ export type SiteState = {
 /** One field of the document that the UI may edit. Dotted path into SiteDocument. */
 export type SiteField =
   | 'identity.baseDomain'
+  | 'identity.timezone'
   | 'network.lanIp'
   | 'network.interface'
   | 'network.gateway'
@@ -56,11 +57,13 @@ export type SiteField =
   | 'network.dnsUpstreams'
   | 'mail.sender'
   | 'mail.alertTo'
+  | 'cloudflare.zoneId'
 
 /** The fields nix sources from site.json — the only ones an edit may touch.
     Everything else in the document is still a copy of the configuration. */
 export const EDITABLE: readonly SiteField[] = [
   'identity.baseDomain',
+  'identity.timezone',
   'network.lanIp',
   'network.interface',
   'network.gateway',
@@ -73,6 +76,7 @@ export const EDITABLE: readonly SiteField[] = [
   'network.dnsUpstreams',
   'mail.sender',
   'mail.alertTo',
+  'cloudflare.zoneId',
 ]
 
 export type SiteEdit = {
@@ -163,6 +167,46 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
 }
 
 /**
+ * The two edits whose valid values are a list somebody else owns.
+ *
+ * A timezone must be one this system's tzdata names: NixOS accepts any string
+ * there, and a box handed a zone its tzdata lacks has no local time at all. A
+ * domain must arrive with the id of a zone the Cloudflare DNS token can see,
+ * and the two must agree, or traefik asks for a certificate in a zone the
+ * token cannot touch and the tunnel's reconciler writes records into the old
+ * one. Putting a field back to its committed value is always allowed, so an
+ * edit can be undone while Cloudflare is unreachable.
+ */
+async function refuseUnknown(ctx: Ctx, patch: Partial<Record<SiteField, unknown>>): Promise<void> {
+  const committed = await readCommittedSite()
+  const unchanged = (f: SiteField) =>
+    committed.present && sameValue(getField(committed.doc, f), patch[f])
+
+  if ('identity.timezone' in patch && !unchanged('identity.timezone')) {
+    const { readTimezones } = await import('../settings/timezones')
+    const tz = patch['identity.timezone']
+    if (typeof tz !== 'string' || !(await readTimezones()).includes(tz)) {
+      throw new Error(`${String(tz)} is not a timezone this system's tzdata names`)
+    }
+  }
+
+  const domain = 'identity.baseDomain' in patch
+  const zone = 'cloudflare.zoneId' in patch
+  if (!domain && !zone) return
+  if (!domain || !zone) throw new Error('the domain and its Cloudflare zone are saved together')
+  if (unchanged('identity.baseDomain') && unchanged('cloudflare.zoneId')) return
+  const { listZones } = await import('../settings/zones')
+  const list = await listZones(ctx)
+  if (!list.ok) throw new Error(`${list.reason}, so the zone cannot be confirmed`)
+  const match = list.zones.find((z) => z.id === patch['cloudflare.zoneId'])
+  if (match === undefined || match.name !== patch['identity.baseDomain']) {
+    throw new Error(
+      `${String(patch['identity.baseDomain'])} is not a zone the Cloudflare DNS token can see`,
+    )
+  }
+}
+
+/**
  * Record an edit. The draft stored is the whole desired document, so the
  * editing surface survives a reload and a second edit composes with the
  * first. Setting a field back to its committed value is how an edit is
@@ -180,6 +224,7 @@ export async function saveSiteEdit(
     if (!EDITABLE.includes(field)) throw new Error(`${field} is not editable`)
     next = setField(next, field, value)
   }
+  await refuseUnknown(ctx, patch)
   // Validate the whole document, not the patch: a field's type is decided by
   // the decoder, and a patch that produces an undecodable document is refused
   // before it is stored.

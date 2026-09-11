@@ -43,10 +43,12 @@ checks). What the converted code looks like, and what a new one must:
    the directory's `shared.tsx` (`BOARD_FOOT`, `SECTION_HEAD`, `MONO`,
    `GHOST_BTN`…) — reuse before re-spelling.
 2. Reach for a shadcn primitive in `src/components/ui/` before
-   hand-rolling: `Card` for a panel, `Badge` for a pill, `Table`,
-   `Separator`, `Tooltip`, `Field` for a form row, `Alert` (body in
+   hand-rolling: `Card` for a panel, `Badge` for a pill, `Select` for
+   a closed list, `Field` for a form row, `Alert` (body in
    `AlertDescription`, never bare text — its grid puts bare text in a
-   zero-width column).
+   zero-width column). The kit holds only what something renders: a
+   primitive nothing uses is deleted, and added back from shadcn
+   (new-york) the day a component needs it.
 3. **Every button is `Button`** (`ui/button.tsx`), whose variants carry
    the house looks: `default` is the foreground fill (the primary
    action is white on a dark page, not the brand colour), `outline` the

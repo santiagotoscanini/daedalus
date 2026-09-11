@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import type { BoxSettings, IntegrationStatus } from '../core/settings/types'
+import type { BoxSettings, GeneralLive, IntegrationStatus } from '../core/settings/types'
 import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../lib/theme'
 
 // Server functions behind Settings: the read-only facts (core/settings), the
@@ -24,6 +24,27 @@ export const fetchIntegrationStatus = createServerFn().handler(
     return integrationStatus(await makeCtx())
   },
 )
+
+/**
+ * General's deferred half: the zones the Cloudflare DNS token can see (the
+ * domain picker) and where the NixOS release stands. Both ask services off the
+ * box, so the tab renders its facts first and these stream in behind it.
+ */
+export const fetchGeneralLive = createServerFn().handler(async (): Promise<GeneralLive> => {
+  const { makeCtx } = await import('../core/ctx')
+  const { listZones } = await import('../core/settings/zones')
+  const { nixosRelease } = await import('../core/settings/nixos')
+  const { siteIdentity } = await import('../lib/contract/domains/site')
+  const [ctx, site] = await Promise.all([makeCtx(), siteIdentity()])
+  const [zones, nixos] = await Promise.all([listZones(ctx), nixosRelease(site.data.nixos)])
+  return { zones, nixos }
+})
+
+/** The zone names this system's tzdata carries: the timezone picker's list. */
+export const fetchTimezones = createServerFn().handler(async (): Promise<string[]> => {
+  const { readTimezones } = await import('../core/settings/timezones')
+  return readTimezones()
+})
 
 export const fetchTheme = createServerFn().handler(async (): Promise<ThemeChoice> => {
   const { readSetting, SETTING_KEYS } = await import('../lib/repo/settings')

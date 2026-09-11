@@ -9,9 +9,8 @@ import type {
 import type { SiteEdit } from '../../core/site'
 import { since, when } from '../../lib/format'
 import { mailAddressError } from '../../lib/site-fields'
-import { Skeleton } from '../ui/skeleton'
 import { Chip } from '../viz'
-import { ExtLink, Mono, Section, Unset, Value } from './shared'
+import { ExtLink, Mono, Pending, Section, Unset, Value } from './shared'
 import { SiteText, SiteUnwritten } from './site-fields'
 
 // Two kinds of fact side by side: what is CONFIGURED (ids and whether a
@@ -192,10 +191,6 @@ export function Integrations({
       )}
     </div>
   )
-}
-
-function Pending() {
-  return <Skeleton className="inline-block h-4 w-28 align-middle" />
 }
 
 /** An id the box is configured with, and the name the service knows it by. */
