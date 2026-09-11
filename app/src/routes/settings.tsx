@@ -8,7 +8,7 @@ import {
   SlidersHorizontalIcon,
   UserIcon,
 } from 'lucide-react'
-import { type ReactNode, useState, useTransition } from 'react'
+import { type ReactNode, useEffect, useState, useTransition } from 'react'
 
 import { ApplyBar } from '../components/apply-bar'
 import { PageHead } from '../components/page'
@@ -21,11 +21,13 @@ import { ProfileTab } from '../components/settings/profile'
 import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
 import { TabBar } from '../components/tabs'
+import type { GithubCallbackNotice } from '../core/settings/types'
 import { fetchProfile } from '../server/profile'
 import { fetchApplyStatus } from '../server/registry'
 import {
   fetchBoxSettings,
   fetchGeneralLive,
+  fetchGithubAppStatus,
   fetchIntegrationStatus,
   fetchTheme,
   fetchTimezones,
@@ -83,8 +85,21 @@ export const Route = createFileRoute('/settings')({
   // The sub-tab is in the URL for the same reason the category pages put it
   // there: it survives a refresh, it can be linked, and it renders on the
   // server.
-  validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: string; github?: GithubCallbackNotice['github']; reason?: string } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
+    // What /settings/github/callback redirected with. Read once, then dropped.
+    github:
+      search.github === 'created' || search.github === 'pending' || search.github === 'failed'
+        ? search.github
+        : undefined,
+    // A code, never text: anything not shaped like one is dropped here, and
+    // the tab maps the rest to its own sentences.
+    reason:
+      typeof search.reason === 'string' && /^[a-z-]{1,40}$/.test(search.reason)
+        ? search.reason
+        : undefined,
   }),
   loaderDeps: ({ search }) => ({ tab: search.tab }),
   // The facts are awaited: files and one database row, no upstream to wait
@@ -94,13 +109,15 @@ export const Route = createFileRoute('/settings')({
   // only for the tab that shows them.
   loader: async ({ deps }) => {
     const general = !isTab(deps.tab) || deps.tab === 'general'
-    const [theme, settings, edit, applyStatus, timezones] = await Promise.all([
+    const [theme, settings, edit, applyStatus, timezones, githubApp] = await Promise.all([
       fetchTheme(),
       fetchBoxSettings(),
       fetchSiteEdit(),
       fetchApplyStatus(),
       // A file read, so awaited like the facts; only General has the picker.
       general ? fetchTimezones() : Promise.resolve<string[]>([]),
+      // Two file reads and a row, no upstream: awaited, for the tab that shows it.
+      deps.tab === 'integrations' ? fetchGithubAppStatus() : Promise.resolve(null),
     ])
     return {
       theme,
@@ -108,6 +125,7 @@ export const Route = createFileRoute('/settings')({
       edit,
       applyStatus,
       timezones,
+      githubApp,
       // The zone list and the NixOS release ask Cloudflare, endoflife.date and
       // GitHub, so they stream in behind the tab like the integration checks.
       live: general ? fetchGeneralLive() : null,
@@ -123,8 +141,18 @@ export const Route = createFileRoute('/settings')({
 })
 
 function SettingsPage() {
-  const { theme, settings, integrations, profile, site, edit, applyStatus, timezones, live } =
-    Route.useLoaderData()
+  const {
+    theme,
+    settings,
+    integrations,
+    profile,
+    site,
+    edit,
+    applyStatus,
+    timezones,
+    live,
+    githubApp,
+  } = Route.useLoaderData()
   // The bar's vocabulary is the registry's — a list of named things and the
   // fields that changed — so the site document is one entry named `site`.
   const changed = edit.changes.length > 0 ? [{ name: 'site', fields: [...edit.changes] }] : []
@@ -133,6 +161,24 @@ function SettingsPage() {
 
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+
+  // The GitHub callback's verdict arrives in the query once. It is held here,
+  // above the Await that remounts the tab when the live checks land, and the
+  // query is dropped so a reload does not repeat it.
+  const [githubNotice, setGithubNotice] = useState<GithubCallbackNotice | null>(() =>
+    search.github === undefined ? null : { github: search.github, code: search.reason ?? null },
+  )
+  useEffect(() => {
+    if (search.github === undefined && search.reason === undefined) return
+    void router.navigate({ to: '/settings', search: { tab: search.tab }, replace: true })
+  }, [search.github, search.reason, search.tab, router])
+  const github = {
+    app: githubApp,
+    notice: githubNotice,
+    onDismissNotice: () => {
+      setGithubNotice(null)
+    },
+  }
   // The choice is held here as well as in the loader so a click repaints the
   // page immediately. The save is what makes it durable; the router
   // invalidation below is what makes the SERVER agree, which matters because
@@ -174,14 +220,31 @@ function SettingsPage() {
         {tab === 'network' && <Network settings={settings} edit={edit} />}
         {tab === 'integrations' &&
           (integrations === null ? (
-            <Integrations settings={settings.integrations} status={null} edit={edit} />
+            <Integrations
+              settings={settings.integrations}
+              status={null}
+              edit={edit}
+              github={github}
+            />
           ) : (
             <Await
               promise={integrations}
-              fallback={<Integrations settings={settings.integrations} status={null} edit={edit} />}
+              fallback={
+                <Integrations
+                  settings={settings.integrations}
+                  status={null}
+                  edit={edit}
+                  github={github}
+                />
+              }
             >
               {(status) => (
-                <Integrations settings={settings.integrations} status={status} edit={edit} />
+                <Integrations
+                  settings={settings.integrations}
+                  status={status}
+                  edit={edit}
+                  github={github}
+                />
               )}
             </Await>
           ))}

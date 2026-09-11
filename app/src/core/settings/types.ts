@@ -2,7 +2,9 @@ import type { ApplyStatus } from '../../lib/apply'
 import type { RepoFacts } from '../../lib/contract/domains/repo'
 import type { NixosFacts } from '../../lib/contract/domains/site'
 import type { GithubTokenKind } from '../../lib/github-signin'
+import type { GithubInstallation } from '../../lib/github-token'
 import type { NixosCycle, NixosNotes, Support } from '../../lib/nixos'
+import type { SiteGithubApp } from '../site/file'
 
 // What the settings page renders. Types only — this file is imported by
 // components, so nothing in it may pull a server module in by value.
@@ -185,3 +187,71 @@ export type NixosRelease = {
 
 /** Settings › General's deferred half. */
 export type GeneralLive = { zones: ZoneList; nixos: NixosRelease }
+
+/** Where the box's GitHub App stands (core/settings/github-app.ts). */
+export type GithubAppState =
+  | 'none'
+  | 'created'
+  | 'installed'
+  | 'installed-elsewhere'
+  | 'pending-apply'
+
+export type GithubAppStatus = {
+  /** GITHUB_APP_ENABLED: the host can take the App's vault file. */
+  enabled: boolean
+  state: GithubAppState
+  /** The account the App is created under. */
+  owner: string
+  defaultName: string
+  nameMax: number
+  identity?: SiteGithubApp
+  /** The minter's last file, token removed. Absent until the host publishes one. */
+  installation?: Omit<GithubInstallation, 'token'> & { hasToken: boolean; stale: boolean }
+  installUrl?: string
+  settingsUrl?: string
+  /** Where an orphaned App is deleted: built on the server, never from a query. */
+  appsUrl: string
+  pending?: { slug: string; htmlUrl: string; at: string; reason: string }
+}
+
+export type GithubAppStart =
+  | { ok: true; action: string; manifest: string; state: string }
+  | { ok: false; reason: string }
+
+/**
+ * Why the callback did not create an App, as its redirect carries it: a code,
+ * never text, so a crafted link cannot put words on the page. The page owns
+ * the sentence for each.
+ */
+export type GithubCallbackCode =
+  | 'disabled'
+  | 'state-expired'
+  | 'state-mismatch'
+  | 'other-actor'
+  | 'conversion-failed'
+  | 'conversion-timeout'
+  | 'owner-mismatch'
+  | 'seal-failed'
+  | 'apply-refused'
+  | 'already-created'
+  | 'unknown'
+
+/** `reason` is detail for the server log; it never leaves the server. */
+export type GithubAppFinish =
+  | { outcome: 'created'; id: string }
+  | { outcome: 'pending'; code: 'apply-refused'; reason: string }
+  | { outcome: 'failed'; code: Exclude<GithubCallbackCode, 'apply-refused'>; reason: string }
+
+export type GithubAppApply = { ok: true; id: string } | { ok: false; reason: string }
+
+/** A discarded pending Apply: which App the box forgot (it may still exist on GitHub). */
+export type GithubAppDiscard =
+  | { ok: true; slug: string; htmlUrl: string }
+  | { ok: false; reason: string }
+
+/** What the callback's redirect said, shown once on the Integrations tab. */
+export type GithubCallbackNotice = {
+  github: 'created' | 'pending' | 'failed'
+  /** As read from the query, so unchecked: the page maps it, and anything unknown is generic. */
+  code: string | null
+}

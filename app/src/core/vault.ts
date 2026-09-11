@@ -37,6 +37,9 @@ function redact(text: string, secrets: string[]): string {
  * directory, because the creation rule's `^vault/…` is matched against the
  * `--filename-override` path relative to where sops stands.
  */
+/** How long sops may run before it is killed. It encrypts a few kilobytes. */
+export const SOPS_TIMEOUT_MS = 30_000
+
 function encrypt(
   file: VaultFile,
   type: 'binary' | 'json',
@@ -67,6 +70,23 @@ function encrypt(
     )
     let out = ''
     let err = ''
+    // Exactly one of error, close and the kill timer settles the promise.
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const settle = (finish: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      finish()
+    }
+    // A sops that hangs would hold its caller forever, and the GitHub App
+    // callback calls this under a lock. SIGKILL: a hung process is not asked.
+    timer = setTimeout(() => {
+      settle(() => {
+        child.kill('SIGKILL')
+        reject(new Error('sops timed out'))
+      })
+    }, SOPS_TIMEOUT_MS)
     child.stdout.setEncoding('utf8').on('data', (c: string) => {
       out += c
     })
@@ -74,16 +94,23 @@ function encrypt(
       err += c
     })
     child.on('error', (e) => {
-      reject(new Error(`sops could not run (${e.message})`))
+      settle(() => {
+        reject(new Error(`sops could not run (${e.message})`))
+      })
     })
     child.on('close', (code) => {
-      if (code === 0) {
-        resolve(out)
-        return
-      }
-      const said = redact(err, secrets).trim().split('\n')[0] ?? ''
-      reject(new Error(`sops failed${said === '' ? '' : `: ${said}`}`))
+      settle(() => {
+        if (code === 0) {
+          resolve(out)
+          return
+        }
+        const said = redact(err, secrets).trim().split('\n')[0] ?? ''
+        reject(new Error(`sops failed${said === '' ? '' : `: ${said}`}`))
+      })
     })
+    // A sops that dies before reading its input makes this pipe EPIPE; the
+    // exit is what reports it, and an unhandled stream error would crash.
+    child.stdin.on('error', () => undefined)
     child.stdin.end(input)
   })
 }

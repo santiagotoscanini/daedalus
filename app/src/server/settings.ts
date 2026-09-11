@@ -1,7 +1,15 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
 import type { TokenReplaceOutcome } from '../core/settings/cloudflare-token'
-import type { BoxSettings, GeneralLive, IntegrationStatus } from '../core/settings/types'
+import type {
+  BoxSettings,
+  GeneralLive,
+  GithubAppApply,
+  GithubAppDiscard,
+  GithubAppStart,
+  GithubAppStatus,
+  IntegrationStatus,
+} from '../core/settings/types'
 import type { SignInPoll, SignInStart } from '../lib/github-signin'
 import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../lib/theme'
 
@@ -90,6 +98,77 @@ export const pollGithubSignInFn = createServerFn({ method: 'POST' })
     const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
     return pollGithubSignIn(await makeCtx(), actor, data.flow)
   })
+
+/**
+ * Settings › Integrations › GitHub App (core/settings/github-app.ts). The
+ * page gets the manifest and state to POST to github.com, and ids back; the
+ * App's key and secrets only ever reach the server, and leave it as ciphertext.
+ */
+export const fetchGithubAppStatus = createServerFn().handler(async (): Promise<GithubAppStatus> => {
+  const { makeCtx } = await import('../core/ctx')
+  const { githubAppStatus } = await import('../core/settings/github-app')
+  return githubAppStatus(await makeCtx())
+})
+
+export const startGithubAppFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { name: string; replace: boolean } => {
+    const d = data as { name?: unknown; replace?: unknown } | null
+    if (typeof d?.name !== 'string' || d.name.length > 200) throw new Error('expected an App name')
+    if (d.replace !== undefined && typeof d.replace !== 'boolean') {
+      throw new Error('expected replace to be true or false')
+    }
+    return { name: d.name, replace: d.replace === true }
+  })
+  .handler(async ({ data }): Promise<GithubAppStart> => {
+    const { makeCtx } = await import('../core/ctx')
+    const { actorFrom, startAppCreation } = await import('../core/settings/github-app')
+    // No fallback name: a missing identity is null, and every App mutation refuses it.
+    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    return startAppCreation(await makeCtx(), actor, data)
+  })
+
+export const pasteAppKeyFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { pem: string; webhookSecret: string; clientSecret: string } => {
+    const d = data as { pem?: unknown; webhookSecret?: unknown; clientSecret?: unknown } | null
+    // The messages name the field, never its value.
+    if (typeof d?.pem !== 'string' || d.pem.length > 16_384)
+      throw new Error('expected a private key')
+    if (typeof d.webhookSecret !== 'string' || d.webhookSecret.length > 1024) {
+      throw new Error('expected a webhook secret')
+    }
+    if (typeof d.clientSecret !== 'string' || d.clientSecret.length > 1024) {
+      throw new Error('expected a client secret')
+    }
+    return { pem: d.pem, webhookSecret: d.webhookSecret, clientSecret: d.clientSecret }
+  })
+  .handler(async ({ data }): Promise<GithubAppApply> => {
+    const { makeCtx } = await import('../core/ctx')
+    const { actorFrom, pasteAppKey } = await import('../core/settings/github-app')
+    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    return pasteAppKey(await makeCtx(), actor, data)
+  })
+
+export const retryGithubApplyFn = createServerFn({ method: 'POST' }).handler(
+  async (): Promise<GithubAppApply> => {
+    const { makeCtx } = await import('../core/ctx')
+    const { actorFrom, retryPendingApply } = await import('../core/settings/github-app')
+    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    return retryPendingApply(await makeCtx(), actor)
+  },
+)
+
+/**
+ * Forget a created App's pending Apply. The enabled flag and the actor are
+ * checked in core/settings/github-app.ts, like every other App mutation.
+ */
+export const discardGithubPendingApplyFn = createServerFn({ method: 'POST' }).handler(
+  async (): Promise<GithubAppDiscard> => {
+    const { makeCtx } = await import('../core/ctx')
+    const { actorFrom, discardPendingApply } = await import('../core/settings/github-app')
+    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    return discardPendingApply(await makeCtx(), actor)
+  },
+)
 
 /** The zone names this system's tzdata carries: the timezone picker's list. */
 export const fetchTimezones = createServerFn().handler(async (): Promise<string[]> => {
