@@ -33,8 +33,8 @@ type CfVerify = {
 /**
  * `GET /user/tokens/verify` answers for the token that asks: its own status
  * and expiry. It says nothing about scope, which is why the zone and tunnel
- * reads below exist — they are the two permissions this box actually needs,
- * proven by using them.
+ * reads below exist — the zone read proves Zone:Read on the domain, the tunnel
+ * read proves the cloudflared connector permission, each by using it.
  */
 async function verifyCloudflare(ctx: Ctx, token: string): Promise<TokenCheck> {
   if (token === '') return NOT_CONFIGURED
@@ -61,31 +61,31 @@ async function verifyCloudflare(ctx: Ctx, token: string): Promise<TokenCheck> {
 }
 
 async function cloudflare(ctx: Ctx): Promise<CloudflareStatus> {
-  const dnsToken = ctx.secret('CF_DNS_TOKEN')
-  const apiToken = ctx.secret('CF_API_TOKEN')
+  // One token for everything Cloudflare on the box; see core/settings/zones.ts.
+  const token = ctx.secret('CF_API_TOKEN')
   const zoneId = ctx.env('CF_ZONE_ID') ?? ''
   const accountId = ctx.env('CF_ACCOUNT_ID') ?? ''
   const tunnelId = ctx.env('CF_TUNNEL_ID') ?? ''
+  const auth = { headers: { Authorization: `Bearer ${token}` } }
 
-  const [dns, api, zone, tunnel] = await Promise.all([
-    verifyCloudflare(ctx, dnsToken),
-    verifyCloudflare(ctx, apiToken),
-    dnsToken === '' || zoneId === ''
+  const [check, zone, tunnel] = await Promise.all([
+    verifyCloudflare(ctx, token),
+    token === '' || zoneId === ''
       ? null
-      : ctx.http.getJson<{ result?: { name?: string; status?: string } }>(`${CF}/zones/${zoneId}`, {
-          headers: { Authorization: `Bearer ${dnsToken}` },
-        }),
-    apiToken === '' || accountId === '' || tunnelId === ''
+      : ctx.http.getJson<{ result?: { name?: string; status?: string } }>(
+          `${CF}/zones/${zoneId}`,
+          auth,
+        ),
+    token === '' || accountId === '' || tunnelId === ''
       ? null
       : ctx.http.getJson<{ result?: { name?: string; status?: string } }>(
           `${CF}/accounts/${accountId}/cfd_tunnel/${tunnelId}`,
-          { headers: { Authorization: `Bearer ${apiToken}` } },
+          auth,
         ),
   ])
 
   return {
-    dns,
-    api,
+    token: check,
     zone:
       zone?.result?.name === undefined
         ? null

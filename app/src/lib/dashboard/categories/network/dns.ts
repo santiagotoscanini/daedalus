@@ -438,7 +438,7 @@ const MANAGED = 'Managed by fleet.cloudflareRoutes'
 async function loadZone(): Promise<ZoneData> {
   const domain = BASE_DOMAIN
   const zoneId = process.env.CF_ZONE_ID ?? ''
-  const auth = { headers: { Authorization: `Bearer ${key('CF_DNS_TOKEN')}` } }
+  const auth = { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } }
 
   const [registration, zone, recordsBody, lan, published, served] = await Promise.all([
     rdap(domain),
@@ -563,7 +563,7 @@ async function loadZone(): Promise<ZoneData> {
     note:
       raw !== null
         ? null
-        : key('CF_DNS_TOKEN') === ''
+        : key('CF_API_TOKEN') === ''
           ? 'No Cloudflare token in this container. See daedalus-dashboard-keys.'
           : 'Cloudflare did not answer for this zone.',
   }

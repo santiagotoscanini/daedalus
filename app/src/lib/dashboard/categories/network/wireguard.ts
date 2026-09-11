@@ -1,12 +1,12 @@
 import { publishingFacts } from '../../../contract/domains/publishing'
 import { localDay, since } from '../../../format'
-import { getJson } from '../../../http'
+import { getJson, getJsonResult, type JsonResult } from '../../../http'
 import { key } from '../../../keys'
 import { lokiEntries, lokiScalar } from '../../../loki'
 import { webAppHosts } from '../../../nix-manifest'
 import { promPoints, promScalar, promScalars, promVector } from '../../../prom'
 import { type VersionGap, versionGap } from '../../github'
-import { type CfTunnel, DAYS } from './shared'
+import { CF_TUNNEL_READ, type CfTunnel, cfReadError, DAYS } from './shared'
 
 /**
  * One WireGuard peer, as wg-easy's exporter reports it.
@@ -64,6 +64,8 @@ type TunnelData = {
   daily: { date: string; requests: number }[]
   /** Every hostname the tunnel will answer for — its ingress rules. */
   published: { hostname: string; service: string }[]
+  /** Why Cloudflare's half of the board is empty, when it is. Null when both reads worked. */
+  cfError: string | null
 }
 
 /**
@@ -206,15 +208,20 @@ export async function loadInbound(ctx: { hc: string }): Promise<InboundData> {
   return { wireguard, tunnel, ddns }
 }
 
-/** Cloudflare's view of the tunnel. The one place the WAN address appears. */
-async function cfTunnel(): Promise<CfTunnel | undefined> {
-  const body = await getJson<{ result?: CfTunnel }>(
+type CfTunnelRead = JsonResult<{ result?: CfTunnel }>
+
+/**
+ * Cloudflare's view of the tunnel. The one place the WAN address appears.
+ * Kept as a result rather than a body so both boards reading it can say WHY
+ * it is empty.
+ */
+async function cfTunnel(): Promise<CfTunnelRead> {
+  return getJsonResult<{ result?: CfTunnel }>(
     `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
       process.env.CF_TUNNEL_ID ?? ''
     }`,
     { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
   )
-  return body?.result
 }
 
 async function loadWireguard(): Promise<WireguardData> {
@@ -297,17 +304,19 @@ type VectorLike = { metric: Record<string, string>; value: [number, string] }
  * how many requests it forwarded, how many failed, and the QUIC round trip to
  * the edge. Neither can answer the other's half.
  */
-async function loadCfTunnel(cfP: Promise<CfTunnel | undefined>): Promise<TunnelData> {
+async function loadCfTunnel(cfP: Promise<CfTunnelRead>): Promise<TunnelData> {
   const account = process.env.CF_ACCOUNT_ID ?? ''
   const id = process.env.CF_TUNNEL_ID ?? ''
   const auth = { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } }
 
-  const [cf, config, rph, errors, inFlight, rtt, daily] = await Promise.all([
+  const [cfRead, config, rph, errors, inFlight, rtt, daily] = await Promise.all([
     cfP,
     // The ingress rules, which are the literal answer to "what can be reached
     // from outside" — generated from every webApp with `exposeRemotely`, so
     // this is a readback of that decision rather than a restatement of it.
-    getJson<{ result?: { config?: { ingress?: { hostname?: string; service?: string }[] } } }>(
+    getJsonResult<{
+      result?: { config?: { ingress?: { hostname?: string; service?: string }[] } }
+    }>(
       `https://api.cloudflare.com/client/v4/accounts/${account}/cfd_tunnel/${id}/configurations`,
       auth,
     ),
@@ -324,7 +333,7 @@ async function loadCfTunnel(cfP: Promise<CfTunnel | undefined>): Promise<TunnelD
     promPoints('sum(increase(cloudflared_tunnel_total_requests[1d]))', DAYS * 24 * 60, 86400),
   ])
 
-  const summary = summariseTunnel(cf, rph)
+  const summary = summariseTunnel(cfRead.ok ? cfRead.body.result : undefined, rph)
   const version = summary.clientVersion
 
   return {
@@ -345,12 +354,15 @@ async function loadCfTunnel(cfP: Promise<CfTunnel | undefined>): Promise<TunnelD
     errors,
     inFlight,
     daily: daily.map((p) => ({ date: localDay(p.t * 1000), requests: p.v })),
-    published: (config?.result?.config?.ingress ?? [])
+    published: (config.ok ? (config.body.result?.config?.ingress ?? []) : [])
       // The last rule is the catch-all, which has no hostname and is not a
       // published name — dropping it is what makes this list a list of names.
       .filter((r) => r.hostname !== undefined && r.hostname !== '')
       .map((r) => ({ hostname: r.hostname ?? '', service: r.service ?? '' }))
       .sort((a, b) => a.hostname.localeCompare(b.hostname)),
+    // The prometheus half keeps drawing through this, which is exactly what
+    // made a refused token look like a quiet tunnel; so it is said out loud.
+    cfError: cfReadError(cfRead, CF_TUNNEL_READ) ?? cfReadError(config, CF_TUNNEL_READ),
   }
 }
 
@@ -370,7 +382,7 @@ async function resolvePublic(name: string): Promise<{ ip: string | null; ttl: nu
   return { ip: a?.data ?? null, ttl: a?.TTL ?? null }
 }
 
-async function loadDdns(cfP: Promise<CfTunnel | undefined>): Promise<DdnsData> {
+async function loadDdns(cfP: Promise<CfTunnelRead>): Promise<DdnsData> {
   const host = process.env.DDNS_HOST ?? ''
   const version = process.env.DDCLIENT_VERSION || null
   const interval = /^(\d+)s?$/.exec(process.env.DDNS_INTERVAL ?? '')?.[1]
@@ -420,7 +432,7 @@ async function loadDdns(cfP: Promise<CfTunnel | undefined>): Promise<DdnsData> {
     intervalSeconds: seconds,
     resolved: resolved.ip,
     ttl: resolved.ttl,
-    actual: cf?.connections?.[0]?.origin_ip ?? null,
+    actual: cf.ok ? (cf.body.result?.connections?.[0]?.origin_ip ?? null) : null,
     lastRunAt,
     // Derived rather than asked: the timer lives in systemd and this container
     // cannot see it. `OnUnitActiveSec` restarts the clock when the last run

@@ -117,7 +117,7 @@ export function GeneralView({ data }: { data: General }) {
               {router.wan ?? DASH}
             </strong>
             <span className="text-[0.7rem] text-(--dim)">
-              this house, as Cloudflare’s edge sees it arrive
+              {router.wanError ?? 'this house, as Cloudflare’s edge sees it arrive'}
             </span>
           </div>
           {/* One row per hop: a light, the name, the round trip, and six hours

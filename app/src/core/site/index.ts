@@ -171,7 +171,7 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
  *
  * A timezone must be one this system's tzdata names: NixOS accepts any string
  * there, and a box handed a zone its tzdata lacks has no local time at all. A
- * domain must arrive with the id of a zone the Cloudflare DNS token can see,
+ * domain must arrive with the id of a zone the Cloudflare API token can see,
  * and the two must agree, or traefik asks for a certificate in a zone the
  * token cannot touch and the tunnel's reconciler writes records into the old
  * one. Putting a field back to its committed value is always allowed, so an
@@ -201,7 +201,7 @@ async function refuseUnknown(ctx: Ctx, patch: Partial<Record<SiteField, unknown>
   const match = list.zones.find((z) => z.id === patch['cloudflare.zoneId'])
   if (match === undefined || match.name !== patch['identity.baseDomain']) {
     throw new Error(
-      `${String(patch['identity.baseDomain'])} is not a zone the Cloudflare DNS token can see`,
+      `${String(patch['identity.baseDomain'])} is not a zone the Cloudflare API token can see`,
     )
   }
 }

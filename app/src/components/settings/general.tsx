@@ -12,7 +12,7 @@ import { type SelectGroupSpec, SiteSelect, SiteUnwritten } from './site-fields'
 // Settings › General: what the box calls itself, and what it runs.
 //
 // Two rows are pickers over a list somebody else owns. The domain is one of the
-// Cloudflare zones the DNS token can see, saved together with that zone's id;
+// Cloudflare zones the API token can see, saved together with that zone's id;
 // the timezone is one of the zones this system's tzdata names. The server
 // refuses a value outside either list, so the pickers are the convenient path
 // and not the only guard.
@@ -89,12 +89,11 @@ export function General({
                 </span>
               ),
           },
-          { k: 'GitHub owner', v: <Value v={g.owner} /> },
         ]}
       >
         <p className={NOTE}>
-          The domains are the Cloudflare zones the DNS token can see, and a zone's id is saved with
-          it. A zone appears here once that token is scoped to it. Changing the domain renames every
+          The domains are the Cloudflare zones the API token can see, and a zone's id is saved with
+          it. A zone appears here once that token covers it. Changing the domain renames every
           hostname on the box and reissues its wildcard certificate — every published URL, tunnel
           route and login redirect moves with it. It is allowed, and it is the most drastic edit on
           this page.
@@ -168,7 +167,7 @@ export function General({
   )
 }
 
-/** The domain, from the zones the DNS token can see; the zone id rides along. */
+/** The domain, from the zones the API token can see; the zone id rides along. */
 function DomainPicker({ edit, zones }: { edit: SiteEdit; zones: ZoneList | undefined }) {
   const list = zones?.ok === true ? zones.zones : []
   const groups: SelectGroupSpec[] =

@@ -344,7 +344,7 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
           aside={
             <span className={LIVE}>
               <Pulse on={healthy} tone={healthy ? 'ok' : 'bad'} />
-              {t.status ?? 'unknown'}
+              {t.cfError !== null ? 'not readable' : (t.status ?? 'unknown')}
             </span>
           }
         >
@@ -360,6 +360,7 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
               },
             ]}
           />
+          {t.cfError !== null && <p className={EMPTY}>{t.cfError}</p>}
 
           <Columns
             points={t.daily.map((d) => ({
@@ -397,7 +398,7 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
           aside={<span className={NOTE}>{t.published.length} hostnames</span>}
         >
           {t.published.length === 0 ? (
-            <p className={EMPTY}>could not read the tunnel’s ingress rules</p>
+            <p className={EMPTY}>{t.cfError ?? 'could not read the tunnel’s ingress rules'}</p>
           ) : (
             <ul className={ROWS}>
               {t.published.map((p) => (

@@ -1,8 +1,8 @@
-import { getJson, getText } from '../../../http'
+import { getJson, getJsonResult, getText } from '../../../http'
 import { key } from '../../../keys'
 import { webAppHosts } from '../../../nix-manifest'
 import { promScalar, promScalars, promSeries, promVector } from '../../../prom'
-import { type CfTunnel, LAN_IP, PIHOLE, piholeSid } from './shared'
+import { CF_TUNNEL_READ, type CfTunnel, cfReadError, LAN_IP, PIHOLE, piholeSid } from './shared'
 
 /**
  * The house network — a different subject from every tab beside it, which are
@@ -54,6 +54,8 @@ export type GeneralData = {
     lan: string
     /** This house's public address — see the note on the fetch. */
     wan: string | null
+    /** Why `wan` is empty, in words a person can act on. Null when Cloudflare answered. */
+    wanError: string | null
     /** Where a person goes to configure it — HTTPS; see the note in nix. */
     adminUrl: string
     /** What the router says it is. Null when it did not answer. */
@@ -142,7 +144,7 @@ export async function loadGeneral(): Promise<GeneralData> {
     // anything else on this box behind NAT — the edge records the address the
     // connection arrived from, so this is the only vantage point on the box
     // that can answer "what is our public IP" truthfully.
-    getJson<{ result?: CfTunnel }>(
+    getJsonResult<{ result?: CfTunnel }>(
       `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
         process.env.CF_TUNNEL_ID ?? ''
       }`,
@@ -177,7 +179,8 @@ export async function loadGeneral(): Promise<GeneralData> {
       ...router,
       gateway: process.env.GATEWAY_IP ?? DASH_IP,
       lan: LAN_IP,
-      wan: tunnel?.result?.connections?.[0]?.origin_ip ?? null,
+      wan: tunnel.ok ? (tunnel.body.result?.connections?.[0]?.origin_ip ?? null) : null,
+      wanError: cfReadError(tunnel, CF_TUNNEL_READ),
       adminUrl: process.env.ROUTER_ADMIN_URL ?? '',
     },
     proxy: { rpm, routers: overview?.http?.routers?.total ?? null, spark: rpmSpark },

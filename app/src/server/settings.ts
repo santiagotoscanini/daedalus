@@ -26,7 +26,7 @@ export const fetchIntegrationStatus = createServerFn().handler(
 )
 
 /**
- * General's deferred half: the zones the Cloudflare DNS token can see (the
+ * General's deferred half: the zones the Cloudflare API token can see (the
  * domain picker) and where the NixOS release stands. Both ask services off the
  * box, so the tab renders its facts first and these stream in behind it.
  */

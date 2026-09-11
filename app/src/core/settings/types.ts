@@ -44,8 +44,8 @@ export type BoxSettings = {
       accountId: string
       zoneId: string
       tunnelId: string
-      dnsTokenConfigured: boolean
-      apiTokenConfigured: boolean
+      /** The one Cloudflare API token (DASH_CF_API_TOKEN) is present. */
+      tokenConfigured: boolean
     }
     github: { owner: string; tokenConfigured: boolean; repoTokenConfigured: boolean }
     mail: { sender: string; alertTo: string }
@@ -81,8 +81,7 @@ export type TokenCheck = {
 }
 
 export type CloudflareStatus = {
-  dns: TokenCheck
-  api: TokenCheck
+  token: TokenCheck
   zone: { name: string; status: string } | null
   tunnel: { name: string; status: string } | null
 }
@@ -105,7 +104,7 @@ export type IntegrationStatus = {
   mail: { lastSentAt: string | null; lastRecipient: string | null }
 }
 
-/** A zone the Cloudflare DNS token can see. */
+/** A zone the Cloudflare API token can see. */
 export type CloudflareZone = { id: string; name: string; status: string }
 
 /** What the domain picker offers, or why it cannot offer anything. */

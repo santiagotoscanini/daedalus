@@ -1,4 +1,5 @@
-import { getJson } from '../../../http'
+import { getJson, type JsonResult } from '../../../http'
+import { key } from '../../../keys'
 import { webAppHosts } from '../../../nix-manifest'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
@@ -40,6 +41,26 @@ export type CfTunnel = {
     opened_at?: string
     client_version?: string
   }[]
+}
+
+/** What Cloudflare's tunnel reads need of the token, as its token editor names it. */
+export const CF_TUNNEL_READ = 'Account › Cloudflare One Connector: cloudflared › Read'
+
+/**
+ * Why a Cloudflare read came back empty, in words a person can act on; null
+ * when it did not fail. A 401 or 403 is the token lacking `needs` — the case
+ * that used to render as a quiet dash, because a refused read and an empty one
+ * looked exactly alike.
+ */
+export function cfReadError(r: JsonResult<unknown>, needs: string): string | null {
+  if (r.ok) return null
+  if (key('CF_API_TOKEN') === '') {
+    return 'No Cloudflare API token in this container. See daedalus-dashboard-keys.'
+  }
+  if (r.status === 401 || r.status === 403) return `Cloudflare refused the token: it needs ${needs}`
+  return r.status === null
+    ? 'Cloudflare did not answer'
+    : `Cloudflare answered HTTP ${String(r.status)}`
 }
 
 export type TraefikRouter = {

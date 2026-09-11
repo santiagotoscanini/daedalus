@@ -55,7 +55,7 @@ const SECTIONS: DocSection[] = [
     provider: "Cloudflare",
     title: "The zone and the tunnel",
     blurb:
-      "One zone, one API token scoped to it, one tunnel. All public HTTP enters through the tunnel. DNS for the zone splits two ways: records the repo syncs, and records you manage by hand. Confusing them is the classic mistake.",
+      "One zone, one API token, one tunnel. All public HTTP enters through the tunnel. DNS for the zone splits two ways: records the repo syncs, and records you manage by hand. Confusing them is the classic mistake.",
     rows: [
       {
         name: "the zone",
@@ -78,7 +78,7 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "the API token",
-        body: "Zone-scoped, DNS edit only. Three consumers share the one value: the proxy's DNS-01, the route sync, and the control plane. Rotate it in one pass. Losing it is an outage, not data loss.",
+        body: "One token for everything Cloudflare on the box. Zone › Zone › Read and Zone › DNS › Edit cover the proxy's DNS-01, the route sync, the dynamic address and the control plane's domain picker; Account › Cloudflare One Connector: cloudflared › Read covers its tunnel panels. Include all zones and a domain added later shows up without touching the token. Stored once, so rotating it is one edit. Losing it is an outage, not data loss.",
         tag: "re-issuable",
       },
     ],

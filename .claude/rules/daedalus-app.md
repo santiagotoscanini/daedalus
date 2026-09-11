@@ -91,7 +91,7 @@ the remote is still the copy that survives a disk. Commit often.
   deferred, 5-min-cached live token checks; `external-apps.ts` reads
   the off-box list from the store with `lib/external-apps.ts` as seed;
   `zones.ts`, `timezones.ts` and `nixos.ts` feed General's two pickers
-  and its Engine card: the Cloudflare zones the DNS token can see,
+  and its Engine card: the Cloudflare zones the API token can see,
   tzdata's `zone.tab` from /export, and the release's support window,
   channel and notes).
   `core/site/` is the site repository — the JSON description of this

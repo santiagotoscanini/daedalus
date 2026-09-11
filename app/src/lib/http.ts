@@ -132,6 +132,43 @@ export function getJson<T>(
 }
 
 /**
+ * What a JSON read came back as: the body, or why there is none. `status` is
+ * the HTTP status the service answered with, and null when it never answered.
+ */
+export type JsonResult<T> = { ok: true; body: T } | { ok: false; status: number | null }
+
+/**
+ * getJson, keeping the reason it came back empty.
+ *
+ * For the reads whose failure a person can act on. A token missing a
+ * permission answers 401 or 403, and "the token needs X" is a different
+ * sentence from "the service did not answer" — getJson folds both into null,
+ * which is how a refused Cloudflare token once blanked the tunnel panels for
+ * weeks without a word. Same retry ladder, same no-redirect rule; not
+ * de-duplicated, since every caller here sends an Authorization header.
+ */
+export async function getJsonResult<T>(
+  url: string,
+  init: RequestInit = {},
+  attempts: number[] = ATTEMPT_MS,
+): Promise<JsonResult<T>> {
+  for (const ms of attempts) {
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(ms),
+        redirect: 'manual',
+        ...init,
+      })
+      if (!res.ok) return { ok: false, status: res.status }
+      return { ok: true, body: (await res.json()) as T }
+    } catch {
+      // fall through to the next, longer attempt; the last one reports no answer
+    }
+  }
+  return { ok: false, status: null }
+}
+
+/**
  * The same fetch, without the JSON.
  *
  * For the one upstream here that is not an API: the router, which answers

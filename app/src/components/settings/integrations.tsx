@@ -40,7 +40,7 @@ export function Integrations({
 
       <Section
         title="Cloudflare"
-        description="The zone every hostname lives in, the tunnel public traffic arrives through, and the two tokens that drive them."
+        description="The zone every hostname lives in, the tunnel public traffic arrives through, and the one token that drives both."
         rows={[
           { k: 'Account', v: <Value v={cf.accountId} /> },
           {
@@ -49,6 +49,7 @@ export function Integrations({
               <Identified
                 id={cf.zoneId}
                 live={status === null ? undefined : status.cloudflare.zone}
+                needs="Zone › Zone › Read"
               />
             ),
           },
@@ -58,15 +59,7 @@ export function Integrations({
               <Identified
                 id={cf.tunnelId}
                 live={status === null ? undefined : status.cloudflare.tunnel}
-              />
-            ),
-          },
-          {
-            k: 'DNS token',
-            v: (
-              <Token
-                configured={cf.dnsTokenConfigured}
-                check={status === null ? undefined : status.cloudflare.dns}
+                needs="Account › Cloudflare One Connector: cloudflared › Read"
               />
             ),
           },
@@ -74,17 +67,18 @@ export function Integrations({
             k: 'API token',
             v: (
               <Token
-                configured={cf.apiTokenConfigured}
-                check={status === null ? undefined : status.cloudflare.api}
+                configured={cf.tokenConfigured}
+                check={status === null ? undefined : status.cloudflare.token}
               />
             ),
           },
         ]}
       >
         <p className="m-0 text-[0.78rem] text-(--text-muted)">
-          The DNS token is the one rotated together with traefik and cloudflared; the API token
-          reads the tunnel. Zone and tunnel names are read with them, which is what proves the scope
-          rather than just the token.
+          One token does all of it: Zone › Zone › Read and Zone › DNS › Edit for the certificate,
+          the tunnel's records, the dynamic address and the domain picker, and Account › Cloudflare
+          One Connector: cloudflared › Read for the tunnel. The zone and tunnel names are read with
+          it, which is what proves the scope rather than just the token.
         </p>
       </Section>
 
@@ -197,9 +191,12 @@ export function Integrations({
 function Identified({
   id,
   live,
+  needs,
 }: {
   id: string
   live: { name: string; status: string } | null | undefined
+  /** The token permission that makes this readable, named when it is not. */
+  needs: string
 }) {
   if (id === '') return <Unset />
   return (
@@ -207,7 +204,10 @@ function Identified({
       {live === undefined ? (
         <Pending />
       ) : live === null ? (
-        <span className="text-[0.82rem] text-(--dim)">not readable with the token</span>
+        <>
+          <span className="text-[0.82rem] text-(--dim)">not readable with the token</span>
+          <span className="text-[0.72rem] text-(--text-muted)">needs {needs}</span>
+        </>
       ) : (
         <span className="inline-flex items-center gap-2">
           <Chip tone={live.status === 'active' || live.status === 'healthy' ? 'ok' : 'warn'}>
