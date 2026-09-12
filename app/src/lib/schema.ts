@@ -276,9 +276,23 @@ export const builds = pgTable(
 
     // Shapes are owned by the status decoder in lib/builds.ts, not here.
     detected: jsonb('detected'),
+    // NULL and [] mean different things here and the difference is load-bearing:
+    // NULL is "nobody computed warnings for this build" — a Dockerfile build, a
+    // failure before `railpack prepare`, or a row from before the engine
+    // computed them at all — while [] is "computed, and there was nothing to
+    // say". The build page shows which rather than calling every silence clean.
     warnings: jsonb('warnings'),
     checks: jsonb('checks'),
     timings: jsonb('timings'),
+    // The agent's `image` and `build` status keys, decoded (lib/build-facts.ts:
+    // the pushed tags, the layer count and compressed sizes, the media type;
+    // the runner, the secrets fingerprint, what the cache did). ONE jsonb rather
+    // than five columns because none of it is ever queried, compared or indexed
+    // — it is read back whole, for one page and one check run — and because the
+    // host agent grows keys faster than a migration per key would be worth.
+    // digest and size_bytes stay their own columns: those two ARE matched
+    // against deploy rows and summed.
+    facts: jsonb('facts'),
 
     // GitHub's ids for what this build posted. Numbers, not bigint: both are
     // far below 2^53, and a bigint would not survive the server-function wire.

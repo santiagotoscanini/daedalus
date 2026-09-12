@@ -139,7 +139,8 @@ function row(over: Partial<BuildRow> = {}): BuildRow {
     phase: 'building',
     error: null,
     detected: null,
-    warnings: [],
+    warnings: null,
+    facts: null,
     checks: null,
     digest: null,
     imageRef: null,
@@ -457,8 +458,8 @@ describe('the Deployment', () => {
     expect(check.conclusion).toBe('success')
     expect(check.output.title).toBe('Built on s2-server')
     expect(check.output.summary).toContain('Result: built, deploying')
-    expect(check.output.summary).toContain(`Tags: \`sha-${SHA}\`, \`latest\``)
-    expect(check.output.summary).toContain('Size: 300 MB')
+    expect(check.output.summary).toContain(`Tags (expected): \`sha-${SHA}\`, \`latest\``)
+    expect(check.output.summary).toContain('Pull size: 300 MB')
     expect(h.calls[1]?.body).toEqual({
       ref: SHA,
       environment: 'production',

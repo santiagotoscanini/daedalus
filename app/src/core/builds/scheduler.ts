@@ -22,6 +22,8 @@
 //
 // Server-only in effect: everything with a side effect is imported dynamically.
 
+import type { DetectionWarning } from '../../lib/build-detect'
+import { readBuildFacts } from '../../lib/build-facts'
 import {
   applyStatus,
   type BuildRow,
@@ -350,6 +352,30 @@ function moved(a: BuildRow, b: BuildRow): boolean {
 const statusKey = (s: BuildStatus): string => `${s.id} ${s.state} ${s.phase} ${s.updatedAt}`
 
 /**
+ * The build's warnings, computed where the two halves of the evidence meet.
+ *
+ * The repo's half — start.mjs, the dependency lists, the package manager, the
+ * pnpm allowBuilds — was read out of the clone and rides the status; the app's
+ * half — a database, the Railpack env, whether anything about the app needs a
+ * server — is only in this database. This is the one place that holds both, so
+ * it is the one place the rules can run at all, and it is why lib/build-queue.ts
+ * never computes them.
+ *
+ * An app that has since been deleted is judged on Railpack's output alone
+ * rather than not judged: the version, SPA and Railpack-advice rules need no
+ * app row, and losing them would be a worse answer than a partial one.
+ */
+async function warningsOf(app: string, status: BuildStatus): Promise<DetectionWarning[] | null> {
+  const { appFacts, statusWarnings } = await import('../../lib/build-detect')
+  const { getApp } = await import('../../lib/repo/apps')
+  const record = await getApp(app)
+  return statusWarnings(
+    status,
+    record ? appFacts(record) : { hasDatabase: false, railpackEnv: {}, registeredAsServer: false },
+  )
+}
+
+/**
  * One tick's work. Returns whether something is in flight, which sets the
  * cadence of the next one. Exported for the tests; the interval calls `tick`.
  */
@@ -417,10 +443,18 @@ export async function runTick(ctx: Ctx, now: Date, state: SchedulerState): Promi
     if (heard) {
       if (status.checks !== null) patch.checks = status.checks
       if (Object.keys(status.timings).length > 0) patch.timings = status.timings
+      const facts = readBuildFacts(status)
+      if (facts !== null) patch.facts = facts
       if (status.detected !== null) {
-        const hash = createHash('sha256').update(JSON.stringify(status.detected)).digest('base64')
+        // The hash covers `repo` as well as `detected`, because the warnings
+        // are a function of both: an agent that publishes the repo facts a
+        // tick after the detection must still get them judged.
+        const hash = createHash('sha256')
+          .update(JSON.stringify([status.detected, status.repo]))
+          .digest('base64')
         if (state.detectedSeen?.id !== before.id || state.detectedSeen.hash !== hash) {
           patch.detected = status.detected
+          patch.warnings = await warningsOf(before.app, status)
           seen = { id: before.id, hash }
         }
       }

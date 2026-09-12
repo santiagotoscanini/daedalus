@@ -7,6 +7,7 @@ import {
   buildTimeline,
   deployOutcome,
   detectionParts,
+  pushedTags,
   reportFailureText,
   sameDigest,
 } from './build-display'
@@ -70,13 +71,38 @@ describe('buildTags', () => {
   })
 })
 
+describe('pushedTags', () => {
+  it('shows what was pushed when the agent read it back', () => {
+    expect(pushedTags('live', SHA, ['sha-abc', 'latest', 'v2'])).toEqual({
+      tags: ['sha-abc', 'latest', 'v2'],
+      actual: true,
+    })
+  })
+
+  it('falls back to the derivation, and says it is one', () => {
+    for (const actual of [null, undefined, []]) {
+      expect(pushedTags('live', SHA, actual)).toEqual({
+        tags: [`sha-${SHA}`, 'latest'],
+        actual: false,
+      })
+    }
+    expect(pushedTags('candidate', SHA, null)).toEqual({
+      tags: [`candidate-${SHA}`],
+      actual: false,
+    })
+  })
+})
+
 const detection: Detection = {
   provider: 'node',
+  providers: ['node'],
   framework: 'tanstack-start',
   node: { version: '24.18.1', requested: '24.18.1', source: '.tool-versions' },
   pnpm: { version: '11.18.0', requested: '11.18.0', source: 'packageManager' },
+  packages: [],
   startCommand: 'node start.mjs',
   aptPackages: [],
+  secrets: [],
   spa: false,
   railpackVersion: '0.39.0',
   success: true,

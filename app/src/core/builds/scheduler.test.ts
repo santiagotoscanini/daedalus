@@ -96,7 +96,10 @@ vi.mock('../../lib/repo/builds', async (importOriginal) => {
     },
   }
 })
-vi.mock('../../lib/repo/apps', () => ({ listApps: async () => h.apps }))
+vi.mock('../../lib/repo/apps', () => ({
+  listApps: async () => h.apps,
+  getApp: async (name: string) => h.apps.find((a) => (a as Rec).name === name),
+}))
 vi.mock('../../lib/repo/github-deliveries', () => ({
   pruneDeliveries: async (d: Date) => {
     h.calls.prune.push(d)
@@ -168,7 +171,8 @@ function row(over: Partial<BuildRow> = {}): BuildRow {
     phase: '',
     error: null,
     detected: null,
-    warnings: [],
+    warnings: null,
+    facts: null,
     checks: null,
     digest: null,
     imageRef: null,
@@ -222,6 +226,9 @@ function status(over: Partial<BuildStatus> = {}): BuildStatus {
     pinned: false,
     candidate: false,
     detected: null,
+    repo: null,
+    image: null,
+    build: null,
     checks: null,
     error: null,
     timings: {},
@@ -577,6 +584,81 @@ describe('status', () => {
     const bare = await beat(t4, {}, t3)
     for (const k of ['detected', 'checks', 'timings', 'warnings'])
       expect(bare).not.toHaveProperty(k)
+  })
+
+  it('computes the warnings where the two halves of the evidence meet', async () => {
+    // Both versions pinned in .tool-versions and nothing logged, so Railpack's
+    // own output alone has nothing to say: any warning here came from the
+    // clone's facts meeting the app's row.
+    const info = {
+      railpackVersion: '0.39.0',
+      resolvedPackages: {
+        node: { name: 'node', resolvedVersion: '24.18.1', source: '.tool-versions' },
+        pnpm: { name: 'pnpm', resolvedVersion: '11.18.0', source: '.tool-versions' },
+      },
+      metadata: { nodeRuntime: 'tanstack-start' },
+      detectedProviders: ['node'],
+      logs: [],
+      success: true,
+    }
+    const detected = { info, plan: { deploy: { startCommand: 'pnpm run start' } } }
+    const running = row({ state: 'detecting', phase: 'railpack prepare', startedAt: NOW })
+    const state = freshState(NOW.getTime())
+    h.apps = [app({ postgres: true })]
+
+    h.active = [{ ...running, updatedAt: new Date(NOW.getTime() - 20_000) }]
+    setStatus(status({ state: 'detecting', phase: 'railpack prepare', detected }))
+    await runTick(ctx, NOW, state)
+    // An agent that does not publish `repo` yet costs the checks that need the
+    // clone — and only those. Computed and empty, which is not null.
+    const first = h.calls.update.at(-1)?.[1] as Rec
+    expect(first.warnings).toEqual([])
+
+    // The agent learns the key: the same detection is judged again, because the
+    // seen-hash covers `repo` as well as `detected`.
+    const t2 = new Date(NOW.getTime() + 20_000)
+    h.active = [{ ...running, updatedAt: NOW }]
+    setStatus(
+      status({
+        state: 'detecting',
+        phase: 'railpack prepare',
+        detected,
+        repo: {
+          hasStartMjs: true,
+          scripts: { start: 'vite start' },
+          dependencies: [],
+          productionDependencies: [],
+          allowBuilds: [],
+        },
+        updatedAt: t2.toISOString(),
+      }),
+    )
+    await runTick(ctx, t2, state)
+    const patch = h.calls.update.at(-1)?.[1] as Rec
+    expect(patch.detected).toEqual(detected)
+    expect((patch.warnings as { code: string }[]).map((w) => w.code)).toEqual([
+      'start-bypasses-migrations',
+    ])
+  })
+
+  it('writes the image and build facts, and no warnings without a detection', async () => {
+    const running = row({ state: 'publishing', phase: 'pushing', startedAt: NOW })
+    h.active = [{ ...running, updatedAt: new Date(NOW.getTime() - 20_000) }]
+    setStatus(
+      status({
+        state: 'publishing',
+        phase: 'pushing',
+        image: { tags: [`sha-${SHA}`, 'latest'], layers: 4, layerSizes: [1, 2], configSize: 3 },
+        build: { runner: 'buildkitd.service', stepsCached: 3, stepsTotal: 5 },
+      }),
+    )
+    await runTick(ctx, NOW, freshState(NOW.getTime()))
+    const patch = h.calls.update.at(-1)?.[1] as Rec
+    expect(patch.facts).toMatchObject({
+      image: { tags: [`sha-${SHA}`, 'latest'], layers: 4 },
+      run: { runner: 'buildkitd.service', stepsCached: 3, stepsTotal: 5 },
+    })
+    expect(patch).not.toHaveProperty('warnings')
   })
 
   it('fails a row whose status went stale as interrupted', async () => {

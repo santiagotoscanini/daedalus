@@ -143,6 +143,7 @@ export const fetchBuild = createServerFn()
       digest: row.digest,
       imageRef: row.imageRef,
       sizeBytes: row.sizeBytes,
+      facts: row.facts,
       timings: row.timings,
       checkRunId: row.checkRunId,
       deploymentId: row.deploymentId,

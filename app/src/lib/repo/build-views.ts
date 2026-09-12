@@ -44,7 +44,9 @@ export async function overviewBuild(appId: string) {
   return {
     summary: summarizeBuild(row),
     detection: detectionFromStatus(row.detected),
-    warningCount: row.warnings.length,
+    // A row nobody computed warnings for counts as none here: the overview's
+    // one line has no room to explain the difference, and the build page does.
+    warningCount: row.warnings?.length ?? 0,
   }
 }
 

@@ -478,6 +478,9 @@ describe('build status', () => {
       pinned: false,
       candidate: false,
       detected: null,
+      repo: null,
+      image: null,
+      build: null,
       checks: { ran: ['ci'], failed: null },
       error: null,
     })

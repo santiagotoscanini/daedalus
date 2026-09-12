@@ -6,21 +6,23 @@ import { GuardedAwait } from '../components/error'
 import { Crumbs, PageHead } from '../components/page'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
-import { Board, BoardGrid, Chip, Facts, Pulse } from '../components/viz'
+import { BarList, Board, BoardGrid, Chip, Facts, Pulse } from '../components/viz'
+import { railpackSpoke } from '../lib/build-detect'
 import {
   type BuildCommit,
   type BuildView,
   buildDurationMs,
-  buildTags,
   buildTimeline,
   type DeployOutcome,
   frameworkName,
   isOpenBuild,
+  pushedTags,
   reportFailureText,
   sha7,
   type TimelineStep,
 } from '../lib/build-display'
-import { bytes, DASH, ms } from '../lib/format'
+import { cacheHitRatio } from '../lib/build-facts'
+import { bytes, DASH, ms, pct } from '../lib/format'
 import { OWNER, REGISTRY_HOST } from '../lib/site'
 import type { Tone } from '../lib/tone'
 import {
@@ -323,19 +325,11 @@ function BuildDetail({
                   k: 'image',
                   v: <code title={build.imageRef ?? undefined}>{`${REGISTRY_HOST}/${name}`}</code>,
                 },
-                {
-                  k: 'tags',
-                  v: (
-                    <span className="inline-flex flex-wrap justify-end gap-1">
-                      {buildTags(build.publish, build.sha).map((t) => (
-                        <code key={t} className="text-[0.76rem]" title={t}>
-                          {t.length > 20 ? `${t.slice(0, t.indexOf('-') + 8)}…` : t}
-                        </code>
-                      ))}
-                    </span>
-                  ),
-                },
-                { k: 'size', v: bytes(build.sizeBytes) },
+                tagsRow(build),
+                // Not "size": it is the manifest's compressed layers plus its
+                // config, which is what a pull moves — an unpacked image on
+                // disk is a different, larger number.
+                { k: 'pull size', v: bytes(build.sizeBytes) },
               ]}
             />
           )}
@@ -364,6 +358,18 @@ function BuildDetail({
 
         <Board title="Detection" span={12}>
           <Detection build={build} />
+        </Board>
+
+        <Board title="Resolved tools" span={6}>
+          <Tools build={build} />
+        </Board>
+
+        <Board title="Image" span={6}>
+          <ImageBoard build={build} />
+        </Board>
+
+        <Board title="Railpack said" span={12}>
+          <RailpackSaid build={build} />
         </Board>
 
         <Board title="Log" span={12} aside={open ? <Chip tone="info">following</Chip> : undefined}>
@@ -574,11 +580,14 @@ function Detection({ build }: { build: BuildView }) {
         <code>{p.version}</code> <span className="text-(--dim)">from {p.source}</span>
       </span>
     )
+  const warnings = build.warnings
   return (
     <>
       <Facts
         rows={[
-          { k: 'provider', v: d.provider ?? DASH },
+          // Every provider, not only the one that won: a repo Railpack read as
+          // both a Node app and a static site is worth seeing as both.
+          { k: 'providers', v: d.providers.length === 0 ? DASH : d.providers.join(', ') },
           { k: 'framework', v: d.framework === null ? DASH : frameworkName(d.framework) },
           { k: 'Node', v: pin(d.node) },
           { k: 'pnpm', v: pin(d.pnpm) },
@@ -587,28 +596,248 @@ function Detection({ build }: { build: BuildView }) {
             k: 'apt packages',
             v: d.aptPackages.length === 0 ? 'none' : <code>{d.aptPackages.join(' ')}</code>,
           },
+          {
+            // Names only. A value never leaves the host, and nothing on this
+            // page has ever held one.
+            k: 'build secrets',
+            v: d.secrets.length === 0 ? 'none' : <code>{d.secrets.join(' ')}</code>,
+          },
           { k: 'Railpack', v: d.railpackVersion ?? DASH },
           { k: 'served as', v: d.spa ? 'static single-page app' : 'server' },
         ]}
       />
-      {build.warnings.length > 0 ? (
+      {/* Only when it failed: a successful prepare is what every other row on
+          this card already says, and a green "succeeded" row would be noise. */}
+      {!d.success && (
+        <Alert variant="destructive">
+          <AlertTitle>Railpack’s detection did not succeed</AlertTitle>
+          <AlertDescription>
+            <p className="m-0">
+              `railpack prepare` reported failure. Its own lines are under “Railpack said”.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+      {warnings === null ? (
+        // Never "no warnings": this build was judged by nobody. Every row from
+        // before the engine learned to compute them reads this way, and so
+        // does one whose detection is not Railpack's at all.
+        <p className={BOARD_FOOT}>
+          No warnings were computed for this build — it predates the checks, so this is not a clean
+          bill of health.
+        </p>
+      ) : warnings.length > 0 ? (
         <Alert variant="warning">
           <AlertTitle>
-            {build.warnings.length === 1
-              ? 'One warning'
-              : `${String(build.warnings.length)} warnings`}
+            {warnings.length === 1 ? 'One warning' : `${String(warnings.length)} warnings`}
           </AlertTitle>
           <AlertDescription>
             <ul className="m-0 flex list-disc flex-col gap-1 pl-4">
-              {build.warnings.map((w) => (
+              {warnings.map((w) => (
                 <li key={`${w.code}:${w.message}`}>{w.message}</li>
               ))}
             </ul>
           </AlertDescription>
         </Alert>
       ) : (
-        <p className={BOARD_FOOT}>No warnings.</p>
+        <p className={BOARD_FOOT}>Checked; no warnings.</p>
       )}
     </>
   )
 }
+
+/**
+ * The `tags` row of the Result board. The agent reads back what the push left
+ * on the registry; without it the tags are derived from the publish mode and
+ * the sha, and the row says so rather than passing a guess off as a reading.
+ */
+function tagsRow(build: BuildView): { k: string; v: ReactNode } {
+  const t = pushedTags(build.publish, build.sha, build.facts?.image?.tags)
+  return {
+    k: t.actual ? 'tags' : 'tags (expected)',
+    v: (
+      <span className="inline-flex flex-wrap justify-end gap-1">
+        {t.tags.map((tag) => (
+          <code key={tag} className="text-[0.76rem]" title={tag}>
+            {tag.length > 20 ? `${tag.slice(0, tag.indexOf('-') + 8)}…` : tag}
+          </code>
+        ))}
+      </span>
+    ),
+  }
+}
+
+/**
+ * Every tool mise resolved and who chose its version. The source column is the
+ * one that earns the board: "railpack default" and "package.json > engines"
+ * look identical in a build log and mean entirely different things the next
+ * time the image is rebuilt.
+ */
+function Tools({ build }: { build: BuildView }) {
+  const packages = build.detection?.packages ?? []
+  if (packages.length === 0) {
+    return <p className={VIZ_EMPTY}>Railpack resolved no tools for this build.</p>
+  }
+  return (
+    <ul className="m-0 list-none p-0">
+      {packages.map((p) => (
+        <li
+          key={p.name}
+          className="grid grid-cols-[7rem_1fr] items-baseline gap-x-3 gap-y-[0.1rem] border-t border-(--border-soft) py-[0.45rem] text-[0.84rem] first:border-t-0 first:pt-0"
+        >
+          <code className="truncate" title={p.name}>
+            {p.name}
+          </code>
+          <span className="min-w-0">
+            <code>{p.version}</code>
+            {p.requested !== null && p.requested !== p.version && (
+              <span className="text-(--dim)"> asked for {p.requested}</span>
+            )}
+          </span>
+          <span />
+          <span className="min-w-0 text-[0.78rem] text-(--dim) [overflow-wrap:anywhere]">
+            from {p.source}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * What the push produced, as the agent read it back off the manifest: how many
+ * layers, how big each one is compressed, and what the cache did. A layer list
+ * is the fastest way to see a build that started shipping node_modules.
+ */
+function ImageBoard({ build }: { build: BuildView }) {
+  const image = build.facts?.image ?? null
+  const run = build.facts?.run ?? null
+  if (image === null && run === null) {
+    return (
+      <p className={VIZ_EMPTY}>
+        {build.digest === null
+          ? 'No image was published.'
+          : 'The host agent recorded no image facts for this build.'}
+      </p>
+    )
+  }
+  const ratio = cacheHitRatio(run)
+  const rows: { k: string; v: ReactNode }[] = []
+  if (image !== null) {
+    if (image.layers !== null) rows.push({ k: 'layers', v: String(image.layers) })
+    if (image.configSize !== null) rows.push({ k: 'config', v: bytes(image.configSize) })
+    if (image.mediaType !== null) {
+      rows.push({ k: 'media type', v: <code className="text-[0.72rem]">{image.mediaType}</code> })
+    }
+  }
+  if (run !== null) {
+    if (run.runner !== null) rows.push({ k: 'runner', v: <code>{run.runner}</code> })
+    if (run.stepsTotal !== null) {
+      rows.push({
+        k: 'steps cached',
+        v: `${String(run.stepsCached ?? 0)} of ${String(run.stepsTotal)}${
+          ratio === null ? '' : ` (${pct(ratio * 100)})`
+        }`,
+      })
+    }
+    if (run.cacheImported !== null || run.cacheExported !== null) {
+      rows.push({
+        k: 'cache',
+        v: [
+          run.cacheImported === null ? null : run.cacheImported ? 'imported' : 'cold',
+          run.cacheExported === null ? null : run.cacheExported ? 'exported' : 'not exported',
+        ]
+          .filter((s): s is string => s !== null)
+          .join(', '),
+      })
+    }
+    if (run.secretsHash !== null) {
+      // The fingerprint, never a value: it is here so two builds can be told
+      // apart by whether their secrets changed.
+      rows.push({
+        k: 'secrets hash',
+        v: <code title={run.secretsHash}>{run.secretsHash.slice(0, 12)}</code>,
+      })
+    }
+  }
+  const layers = image?.layerSizes ?? []
+  return (
+    <>
+      {rows.length > 0 && <Facts list rows={rows} />}
+      {layers.length > 0 && (
+        <BarList
+          items={layers.map((size, i) => ({
+            label: `layer ${String(i + 1)}`,
+            value: size,
+            display: bytes(size),
+          }))}
+          tone="info"
+        />
+      )}
+      {layers.length > 0 && (
+        <p className={BOARD_FOOT}>
+          Compressed sizes from the manifest — these plus the config are the pull size above.
+        </p>
+      )}
+    </>
+  )
+}
+
+/**
+ * Railpack's own lines, verbatim. Deliberately overlapping the warnings above:
+ * this is the transcript, warnings and errors and the standing config-format
+ * notice included, while the warnings list is the judgement made of it.
+ */
+function RailpackSaid({ build }: { build: BuildView }) {
+  const d = build.detection
+  const spoken = d === null ? [] : railpackSpoke(d)
+  if (spoken.length === 0) {
+    return (
+      <p className={VIZ_EMPTY}>
+        {d === null
+          ? 'Railpack did not look at this build.'
+          : 'Railpack logged nothing above info level.'}
+      </p>
+    )
+  }
+  return (
+    <ul className="m-0 list-none p-0">
+      {spoken.map((l) => (
+        <li
+          key={`${l.level}:${l.message}`}
+          className="flex flex-wrap items-baseline gap-x-[0.6rem] gap-y-[0.15rem] border-t border-(--border-soft) py-[0.45rem] text-[0.84rem] first:border-t-0 first:pt-0"
+        >
+          <Chip tone={LOG_TONE[l.level.toLowerCase()] ?? 'muted'}>{l.level.toLowerCase()}</Chip>
+          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{l.message}</span>
+          {l.docsPath !== null && (
+            <a
+              href={docsUrl(l.docsPath)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[0.78rem]"
+            >
+              docs ↗
+            </a>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const LOG_TONE: Record<string, Tone> = {
+  error: 'bad',
+  warn: 'warn',
+  deprecation: 'warn',
+  suggestion: 'info',
+}
+
+/**
+ * Railpack names its documentation by path (`/config/…`), against its own site.
+ * An absolute URL is passed through, so a version that starts writing one does
+ * not turn into `https://railpack.com/https://…`.
+ */
+const docsUrl = (path: string): string =>
+  /^https?:\/\//i.test(path)
+    ? path
+    : `https://railpack.com${path.startsWith('/') ? '' : '/'}${path}`

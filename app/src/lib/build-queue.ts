@@ -1,4 +1,5 @@
 import type { DetectionWarning } from './build-detect'
+import { type BuildFacts, readBuildFacts } from './build-facts'
 import {
   BUILD_STATUS_MAX_AGE_MS,
   type BuildChecks,
@@ -60,10 +61,13 @@ export type BuildRow = {
    */
   detected: unknown
   /**
-   * A cache, written when the status lands: warnings need the repo's facts,
-   * which the reducer does not have, so it never computes or clears them.
+   * A cache, written when the status lands: warnings need the app's row and the
+   * agent's repo facts, neither of which the reducer has, so it never computes
+   * or clears them. Null means nobody has — not that there were none.
    */
-  warnings: DetectionWarning[]
+  warnings: DetectionWarning[] | null
+  /** The agent's `image`/`build` keys, decoded. Null until one arrives. */
+  facts: BuildFacts | null
   checks: BuildChecks | null
   digest: string | null
   imageRef: string | null
@@ -221,7 +225,8 @@ export function enqueue(
     phase: '',
     error: null,
     detected: null,
-    warnings: [],
+    warnings: null,
+    facts: null,
     checks: null,
     digest: null,
     imageRef: null,
@@ -331,6 +336,7 @@ export function applyStatus<R extends BuildRow>(row: R, status: BuildStatus | nu
     imageRef: status.imageRef ?? row.imageRef,
     sizeBytes: status.sizeBytes ?? row.sizeBytes,
     detected: status.detected ?? row.detected,
+    facts: readBuildFacts(status) ?? row.facts,
     checks: status.checks ?? row.checks,
     timings: Object.keys(status.timings).length > 0 ? status.timings : row.timings,
     reported: overrides ? false : row.reported,

@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
+  type AppFacts,
+  type AppRegistration,
+  appFacts,
   type Detection,
   detectionFromStatus,
   detectionWarnings,
   type RepoFacts,
+  railpackSpoke,
   readDetection,
+  readRepoFacts,
+  statusWarnings,
 } from './build-detect'
 
 // Fixtures follow Railpack v0.39.0 exactly where the source pins the shape:
@@ -158,15 +164,31 @@ describe('readDetection', () => {
   it('reads a pnpm engines app', () => {
     expect(detect(PNPM_ENGINES_INFO, PNPM_ENGINES_PLAN)).toEqual({
       provider: 'node',
+      providers: ['node'],
       framework: 'node',
       node: { version: '24.16.0', requested: '24.16.0', source: 'package.json > engines > node' },
       pnpm: { version: '11.5.2', requested: '11.5.x', source: 'package.json > engines > pnpm' },
+      packages: [
+        {
+          name: 'node',
+          version: '24.16.0',
+          requested: '24.16.0',
+          source: 'package.json > engines > node',
+        },
+        {
+          name: 'pnpm',
+          version: '11.5.2',
+          requested: '11.5.x',
+          source: 'package.json > engines > pnpm',
+        },
+      ],
       startCommand: 'pnpm run start',
       aptPackages: ['libatomic1'],
+      secrets: [],
       spa: false,
       railpackVersion: '0.39.0',
       success: true,
-      logs: [{ level: 'info', message: 'Detected Node' }],
+      logs: [{ level: 'info', message: 'Detected Node', docsPath: null }],
     })
   })
 
@@ -229,7 +251,7 @@ describe('readDetection', () => {
 
   it('accepts lowercase log keys too', () => {
     expect(detect({ success: true, logs: [{ level: 'warn', msg: 'x' }] }).logs).toEqual([
-      { level: 'warn', message: 'x' },
+      { level: 'warn', message: 'x', docsPath: null },
     ])
   })
 
@@ -495,5 +517,243 @@ describe('detectionWarnings', () => {
         'railpack',
       ])
     })
+  })
+})
+
+// ── what the page shows and the scheduler computes ──────────────────────────
+
+describe('resolved packages, providers and secrets', () => {
+  it('lists every resolved tool, node and pnpm first', () => {
+    const info = {
+      ...PINNED_INFO,
+      resolvedPackages: {
+        python: {
+          name: 'python',
+          requestedVersion: '3.13',
+          resolvedVersion: '3.13.2',
+          source: 'mise.toml',
+        },
+        ...PINNED_INFO.resolvedPackages,
+        bun: { name: 'bun', resolvedVersion: '1.3.0', source: 'railpack default' },
+      },
+    }
+    expect(detect(info, IRIS_PLAN).packages.map((p) => p.name)).toEqual([
+      'node',
+      'pnpm',
+      'python',
+      'bun',
+    ])
+    expect(detect(info, IRIS_PLAN).packages[3]).toEqual({
+      name: 'bun',
+      version: '1.3.0',
+      requested: null,
+      source: 'railpack default',
+    })
+  })
+
+  it('keeps node and pnpm first even when Railpack wrote them last', () => {
+    expect(detect(PINNED_INFO, IRIS_PLAN).packages.map((p) => p.name)).toEqual(['node', 'pnpm'])
+    expect(detect({ success: true, resolvedPackages: {} }).packages).toEqual([])
+  })
+
+  it('carries every detected provider, not only the one that won', () => {
+    const both = { success: true, detectedProviders: ['node', 'staticfile'] }
+    expect(detect(both).providers).toEqual(['node', 'staticfile'])
+    expect(detect(both).provider).toBe('node')
+    expect(detect({ success: true, detectedProviders: [7, 'node'] }).providers).toEqual(['node'])
+  })
+
+  it('reads the build secret NAMES off the plan, in either shape', () => {
+    expect(
+      detect(PINNED_INFO, { ...IRIS_PLAN, secrets: ['AUTH_SECRET', 'DATABASE_URL'] }).secrets,
+    ).toEqual(['AUTH_SECRET', 'DATABASE_URL'])
+    expect(
+      detect(PINNED_INFO, { ...IRIS_PLAN, secrets: { AUTH_SECRET: 'hunter2' } }).secrets,
+    ).toEqual(['AUTH_SECRET'])
+    expect(detect(PINNED_INFO, IRIS_PLAN).secrets).toEqual([])
+  })
+
+  it('keeps the docs path Railpack attached to a line', () => {
+    const info = {
+      success: true,
+      logs: [{ Level: 'suggestion', Msg: 'Add a start script', DocsPath: '/config/start' }],
+    }
+    expect(detect(info).logs[0]).toEqual({
+      level: 'suggestion',
+      message: 'Add a start script',
+      docsPath: '/config/start',
+    })
+  })
+})
+
+describe('railpackSpoke', () => {
+  it('keeps warn, deprecation, suggestion and error, and drops the narration', () => {
+    const info = {
+      ...PINNED_INFO,
+      logs: [
+        { Level: 'info', Msg: 'Detected Node' },
+        { Level: 'warn', Msg: 'something' },
+        { Level: 'error', Msg: 'install failed' },
+        { Level: 'Deprecation', Msg: 'RAILPACK_OLD is deprecated' },
+      ],
+    }
+    expect(railpackSpoke(detect(info)).map((l) => l.message)).toEqual([
+      'something',
+      'install failed',
+      'RAILPACK_OLD is deprecated',
+    ])
+  })
+
+  it('keeps the standing config-format notice the warnings drop — it is the transcript', () => {
+    const spoken = railpackSpoke(detect(IRIS_INFO, IRIS_PLAN))
+    expect(spoken.map((l) => l.message)).toEqual([
+      'The config file format is not yet finalized and subject to change.',
+    ])
+    expect(codes(detect(IRIS_INFO, IRIS_PLAN), IRIS_REPO)).not.toContain('railpack')
+  })
+})
+
+const REGISTRATION: AppRegistration = {
+  postgres: true,
+  storage: false,
+  litellm: false,
+  prometheus: false,
+  authMode: 'proxy',
+  egressContainer: null,
+  railpackEnv: { RAILPACK_PRUNE_DEPS: 'true' },
+}
+
+describe('appFacts', () => {
+  it('reads the database and the Railpack env straight off the row', () => {
+    expect(appFacts(REGISTRATION)).toEqual({
+      hasDatabase: true,
+      railpackEnv: { RAILPACK_PRUNE_DEPS: 'true' },
+      registeredAsServer: true,
+    })
+  })
+
+  it.each([
+    ['postgres', { postgres: true }],
+    ['storage', { storage: true }],
+    ['litellm', { litellm: true }],
+    ['prometheus', { prometheus: true }],
+    ['native auth', { authMode: 'native' }],
+    ['a VPN egress', { egressContainer: 'gluetun-argus' }],
+  ])('counts an app given %s as a server', (_what, over) => {
+    const bare = { ...REGISTRATION, postgres: false, authMode: 'none' }
+    expect(appFacts({ ...bare, ...over }).registeredAsServer).toBe(true)
+  })
+
+  it('does not call an app with nothing but a hostname a server', () => {
+    const bare = { ...REGISTRATION, postgres: false, authMode: 'none' }
+    expect(appFacts(bare).registeredAsServer).toBe(false)
+    expect(appFacts(bare).hasDatabase).toBe(false)
+  })
+})
+
+const APP: AppFacts = { hasDatabase: true, railpackEnv: {}, registeredAsServer: true }
+
+/** The `repo` key exactly as the host build agent publishes it for iris. */
+const IRIS_REPO_KEY = {
+  hasStartMjs: true,
+  packageManager: 'pnpm@11.18.0+sha512.8f7e6d5c4b3a29180706f5e4d3c2b1a0',
+  scripts: { start: 'node start.mjs', build: 'vite build' },
+  dependencies: ['@tanstack/react-start', 'drizzle-orm', 'postgres'],
+  productionDependencies: ['@tanstack/react-start', 'drizzle-orm', 'postgres'],
+  allowBuilds: ['esbuild'],
+}
+
+describe('readRepoFacts', () => {
+  it('merges the agent half with the engine half', () => {
+    expect(readRepoFacts(IRIS_REPO_KEY, APP)).toEqual({
+      hasStartMjs: true,
+      hasDatabase: true,
+      dependencies: ['@tanstack/react-start', 'drizzle-orm', 'postgres'],
+      productionDependencies: ['@tanstack/react-start', 'drizzle-orm', 'postgres'],
+      packageManager: 'pnpm@11.18.0+sha512.8f7e6d5c4b3a29180706f5e4d3c2b1a0',
+      allowBuilds: ['esbuild'],
+      railpackEnv: {},
+      registeredAsServer: true,
+      scripts: { start: 'node start.mjs', build: 'vite build' },
+    })
+  })
+
+  it('reads an absent key as "nobody looked" rather than throwing', () => {
+    for (const raw of [null, undefined, 'repo', 42, []]) {
+      const facts = readRepoFacts(raw, APP)
+      expect(facts).toMatchObject({
+        hasStartMjs: false,
+        dependencies: [],
+        productionDependencies: [],
+        allowBuilds: [],
+        hasDatabase: true,
+        registeredAsServer: true,
+      })
+      // Absent, not empty: an empty scripts map would say "there is no start
+      // script", which is a different claim from "nobody read package.json".
+      expect('scripts' in facts).toBe(false)
+      expect('packageManager' in facts).toBe(false)
+    }
+  })
+
+  it('drops the entries of a mistyped half and keeps the rest', () => {
+    const facts = readRepoFacts(
+      { ...IRIS_REPO_KEY, dependencies: ['ok', 7], scripts: { start: 1, build: 'vite build' } },
+      APP,
+    )
+    expect(facts.dependencies).toEqual(['ok'])
+    expect(facts.scripts).toEqual({ build: 'vite build' })
+  })
+})
+
+describe('statusWarnings', () => {
+  it('judges a build with both halves present', () => {
+    const w = statusWarnings(
+      {
+        detected: { info: PINNED_INFO, plan: { deploy: { startCommand: 'pnpm run start' } } },
+        repo: { ...IRIS_REPO_KEY, scripts: { start: 'vite start' } },
+      },
+      APP,
+    )
+    expect(w?.map((x) => x.code)).toEqual(['start-bypasses-migrations'])
+  })
+
+  it('says nothing rather than everything when the agent published no repo key', () => {
+    const w = statusWarnings(
+      { detected: { info: PINNED_INFO, plan: IRIS_PLAN }, repo: undefined },
+      APP,
+    )
+    // start.mjs, the dependency checks and the packageManager check all need
+    // the clone and have nothing to say; nothing is invented in their place.
+    expect(w).toEqual([])
+  })
+
+  it('still runs the checks that need only Railpack when the repo key is absent', () => {
+    const w = statusWarnings({ detected: { info: IRIS_INFO, plan: IRIS_PLAN }, repo: null }, APP)
+    expect(w?.map((x) => x.code)).toEqual([
+      'version-not-from-tool-versions',
+      'version-not-from-tool-versions',
+    ])
+  })
+
+  it('warns about a SPA registered as a server with no repo key at all', () => {
+    const w = statusWarnings(
+      { detected: { info: VITE_SPA_INFO, plan: VITE_SPA_PLAN }, repo: null },
+      APP,
+    )
+    expect(w?.map((x) => x.code)).toContain('spa-registered-as-server')
+  })
+
+  it('is null, not [], when Railpack never looked — a Dockerfile build is not a clean one', () => {
+    expect(statusWarnings({ detected: null, repo: IRIS_REPO_KEY }, APP)).toBeNull()
+    expect(statusWarnings({ detected: { unrelated: true }, repo: null }, APP)).toBeNull()
+  })
+
+  it('never throws on a repo key from an agent that renamed everything', () => {
+    const w = statusWarnings(
+      { detected: { info: PINNED_INFO, plan: IRIS_PLAN }, repo: { deps: ['x'], has_start_mjs: 1 } },
+      APP,
+    )
+    expect(w).toEqual([])
   })
 })

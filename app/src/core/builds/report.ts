@@ -23,7 +23,8 @@
 // in the preferences store; GitHub's rate limit and the throttles are
 // per-process, on globalThis so a Vite re-evaluation keeps them.
 
-import { detectionFromStatus } from '../../lib/build-detect'
+import { detectionFromStatus, railpackSpoke } from '../../lib/build-detect'
+import { pushedTags } from '../../lib/build-display'
 import type { BuildRow } from '../../lib/build-queue'
 import { type BuildState, isActiveBuildState, isTerminalBuildState } from '../../lib/builds'
 import { bytes, ms } from '../../lib/format'
@@ -384,6 +385,18 @@ function code(s: string): string {
   return `${fence}${pad}${s}${pad}${fence}`
 }
 
+/** Most resolved tools the summary lists; a plan with more is a plan to read elsewhere. */
+const TABLE_MAX_ROWS = 20
+/** Most Railpack lines the summary quotes, for the same reason. */
+const ADVICE_MAX_LINES = 20
+
+/**
+ * One Markdown table cell. A pipe would end the column and a newline the row,
+ * so both are neutralised — a version string or a mise source that contained
+ * either would otherwise wreck the table around it.
+ */
+const cell = (s: string): string => s.replaceAll('|', '\\|').replace(/\s+/g, ' ').trim()
+
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
@@ -474,12 +487,55 @@ function summaryOf(row: BuildRow, delivery: Delivery | null): string {
     if (row.imageRef !== null && !row.imageRef.includes(row.digest)) {
       lines.push(`- Digest: ${code(row.digest)}`)
     }
-    const tags = row.publish === 'live' ? [`sha-${row.sha}`, 'latest'] : [`candidate-${row.sha}`]
-    lines.push(`- Tags: ${tags.map(code).join(', ')}`)
+    const t = pushedTags(row.publish, row.sha, row.facts?.image?.tags)
+    lines.push(`- Tags${t.actual ? '' : ' (expected)'}: ${t.tags.map(code).join(', ')}`)
   }
-  if (row.sizeBytes !== null) lines.push(`- Size: ${bytes(row.sizeBytes)}`)
+  // Labelled, because it is the manifest's compressed layers plus its config —
+  // what a pull moves, not what the image takes unpacked.
+  if (row.sizeBytes !== null) lines.push(`- Pull size: ${bytes(row.sizeBytes)}`)
+  const run = row.facts?.run ?? null
+  if (run !== null) {
+    const parts = [
+      run.runner === null ? null : `runner ${run.runner}`,
+      run.stepsTotal === null
+        ? null
+        : `${String(run.stepsCached ?? 0)}/${String(run.stepsTotal)} steps cached`,
+      run.cacheImported === null ? null : `cache ${run.cacheImported ? 'imported' : 'cold'}`,
+      run.cacheExported === true ? 'cache exported' : null,
+    ].filter((p): p is string => p !== null)
+    if (parts.length > 0) lines.push(`- Builder: ${parts.join(' · ')}`)
+  }
 
-  if (row.warnings.length > 0) {
+  if (d !== null && d.packages.length > 0) {
+    lines.push(
+      '',
+      '**Tools**',
+      '',
+      '| tool | version | requested | source |',
+      '| --- | --- | --- | --- |',
+    )
+    for (const p of d.packages.slice(0, TABLE_MAX_ROWS)) {
+      lines.push(
+        `| ${cell(p.name)} | ${cell(p.version)} | ${cell(p.requested ?? '—')} | ${cell(p.source)} |`,
+      )
+    }
+  }
+
+  if (d !== null) {
+    // Railpack's own lines, verbatim. They overlap the warnings on purpose: a
+    // reader asking "what did Railpack say" wants the errors and the standing
+    // notices too, which the warnings deliberately leave out.
+    const spoken = railpackSpoke(d).slice(0, ADVICE_MAX_LINES)
+    if (spoken.length > 0) {
+      lines.push('', '**Railpack said**', '')
+      for (const l of spoken) {
+        const docs = l.docsPath === null ? '' : ` (${l.docsPath})`
+        lines.push(`- ${l.level}: ${l.message}${docs}`)
+      }
+    }
+  }
+
+  if (row.warnings !== null && row.warnings.length > 0) {
     lines.push('', '**Warnings**', '', ...row.warnings.map((w) => `- ${w.message}`))
   }
   return lines.join('\n')

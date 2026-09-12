@@ -1,4 +1,5 @@
 import type { Detection, DetectionWarning } from './build-detect'
+import type { BuildFacts } from './build-facts'
 import {
   ACTIVE_BUILD_STATES,
   type BuildChecks,
@@ -69,11 +70,13 @@ export type BuildView = BuildSummary & {
   /** The last failed attempt to tell GitHub about this build, while it is unreported. */
   reportFailure: BuildReportFailure | null
   detection: Detection | null
-  warnings: DetectionWarning[]
+  /** Null means nobody computed them — see the builds table's `warnings`. */
+  warnings: DetectionWarning[] | null
   checks: BuildChecks | null
   digest: string | null
   imageRef: string | null
   sizeBytes: number | null
+  facts: BuildFacts | null
   timings: Record<string, number>
   checkRunId: number | null
   deploymentId: number | null
@@ -180,6 +183,27 @@ export function buildTimeline(state: BuildState, timings: Record<string, number>
 /** The tags the host pushes (plan D): live → sha-<sha> + latest, candidate → candidate-<sha>. */
 export function buildTags(publish: BuildPublish, sha: string): string[] {
   return publish === 'candidate' ? [`candidate-${sha}`] : [`sha-${sha}`, 'latest']
+}
+
+/**
+ * The tags on the image, and whether anybody checked.
+ *
+ * The agent reads them back off the manifest zot serves, so when it says, those
+ * ARE the tags. Without it the rule above is applied to the publish mode and
+ * the sha — which is a prediction, and every view that shows a derived list
+ * says so: a push that renamed a tag, dropped `latest`, or raced another build
+ * for it would look identical here, and that is precisely the case somebody
+ * reading this page is trying to see.
+ */
+export function pushedTags(
+  publish: BuildPublish,
+  sha: string,
+  actual: string[] | null | undefined,
+): { tags: string[]; actual: boolean } {
+  if (actual !== null && actual !== undefined && actual.length > 0) {
+    return { tags: actual, actual: true }
+  }
+  return { tags: buildTags(publish, sha), actual: false }
 }
 
 const FRAMEWORKS: Record<string, string> = {

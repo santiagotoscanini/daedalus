@@ -14,6 +14,7 @@ import {
   sql,
 } from 'drizzle-orm'
 import type { DetectionWarning } from '../build-detect'
+import type { BuildFacts } from '../build-facts'
 import { type BuildLane, type BuildRow, ENGINE_VERDICTS } from '../build-queue'
 import {
   ACTIVE_BUILD_STATES,
@@ -184,8 +185,10 @@ const listWithApp = () =>
  * typed.
  *
  * A list record (every read but getBuild) has no detected, checks, timings or
- * warnings, so its row reads as none of them. Such a row is for deciding and
- * displaying; nothing may write those four fields back from it.
+ * warnings, so its row reads as none of them — warnings as null, "nobody
+ * said", which is exactly what a list read knows. Such a row is for deciding
+ * and displaying; nothing may write those four fields back from it. `facts` is
+ * small enough to stay in the list columns, so it is on every row.
  */
 export function toBuildRow(
   r: BuildListRecordWithApp & Partial<Pick<BuildRecord, HeavyColumn>>,
@@ -208,7 +211,8 @@ export function toBuildRow(
     error: r.error,
     // Raw, as the status carried it; decoded on read (detectionFromStatus).
     detected: r.detected ?? null,
-    warnings: (r.warnings as DetectionWarning[] | null | undefined) ?? [],
+    warnings: (r.warnings as DetectionWarning[] | null | undefined) ?? null,
+    facts: (r.facts as BuildFacts | null | undefined) ?? null,
     checks: (r.checks as BuildChecks | null | undefined) ?? null,
     digest: r.digest,
     imageRef: r.imageRef,
@@ -385,6 +389,7 @@ export type BuildStatusPatch = Partial<
     | 'warnings'
     | 'checks'
     | 'timings'
+    | 'facts'
     | 'digest'
     | 'imageRef'
     | 'sizeBytes'
@@ -405,6 +410,7 @@ const STATUS_FIELDS = [
   'warnings',
   'checks',
   'timings',
+  'facts',
   'digest',
   'imageRef',
   'sizeBytes',

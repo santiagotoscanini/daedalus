@@ -1,0 +1,14 @@
+-- One jsonb for everything the host build agent says about the image it made
+-- and the run that made it: the pushed tags, the layer count and their
+-- compressed sizes, the media type, the runner, the build-secrets fingerprint
+-- and what the cache did.
+--
+-- One column rather than five, because none of it is ever queried, compared or
+-- indexed — it is read back whole, for one build page and one check run — and
+-- because the agent grows keys faster than a migration per key would be worth.
+-- `digest` and `size_bytes` stay their own columns: those two ARE matched
+-- against deploy rows and summed.
+--
+-- Nullable with no default: NULL means no agent ever said, which is every row
+-- built before this contract and every build that failed before an image.
+ALTER TABLE "builds" ADD COLUMN "facts" jsonb;

@@ -56,6 +56,7 @@ const record = (over: Partial<BuildRecord> = {}): BuildRecord => ({
   warnings: null,
   checks: null,
   timings: null,
+  facts: null,
   checkRunId: 38_000_000_001,
   deploymentId: null,
   reported: false,
@@ -197,13 +198,15 @@ describe('BuildStatusPatch', () => {
 })
 
 describe('toBuildRow', () => {
-  it('hands build-queue no null phase, timings or warnings, and carries the app name', () => {
+  it('hands build-queue no null phase or timings, keeps a null warnings, and carries the app name', () => {
     const row = toBuildRow({ ...record(), app: 'demo' })
     expect(row).toMatchObject({
       app: 'demo',
       phase: '',
       timings: {},
-      warnings: [],
+      // Null, not []: nobody computed warnings for this row, and the two are
+      // different claims (lib/schema.ts builds.warnings).
+      warnings: null,
       strategy: 'auto',
       resolvedStrategy: 'railpack',
       actor: 'santiago',
@@ -270,7 +273,7 @@ describe('list reads', () => {
       detected: null,
       checks: null,
       timings: {},
-      warnings: [],
+      warnings: null,
       checkRunId: 38_000_000_001,
     })
   })

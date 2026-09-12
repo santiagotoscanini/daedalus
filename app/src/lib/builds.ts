@@ -395,6 +395,18 @@ export type BuildStatus = {
    * lib/build-detect.ts reads it, tolerating Railpack's 0.x churn.
    */
   detected: unknown
+  /**
+   * What the agent read out of the clone: `{ hasStartMjs, packageManager,
+   * scripts, dependencies, productionDependencies, allowBuilds }`. The half of
+   * the warning rules' RepoFacts only the host can see — the other half is the
+   * app's own row. Absent from an agent older than the key; kept undecoded here
+   * and read by lib/build-detect.ts `readRepoFacts`, which tolerates both.
+   */
+  repo: unknown
+  /** `{ tags, layers, layerSizes, configSize, mediaType }` — lib/build-facts.ts. */
+  image: unknown
+  /** `{ runner, secretsHash, cacheImported, cacheExported, stepsCached, stepsTotal }`. */
+  build: unknown
   checks: BuildChecks | null
   /** Host words, already passed through redactBuildLog. */
   error: string | null
@@ -511,6 +523,12 @@ export const buildStatusDecoder: Decoder<BuildStatus> = obj({
   pinned: optional(bool, false),
   candidate: optional(bool, false),
   detected: optional(unknownValue, null),
+  // Undecoded, like `detected`, and for the same reason: a decoder that threw
+  // on a renamed field would turn a cosmetic agent change into a build the
+  // engine cannot read the status of at all.
+  repo: optional(unknownValue, null),
+  image: optional(unknownValue, null),
+  build: optional(unknownValue, null),
   checks: optional(
     nullable(obj({ ran: optional(arrayOf(str), []), failed: optional(nullable(str), null) })),
     null,
