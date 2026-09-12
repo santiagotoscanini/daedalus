@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   BUILD_REQUEST_MAX_BYTES,
@@ -8,8 +9,10 @@ import {
   buildStatusDecoder,
   isReservedEnvName,
   RAILPACK_KNOB_NAMES,
+  RAILPACK_KNOB_PATTERNS,
   RESERVED_ENV_NAMES,
   RESERVED_ENV_PREFIXES,
+  railpackValueRefusal,
   redactBuildLog,
   serializeBuildRequest,
   tailFromBytes,
@@ -223,36 +226,191 @@ describe('build request env', () => {
   })
 })
 
-describe('the reserved placeholder names', () => {
-  // host/build.sh RESERVED_ENV_RE as of 2026-09-12. The engine's list is exactly
-  // this plus the package-manager prefixes: a change on either side fails here.
+describe('the build env rules, identical in host/build.sh', () => {
+  // host/build.sh's RESERVED_ENV_RE and RAILPACK_KNOBS as of 2026-09-12.
+  //
+  // Where the host file is visible — on the box, with DAEDALUS_HOST_BUILD_SH
+  // naming it, or at s2-server's own path — the tests read it, and it must equal
+  // this copy. Where it is not (this public repo's CI), the copy stands in. The
+  // copy therefore cannot go stale without a run on the box failing, and the
+  // engine's lists are held to the host's text in both places.
   const HOST_RESERVED_ENV_RE =
-    '^(PATH|HOME|SHELL|USER|LOGNAME|PWD|OLDPWD|IFS|ENV|BASH|BASHOPTS|SHELLOPTS|CDPATH|GLOBIGNORE|PS4|UID|EUID|PPID|SHLVL|TMPDIR|TZ|LANG|LANGUAGE|TERM|HOSTNAME|GITHUB_TOKEN|GODEBUG|GOFLAGS|GOTRACEBACK|NODE_OPTIONS|NODE_EXTRA_CA_CERTS|NO_PROXY|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|FTP_PROXY|DAEDALUS_TOKEN_FILE)$|^(LD_|BASH_FUNC_|GIT_|BUILDKIT_|BUILDCTL_|DOCKER_|MISE_|RAILPACK_|XDG_|LC_|SSL_|NIX_SSL_|CURL_|SYSTEMD_)'
-  const ADDED = ['NPM_CONFIG_', 'PNPM_', 'COREPACK_', 'YARN_', 'BUN_', 'NODE_']
+    '^(PATH|HOME|SHELL|USER|LOGNAME|PWD|OLDPWD|IFS|ENV|BASH|BASH_ENV|BASHOPTS|SHELLOPTS|CDPATH|GLOBIGNORE|PS4|PROMPT_COMMAND|UID|EUID|PPID|SHLVL|TMPDIR|TZ|LANG|LANGUAGE|TERM|HOSTNAME|GCONV_PATH|GLIBC_TUNABLES|LOCPATH|GITHUB_TOKEN|DAEDALUS_TOKEN_FILE|NO_PROXY|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|FTP_PROXY|GODEBUG|GOFLAGS|GOTRACEBACK|GOENV|GOROOT|GOPATH|GOBIN|GOCACHE|GOCACHEPROG|GOMODCACHE|GOTMPDIR|GOWORK|GOPROXY|GONOPROXY|GOPRIVATE|GOSUMDB|GONOSUMDB|GONOSUMCHECK|GOINSECURE|GOVCS|GOAUTH|GOTOOLCHAIN|GOEXPERIMENT|GO111MODULE|RUSTDOC|RUSTFLAGS|RUSTDOCFLAGS|RUBYOPT|RUBYLIB|GEM_PATH|GEM_HOME|PERLLIB|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)$|^(LD_|BASH_FUNC_|GIT_|BUILDKIT_|BUILDCTL_|DOCKER_|MISE_|RAILPACK_|XDG_|LC_|SSL_|NIX_SSL_|CURL_|SYSTEMD_|NPM_CONFIG_|PNPM_|COREPACK_|YARN_|BUN_|NODE_|CGO_|PIP_|UV_|PYTHON|CARGO_|RUSTUP_|RUSTC|BUNDLE_|PERL5)'
+  const APT = '[a-z0-9][a-z0-9+.-]*(?:=[A-Za-z0-9.+~:-]+)?'
+  const FLAG = '^(?:true|false|1|0)$'
+  const HOST_RAILPACK_KNOBS: Record<string, string> = {
+    RAILPACK_PRUNE_DEPS: FLAG,
+    RAILPACK_NODE_PLAYWRIGHT_INSTALL: FLAG,
+    RAILPACK_NO_SPA: FLAG,
+    RAILPACK_DISABLE_CACHES: '^(?:\\*|[A-Za-z0-9_.:-]+(?: [A-Za-z0-9_.:-]+)*)$',
+    RAILPACK_SPA_OUTPUT_DIR: '^(?!/)(?!(?:.*/)?\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,200}$',
+    RAILPACK_NODE_VERSION: '^[0-9]{1,3}(?:\\.[0-9]{1,4}){0,2}$',
+    RAILPACK_BUILD_APT_PACKAGES: `^${APT}(?: ${APT})*$`,
+    RAILPACK_DEPLOY_APT_PACKAGES: `^${APT}(?: ${APT})*$`,
+  }
 
-  it('mirror host/build.sh name for name, plus the package-manager prefixes', () => {
-    const [, exact = '', prefixes = ''] =
-      /^\^\((.*)\)\$\|\^\((.*)\)$/.exec(HOST_RESERVED_ENV_RE) ?? []
-    expect([...RESERVED_ENV_NAMES]).toEqual(exact.split('|'))
-    expect(RESERVED_ENV_PREFIXES.filter((p) => !ADDED.includes(p))).toEqual(prefixes.split('|'))
-    expect(RESERVED_ENV_PREFIXES.filter((p) => ADDED.includes(p))).toEqual(ADDED)
+  const hostPath = process.env.DAEDALUS_HOST_BUILD_SH ?? '/etc/nixos/stacks/daedalus/host/build.sh'
+  // A path named on purpose must exist; the default path is simply absent off the box.
+  const hostText =
+    process.env.DAEDALUS_HOST_BUILD_SH !== undefined || existsSync(hostPath)
+      ? readFileSync(hostPath, 'utf8')
+      : null
+
+  /** A `NAME='…'` assignment's value, which build.sh keeps in exactly that form. */
+  function assignment(text: string, name: string): string {
+    const m = new RegExp(`^${name}='([^']*)'$`, 'm').exec(text)
+    if (m?.[1] === undefined) throw new Error(`host/build.sh has no ${name}='…' line`)
+    return m[1]
+  }
+
+  const hostReserved =
+    hostText === null ? HOST_RESERVED_ENV_RE : assignment(hostText, 'RESERVED_ENV_RE')
+  const hostKnobs: Record<string, string> =
+    hostText === null ? HOST_RAILPACK_KNOBS : JSON.parse(assignment(hostText, 'RAILPACK_KNOBS'))
+
+  it.runIf(hostText !== null)('are read from the host file, which matches the copy here', () => {
+    expect(hostReserved).toBe(HOST_RESERVED_ENV_RE)
+    expect(hostKnobs).toEqual(HOST_RAILPACK_KNOBS)
   })
 
-  it('refuse what the host refuses, and the added prefixes on top', () => {
-    const host = new RegExp(HOST_RESERVED_ENV_RE)
-    for (const name of [
+  it("build the host's reserved-name pattern from the engine's lists, in order", () => {
+    expect(`^(${RESERVED_ENV_NAMES.join('|')})$|^(${RESERVED_ENV_PREFIXES.join('|')})`).toBe(
+      hostReserved,
+    )
+  })
+
+  it('repeat no name a prefix already covers', () => {
+    for (const name of RESERVED_ENV_NAMES) {
+      expect(RESERVED_ENV_PREFIXES.filter((p) => name.startsWith(p))).toEqual([])
+    }
+  })
+
+  it("pass on exactly the host's Railpack switches, with the host's value patterns", () => {
+    expect(RAILPACK_KNOB_PATTERNS).toEqual(hostKnobs)
+    expect(Object.keys(hostKnobs)).toEqual([...RAILPACK_KNOB_NAMES])
+  })
+
+  it('refuse the same names on both sides', () => {
+    const host = new RegExp(hostReserved)
+    const refused = [
       'PATH',
       'LD_PRELOAD',
       'GIT_DIR',
       'RAILPACK_X',
       'SYSTEMD_EXEC_PID',
-      'DATABASE_URL',
+      'NPM_CONFIG_REGISTRY',
+      'NODE_OPTIONS',
+      'BASH_ENV',
+      'PROMPT_COMMAND',
+      'GCONV_PATH',
+      'GLIBC_TUNABLES',
+      'LOCPATH',
+      'GOPROXY',
+      'GONOSUMDB',
+      'GOPRIVATE',
+      'GOTOOLCHAIN',
+      'GOEXPERIMENT',
+      'GOENV',
+      'GOCACHEPROG',
+      'CGO_LDFLAGS',
+      'PIP_INDEX_URL',
+      'UV_INDEX_URL',
+      'PYTHONPATH',
+      'PYTHONSTARTUP',
+      'PYTHON_GIL',
+      'CARGO_HOME',
+      'RUSTUP_TOOLCHAIN',
+      'RUSTC_WRAPPER',
+      'RUSTFLAGS',
+      'BUNDLE_GEMFILE',
+      'PERL5LIB',
+      'PERL5OPT',
+      'PERLLIB',
+      'RUBYOPT',
+      'GEM_HOME',
+      'JAVA_TOOL_OPTIONS',
+      '_JAVA_OPTIONS',
+    ]
+    for (const name of refused) {
+      expect([name, isReservedEnvName(name)]).toEqual([name, true])
+      expect([name, host.test(name)]).toEqual([name, true])
+    }
+    for (const name of [
       'PATHS',
       'MY_PATH',
+      'GOOGLE_ANALYTICS_ID',
+      'GOLD_API_KEY',
+      'PIPEDREAM_KEY',
     ]) {
-      expect(isReservedEnvName(name)).toBe(host.test(name))
+      expect([name, isReservedEnvName(name)]).toEqual([name, false])
+      expect([name, host.test(name)]).toEqual([name, false])
     }
-    for (const p of ADDED) expect(isReservedEnvName(`${p}REGISTRY`)).toBe(true)
+  })
+
+  // Every build-time placeholder the seven apps declare (the plan's railpack.json table).
+  const APP_PLACEHOLDERS = [
+    'DATABASE_URL',
+    'AUTH_SECRET',
+    'MAPBOX_ACCESS_TOKEN',
+    'GOOGLE_MAPS_API_KEY',
+    'GOOGLE_MAPS_MAP_ID',
+    'AVIATIONSTACK_API_KEY',
+    'GOOGLE_TIME_ZONE_API_KEY',
+    'LITELLM_BASE_URL',
+    'LITELLM_API_KEY',
+    'LITELLM_MODEL',
+  ]
+
+  it("let every app's real placeholder names through on both sides", () => {
+    const host = new RegExp(hostReserved)
+    for (const name of APP_PLACEHOLDERS) {
+      expect([name, isReservedEnvName(name)]).toEqual([name, false])
+      expect([name, host.test(name)]).toEqual([name, false])
+    }
+    const placeholders = Object.fromEntries(APP_PLACEHOLDERS.map((n) => [n, 'placeholder']))
+    const decoded = decode(buildRequestDecoder, {
+      ...request,
+      buildEnv: { placeholders, railpack: {} },
+    })
+    expect(Object.keys(decoded.buildEnv?.placeholders ?? {})).toEqual(APP_PLACEHOLDERS)
+  })
+
+  it('give each Railpack value the same verdict on both sides', () => {
+    const cases: [string, string, boolean][] = [
+      ['RAILPACK_PRUNE_DEPS', 'true', true],
+      ['RAILPACK_PRUNE_DEPS', 'yes', false],
+      ['RAILPACK_DISABLE_CACHES', '*', true],
+      ['RAILPACK_DISABLE_CACHES', 'pnpm-install node-modules', true],
+      ['RAILPACK_DISABLE_CACHES', '* x', false],
+      ['RAILPACK_SPA_OUTPUT_DIR', 'dist', true],
+      ['RAILPACK_SPA_OUTPUT_DIR', 'dist/client', true],
+      ['RAILPACK_SPA_OUTPUT_DIR', './dist', true],
+      ['RAILPACK_SPA_OUTPUT_DIR', 'a..b', true],
+      ['RAILPACK_SPA_OUTPUT_DIR', '...', true],
+      ['RAILPACK_SPA_OUTPUT_DIR', '..', false],
+      ['RAILPACK_SPA_OUTPUT_DIR', '../etc', false],
+      ['RAILPACK_SPA_OUTPUT_DIR', 'dist/../..', false],
+      ['RAILPACK_SPA_OUTPUT_DIR', 'x/..', false],
+      ['RAILPACK_SPA_OUTPUT_DIR', '/etc', false],
+      ['RAILPACK_SPA_OUTPUT_DIR', 'dist dir', false],
+      ['RAILPACK_SPA_OUTPUT_DIR', 'd'.repeat(201), false],
+      ['RAILPACK_NODE_VERSION', '24', true],
+      ['RAILPACK_NODE_VERSION', '24.18.1', true],
+      ['RAILPACK_NODE_VERSION', '２４', false],
+      ['RAILPACK_NODE_VERSION', '24.18.1.1', false],
+      ['RAILPACK_NODE_VERSION', 'path:/tmp/node', false],
+      ['RAILPACK_DEPLOY_APT_PACKAGES', 'ffmpeg chromium fonts-liberation', true],
+      ['RAILPACK_DEPLOY_APT_PACKAGES', 'libc6=2.41-12', true],
+      ['RAILPACK_DEPLOY_APT_PACKAGES', 'ffmpeg  git', false],
+      ['RAILPACK_DEPLOY_APT_PACKAGES', 'ffmpeg; curl x|sh', false],
+      ['RAILPACK_BUILD_APT_PACKAGES', '$(id)', false],
+    ]
+    for (const [name, value, ok] of cases) {
+      expect([name, value, railpackValueRefusal(name, value) === null]).toEqual([name, value, ok])
+      const pattern = hostKnobs[name]
+      expect(pattern).toBeDefined()
+      expect([name, value, new RegExp(pattern ?? '').test(value)]).toEqual([name, value, ok])
+    }
   })
 })
 

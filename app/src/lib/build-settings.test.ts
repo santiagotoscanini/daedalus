@@ -95,10 +95,26 @@ describe('validateBuildSettings', () => {
       'YARN_NPM_REGISTRY_SERVER',
       'BUN_CONFIG_REGISTRY',
       'NODE_ENV',
+      'GLIBC_TUNABLES',
+      'GOPROXY',
+      'PIP_INDEX_URL',
+      'PYTHONPATH',
+      'CARGO_HOME',
+      'RUSTC_WRAPPER',
+      'BUNDLE_GEMFILE',
+      'PERL5OPT',
+      'JAVA_TOOL_OPTIONS',
     ]) {
       expect(envEntryError('placeholders', name, 'x')).toContain(`${name} is reserved`)
     }
-    for (const name of ['DATABASE_URL', 'AUTH_SECRET', 'PATHS', 'NPM_TOKEN', 'VITE_NODE_URL']) {
+    for (const name of [
+      'DATABASE_URL',
+      'AUTH_SECRET',
+      'PATHS',
+      'NPM_TOKEN',
+      'VITE_NODE_URL',
+      'GOOGLE_MAPS_API_KEY',
+    ]) {
       expect(envEntryError('placeholders', name, 'x')).toBeNull()
     }
     expect(() =>

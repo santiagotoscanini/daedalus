@@ -100,13 +100,27 @@ export const BUILD_ENV_MAX_BYTES = 32 * 1024
 /** The largest request the engine writes; the host refuses one past 65,536 bytes. */
 export const BUILD_REQUEST_MAX_BYTES = 60 * 1024
 
+// ── the build env rules, identical on the host ─────────────────────────────
+//
+// host/build.sh (s2-server stacks/daedalus/host) holds the same two rules as
+// two assignments: RESERVED_ENV_RE (built from the two lists below, in this
+// order) and RAILPACK_KNOBS (RAILPACK_KNOB_PATTERNS as JSON). The host refuses
+// on its own whatever this file refuses, because the container can write a
+// request directly. builds.test.ts reads those assignments out of the host
+// file when it can see one and fails on any difference; change both together.
+
 /**
  * Names a placeholder may not take, because the builder's own tools read them
- * rather than the app: the shell, git, mise, BuildKit, the dynamic loader, and
- * the package managers, whose variables can point an install at another
- * registry. host/build.sh RESERVED_ENV_RE holds the same list; change both.
+ * rather than the app: the shell, the C library and dynamic loader, git, mise,
+ * BuildKit, and the language toolchains and package managers, whose variables
+ * can point an install at another registry or run a program of their choosing.
+ * A name a prefix below already covers is not repeated here.
+ *
+ * Toolchains get exact names where a prefix would catch app names: `GO` would
+ * refuse voyra's GOOGLE_MAPS_API_KEY, so Go's variables are listed one by one.
  */
 export const RESERVED_ENV_NAMES = [
+  // the shell and the process
   'PATH',
   'HOME',
   'SHELL',
@@ -117,11 +131,13 @@ export const RESERVED_ENV_NAMES = [
   'IFS',
   'ENV',
   'BASH',
+  'BASH_ENV',
   'BASHOPTS',
   'SHELLOPTS',
   'CDPATH',
   'GLOBIGNORE',
   'PS4',
+  'PROMPT_COMMAND',
   'UID',
   'EUID',
   'PPID',
@@ -132,18 +148,56 @@ export const RESERVED_ENV_NAMES = [
   'LANGUAGE',
   'TERM',
   'HOSTNAME',
+  // the C library: charset converters and locale data it loads by path
+  'GCONV_PATH',
+  'GLIBC_TUNABLES',
+  'LOCPATH',
+  // the builder's own credentials and network
   'GITHUB_TOKEN',
-  'GODEBUG',
-  'GOFLAGS',
-  'GOTRACEBACK',
-  'NODE_OPTIONS',
-  'NODE_EXTRA_CA_CERTS',
+  'DAEDALUS_TOKEN_FILE',
   'NO_PROXY',
   'HTTP_PROXY',
   'HTTPS_PROXY',
   'ALL_PROXY',
   'FTP_PROXY',
-  'DAEDALUS_TOKEN_FILE',
+  // Go
+  'GODEBUG',
+  'GOFLAGS',
+  'GOTRACEBACK',
+  'GOENV',
+  'GOROOT',
+  'GOPATH',
+  'GOBIN',
+  'GOCACHE',
+  'GOCACHEPROG',
+  'GOMODCACHE',
+  'GOTMPDIR',
+  'GOWORK',
+  'GOPROXY',
+  'GONOPROXY',
+  'GOPRIVATE',
+  'GOSUMDB',
+  'GONOSUMDB',
+  'GONOSUMCHECK',
+  'GOINSECURE',
+  'GOVCS',
+  'GOAUTH',
+  'GOTOOLCHAIN',
+  'GOEXPERIMENT',
+  'GO111MODULE',
+  // Rust, beside CARGO_/RUSTUP_/RUSTC: cargo reads these under their own names
+  'RUSTDOC',
+  'RUSTFLAGS',
+  'RUSTDOCFLAGS',
+  // Ruby, Perl, the JVM
+  'RUBYOPT',
+  'RUBYLIB',
+  'GEM_PATH',
+  'GEM_HOME',
+  'PERLLIB',
+  'JAVA_TOOL_OPTIONS',
+  'JDK_JAVA_OPTIONS',
+  '_JAVA_OPTIONS',
 ] as const
 
 /** Prefixes a placeholder may not start with; see RESERVED_ENV_NAMES. */
@@ -168,6 +222,19 @@ export const RESERVED_ENV_PREFIXES = [
   'YARN_',
   'BUN_',
   'NODE_',
+  // cgo's flags skip Go's own flag allowlist
+  'CGO_',
+  'PIP_',
+  'UV_',
+  // Python's own variables are PYTHON<WORD> and, since 3.13, PYTHON_<WORD>
+  'PYTHON',
+  'CARGO_',
+  'RUSTUP_',
+  // RUSTC, RUSTC_WRAPPER, RUSTC_WORKSPACE_WRAPPER: each names a program to run
+  'RUSTC',
+  // Bundler reads every BUNDLE_<KEY> as configuration
+  'BUNDLE_',
+  'PERL5',
 ] as const
 
 export function isReservedEnvName(name: string): boolean {
@@ -177,13 +244,21 @@ export function isReservedEnvName(name: string): boolean {
   )
 }
 
-type Knob = { ok: (value: string) => boolean; says: string }
+/**
+ * A value pattern runs twice: here as a JavaScript RegExp and on the host in
+ * jq's Oniguruma. So each is written in what the two read alike — ASCII classes
+ * (`[0-9]`, never `\d`, which Oniguruma widens to every Unicode digit),
+ * lookahead but no lookbehind, no flags — and only ever meets a single-line
+ * value (both sides refuse line breaks first, and Oniguruma's `$` also matches
+ * before a final newline).
+ */
+type Knob = { pattern: string; says: string }
 
-const FLAG: Knob = { ok: (v) => /^(?:true|false|1|0)$/.test(v), says: 'true, false, 1 or 0' }
+const FLAG: Knob = { pattern: '^(?:true|false|1|0)$', says: 'true, false, 1 or 0' }
 // Railpack splits a list on single spaces (core/app/environment.go).
 const APT_PACKAGE = '[a-z0-9][a-z0-9+.-]*(?:=[A-Za-z0-9.+~:-]+)?'
 const APT_PACKAGES: Knob = {
-  ok: (v) => new RegExp(`^${APT_PACKAGE}(?: ${APT_PACKAGE})*$`).test(v),
+  pattern: `^${APT_PACKAGE}(?: ${APT_PACKAGE})*$`,
   says: 'Debian package names, one space apart',
 }
 
@@ -202,23 +277,23 @@ const RAILPACK_KNOBS = new Map<string, Knob>([
   [
     'RAILPACK_DISABLE_CACHES',
     {
-      ok: (v) => /^(?:\*|[A-Za-z0-9_.:-]+(?: [A-Za-z0-9_.:-]+)*)$/.test(v),
+      pattern: '^(?:\\*|[A-Za-z0-9_.:-]+(?: [A-Za-z0-9_.:-]+)*)$',
       says: 'cache names one space apart, or *',
     },
   ],
   [
     'RAILPACK_SPA_OUTPUT_DIR',
     {
-      // Joined onto /app and served: nothing may climb out of the app.
-      ok: (v) =>
-        /^[A-Za-z0-9._/-]{1,200}$/.test(v) && !v.startsWith('/') && !v.split('/').includes('..'),
+      // Joined onto /app and served: nothing may climb out of the app. Not
+      // absolute, and no `..` segment anywhere.
+      pattern: '^(?!/)(?!(?:.*/)?\\.\\.(?:/|$))[A-Za-z0-9._/-]{1,200}$',
       says: 'a directory inside the repo, such as dist',
     },
   ],
   [
     'RAILPACK_NODE_VERSION',
     {
-      ok: (v) => /^\d{1,3}(?:\.\d{1,4}){0,2}$/.test(v),
+      pattern: '^[0-9]{1,3}(?:\\.[0-9]{1,4}){0,2}$',
       says: 'a Node version number, such as 24 or 24.18.1',
     },
   ],
@@ -226,7 +301,14 @@ const RAILPACK_KNOBS = new Map<string, Knob>([
   ['RAILPACK_DEPLOY_APT_PACKAGES', APT_PACKAGES],
 ])
 
+const KNOB_RES = new Map([...RAILPACK_KNOBS].map(([name, k]) => [name, new RegExp(k.pattern)]))
+
 export const RAILPACK_KNOB_NAMES: readonly string[] = [...RAILPACK_KNOBS.keys()]
+
+/** Switch name → value pattern: host/build.sh RAILPACK_KNOBS, exactly. */
+export const RAILPACK_KNOB_PATTERNS: Readonly<Record<string, string>> = Object.fromEntries(
+  [...RAILPACK_KNOBS].map(([name, k]) => [name, k.pattern]),
+)
 
 /**
  * Why a well-formed name (it passed its map's pattern) is still refused, as the
@@ -235,7 +317,7 @@ export const RAILPACK_KNOB_NAMES: readonly string[] = [...RAILPACK_KNOBS.keys()]
 export function buildEnvNameRefusal(kind: BuildEnvKind, name: string): string | null {
   if (kind === 'placeholders') {
     return isReservedEnvName(name)
-      ? "reserved: the builder's own tools read it (the shell, git, mise, BuildKit, the package managers)"
+      ? "reserved: the builder's own tools read it (the shell, git, mise, BuildKit, the language toolchains and package managers)"
       : null
   }
   if (name.endsWith('_CMD')) {
@@ -250,7 +332,8 @@ export function buildEnvNameRefusal(kind: BuildEnvKind, name: string): string | 
 /** What a Railpack switch's value must be, when this one is not; null when it fits. */
 export function railpackValueRefusal(name: string, value: string): string | null {
   const knob = RAILPACK_KNOBS.get(name)
-  return knob === undefined || knob.ok(value) ? null : knob.says
+  const re = KNOB_RES.get(name)
+  return knob === undefined || re === undefined || re.test(value) ? null : knob.says
 }
 
 const encoder = new TextEncoder()
