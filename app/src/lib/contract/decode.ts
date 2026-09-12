@@ -89,14 +89,27 @@ export function recordOf<T>(d: Decoder<T>): Decoder<Record<string, T>> {
     if (v === null || typeof v !== 'object' || Array.isArray(v)) {
       throw new DecodeError(p, `expected an object, got ${kind(v)}`)
     }
-    // Null prototype, for both halves of the same hole. Writing: `out.__proto__
-    // = x` on a `{}` hits Object.prototype's setter, so the entry is dropped
-    // and the result inherits whatever the attacker sent. Reading: a key the
-    // input never carried — `toString`, `constructor` — answers a function
-    // where the type says T. Neither is reachable without a prototype.
+    // Accumulate without a prototype, hand back with one.
+    //
+    // The hole is the write: `out.__proto__ = x` on a plain `{}` hits
+    // Object.prototype's inherited setter, so the validated entry is silently
+    // dropped AND the result then answers the attacker's values for keys it
+    // never checked. A null-prototype accumulator has no setter to hit.
+    //
+    // But a null prototype cannot be the RESULT. Decoded records land in jsonb
+    // columns, and the driver infers a type with `Object.getPrototypeOf(x)
+    // .constructor` — `null.constructor` on such an object. That threw inside
+    // the build scheduler's tick and wedged the queue, so this is a fix with a
+    // scar. The spread restores an ordinary prototype and is safe because
+    // spread creates data properties directly instead of assigning through
+    // setters; `__proto__` survives as a real own key.
+    //
+    // Deliberately not fixed here: `out.toString` still answers
+    // Object.prototype's function where the type says T. That is a type
+    // imprecision on keys nobody sent, not a way in.
     const out = Object.create(null) as Record<string, T>
     for (const [k, item] of Object.entries(v)) out[k] = d(item, `${p}.${k}`)
-    return out
+    return { ...out }
   }
 }
 

@@ -68,20 +68,24 @@ describe('hostile input', () => {
     // yields it; `out[k] = …` on a `{}` would then hit Object.prototype's
     // setter, drop the entry, and swap the result's prototype.
     const out = decode(recordOf(str), JSON.parse('{"a":"b","__proto__":"x"}'))
-    expect(Object.getPrototypeOf(out)).toBeNull()
     expect(Object.hasOwn(out, '__proto__')).toBe(true)
     expect(out.a).toBe('b')
 
     const nested = decode(recordOf(recordOf(str)), JSON.parse('{"__proto__":{"admin":"yes"}}'))
     expect(nested.admin).toBeUndefined()
     expect(Object.keys(nested)).toEqual(['__proto__'])
+    expect(({} as Record<string, unknown>).admin).toBeUndefined()
   })
 
-  it('recordOf answers nothing for a key it never decoded', () => {
-    const out = decode(recordOf(str), { a: 'b' })
-    expect(out.toString).toBeUndefined()
-    expect(out.constructor).toBeUndefined()
-    expect(out.hasOwnProperty).toBeUndefined()
+  // The other half of that fix, and the one that cost an outage: a decoded
+  // record goes into a jsonb column, and the driver infers its type with
+  // `Object.getPrototypeOf(x).constructor`. Accumulating without a prototype
+  // is what makes the write safe; returning without one wedged the build queue.
+  it('recordOf returns an object a database driver can inspect', () => {
+    const out = decode(recordOf(str), JSON.parse('{"a":"b","__proto__":"x"}'))
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype)
+    expect(Object.getPrototypeOf(out).constructor).toBe(Object)
+    expect(JSON.parse(JSON.stringify(out)).a).toBe('b')
   })
 
   it('obj reads own keys only', () => {
