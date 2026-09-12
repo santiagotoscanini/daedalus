@@ -341,7 +341,7 @@ function RemovePanel({
         <div className="[&>p]:mt-0 [&>p]:mr-0 [&>p]:mb-2 [&>p]:ml-0 [&>p]:text-[0.85rem] [&>p]:leading-[1.55] [&>p]:text-(--text-muted)">
           <p>
             Deletes the registry entry. The next Apply removes the container, the traefik router,
-            the pi-hole record, the gatus probe, the Cloudflare route and this app’s CI runner.
+            the pi-hole record, the gatus probe and the Cloudflare route.
           </p>
           <p className="mb-0 text-[0.73rem] leading-[1.45] text-(--dim)">
             <b>Not removed:</b>{' '}

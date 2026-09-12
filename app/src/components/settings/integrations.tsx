@@ -141,7 +141,7 @@ export function Integrations({
             k: 'Repo token',
             v: (
               <Github
-                configured={gh.repoTokenConfigured}
+                configured={status === null || status.github.repoToken.configured}
                 check={status === null ? undefined : status.github.repoToken}
               />
             ),

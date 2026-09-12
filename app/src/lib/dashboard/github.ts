@@ -25,6 +25,7 @@
 // Release history is the one upstream where staleness is free.
 
 import { swrCache } from '../cache'
+import { readGithubInstallation, usableToken } from '../github-token'
 import { key } from '../keys'
 import { stripTags } from '../plain-text'
 
@@ -108,21 +109,24 @@ type GhRelease = {
 }
 
 /**
- * Authenticated when a token is present, which is only about the rate limit.
+ * Authenticated when a credential is available, which is only about the rate
+ * limit.
  *
- * Everything read here is PUBLIC — four projects' release notes — so the token
- * buys no access, just headroom: 60 requests an hour per IP unauthenticated
- * against 5000 authenticated. It is the GHCR pull credential, re-shaped into
- * this env var by a boot oneshot (see stacks/daedalus/daedalus.nix), so there
- * is no second secret to rotate.
+ * Everything read here is PUBLIC — four projects' release notes — so the
+ * credential buys no access, just headroom: 60 requests an hour per IP
+ * unauthenticated against 5000 authenticated. It is the GitHub App's
+ * installation token, the same one-hour token the build side uses, read from
+ * the minter's file; `GITHUB_REPO_TOKEN` overrides it for anyone who would
+ * rather spend a PAT's budget here.
  *
- * Absent is a supported state, not a misconfiguration: without it this falls
- * back to the unauthenticated budget, which normal use spends about a quarter
- * of. So the token expiring costs nothing here — it is caught by the deploys
- * that actually need it.
+ * Absent is a supported state, not a misconfiguration: without either this
+ * falls back to the unauthenticated budget, which normal use spends about a
+ * quarter of. So the minter stopping costs nothing here — it is caught by the
+ * builds that actually need a token.
  */
-export function githubHeaders(): Record<string, string> {
-  const token = key('GITHUB_TOKEN')
+export async function githubHeaders(): Promise<Record<string, string>> {
+  const override = key('GITHUB_REPO_TOKEN')
+  const token = override === '' ? (usableToken(await readGithubInstallation()) ?? '') : override
   return {
     Accept: 'application/vnd.github+json',
     ...(token === '' ? {} : { Authorization: `Bearer ${token}` }),
@@ -139,7 +143,7 @@ async function releases(repo: string): Promise<GhRelease[] | null> {
   return cache.get(`releases:${repo}`, async (): Promise<GhRelease[] | null> => {
     try {
       const res = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=60`, {
-        headers: githubHeaders(),
+        headers: await githubHeaders(),
         signal: AbortSignal.timeout(6_000),
       })
       if (res.ok) return (await res.json()) as GhRelease[]
@@ -424,7 +428,7 @@ export async function commitsSince(
       let body: Compare | null = null
       try {
         const res = await fetch(`https://api.github.com/repos/${repo}/compare/${sha}...${branch}`, {
-          headers: githubHeaders(),
+          headers: await githubHeaders(),
           signal: AbortSignal.timeout(6_000),
         })
         if (res.ok) body = (await res.json()) as Compare

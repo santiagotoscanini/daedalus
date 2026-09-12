@@ -1,6 +1,6 @@
 import { APP, AppTile, Board, Chip, Shell, TONE, Tabs, type Tone } from "../chrome";
 
-/** App detail → deployments: the self-hosted runner mid-build, and the
+/** App detail → deployments: a build running on the box, and the
  * timeline of runs where the digest actually moved. */
 
 const HISTORY: Array<{
@@ -96,23 +96,23 @@ export function DeploysView() {
       />
 
       <div className="mt-[16px] grid grid-cols-[1fr_1.6fr] gap-[13px]">
-        {/* The runner, mid-build */}
-        <Board title="Runner" note={<Chip tone="warn">busy</Chip>}>
+        {/* The box's own build, mid-run */}
+        <Board title="Build" note={<Chip tone="warn">building</Chip>}>
           <code className="font-mono text-[12.5px]" style={{ color: APP.text }}>
-            gha-runner-s2
+            8f2c1d0 · push to main
           </code>
           <div
             className="rounded-[9px] border px-[12px] py-[10px]"
             style={{ background: APP.panel2, borderColor: APP.hairline }}
           >
             <div className="flex items-baseline justify-between text-[12.5px]">
-              <span style={{ color: APP.text }}>⚙ build-and-push</span>
+              <span style={{ color: APP.text }}>⚙ build image</span>
               <span className="font-mono" style={{ color: APP.dim }}>
                 1m 12s
               </span>
             </div>
             <p className="mt-[3px] text-[11.5px]" style={{ color: APP.dim }}>
-              step 4/7 · Build image
+              installing dependencies
             </p>
             <div
               className="mt-[8px] h-[5px] overflow-hidden rounded-full"
@@ -125,8 +125,8 @@ export function DeploysView() {
             </div>
           </div>
           <p className="text-[11.5px] leading-snug" style={{ color: APP.dim }}>
-            Builds run on the box's own runners; images land in its own registry. The pipeline
-            never leaves the house.
+            Builds run on the box itself; images land in its own registry. The pipeline never
+            leaves the house.
           </p>
         </Board>
 

@@ -1,5 +1,5 @@
 import { swrValue } from '../../lib/cache'
-import { githubTokenKind } from '../../lib/github-signin'
+import { githubTokenKind } from '../../lib/github-token'
 import { ATTEMPT_MS } from '../../lib/http'
 import type { Ctx } from '../ctx'
 import type { CloudflareStatus, GithubCheck, IntegrationStatus, TokenCheck } from './types'

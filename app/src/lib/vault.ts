@@ -6,15 +6,10 @@
 
 /**
  * Every vault entry daedalus may seal. apply.sh allowlists what it writes
- * (stacks/daedalus/host/apply.sh MANAGED): the Cloudflare and GitHub token
- * files today. `vault/github-app.sops` is managed host-side only from plan
- * step 1, when MANAGED gains it, and nothing may send it before then.
+ * (stacks/daedalus/host/apply.sh MANAGED): the Cloudflare token and the
+ * GitHub App's sealed key.
  */
-export const VAULT_FILES = [
-  'vault/github-app.sops',
-  'vault/cloudflare-api-token.sops',
-  'vault/github-token.sops',
-] as const
+export const VAULT_FILES = ['vault/github-app.sops', 'vault/cloudflare-api-token.sops'] as const
 
 export type VaultFile = (typeof VAULT_FILES)[number]
 

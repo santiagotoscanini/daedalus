@@ -380,50 +380,17 @@ export async function logVolume(name: string): Promise<number | null> {
 }
 
 /**
- * The live build-and-deploy stream for an app.
+ * The live deploy stream for an app: this box pulling the new image,
+ * restarting the container and health-checking it. alloy ships the host
+ * journal (stacks/logging), so this is complete and live.
  *
- * Two Loki selectors merged, because the pipeline genuinely has two halves and
- * neither alone is the story:
- *
- *   `unit="app-<name>-deploy.service"` — this box pulling the new image,
- *      restarting the container and health-checking it. alloy ships the host
- *      journal (stacks/logging), so this is complete and live.
- *
- *   `service_name="gha-runner-<name>"` — the runner announcing `Running job:`
- *      and `Job … completed with result:`.
- *
- * What is deliberately NOT here is the build's step output. The Actions runner
- * writes that to its _diag files and streams it straight to GitHub; the
- * container's stdout only ever carries those two lifecycle lines. Verified
- * against 30 days of history — everything else in that stream is runner
- * registration. Step-level progress comes from the CI snapshot instead
- * (lib/ci.ts), and the full text lives behind the Actions link.
+ * Deploys only. The build half is not a log stream any more — builds run on
+ * the box and are recorded as rows (lib/repo/builds.ts), with their full
+ * output on the build's own page.
  */
-export type ActivityLine = LogLine & { source: 'build' | 'deploy' }
-
-export async function activityLog(name: string, limit = 60, hours = 6): Promise<ActivityLine[]> {
-  // Two queries, not one. LogQL's `or` combines line filters within a stream
-  // selector, not two different selectors — and these are genuinely different
-  // streams: the deploy unit is labelled `unit=`, the runner `service_name=`.
-  // Merging in TypeScript is the honest version of what a single query would
-  // only look like it was doing.
-  const [deploy, build] = await Promise.all([
-    lokiLines(`{unit="app-${name}-deploy.service"}`, limit, hours),
-    // Only the lifecycle lines. The rest of that stream is runner
-    // registration, which is noise next to a deploy.
-    lokiLines(
-      `{service_name="gha-runner-${name}"} |~ "(?i)(running job|job .* completed)"`,
-      limit,
-      hours,
-    ),
-  ])
-
-  return [
-    ...deploy.map((l) => ({ ...l, source: 'deploy' as const })),
-    ...build.map((l) => ({ ...l, source: 'build' as const })),
-  ]
-    .sort((a, b) => a.ts.getTime() - b.ts.getTime())
-    .slice(-limit)
+export async function activityLog(name: string, limit = 60, hours = 6): Promise<LogLine[]> {
+  const lines = await lokiLines(`{unit="app-${name}-deploy.service"}`, limit, hours)
+  return lines.sort((a, b) => a.ts.getTime() - b.ts.getTime()).slice(-limit)
 }
 
 /** Lines with their stream's `level` label — which only exists on raw streams. */

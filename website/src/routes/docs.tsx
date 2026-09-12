@@ -126,9 +126,9 @@ const SECTIONS: DocSection[] = [
   {
     id: "github",
     provider: "GitHub",
-    title: "Keys and runners",
+    title: "Keys and builds",
     blurb:
-      "The repos live here; the CI does not. Builds run on the box's own runners and land in its own registry. GitHub holds the source and the keys.",
+      "The repos live here; the builds do not. A push wakes the box, which builds the image itself and lands it in its own registry. GitHub holds the source and the keys.",
     rows: [
       {
         name: "the config repo",
@@ -137,16 +137,12 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "one repo per app",
-        body: "Each app is a repo with a Dockerfile. A push to main builds an image on the box's runner and pushes it to the box's registry; the deploy timer picks up the digest change.",
+        body: "Each app is a repo. A push to main reaches the box as a webhook, which builds the image on its own hardware (from the Dockerfile, or from Railpack when there is none) and pushes it to the box's registry; the deploy timer picks up the digest change.",
       },
       {
-        name: "runner token",
-        body: "A fine-grained PAT scoped to Administration on the app repos only. The box mints one-hour registration tokens host-side; the PAT itself never enters a container. Each runner takes one job, then dies.",
+        name: "the box's own GitHub App",
+        body: "Created and installed from the control plane. Its private key is sealed into the config repo and stays host-side; the container only ever sees a one-hour installation token, scoped to reading contents and writing checks and deployments.",
         tag: "re-issuable",
-      },
-      {
-        name: "per-repo registry secret",
-        body: "Each app repo carries one Actions secret for the box's registry, set from the box itself so the value never leaves it.",
       },
       {
         name: "Pages",
@@ -214,7 +210,7 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "after losing the box",
-        body: "Images live only in the box's own registry, so every app needs one CI run before its first deploy on new hardware.",
+        body: "Images live only in the box's own registry, so every app needs one build before its first deploy on new hardware.",
       },
     ],
   },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type ActivityRow, rollUp, shortenDigests } from './ci-lines'
+import { type ActivityRow, rollUp, shortenDigests } from './activity-lines'
 
 // A full 64-hex-character digest whose first twelve characters are the short
 // form the rest of the page shows.
@@ -24,11 +24,7 @@ describe('shortenDigests', () => {
   })
 })
 
-const row = (ts: string, line: string, source: ActivityRow['source'] = 'deploy'): ActivityRow => ({
-  ts,
-  line,
-  source,
-})
+const row = (ts: string, line: string): ActivityRow => ({ ts, line })
 
 describe('rollUp', () => {
   it('returns nothing for nothing', () => {
@@ -47,7 +43,6 @@ describe('rollUp', () => {
         ts: '2026-08-12T04:00:00Z',
         lastTs: '2026-08-12T04:04:00Z',
         line: 'no change',
-        source: 'deploy',
         count: 3,
       },
     ])
@@ -65,12 +60,6 @@ describe('rollUp', () => {
       ['digest moved', 1],
       ['no change', 1],
     ])
-  })
-
-  it('never merges across sources, even for an identical line', () => {
-    const rolled = rollUp([row('t1', 'job done', 'build'), row('t2', 'job done', 'deploy')])
-    expect(rolled.map((l) => l.source)).toEqual(['build', 'deploy'])
-    expect(rolled.map((l) => l.count)).toEqual([1, 1])
   })
 
   it('compares lines after digest shortening, so a repeated digest line folds', () => {

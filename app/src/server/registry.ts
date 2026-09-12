@@ -276,13 +276,10 @@ export type AppTabData =
     }
   | {
       kind: 'deployments'
-      ci: CiSnapshot
       activity: ActivityRow[]
       deployments: DeployRow[]
       /** Box builds, newest first (lib/repo/builds.ts). */
       builds: import('../lib/build-display').BuildSummary[]
-      /** Which workflow the Run CI button dispatches, and whether it can be. */
-      publish: { workflow: string | null; dispatchable: boolean }
     }
   | { kind: 'access'; access: AppAccess }
   | { kind: 'secrets'; env: EnvPayload }
@@ -295,8 +292,7 @@ type AppResources = Awaited<ReturnType<typeof import('../lib/metrics')['appResou
 type AppDatabase = Awaited<ReturnType<typeof import('../lib/metrics')['appDatabase']>>
 type AppVpn = Awaited<ReturnType<typeof import('../lib/metrics')['appVpn']>>
 type AppAccess = Awaited<ReturnType<typeof import('../lib/access')['appAccess']>>
-type CiSnapshot = Awaited<ReturnType<typeof import('../lib/ci')['readCiSnapshot']>>
-type ActivityRow = { ts: string; line: string; source: 'build' | 'deploy' }
+type ActivityRow = { ts: string; line: string }
 type EnvSnapshotVar = Awaited<
   ReturnType<typeof import('../lib/env-snapshot')['readEnvSnapshot']>
 >['vars'][number]
@@ -353,39 +349,24 @@ export const fetchAppTab = createServerFn()
 
       case 'deployments': {
         const { activityLog } = await import('../lib/metrics')
-        const { readCiSnapshot } = await import('../lib/ci')
         const { commitUrl } = await import('../lib/registry')
         // Fold deploy.sh's journal into Postgres before reading it back. Done
         // on demand here; the build reporter (core/builds/report.ts) also
         // ingests an app's journal on its own tick while a GitHub Deployment
         // waits for its deploy to land. Ingest is idempotent, so both may run.
         const { ingestDeployments, listDeployments } = await import('../lib/repo/deployments')
-        const { repoChecks } = await import('../lib/github-repos')
         const { recentBuilds } = await import('../lib/repo/build-views')
         await ingestDeployments(record.id, name)
-        const [deploys, ci, activity, deploy, publish, builds] = await Promise.all([
+        const [deploys, activity, deploy, builds] = await Promise.all([
           listDeployments(record.id),
-          readCiSnapshot(name),
           activityLog(name, 60),
           (await import('../lib/deploy')).lastDeploy(name),
-          // Which workflow to dispatch. Cached for a minute in that module, and
-          // skipped entirely for a local-source app: there is no repo of its
-          // own to run anything in.
-          record.sourceMode === 'local'
-            ? Promise.resolve({ publishWorkflow: null, dispatchable: false })
-            : repoChecks(name).catch(() => ({ publishWorkflow: null, dispatchable: false })),
           record.sourceMode === 'local' ? Promise.resolve([]) : recentBuilds(record.id, 10),
         ])
         return {
           kind: 'deployments',
-          ci,
           builds,
-          publish: { workflow: publish.publishWorkflow, dispatchable: publish.dispatchable },
-          activity: activity.map((l) => ({
-            ts: l.ts.toISOString(),
-            line: l.line,
-            source: l.source,
-          })),
+          activity: activity.map((l) => ({ ts: l.ts.toISOString(), line: l.line })),
           deployments: deploys.map((d) => ({
             id: d.id,
             digest: d.digest.replace('sha256:', ''),
@@ -509,39 +490,17 @@ export const fetchNewAppOptions = createServerFn().handler(async () => {
 })
 
 /**
- * The repository listing again, past its cache.
+ * The one thing that has to be true before this repo can become an app: an
+ * image the box can actually pull.
  *
- * Only the listing: the taken names come from files this box owns and are
- * cheap, but they also cannot change while somebody is filling this form in.
- * Returned to the caller rather than invalidating the route — re-running the
- * loader would remount the wizard and take the half-filled form with it.
- */
-export const refreshRepoList = createServerFn().handler(async () => {
-  const { listRepos, forgetRepos } = await import('../lib/github-repos')
-  forgetRepos()
-  return listRepos()
-})
-
-/**
- * Everything that has to be true before this repo can become an app.
- *
- * Two of the answers come from GitHub (workflows, repo secret) and one from
- * the box's own registry (has CI ever published an image?). The last one is
- * the only hard gate: a declaration whose image does not exist produces a
- * container that cannot start, on a timer, until somebody notices.
+ * It is a hard gate. A declaration whose image does not exist produces a
+ * container that cannot start, on a timer, until somebody notices — and the
+ * failing container fails the switch, which makes the Apply revert itself.
  */
 export const fetchAppPreflight = createServerFn()
-  .inputValidator((i: { repo: string; name: string; image: string | null; force?: boolean }) => i)
+  .inputValidator((i: { name: string; image: string | null }) => i)
   .handler(async ({ data }) => {
-    const { forgetRepoChecks, repoChecks } = await import('../lib/github-repos')
     const { imageInfo } = await import('../lib/registry')
-
-    // The GitHub half of this is memoized for a minute, so a re-check that
-    // does not drop the entry first is not a re-check at all — it re-reads the
-    // registry and re-serves the same cached answer about the repo. Only the
-    // explicit refresh forces it; the debounced re-runs behind every keystroke
-    // must NOT, or the cache would exist in name only.
-    if (data.force === true) forgetRepoChecks(data.repo)
 
     const effectiveImage = data.image?.trim() || defaultImage(data.name)
 
@@ -561,59 +520,8 @@ export const fetchAppPreflight = createServerFn()
             (info) => (info.digest === null ? ('missing' as const) : ('present' as const)),
           )
 
-    const { checks, workflows, publishWorkflow, dispatchable } = await repoChecks(data.repo)
-
-    return { effectiveImage, imageState, checks, workflows, publishWorkflow, dispatchable }
+    return { effectiveImage, imageState }
   })
-
-/**
- * Authorise a repo to push to the registry: the host sets REGISTRY_PASSWORD in
- * its Actions secrets.
- *
- * The password is not in this request and not in this container — the host
- * reads it from /run/secrets. What crosses the boundary is a repo name.
- */
-export const setRegistrySecretFn = createServerFn({ method: 'POST' })
-  .inputValidator((i: { repo: string }) => i)
-  .handler(async ({ data }) => {
-    const { requestCi } = await import('../lib/ci-request')
-    const { forgetRepoChecks } = await import('../lib/github-repos')
-    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
-    const id = await requestCi({ action: 'set-secret', repo: data.repo, actor })
-    // The next preflight has to see the new answer rather than the cached one.
-    forgetRepoChecks(data.repo)
-    return { id }
-  })
-
-/**
- * Run the repo's publishing workflow now.
- *
- * For an app this is "build and publish from the UI" — the same run a push to
- * main would trigger, on the same runner, so the logs land in the CI panel on
- * its deployments tab. For a repo that is not an app yet it is the only way to
- * get a first image at all, and the host starts a one-shot runner to serve it
- * (stacks/gha-runner's bootstrap unit).
- */
-export const runCiFn = createServerFn({ method: 'POST' })
-  .inputValidator((i: { repo: string; workflow: string }) => i)
-  .handler(async ({ data }) => {
-    const { requestCi } = await import('../lib/ci-request')
-    const { forgetRepoChecks } = await import('../lib/github-repos')
-    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
-    const id = await requestCi({
-      action: 'run-ci',
-      repo: data.repo,
-      workflow: data.workflow,
-      actor,
-    })
-    forgetRepoChecks(data.repo)
-    return { id }
-  })
-
-export const fetchCiRequestStatus = createServerFn().handler(async () => {
-  const { readCiRequestStatus } = await import('../lib/ci-request')
-  return readCiRequestStatus()
-})
 
 export const createAppFn = createServerFn({ method: 'POST' })
   .inputValidator((i: { app: NewApp }) => i)

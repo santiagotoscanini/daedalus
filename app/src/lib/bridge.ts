@@ -9,7 +9,7 @@ import { join } from 'node:path'
 // file the host writes back. A systemd.path unit on the host watches each
 // request file and starts the matching root-side service; the trust boundary
 // is "can write into /apply", and the Pocket ID gate in front of the app is
-// what guards that. apply.ts, deploy.ts and ci-request.ts each instantiate
+// what guards that. apply.ts, deploy.ts and build-bridge.ts each instantiate
 // this with their own file names and status shape — the mechanics live here
 // once.
 

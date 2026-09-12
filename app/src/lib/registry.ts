@@ -3,7 +3,7 @@
 // Anonymous: the registry's accessControl gives anonymous pull-only, which is
 // exactly what this needs — no credential to hold, and nothing here can write.
 // Reached over traefik (https://registry.toscanini.me) because daedalus is
-// `isolated` and deliberately not on registry-net, where the CI runners live.
+// `isolated` and deliberately not on registry-net, where the registry lives.
 
 import { REGISTRY_HOST } from './site'
 

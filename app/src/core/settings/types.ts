@@ -1,8 +1,7 @@
 import type { ApplyStatus } from '../../lib/apply'
 import type { RepoFacts } from '../../lib/contract/domains/repo'
 import type { NixosFacts } from '../../lib/contract/domains/site'
-import type { GithubTokenKind } from '../../lib/github-signin'
-import type { GithubInstallation } from '../../lib/github-token'
+import type { GithubInstallation, GithubTokenKind } from '../../lib/github-token'
 import type { NixosCycle, NixosNotes, Support } from '../../lib/nixos'
 import type { SiteGithubApp } from '../site/file'
 
@@ -55,11 +54,6 @@ export type BoxSettings = {
     github: {
       owner: string
       tokenConfigured: boolean
-      repoTokenConfigured: boolean
-      /** The box's GitHub consumers read the token the sign-in wrote to site/vault/ (Phase 7). */
-      tokenFromSite: boolean
-      /** An OAuth App client id is known, so Sign in can be offered. */
-      signInReady: boolean
     }
     mail: { sender: string; alertTo: string }
     registryUrl: string

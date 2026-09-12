@@ -6,8 +6,9 @@
 // bodies that could drift; the route's header even claimed otherwise.
 //
 // runSecretApply is the third door, for a vault secret set from Settings
-// (core/settings/cloudflare-token.ts, core/settings/github-signin.ts). It shares the lock, the busy checks and
-// the pickup window, and differs in one rule: it is always its own Apply.
+// (core/settings/cloudflare-token.ts, core/settings/github-app.ts). It shares
+// the lock, the busy checks and the pickup window, and differs in one rule: it
+// is always its own Apply.
 
 export type ApplyOutcome =
   | { ok: true; id: string; changed: { name: string; fields: string[] }[] }
@@ -155,8 +156,8 @@ const pendingReason = (other: { name: string }[]) =>
 /**
  * Why a vault secret could not be applied right now, or null when it could.
  *
- * For work that cannot be repeated for free, asked before it starts: a GitHub
- * sign-in mints a token, and one minted and then refused here is a token
+ * For work that cannot be repeated for free, asked before it starts: creating
+ * a GitHub App mints a key, and one minted and then refused here is a key
  * nobody can use. runSecretApply asks again at the moment it writes.
  */
 export async function secretApplyBlocker(): Promise<string | null> {

@@ -1,69 +1,45 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
-import { type HostNote, ReadinessPanel } from '../components/apps/readiness'
+import { type ReactNode, useEffect, useId, useState } from 'react'
+import { ReadinessPanel } from '../components/apps/readiness'
 import { RepoPicker } from '../components/apps/repo-picker'
-import { BOARD_FOOT, GHOST_BTN, SECTION_HEAD, SECTION_HEAD_SMALL } from '../components/apps/shared'
-import { RefreshButton, Segmented, Toggle } from '../components/controls'
+import { BOARD_FOOT, SECTION_HEAD, SECTION_HEAD_SMALL } from '../components/apps/shared'
+import { Segmented, Toggle } from '../components/controls'
 import { GuardedAwait } from '../components/error'
 import { Crumbs, PageHead } from '../components/page'
 import { NewAppSkeleton } from '../components/skeleton'
-import { usePolledStatus } from '../components/status'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../components/ui/field'
 import { Input } from '../components/ui/input'
 import { Board, BoardGrid } from '../components/viz'
-import type { CiRequestStatus } from '../lib/ci-request'
 import { cn } from '../lib/cn'
-import type { Check, Repo } from '../lib/github-repos'
+import type { Repo } from '../lib/github-repos'
 import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import { readiness } from '../lib/readiness'
 import { defaultImage, OWNER } from '../lib/site'
-import {
-  createAppFn,
-  fetchAppPreflight,
-  fetchCiRequestStatus,
-  fetchNewAppOptions,
-  refreshRepoList,
-  runCiFn,
-  setRegistrySecretFn,
-} from '../server/registry'
+import { createAppFn, fetchAppPreflight, fetchNewAppOptions } from '../server/registry'
 
 // Adding an app.
 //
 // The platform half of this has always been one entry: stacks/apps turns a
-// `fleet.apps.<name>` into a container, a route, DNS, a probe, a database, a
-// deploy timer and a CI runner. What was never written down anywhere a person
-// could see it is the OTHER half — the repo-side steps in
-// stacks/apps/declarations.nix's header comment, which nothing enforces and
-// which fail late and confusingly when skipped: an app whose image was never
-// published restart-loops, and one whose repo the runner PAT does not cover
-// takes its runner unit down with it.
+// `fleet.apps.<name>` into a container, a route, DNS, a probe, a database and
+// a deploy timer. What was never written down anywhere a person could see it
+// is the one repo-side fact that fails late and confusingly when skipped: an
+// app whose image was never published restart-loops from the moment its entry
+// is applied, which fails the switch, which makes the Apply revert itself.
 //
 // So this page is a checklist first and a form second. It creates a database
 // row — the same thing the app's own page edits, shipped by the same Apply —
 // and everything else it does is tell you what is not ready yet.
 //
-// What it deliberately cannot do: create the repo, push the workflows, set
-// REGISTRY_PASSWORD, or add the repo to the runner PAT. Each of those needs a
-// credential that can change what CI builds, and therefore what this box runs.
-// Daedalus reads GitHub; it does not write it.
+// What it deliberately cannot do: create the repo or push to it. Daedalus
+// reads GitHub; it does not write it. Building is the build queue's job, and
+// it starts from a push.
 
 export const Route = createFileRoute('/apps/new')({
   loader: () => ({ options: fetchNewAppOptions() }),
   component: NewAppPage,
 })
-
-const CI_IDLE: CiRequestStatus = {
-  id: null,
-  action: null,
-  repo: null,
-  state: 'idle',
-  detail: '',
-  error: '',
-  startedAt: null,
-  finishedAt: null,
-}
 
 type Options = Awaited<ReturnType<typeof fetchNewAppOptions>>
 type Preflight = Awaited<ReturnType<typeof fetchAppPreflight>>
@@ -100,7 +76,7 @@ function NewAppPage() {
       </Crumbs>
       <PageHead title="Add an app">
         One repository under <code>github.com/{OWNER}</code> becomes one entry in the registry. The
-        container, hostname, TLS, DNS, probe, deploy timer and CI runner are all derived from it.
+        container, hostname, TLS, DNS, probe, builds and deploy timer are all derived from it.
       </PageHead>
 
       <GuardedAwait resetKey="options" promise={options} fallback={<NewAppSkeleton />}>
@@ -116,26 +92,6 @@ function Wizard({ options }: { options: Options }) {
   const [repo, setRepo] = useState<Repo | null>(null)
   const [search, setSearch] = useState('')
 
-  // The listing lives here rather than being read from the loader on every
-  // render: the picker's refresh replaces it in place. Invalidating the route
-  // instead would re-run the loader, remount this component, and take the
-  // half-filled form below with it.
-  const [repoList, setRepoList] = useState<{
-    repos: Repo[]
-    authenticated: boolean
-    error: string | null
-  }>({ repos: options.repos, authenticated: options.authenticated, error: options.error })
-  const [reloading, setReloading] = useState(false)
-
-  const reloadRepos = () => {
-    setReloading(true)
-    void refreshRepoList()
-      .then(setRepoList)
-      .finally(() => {
-        setReloading(false)
-      })
-  }
-
   const [description, setDescription] = useState('')
   const [stage, setStage] = useState<'off' | 'lab' | 'live'>('lab')
   const [postgres, setPostgres] = useState(false)
@@ -150,38 +106,22 @@ function Wizard({ options }: { options: Options }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Bumped after a host action, to re-run the checks it was meant to change.
+  // The manual re-run trigger for the check below.
   const [recheck, setRecheck] = useState(0)
-  // The host action in flight, if any: which row it belongs to, and what came
-  // back. One at a time on purpose — both of them change what the checklist
-  // says, and two concurrent requests would race the single status file.
-  const [host, setHost] = useState<{
-    id: 'registry-secret' | 'image'
-    state: 'running' | 'done' | 'failed'
-    message: string
-  } | null>(null)
-  // True once CI has been dispatched from this page: the image will appear
-  // minutes later, so the image check starts refreshing itself.
-  const [awaitingImage, setAwaitingImage] = useState(false)
 
   // The app key IS the repo name. Not a free field: the default image is
-  // `registry.toscanini.me/<name>:latest` and stacks/gha-runner derives the
-  // repo it registers a runner for from the same key, so a name that differs
-  // from the repo silently points both at something that does not exist. A
-  // fork with a different name is what the image override is for.
+  // `registry.toscanini.me/<name>:latest` and the build queue keys an app's
+  // builds off the same name, so a name that differs from the repo silently
+  // points both at something that does not exist. A fork with a different name
+  // is what the image override is for.
   const name = repo?.name ?? ''
 
   const nameErr = repo ? appNameError(name, options.taken) : null
   const hostErr = hostnameError(hostname)
 
   // Re-check whenever the thing being checked changes. The result is about a
-  // (repo, name, image) triple, so keeping a stale one on screen after the
-  // image override is edited would be worse than showing none.
-  //
-  // Set by the readiness refresh, read by the run it triggers. A ref rather
-  // than state so it is not a dependency, and so a forced run whose debounce a
-  // keystroke cancelled is still owed rather than silently downgraded.
-  const forceChecks = useRef(false)
+  // (name, image) pair, so keeping a stale one on screen after the image
+  // override is edited would be worse than showing none.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `recheck` is not read in the body — it is the manual re-run trigger.
   useEffect(() => {
     if (!repo) {
@@ -192,14 +132,10 @@ function Wizard({ options }: { options: Options }) {
     setChecking(true)
     // Debounced: `name` and `image` are keystroke-hot dependencies, and every
     // run costs a server round trip plus a zot manifest read that is
-    // deliberately uncached (the answer must flip the moment CI lands an
+    // deliberately uncached (the answer must flip the moment a build lands an
     // image). A third of a second of quiet separates typing from asking.
     const t = setTimeout(() => {
-      const force = forceChecks.current
-      forceChecks.current = false
-      void fetchAppPreflight({
-        data: { repo: repo.name, name, image: image.trim() || null, force },
-      })
+      void fetchAppPreflight({ data: { name, image: image.trim() || null } })
         .then((p) => {
           if (live) setPreflight(p)
         })
@@ -213,137 +149,21 @@ function Wizard({ options }: { options: Options }) {
     }
   }, [repo, name, image, recheck])
 
-  // A dispatched build takes minutes, and the thing being waited for is one
-  // HEAD request to the registry — so the page asks again every twenty seconds
-  // instead of making you reload it. Stops the moment the image lands.
   const imageMissing = preflight?.imageState === 'missing'
-  useEffect(() => {
-    if (!awaitingImage || !imageMissing) return
-    const t = setInterval(() => {
-      setRecheck((n) => n + 1)
-    }, 20_000)
-    return () => {
-      clearInterval(t)
-    }
-  }, [awaitingImage, imageMissing])
-
-  /**
-   * Fire a host request and wait for its verdict.
-   *
-   * The server function returns as soon as the request file is written, which
-   * is before the host has done anything — so success has to come from the
-   * status file, not from the call returning. usePolledStatus owns the
-   * waiting, including not being fooled by the previous request's terminal
-   * state still sitting in the file; the row the verdict belongs to rides in
-   * a ref because settle fires from the poller, not from this closure.
-   */
-  const hostRow = useRef<'registry-secret' | 'image' | null>(null)
-  const ci = usePolledStatus({
-    initial: CI_IDLE,
-    fetch: () => fetchCiRequestStatus(),
-    intervalMs: 1500,
-    onSettle: (s) => {
-      const id = hostRow.current
-      if (id === null) return
-      hostRow.current = null
-      const failed = s.state === 'failed'
-      setHost({ id, state: failed ? 'failed' : 'done', message: failed ? s.error : s.detail })
-      if (!failed) {
-        if (id === 'image') setAwaitingImage(true)
-        setRecheck((n) => n + 1)
-      }
-    },
-  })
-
-  const hostAction = (id: 'registry-secret' | 'image', run: () => Promise<{ id: string }>) => {
-    hostRow.current = id
-    setHost({ id, state: 'running', message: '' })
-    ci.start(async () => {
-      try {
-        return (await run()).id
-      } catch (e: unknown) {
-        hostRow.current = null
-        setHost({ id, state: 'failed', message: e instanceof Error ? e.message : String(e) })
-        return null
-      }
-    })
-  }
 
   // Re-runs the same effect the debounce owns, rather than a second path
   // alongside it — so a refresh cannot race the run a keystroke already
   // scheduled, and every one of them still lands through the single `live`
-  // guard. The only difference is that this one is allowed past the cache.
+  // guard.
   const recheckNow = () => {
-    forceChecks.current = true
     setRecheck((n) => n + 1)
   }
 
-  // The seven answers, ordered into a plan: what is actually wrong, what is
-  // only waiting on it, and what needs nothing.
+  // The one answer, as a plan: whether there is anything to act on.
   const plan =
     preflight === null
       ? null
-      : readiness({
-          checks: preflight.checks,
-          imageState: preflight.imageState,
-          effectiveImage: preflight.effectiveImage,
-        })
-
-  /** The button that fixes a row, on the two rows this box can fix. */
-  const rowAction = (c: Check): ReactNode => {
-    if (repo === null || preflight === null) return null
-    if (c.id === 'image') {
-      if (preflight.imageState !== 'missing' || !preflight.dispatchable) return null
-      return (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={GHOST_BTN}
-          disabled={host?.state === 'running'}
-          onClick={() => {
-            hostAction('image', () =>
-              runCiFn({ data: { repo: repo.name, workflow: preflight.publishWorkflow ?? '' } }),
-            )
-          }}
-        >
-          {host?.id === 'image' && host.state === 'running'
-            ? 'Dispatching…'
-            : `Run ${preflight.publishWorkflow ?? 'CI'}`}
-        </Button>
-      )
-    }
-    if (c.id === 'registry-secret' && c.state === 'bad') {
-      return (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={GHOST_BTN}
-          disabled={host?.state === 'running'}
-          onClick={() => {
-            hostAction('registry-secret', () => setRegistrySecretFn({ data: { repo: repo.name } }))
-          }}
-        >
-          {host?.id === 'registry-secret' && host.state === 'running' ? 'Setting…' : 'Set it'}
-        </Button>
-      )
-    }
-    return null
-  }
-
-  // What the host said back, per row. Two at most, and never two for the same
-  // row: a settled verdict about the image is the newer fact, so it wins over
-  // "still building".
-  const hostNotes: HostNote[] = []
-  if (host !== null && host.state !== 'running') hostNotes.push(host)
-  if (awaitingImage && imageMissing && !hostNotes.some((n) => n.id === 'image')) {
-    hostNotes.push({
-      id: 'image',
-      state: 'running',
-      message: 'building. This row refreshes itself every 20s',
-    })
-  }
+      : readiness({ imageState: preflight.imageState, effectiveImage: preflight.effectiveImage })
 
   const canCreate =
     repo !== null && nameErr === null && hostErr === null && !imageMissing && !busy && !checking
@@ -385,34 +205,24 @@ function Wizard({ options }: { options: Options }) {
         <h2 className={FIRST_STEP_HEAD}>
           1. Repository
           <small className={SECTION_HEAD_SMALL}>
-            the app key, the image name and the CI runner all come from it
+            the app key and the image name both come from it
           </small>
-          {/* RefreshButton (components/controls.tsx) sizes and right-aligns
-              itself against a `.section-head` ancestor. This head is utilities
-              now, so the same two rules reach it from here instead. */}
-          <span className="ml-auto self-center [&>button]:size-[30px] [&>button]:text-[0.95rem]">
-            <RefreshButton
-              busy={reloading}
-              label="Re-read the repository list"
-              onClick={reloadRepos}
-            />
-          </span>
         </h2>
 
-        {repoList.error !== null && (
+        {options.error !== null && (
           <Alert variant="warning" className={WARN_BANNER}>
             <AlertDescription>
-              {repoList.error}. The list below is whatever could be read; you can still create an
-              app by picking a repo once GitHub answers again.
+              {options.error}. The list below is whatever could be read; you can still create an app
+              by picking a repo once GitHub answers again.
             </AlertDescription>
           </Alert>
         )}
-        {repoList.error === null && !repoList.authenticated && (
+        {options.error === null && !options.authenticated && (
           <Alert className={MUTED_BANNER}>
             <AlertDescription>
               No GitHub token in the container’s environment, so this lists <b>public</b>
-              repositories only and the checks below that need authentication will say so. The
-              fleet’s GitHub credential is rendered by <code>daedalus-dashboard-keys.service</code>
+              repositories only. The fleet’s GitHub credential is rendered by{' '}
+              <code>daedalus-dashboard-keys.service</code>
               {'; '}a <code>GITHUB_REPO_TOKEN</code> in{' '}
               <code>stacks/daedalus/service-keys.sops</code> overrides it.
             </AlertDescription>
@@ -420,7 +230,7 @@ function Wizard({ options }: { options: Options }) {
         )}
 
         <RepoPicker
-          repos={repoList.repos}
+          repos={options.repos}
           taken={options.taken}
           picked={repo}
           search={search}
@@ -468,7 +278,7 @@ function Wizard({ options }: { options: Options }) {
                       <code>
                         {name}.{BASE_DOMAIN}
                       </code>
-                      , the postgres role, and the repo the CI runner registers against.
+                      , the postgres role, and the repo its builds come from.
                     </>
                   }
                   onChange={() => undefined}
@@ -556,7 +366,7 @@ function Wizard({ options }: { options: Options }) {
                   label="Image override"
                   value={image}
                   placeholder={defaultImage(name)}
-                  hint="Empty uses the box's own registry, which is what CI publishes to. Set this for a fork, another registry, or a pinned digest."
+                  hint="Empty uses the box's own registry, which is where its builds publish to. Set this for a fork, another registry, or a pinned digest."
                   onChange={setImage}
                 />
               </Board>
@@ -568,20 +378,14 @@ function Wizard({ options }: { options: Options }) {
               <>
                 <h2 className={SECTION_HEAD}>
                   3. Readiness
-                  <small className={SECTION_HEAD_SMALL}>can this repo publish an image?</small>
+                  <small className={SECTION_HEAD_SMALL}>is there an image this box can pull?</small>
                 </h2>
                 <Alert className={MUTED_BANNER}>
-                  <AlertDescription>Checking the repository…</AlertDescription>
+                  <AlertDescription>Checking the registry…</AlertDescription>
                 </Alert>
               </>
             ) : (
-              <ReadinessPanel
-                plan={plan}
-                refreshing={checking}
-                onRefresh={recheckNow}
-                action={rowAction}
-                notes={hostNotes}
-              />
+              <ReadinessPanel plan={plan} refreshing={checking} onRefresh={recheckNow} />
             )}
 
             {error !== null && (
@@ -596,7 +400,7 @@ function Wizard({ options }: { options: Options }) {
               </Button>
               <p className="m-0 max-w-[46rem] text-[0.8rem] text-(--dim)">
                 {imageMissing
-                  ? 'Blocked until the image exists. Run CI above; a one-shot runner is started for the repo, since it has no runner of its own until it is an app. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
+                  ? 'Blocked until the image exists. Push to the repo’s default branch and let the box build it. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
                   : 'Writes the registry row. Nothing is built, routed or started until you Apply, which commits stacks/apps/apps.json and rebuilds.'}
               </p>
             </div>

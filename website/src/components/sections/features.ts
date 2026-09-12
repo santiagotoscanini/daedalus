@@ -26,7 +26,7 @@ export const FEATURES: Feature[] = [
     view: "deploys",
     kicker: "deploys",
     title: "Push to main. Live in minutes.",
-    body: "Apps build on the box's own CI runners, land in its own registry, and deploy the moment the digest moves. No cloud in the loop. The pipeline never leaves the house.",
+    body: "Apps build on the box's own hardware, land in its own registry, and deploy the moment the digest moves. No cloud in the loop. The pipeline never leaves the house.",
     color: "#4ea87a",
   },
   {

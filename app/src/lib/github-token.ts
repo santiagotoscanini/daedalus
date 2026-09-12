@@ -141,3 +141,18 @@ export function publicInstallation(
   const { token, ...rest } = installation
   return { ...rest, hasToken: typeof token === 'string' && token !== '' }
 }
+
+export type GithubTokenKind = 'oauth' | 'classic' | 'fine-grained' | 'unknown'
+
+/**
+ * A token's kind from its prefix, for the credential rows on Settings ›
+ * Integrations. `unknown` is a real answer: a classic token minted before
+ * GitHub prefixed them is forty hex characters and says nothing about itself
+ * (the caller settles it from the reply's scopes header).
+ */
+export function githubTokenKind(token: string): GithubTokenKind {
+  if (token.startsWith('gho_')) return 'oauth'
+  if (token.startsWith('ghp_')) return 'classic'
+  if (token.startsWith('github_pat_')) return 'fine-grained'
+  return 'unknown'
+}

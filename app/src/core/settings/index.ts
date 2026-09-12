@@ -3,7 +3,6 @@ import { networkSnapshot } from '../../lib/contract/domains/network'
 import { repoFacts } from '../../lib/contract/domains/repo'
 import { type SiteIdentity, siteIdentity } from '../../lib/contract/domains/site'
 import type { SnapshotResult } from '../../lib/contract/snapshot'
-import { oauthClientId } from '../../lib/github-signin'
 import { manifestEntries } from '../../lib/nix-manifest'
 import type { Ctx } from '../ctx'
 import type { BoxSettings, SourceMeta } from './types'
@@ -86,9 +85,6 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
       github: {
         owner: s.owner,
         tokenConfigured: ctx.secret('GITHUB_TOKEN') !== '',
-        repoTokenConfigured: ctx.secret('GITHUB_REPO_TOKEN') !== '',
-        tokenFromSite: ctx.env('GITHUB_TOKEN_FROM_SITE') === '1',
-        signInReady: oauthClientId(ctx.env('GITHUB_OAUTH_CLIENT_ID')) !== '',
       },
       mail: s.mail,
       registryUrl: s.registryUrl,

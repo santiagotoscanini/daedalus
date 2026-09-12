@@ -1,17 +1,16 @@
 // A LEAF module, deliberately: these are pure line-folding helpers that the
-// deployments tab renders with in the browser. They lived in ci.ts until its
-// node imports (readSnapshot → node:fs) started riding the client bundle and
-// threw "externalized for browser compatibility" on every app page — a client
-// component may import from here, never from ci.ts itself.
+// deployments tab renders with in the browser. They may never grow a node
+// import — a client component imports from here, and anything reaching
+// node:fs would ride the client bundle and throw "externalized for browser
+// compatibility" on every app page.
 
-export type ActivityRow = { ts: string; line: string; source: 'build' | 'deploy' }
+export type ActivityRow = { ts: string; line: string }
 
 export type RolledLine = {
   key: string
   ts: string
   lastTs: string
   line: string
-  source: 'build' | 'deploy'
   count: number
 }
 
@@ -33,7 +32,7 @@ export function rollUp(rows: ActivityRow[]): RolledLine[] {
   for (const r of rows) {
     const line = shortenDigests(r.line)
     const last = out[out.length - 1]
-    if (last && last.line === line && last.source === r.source) {
+    if (last && last.line === line) {
       last.count++
       last.lastTs = r.ts
       continue
@@ -43,7 +42,6 @@ export function rollUp(rows: ActivityRow[]): RolledLine[] {
       ts: r.ts,
       lastTs: r.ts,
       line,
-      source: r.source,
       count: 1,
     })
   }

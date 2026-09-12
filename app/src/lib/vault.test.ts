@@ -43,7 +43,6 @@ describe('VAULT_FILES', () => {
   it('allowlists the GitHub App file beside the existing entries', () => {
     expect(VAULT_FILES).toContain('vault/github-app.sops')
     expect(VAULT_FILES).toContain('vault/cloudflare-api-token.sops')
-    expect(VAULT_FILES).toContain('vault/github-token.sops')
   })
 })
 

@@ -85,7 +85,7 @@ function branchHead(branch: string): Promise<{ sha: string; date: string } | nul
   return cache.get(`branch:${branch}`, async () => {
     const body = await fetchJson<Branch>(
       `https://api.github.com/repos/${NIXPKGS}/branches/${branch}`,
-      githubHeaders(),
+      await githubHeaders(),
     )
     const sha = body?.commit?.sha
     if (sha === undefined) return null
@@ -98,7 +98,7 @@ function newerCommits(base: string, head: string): Promise<number | null> {
   return cache.get(`compare:${base}...${head}`, async () => {
     const body = await fetchJson<{ ahead_by?: number }>(
       `https://api.github.com/repos/${NIXPKGS}/compare/${base}...${head}?per_page=1`,
-      githubHeaders(),
+      await githubHeaders(),
     )
     return typeof body?.ahead_by === 'number' ? body.ahead_by : null
   })

@@ -10,7 +10,6 @@ import type {
   GithubAppStatus,
   IntegrationStatus,
 } from '../core/settings/types'
-import type { SignInPoll, SignInStart } from '../lib/github-signin'
 import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../lib/theme'
 
 // Server functions behind Settings: the read-only facts (core/settings), the
@@ -68,35 +67,6 @@ export const replaceCloudflareTokenFn = createServerFn({ method: 'POST' })
     const { replaceCloudflareToken } = await import('../core/settings/cloudflare-token')
     const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
     return replaceCloudflareToken(await makeCtx(), actor, data.token)
-  })
-
-/**
- * Settings › Integrations › GitHub › Sign in: the device flow's two halves
- * (core/settings/github-signin.ts). Neither answers with anything that could
- * redeem the sign-in — the page gets the code a person types, never the
- * device code, and never the token.
- */
-export const startGithubSignInFn = createServerFn({ method: 'POST' }).handler(
-  async (): Promise<SignInStart> => {
-    const { makeCtx } = await import('../core/ctx')
-    const { startGithubSignIn } = await import('../core/settings/github-signin')
-    return startGithubSignIn(await makeCtx())
-  },
-)
-
-export const pollGithubSignInFn = createServerFn({ method: 'POST' })
-  .validator((data: unknown): { flow: string } => {
-    const flow = (data as { flow?: unknown } | null)?.flow
-    if (typeof flow !== 'string' || !/^[0-9a-f-]{36}$/.test(flow)) {
-      throw new Error('expected a sign-in flow')
-    }
-    return { flow }
-  })
-  .handler(async ({ data }): Promise<SignInPoll> => {
-    const { makeCtx } = await import('../core/ctx')
-    const { pollGithubSignIn } = await import('../core/settings/github-signin')
-    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
-    return pollGithubSignIn(await makeCtx(), actor, data.flow)
   })
 
 /**
