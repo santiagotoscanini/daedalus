@@ -233,6 +233,14 @@ export const fetchApp = createServerFn()
         egressContainer: record.egressContainer,
         egressHostPort: record.egressHostPort,
         notes: record.notes,
+        // Engine-only build settings (lib/schema.ts): shown and edited on the
+        // Settings tab's Builds board, never part of drift.
+        buildOnBox: record.buildOnBox,
+        buildStrategy: record.buildStrategy,
+        buildPublish: record.buildPublish,
+        buildEnvPlaceholders: record.buildEnvPlaceholders,
+        railpackEnv: record.railpackEnv,
+        githubRepoId: record.githubRepoId,
         updatedAt: record.updatedAt.toISOString(),
         envVars: record.envVars.map((e) => ({ key: e.key, value: e.value, note: e.note })),
       },
@@ -254,12 +262,25 @@ export const fetchApp = createServerFn()
  * tab and getting a runtime undefined instead of a type error.
  */
 export type AppTabData =
-  | { kind: 'overview'; resources: AppResources; dbSize: number | null; logs1h: number | null }
+  | {
+      kind: 'overview'
+      resources: AppResources
+      dbSize: number | null
+      logs1h: number | null
+      /** The last successful box build, for the detection line; null when there is none. */
+      build: {
+        summary: import('../lib/build-display').BuildSummary
+        detection: import('../lib/build-detect').Detection | null
+        warningCount: number
+      } | null
+    }
   | {
       kind: 'deployments'
       ci: CiSnapshot
       activity: ActivityRow[]
       deployments: DeployRow[]
+      /** Box builds, newest first (lib/repo/builds.ts). */
+      builds: import('../lib/build-display').BuildSummary[]
       /** Which workflow the Run CI button dispatches, and whether it can be. */
       publish: { workflow: string | null; dispatchable: boolean }
     }
@@ -319,12 +340,15 @@ export const fetchAppTab = createServerFn()
         const { appResources, databaseSize, logVolume, NO_RESOURCES } = await import(
           '../lib/metrics'
         )
-        const [resources, dbSize, logs1h] = await Promise.all([
+        const { overviewBuild } = await import('../lib/repo/build-views')
+        const [resources, dbSize, logs1h, build] = await Promise.all([
           appResources(name).catch(() => NO_RESOURCES),
           record.postgres ? databaseSize(name) : Promise.resolve(null),
           logVolume(name),
+          // The detection line is not worth the overview.
+          overviewBuild(record.id).catch(() => null),
         ])
-        return { kind: 'overview', resources, dbSize, logs1h }
+        return { kind: 'overview', resources, dbSize, logs1h, build }
       }
 
       case 'deployments': {
@@ -332,12 +356,14 @@ export const fetchAppTab = createServerFn()
         const { readCiSnapshot } = await import('../lib/ci')
         const { commitUrl } = await import('../lib/registry')
         // Fold deploy.sh's journal into Postgres before reading it back. Done
-        // on demand rather than on a timer: the journal is a small bounded file
-        // and this is the only place the result is consumed.
+        // on demand here; the build reporter (core/builds/report.ts) also
+        // ingests an app's journal on its own tick while a GitHub Deployment
+        // waits for its deploy to land. Ingest is idempotent, so both may run.
         const { ingestDeployments, listDeployments } = await import('../lib/repo/deployments')
         const { repoChecks } = await import('../lib/github-repos')
+        const { recentBuilds } = await import('../lib/repo/build-views')
         await ingestDeployments(record.id, name)
-        const [deploys, ci, activity, deploy, publish] = await Promise.all([
+        const [deploys, ci, activity, deploy, publish, builds] = await Promise.all([
           listDeployments(record.id),
           readCiSnapshot(name),
           activityLog(name, 60),
@@ -348,10 +374,12 @@ export const fetchAppTab = createServerFn()
           record.sourceMode === 'local'
             ? Promise.resolve({ publishWorkflow: null, dispatchable: false })
             : repoChecks(name).catch(() => ({ publishWorkflow: null, dispatchable: false })),
+          record.sourceMode === 'local' ? Promise.resolve([]) : recentBuilds(record.id, 10),
         ])
         return {
           kind: 'deployments',
           ci,
+          builds,
           publish: { workflow: publish.publishWorkflow, dispatchable: publish.dispatchable },
           activity: activity.map((l) => ({
             ts: l.ts.toISOString(),

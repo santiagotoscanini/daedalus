@@ -82,7 +82,6 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
         zoneId: ctx.env('CF_ZONE_ID') ?? '',
         tunnelId: ctx.env('CF_TUNNEL_ID') ?? '',
         tokenConfigured: ctx.secret('CF_API_TOKEN') !== '',
-        tokenFromSite: ctx.env('CF_TOKEN_FROM_SITE') === '1',
       },
       github: {
         owner: s.owner,

@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { ensureScheduler } from '../core/builds/scheduler'
 import { sql } from '../lib/db'
 
 // Liveness + readiness. This one path carries three jobs, all declared in
@@ -16,6 +17,9 @@ export const Route = createFileRoute('/api/healthz')({
   server: {
     handlers: {
       GET: async () => {
+        // gatus calling this every minute is what starts the build scheduler
+        // in a fresh process. Synchronous and idempotent; adds nothing to the answer.
+        ensureScheduler()
         try {
           await sql`SELECT 1`
           return Response.json({ status: 'ok' }, { status: 200 })

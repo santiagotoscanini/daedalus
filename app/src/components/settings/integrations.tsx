@@ -104,7 +104,7 @@ export function Integrations({
           },
         ]}
       >
-        <ReplaceToken enabled={cf.tokenFromSite} />
+        <ReplaceToken />
         <p className="m-0 text-[0.78rem] text-(--text-muted)">
           One token does all of it: Zone › Zone › Read and Zone › DNS › Edit for the certificate,
           the tunnel's records, the dynamic address and the domain picker, and Account › Cloudflare
@@ -329,22 +329,13 @@ const PANEL = 'flex flex-col gap-2 rounded-[9px] border border-(--border-soft) p
  * submitted, and never comes back from the server — the server answers with
  * what it checked, not with what it was given.
  */
-function ReplaceToken({ enabled }: { enabled: boolean }) {
+function ReplaceToken() {
   const id = useId()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [token, setToken] = useState('')
   const [busy, start] = useTransition()
   const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null)
-
-  if (!enabled) {
-    return (
-      <p className={NOTE}>
-        The box reads this token from stacks/cloudflared/env.sops for now, so it is replaced there.
-        Once it reads the copy in site/vault/, it can be replaced from here.
-      </p>
-    )
-  }
 
   const local = token === '' ? null : tokenShapeError(token)
   const submit = () => {
@@ -546,17 +537,23 @@ function CallbackNotice({
           title: 'GitHub App created',
           body: 'Its private key and secrets are encrypted and the Apply has started. Install the App once the rebuild finishes.',
         }
-      : notice.github === 'pending'
+      : notice.github === 'installed'
         ? {
-            variant: 'warning' as const,
-            title: 'GitHub App created, but not applied',
-            body: CALLBACK_SENTENCES['apply-refused'],
+            variant: 'success' as const,
+            title: 'Installed on GitHub',
+            body: 'The box is fetching access now; this can take a minute.',
           }
-        : {
-            variant: 'destructive' as const,
-            title: 'The GitHub App was not set up',
-            body: callbackSentence(notice.code),
-          }
+        : notice.github === 'pending'
+          ? {
+              variant: 'warning' as const,
+              title: 'GitHub App created, but not applied',
+              body: CALLBACK_SENTENCES['apply-refused'],
+            }
+          : {
+              variant: 'destructive' as const,
+              title: 'The GitHub App was not set up',
+              body: callbackSentence(notice.code),
+            }
   return (
     <Alert variant={view.variant}>
       <AlertTitle>{view.title}</AlertTitle>

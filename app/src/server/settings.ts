@@ -170,6 +170,22 @@ export const discardGithubPendingApplyFn = createServerFn({ method: 'POST' }).ha
   },
 )
 
+/**
+ * Where GitHub's setup redirect lands after the App is installed or its
+ * repositories change. The query's installation_id is never read — anyone can
+ * type one into a link — so all this does is ask the host's minter to look
+ * now; the minter finds the installation on its own.
+ */
+export const githubInstallLandedFn = createServerFn({ method: 'POST' }).handler(
+  async (): Promise<{ ok: boolean }> => {
+    const { actorFrom } = await import('../core/settings/github-app')
+    if (actorFrom(getRequestHeader('x-forwarded-email')) === null) return { ok: false }
+    const { requestTokenRefresh } = await import('../core/github-app')
+    await requestTokenRefresh()
+    return { ok: true }
+  },
+)
+
 /** The zone names this system's tzdata carries: the timezone picker's list. */
 export const fetchTimezones = createServerFn().handler(async (): Promise<string[]> => {
   const { readTimezones } = await import('../core/settings/timezones')

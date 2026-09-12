@@ -1,4 +1,4 @@
-import { desc, lt } from 'drizzle-orm'
+import { desc, eq, lt } from 'drizzle-orm'
 import { db, type Executor } from '../db'
 import { githubDeliveries } from '../schema'
 
@@ -30,6 +30,15 @@ export async function recordDelivery(
     .onConflictDoNothing({ target: githubDeliveries.id })
     .returning({ id: githubDeliveries.id })
   return rows.length > 0
+}
+
+/**
+ * Replace a delivery's outcome. For an outcome known only after the insert
+ * (the build a push queued); pass the transaction that recorded it, so the row
+ * never commits holding the provisional word.
+ */
+export async function setDeliveryOutcome(tx: Executor, id: string, outcome: string): Promise<void> {
+  await tx.update(githubDeliveries).set({ outcome }).where(eq(githubDeliveries.id, id))
 }
 
 /** Delete deliveries received before `olderThan`. Returns how many went. */

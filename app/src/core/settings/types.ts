@@ -51,8 +51,6 @@ export type BoxSettings = {
       tunnelId: string
       /** The one Cloudflare API token (DASH_CF_API_TOKEN) is present. */
       tokenConfigured: boolean
-      /** The box reads it from site/vault/, so it can be replaced from here (Phase 6). */
-      tokenFromSite: boolean
     }
     github: {
       owner: string
@@ -249,9 +247,13 @@ export type GithubAppDiscard =
   | { ok: true; slug: string; htmlUrl: string }
   | { ok: false; reason: string }
 
-/** What the callback's redirect said, shown once on the Integrations tab. */
+/**
+ * What the callback's redirect said, shown once on the Integrations tab.
+ * `installed` is GitHub's setup redirect after an install, never read from a
+ * `github=` query.
+ */
 export type GithubCallbackNotice = {
-  github: 'created' | 'pending' | 'failed'
+  github: 'created' | 'pending' | 'failed' | 'installed'
   /** As read from the query, so unchecked: the page maps it, and anything unknown is generic. */
   code: string | null
 }

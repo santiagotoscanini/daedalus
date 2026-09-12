@@ -42,6 +42,25 @@ describe('requestBuild', () => {
     expect(JSON.parse(await readFile(join(dir, 'build-request.json'), 'utf8'))).toEqual(REQUEST)
   })
 
+  it('writes the build env with the request', async () => {
+    const withEnv: BuildRequest = {
+      ...REQUEST,
+      buildEnv: { placeholders: { AUTH_SECRET: 'placeholder' }, railpack: {} },
+    }
+    await requestBuild(withEnv, env)
+    expect(JSON.parse(await readFile(join(dir, 'build-request.json'), 'utf8'))).toEqual(withEnv)
+  })
+
+  it('refuses a bad build env name before writing', async () => {
+    await expect(
+      requestBuild(
+        { ...REQUEST, buildEnv: { placeholders: {}, railpack: { NODE_ENV: 'x' } } },
+        env,
+      ),
+    ).rejects.toThrow(/buildEnv\.railpack/)
+    expect(await readdir(dir)).toEqual([])
+  })
+
   it('refuses an invalid request before writing', async () => {
     await expect(requestBuild({ ...REQUEST, id: '../x' }, env)).rejects.toThrow(/id/)
     expect(await readdir(dir)).toEqual([])

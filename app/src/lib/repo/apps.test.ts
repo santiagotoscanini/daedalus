@@ -63,6 +63,7 @@ function recordOf(entry: ManifestEntry): AppRecord {
     buildPublish: 'live',
     buildEnvPlaceholders: {},
     railpackEnv: {},
+    buildOnBox: false,
     createdAt: NOW,
     updatedAt: NOW,
     envVars: entry.env.map((e, i) => ({
@@ -116,6 +117,7 @@ describe('engine-only columns', () => {
     buildPublish: 'candidate',
     buildEnvPlaceholders: { VITE_PUBLIC_KEY: 'placeholder', DATABASE_URL: 'postgres://build' },
     railpackEnv: { RAILPACK_NODE_PLAYWRIGHT_INSTALL: 'true' },
+    buildOnBox: true,
   }
 
   it('render byte-identical apps.json', () => {
@@ -130,6 +132,18 @@ describe('engine-only columns', () => {
     expect(driftOf(built, entry)).toEqual([])
   })
 
+  // Build on this box is the switch an operator flips per app (plan step 7):
+  // turning it on must not read as a registry change waiting for Apply.
+  it('show no drift with Build on this box on, and none when only it changes', () => {
+    const [entry] = reparse(renderRegistryFile(toRegistryExport([plain])))
+    expect(entry).toBeDefined()
+    expect(driftOf({ ...plain, buildOnBox: true }, entry)).toEqual([])
+    expect(driftOf({ ...plain, buildOnBox: false }, entry)).toEqual([])
+    expect(renderRegistryFile(toRegistryExport([{ ...plain, buildOnBox: true }]))).toBe(
+      renderRegistryFile(toRegistryExport([{ ...plain, buildOnBox: false }])),
+    )
+  })
+
   it('survive a re-sync from Nix — toRow never carries them', () => {
     const row = toRow(RICH)
     for (const k of [
@@ -138,6 +152,7 @@ describe('engine-only columns', () => {
       'buildPublish',
       'buildEnvPlaceholders',
       'railpackEnv',
+      'buildOnBox',
     ]) {
       expect(row).not.toHaveProperty(k)
     }

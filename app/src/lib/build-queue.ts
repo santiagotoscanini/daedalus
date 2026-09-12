@@ -111,33 +111,40 @@ const sameLane = (row: BuildRow, key: { appId: string; lane: BuildLane }): boole
 const sha7 = (sha: string): string => sha.slice(0, 7)
 const ms = (d: Date | number): number => (typeof d === 'number' ? d : d.getTime())
 
-export function enqueue(
+/**
+ * Why a build of this sha need not be queued, or null — the one skip rule every
+ * door shares (webhook, sweep, a superseded build's tip). `rows` is whatever the
+ * caller holds of the lane: its active and queued rows and its newest success
+ * in this publish mode are enough. `force` ("Build now") lifts only the
+ * already-built rule.
+ */
+export function enqueueSkip(
   rows: BuildRow[],
-  req: EnqueueRequest,
-): { rows: BuildRow[]; result: EnqueueResult } {
+  req: Pick<EnqueueRequest, 'appId' | 'lane' | 'sha' | 'publish' | 'force'>,
+): { reason: SkipReason; existingId: string } | null {
   const lane = rows.filter((r) => sameLane(r, req))
 
   const running = lane.find((r) => isActiveBuildState(r.state) && r.sha === req.sha)
-  if (running) {
-    return { rows, result: { kind: 'skipped', reason: 'already-running', existingId: running.id } }
-  }
+  if (running) return { reason: 'already-running', existingId: running.id }
   const queued = lane.find((r) => r.state === 'queued' && r.sha === req.sha)
-  if (queued) {
-    return { rows, result: { kind: 'skipped', reason: 'already-queued', existingId: queued.id } }
-  }
+  if (queued) return { reason: 'already-queued', existingId: queued.id }
   if (!req.force) {
     // The newest success, with the same publish mode: a candidate build of a
     // sha is not the live build of it.
     const lastBuilt = lane
       .filter((r) => r.state === 'succeeded' && r.publish === req.publish)
       .sort((a, b) => ms(b.createdAt) - ms(a.createdAt))[0]
-    if (lastBuilt?.sha === req.sha) {
-      return {
-        rows,
-        result: { kind: 'skipped', reason: 'already-built', existingId: lastBuilt.id },
-      }
-    }
+    if (lastBuilt?.sha === req.sha) return { reason: 'already-built', existingId: lastBuilt.id }
   }
+  return null
+}
+
+export function enqueue(
+  rows: BuildRow[],
+  req: EnqueueRequest,
+): { rows: BuildRow[]; result: EnqueueResult } {
+  const skip = enqueueSkip(rows, req)
+  if (skip !== null) return { rows, result: { kind: 'skipped', ...skip } }
 
   const superseded: string[] = []
   const next = rows.map((r) => {

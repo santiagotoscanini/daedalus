@@ -9,6 +9,7 @@ import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
 import { Input } from '../ui/input'
 import { Board, BoardGrid, Facts } from '../viz'
+import { BuildSettings } from './build-settings'
 import { type AppRecord, BOARD_FOOT, type LoaderData } from './shared'
 
 export function Settings({
@@ -272,6 +273,9 @@ export function Settings({
           of its own.
         </p>
       </Board>
+
+      {/* Local-source apps run their working tree: nothing is built. */}
+      {!readOnly && app.sourceMode !== 'local' && <BuildSettings app={app} />}
 
       {!readOnly && (
         <RemovePanel

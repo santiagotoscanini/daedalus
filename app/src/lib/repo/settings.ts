@@ -59,4 +59,6 @@ export const SETTING_KEYS = {
   githubAppPendingApply: 'github.app.pendingApply',
   /** When the build scheduler last ran its sweep. */
   buildsLastSweep: 'builds.lastSweep',
+  /** Builds whose GitHub report failed, for "Retry report" (core/builds/report.ts). */
+  buildsReportFailures: 'builds.reportFailures',
 } as const

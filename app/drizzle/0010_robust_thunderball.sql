@@ -1,0 +1,1 @@
+ALTER TABLE "apps" ADD COLUMN "build_on_box" boolean DEFAULT false NOT NULL;

@@ -532,17 +532,24 @@ type AppRailContext = {
 function useAppRailContext(): AppRailContext | null {
   return useMatches({
     select: (matches) => {
-      const m = matches.find((x) => x.routeId === '/apps/$name')
+      // A build's page is not nested under the app route (it has no Outlet),
+      // but it is still inside the app, under Deployments.
+      const m = matches.find(
+        (x) => x.routeId === '/apps/$name' || x.routeId === '/apps_/$name/builds/$id',
+      )
       if (m === undefined) return null
       const data = m.loaderData as
-        | { app: { postgres: boolean; egressContainer: string | null } }
+        | { app: { postgres: boolean; egressContainer: string | null } | null }
         | null
         | undefined
       return {
         name: (m.params as { name: string }).name,
-        tab: (m.search as { tab?: string }).tab ?? 'overview',
-        hasDatabase: data?.app.postgres === true,
-        hasVpn: (data?.app.egressContainer ?? null) !== null,
+        tab:
+          m.routeId === '/apps/$name'
+            ? ((m.search as { tab?: string }).tab ?? 'overview')
+            : 'deployments',
+        hasDatabase: data?.app?.postgres === true,
+        hasVpn: (data?.app?.egressContainer ?? null) !== null,
       }
     },
     structuralSharing: true,

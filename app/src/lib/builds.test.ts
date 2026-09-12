@@ -96,6 +96,92 @@ describe('build request', () => {
   })
 })
 
+describe('build request env', () => {
+  const buildEnv = {
+    placeholders: { MAPBOX_ACCESS_TOKEN: 'pk.placeholder', _UNDERSCORED: '', A: 'x'.repeat(512) },
+    railpack: { RAILPACK_PRUNE_DEPS: 'true', RAILPACK_NODE_PLAYWRIGHT_INSTALL: '1' },
+  }
+
+  it('leaves buildEnv absent when the request has none', () => {
+    const r = decode(buildRequestDecoder, request)
+    expect('buildEnv' in r).toBe(false)
+    expect(JSON.stringify(r)).toBe(JSON.stringify(request))
+  })
+
+  it('carries it through the encoder and the decoder', () => {
+    const r = buildRequest({
+      id: ID,
+      app: 'iris',
+      sha: SHA,
+      repoId: 1_029_384_756,
+      strategy: 'railpack',
+      publish: 'candidate',
+      requestedBy: 'sweep',
+      at: new Date('2026-09-11T20:00:00Z'),
+      buildEnv,
+    })
+    expect(r.version).toBe(1)
+    expect(r.buildEnv).toEqual(buildEnv)
+    expect(decode(buildRequestDecoder, JSON.parse(JSON.stringify(r)))).toEqual(r)
+  })
+
+  it('accepts empty maps', () => {
+    const env = { placeholders: {}, railpack: {} }
+    expect(decode(buildRequestDecoder, { ...request, buildEnv: env }).buildEnv).toEqual(env)
+  })
+
+  const P = 'buildEnv.placeholders'
+  const R = 'buildEnv.railpack'
+  it.each([
+    ['a lowercase placeholder', { placeholders: { auth_secret: 'x' }, railpack: {} }, P],
+    ['a placeholder starting with a digit', { placeholders: { '1X': 'x' }, railpack: {} }, P],
+    [
+      'a placeholder past 64 chars',
+      { placeholders: { [`A${'B'.repeat(64)}`]: 'x' }, railpack: {} },
+      P,
+    ],
+    ['a placeholder with a dash', { placeholders: { 'AUTH-SECRET': 'x' }, railpack: {} }, P],
+    ['a __proto__ key', { placeholders: JSON.parse('{"__proto__":"x"}'), railpack: {} }, P],
+    [
+      'a railpack key without the prefix',
+      { placeholders: {}, railpack: { NODE_VERSION: '24' } },
+      R,
+    ],
+    ['a bare RAILPACK_', { placeholders: {}, railpack: { RAILPACK_: '1' } }, R],
+    ['a non-string value', { placeholders: { A: 1 }, railpack: {} }, `${P}.A`],
+    ['a value past 512 chars', { placeholders: { A: 'x'.repeat(513) }, railpack: {} }, `${P}.A`],
+    ['a NUL in a value', { placeholders: {}, railpack: { RAILPACK_X: 'a\0b' } }, `${R}.RAILPACK_X`],
+    ['a missing half', { placeholders: {} }, R],
+    ['an array', [], 'buildEnv'],
+  ])('refuses %s', (_label, value, path) => {
+    let caught: unknown = null
+    try {
+      decode(buildRequestDecoder, { ...request, buildEnv: value })
+    } catch (e) {
+      caught = e
+    }
+    expect(caught).toBeInstanceOf(DecodeError)
+    expect((caught as DecodeError).path).toBe(path)
+  })
+
+  it('never quotes a value in the error', () => {
+    const secretish = 'do-not-echo-this-value'
+    for (const env of [
+      { placeholders: { A: `${secretish}${'x'.repeat(600)}` }, railpack: {} },
+      { placeholders: { lower: secretish }, railpack: {} },
+    ]) {
+      let caught: unknown = null
+      try {
+        decode(buildRequestDecoder, { ...request, buildEnv: env })
+      } catch (e) {
+        caught = e
+      }
+      expect(caught).toBeInstanceOf(DecodeError)
+      expect((caught as Error).message).not.toContain(secretish)
+    }
+  })
+})
+
 describe('build status', () => {
   it('decodes a running status and fills the optional fields', () => {
     expect(decode(buildStatusDecoder, status)).toEqual({

@@ -76,6 +76,21 @@ export const TERMINAL_BUILD_STATES: readonly BuildState[] = [
 export const isActiveBuildState = (s: BuildState): boolean => ACTIVE_BUILD_STATES.includes(s)
 export const isTerminalBuildState = (s: BuildState): boolean => TERMINAL_BUILD_STATES.includes(s)
 
+/**
+ * The app's build-time env, from its `buildEnvPlaceholders` and `railpackEnv`
+ * columns. The host exports both into the builder's process env and passes the
+ * names — never the values — on argv, so a name is a strict env identifier.
+ * Placeholders are not secrets, but they are not image config either.
+ */
+export type BuildEnv = {
+  placeholders: Record<string, string>
+  railpack: Record<string, string>
+}
+
+export const BUILD_ENV_PLACEHOLDER_RE = /^[A-Z_][A-Z0-9_]{0,63}$/
+export const BUILD_ENV_RAILPACK_RE = /^RAILPACK_[A-Z0-9_]+$/
+export const BUILD_ENV_VALUE_MAX = 512
+
 export type BuildRequest = {
   version: 1
   id: string
@@ -86,6 +101,8 @@ export type BuildRequest = {
   publish: BuildPublish
   requestedBy: BuildRequester
   at: string
+  /** Absent in requests from before the field; the host treats that as empty. */
+  buildEnv?: BuildEnv
 }
 
 export type BuildChecks = {
@@ -157,7 +174,35 @@ const unknownValue: Decoder<unknown> = (v) => v
 
 const redacted: Decoder<string> = (v, p) => redactBuildLog(str(v, p))
 
-export const buildRequestDecoder: Decoder<BuildRequest> = obj({
+// Error messages name the key's path but never quote a value.
+function envRecord(nameRe: RegExp, what: string): Decoder<Record<string, string>> {
+  return (v, p) => {
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) {
+      throw new DecodeError(p, 'expected an object')
+    }
+    const out: Record<string, string> = {}
+    for (const [k, value] of Object.entries(v)) {
+      // Checked before the assignment: a name like `__proto__` never reaches `out`.
+      if (!nameRe.test(k)) throw new DecodeError(p, `expected ${what} names`)
+      const at = `${p}.${k}`
+      if (typeof value !== 'string') throw new DecodeError(at, 'expected a string')
+      if (value.length > BUILD_ENV_VALUE_MAX) {
+        throw new DecodeError(at, `longer than ${String(BUILD_ENV_VALUE_MAX)} characters`)
+      }
+      // No process env can carry a NUL; the host would fail to export it.
+      if (value.includes('\0')) throw new DecodeError(at, 'contains a NUL character')
+      out[k] = value
+    }
+    return out
+  }
+}
+
+const buildEnvDecoder: Decoder<BuildEnv> = obj({
+  placeholders: envRecord(BUILD_ENV_PLACEHOLDER_RE, 'placeholder env'),
+  railpack: envRecord(BUILD_ENV_RAILPACK_RE, 'RAILPACK_*'),
+})
+
+const buildRequestCore = obj({
   version: versionOne,
   id: matching(BUILD_ID_RE, 'a build id'),
   app: matching(APP_NAME_RE, 'an app name'),
@@ -168,6 +213,14 @@ export const buildRequestDecoder: Decoder<BuildRequest> = obj({
   requestedBy: literal(...BUILD_REQUESTERS),
   at: str,
 })
+
+/** `buildEnv` stays absent when absent, so an older request round-trips byte for byte. */
+export const buildRequestDecoder: Decoder<BuildRequest> = (v, p) => {
+  const core = buildRequestCore(v, p)
+  const env = (v as Record<string, unknown>).buildEnv
+  if (env === undefined) return core
+  return { ...core, buildEnv: buildEnvDecoder(env, p === '' ? 'buildEnv' : `${p}.buildEnv`) }
+}
 
 export const buildStatusDecoder: Decoder<BuildStatus> = obj({
   version: versionOne,

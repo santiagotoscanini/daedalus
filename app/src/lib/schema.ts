@@ -144,6 +144,10 @@ export const apps = pgTable(
     // Env handed to Railpack — its RAILPACK_* switches, such as
     // RAILPACK_NODE_PLAYWRIGHT_INSTALL.
     railpackEnv: jsonb('railpack_env').$type<Record<string, string>>().notNull().default({}),
+    // Whether pushes to this app's repo build on the box. Off by default: the
+    // GitHub App is installed on every repository, and a repo moves to box
+    // builds one at a time (plan step 7) by turning this on.
+    buildOnBox: boolean('build_on_box').notNull().default(false),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

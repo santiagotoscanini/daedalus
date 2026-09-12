@@ -8,7 +8,7 @@ import {
   SlidersHorizontalIcon,
   UserIcon,
 } from 'lucide-react'
-import { type ReactNode, useEffect, useState, useTransition } from 'react'
+import { type ReactNode, useEffect, useRef, useState, useTransition } from 'react'
 
 import { ApplyBar } from '../components/apply-bar'
 import { PageHead } from '../components/page'
@@ -21,7 +21,7 @@ import { ProfileTab } from '../components/settings/profile'
 import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
 import { TabBar } from '../components/tabs'
-import type { GithubCallbackNotice } from '../core/settings/types'
+import type { GithubAppStatus, GithubCallbackNotice } from '../core/settings/types'
 import { fetchProfile } from '../server/profile'
 import { fetchApplyStatus } from '../server/registry'
 import {
@@ -31,6 +31,7 @@ import {
   fetchIntegrationStatus,
   fetchTheme,
   fetchTimezones,
+  githubInstallLandedFn,
 } from '../server/settings'
 import { fetchSiteEdit, fetchSiteState } from '../server/site'
 
@@ -81,13 +82,22 @@ function isTab(v: string | undefined): v is SettingsTab {
   return TABS.some((t) => t.id === v)
 }
 
+/** How long the GitHub App section keeps asking after an install, and how often. */
+const INSTALL_WATCH_MS = 60_000
+const INSTALL_POLL_MS = 5_000
+
 export const Route = createFileRoute('/settings')({
   // The sub-tab is in the URL for the same reason the category pages put it
   // there: it survives a refresh, it can be linked, and it renders on the
   // server.
   validateSearch: (
     search: Record<string, unknown>,
-  ): { tab?: string; github?: GithubCallbackNotice['github']; reason?: string } => ({
+  ): {
+    tab?: string
+    github?: Exclude<GithubCallbackNotice['github'], 'installed'>
+    reason?: string
+    setup_action?: 'install' | 'update'
+  } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
     // What /settings/github/callback redirected with. Read once, then dropped.
     github:
@@ -99,6 +109,13 @@ export const Route = createFileRoute('/settings')({
     reason:
       typeof search.reason === 'string' && /^[a-z-]{1,40}$/.test(search.reason)
         ? search.reason
+        : undefined,
+    // GitHub's setup URL after an install: `?installation_id=…&setup_action=`.
+    // Only the action is read. The id is not — a link can carry any id — and
+    // the host's minter finds the installation by itself.
+    setup_action:
+      search.setup_action === 'install' || search.setup_action === 'update'
+        ? search.setup_action
         : undefined,
   }),
   loaderDeps: ({ search }) => ({ tab: search.tab }),
@@ -162,18 +179,68 @@ function SettingsPage() {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
-  // The GitHub callback's verdict arrives in the query once. It is held here,
-  // above the Await that remounts the tab when the live checks land, and the
-  // query is dropped so a reload does not repeat it.
+  // The GitHub callback's verdict, or GitHub's install redirect, arrives in
+  // the query once. It is held here, above the Await that remounts the tab
+  // when the live checks land, and the query is dropped so a reload does not
+  // repeat it.
+  const landed = search.setup_action !== undefined
   const [githubNotice, setGithubNotice] = useState<GithubCallbackNotice | null>(() =>
-    search.github === undefined ? null : { github: search.github, code: search.reason ?? null },
+    search.github !== undefined
+      ? { github: search.github, code: search.reason ?? null }
+      : landed
+        ? { github: 'installed', code: null }
+        : null,
   )
   useEffect(() => {
-    if (search.github === undefined && search.reason === undefined) return
-    void router.navigate({ to: '/settings', search: { tab: search.tab }, replace: true })
-  }, [search.github, search.reason, search.tab, router])
+    if (search.github === undefined && search.reason === undefined && !landed) return
+    void router.navigate({
+      to: '/settings',
+      search: { tab: landed ? 'integrations' : search.tab },
+      replace: true,
+    })
+  }, [search.github, search.reason, search.tab, landed, router])
+
+  // After an install the host's minter has not looked yet, so the App reads
+  // "not installed". Ask it to look now, then re-read the App's status every
+  // few seconds for a minute, so "installed" arrives without a reload.
+  const [watchUntil, setWatchUntil] = useState<number | null>(null)
+  // Tagged with the loader read it was polled over: a fresh loader read is
+  // newer than anything the poll held, so a stale tag falls back to it.
+  const [polled, setPolled] = useState<{
+    over: typeof githubApp
+    status: GithubAppStatus
+  } | null>(null)
+  const askedMinter = useRef(false)
+  useEffect(() => {
+    if (!landed || askedMinter.current) return
+    askedMinter.current = true
+    void githubInstallLandedFn()
+      .then((r) => {
+        if (r.ok) setWatchUntil(Date.now() + INSTALL_WATCH_MS)
+      })
+      .catch(() => {})
+  }, [landed])
+  const loaderApp = useRef(githubApp)
+  loaderApp.current = githubApp
+  useEffect(() => {
+    if (watchUntil === null) return
+    const t = setInterval(() => {
+      void fetchGithubAppStatus()
+        .then((s) => {
+          setPolled({ over: loaderApp.current, status: s })
+          if (s.state === 'installed' || Date.now() >= watchUntil) setWatchUntil(null)
+        })
+        .catch(() => {
+          if (Date.now() >= watchUntil) setWatchUntil(null)
+        })
+    }, INSTALL_POLL_MS)
+    return () => {
+      clearInterval(t)
+    }
+  }, [watchUntil])
+
   const github = {
-    app: githubApp,
+    app: polled !== null && polled.over === githubApp ? polled.status : githubApp,
     notice: githubNotice,
     onDismissNotice: () => {
       setGithubNotice(null)

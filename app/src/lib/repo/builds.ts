@@ -5,6 +5,7 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNull,
   ne,
   notInArray,
   or,
@@ -372,6 +373,26 @@ export async function updateFromStatus(
     .where(where)
     .returning()
   return row
+}
+
+/** The pin, unexecuted: its SQL is what the tests pin. */
+export function pinGithubRepoIdQuery(appId: string, repoId: number, exec: Executor = db) {
+  return exec
+    .update(apps)
+    .set({ githubRepoId: repoId })
+    .where(and(eq(apps.id, appId), isNull(apps.githubRepoId)))
+    .returning({ id: apps.id })
+}
+
+/**
+ * Fill an app's GitHub repository id — only while it is empty, enforced in the
+ * WHERE: a pin is never overwritten, however the caller came to disagree with
+ * it. True when this call set it. Leaves apps.updatedAt alone: the column is
+ * engine-only and the pin is not an edit anyone made.
+ */
+export async function pinGithubRepoId(appId: string, repoId: number): Promise<boolean> {
+  if (!UUID.test(appId) || !Number.isSafeInteger(repoId) || repoId <= 0) return false
+  return (await pinGithubRepoIdQuery(appId, repoId)).length > 0
 }
 
 /**

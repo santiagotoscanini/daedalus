@@ -71,6 +71,13 @@
       "when": 1789162504988,
       "tag": "0009_silent_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789189771684,
+      "tag": "0010_robust_thunderball",
+      "breakpoints": true
     }
   ]
 }

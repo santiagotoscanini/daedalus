@@ -18,7 +18,8 @@ import { sealForVault } from '../vault'
 // (core/vault.ts): the container holds no age identity, so it can write the
 // secret and never read it back. The ciphertext goes to Apply as its own
 // change (lib/apply-flow.ts runSecretApply); nix renders it for all four
-// consumers and restarts them (stacks/cloudflared, fleet.cloudflare.tokenFromSite).
+// consumers and restarts them (stacks/cloudflared). site/vault/ is the token's
+// only home: the old env.sops copy and the toggle beside it are gone.
 //
 // The token is never stored, logged or returned. Every error below is written
 // without it, and sops's stderr is scrubbed of it before it is repeated.
@@ -135,13 +136,6 @@ export async function replaceCloudflareToken(
   const shape = tokenShapeError(token)
   if (shape !== null) return { ok: false, reason: shape }
 
-  if (ctx.env('CF_TOKEN_FROM_SITE') !== '1') {
-    return {
-      ok: false,
-      reason:
-        'The box still reads the token from stacks/cloudflared/env.sops, so a token set here would change nothing yet (fleet.cloudflare.tokenFromSite is off).',
-    }
-  }
   if (token === ctx.secret('CF_API_TOKEN')) {
     return { ok: false, reason: 'That is the token the box already uses.' }
   }

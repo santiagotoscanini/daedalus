@@ -11,6 +11,7 @@ import { usePolledStatus } from '../status'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Board, BoardGrid, Chip, Progress } from '../viz'
+import { BuildsBoard } from './builds'
 import {
   type AppRecord,
   BOARD_FOOT,
@@ -50,7 +51,9 @@ export function Deployments({
             <a href={`https://github.com/${OWNER}/${app.name}`} target="_blank" rel="noreferrer">
               ⎇ {OWNER}/{app.name}
             </a>
-            <span className="text-(--text-muted)">builds run on self-hosted runners</span>
+            <span className="text-(--text-muted)">
+              {app.buildOnBox ? 'builds run on this box' : 'builds run on self-hosted runners'}
+            </span>
             <span className="ml-auto">
               <RunCiButton repo={app.name} publish={td.publish} />
               <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
@@ -67,6 +70,19 @@ export function Deployments({
           </>
         )}
       </p>
+
+      {app.sourceMode !== 'local' && (
+        <div className="mb-[0.8rem]">
+          <BoardGrid>
+            <BuildsBoard
+              app={app.name}
+              initial={td.builds}
+              buildOnBox={app.buildOnBox}
+              linked={app.githubRepoId !== null}
+            />
+          </BoardGrid>
+        </div>
+      )}
 
       {app.sourceMode !== 'local' && <Runners ci={td.ci} activity={td.activity} />}
 

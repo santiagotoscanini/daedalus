@@ -15,7 +15,7 @@ engine that any NixOS machine imports, configured from its own UI. Written
 | 3 | `site/` directory in the config repo, written from the UI | landed 2026-09-10 (s2-server `8f77a00`, engine `870493b`) |
 | 4 | Nix reads the app registry from `site/` | landed 2026-09-10 (s2-server `b09957f`, engine `4c64c81`) |
 | 5 | `site.json` is the source of the site constants, editable | landed 2026-09-10 (s2-server `c6ad8d0`, engine `2aceab5`, `ac60f42`) |
-| 6 | Secrets vault v1: the Cloudflare token | in progress — vault copy, toggle ON and Replace token landed 2026-09-11 (s2-server `cf697b6`, `94d6415`); remaining: the gate (a real rotation from the UI) and deleting `stacks/cloudflared/env.sops` |
+| 6 | Secrets vault v1: the Cloudflare token | landed — vault copy, toggle ON and Replace token 2026-09-11 (s2-server `cf697b6`, `94d6415`); the gate (a real rotation from the UI) passed 2026-09-12, and `stacks/cloudflared/env.sops` and the toggle are deleted (s2-server `548255f`) |
 | 7 | GitHub: device flow, HTTPS pushes, JIT runners | not started |
 | 8 | Auth hardening | not started |
 | 9 | Nix: enable surface, literals, state out of the tree | not started |
@@ -51,9 +51,10 @@ Outside the plan, landed 2026-09-11:
   token Cloudflare no longer accepted (the tunnel panels had gone silently
   blank), and ddclient on the Global API Key. Now one token (Zone:Read,
   DNS:Edit, Account "Cloudflare One Connector: cloudflared" Read; all zones)
-  lives only in `stacks/cloudflared/env.sops`; traefik, route-sync, ddclient
+  lived only in `stacks/cloudflared/env.sops`; traefik, route-sync, ddclient
   and daedalus read it from there (s2-server `6966a4d` dropped the last
-  alias). A refused Cloudflare read now says which permission is missing
+  alias). Since Phase 6's gate passed on 2026-09-12 it lives only in
+  `site/vault/`, and env.sops is deleted (s2-server `548255f`). A refused Cloudflare read now says which permission is missing
   (`getJsonResult`, `cfReadError`). This shrinks Phase 6: the rotate-together
   set it was written against no longer exists.
 - **Settings › Profile** (engine `f451143`, `c67cfe9`): the signed-in person's
@@ -103,8 +104,10 @@ and rebuild. Refused while other changes are pending, so a rotation is its
 own Apply. Write-only and never logged (a test over status files and the
 payload). Gate: flip the toggle, rotate from the UI, all four consumers pick
 up the new value with no manual restart — `restartUnits` on the fleet's
-oneshot container units is still the untested risk. Then delete
-`stacks/cloudflared/env.sops`.
+oneshot container units was the untested risk. **Passed 2026-09-12**: a
+rotation from the UI restarted every consumer unaided, then
+`stacks/cloudflared/env.sops` and the toggle were deleted (s2-server
+`548255f`); the engine's `CF_TOKEN_FROM_SITE` gate went with them.
 
 **Phase 7 — GitHub without classic PATs.** A daedalus OAuth App with device
 flow; Settings › GitHub shows the code, polls, checks scopes and stores the

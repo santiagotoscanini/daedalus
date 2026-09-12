@@ -6,6 +6,7 @@ import { usePolledStatus } from '../status'
 import { Button } from '../ui/button'
 import { Board, BoardGrid, Facts, Stat, StatStrip } from '../viz'
 import { CloneButton } from '../workspace'
+import { DetectionLine } from './builds'
 import { type AppRecord, GHOST_BTN, type LoaderData, STRIP_FOOT, VIZ_EMPTY } from './shared'
 
 /**
@@ -221,6 +222,9 @@ export function Overview({
               { k: 'container', v: <code>app-{app.name}</code> },
             ]}
           />
+          {/* What the last box build found in the repo. Nothing at all for an
+              app that has never built here. */}
+          {d.build !== null && <DetectionLine app={app.name} build={d.build} />}
         </Board>
 
         {/* No Database, Access or Egress boards here: each is a section in

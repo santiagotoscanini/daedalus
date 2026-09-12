@@ -5,6 +5,7 @@ import {
   type BuildRow,
   type EnqueueRequest,
   enqueue,
+  enqueueSkip,
   INTERRUPTED,
   markDispatched,
   nextToRun,
@@ -181,6 +182,42 @@ describe('enqueue', () => {
   it('does not count a failed build as built', () => {
     const failed = row({ sha: SHA_B, state: 'failed' })
     expect(enqueue([failed], req({ sha: SHA_B })).result.kind).toBe('enqueued')
+  })
+})
+
+describe('enqueueSkip', () => {
+  it('names why a sha need not be queued, and agrees with enqueue', () => {
+    const running = row({ sha: SHA_A, state: 'building', startedAt: T0 })
+    const queued = row({ sha: SHA_B })
+    const built = row({ sha: SHA_C, state: 'succeeded' })
+    const rows = [running, queued, built]
+
+    expect(enqueueSkip(rows, req({ sha: SHA_A }))).toEqual({
+      reason: 'already-running',
+      existingId: running.id,
+    })
+    expect(enqueueSkip(rows, req({ sha: SHA_B }))).toEqual({
+      reason: 'already-queued',
+      existingId: queued.id,
+    })
+    expect(enqueueSkip(rows, req({ sha: SHA_C }))).toEqual({
+      reason: 'already-built',
+      existingId: built.id,
+    })
+    for (const sha of [SHA_A, SHA_B, SHA_C]) {
+      expect(enqueue(rows, req({ sha })).result.kind).toBe('skipped')
+    }
+  })
+
+  it('lets force past only the built rule, and keeps to its app, lane and publish mode', () => {
+    const running = row({ sha: SHA_A, state: 'building', startedAt: T0 })
+    const built = row({ sha: SHA_C, state: 'succeeded' })
+    const rows = [running, built]
+    expect(enqueueSkip(rows, req({ sha: SHA_C, force: true }))).toBeNull()
+    expect(enqueueSkip(rows, req({ sha: SHA_A, force: true }))?.reason).toBe('already-running')
+    expect(enqueueSkip(rows, req({ sha: SHA_C, publish: 'candidate' }))).toBeNull()
+    expect(enqueueSkip(rows, req({ sha: SHA_A, appId: 'app-hermes' }))).toBeNull()
+    expect(enqueueSkip(rows, req({ sha: SHA_A, lane: 'pr' }))).toBeNull()
   })
 })
 
