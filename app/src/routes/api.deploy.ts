@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { safeEqual } from '../lib/github-app-crypto'
+import { isRecord } from '../lib/is-record'
 
 // "A new image landed — redeploy this app."
 //
@@ -38,9 +39,19 @@ export const Route = createFileRoute('/api/deploy')({
         const { requestDeploy } = await import('../lib/deploy')
         const { getApp } = await import('../lib/repo/apps')
 
-        let body: Record<string, unknown> = {}
+        // `null` is valid JSON: the parse succeeds, the catch never fires, and
+        // a cast to a record would leave every read below to throw outside the
+        // try — a 500 where this 400 is meant.
+        let body: Record<string, unknown>
         try {
-          body = (await request.json()) as Record<string, unknown>
+          const parsed: unknown = await request.json()
+          if (!isRecord(parsed)) {
+            return Response.json(
+              { status: 'error', error: 'body must be a JSON object' },
+              { status: 400 },
+            )
+          }
+          body = parsed
         } catch {
           return Response.json({ status: 'error', error: 'body must be JSON' }, { status: 400 })
         }
@@ -64,9 +75,7 @@ export const Route = createFileRoute('/api/deploy')({
 
         // `name` is zot's field; `app`/`repository` keep hand-rolled calls and
         // any future sender working.
-        const data = (
-          typeof body.data === 'object' && body.data !== null ? body.data : {}
-        ) as Record<string, unknown>
+        const data = isRecord(body.data) ? body.data : {}
         const raw = [body.app, body.repository, body.name, data.repository, data.name].find(
           (v): v is string => typeof v === 'string' && v.length > 0,
         )

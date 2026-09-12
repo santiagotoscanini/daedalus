@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { SiteDocument } from '../../../core/site/file'
-import { arrayOf, bool, decode, literal, nullable, num, obj, optional, str } from '../decode'
+import { arrayOf, bool, decode, int, literal, nullable, obj, optional, str } from '../decode'
 
 // /site/site.json — the committed document, read from the site directory
 // mounted read-only into the container. Since Phase 5 this is THE source of
@@ -40,12 +40,12 @@ const shape = obj({
     obj({
       app: nullable(
         obj({
-          id: num,
+          id: int,
           slug: str,
           clientId: str,
           htmlUrl: str,
           owner: str,
-          ownerId: num,
+          ownerId: int,
         }),
       ),
     }),

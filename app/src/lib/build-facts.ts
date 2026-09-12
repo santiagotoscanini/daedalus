@@ -22,9 +22,8 @@
 // worth. `digest` and `size_bytes` stay their own columns, because those two
 // ARE matched against deploy rows and summed.
 
-type Rec = Record<string, unknown>
+import { isRecord } from './is-record'
 
-const isRec = (v: unknown): v is Rec => v !== null && typeof v === 'object' && !Array.isArray(v)
 const text = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
 const flag = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null)
 const count = (v: unknown): number | null =>
@@ -77,7 +76,7 @@ function saidSomething<T extends object>(decoded: T): T | null {
 }
 
 function readImage(raw: unknown): ImageFacts | null {
-  if (!isRec(raw)) return null
+  if (!isRecord(raw)) return null
   return saidSomething({
     tags: strings(raw.tags),
     layers: count(raw.layers),
@@ -88,7 +87,7 @@ function readImage(raw: unknown): ImageFacts | null {
 }
 
 function readRun(raw: unknown): RunFacts | null {
-  if (!isRec(raw)) return null
+  if (!isRecord(raw)) return null
   return saidSomething({
     runner: text(raw.runner),
     secretsHash: text(raw.secretsHash),

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 // Type-only, so it is erased rather than pulling the bridge's node:fs into a
 // bundle — the value import below stays dynamic like every other server reach.
 import type { ImageTarget } from '../lib/image-update'
+import { isRecord } from '../lib/is-record'
 
 // Move a container's image pin without the UI, and read back where it got to.
 //
@@ -37,9 +38,19 @@ export const Route = createFileRoute('/api/image-update')({
       POST: async ({ request }) => {
         const { runImageUpdate } = await import('../lib/update-flow')
 
-        let body: { container?: unknown; toTag?: unknown; targets?: unknown } = {}
+        // `null` is valid JSON: the parse succeeds, the catch never fires, and
+        // a cast to a record would leave every read below to throw outside the
+        // try — a 500 where this 400 is meant.
+        let body: Record<string, unknown>
         try {
-          body = (await request.json()) as typeof body
+          const parsed: unknown = await request.json()
+          if (!isRecord(parsed)) {
+            return Response.json(
+              { status: 'refused', reason: 'body must be a JSON object' },
+              { status: 400 },
+            )
+          }
+          body = parsed
         } catch {
           return Response.json({ status: 'refused', reason: 'body is not JSON' }, { status: 400 })
         }

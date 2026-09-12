@@ -30,6 +30,7 @@ import { type BuildState, isActiveBuildState, isTerminalBuildState } from '../..
 import { bytes, ms } from '../../lib/format'
 import { checkRunOutput } from '../../lib/github-app'
 import { effectiveHostname } from '../../lib/hostname'
+import { isRecord } from '../../lib/is-record'
 import type { AppRecord } from '../../lib/repo/apps'
 import type { Ctx } from '../ctx'
 import {
@@ -107,7 +108,6 @@ type Memo = {
 // there is shape-checked before use and replaced when it does not match.
 const MEMO_KEY = 'daedalusBuildReportV1'
 
-const isRec = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object'
 const isFiniteNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isStr = (v: unknown): v is string => typeof v === 'string'
 
@@ -118,11 +118,11 @@ function mapOf(v: unknown, value: (x: unknown) => boolean): boolean {
 }
 
 function isMemo(v: unknown): v is Memo {
-  if (!isRec(v)) return false
+  if (!isRecord(v)) return false
   return (
     isFiniteNum(v.blockedUntil) &&
     isFiniteNum(v.lastTickAt) &&
-    mapOf(v.sent, (s) => isRec(s) && isFiniteNum(s.at) && isStr(s.state) && isStr(s.phase)) &&
+    mapOf(v.sent, (s) => isRecord(s) && isFiniteNum(s.at) && isStr(s.state) && isStr(s.phase)) &&
     mapOf(v.checkRuns, isFiniteNum) &&
     mapOf(v.deployments, isFiniteNum) &&
     mapOf(v.completed, isStr) &&
@@ -130,7 +130,7 @@ function isMemo(v: unknown): v is Memo {
       mapOf(
         v.failures,
         (f) =>
-          isRec(f) &&
+          isRecord(f) &&
           isStr(f.step) &&
           isStr(f.kind) &&
           (f.status === null || isFiniteNum(f.status)) &&

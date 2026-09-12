@@ -49,6 +49,7 @@ import {
   isTerminalBuildState,
   redactBuildLog,
 } from '../../lib/builds'
+import { isRecord } from '../../lib/is-record'
 import type { BuildStatusPatch } from '../../lib/repo/builds'
 import type { Ctx } from '../ctx'
 
@@ -109,8 +110,6 @@ type Slot = {
 
 const g = globalThis as unknown as Record<string, unknown>
 
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  v !== null && typeof v === 'object' && !Array.isArray(v)
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isHold = (v: unknown): boolean => v === null || (isRecord(v) && isNum(v.since))
 

@@ -36,6 +36,24 @@ export const num: Decoder<number> = (v, p) => {
   return v
 }
 
+/**
+ * A whole number JS can still tell apart from its neighbours.
+ *
+ * `num` would take GitHub's `9007199254740993` and answer `…992` — a
+ * different account, silently — because past 2^53 the nearest double is a
+ * different integer. Anything used as an identity (an id, a count that is
+ * compared) decodes with this, not with `num`.
+ */
+export const int: Decoder<number> = (v, p) => {
+  if (typeof v !== 'number') throw new DecodeError(p, `expected a whole number, got ${kind(v)}`)
+  if (!Number.isSafeInteger(v)) {
+    throw new DecodeError(p, `expected a whole number below 2^53, got ${String(v)}`)
+  }
+  // -0 is a valid JSON number and an id nobody means: it fails `Object.is`
+  // against the 0 it round-trips back as, so it is normalised here.
+  return v === 0 ? 0 : v
+}
+
 export const bool: Decoder<boolean> = (v, p) => {
   if (typeof v !== 'boolean') throw new DecodeError(p, `expected a boolean, got ${kind(v)}`)
   return v
@@ -71,7 +89,12 @@ export function recordOf<T>(d: Decoder<T>): Decoder<Record<string, T>> {
     if (v === null || typeof v !== 'object' || Array.isArray(v)) {
       throw new DecodeError(p, `expected an object, got ${kind(v)}`)
     }
-    const out: Record<string, T> = {}
+    // Null prototype, for both halves of the same hole. Writing: `out.__proto__
+    // = x` on a `{}` hits Object.prototype's setter, so the entry is dropped
+    // and the result inherits whatever the attacker sent. Reading: a key the
+    // input never carried — `toString`, `constructor` — answers a function
+    // where the type says T. Neither is reachable without a prototype.
+    const out = Object.create(null) as Record<string, T>
     for (const [k, item] of Object.entries(v)) out[k] = d(item, `${p}.${k}`)
     return out
   }
@@ -91,7 +114,13 @@ export function obj<S extends Record<string, Decoder<unknown>>>(
     }
     const source = v as Record<string, unknown>
     const out: Record<string, unknown> = {}
-    for (const [k, d] of Object.entries(shape)) out[k] = d(source[k], p === '' ? k : `${p}.${k}`)
+    for (const [k, d] of Object.entries(shape)) {
+      // Own keys only: a shape key named `toString` or `constructor` would
+      // otherwise decode Object.prototype's member instead of the absence the
+      // input actually carries.
+      const raw = Object.hasOwn(source, k) ? source[k] : undefined
+      out[k] = d(raw, p === '' ? k : `${p}.${k}`)
+    }
     return out as { [K in keyof S]: S[K] extends Decoder<infer T> ? T : never }
   }
 }

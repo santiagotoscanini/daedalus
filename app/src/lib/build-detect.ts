@@ -1,4 +1,5 @@
 import { redactBuildLog } from './builds'
+import { isRecord } from './is-record'
 
 // What Railpack decided an app is, and what about that decision is likely
 // wrong. Pure and client-safe; the build page and the overview render it.
@@ -63,9 +64,6 @@ export type Detection = {
   logs: DetectionLog[]
 }
 
-type Rec = Record<string, unknown>
-
-const isRec = (v: unknown): v is Rec => v !== null && typeof v === 'object' && !Array.isArray(v)
 const text = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : []
@@ -80,9 +78,9 @@ const INFO_KEYS = [
 ]
 
 function pin(resolved: unknown, name: string): VersionPin | null {
-  if (!isRec(resolved)) return null
+  if (!isRecord(resolved)) return null
   const pkg = resolved[name]
-  if (!isRec(pkg)) return null
+  if (!isRecord(pkg)) return null
   const requested = text(pkg.requestedVersion)
   const version = text(pkg.resolvedVersion) ?? requested
   if (version === null) return null
@@ -96,7 +94,7 @@ function pin(resolved: unknown, name: string): VersionPin | null {
  * its own toolchain instead of two em dashes.
  */
 function packagesOf(resolved: unknown): ResolvedPackage[] {
-  if (!isRec(resolved)) return []
+  if (!isRecord(resolved)) return []
   const out: ResolvedPackage[] = []
   for (const name of new Set(['node', 'pnpm', ...Object.keys(resolved)])) {
     const p = pin(resolved, name)
@@ -111,9 +109,9 @@ function packagesOf(resolved: unknown): ResolvedPackage[] {
  * none — a secret NAME is all this ever shows, so no shape of it can leak.
  */
 function secretsOf(plan: unknown): string[] {
-  if (!isRec(plan)) return []
+  if (!isRecord(plan)) return []
   if (Array.isArray(plan.secrets)) return strings(plan.secrets)
-  return isRec(plan.secrets) ? Object.keys(plan.secrets) : []
+  return isRecord(plan.secrets) ? Object.keys(plan.secrets) : []
 }
 
 const RUNTIME_APT_STEP = 'packages:apt:runtime'
@@ -121,12 +119,12 @@ const APT_NAME_PREFIX = 'install apt packages: '
 const APT_CMD = /apt-get install -y ([^'"&|;]+)/
 
 function aptPackagesOf(plan: unknown): string[] {
-  if (!isRec(plan) || !Array.isArray(plan.steps)) return []
+  if (!isRecord(plan) || !Array.isArray(plan.steps)) return []
   const found = new Set<string>()
   for (const step of plan.steps) {
-    if (!isRec(step) || step.name !== RUNTIME_APT_STEP || !Array.isArray(step.commands)) continue
+    if (!isRecord(step) || step.name !== RUNTIME_APT_STEP || !Array.isArray(step.commands)) continue
     for (const command of step.commands) {
-      if (!isRec(command)) continue
+      if (!isRecord(command)) continue
       const custom = text(command.customName)
       const fromCmd = APT_CMD.exec(text(command.cmd) ?? '')?.[1]
       const list = custom?.startsWith(APT_NAME_PREFIX)
@@ -142,7 +140,7 @@ function logsOf(logs: unknown): DetectionLog[] {
   if (!Array.isArray(logs)) return []
   const out: DetectionLog[] = []
   for (const entry of logs) {
-    if (!isRec(entry)) continue
+    if (!isRecord(entry)) continue
     const message = text(entry.Msg) ?? text(entry.msg) ?? text(entry.message)
     if (message === null) continue
     out.push({
@@ -159,10 +157,10 @@ function logsOf(logs: unknown): DetectionLog[] {
  * A failed `prepare` (`success: false`, reason in `logs`) still decodes.
  */
 export function readDetection(info: unknown, plan?: unknown): Detection | null {
-  if (!isRec(info) || !INFO_KEYS.some((k) => k in info)) return null
-  const metadata = isRec(info.metadata) ? info.metadata : {}
+  if (!isRecord(info) || !INFO_KEYS.some((k) => k in info)) return null
+  const metadata = isRecord(info.metadata) ? info.metadata : {}
   const detectedProviders = Array.isArray(info.detectedProviders) ? info.detectedProviders : []
-  const deploy = isRec(plan) && isRec(plan.deploy) ? plan.deploy : {}
+  const deploy = isRecord(plan) && isRecord(plan.deploy) ? plan.deploy : {}
 
   return {
     provider: text(detectedProviders[0]),
@@ -186,7 +184,7 @@ export function readDetection(info: unknown, plan?: unknown): Detection | null {
  * bare info document.
  */
 export function detectionFromStatus(detected: unknown): Detection | null {
-  if (isRec(detected) && 'info' in detected) return readDetection(detected.info, detected.plan)
+  if (isRecord(detected) && 'info' in detected) return readDetection(detected.info, detected.plan)
   return readDetection(detected)
 }
 
@@ -428,7 +426,7 @@ export function appFacts(app: AppRegistration): AppFacts {
 }
 
 const stringMap = (v: unknown): Record<string, string> | undefined => {
-  if (!isRec(v)) return undefined
+  if (!isRecord(v)) return undefined
   const out: Record<string, string> = {}
   for (const [k, x] of Object.entries(v)) if (typeof x === 'string') out[k] = x
   return out
@@ -447,7 +445,7 @@ const stringMap = (v: unknown): Record<string, string> | undefined => {
  * checks that only need Railpack's own output still run.
  */
 export function readRepoFacts(raw: unknown, app: AppFacts): RepoFacts {
-  const r = isRec(raw) ? raw : {}
+  const r = isRecord(raw) ? raw : {}
   const packageManager = text(r.packageManager)
   const scripts = stringMap(r.scripts)
   return {

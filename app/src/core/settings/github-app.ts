@@ -10,6 +10,7 @@ import {
 import { safeEqual } from '../../lib/github-app-crypto'
 import { publicInstallation } from '../../lib/github-token'
 import { getJsonResult } from '../../lib/http'
+import { isRecord } from '../../lib/is-record'
 import { BASE_DOMAIN, OWNER } from '../../lib/site'
 import type { Ctx } from '../ctx'
 import { GITHUB_API, GITHUB_API_VERSION, installationState } from '../github-app'
@@ -56,7 +57,7 @@ const OWNER_ATTEMPTS = [3_000, 8_000]
 const CONVERSION_TIMEOUT_MS = 8_000
 const VAULT_NAME = 'github-app'
 
-export const DISABLED_REASON = 'Waiting for the host to support GitHub Apps (plan step 1).'
+export const DISABLED_REASON = 'Waiting for the host to support GitHub Apps.'
 export const NO_ACTOR_REASON = 'The request carried no signed-in identity, so nothing was done.'
 
 const enabled = (ctx: Ctx): boolean => ctx.env('GITHUB_APP_ENABLED') === '1'
@@ -88,9 +89,6 @@ type CreationRecord = {
   expiresAt: number
   replace: boolean
 }
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  v !== null && typeof v === 'object' && !Array.isArray(v)
 
 const isCreation = (v: unknown): v is CreationRecord =>
   isRecord(v) &&
