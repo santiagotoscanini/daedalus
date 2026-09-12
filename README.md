@@ -62,3 +62,13 @@ The app runs as a `source.mode = "local"` app on the machine it
 manages: the container bind-mounts `app/` and runs the Vite dev server
 against it, so saving a file is the deploy. `CLAUDE.md` has the loop,
 the verification commands and where everything else lives.
+
+None of that is needed to work on it. Node 24, a throwaway Postgres and
+one environment variable are enough, and the checks need nothing at all:
+[CONTRIBUTING.md](CONTRIBUTING.md) — every command in it was run from a
+fresh clone with no host present.
+
+[ARCHITECTURE.md](ARCHITECTURE.md) is how the pieces fit together, and
+why an unprivileged container can drive a machine safely.
+[BUILDS.md](BUILDS.md) is what happens between a push and a running
+container.
