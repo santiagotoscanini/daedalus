@@ -1,12 +1,14 @@
 import { useRouter } from '@tanstack/react-router'
 import { useEffect, useId, useState } from 'react'
 import {
+  boxBuildRefusal,
+  buildEnvSizeError,
   ENV_ENTRIES_MAX,
   type EnvMapKind,
   envEntryError,
   envMapError,
 } from '../../lib/build-settings'
-import type { BuildPublish, BuildStrategy } from '../../lib/builds'
+import { type BuildPublish, type BuildStrategy, RAILPACK_KNOB_NAMES } from '../../lib/builds'
 import { OWNER } from '../../lib/site'
 import { type BuildSettingsResult, setBuildSettingsFn } from '../../server/builds'
 import { Segmented, Toggle } from '../controls'
@@ -25,6 +27,8 @@ export function BuildSettings({ app }: { app: AppRecord }) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // Only blocks turning it on: an app already building can still turn it off.
+  const nameRefusal = app.buildOnBox ? null : boxBuildRefusal(app.name)
 
   const save = async (patch: Record<string, unknown>): Promise<boolean> => {
     setSaving(true)
@@ -53,12 +57,15 @@ export function BuildSettings({ app }: { app: AppRecord }) {
         <div className="flex min-w-0 flex-col gap-3">
           <Toggle
             checked={app.buildOnBox}
-            disabled={saving}
+            disabled={saving || nameRefusal !== null}
             onChange={(v) => {
               void save({ buildOnBox: v })
             }}
             label="Build on this box"
-            hint="Pushes to the repo’s default branch build here, and Build now works. The repo keeps its GitHub Actions workflows until you remove them."
+            hint={
+              nameRefusal ??
+              'Pushes to the repo’s default branch build here, and Build now works. The repo keeps its GitHub Actions workflows until you remove them.'
+            }
           />
           <div className="flex flex-col gap-[0.35rem]">
             <span className={FIELD_LABEL}>Strategy</span>
@@ -143,16 +150,18 @@ export function BuildSettings({ app }: { app: AppRecord }) {
             kind="placeholders"
             title="Build placeholders"
             value={app.buildEnvPlaceholders}
+            other={app.railpackEnv}
             keyPlaceholder="VITE_PUBLIC_URL"
-            help="Env names the build needs set but never uses for real: a build that reads DATABASE_URL at import time, say. Dummy values only, never secrets. The build sees them in the clear, and so does anyone with its log."
+            help="Env names the build needs set but never uses for real: a build that reads DATABASE_URL at import time, say. Dummy values only, never secrets. The build sees them in the clear, and so does anyone with its log. Names the builder’s own tools read are refused: PATH, HOME, GIT_*, NODE_*, NPM_CONFIG_*, PNPM_* and the like."
             onSave={(v) => save({ buildEnvPlaceholders: v })}
           />
           <EnvMapEditor
             kind="railpack"
             title="Railpack switches"
             value={app.railpackEnv}
-            keyPlaceholder="RAILPACK_NODE_PLAYWRIGHT_INSTALL"
-            help="Railpack’s own RAILPACK_* settings, handed to it as they are. Ignored when the build uses the Dockerfile."
+            other={app.buildEnvPlaceholders}
+            keyPlaceholder="RAILPACK_PRUNE_DEPS"
+            help={`The Railpack switches this box passes on: ${RAILPACK_KNOB_NAMES.join(', ')}. Start, build and install commands are not switches here: they belong in the repo’s railpack.json, where they are reviewed with the code. Ignored when the build uses the Dockerfile.`}
             onSave={(v) => save({ railpackEnv: v })}
           />
         </div>
@@ -174,6 +183,7 @@ function EnvMapEditor({
   kind,
   title,
   value,
+  other,
   keyPlaceholder,
   help,
   onSave,
@@ -181,6 +191,8 @@ function EnvMapEditor({
   kind: EnvMapKind
   title: string
   value: Record<string, string>
+  /** The app's other build env map, saved: the size cap is on both together. */
+  other: Record<string, string>
   keyPlaceholder: string
   help: string
   onSave: (v: Record<string, string>) => Promise<boolean>
@@ -198,10 +210,11 @@ function EnvMapEditor({
   const entries = rows
     .filter((r) => r.key.trim() !== '' || r.value !== '')
     .map((r): [string, string] => [r.key.trim(), r.value])
-  const dirty =
-    JSON.stringify(Object.fromEntries(entries)) !== saved ||
-    entries.length !== Object.keys(value).length
-  const problem = envMapError(kind, entries)
+  const draft = Object.fromEntries(entries)
+  const dirty = JSON.stringify(draft) !== saved || entries.length !== Object.keys(value).length
+  const problem =
+    envMapError(kind, entries) ??
+    (kind === 'placeholders' ? buildEnvSizeError(draft, other) : buildEnvSizeError(other, draft))
   const [busy, setBusy] = useState(false)
 
   const set = (id: number, patch: Partial<Row>) => {

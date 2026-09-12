@@ -7,6 +7,7 @@ import {
   buildTimeline,
   deployOutcome,
   detectionParts,
+  reportFailureText,
   sameDigest,
 } from './build-display'
 
@@ -124,6 +125,34 @@ describe('deployOutcome', () => {
       why: 'image-override',
     })
     expect(deployOutcome(base)).toEqual({ kind: 'waiting' })
+  })
+})
+
+describe('reportFailureText', () => {
+  it('says what GitHub refused, how often, and whether retries remain', () => {
+    const f = {
+      step: 'check-run',
+      kind: 'server',
+      status: 502,
+      attempts: 4,
+      at: '2026-09-12T12:00:00Z',
+      gaveUp: true,
+    }
+    expect(reportFailureText(f)).toBe(
+      'Posting the check run to GitHub failed (server, HTTP 502), 4 times. The automatic retries are spent.',
+    )
+    expect(
+      reportFailureText({
+        ...f,
+        step: 'deployment',
+        kind: 'unreachable',
+        status: null,
+        attempts: 1,
+        gaveUp: false,
+      }),
+    ).toBe(
+      'Posting the Deployment to GitHub failed (unreachable), once. It is retried on its own as well.',
+    )
   })
 })
 

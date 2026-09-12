@@ -5,7 +5,7 @@ import type { BuildSettingsPatch } from '../build-settings'
 import { ACTIVE_BUILD_STATES } from '../builds'
 import { db } from '../db'
 import { apps, builds, deployments } from '../schema'
-import { latestSucceeded, listBuilds, toBuildRow } from './builds'
+import { getBuild, latestSucceeded, listBuilds, toBuildRow } from './builds'
 
 // The reads the build UI needs that lib/repo/builds.ts (the queue's own
 // repository) does not have, and the one write to an app's engine-only build
@@ -36,9 +36,11 @@ export async function recentBuilds(appId: string, limit = 10): Promise<BuildSumm
 
 /** The overview's detection line: the last successful main-lane build, or null. */
 export async function overviewBuild(appId: string) {
-  const r = await latestSucceeded(appId)
-  if (r === undefined) return null
-  const row = toBuildRow(r)
+  const latest = await latestSucceeded(appId)
+  if (latest === undefined) return null
+  // The list read carries no detection or warnings: the one build this line
+  // describes is read whole.
+  const row = toBuildRow((await getBuild(latest.id)) ?? latest)
   return {
     summary: summarizeBuild(row),
     detection: detectionFromStatus(row.detected),

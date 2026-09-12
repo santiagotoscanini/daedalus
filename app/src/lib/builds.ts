@@ -87,9 +87,185 @@ export type BuildEnv = {
   railpack: Record<string, string>
 }
 
+export type BuildEnvKind = keyof BuildEnv
+
+// Every limit below is host/build.sh's own (its buildEnv jq check), so a
+// request this decoder passes is one the host accepts.
 export const BUILD_ENV_PLACEHOLDER_RE = /^[A-Z_][A-Z0-9_]{0,63}$/
-export const BUILD_ENV_RAILPACK_RE = /^RAILPACK_[A-Z0-9_]+$/
+export const BUILD_ENV_RAILPACK_RE = /^RAILPACK_[A-Z0-9_]{1,55}$/
 export const BUILD_ENV_VALUE_MAX = 512
+export const BUILD_ENV_ENTRIES_MAX = 40
+/** Both maps together, measured as the request's JSON carries them (buildEnvBytes). */
+export const BUILD_ENV_MAX_BYTES = 32 * 1024
+/** The largest request the engine writes; the host refuses one past 65,536 bytes. */
+export const BUILD_REQUEST_MAX_BYTES = 60 * 1024
+
+/**
+ * Names a placeholder may not take, because the builder's own tools read them
+ * rather than the app: the shell, git, mise, BuildKit, the dynamic loader, and
+ * the package managers, whose variables can point an install at another
+ * registry. host/build.sh RESERVED_ENV_RE holds the same list; change both.
+ */
+export const RESERVED_ENV_NAMES = [
+  'PATH',
+  'HOME',
+  'SHELL',
+  'USER',
+  'LOGNAME',
+  'PWD',
+  'OLDPWD',
+  'IFS',
+  'ENV',
+  'BASH',
+  'BASHOPTS',
+  'SHELLOPTS',
+  'CDPATH',
+  'GLOBIGNORE',
+  'PS4',
+  'UID',
+  'EUID',
+  'PPID',
+  'SHLVL',
+  'TMPDIR',
+  'TZ',
+  'LANG',
+  'LANGUAGE',
+  'TERM',
+  'HOSTNAME',
+  'GITHUB_TOKEN',
+  'GODEBUG',
+  'GOFLAGS',
+  'GOTRACEBACK',
+  'NODE_OPTIONS',
+  'NODE_EXTRA_CA_CERTS',
+  'NO_PROXY',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'FTP_PROXY',
+  'DAEDALUS_TOKEN_FILE',
+] as const
+
+/** Prefixes a placeholder may not start with; see RESERVED_ENV_NAMES. */
+export const RESERVED_ENV_PREFIXES = [
+  'LD_',
+  'BASH_FUNC_',
+  'GIT_',
+  'BUILDKIT_',
+  'BUILDCTL_',
+  'DOCKER_',
+  'MISE_',
+  'RAILPACK_',
+  'XDG_',
+  'LC_',
+  'SSL_',
+  'NIX_SSL_',
+  'CURL_',
+  'SYSTEMD_',
+  'NPM_CONFIG_',
+  'PNPM_',
+  'COREPACK_',
+  'YARN_',
+  'BUN_',
+  'NODE_',
+] as const
+
+export function isReservedEnvName(name: string): boolean {
+  return (
+    (RESERVED_ENV_NAMES as readonly string[]).includes(name) ||
+    RESERVED_ENV_PREFIXES.some((p) => name.startsWith(p))
+  )
+}
+
+type Knob = { ok: (value: string) => boolean; says: string }
+
+const FLAG: Knob = { ok: (v) => /^(?:true|false|1|0)$/.test(v), says: 'true, false, 1 or 0' }
+// Railpack splits a list on single spaces (core/app/environment.go).
+const APT_PACKAGE = '[a-z0-9][a-z0-9+.-]*(?:=[A-Za-z0-9.+~:-]+)?'
+const APT_PACKAGES: Knob = {
+  ok: (v) => new RegExp(`^${APT_PACKAGE}(?: ${APT_PACKAGE})*$`).test(v),
+  says: 'Debian package names, one space apart',
+}
+
+/**
+ * The Railpack switches (v0.39.0) this box passes on, with the values each may
+ * take. Only switches that tune how Railpack builds: every `*_CMD`, the config
+ * file and the install patterns change what runs, and that belongs in the
+ * repo's railpack.json, where it is reviewed with the code. RAILPACK_PACKAGES
+ * is left out too: a mise package can name a backend that runs its own install
+ * code, and `railpack prepare` resolves it on the host.
+ */
+const RAILPACK_KNOBS = new Map<string, Knob>([
+  ['RAILPACK_PRUNE_DEPS', FLAG],
+  ['RAILPACK_NODE_PLAYWRIGHT_INSTALL', FLAG],
+  ['RAILPACK_NO_SPA', FLAG],
+  [
+    'RAILPACK_DISABLE_CACHES',
+    {
+      ok: (v) => /^(?:\*|[A-Za-z0-9_.:-]+(?: [A-Za-z0-9_.:-]+)*)$/.test(v),
+      says: 'cache names one space apart, or *',
+    },
+  ],
+  [
+    'RAILPACK_SPA_OUTPUT_DIR',
+    {
+      // Joined onto /app and served: nothing may climb out of the app.
+      ok: (v) =>
+        /^[A-Za-z0-9._/-]{1,200}$/.test(v) && !v.startsWith('/') && !v.split('/').includes('..'),
+      says: 'a directory inside the repo, such as dist',
+    },
+  ],
+  [
+    'RAILPACK_NODE_VERSION',
+    {
+      ok: (v) => /^\d{1,3}(?:\.\d{1,4}){0,2}$/.test(v),
+      says: 'a Node version number, such as 24 or 24.18.1',
+    },
+  ],
+  ['RAILPACK_BUILD_APT_PACKAGES', APT_PACKAGES],
+  ['RAILPACK_DEPLOY_APT_PACKAGES', APT_PACKAGES],
+])
+
+export const RAILPACK_KNOB_NAMES: readonly string[] = [...RAILPACK_KNOBS.keys()]
+
+/**
+ * Why a well-formed name (it passed its map's pattern) is still refused, as the
+ * rest of a sentence that starts "<NAME> is", or null.
+ */
+export function buildEnvNameRefusal(kind: BuildEnvKind, name: string): string | null {
+  if (kind === 'placeholders') {
+    return isReservedEnvName(name)
+      ? "reserved: the builder's own tools read it (the shell, git, mise, BuildKit, the package managers)"
+      : null
+  }
+  if (name.endsWith('_CMD')) {
+    return "a command, and start, build and install commands belong in the repo's railpack.json"
+  }
+  if (!RAILPACK_KNOBS.has(name)) {
+    return `not a Railpack switch this box passes on (${RAILPACK_KNOB_NAMES.join(', ')})`
+  }
+  return null
+}
+
+/** What a Railpack switch's value must be, when this one is not; null when it fits. */
+export function railpackValueRefusal(name: string, value: string): string | null {
+  const knob = RAILPACK_KNOBS.get(name)
+  return knob === undefined || knob.ok(value) ? null : knob.says
+}
+
+const encoder = new TextEncoder()
+
+/** The request file's exact bytes (lib/build-bridge.ts writes this). */
+export function serializeBuildRequest(req: BuildRequest): string {
+  return `${JSON.stringify(req, null, 2)}\n`
+}
+
+export const buildRequestBytes = (req: BuildRequest): number =>
+  encoder.encode(serializeBuildRequest(req)).length
+
+/** Both maps as the request carries them: the `buildEnv` field, indented as the file is. */
+export const buildEnvBytes = (env: BuildEnv): number =>
+  encoder.encode(JSON.stringify({ buildEnv: env }, null, 2)).length
 
 export type BuildRequest = {
   version: 1
@@ -174,23 +350,38 @@ const unknownValue: Decoder<unknown> = (v) => v
 
 const redacted: Decoder<string> = (v, p) => redactBuildLog(str(v, p))
 
-// Error messages name the key's path but never quote a value.
-function envRecord(nameRe: RegExp, what: string): Decoder<Record<string, string>> {
+// A value reaches the host as one NAME=value line; a NUL cannot be exported.
+const LINE_BREAK_OR_NUL = /[\0\r\n]/
+
+// Error messages name the key's path — and a name once it is a well-formed env
+// identifier — but never quote a value.
+function envRecord(kind: BuildEnvKind): Decoder<Record<string, string>> {
+  const nameRe = kind === 'placeholders' ? BUILD_ENV_PLACEHOLDER_RE : BUILD_ENV_RAILPACK_RE
+  const what = kind === 'placeholders' ? 'placeholder env' : 'RAILPACK_*'
   return (v, p) => {
     if (v === null || typeof v !== 'object' || Array.isArray(v)) {
       throw new DecodeError(p, 'expected an object')
     }
+    const entries = Object.entries(v)
+    if (entries.length > BUILD_ENV_ENTRIES_MAX) {
+      throw new DecodeError(p, `more than ${String(BUILD_ENV_ENTRIES_MAX)} names`)
+    }
     const out: Record<string, string> = {}
-    for (const [k, value] of Object.entries(v)) {
+    for (const [k, value] of entries) {
       // Checked before the assignment: a name like `__proto__` never reaches `out`.
       if (!nameRe.test(k)) throw new DecodeError(p, `expected ${what} names`)
+      const refused = buildEnvNameRefusal(kind, k)
+      if (refused !== null) throw new DecodeError(p, `${k} is ${refused}`)
       const at = `${p}.${k}`
       if (typeof value !== 'string') throw new DecodeError(at, 'expected a string')
       if (value.length > BUILD_ENV_VALUE_MAX) {
         throw new DecodeError(at, `longer than ${String(BUILD_ENV_VALUE_MAX)} characters`)
       }
-      // No process env can carry a NUL; the host would fail to export it.
-      if (value.includes('\0')) throw new DecodeError(at, 'contains a NUL character')
+      if (LINE_BREAK_OR_NUL.test(value)) {
+        throw new DecodeError(at, 'contains a line break or a NUL character')
+      }
+      const shape = kind === 'railpack' ? railpackValueRefusal(k, value) : null
+      if (shape !== null) throw new DecodeError(at, `expected ${shape}`)
       out[k] = value
     }
     return out
@@ -198,8 +389,8 @@ function envRecord(nameRe: RegExp, what: string): Decoder<Record<string, string>
 }
 
 const buildEnvDecoder: Decoder<BuildEnv> = obj({
-  placeholders: envRecord(BUILD_ENV_PLACEHOLDER_RE, 'placeholder env'),
-  railpack: envRecord(BUILD_ENV_RAILPACK_RE, 'RAILPACK_*'),
+  placeholders: envRecord('placeholders'),
+  railpack: envRecord('railpack'),
 })
 
 const buildRequestCore = obj({

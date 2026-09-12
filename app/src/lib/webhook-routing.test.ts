@@ -113,10 +113,11 @@ describe('event helpers', () => {
     expect(repoMove('installation', 'deleted')).toBeNull()
   })
 
-  it('tells the operator a renamed repo still builds its pinned app', () => {
+  it('tells the operator a renamed repo fails its pinned app until the names match again', () => {
     const note = repoMoveNote('renamed', ['iris'])
-    expect(note).toContain('still build iris')
-    expect(note).toContain('renamed later')
+    expect(note).toContain('builds for iris fail')
+    expect(note).toContain('until the app is renamed to match or the repository is renamed back')
+    expect(note).not.toContain('still build')
     expect(repoMoveNote('transferred', ['iris'])).toContain('ignored')
     expect(repoMoveNote('deleted', ['iris', 'hermes'])).toContain('iris, hermes')
   })

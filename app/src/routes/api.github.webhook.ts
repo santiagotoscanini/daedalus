@@ -254,8 +254,9 @@ async function afterInstallationChange(delivery: Delivery): Promise<void> {
     if (move === null || repoId === null) return
     const { listApps } = await import('../lib/repo/apps')
     const pinned = appsPinnedTo(await listApps(), repoId)
-    // Never unpinned here: a rename keeps building (the app is found by id),
-    // and classifyPush already refuses a transferred or recreated repo.
+    // Never unpinned here: a renamed repo's pushes still reach the app by id
+    // (and fail closed at the host until the names match again), and
+    // classifyPush already refuses a transferred or recreated repo.
     if (pinned.length > 0) {
       console.warn(`[github-webhook] delivery ${delivery.id}: ${repoMoveNote(move, pinned)}`)
     }

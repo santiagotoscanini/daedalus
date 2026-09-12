@@ -1,7 +1,7 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { BuildNowButton, BuildStateChip, requesterLabel, useNow } from '../components/apps/builds'
-import { BOARD_FOOT, VIZ_EMPTY } from '../components/apps/shared'
+import { BOARD_FOOT, GHOST_BTN, VIZ_EMPTY } from '../components/apps/shared'
 import { GuardedAwait } from '../components/error'
 import { Crumbs, PageHead } from '../components/page'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
@@ -16,13 +16,20 @@ import {
   type DeployOutcome,
   frameworkName,
   isOpenBuild,
+  reportFailureText,
   sha7,
   type TimelineStep,
 } from '../lib/build-display'
 import { bytes, DASH, ms } from '../lib/format'
 import { OWNER, REGISTRY_HOST } from '../lib/site'
 import type { Tone } from '../lib/tone'
-import { type BuildPageApp, fetchBuild, fetchBuildApp, fetchBuildCommit } from '../server/builds'
+import {
+  type BuildPageApp,
+  fetchBuild,
+  fetchBuildApp,
+  fetchBuildCommit,
+  retryReportFn,
+} from '../server/builds'
 
 // One build on the box: what was built, how it went phase by phase, what
 // Railpack made of the repo, and the log. GitHub's check run links here
@@ -240,6 +247,18 @@ function BuildDetail({
         </Alert>
       )}
 
+      {build.reportFailure !== null && (
+        <Alert variant="warning" className="mb-4">
+          <AlertTitle>
+            {open ? 'GitHub has not heard about this build' : 'GitHub has not heard how it ended'}
+          </AlertTitle>
+          <AlertDescription>
+            <p className="m-0">{reportFailureText(build.reportFailure)}</p>
+            <RetryReportButton app={name} id={build.id} />
+          </AlertDescription>
+        </Alert>
+      )}
+
       <BoardGrid>
         <Board title="Commit" span={6}>
           <Facts
@@ -374,6 +393,45 @@ function BuildDetail({
         </Board>
       </BoardGrid>
     </>
+  )
+}
+
+/** Send a failed GitHub report again now; the page reloads to show what GitHub said. */
+function RetryReportButton({ app, id }: { app: string; id: string }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const run = () => {
+    setBusy(true)
+    setError(null)
+    void retryReportFn({ data: { app, id } })
+      .then(async (r) => {
+        if (!r.ok) setError(r.reason)
+        await router.invalidate()
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        setBusy(false)
+      })
+  }
+
+  return (
+    <span className="mt-2 inline-flex flex-wrap items-center gap-[0.6rem] text-[0.76rem]">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={GHOST_BTN}
+        disabled={busy}
+        onClick={run}
+      >
+        {busy ? 'Sending…' : 'Retry report'}
+      </Button>
+      {error !== null && <span className="text-danger">{error}</span>}
+    </span>
   )
 }
 

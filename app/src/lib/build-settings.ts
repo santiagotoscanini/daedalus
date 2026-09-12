@@ -1,19 +1,30 @@
 import {
+  BUILD_ENV_ENTRIES_MAX,
+  BUILD_ENV_MAX_BYTES,
+  BUILD_ENV_PLACEHOLDER_RE,
+  BUILD_ENV_RAILPACK_RE,
+  BUILD_ENV_VALUE_MAX,
   BUILD_PUBLISH_MODES,
   BUILD_STRATEGIES,
+  type BuildEnvKind,
   type BuildPublish,
   type BuildStrategy,
+  buildEnvBytes,
+  buildEnvNameRefusal,
+  railpackValueRefusal,
 } from './builds'
 
 // Apps › <name> › Settings › Builds: what a request may change. Engine-only
 // columns (lib/schema.ts): nix never reads them, so a save here ships nothing
 // and lights no Apply bar. Client-safe, so the editors show the same verdicts
-// the server enforces.
+// the server enforces. The name and value rules themselves are lib/builds.ts's,
+// shared with the request decoder, so a setting that saves is one the host
+// takes.
 
-export const PLACEHOLDER_NAME_RE = /^[A-Z_][A-Z0-9_]{0,63}$/
-export const RAILPACK_KEY_RE = /^RAILPACK_[A-Z0-9_]{1,55}$/
-export const ENV_VALUE_MAX = 512
-export const ENV_ENTRIES_MAX = 40
+export const PLACEHOLDER_NAME_RE = BUILD_ENV_PLACEHOLDER_RE
+export const RAILPACK_KEY_RE = BUILD_ENV_RAILPACK_RE
+export const ENV_VALUE_MAX = BUILD_ENV_VALUE_MAX
+export const ENV_ENTRIES_MAX = BUILD_ENV_ENTRIES_MAX
 const APP_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/
 // A value reaches the build as one env line; a newline in it would be a second.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point.
@@ -27,7 +38,7 @@ export type BuildSettingsPatch = {
   railpackEnv?: Record<string, string>
 }
 
-export type EnvMapKind = 'placeholders' | 'railpack'
+export type EnvMapKind = BuildEnvKind
 
 const KEY_RULE: Record<EnvMapKind, { re: RegExp; says: string }> = {
   placeholders: {
@@ -36,8 +47,19 @@ const KEY_RULE: Record<EnvMapKind, { re: RegExp; says: string }> = {
   },
   railpack: {
     re: RAILPACK_KEY_RE,
-    says: 'RAILPACK_ followed by capital letters, digits and underscores',
+    says: 'RAILPACK_ followed by capital letters, digits and underscores, 64 at most',
   },
+}
+
+/**
+ * Why this app may not turn on Build on this box, or null. The builder
+ * namespaces cache mounts as `<app>-…`, so a `-` in the name could reach
+ * another app's caches, and host/build.sh refuses the build.
+ */
+export function boxBuildRefusal(app: string): string | null {
+  return app.includes('-')
+    ? `${app} cannot build on this box: the builder names each app's caches <app>-…, so an app name containing '-' could share another app's. Rename the app to build it here.`
+    : null
 }
 
 /** Why one entry would be refused, or null. */
@@ -45,10 +67,14 @@ export function envEntryError(kind: EnvMapKind, key: string, value: string): str
   const rule = KEY_RULE[kind]
   if (key === '') return 'Every entry needs a name.'
   if (!rule.re.test(key)) return `${key} is not a valid name: ${rule.says}.`
+  const refused = buildEnvNameRefusal(kind, key)
+  if (refused !== null) return `${key} is ${refused}.`
   if (value.length > ENV_VALUE_MAX) {
     return `${key} is longer than ${String(ENV_VALUE_MAX)} characters.`
   }
   if (CONTROL.test(value)) return `${key} holds a line break or control character.`
+  const shape = kind === 'railpack' ? railpackValueRefusal(key, value) : null
+  if (shape !== null) return `${key} must be ${shape}.`
   return null
 }
 
@@ -65,6 +91,20 @@ export function envMapError(kind: EnvMapKind, entries: [string, string][]): stri
     seen.add(k)
   }
   return null
+}
+
+/**
+ * Why the two maps are too big together, or null: measured as the build
+ * request's JSON will carry them, against BUILD_ENV_MAX_BYTES.
+ */
+export function buildEnvSizeError(
+  placeholders: Record<string, string>,
+  railpack: Record<string, string>,
+): string | null {
+  const bytes = buildEnvBytes({ placeholders, railpack })
+  if (bytes <= BUILD_ENV_MAX_BYTES) return null
+  const kib = (n: number) => `${(n / 1024).toFixed(1)} KiB`
+  return `Build placeholders and Railpack switches come to ${kib(bytes)} together; a build request carries at most ${kib(BUILD_ENV_MAX_BYTES)}.`
 }
 
 function envMap(kind: EnvMapKind, field: string, v: unknown): Record<string, string> {
@@ -85,6 +125,9 @@ function envMap(kind: EnvMapKind, field: string, v: unknown): Record<string, str
  * A request body into an app name and a patch, or an error naming what was
  * wrong. Unknown keys are refused rather than dropped: a typo that saves
  * nothing would look like a save.
+ *
+ * The size cap sees only the maps in the patch; the server function checks it
+ * again with the stored map the patch leaves alone.
  */
 export function validateBuildSettings(input: unknown): { app: string; patch: BuildSettingsPatch } {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
@@ -123,5 +166,13 @@ export function validateBuildSettings(input: unknown): { app: string; patch: Bui
     }
   }
   if (Object.keys(patch).length === 0) throw new Error('nothing to change')
+  if (patch.buildOnBox === true) {
+    const refused = boxBuildRefusal(app)
+    if (refused !== null) throw new Error(refused)
+  }
+  if (patch.buildEnvPlaceholders !== undefined || patch.railpackEnv !== undefined) {
+    const tooBig = buildEnvSizeError(patch.buildEnvPlaceholders ?? {}, patch.railpackEnv ?? {})
+    if (tooBig !== null) throw new Error(tooBig)
+  }
   return { app, patch }
 }

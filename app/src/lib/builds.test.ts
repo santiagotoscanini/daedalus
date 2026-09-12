@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BUILD_REQUEST_MAX_BYTES,
   buildLogPath,
   buildRequest,
+  buildRequestBytes,
   buildRequestDecoder,
   buildStatusDecoder,
+  isReservedEnvName,
+  RAILPACK_KNOB_NAMES,
+  RESERVED_ENV_NAMES,
+  RESERVED_ENV_PREFIXES,
   redactBuildLog,
+  serializeBuildRequest,
   tailFromBytes,
 } from './builds'
 import { DecodeError, decode } from './contract/decode'
@@ -148,9 +155,43 @@ describe('build request env', () => {
       R,
     ],
     ['a bare RAILPACK_', { placeholders: {}, railpack: { RAILPACK_: '1' } }, R],
+    [
+      'a Railpack name past 64 chars',
+      { placeholders: {}, railpack: { [`RAILPACK_${'A'.repeat(56)}`]: '1' } },
+      R,
+    ],
+    ['a reserved placeholder', { placeholders: { NPM_CONFIG_REGISTRY: 'x' }, railpack: {} }, P],
+    ['a placeholder under NODE_', { placeholders: { NODE_ENV: 'production' }, railpack: {} }, P],
+    ['a Railpack command', { placeholders: {}, railpack: { RAILPACK_START_CMD: 'x' } }, R],
+    [
+      'a Railpack switch this box does not pass on',
+      { placeholders: {}, railpack: { RAILPACK_PACKAGES: 'node' } },
+      R,
+    ],
+    [
+      'more than 40 names in one map',
+      {
+        placeholders: Object.fromEntries(
+          Array.from({ length: 41 }, (_, i) => [`K${String(i)}`, 'v']),
+        ),
+        railpack: {},
+      },
+      P,
+    ],
     ['a non-string value', { placeholders: { A: 1 }, railpack: {} }, `${P}.A`],
     ['a value past 512 chars', { placeholders: { A: 'x'.repeat(513) }, railpack: {} }, `${P}.A`],
-    ['a NUL in a value', { placeholders: {}, railpack: { RAILPACK_X: 'a\0b' } }, `${R}.RAILPACK_X`],
+    [
+      'a NUL in a value',
+      { placeholders: {}, railpack: { RAILPACK_PRUNE_DEPS: 'a\0b' } },
+      `${R}.RAILPACK_PRUNE_DEPS`,
+    ],
+    ['a line feed in a value', { placeholders: { A: 'a\nB=b' }, railpack: {} }, `${P}.A`],
+    ['a carriage return in a value', { placeholders: { A: 'a\rb' }, railpack: {} }, `${P}.A`],
+    [
+      'a Railpack value Railpack would not read as meant',
+      { placeholders: {}, railpack: { RAILPACK_SPA_OUTPUT_DIR: '../..' } },
+      `${R}.RAILPACK_SPA_OUTPUT_DIR`,
+    ],
     ['a missing half', { placeholders: {} }, R],
     ['an array', [], 'buildEnv'],
   ])('refuses %s', (_label, value, path) => {
@@ -179,6 +220,92 @@ describe('build request env', () => {
       expect(caught).toBeInstanceOf(DecodeError)
       expect((caught as Error).message).not.toContain(secretish)
     }
+  })
+})
+
+describe('the reserved placeholder names', () => {
+  // host/build.sh RESERVED_ENV_RE as of 2026-09-12. The engine's list is exactly
+  // this plus the package-manager prefixes: a change on either side fails here.
+  const HOST_RESERVED_ENV_RE =
+    '^(PATH|HOME|SHELL|USER|LOGNAME|PWD|OLDPWD|IFS|ENV|BASH|BASHOPTS|SHELLOPTS|CDPATH|GLOBIGNORE|PS4|UID|EUID|PPID|SHLVL|TMPDIR|TZ|LANG|LANGUAGE|TERM|HOSTNAME|GITHUB_TOKEN|GODEBUG|GOFLAGS|GOTRACEBACK|NODE_OPTIONS|NODE_EXTRA_CA_CERTS|NO_PROXY|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|FTP_PROXY|DAEDALUS_TOKEN_FILE)$|^(LD_|BASH_FUNC_|GIT_|BUILDKIT_|BUILDCTL_|DOCKER_|MISE_|RAILPACK_|XDG_|LC_|SSL_|NIX_SSL_|CURL_|SYSTEMD_)'
+  const ADDED = ['NPM_CONFIG_', 'PNPM_', 'COREPACK_', 'YARN_', 'BUN_', 'NODE_']
+
+  it('mirror host/build.sh name for name, plus the package-manager prefixes', () => {
+    const [, exact = '', prefixes = ''] =
+      /^\^\((.*)\)\$\|\^\((.*)\)$/.exec(HOST_RESERVED_ENV_RE) ?? []
+    expect([...RESERVED_ENV_NAMES]).toEqual(exact.split('|'))
+    expect(RESERVED_ENV_PREFIXES.filter((p) => !ADDED.includes(p))).toEqual(prefixes.split('|'))
+    expect(RESERVED_ENV_PREFIXES.filter((p) => ADDED.includes(p))).toEqual(ADDED)
+  })
+
+  it('refuse what the host refuses, and the added prefixes on top', () => {
+    const host = new RegExp(HOST_RESERVED_ENV_RE)
+    for (const name of [
+      'PATH',
+      'LD_PRELOAD',
+      'GIT_DIR',
+      'RAILPACK_X',
+      'SYSTEMD_EXEC_PID',
+      'DATABASE_URL',
+      'PATHS',
+      'MY_PATH',
+    ]) {
+      expect(isReservedEnvName(name)).toBe(host.test(name))
+    }
+    for (const p of ADDED) expect(isReservedEnvName(`${p}REGISTRY`)).toBe(true)
+  })
+})
+
+describe('Railpack switches', () => {
+  it('are exactly the tuning switches, no command among them', () => {
+    expect([...RAILPACK_KNOB_NAMES].sort()).toEqual([
+      'RAILPACK_BUILD_APT_PACKAGES',
+      'RAILPACK_DEPLOY_APT_PACKAGES',
+      'RAILPACK_DISABLE_CACHES',
+      'RAILPACK_NODE_PLAYWRIGHT_INSTALL',
+      'RAILPACK_NODE_VERSION',
+      'RAILPACK_NO_SPA',
+      'RAILPACK_PRUNE_DEPS',
+      'RAILPACK_SPA_OUTPUT_DIR',
+    ])
+    for (const k of RAILPACK_KNOB_NAMES) expect(k).not.toMatch(/_CMD$/)
+  })
+
+  it('decode with the values Railpack reads', () => {
+    const railpack = {
+      RAILPACK_PRUNE_DEPS: 'true',
+      RAILPACK_DEPLOY_APT_PACKAGES: 'ffmpeg chromium',
+      RAILPACK_SPA_OUTPUT_DIR: 'dist',
+      RAILPACK_NODE_VERSION: '24',
+      RAILPACK_DISABLE_CACHES: '*',
+    }
+    const decoded = decode(buildRequestDecoder, {
+      ...request,
+      buildEnv: { placeholders: {}, railpack },
+    })
+    expect(decoded.buildEnv?.railpack).toEqual(railpack)
+  })
+})
+
+describe('request size', () => {
+  it('measures the exact bytes the bridge writes, under the host ceiling', () => {
+    const r = buildRequest({
+      id: ID,
+      app: 'iris',
+      sha: SHA,
+      repoId: 1,
+      strategy: 'auto',
+      publish: 'live',
+      requestedBy: 'webhook',
+      at: new Date('2026-09-11T20:00:00Z'),
+      buildEnv: { placeholders: { A: '€' }, railpack: {} },
+    })
+    const text = serializeBuildRequest(r)
+    expect(text).toBe(`${JSON.stringify(r, null, 2)}\n`)
+    expect(buildRequestBytes(r)).toBe(Buffer.byteLength(text, 'utf8'))
+    expect(buildRequestBytes(r)).toBeGreaterThan(text.length)
+    expect(BUILD_REQUEST_MAX_BYTES).toBe(60 * 1024)
+    expect(BUILD_REQUEST_MAX_BYTES).toBeLessThan(65_536)
   })
 })
 

@@ -37,8 +37,37 @@ export type DeployOutcome =
   | { kind: 'waiting' }
   | { kind: 'deployed'; result: string; at: string; httpCode: string | null }
 
+/** Posting a build to GitHub failed: core/builds/report.ts `ReportFailure`, for the wire. */
+export type BuildReportFailure = {
+  step: string
+  kind: string
+  status: number | null
+  attempts: number
+  at: string
+  /** The automatic retries are spent: only Retry report sends it again. */
+  gaveUp: boolean
+}
+
+const REPORT_STEPS: Record<string, string> = {
+  'check-run': 'the check run',
+  deployment: 'the Deployment',
+  'deployment-status': 'the Deployment’s status',
+}
+
+/** One sentence for the build page: what GitHub refused, how often, and what happens next. */
+export function reportFailureText(f: BuildReportFailure): string {
+  const what = REPORT_STEPS[f.step] ?? f.step
+  const why = f.status === null ? f.kind : `${f.kind}, HTTP ${String(f.status)}`
+  const tries = f.attempts === 1 ? 'once' : `${String(f.attempts)} times`
+  return `Posting ${what} to GitHub failed (${why}), ${tries}. ${
+    f.gaveUp ? 'The automatic retries are spent.' : 'It is retried on its own as well.'
+  }`
+}
+
 export type BuildView = BuildSummary & {
   app: string
+  /** The last failed attempt to tell GitHub about this build, while it is unreported. */
+  reportFailure: BuildReportFailure | null
   detection: Detection | null
   warnings: DetectionWarning[]
   checks: BuildChecks | null

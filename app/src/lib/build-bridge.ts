@@ -14,6 +14,7 @@ import {
   type EnvReader,
   NO_BUILD,
   redactBuildLog,
+  serializeBuildRequest,
   tailFromBytes,
 } from './builds'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
@@ -36,7 +37,8 @@ export async function requestBuild(req: BuildRequest, env: EnvReader = processEn
   const checked = buildRequestDecoder(req, '')
   const dir = applyDir(env)
   await mkdir(dir, { recursive: true })
-  await writeAtomic(join(dir, BUILD_REQUEST_FILE), `${JSON.stringify(checked, null, 2)}\n`)
+  // The same bytes the scheduler measured against BUILD_REQUEST_MAX_BYTES.
+  await writeAtomic(join(dir, BUILD_REQUEST_FILE), serializeBuildRequest(checked))
 }
 
 /**

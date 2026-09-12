@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   build: undefined as unknown,
   active: [] as unknown[],
   unreported: [] as unknown[],
+  unreportedArgs: [] as unknown[][],
   latest: undefined as unknown,
   marks: [] as [string, unknown][],
   app: undefined as unknown,
@@ -53,8 +54,9 @@ vi.mock('../../lib/repo/builds', () => ({
     h.marks.push([id, report])
   },
   activeBuilds: async () => h.active,
-  unreportedBuilds: async () => {
+  unreportedBuilds: async (...args: unknown[]) => {
     boom('unreported')
+    h.unreportedArgs.push(args)
     return h.unreported
   },
   latestSucceeded: async () => h.latest,
@@ -367,6 +369,38 @@ describe('the check run', () => {
     ;(h.site as { doc: { github: unknown } }).doc.github = { app: null }
     await reportBuildChange(ctx, row({ state: 'cloning' }))
     expect(h.calls).toEqual([])
+  })
+})
+
+describe('list rows', () => {
+  it('complete the check run with what the whole build holds', async () => {
+    h.build = row({
+      state: 'failed',
+      phase: 'checking',
+      error: 'check failed: lint',
+      checkRunId: 77,
+      checks: { ran: ['lint'], failed: 'lint' },
+      timings: { checking: 5_000 },
+      warnings: [{ code: 'railpack', message: 'Railpack says pin Node' }],
+    })
+    // What the scheduler hands over: a list row, with none of the four.
+    await reportBuildChange(
+      ctx,
+      row({ state: 'failed', phase: 'checking', error: 'check failed: lint', checkRunId: 77 }),
+    )
+    const body = h.calls[0]?.body as { output?: { summary?: string } } | undefined
+    const s = body?.output?.summary ?? ''
+    expect(s).toContain('Checks: `lint`; failed: `lint`')
+    expect(s).toContain('Timings: checking 5.0 s')
+    expect(s).toContain('- Railpack says pin Node')
+  })
+
+  it('the tick reads unreported builds of the last 24 hours, twenty at most', async () => {
+    h.unreportedArgs = []
+    await reportTick(ctx)
+    const [since, limit] = (h.unreportedArgs[0] ?? []) as [Date, number]
+    expect(since.getTime()).toBe(T0 - 24 * 60 * 60_000)
+    expect(limit).toBe(20)
   })
 })
 

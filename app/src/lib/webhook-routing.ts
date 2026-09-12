@@ -71,15 +71,20 @@ export function repoMove(event: string, action: string | null): RepoMove | null 
 }
 
 /**
- * The operator's warning for apps pinned to a repository that moved. Pushes are
- * matched on the pinned id, so a rename keeps building; a transfer leaves the
- * App owner's account, which classifyPush refuses.
+ * The operator's warning for apps pinned to a repository that moved. A push
+ * from a renamed repository still reaches its app (matched on the pinned id),
+ * but the builder mints its token for, and reads, the repository by the APP's
+ * name, and the reporter posts to that name too, so the build fails closed. A
+ * transfer leaves the App owner's account, which classifyPush refuses.
+ *
+ * Later: carrying the repository's current name in the build request would
+ * let a rename keep building. That is a change to the host's contract.
  */
 export function repoMoveNote(move: RepoMove, pinned: readonly string[]): string {
   const names = pinned.join(', ')
   switch (move) {
     case 'renamed':
-      return `repository pinned by ${names} was renamed; pushes still build ${names} (matched by repository id), and the app may be renamed later to match`
+      return `repository pinned by ${names} was renamed; builds for ${names} fail until the app is renamed to match or the repository is renamed back`
     case 'transferred':
       return `repository pinned by ${names} was transferred; the pin is kept, and pushes from outside the App owner's account are ignored`
     case 'deleted':

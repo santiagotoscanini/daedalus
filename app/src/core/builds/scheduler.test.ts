@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
   queued: [] as unknown[],
   builds: new Map<string, unknown>(),
   latest: undefined as unknown,
+  history: [] as unknown[],
   claim: undefined as unknown,
   update: undefined as unknown,
   apps: [] as unknown[],
@@ -72,6 +73,7 @@ vi.mock('../../lib/repo/builds', async (importOriginal) => {
     queuedBuilds: async () => h.queued,
     getBuild: async (id: string) => h.builds.get(id),
     latestSucceeded: async () => h.latest,
+    buildsOfSha: async () => h.history,
     claimQueued: async (id: string, now: Date) => {
       h.calls.claim.push(id)
       return typeof h.claim === 'function'
@@ -137,8 +139,16 @@ const ctx = {
 vi.mock('../ctx', () => ({ makeCtx: async () => ctx }))
 
 const scheduler = await import('./scheduler')
-const { freshState, runSweep, runTick, planDispatch, BOX_BUILDS_OFF, NO_INSTALLATION, PICKUP_MS } =
-  scheduler
+const {
+  freshState,
+  runSweep,
+  runTick,
+  planDispatch,
+  BOX_BUILDS_OFF,
+  NO_INSTALLATION,
+  PICKUP_MS,
+  REQUEST_TOO_LARGE,
+} = scheduler
 
 function row(over: Partial<BuildRow> = {}): BuildRow {
   return {
@@ -230,6 +240,7 @@ beforeEach(() => {
   h.queued = []
   h.builds = new Map()
   h.latest = undefined
+  h.history = []
   h.claim = undefined
   h.update = (id: string, patch: Rec) => ({ ...record(row({ id })), ...patch })
   h.apps = [app()]
@@ -344,6 +355,35 @@ describe('dispatch', () => {
     expect([id, source]).toEqual([ID, 'engine'])
     expect((patch as Rec).state).toBe('failed')
     expect((patch as Rec).error).toMatch(/^request refused: buildEnv\.railpack/)
+  })
+
+  it('fails a build whose env a stored setting carried past the rules', async () => {
+    h.queued = [row()]
+    h.apps = [app({ railpackEnv: { RAILPACK_START_CMD: 'node evil.mjs' } })]
+    await runTick(ctx, NOW, freshState(NOW.getTime()))
+    expect(h.calls.request).toEqual([])
+    expect((h.calls.update[0]?.[1] as Rec | undefined)?.error).toContain(
+      "RAILPACK_START_CMD is a command, and start, build and install commands belong in the repo's railpack.json",
+    )
+  })
+
+  it('fails a request too large to write, without claiming it', async () => {
+    h.queued = [row()]
+    const placeholders = Object.fromEntries(
+      Array.from({ length: 40 }, (_, i) => [`K${String(i)}`, '€'.repeat(512)]),
+    )
+    h.apps = [app({ buildEnvPlaceholders: placeholders, railpackEnv: {} })]
+    await runTick(ctx, NOW, freshState(NOW.getTime()))
+    expect(h.calls.claim).toEqual([])
+    expect(h.calls.request).toEqual([])
+    expect(h.calls.update).toEqual([
+      [
+        ID,
+        { state: 'failed', error: REQUEST_TOO_LARGE, phase: 'failed', updatedAt: NOW },
+        'engine',
+      ],
+    ])
+    expect(REQUEST_TOO_LARGE).toBe('request refused: too large')
   })
 
   it('does not dispatch while the host reports a fresh unfinished build', async () => {
@@ -490,6 +530,55 @@ describe('status', () => {
     expect(h.calls.report).toHaveLength(0)
   })
 
+  it('writes detection only when it changed, and never a list row’s empty fields', async () => {
+    const detected = { info: { railpackVersion: '0.39.0' } }
+    const running = row({ state: 'detecting', phase: 'railpack prepare', startedAt: NOW })
+    const state = freshState(NOW.getTime())
+    const beat = async (at: Date, over: Partial<BuildStatus>, rowHeardAt: Date) => {
+      h.active = [{ ...running, updatedAt: rowHeardAt }]
+      setStatus(
+        status({
+          state: 'detecting',
+          phase: 'railpack prepare',
+          updatedAt: at.toISOString(),
+          ...over,
+        }),
+      )
+      await runTick(ctx, at, state)
+      return h.calls.update.at(-1)?.[1] as Rec
+    }
+
+    const t1 = NOW
+    const first = await beat(
+      t1,
+      { detected, timings: { cloning: 900 } },
+      new Date(t1.getTime() - 20_000),
+    )
+    expect(first).toMatchObject({ detected, timings: { cloning: 900 } })
+    expect(first).not.toHaveProperty('checks')
+    expect(state.detectedSeen).toMatchObject({ id: ID })
+
+    const t2 = new Date(t1.getTime() + 20_000)
+    const second = await beat(
+      t2,
+      { detected: structuredClone(detected), timings: { cloning: 900 } },
+      t1,
+    )
+    expect(h.calls.update).toHaveLength(2)
+    expect(second).not.toHaveProperty('detected')
+    expect(second).toMatchObject({ timings: { cloning: 900 } })
+
+    const changed = { info: { railpackVersion: '0.39.0', detectedProviders: ['node'] } }
+    const t3 = new Date(t2.getTime() + 20_000)
+    expect(await beat(t3, { detected: changed }, t2)).toMatchObject({ detected: changed })
+
+    // A status that carries none of them writes none of them.
+    const t4 = new Date(t3.getTime() + 20_000)
+    const bare = await beat(t4, {}, t3)
+    for (const k of ['detected', 'checks', 'timings', 'warnings'])
+      expect(bare).not.toHaveProperty(k)
+  })
+
   it('fails a row whose status went stale as interrupted', async () => {
     const old = new Date(NOW.getTime() - 120_000)
     h.active = [row({ state: 'building', phase: 'building image', startedAt: old, updatedAt: old })]
@@ -499,6 +588,7 @@ describe('status', () => {
     const [id, patch, source] = h.calls.update[0] ?? []
     expect([id, source]).toEqual([ID, 'engine'])
     expect(patch).toMatchObject({ state: 'failed', error: 'interrupted' })
+    for (const k of ['detected', 'checks', 'timings']) expect(patch).not.toHaveProperty(k)
     expect((h.calls.report[0] as BuildRow).state).toBe('failed')
   })
 
@@ -547,6 +637,15 @@ describe('status', () => {
     await runTick(ctx, new Date(NOW.getTime() + 3_000), state)
     await runTick(ctx, new Date(NOW.getTime() + 6_000), state)
     expect(h.calls.insert).toHaveLength(1)
+  })
+
+  it('does not enqueue the tip of a superseded build when that tip last failed', async () => {
+    h.active = [row({ state: 'cloning', startedAt: NOW, updatedAt: NOW })]
+    setStatus(status({ state: 'superseded', tip: TIP }))
+    h.history = [row({ id: ID2, sha: TIP, state: 'failed', error: 'check failed: lint' })]
+    await runTick(ctx, NOW, freshState(NOW.getTime()))
+    expect(h.calls.update).toHaveLength(1)
+    expect(h.calls.insert).toEqual([])
   })
 
   it('does not enqueue the tip when a concurrent tick already moved the row', async () => {
@@ -642,6 +741,39 @@ describe('sweep', () => {
     expect(h.calls.insert).toEqual([])
   })
 
+  it('does not rebuild a HEAD whose last build failed, hour after hour', async () => {
+    h.apps = [app({ githubRepoId: 101 })]
+    h.repos = { ok: true, repos: [repo(101, 'iris')], total: 1 }
+    h.heads = { '/repos/octo/iris/commits/main': TIP }
+    h.history = [row({ sha: TIP, state: 'failed', error: 'check failed: lint', startedAt: NOW })]
+
+    for (let hour = 0; hour < 3; hour++) {
+      const at = new Date(NOW.getTime() + hour * 3_600_000)
+      expect((await runSweep(ctx, at, freshState(at.getTime()))).enqueued).toEqual([])
+    }
+    expect(h.calls.gh).toHaveLength(3)
+    expect(h.calls.insert).toEqual([])
+  })
+
+  it('tries a HEAD the engine failed as interrupted once more, then leaves it', async () => {
+    h.apps = [app({ githubRepoId: 101 })]
+    h.repos = { ok: true, repos: [repo(101, 'iris')], total: 1 }
+    h.heads = { '/repos/octo/iris/commits/main': TIP }
+    const firstTry = row({
+      sha: TIP,
+      state: 'failed',
+      error: 'interrupted',
+      createdAt: new Date(NOW.getTime() - 7_200_000),
+    })
+
+    h.history = [firstTry]
+    expect((await runSweep(ctx, NOW, freshState(NOW.getTime()))).enqueued).toEqual(['iris'])
+
+    h.history = [row({ id: ID2, sha: TIP, state: 'failed', error: 'interrupted' }), firstTry]
+    expect((await runSweep(ctx, NOW, freshState(NOW.getTime()))).enqueued).toEqual([])
+    expect(h.calls.insert).toHaveLength(1)
+  })
+
   it('never reads HEAD for an app with box builds off', async () => {
     h.apps = [app({ githubRepoId: 101, buildOnBox: false })]
     h.repos = { ok: true, repos: [repo(101, 'iris')], total: 1 }
@@ -678,8 +810,20 @@ describe('sweep', () => {
 })
 
 describe('ensureScheduler', () => {
-  const SLOT = 'daedalusBuildSchedulerV1'
+  const SLOT = 'daedalusBuildSchedulerV2'
+  const V1 = 'daedalusBuildSchedulerV1'
   const g = globalThis as unknown as Record<string, unknown>
+
+  /** A scheduler as the previous version of the module left it running. */
+  function plantV1(state: unknown) {
+    const tick = vi.fn(async () => undefined)
+    const handle = setInterval(() => {
+      const v = g[V1] as { tick?: () => unknown } | undefined
+      void v?.tick?.()
+    }, 3_000)
+    g[V1] = { handle, tick, state }
+    return { tick, handle }
+  }
 
   it('starts one interval, ticks at 30 s idle, and sweeps a minute after start', async () => {
     vi.useFakeTimers({ now: NOW })
@@ -769,5 +913,47 @@ describe('ensureScheduler', () => {
     await import('./scheduler')
     expect(g[SLOT]).toBeUndefined()
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('retires the scheduler the previous key runs, carrying its state over in place', async () => {
+    vi.useFakeTimers({ now: NOW })
+    const { detectedSeen: _seen, ...v1State } = freshState(NOW.getTime())
+    const planted: Rec = { ...v1State, pending: { id: ID, at: NOW.getTime() } }
+    const old = plantV1(planted)
+    const clear = vi.spyOn(globalThis, 'clearInterval')
+
+    // What a Vite save does: the new module evaluates while the old interval runs.
+    vi.resetModules()
+    await import('./scheduler')
+    expect(g[V1]).toBeUndefined()
+    expect(clear).toHaveBeenCalledWith(old.handle)
+    const slot = g[SLOT] as { state: unknown }
+    expect(slot.state).toBe(planted)
+    expect(planted).toMatchObject({ detectedSeen: null, pending: { id: ID } })
+
+    await vi.advanceTimersByTimeAsync(9_000)
+    expect(old.tick).not.toHaveBeenCalled()
+    expect(h.calls.readStatus).toBeGreaterThan(0)
+    expect(vi.getTimerCount()).toBe(1)
+  })
+
+  it('starts afresh when the previous key held a state of another shape', async () => {
+    vi.useFakeTimers({ now: NOW })
+    plantV1({ busy: 'yes' })
+    scheduler.ensureScheduler()
+    expect(g[V1]).toBeUndefined()
+    expect((g[SLOT] as { state: unknown }).state).toMatchObject({ busy: null, detectedSeen: null })
+    expect(vi.getTimerCount()).toBe(1)
+  })
+
+  it('stops an old scheduler that comes back after the takeover, within a tick', async () => {
+    vi.useFakeTimers({ now: NOW })
+    scheduler.ensureScheduler()
+    await vi.advanceTimersByTimeAsync(1_000)
+    plantV1(freshState(NOW.getTime()))
+    expect(vi.getTimerCount()).toBe(2)
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(g[V1]).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(1)
   })
 })

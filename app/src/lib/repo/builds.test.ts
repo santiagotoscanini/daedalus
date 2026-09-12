@@ -1,9 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs'
+import { getTableColumns } from 'drizzle-orm'
 import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core'
 import { describe, expect, it } from 'vitest'
 import type { Executor } from '../db'
 import { builds } from '../schema'
 import {
+  BUILD_LIST_COLUMNS,
   type BuildRecord,
   type BuildStatusPatch,
   claimQueued,
@@ -11,7 +13,10 @@ import {
   getBuild,
   insertOrSupersedeQueued,
   isQueuedLaneConflict,
+  listBuildsQuery,
   toBuildRow,
+  UNREPORTED_LIMIT,
+  unreportedBuildsQuery,
 } from './builds'
 
 // No database here (vitest points DATABASE_URL at a closed port): these pin the
@@ -218,6 +223,56 @@ describe('getBuild', () => {
   it('answers a malformed id without querying', async () => {
     // A query would reject with a connection refusal, not resolve.
     await expect(getBuild('../../etc/passwd')).resolves.toBeUndefined()
+  })
+})
+
+describe('list reads', () => {
+  const HEAVY = ['detected', 'checks', 'timings', 'warnings']
+  const heavyColumn = /"(detected|checks|timings|warnings)"/
+
+  it('select every column but detected, checks, timings and warnings', () => {
+    for (const k of HEAVY) expect(BUILD_LIST_COLUMNS).not.toHaveProperty(k)
+    expect(Object.keys(BUILD_LIST_COLUMNS).sort()).toEqual(
+      Object.keys(getTableColumns(builds))
+        .filter((k) => !HEAVY.includes(k))
+        .sort(),
+    )
+    const { sql } = listBuildsQuery(ID).toSQL()
+    expect(sql).not.toMatch(heavyColumn)
+    expect(sql).toContain('"builds"."sha"')
+  })
+
+  it('come back from the claim too', () => {
+    expect(claimQueuedQuery(ID, AT).toSQL().sql).not.toMatch(heavyColumn)
+  })
+
+  it('read unreported builds of the window only, newest first, twenty at most', () => {
+    const since = new Date('2026-09-10T00:00:00Z')
+    const { sql, params } = unreportedBuildsQuery(since).toSQL()
+    expect(sql).toMatch(/"builds"\."updated_at" >= \$\d+/)
+    expect(sql).toContain('order by "builds"."updated_at" desc')
+    expect(sql).toMatch(/ limit \$\d+$/)
+    expect(sql).not.toMatch(heavyColumn)
+    expect(params).toContain(since.toISOString())
+    expect(params).toContain(UNREPORTED_LIMIT)
+    expect(UNREPORTED_LIMIT).toBe(20)
+  })
+
+  it('hand the queue a row with no detection, checks, timings or warnings', () => {
+    const {
+      detected: _d,
+      checks: _c,
+      timings: _t,
+      warnings: _w,
+      ...list
+    } = record({ detected: { info: {} }, checks: { ran: ['lint'], failed: null } })
+    expect(toBuildRow({ ...list, app: 'demo' })).toMatchObject({
+      detected: null,
+      checks: null,
+      timings: {},
+      warnings: [],
+      checkRunId: 38_000_000_001,
+    })
   })
 })
 

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  boxBuildRefusal,
+  buildEnvSizeError,
   ENV_ENTRIES_MAX,
   envEntryError,
   envMapError,
   validateBuildSettings,
 } from './build-settings'
+import { buildEnvBytes } from './builds'
 
 describe('validateBuildSettings', () => {
   it('accepts every field with a valid value', () => {
@@ -72,6 +75,107 @@ describe('validateBuildSettings', () => {
     ).toThrow('RAILPACK_')
     expect(() => validateBuildSettings({ app: 'iris', railpackEnv: { RAILPACK_: '1' } })).toThrow(
       'not a valid name',
+    )
+  })
+
+  it('refuses the names the builder reserves, as the host does, and the package-manager prefixes', () => {
+    for (const name of [
+      'PATH',
+      'HOME',
+      'GITHUB_TOKEN',
+      'NODE_OPTIONS',
+      'DAEDALUS_TOKEN_FILE',
+      'LD_PRELOAD',
+      'GIT_SSH_COMMAND',
+      'MISE_DATA_DIR',
+      'RAILPACK_PRUNE_DEPS',
+      'NPM_CONFIG_REGISTRY',
+      'PNPM_HOME',
+      'COREPACK_NPM_REGISTRY',
+      'YARN_NPM_REGISTRY_SERVER',
+      'BUN_CONFIG_REGISTRY',
+      'NODE_ENV',
+    ]) {
+      expect(envEntryError('placeholders', name, 'x')).toContain(`${name} is reserved`)
+    }
+    for (const name of ['DATABASE_URL', 'AUTH_SECRET', 'PATHS', 'NPM_TOKEN', 'VITE_NODE_URL']) {
+      expect(envEntryError('placeholders', name, 'x')).toBeNull()
+    }
+    expect(() =>
+      validateBuildSettings({ app: 'iris', buildEnvPlaceholders: { NPM_CONFIG_REGISTRY: 'x' } }),
+    ).toThrow('buildEnvPlaceholders: NPM_CONFIG_REGISTRY is reserved')
+  })
+
+  it('passes on only the known Railpack switches, and never a command', () => {
+    for (const cmd of ['RAILPACK_START_CMD', 'RAILPACK_BUILD_CMD', 'RAILPACK_INSTALL_CMD']) {
+      expect(envEntryError('railpack', cmd, 'node x.mjs')).toContain("repo's railpack.json")
+    }
+    for (const other of [
+      'RAILPACK_CONFIG_FILE',
+      'RAILPACK_PACKAGES',
+      'RAILPACK_NODE_NPM_INSTALL',
+    ]) {
+      expect(envEntryError('railpack', other, 'x')).toContain('not a Railpack switch')
+    }
+    for (const [k, v] of [
+      ['RAILPACK_PRUNE_DEPS', 'true'],
+      ['RAILPACK_NODE_PLAYWRIGHT_INSTALL', '1'],
+      ['RAILPACK_DISABLE_CACHES', '*'],
+      ['RAILPACK_NO_SPA', 'false'],
+      ['RAILPACK_SPA_OUTPUT_DIR', 'dist/client'],
+      ['RAILPACK_NODE_VERSION', '24.18.1'],
+      ['RAILPACK_BUILD_APT_PACKAGES', 'git'],
+      ['RAILPACK_DEPLOY_APT_PACKAGES', 'ffmpeg chromium fonts-liberation'],
+    ] as const) {
+      expect(envEntryError('railpack', k, v)).toBeNull()
+    }
+  })
+
+  it('holds each Railpack switch to the values Railpack reads', () => {
+    expect(envEntryError('railpack', 'RAILPACK_PRUNE_DEPS', 'yes')).toContain('true, false, 1 or 0')
+    for (const dir of ['../etc', 'dist/../..', '/etc', 'dist dir']) {
+      expect(envEntryError('railpack', 'RAILPACK_SPA_OUTPUT_DIR', dir)).toContain('inside the repo')
+    }
+    expect(envEntryError('railpack', 'RAILPACK_NODE_VERSION', 'path:/tmp/node')).toContain(
+      'Node version',
+    )
+    for (const list of ['ffmpeg; curl x|sh', 'ffmpeg  git', 'ffmpeg,git', '$(id)']) {
+      expect(envEntryError('railpack', 'RAILPACK_DEPLOY_APT_PACKAGES', list)).toContain('Debian')
+    }
+    expect(envEntryError('railpack', `RAILPACK_${'A'.repeat(56)}`, '1')).toContain(
+      'not a valid name',
+    )
+  })
+
+  it("refuses Build on this box for an app name with a '-', and only that", () => {
+    expect(() => validateBuildSettings({ app: 'my-app', buildOnBox: true })).toThrow(
+      "containing '-'",
+    )
+    expect(validateBuildSettings({ app: 'my-app', buildOnBox: false }).patch).toEqual({
+      buildOnBox: false,
+    })
+    expect(validateBuildSettings({ app: 'my-app', buildStrategy: 'railpack' }).patch).toEqual({
+      buildStrategy: 'railpack',
+    })
+    expect(boxBuildRefusal('iris')).toBeNull()
+    expect(boxBuildRefusal('my-app')).toContain('Rename the app')
+  })
+
+  it('caps both maps together at 32 KiB, measured as the request carries them', () => {
+    const big = (n: number, ch: string) =>
+      Object.fromEntries(Array.from({ length: n }, (_, i) => [`K${String(i)}`, ch.repeat(512)]))
+    // 40 values of 512 ASCII characters fit; the same in three-byte characters do not.
+    expect(buildEnvSizeError(big(40, 'x'), {})).toBeNull()
+    expect(buildEnvSizeError(big(40, '€'), {})).toContain('at most 32.0 KiB')
+    expect(() =>
+      validateBuildSettings({ app: 'iris', buildEnvPlaceholders: big(40, '€') }),
+    ).toThrow('at most 32.0 KiB')
+    // Each half fits alone; together they do not.
+    expect(buildEnvSizeError(big(15, '€'), {})).toBeNull()
+    expect(buildEnvSizeError(big(15, '€'), big(15, '€'))).not.toBeNull()
+    const env = { placeholders: big(3, '€'), railpack: { RAILPACK_PRUNE_DEPS: 'true' } }
+    expect(buildEnvBytes(env)).toBe(
+      new TextEncoder().encode(JSON.stringify({ buildEnv: env }, null, 2)).length,
     )
   })
 

@@ -475,15 +475,15 @@ describe('handleGithubWebhook: a verified delivery', () => {
     },
   )
 
-  it('tells the operator a renamed repo still builds its pinned app', async () => {
+  it('tells the operator a renamed repo fails its pinned app until the names match', async () => {
     const body = JSON.stringify({
       action: 'renamed',
       repository: { id: REPO_ID, name: 'iris-web' },
     })
     await handleGithubWebhook(delivery('repository', body), deps)
     const warned = vi.mocked(console.warn).mock.calls.flat().join('\n')
-    expect(warned).toContain('pushes still build iris')
-    expect(warned).toContain('renamed later')
+    expect(warned).toContain('builds for iris fail until the app is renamed to match')
+    expect(warned).not.toContain('still build')
   })
 
   it('ignores other events, recording them', async () => {

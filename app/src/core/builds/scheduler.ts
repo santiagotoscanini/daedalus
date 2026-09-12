@@ -16,6 +16,9 @@
 // the outage that taught it). A re-evaluation swaps the tick and re-arms the
 // interval in place — never a second one — and keeps the busy flag and the
 // pickup guard. No closure but `tick` is stored, and nothing awaits the slot.
+// When the state's shape changes the key moves on, and the keys earlier
+// versions ran under are retired on sight: their interval cleared, their state
+// carried over when it still fits.
 //
 // Server-only in effect: everything with a side effect is imported dynamically.
 
@@ -31,6 +34,7 @@ import {
 } from '../../lib/build-queue'
 import {
   BUILD_PUBLISH_MODES,
+  BUILD_REQUEST_MAX_BYTES,
   BUILD_SHA_RE,
   BUILD_STRATEGIES,
   type BuildPublish,
@@ -38,10 +42,12 @@ import {
   type BuildStatus,
   type BuildStrategy,
   buildRequest,
+  buildRequestBytes,
   isActiveBuildState,
   isTerminalBuildState,
   redactBuildLog,
 } from '../../lib/builds'
+import type { BuildStatusPatch } from '../../lib/repo/builds'
 import type { Ctx } from '../ctx'
 
 /** Tick cadence while a build is dispatched or running. */
@@ -60,10 +66,14 @@ export const DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60_000
 /** A failure of one kind is logged at most once per this. */
 export const LOG_EVERY_MS = 60 * 60_000
 export const BOX_BUILDS_OFF = 'box builds off'
+/** A request over BUILD_REQUEST_MAX_BYTES is failed with this rather than written. */
+export const REQUEST_TOO_LARGE = 'request refused: too large'
 
 // ── the slot ───────────────────────────────────────────────────────────────
 
-const SLOT_KEY = 'daedalusBuildSchedulerV1'
+const SLOT_KEY = 'daedalusBuildSchedulerV2'
+/** Keys earlier versions of this module ran under. */
+const RETIRED_SLOT_KEYS = ['daedalusBuildSchedulerV1'] as const
 
 type Hold = { since: number }
 
@@ -79,6 +89,12 @@ export type SchedulerState = {
   pending: { id: string; at: number } | null
   /** The status last folded, so an unchanged file does not cost a lookup per tick. */
   seenStatus: string | null
+  /**
+   * The detection last written, by build and a hash of its JSON: the status
+   * carries up to 256 KiB of it on every heartbeat, and it is written only
+   * when it changed. Empty after a restart, which costs one write.
+   */
+  detectedSeen: { id: string; hash: string } | null
   githubBackoffUntil: number
   logged: Record<string, number>
 }
@@ -108,6 +124,10 @@ function isState(v: unknown): v is SchedulerState {
     (v.pending === null ||
       (isRecord(v.pending) && typeof v.pending.id === 'string' && isNum(v.pending.at))) &&
     (v.seenStatus === null || typeof v.seenStatus === 'string') &&
+    (v.detectedSeen === null ||
+      (isRecord(v.detectedSeen) &&
+        typeof v.detectedSeen.id === 'string' &&
+        typeof v.detectedSeen.hash === 'string')) &&
     isNum(v.githubBackoffUntil) &&
     isRecord(v.logged)
   )
@@ -123,6 +143,7 @@ export function freshState(now: number): SchedulerState {
     nextSweepAt: now + FIRST_SWEEP_MS,
     pending: null,
     seenStatus: null,
+    detectedSeen: null,
     githubBackoffUntil: 0,
     logged: {},
   }
@@ -158,6 +179,40 @@ function disarm(handle: unknown): void {
   }
 }
 
+/**
+ * An earlier version's state, brought to this shape in place — the same
+ * object, so a tick of that version still running shares its busy flag — or
+ * null when it does not fit.
+ */
+function carryState(v: unknown): SchedulerState | null {
+  if (!isRecord(v)) return null
+  if (!('detectedSeen' in v)) v.detectedSeen = null
+  return isState(v) ? v : null
+}
+
+/**
+ * Stop every scheduler an earlier version of this module left running, and
+ * hand back whether one was and the first state that still fits. The slot is
+ * deleted before its interval is cleared, so a callback already queued finds
+ * nothing to run.
+ */
+function retireOld(): { running: boolean; state: SchedulerState | null } {
+  let running = false
+  let state: SchedulerState | null = null
+  for (const key of RETIRED_SLOT_KEYS) {
+    const old = g[key]
+    if (old === undefined) continue
+    delete g[key]
+    if (!isRecord(old)) continue
+    if ('handle' in old) {
+      running = true
+      disarm(old.handle)
+    }
+    state ??= carryState(old.state)
+  }
+  return { running, state }
+}
+
 /** Start the scheduler once per process. Idempotent, synchronous and cheap. */
 export function ensureScheduler(): void {
   const current = g[SLOT_KEY]
@@ -166,15 +221,20 @@ export function ensureScheduler(): void {
 }
 
 /**
- * Take over whatever the slot holds: this module's tick, a new interval in
- * place of the old one, the old state when it still has the right shape.
- * `start` false only re-arms a scheduler that is already running.
+ * Take over whatever the slot holds, and whatever an earlier version left: this
+ * module's tick, a new interval in place of the old ones, the old state when it
+ * still has the right shape. `start` false only re-arms a scheduler that is
+ * already running.
  */
 function adopt(current: unknown, start: boolean): void {
-  const running = isRecord(current) && 'handle' in current
-  if (!running && !start) return
-  if (running) disarm(current.handle)
-  const state = isRecord(current) && isState(current.state) ? current.state : freshState(Date.now())
+  const retired = retireOld()
+  const here = isRecord(current) && 'handle' in current
+  if (!here && !retired.running && !start) return
+  if (here) disarm(current.handle)
+  const state =
+    isRecord(current) && isState(current.state)
+      ? current.state
+      : (retired.state ?? freshState(Date.now()))
   const slot: Slot = { handle: arm(), tick, state }
   g[SLOT_KEY] = slot
 }
@@ -184,6 +244,7 @@ export function stopScheduler(): void {
   const current = g[SLOT_KEY]
   if (isRecord(current)) disarm(current.handle)
   delete g[SLOT_KEY]
+  retireOld()
 }
 
 // ── logging ────────────────────────────────────────────────────────────────
@@ -219,6 +280,9 @@ async function quietly(state: SchedulerState, kind: string, work: () => Promise<
 // ── the tick ───────────────────────────────────────────────────────────────
 
 async function tick(): Promise<void> {
+  // An older module instance that outlived a re-evaluation can start its own
+  // scheduler again; this one stops it within a tick.
+  if (RETIRED_SLOT_KEYS.some((k) => g[k] !== undefined)) retireOld()
   const slot = readSlot()
   if (slot === null) return
   const state = slot.state
@@ -293,6 +357,7 @@ export async function runTick(ctx: Ctx, now: Date, state: SchedulerState): Promi
   const bridge = await import('../../lib/build-bridge')
   const repo = await import('../../lib/repo/builds')
   const { reportBuildChange, reportTick } = await import('./report')
+  const { createHash } = await import('node:crypto')
   const at = now.getTime()
 
   const report = (row: BuildRow) => quietly(state, 'report', () => reportBuildChange(ctx, row))
@@ -331,28 +396,39 @@ export async function runTick(ctx: Ctx, now: Date, state: SchedulerState): Promi
       continue
     }
     const hostView = applyStatus(before, status)
+    const heard = status !== null && hostView !== before
     const source =
       after.state === hostView.state && after.error === hostView.error ? 'host' : 'engine'
-    const record = await repo.updateFromStatus(
-      before.id,
-      {
-        state: after.state,
-        phase: after.phase,
-        error: after.error,
-        resolvedStrategy: after.resolvedStrategy,
-        detected: after.detected,
-        checks: after.checks,
-        timings: after.timings,
-        digest: after.digest,
-        imageRef: after.imageRef,
-        sizeBytes: after.sizeBytes,
-        startedAt: after.startedAt,
-        updatedAt: after.updatedAt,
-      },
-      source,
-    )
+    const patch: BuildStatusPatch = {
+      state: after.state,
+      phase: after.phase,
+      error: after.error,
+      resolvedStrategy: after.resolvedStrategy,
+      digest: after.digest,
+      imageRef: after.imageRef,
+      sizeBytes: after.sizeBytes,
+      startedAt: after.startedAt,
+      updatedAt: after.updatedAt,
+    }
+    // Only what the status itself carries. The rows come from a list read,
+    // which holds no detection, checks or timings: writing the row's own
+    // (empty) values back would erase what an earlier status stored.
+    let seen: SchedulerState['detectedSeen'] = null
+    if (heard) {
+      if (status.checks !== null) patch.checks = status.checks
+      if (Object.keys(status.timings).length > 0) patch.timings = status.timings
+      if (status.detected !== null) {
+        const hash = createHash('sha256').update(JSON.stringify(status.detected)).digest('base64')
+        if (state.detectedSeen?.id !== before.id || state.detectedSeen.hash !== hash) {
+          patch.detected = status.detected
+          seen = { id: before.id, hash }
+        }
+      }
+    }
+    const record = await repo.updateFromStatus(before.id, patch, source)
     // Final, or moved by a concurrent tick: its change is that tick's to report.
     if (record === undefined) continue
+    if (seen !== null) state.detectedSeen = seen
     const row = repo.toBuildRow({ ...record, app: before.app })
     if (row.state === 'superseded' && before.state !== 'superseded') {
       supersededHere.add(`${row.appId} ${row.lane}`)
@@ -509,6 +585,16 @@ async function settleQueue(
     await fail(row, { state: 'failed', error: `request refused: ${errorText(e)}` })
     return false
   }
+  // Below the host's own ceiling, so an oversized request is failed here with
+  // a reason rather than refused there with only a mail.
+  const bytes = buildRequestBytes(request)
+  if (bytes > BUILD_REQUEST_MAX_BYTES) {
+    console.warn(
+      `[builds] ${row.app}: refused ${row.sha.slice(0, 7)}: the request is ${String(bytes)} bytes, over ${String(BUILD_REQUEST_MAX_BYTES)}`,
+    )
+    await fail(row, { state: 'failed', error: REQUEST_TOO_LARGE })
+    return false
+  }
 
   const claimed = await repo.claimQueued(row.id, now)
   if (claimed === undefined) return false
@@ -530,19 +616,27 @@ async function settleQueue(
 
 /**
  * Queue a build unless the queue's rules skip it — already running, already
- * queued, or the lane's newest success in the same publish mode.
+ * queued, the lane's newest success in the same publish mode, or (the sweep
+ * asks on its own, and so does a superseded build's tip) a sha whose last
+ * build failed or was cancelled.
  */
 export async function enqueueChecked(
   intent: EnqueueIntent,
   now: Date,
 ): Promise<'enqueued' | SkipReason> {
   const repo = await import('../../lib/repo/builds')
-  const [active, queued, built] = await Promise.all([
+  const [active, queued, built, history] = await Promise.all([
     repo.activeBuilds(),
     repo.queuedBuilds(),
     repo.latestSucceeded(intent.appId, intent.lane, intent.publish),
+    repo.buildsOfSha(intent.appId, intent.lane, intent.publish, intent.sha),
   ])
-  const rows = [...active, ...queued, ...(built === undefined ? [] : [repo.toBuildRow(built)])]
+  const rows = [
+    ...active,
+    ...queued,
+    ...(built === undefined ? [] : [repo.toBuildRow(built)]),
+    ...history,
+  ]
   const { result } = enqueue(rows, { ...intent, id: crypto.randomUUID(), at: now })
   if (result.kind === 'skipped') return result.reason
   const { alreadyQueued } = await repo.insertOrSupersedeQueued({
@@ -688,6 +782,8 @@ async function sweepGithub(
     const publish = publishOf(app.buildPublish)
     const built = await repo.latestSucceeded(app.id, 'main', publish)
     if (built?.sha === sha) continue
+    // A HEAD whose last build failed is skipped inside (build-queue.ts failedTip):
+    // a push or Build now builds it again, the sweep does not.
     const outcome = await enqueueChecked(
       {
         appId: app.id,
@@ -712,5 +808,6 @@ async function sweepGithub(
 }
 
 // A re-evaluation of this file (a Vite save) swaps the running scheduler onto
-// this module's tick. It never starts one: that is ensureScheduler's call.
+// this module's tick, retiring one an earlier key still runs. It never starts
+// one: that is ensureScheduler's call.
 adopt(g[SLOT_KEY], false)

@@ -3,9 +3,11 @@ import { detectionFromStatus } from './build-detect'
 import {
   applyStatus,
   type BuildRow,
+  ENGINE_VERDICT_RETRIES,
   type EnqueueRequest,
   enqueue,
   enqueueSkip,
+  failedTip,
   INTERRUPTED,
   markDispatched,
   nextToRun,
@@ -219,6 +221,68 @@ describe('enqueueSkip', () => {
     expect(enqueueSkip(rows, req({ sha: SHA_A, appId: 'app-hermes' }))).toBeNull()
     expect(enqueueSkip(rows, req({ sha: SHA_A, lane: 'pr' }))).toBeNull()
   })
+})
+
+describe('the sweep does not rebuild a failed tip', () => {
+  const sweep = (over: Partial<EnqueueRequest> = {}) =>
+    req({ sha: SHA_B, requestedBy: 'sweep', ...over })
+
+  it('skips a sha whose newest build failed or was cancelled', () => {
+    const failed = row({ sha: SHA_B, state: 'failed', error: 'check failed: lint' })
+    expect(enqueueSkip([failed], sweep())).toEqual({
+      reason: 'already-failed',
+      existingId: failed.id,
+    })
+    expect(enqueue([failed], sweep()).result.kind).toBe('skipped')
+    const cancelled = row({ sha: SHA_B, state: 'cancelled', error: 'box builds off' })
+    expect(enqueueSkip([cancelled], sweep())?.reason).toBe('already-failed')
+    const refused = row({ sha: SHA_B, state: 'failed', error: 'request refused: too large' })
+    expect(enqueueSkip([refused], sweep())?.reason).toBe('already-failed')
+  })
+
+  it('still builds it for a push, for Build now, and when forced', () => {
+    const failed = row({ sha: SHA_B, state: 'failed', error: 'check failed: lint' })
+    expect(enqueueSkip([failed], sweep({ requestedBy: 'webhook' }))).toBeNull()
+    expect(enqueueSkip([failed], sweep({ requestedBy: 'operator' }))).toBeNull()
+    expect(enqueueSkip([failed], sweep({ force: true }))).toBeNull()
+  })
+
+  it('reads only the newest finished build of that sha, app, lane and publish mode', () => {
+    const olderFailed = row({ sha: SHA_B, state: 'failed', error: 'x', createdAt: at(-600) })
+    const newerSuperseded = row({ sha: SHA_B, state: 'superseded', createdAt: at(-60) })
+    expect(enqueueSkip([olderFailed, newerSuperseded], sweep())).toBeNull()
+    expect(
+      enqueueSkip([row({ sha: SHA_B, state: 'failed', publish: 'candidate' })], sweep()),
+    ).toBeNull()
+    expect(enqueueSkip([row({ sha: SHA_C, state: 'failed' })], sweep())).toBeNull()
+    expect(
+      enqueueSkip([row({ sha: SHA_B, state: 'failed', appId: 'app-hermes' })], sweep()),
+    ).toBeNull()
+    expect(enqueueSkip([row({ sha: SHA_B, state: 'failed', lane: 'pr' })], sweep())).toBeNull()
+  })
+
+  it.each([INTERRUPTED, TIMED_OUT])(
+    'gives a sha the engine failed as %s one more try, and one only',
+    (verdict) => {
+      expect(ENGINE_VERDICT_RETRIES).toBe(1)
+      const first = row({ sha: SHA_B, state: 'failed', error: verdict, createdAt: at(-3600) })
+      expect(failedTip([first], sweep())).toBeNull()
+      expect(enqueueSkip([first], sweep())).toBeNull()
+
+      const again = row({ sha: SHA_B, state: 'failed', error: INTERRUPTED, createdAt: at(-60) })
+      expect(enqueueSkip([first, again], sweep())).toEqual({
+        reason: 'already-failed',
+        existingId: again.id,
+      })
+      const hostWord = row({
+        sha: SHA_B,
+        state: 'failed',
+        error: 'building: OOM',
+        createdAt: at(-60),
+      })
+      expect(enqueueSkip([first, hostWord], sweep())?.reason).toBe('already-failed')
+    },
+  )
 })
 
 describe('nextToRun', () => {

@@ -99,7 +99,10 @@ export type EnqueueRequest = {
 /** A build the reducer wants queued; the caller mints the id and time. */
 export type EnqueueIntent = Omit<EnqueueRequest, 'id' | 'at' | 'force'>
 
-export type SkipReason = 'already-queued' | 'already-running' | 'already-built'
+export type SkipReason = 'already-queued' | 'already-running' | 'already-built' | 'already-failed'
+
+/** How many more tries a sha gets after the engine's own verdict (interrupted, timed out). */
+export const ENGINE_VERDICT_RETRIES = 1
 
 export type EnqueueResult =
   | { kind: 'enqueued'; row: BuildRow; superseded: string[] }
@@ -111,16 +114,56 @@ const sameLane = (row: BuildRow, key: { appId: string; lane: BuildLane }): boole
 const sha7 = (sha: string): string => sha.slice(0, 7)
 const ms = (d: Date | number): number => (typeof d === 'number' ? d : d.getTime())
 
+const isEngineVerdict = (r: Pick<BuildRow, 'state' | 'error'>): boolean =>
+  r.state === 'failed' && r.error !== null && ENGINE_VERDICTS.includes(r.error)
+
+/**
+ * The sha's newest finished build in this lane and publish mode, when it ended
+ * `failed` or `cancelled` and the sha must not be tried again unasked. Without
+ * this the hourly sweep, and a superseded build's tip, rebuild a broken tip
+ * every hour for as long as it is the tip. The engine's own verdicts
+ * (interrupted, timed out) say nothing about the commit, so they buy
+ * ENGINE_VERDICT_RETRIES more tries, counted by the sha's failed rows that
+ * carry one. Null when the sha may be queued. `rows` must include the sha's
+ * past builds (lib/repo/builds.ts `buildsOfSha`).
+ */
+export function failedTip(
+  rows: BuildRow[],
+  req: Pick<EnqueueRequest, 'appId' | 'lane' | 'sha' | 'publish'>,
+): BuildRow | null {
+  const ofSha = rows
+    .filter(
+      (r) =>
+        sameLane(r, req) &&
+        r.sha === req.sha &&
+        r.publish === req.publish &&
+        isTerminalBuildState(r.state),
+    )
+    .sort((a, b) => ms(b.createdAt) - ms(a.createdAt))
+  const newest = ofSha[0]
+  if (newest === undefined || (newest.state !== 'failed' && newest.state !== 'cancelled')) {
+    return null
+  }
+  if (isEngineVerdict(newest) && ofSha.filter(isEngineVerdict).length <= ENGINE_VERDICT_RETRIES) {
+    return null
+  }
+  return newest
+}
+
 /**
  * Why a build of this sha need not be queued, or null — the one skip rule every
  * door shares (webhook, sweep, a superseded build's tip). `rows` is whatever the
- * caller holds of the lane: its active and queued rows and its newest success
- * in this publish mode are enough. `force` ("Build now") lifts only the
- * already-built rule.
+ * caller holds of the lane: its active and queued rows, its newest success in
+ * this publish mode, and — for the sweep — the sha's own past builds. `force`
+ * ("Build now") lifts the built and failed rules.
+ *
+ * The failed rule binds only the `sweep` requester (the hourly sweep and a
+ * superseded build's tip ask on their own). A push is somebody asking: a push
+ * of a sha that failed builds it again, and so does Build now.
  */
 export function enqueueSkip(
   rows: BuildRow[],
-  req: Pick<EnqueueRequest, 'appId' | 'lane' | 'sha' | 'publish' | 'force'>,
+  req: Pick<EnqueueRequest, 'appId' | 'lane' | 'sha' | 'publish' | 'requestedBy' | 'force'>,
 ): { reason: SkipReason; existingId: string } | null {
   const lane = rows.filter((r) => sameLane(r, req))
 
@@ -135,6 +178,10 @@ export function enqueueSkip(
       .filter((r) => r.state === 'succeeded' && r.publish === req.publish)
       .sort((a, b) => ms(b.createdAt) - ms(a.createdAt))[0]
     if (lastBuilt?.sha === req.sha) return { reason: 'already-built', existingId: lastBuilt.id }
+    if (req.requestedBy === 'sweep') {
+      const failed = failedTip(lane, req)
+      if (failed !== null) return { reason: 'already-failed', existingId: failed.id }
+    }
   }
   return null
 }

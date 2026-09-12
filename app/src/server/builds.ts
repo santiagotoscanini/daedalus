@@ -2,12 +2,17 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
 import {
   type BuildCommit,
+  type BuildReportFailure,
   type BuildSummary,
   type BuildView,
   summarizeBuild,
 } from '../lib/build-display'
 import type { BuildRow } from '../lib/build-queue'
-import { type BuildSettingsPatch, validateBuildSettings } from '../lib/build-settings'
+import {
+  type BuildSettingsPatch,
+  buildEnvSizeError,
+  validateBuildSettings,
+} from '../lib/build-settings'
 import {
   BUILD_PUBLISH_MODES,
   BUILD_STRATEGIES,
@@ -16,9 +21,9 @@ import {
 } from '../lib/builds'
 
 // Server functions behind the build UI: the builds board, the build page, the
-// Build now button and an app's build settings. Value imports of anything that
-// touches the database are dynamic, so it stays out of the client bundle
-// (server/registry.ts does the same).
+// Build now and Retry report buttons and an app's build settings. Value imports
+// of anything that touches the database are dynamic, so it stays out of the
+// client bundle (server/registry.ts does the same).
 
 const APP_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/
 const SHA_RE = /^[0-9a-f]{40}$/
@@ -79,10 +84,27 @@ export const fetchBuildApp = createServerFn()
     }
   })
 
+/** The reporter's failure record for one build, for the page; null when there is none. */
+async function reportFailureOf(id: string): Promise<BuildReportFailure | null> {
+  const { makeCtx } = await import('../core/ctx')
+  const { readReportFailures } = await import('../core/builds/report')
+  const f = (await readReportFailures(await makeCtx()))[id]
+  if (f === undefined) return null
+  return {
+    step: f.step,
+    kind: f.kind,
+    status: f.status,
+    attempts: f.attempts,
+    at: f.at,
+    gaveUp: f.gaveUp,
+  }
+}
+
 /**
  * One build as its page shows it: the row, its detection decoded, the cached
- * warnings, the log's last 64 KB and what became of the image. Null for an
- * unknown id, and for another app's build under this app's URL.
+ * warnings, the log's last 64 KB, what became of the image, and a failed
+ * GitHub report while there is one. Null for an unknown id, and for another
+ * app's build under this app's URL.
  */
 export const fetchBuild = createServerFn()
   .validator((input: { app: string; id: string }) => {
@@ -102,17 +124,19 @@ export const fetchBuild = createServerFn()
     const { deployOutcome } = await import('../lib/build-display')
 
     const row = toBuildRow(record)
-    const [app, log, deployment] = await Promise.all([
+    const [app, log, deployment, reportFailure] = await Promise.all([
       getApp(data.app),
       readBuildLogTail(row.id, { maxBytes: LOG_TAIL_BYTES }),
       row.state === 'succeeded' && row.digest !== null
         ? deploymentOfDigest(row.appId, row.digest)
         : Promise.resolve(undefined),
+      row.reported ? Promise.resolve(null) : reportFailureOf(row.id),
     ])
 
     return {
       ...summarize(row),
       app: row.app,
+      reportFailure,
       detection: detectionFromStatus(row.detected),
       warnings: row.warnings,
       checks: row.checks,
@@ -242,8 +266,8 @@ export const buildNowFn = createServerFn({ method: 'POST' })
     const { makeCtx } = await import('../core/ctx')
     const { ghApp, describeGhFailure } = await import('../core/github-app')
     const ctx = await makeCtx()
-    // By id rather than owner/name: the id is what the sweep linked, and a
-    // renamed or transferred repository keeps it. Same repository object.
+    // By id rather than owner/name: the id is what the sweep linked. The host
+    // still reads the repository by the app's name, so a renamed one fails there.
     const repo = await ghApp<RepoBody>(ctx, `/repositories/${String(record.githubRepoId)}`)
     if (repo.status !== 200 || repo.body === null) {
       return { ok: false, reason: describeGhFailure(repo) }
@@ -288,6 +312,43 @@ export const buildNowFn = createServerFn({ method: 'POST' })
     return { ok: true, id: enqueued.row.id, sha, existing: enqueued.alreadyQueued }
   })
 
+export type RetryReportResult = { ok: true } | { ok: false; reason: string }
+
+/**
+ * Retry report: forget a build's failed GitHub report and post it now, however
+ * many retries it spent (core/builds/report.ts retryReport). Not ok when GitHub
+ * refuses again, with what it said.
+ */
+export const retryReportFn = createServerFn({ method: 'POST' })
+  .validator((input: { app: string; id: string }) => {
+    if (typeof input.id !== 'string') throw new Error('expected a build id')
+    return { app: appName(input.app), id: input.id }
+  })
+  .handler(async ({ data }): Promise<RetryReportResult> => {
+    const { actorFrom, NO_ACTOR_REASON } = await import('../core/settings/github-app')
+    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    if (actor === null) return { ok: false, reason: NO_ACTOR_REASON }
+
+    const { getBuild } = await import('../lib/repo/builds')
+    const record = await getBuild(data.id)
+    if (!record || record.app !== data.app) return { ok: false, reason: 'No such build.' }
+    if (record.reported) return { ok: true }
+
+    const { makeCtx } = await import('../core/ctx')
+    const { readReportFailures, retryReport } = await import('../core/builds/report')
+    const ctx = await makeCtx()
+    await retryReport(ctx, record.id)
+    console.info(
+      `[builds] ${actor} retried the GitHub report of ${data.app}@${record.sha.slice(0, 7)} (${record.id})`,
+    )
+    const again = (await readReportFailures(ctx))[record.id]
+    if (again === undefined) return { ok: true }
+    return {
+      ok: false,
+      reason: `GitHub refused it again: ${again.kind}${again.status === null ? '' : ` (HTTP ${String(again.status)})`}.`,
+    }
+  })
+
 export type BuildSettingsResult = { ok: true } | { ok: false; reason: string }
 
 /**
@@ -309,6 +370,15 @@ export const setBuildSettingsFn = createServerFn({ method: 'POST' })
     if (!record) return { ok: false, reason: `No app named ${data.app}.` }
     if (record.managedInNix || record.sourceMode === 'local') {
       return { ok: false, reason: `${data.app} runs its working tree; it has no builds to set.` }
+    }
+    const { buildEnvPlaceholders, railpackEnv } = data.patch
+    if (buildEnvPlaceholders !== undefined || railpackEnv !== undefined) {
+      // The cap is on both maps as a request carries them; a patch may hold one.
+      const tooBig = buildEnvSizeError(
+        buildEnvPlaceholders ?? record.buildEnvPlaceholders,
+        railpackEnv ?? record.railpackEnv,
+      )
+      if (tooBig !== null) return { ok: false, reason: tooBig }
     }
     const { updateBuildSettings } = await import('../lib/repo/build-views')
     await updateBuildSettings(data.app, data.patch)

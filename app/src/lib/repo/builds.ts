@@ -4,6 +4,7 @@ import {
   desc,
   eq,
   getTableColumns,
+  gte,
   inArray,
   isNull,
   ne,
@@ -34,6 +35,26 @@ export type BuildRecord = typeof builds.$inferSelect
 
 /** A row with its app's name — the manifest and the host bridge are keyed by name. */
 export type BuildRecordWithApp = BuildRecord & { app: string }
+
+// The jsonb columns a build grows large in: `detected` alone may be 256 KiB
+// (host/build.sh MAX_DETECTED_BYTES). Every read that returns many rows or runs
+// on the scheduler's tick, and every write's RETURNING, leaves them out;
+// getBuild is the one read that carries them.
+type HeavyColumn = 'detected' | 'checks' | 'timings' | 'warnings'
+
+const {
+  detected: _detected,
+  checks: _checks,
+  timings: _timings,
+  warnings: _warnings,
+  ...listColumns
+} = getTableColumns(builds)
+
+/** Every builds column but detected, checks, timings and warnings. */
+export const BUILD_LIST_COLUMNS = listColumns
+
+export type BuildListRecord = Omit<BuildRecord, HeavyColumn>
+export type BuildListRecordWithApp = BuildListRecord & { app: string }
 
 export type BuildRequest = {
   /** The id build-queue minted for the row, when it did; otherwise the database mints one. */
@@ -141,10 +162,16 @@ export async function insertOrSupersedeQueued(
   }
 }
 
-// A fresh builder per read: drizzle's query builders are single-use.
+// Fresh builders per read: drizzle's query builders are single-use.
 const withApp = () =>
   db
     .select({ ...getTableColumns(builds), app: apps.name })
+    .from(builds)
+    .innerJoin(apps, eq(apps.id, builds.appId))
+
+const listWithApp = () =>
+  db
+    .select({ ...BUILD_LIST_COLUMNS, app: apps.name })
     .from(builds)
     .innerJoin(apps, eq(apps.id, builds.appId))
 
@@ -155,8 +182,14 @@ const withApp = () =>
  * and warnings, text enums — and this is the one place that tightens it. The
  * casts are sound because this module is the only writer and its inputs are
  * typed.
+ *
+ * A list record (every read but getBuild) has no detected, checks, timings or
+ * warnings, so its row reads as none of them. Such a row is for deciding and
+ * displaying; nothing may write those four fields back from it.
  */
-export function toBuildRow(r: BuildRecordWithApp): BuildRow {
+export function toBuildRow(
+  r: BuildListRecordWithApp & Partial<Pick<BuildRecord, HeavyColumn>>,
+): BuildRow {
   return {
     id: r.id,
     appId: r.appId,
@@ -174,13 +207,13 @@ export function toBuildRow(r: BuildRecordWithApp): BuildRow {
     phase: r.phase ?? '',
     error: r.error,
     // Raw, as the status carried it; decoded on read (detectionFromStatus).
-    detected: r.detected,
-    warnings: (r.warnings as DetectionWarning[] | null) ?? [],
-    checks: r.checks as BuildChecks | null,
+    detected: r.detected ?? null,
+    warnings: (r.warnings as DetectionWarning[] | null | undefined) ?? [],
+    checks: (r.checks as BuildChecks | null | undefined) ?? null,
     digest: r.digest,
     imageRef: r.imageRef,
     sizeBytes: r.sizeBytes,
-    timings: (r.timings as Record<string, number> | null) ?? {},
+    timings: (r.timings as Record<string, number> | null | undefined) ?? {},
     checkRunId: r.checkRunId,
     deploymentId: r.deploymentId,
     reported: r.reported,
@@ -192,6 +225,7 @@ export function toBuildRow(r: BuildRecordWithApp): BuildRow {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** One build, whole: the only read that carries detected, checks, timings and warnings. */
 export async function getBuild(id: string): Promise<BuildRecordWithApp | undefined> {
   // The id arrives from a URL. A malformed one is "no such build", not a uuid
   // cast error from postgres.
@@ -200,8 +234,13 @@ export async function getBuild(id: string): Promise<BuildRecordWithApp | undefin
   return row
 }
 
-export async function listBuilds(appId: string, limit = 25): Promise<BuildRecordWithApp[]> {
-  return withApp().where(eq(builds.appId, appId)).orderBy(desc(builds.createdAt)).limit(limit)
+/** The list read, unexecuted: its SQL is what the tests pin. */
+export function listBuildsQuery(appId: string, limit = 25) {
+  return listWithApp().where(eq(builds.appId, appId)).orderBy(desc(builds.createdAt)).limit(limit)
+}
+
+export async function listBuilds(appId: string, limit = 25): Promise<BuildListRecordWithApp[]> {
+  return listBuildsQuery(appId, limit)
 }
 
 /**
@@ -212,8 +251,8 @@ export async function latestSucceeded(
   appId: string,
   lane: BuildLane = 'main',
   publish?: BuildPublish,
-): Promise<BuildRecordWithApp | undefined> {
-  const [row] = await withApp()
+): Promise<BuildListRecordWithApp | undefined> {
+  const [row] = await listWithApp()
     .where(
       and(
         eq(builds.appId, appId),
@@ -227,9 +266,34 @@ export async function latestSucceeded(
   return row
 }
 
+/**
+ * The lane's builds of one sha in one publish mode, newest first: what
+ * build-queue.ts `failedTip` reads to decide whether the sweep may try it again.
+ */
+export async function buildsOfSha(
+  appId: string,
+  lane: BuildLane,
+  publish: BuildPublish,
+  sha: string,
+  limit = 10,
+): Promise<BuildRow[]> {
+  const rows = await listWithApp()
+    .where(
+      and(
+        eq(builds.appId, appId),
+        eq(builds.lane, lane),
+        eq(builds.publish, publish),
+        eq(builds.sha, sha),
+      ),
+    )
+    .orderBy(desc(builds.createdAt))
+    .limit(limit)
+  return rows.map(toBuildRow)
+}
+
 /** Builds handed to the host and not finished — every one, for reconcile. */
 export async function activeBuilds(): Promise<BuildRow[]> {
-  const rows = await withApp()
+  const rows = await listWithApp()
     .where(inArray(builds.state, [...ACTIVE_BUILD_STATES]))
     .orderBy(asc(builds.createdAt))
   return rows.map(toBuildRow)
@@ -242,7 +306,7 @@ export async function runningBuild(): Promise<BuildRow | undefined> {
 
 /** Oldest first — queue order. */
 export async function queuedBuilds(): Promise<BuildRow[]> {
-  const rows = await withApp().where(eq(builds.state, 'queued')).orderBy(asc(builds.createdAt))
+  const rows = await listWithApp().where(eq(builds.state, 'queued')).orderBy(asc(builds.createdAt))
   return rows.map(toBuildRow)
 }
 
@@ -252,7 +316,7 @@ export function claimQueuedQuery(id: string, now: Date, exec: Executor = db) {
     .update(builds)
     .set({ state: 'cloning', phase: 'requested', startedAt: now, updatedAt: now })
     .where(and(eq(builds.id, id), eq(builds.state, 'queued')))
-    .returning()
+    .returning(BUILD_LIST_COLUMNS)
 }
 
 /**
@@ -267,17 +331,41 @@ export async function claimQueued(
   id: string,
   now: Date,
   exec: Executor = db,
-): Promise<BuildRecord | undefined> {
+): Promise<BuildListRecord | undefined> {
   if (!UUID.test(id)) return undefined
   const [row] = await claimQueuedQuery(id, now, exec)
   return row
 }
 
-/** Finished builds whose final result has not been posted to GitHub yet. */
-export async function unreportedBuilds(): Promise<BuildRecordWithApp[]> {
-  return withApp()
-    .where(and(eq(builds.reported, false), inArray(builds.state, [...TERMINAL_BUILD_STATES])))
-    .orderBy(asc(builds.createdAt))
+/** Unreported builds a read returns at most; the reporter works five a tick. */
+export const UNREPORTED_LIMIT = 20
+const UNREPORTED_WINDOW_MS = 24 * 60 * 60_000
+
+/** The unreported read, unexecuted: its SQL is what the tests pin. */
+export function unreportedBuildsQuery(since: Date, limit = UNREPORTED_LIMIT) {
+  return listWithApp()
+    .where(
+      and(
+        eq(builds.reported, false),
+        inArray(builds.state, [...TERMINAL_BUILD_STATES]),
+        gte(builds.updatedAt, since),
+      ),
+    )
+    .orderBy(desc(builds.updatedAt))
+    .limit(limit)
+}
+
+/**
+ * Finished builds whose final result has not been posted to GitHub, heard from
+ * since `since` (the reporter's 24-hour window), newest first, at most `limit`.
+ * Newest first so a pile of builds GitHub keeps refusing cannot starve a fresh
+ * one; anything older is reported only by hand (report.ts retryReport).
+ */
+export async function unreportedBuilds(
+  since: Date = new Date(Date.now() - UNREPORTED_WINDOW_MS),
+  limit = UNREPORTED_LIMIT,
+): Promise<BuildListRecordWithApp[]> {
+  return unreportedBuildsQuery(since, limit)
 }
 
 /**
@@ -327,8 +415,8 @@ const STATUS_FIELDS = [
 /**
  * Fold a status into the row. `source` says whose word it is: the host's
  * status file, or the engine's own verdict (reconcile's interrupted / timed
- * out, a cancel). Returns the updated row, or undefined when there is no such
- * build or the row is final.
+ * out, a cancel). Returns the updated row (list columns only), or undefined
+ * when there is no such build or the row is final.
  *
  * The rule is build-queue.ts `applyStatus`'s, enforced again in the WHERE so it
  * holds against a concurrent tick: a finished row is final, except an engine
@@ -339,7 +427,7 @@ export async function updateFromStatus(
   id: string,
   patch: BuildStatusPatch,
   source: 'host' | 'engine',
-): Promise<BuildRecord | undefined> {
+): Promise<BuildListRecord | undefined> {
   const clean: BuildStatusPatch = {}
   for (const k of STATUS_FIELDS) {
     if (k in patch) (clean as Record<string, unknown>)[k] = patch[k]
@@ -371,7 +459,7 @@ export async function updateFromStatus(
     .update(builds)
     .set({ updatedAt: new Date(), ...clean, ...(reported === undefined ? {} : { reported }) })
     .where(where)
-    .returning()
+    .returning(BUILD_LIST_COLUMNS)
   return row
 }
 

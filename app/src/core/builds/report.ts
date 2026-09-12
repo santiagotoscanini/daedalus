@@ -55,6 +55,8 @@ export const DEPLOY_WAIT_MS = 30 * 60_000
 export const REPORT_WINDOW_MS = 24 * 60 * 60_000
 /** Unreported builds a tick may work on. */
 export const TICK_BUDGET = 5
+/** Unreported builds a tick reads: newest first, within REPORT_WINDOW_MS. */
+export const UNREPORTED_READ = 20
 const TICK_MIN_INTERVAL_MS = 5_000
 const INGEST_MIN_INTERVAL_MS = 15_000
 const TITLE_MAX_CHARS = 200
@@ -638,6 +640,17 @@ async function reportProgress(
   else logOnce(row.id, `progress:${call.failure}`, `progress update failed: ${call.failure}`)
 }
 
+/**
+ * The row with its detection, checks, timings and warnings. The scheduler and
+ * the tick hand over list rows, which carry none of them; only the completed
+ * check run's story needs them, so they are read here, once per report.
+ */
+async function withDetails(row: BuildRow): Promise<BuildRow> {
+  const { getBuild, toBuildRow } = await import('../../lib/repo/builds')
+  const record = await getBuild(row.id)
+  return record !== undefined && record.id === row.id ? toBuildRow(record) : row
+}
+
 async function reportFinal(ctx: Ctx, row: BuildRow, repo: RepoRef, site: SiteFacts): Promise<void> {
   const m = memo()
   const { getApp } = await import('../../lib/repo/apps')
@@ -652,10 +665,10 @@ async function reportFinal(ctx: Ctx, row: BuildRow, repo: RepoRef, site: SiteFac
   const conclusion = CONCLUSION[row.state]
   if (conclusion !== undefined && m.completed.get(row.id) !== row.state) {
     const { readBuildLogTail } = await import('../../lib/build-bridge')
-    const tail = await readBuildLogTail(row.id)
+    const [tail, whole] = await Promise.all([readBuildLogTail(row.id), withDetails(row)])
     const out = checkRunOutput({
-      title: titleOf(row, site, delivery),
-      summary: summaryOf(row, delivery),
+      title: titleOf(whole, site, delivery),
+      summary: summaryOf(whole, delivery),
       logTail: tail.available ? tail.text : '',
     })
     const output = {
@@ -838,6 +851,8 @@ export async function reportTick(ctx: Ctx): Promise<void> {
     await failures(ctx)
     const { activeBuilds, unreportedBuilds, toBuildRow } = await import('../../lib/repo/builds')
 
+    // Both are list reads: no detection rides along. reportFinal reads the one
+    // build it completes whole.
     for (const row of await activeBuilds()) {
       const last = m.sent.get(row.id)
       const pending =
@@ -849,7 +864,8 @@ export async function reportTick(ctx: Ctx): Promise<void> {
     }
 
     let budget = TICK_BUDGET
-    for (const record of await unreportedBuilds()) {
+    const since = new Date(Date.now() - REPORT_WINDOW_MS)
+    for (const record of await unreportedBuilds(since, UNREPORTED_READ)) {
       if (budget <= 0 || Date.now() < m.blockedUntil) break
       const row = toBuildRow(record)
       if (Date.now() - row.updatedAt.getTime() > REPORT_WINDOW_MS) continue
