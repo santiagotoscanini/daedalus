@@ -34,6 +34,20 @@ export const TIMED_OUT = 'timed out'
 /** The failures reconcile decides on its own, for want of word from the host. */
 export const ENGINE_VERDICTS: readonly string[] = [INTERRUPTED, TIMED_OUT]
 
+/**
+ * Somebody pressed Cancel. Written on the row the moment the host is asked to
+ * stop, because the host cannot tell the difference: its reaper publishes
+ * `interrupted` for every unit that ends early — a crash, an OOM kill and a
+ * `systemctl stop` look identical from down there.
+ *
+ * Deliberately NOT an ENGINE_VERDICT. Those are verdicts reached for want of
+ * word from the host, which the host may overturn (`hostOverridesVerdict`) and
+ * which buy a sha another try (`failedTip`). This is word from a person: the
+ * row is `cancelled`, which is terminal, so the `interrupted` that lands a few
+ * seconds later cannot overwrite it.
+ */
+export const CANCELLED_BY_OPERATOR = 'cancelled by the operator'
+
 export type BuildRow = {
   id: string
   appId: string

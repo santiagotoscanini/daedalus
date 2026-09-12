@@ -3,6 +3,7 @@ import type { Detection } from './build-detect'
 import {
   type BuildSummary,
   buildDurationMs,
+  buildQueuedMs,
   buildTags,
   buildTimeline,
   deployOutcome,
@@ -60,7 +61,41 @@ describe('buildTimeline', () => {
   it('keeps timings under names it does not know, after the known phases', () => {
     const t = buildTimeline('succeeded', { build: 10, smoke: 4 })
     expect(t.at(-1)).toEqual({ phase: 'smoke', ms: 4, status: 'done' })
-    expect(t.every((s) => s.status === 'done')).toBe(true)
+    expect(t.find((s) => s.phase === 'building')).toEqual({
+      phase: 'building',
+      ms: 10,
+      status: 'done',
+    })
+  })
+  it('calls an untimed phase of a succeeded build skipped, not done', () => {
+    // A repo with no `ci` script: the checks never ran, and reading that as
+    // `done` told somebody their checks had passed.
+    const t = buildTimeline('succeeded', { cloning: 1, detecting: 2, building: 3, publishing: 4 })
+    expect(t.find((s) => s.phase === 'checking')).toEqual({
+      phase: 'checking',
+      ms: null,
+      status: 'skipped',
+    })
+    expect(t.filter((s) => s.status === 'done').map((s) => s.phase)).toEqual([
+      'cloning',
+      'detecting',
+      'building',
+      'publishing',
+    ])
+  })
+  it('leaves an untimed phase of a running build pending, not skipped', () => {
+    const t = buildTimeline('building', { cloning: 1, detecting: 2 })
+    expect(t.some((s) => s.status === 'skipped')).toBe(false)
+  })
+})
+
+describe('buildQueuedMs', () => {
+  it('measures the wait that buildDurationMs excludes', () => {
+    expect(buildQueuedMs(summary())).toBe(5_000)
+    expect(buildDurationMs(summary())).toBe(180_000)
+  })
+  it('is null while the build is still waiting', () => {
+    expect(buildQueuedMs(summary({ state: 'queued', startedAt: null }))).toBeNull()
   })
 })
 

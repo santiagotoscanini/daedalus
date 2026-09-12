@@ -7,6 +7,7 @@ import {
   ghApp,
   listInstallationRepos,
   MIN_BACKOFF_MS,
+  repoById,
   requestTokenRefresh,
   retryAfterMs,
 } from './github-app'
@@ -174,5 +175,73 @@ describe('listInstallationRepos', () => {
   it('says why when it cannot', async () => {
     answer(() => new Response('{}', { status: 403, headers: { 'retry-after': '120' } }))
     expect(await listInstallationRepos(ctx)).toMatchObject({ ok: false, retryAfterMs: 120_000 })
+  })
+
+  it('carries the description and language the create form renders', async () => {
+    answer(() =>
+      Response.json({
+        total_count: 1,
+        repositories: [{ ...repo(2, 'iris'), description: 'QR codes', language: 'TypeScript' }],
+      }),
+    )
+    const r = await listInstallationRepos(ctx)
+    expect(r.ok && r.repos[0]).toMatchObject({ description: 'QR codes', language: 'TypeScript' })
+  })
+
+  it('reads an empty description as none rather than as an empty string', async () => {
+    answer(() =>
+      Response.json({ total_count: 1, repositories: [{ ...repo(2, 'iris'), description: '' }] }),
+    )
+    const r = await listInstallationRepos(ctx)
+    expect(r.ok && r.repos[0]).toMatchObject({ description: null, language: null })
+  })
+})
+
+describe('repoById', () => {
+  const body = (over: Record<string, unknown> = {}) => ({
+    id: 4242,
+    full_name: 'octo/iris-web',
+    default_branch: 'trunk',
+    ...over,
+  })
+
+  it("answers with the repository's name today, split for the API paths", async () => {
+    answer((url) => {
+      expect(url).toBe('https://api.github.com/repositories/4242')
+      return Response.json(body())
+    })
+    expect(await repoById(ctx, 4242)).toEqual({
+      ok: true,
+      repo: {
+        id: 4242,
+        fullName: 'octo/iris-web',
+        owner: 'octo',
+        name: 'iris-web',
+        defaultBranch: 'trunk',
+      },
+    })
+  })
+
+  it('refuses an answer about another repository', async () => {
+    answer(() => Response.json(body({ id: 7 })))
+    expect(await repoById(ctx, 4242)).toMatchObject({ ok: false })
+  })
+
+  it('refuses a full_name that is not owner/name', async () => {
+    answer(() => Response.json(body({ full_name: 'iris-web' })))
+    expect(await repoById(ctx, 4242)).toMatchObject({ ok: false })
+  })
+
+  it('falls back to main when GitHub names no default branch', async () => {
+    answer(() => Response.json(body({ default_branch: null })))
+    expect(await repoById(ctx, 4242)).toMatchObject({ ok: true, repo: { defaultBranch: 'main' } })
+  })
+
+  it('says why when GitHub refuses, and asks nothing for a non-id', async () => {
+    answer(() => new Response('{}', { status: 404 }))
+    expect(await repoById(ctx, 4242)).toMatchObject({ ok: false, reason: /404/ })
+    fetchMock.mockClear()
+    expect(await repoById(ctx, 0)).toMatchObject({ ok: false })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

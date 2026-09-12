@@ -117,8 +117,27 @@ export function summarizeBuild(row: import('./build-queue').BuildRow): BuildSumm
 }
 
 /**
- * Milliseconds from hand-off to the last word, or to `now` while it runs.
- * Null for a build that never started.
+ * Milliseconds a build spent in the queue: from being asked for to being handed
+ * to the host. Null while it is still waiting — the wait is not over, and a
+ * number that grew every second would read as an elapsed build.
+ *
+ * Its own function because `buildDurationMs` deliberately excludes it: one
+ * build runs at a time here, so a build asked for behind another can wait
+ * longer than it runs, and a single "took" that hides the wait answers the
+ * wrong question.
+ */
+export function buildQueuedMs(b: BuildSummary): number | null {
+  if (b.startedAt === null) return null
+  const asked = Date.parse(b.createdAt)
+  const started = Date.parse(b.startedAt)
+  if (!Number.isFinite(asked) || !Number.isFinite(started)) return null
+  return Math.max(0, started - asked)
+}
+
+/**
+ * Milliseconds from hand-off to the last word, or to `now` while it runs — the
+ * time the host spent on it, NOT the time since it was asked for
+ * (`buildQueuedMs` is the other half). Null for a build that never started.
  */
 export function buildDurationMs(b: BuildSummary, now = Date.now()): number | null {
   if (b.startedAt === null) return null
@@ -128,10 +147,18 @@ export function buildDurationMs(b: BuildSummary, now = Date.now()): number | nul
   return Math.max(0, end - start)
 }
 
+/**
+ * `skipped` is the one that earns its keep: a phase the host never timed on a
+ * build that SUCCEEDED did not run at all — checks on a repo with no `ci`
+ * script, detection on a Dockerfile build — and reading it as `done` told
+ * somebody their checks passed when nothing ever ran them. "Did not run" and
+ * "passed" are different answers to the same question, so they get different
+ * words.
+ */
 export type TimelineStep = {
   phase: string
   ms: number | null
-  status: 'done' | 'running' | 'failed' | 'pending'
+  status: 'done' | 'running' | 'failed' | 'pending' | 'skipped'
 }
 
 // What the host may call each phase in its timings: the state's own name, or
@@ -170,8 +197,9 @@ export function buildTimeline(state: BuildState, timings: Record<string, number>
     const step = steps[firstUntimed]
     if (step !== undefined) step.status = 'failed'
   } else if (state === 'succeeded') {
-    // A phase with no timing on a finished build was skipped, not pending.
-    for (const s of steps) if (s.ms === null) s.status = 'done'
+    // A phase with no timing on a build that finished never ran — it is not
+    // still pending, and it did not pass either.
+    for (const s of steps) if (s.ms === null) s.status = 'skipped'
   }
 
   for (const [k, v] of Object.entries(timings)) {

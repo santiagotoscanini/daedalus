@@ -3,6 +3,7 @@ import { detectionFromStatus } from './build-detect'
 import {
   applyStatus,
   type BuildRow,
+  CANCELLED_BY_OPERATOR,
   ENGINE_VERDICT_RETRIES,
   type EnqueueRequest,
   enqueue,
@@ -502,6 +503,29 @@ describe('the terminal rule: the host is the source of truth', () => {
     expect(applyStatus(r, status({ state: 'failed', error: 'late' }))).toBe(r)
     expect(applyStatus(r, status({ state: 'succeeded' }))).toBe(r)
     expect(applyStatus(r, status({ state: 'building' }))).toBe(r)
+  })
+
+  it('keeps a cancel the operator asked for, whatever the reaper says next', () => {
+    // `systemctl stop` reaches the host's reaper as `interrupted` — the same
+    // word a crash and an OOM kill produce. The row is marked `cancelled` when
+    // the stop is asked for, and that word has to survive the reaper's.
+    const cancelled = row({
+      id: '00000001',
+      state: 'cancelled',
+      phase: 'cancelled',
+      error: CANCELLED_BY_OPERATOR,
+      startedAt: T0,
+    })
+    const late = status({ state: 'failed', error: INTERRUPTED })
+    expect(applyStatus(cancelled, late)).toBe(cancelled)
+
+    // No tick reopens it, and the sha is not retried behind the operator's back.
+    const { rows, changed } = reconcile([cancelled], late, at(600))
+    expect(rows[0]).toBe(cancelled)
+    expect(changed).toEqual([])
+    expect(
+      failedTip([cancelled], { appId: 'app-iris', lane: 'main', sha: SHA_A, publish: 'live' }),
+    ).toBe(cancelled)
   })
 })
 

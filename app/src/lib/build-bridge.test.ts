@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile, rm, symlink, utimes, writeFile } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readBuildLogTail, readBuildStatus, requestBuild } from './build-bridge'
+import { readBuildLogTail, readBuildStatus, requestBuild, requestBuildCancel } from './build-bridge'
 import type { BuildRequest } from './builds'
 
 let dir: string
@@ -63,6 +63,32 @@ describe('requestBuild', () => {
 
   it('refuses an invalid request before writing', async () => {
     await expect(requestBuild({ ...REQUEST, id: '../x' }, env)).rejects.toThrow(/id/)
+    expect(await readdir(dir)).toEqual([])
+  })
+})
+
+describe('requestBuildCancel', () => {
+  it('names the build to stop, and only that', async () => {
+    await requestBuildCancel(ID, new Date('2026-09-12T21:00:00.000Z'), env)
+    expect(await readdir(dir)).toEqual(['build-cancel-request.json'])
+    expect(JSON.parse(await readFile(join(dir, 'build-cancel-request.json'), 'utf8'))).toEqual({
+      version: 1,
+      id: ID,
+      at: '2026-09-12T21:00:00.000Z',
+    })
+  })
+
+  it('is idempotent: a second press rewrites the same ask', async () => {
+    const at = new Date('2026-09-12T21:00:00.000Z')
+    await requestBuildCancel(ID, at, env)
+    const first = await readFile(join(dir, 'build-cancel-request.json'), 'utf8')
+    await requestBuildCancel(ID, at, env)
+    expect(await readdir(dir)).toEqual(['build-cancel-request.json'])
+    expect(await readFile(join(dir, 'build-cancel-request.json'), 'utf8')).toBe(first)
+  })
+
+  it('refuses a path-shaped id before writing', async () => {
+    await expect(requestBuildCancel('../x', new Date(), env)).rejects.toThrow(/id/)
     expect(await readdir(dir)).toEqual([])
   })
 })

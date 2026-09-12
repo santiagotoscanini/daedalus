@@ -193,6 +193,9 @@ export type InstallationRepo = {
   defaultBranch: string
   htmlUrl: string
   pushedAt: string | null
+  /** The two the create form's picker renders; nothing else reads them. */
+  description: string | null
+  language: string | null
 }
 
 export type InstallationRepos =
@@ -223,8 +226,12 @@ function readRepo(raw: unknown): InstallationRepo | null {
     defaultBranch: r.default_branch,
     htmlUrl: r.html_url,
     pushedAt: typeof r.pushed_at === 'string' ? r.pushed_at : null,
+    description: text(r.description),
+    language: text(r.language),
   }
 }
+
+const text = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
 
 /** Every repository the installation can see, by name. */
 export async function listInstallationRepos(ctx: Ctx): Promise<InstallationRepos> {
@@ -248,4 +255,50 @@ export async function listInstallationRepos(ctx: Ctx): Promise<InstallationRepos
   }
   repos.sort((a, b) => a.name.localeCompare(b.name))
   return { ok: true, repos, total: Math.max(total, repos.length) }
+}
+
+/** A repository as GitHub names it now. `owner`/`name` are `fullName`, split. */
+export type RepoById = {
+  id: number
+  fullName: string
+  owner: string
+  name: string
+  defaultBranch: string
+}
+
+export type RepoLookup = { ok: true; repo: RepoById } | { ok: false; reason: string }
+
+/**
+ * The repository with this id — the ONE way anything in the build and report
+ * path names a repo to GitHub.
+ *
+ * `apps.githubRepoId` is what the sweep pinned and what the webhook matches on;
+ * the app's own name is a label that a rename makes wrong, and every path that
+ * built `owner/<app name>` broke silently the moment somebody renamed a repo.
+ * Asked every time rather than cached: a rename is exactly the case this
+ * exists for, and one GET against a 5000/hour budget is cheaper than a wrong
+ * answer kept warm.
+ */
+export async function repoById(ctx: Ctx, id: number): Promise<RepoLookup> {
+  if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, reason: 'Not a repository id.' }
+  const r = await ghApp<{ id?: unknown; full_name?: unknown; default_branch?: unknown }>(
+    ctx,
+    `/repositories/${String(id)}`,
+  )
+  if (r.status !== 200 || r.body === null) return { ok: false, reason: describeGhFailure(r) }
+  const { id: got, full_name: fullName, default_branch: defaultBranch } = r.body
+  const [owner = '', name = ''] = typeof fullName === 'string' ? fullName.split('/') : []
+  if (got !== id || typeof fullName !== 'string' || owner === '' || name === '') {
+    return { ok: false, reason: 'GitHub answered with a repository this app is not linked to.' }
+  }
+  return {
+    ok: true,
+    repo: {
+      id,
+      fullName,
+      owner,
+      name,
+      defaultBranch: typeof defaultBranch === 'string' ? defaultBranch : 'main',
+    },
+  }
 }

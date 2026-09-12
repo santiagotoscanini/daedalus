@@ -74,6 +74,34 @@ describe('readBuildFacts', () => {
     })
   })
 
+  it('reads an explicit null as the absent key the contract asks for', () => {
+    // The contract is "omit the key"; agents have published `secretsHash: null`
+    // for an app with no build secrets. Both must read the same way.
+    const withNull = readBuildFacts({ build: { ...BUILD, secretsHash: null } })?.run
+    const omitted = readBuildFacts({
+      build: {
+        runner: BUILD.runner,
+        cacheImported: true,
+        cacheExported: false,
+        stepsCached: 7,
+        stepsTotal: 9,
+      },
+    })?.run
+    expect(withNull?.secretsHash).toBeNull()
+    expect(withNull).toEqual(omitted)
+  })
+
+  it('is "nobody said" for a key of nothing but nulls, not a card of empty rows', () => {
+    expect(readBuildFacts({ build: { secretsHash: null } })).toBeNull()
+    expect(readBuildFacts({ build: {}, image: {} })).toBeNull()
+    expect(readBuildFacts({ image: IMAGE, build: { secretsHash: null } })?.run).toBeNull()
+    // One field with something in it is still something said.
+    expect(readBuildFacts({ build: { runner: 'x', secretsHash: null } })?.run).toMatchObject({
+      runner: 'x',
+      secretsHash: null,
+    })
+  })
+
   it('never reads a secret value, only the fingerprint the agent sends', () => {
     const facts = readBuildFacts({ build: { ...BUILD, secrets: { GITHUB_TOKEN: 'ghp_nope' } } })
     expect(JSON.stringify(facts)).not.toContain('ghp_nope')

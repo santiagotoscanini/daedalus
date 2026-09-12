@@ -75,8 +75,9 @@ function NewAppPage() {
         <span aria-hidden="true">›</span> new
       </Crumbs>
       <PageHead title="Add an app">
-        One repository under <code>github.com/{OWNER}</code> becomes one entry in the registry. The
-        container, hostname, TLS, DNS, probe, builds and deploy timer are all derived from it.
+        One repository under <code>github.com/{OWNER}</code> — one the box’s GitHub App is installed
+        on — becomes one entry in the registry. The container, hostname, TLS, DNS, probe, builds and
+        deploy timer are all derived from it.
       </PageHead>
 
       <GuardedAwait resetKey="options" promise={options} fallback={<NewAppSkeleton />}>
@@ -212,19 +213,22 @@ function Wizard({ options }: { options: Options }) {
         {options.error !== null && (
           <Alert variant="warning" className={WARN_BANNER}>
             <AlertDescription>
-              {options.error}. The list below is whatever could be read; you can still create an app
-              by picking a repo once GitHub answers again.
+              {options.error} Nothing is listed below — this is the whole list being missing, not a
+              short one. Try again once GitHub answers; the App’s installation is on{' '}
+              <Link to="/settings" search={{ tab: 'integrations' }}>
+                Settings › Integrations
+              </Link>
+              .
             </AlertDescription>
           </Alert>
         )}
-        {options.error === null && !options.authenticated && (
+        {options.error === null && options.source === 'token' && (
           <Alert className={MUTED_BANNER}>
             <AlertDescription>
-              No GitHub token in the container’s environment, so this lists <b>public</b>
-              repositories only. The fleet’s GitHub credential is rendered by{' '}
-              <code>daedalus-dashboard-keys.service</code>
-              {'; '}a <code>GITHUB_REPO_TOKEN</code> in{' '}
-              <code>stacks/daedalus/service-keys.sops</code> overrides it.
+              Listing the <b>account’s</b> repositories, not the App’s: a{' '}
+              <code>GITHUB_REPO_TOKEN</code> in <code>stacks/daedalus/service-keys.sops</code> is
+              overriding the installation. An app can only be built from a repo the App is installed
+              on.
             </AlertDescription>
           </Alert>
         )}

@@ -469,13 +469,13 @@ export const fetchAppTab = createServerFn()
  * What the create form needs before it can ask anything: the repositories to
  * pick from, and the names already spoken for.
  *
- * The repo list is the slow half (a GitHub round trip) and the taken names are
- * two file reads plus a query, but they are fetched together — the form cannot
- * usefully render half of itself, since picking a repo is what every later
- * step keys off.
+ * The repo list is the slow half (a GitHub round trip, as the App installation
+ * — lib/github-repos.ts) and the taken names are two file reads plus a query,
+ * but they are fetched together: the form cannot usefully render half of
+ * itself, since picking a repo is what every later step keys off.
  */
 export const fetchNewAppOptions = createServerFn().handler(async () => {
-  const { listRepos, OWNER } = await import('../lib/github-repos')
+  const { listRepos } = await import('../lib/github-repos')
   const { listApps } = await import('../lib/repo/apps')
   const { manifestEntries } = await import('../lib/nix-manifest')
 
@@ -487,7 +487,7 @@ export const fetchNewAppOptions = createServerFn().handler(async () => {
   // fail at the last step.
   const taken = [...new Set([...records.map((r) => r.name), ...manifest.map((m) => m.name)])]
 
-  return { owner: OWNER, taken, ...repos }
+  return { taken, ...repos }
 })
 
 /**

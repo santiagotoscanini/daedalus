@@ -12,6 +12,7 @@ import {
   type BuildCommit,
   type BuildView,
   buildDurationMs,
+  buildQueuedMs,
   buildTimeline,
   type DeployOutcome,
   frameworkName,
@@ -22,11 +23,13 @@ import {
   type TimelineStep,
 } from '../lib/build-display'
 import { cacheHitRatio } from '../lib/build-facts'
+import { isActiveBuildState } from '../lib/builds'
 import { bytes, DASH, ms, pct } from '../lib/format'
 import { OWNER, REGISTRY_HOST } from '../lib/site'
 import type { Tone } from '../lib/tone'
 import {
   type BuildPageApp,
+  cancelBuildFn,
   fetchBuild,
   fetchBuildApp,
   fetchBuildCommit,
@@ -171,6 +174,8 @@ function BuildDetail({
   const repo = `${OWNER}/${name}`
   const commitUrl = `https://github.com/${repo}/commit/${build.sha}`
   const took = open && now === null ? null : buildDurationMs(build, now ?? 0)
+  const waited = buildQueuedMs(build)
+  const running = isActiveBuildState(build.state)
   const refusal =
     app === null
       ? 'No app by that name.'
@@ -228,7 +233,10 @@ function BuildDetail({
             </a>
           </Button>
         )}
-        <span className="ml-auto">
+        <span className="ml-auto inline-flex flex-wrap items-center justify-end gap-2">
+          {/* Only while the host actually has it: a queued build has nothing
+              running to stop, and a finished one has nothing to stop at all. */}
+          {running && <CancelBuildButton app={name} id={build.id} />}
           <BuildNowButton
             app={name}
             label="Build again"
@@ -297,7 +305,11 @@ function BuildDetail({
               { k: 'publish', v: build.publish },
               { k: 'queued', v: at(build.createdAt) },
               { k: 'started', v: at(build.startedAt) },
-              { k: 'took', v: took === null ? DASH : ms(took) },
+              // Two numbers, not one "took": one build runs on this box at a
+              // time, so a build can wait longer than it runs, and the wall
+              // clock from hand-off hides exactly that.
+              { k: 'waited in queue', v: waited === null ? DASH : ms(waited) },
+              { k: 'ran for', v: took === null ? DASH : ms(took) },
             ]}
           />
         </Board>
@@ -402,6 +414,60 @@ function BuildDetail({
   )
 }
 
+/**
+ * Ask the host to stop this build. One press, one confirmation — a build is
+ * minutes of work and the button sits beside "Build again", which is the pair
+ * that gets misclicked.
+ *
+ * Pressing it twice is harmless (the server re-asks for the same thing and
+ * finds the row already terminal), so the busy flag is a courtesy rather than
+ * a guard.
+ */
+function CancelBuildButton({ app, id }: { app: string; id: string }) {
+  const router = useRouter()
+  const [armed, setArmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const run = () => {
+    setBusy(true)
+    setError(null)
+    void cancelBuildFn({ data: { app, id } })
+      .then(async (r) => {
+        if (!r.ok) setError(r.reason)
+        await router.invalidate()
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        setBusy(false)
+        setArmed(false)
+      })
+  }
+
+  return (
+    <span className="inline-flex flex-wrap items-center justify-end gap-[0.6rem] text-[0.76rem]">
+      {error !== null && <span className="max-w-[28rem] text-right text-danger">{error}</span>}
+      {armed && <span className="text-(--text-muted)">Stop it where it is?</span>}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={GHOST_BTN}
+        disabled={busy}
+        title="Stops the host builder. The build ends as cancelled; nothing is published."
+        onClick={() => {
+          if (armed) run()
+          else setArmed(true)
+        }}
+      >
+        {busy ? 'Stopping…' : armed ? 'Yes, cancel' : 'Cancel build'}
+      </Button>
+    </span>
+  )
+}
+
 /** Send a failed GitHub report again now; the page reloads to show what GitHub said. */
 function RetryReportButton({ app, id }: { app: string; id: string }) {
   const router = useRouter()
@@ -494,6 +560,16 @@ const STEP_TONE: Record<TimelineStep['status'], Tone> = {
   running: 'info',
   failed: 'bad',
   pending: 'muted',
+  skipped: 'muted',
+}
+
+// What the right-hand column says when there is no duration to put there. A
+// skipped phase says so in words: "—" beside a green build read as "passed,
+// too fast to time", which is how checks that never ran came to look like
+// checks that passed.
+const STEP_NOTE: Partial<Record<TimelineStep['status'], string>> = {
+  failed: 'failed',
+  skipped: 'did not run',
 }
 
 function Step({ step }: { step: TimelineStep }) {
@@ -502,7 +578,7 @@ function Step({ step }: { step: TimelineStep }) {
       <Pulse on={step.status === 'running'} tone={STEP_TONE[step.status]} />
       <span
         className={
-          step.status === 'pending'
+          step.status === 'pending' || step.status === 'skipped'
             ? 'text-(--dim)'
             : step.status === 'failed'
               ? 'text-danger'
@@ -512,7 +588,7 @@ function Step({ step }: { step: TimelineStep }) {
         {step.phase}
       </span>
       <span className="ml-auto font-mono text-[0.78rem] text-(--dim)">
-        {step.status === 'failed' ? 'failed' : step.ms === null ? DASH : ms(step.ms)}
+        {STEP_NOTE[step.status] ?? (step.ms === null ? DASH : ms(step.ms))}
       </span>
     </li>
   )

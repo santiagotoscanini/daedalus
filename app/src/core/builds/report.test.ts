@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
   latest: undefined as unknown,
   marks: [] as [string, unknown][],
   app: undefined as unknown,
+  repo: undefined as unknown,
   deploys: [] as unknown[],
   ingests: [] as [string, string][],
   log: { available: true, text: '', truncated: false, sizeBytes: 0 },
@@ -46,6 +47,9 @@ vi.mock('../github-app', () => ({
     h.calls.push({ path, method, body: JSON.parse(String(init.body ?? '{}')) })
     return h.answer(path, method)
   },
+  // The repository is read from the app's pinned id, never built from its
+  // name: `h.repo` is what GitHub says that id is called today.
+  repoById: async () => h.repo,
 }))
 vi.mock('../../lib/repo/builds', () => ({
   getBuild: async () => h.build,
@@ -205,6 +209,17 @@ beforeEach(() => {
       deployEnable: true,
       sourceMode: 'registry',
       image: null,
+      githubRepoId: 4242,
+    },
+    repo: {
+      ok: true,
+      repo: {
+        id: 4242,
+        fullName: 'octo/iris',
+        owner: 'octo',
+        name: 'iris',
+        defaultBranch: 'main',
+      },
     },
     site: {
       present: true,
@@ -370,6 +385,45 @@ describe('the check run', () => {
     ;(h.site as { doc: { github: unknown } }).doc.github = { app: null }
     await reportBuildChange(ctx, row({ state: 'cloning' }))
     expect(h.calls).toEqual([])
+  })
+
+  it('posts to the repository the pinned id names now, not to the app name', async () => {
+    // Renamed on GitHub: the app is still `iris` here and the repo is not.
+    h.repo = {
+      ok: true,
+      repo: {
+        id: 4242,
+        fullName: 'octo/iris-web',
+        owner: 'octo',
+        name: 'iris-web',
+        defaultBranch: 'main',
+      },
+    }
+    await reportBuildChange(ctx, row({ state: 'cloning' }))
+    expect(paths()).toEqual(['POST /repos/octo/iris-web/check-runs'])
+  })
+
+  it('posts nothing, and keeps the build unreported, when the repo cannot be read', async () => {
+    h.repo = { ok: false, reason: 'GitHub did not answer within 10 seconds.' }
+    await reportBuildChange(ctx, succeeded())
+    expect(h.calls).toEqual([])
+    expect(h.marks).toEqual([])
+  })
+
+  it('posts nothing for an app with no repository pinned', async () => {
+    ;(h.app as { githubRepoId: number | null }).githubRepoId = null
+    await reportBuildChange(ctx, row({ state: 'cloning' }))
+    expect(h.calls).toEqual([])
+  })
+
+  it('says who cancelled a build in the check run title', async () => {
+    await reportBuildChange(
+      ctx,
+      row({ state: 'cancelled', phase: 'cancelled', error: 'cancelled by the operator' }),
+    )
+    expect(h.calls.at(-1)?.body.output).toMatchObject({
+      title: 'Build cancelled by the operator',
+    })
   })
 })
 

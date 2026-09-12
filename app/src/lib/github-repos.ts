@@ -1,63 +1,21 @@
 // The repositories an app could be created from: the listing behind the
 // create form's picker.
 //
-// Read-only, deliberately. Daedalus creates the registry ENTRY; it does not
-// create repos or push to them. A credential that can write to a repo is a
-// credential that can change what this box runs, and the control plane already
-// has enough reach.
+// It is the GitHub App's installation — exactly the repositories the box was
+// given, which is what a "connect a repo" picker should show and nothing more.
+// Nothing here holds a credential: core/github-app.ts `ghApp` is the one door
+// to GitHub as the installation, and the token never leaves it.
 //
-// Separate from lib/dashboard/github.ts, which reads four public projects'
-// release notes. Same API, different question and different credential: that
-// one wants rate-limit headroom on public data, this one needs to SEE private
-// repos of the account, which the GHCR pull token cannot.
+// Read-only, deliberately. Daedalus creates the registry ENTRY; it does not
+// create repos or push to them. The App's permissions say the same.
+//
+// `GITHUB_REPO_TOKEN` (service-keys.sops, rendered as DASH_GITHUB_REPO_TOKEN)
+// is the explicit override, and the only reason a PAT path still exists here:
+// a personal token lists the ACCOUNT's repositories rather than the
+// installation's, which is the escape hatch for connecting a repo the App has
+// not been given yet. Unset — the normal case — nothing here reads a PAT.
 
-import { swrCache } from './cache'
 import { key } from './keys'
-import { OWNER } from './site'
-
-// Every app repo lives under OWNER (site.ts, nix-bound). Re-exported so this
-// module's importers keep their import path.
-export { OWNER }
-
-/**
- * Listings change when a repo is pushed to, which is minutes-to-days apart,
- * and the picker is re-rendered on every keystroke of the search box. A short
- * cache keeps typing from spending the hourly budget.
- */
-const TTL_MS = 60_000
-
-const cache = swrCache({ ttlMs: TTL_MS })
-
-/**
- * The credential these reads authenticate with.
- *
- * `GITHUB_REPO_TOKEN` first, when service-keys.sops defines one — that key
- * exists so this can be narrowed to a read-only PAT independently of the
- * credential below.
- *
- * Otherwise `GITHUB_TOKEN`, which is the GHCR pull credential re-shaped by a
- * boot oneshot (stacks/daedalus/daedalus.nix) and already present for the
- * release-notes panels. It is a classic PAT carrying `repo`, so it can list
- * private repositories. Worth knowing what that means: `repo` is read-WRITE on
- * every repository on the account, and this module only ever issues GETs.
- * Narrowing it is what the first key is for.
- *
- * Neither present is a supported state: the listing falls back to the
- * account's PUBLIC repos. The UI says which it is — an empty list because a
- * token is missing must not read as "you have no repos".
- */
-function token(): string | null {
-  return key('GITHUB_REPO_TOKEN') || key('GITHUB_TOKEN') || null
-}
-
-function headers(): Record<string, string> {
-  const t = token()
-  return {
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    ...(t ? { Authorization: `Bearer ${t}` } : {}),
-  }
-}
 
 export type Repo = {
   name: string
@@ -71,72 +29,109 @@ export type Repo = {
 
 export type RepoList = {
   repos: Repo[]
-  /** False when the token is absent — the list is then public repos only. */
-  authenticated: boolean
-  /** Set when GitHub refused. The list is empty AND the reason is shown. */
+  /** 'app' when the installation answered, 'token' when the override did. */
+  source: 'app' | 'token'
+  /**
+   * Why there is no listing. The list is then EMPTY and the page shows this
+   * instead — a short list must never pass for the whole truth.
+   */
   error: string | null
 }
 
 type GhRepo = {
-  name?: string
-  description?: string | null
-  private?: boolean
-  archived?: boolean
-  language?: string | null
-  pushed_at?: string | null
-  html_url?: string
+  name?: unknown
+  description?: unknown
+  private?: unknown
+  archived?: unknown
+  language?: unknown
+  pushed_at?: unknown
+  html_url?: unknown
+}
+
+const text = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
+
+/** Most recently pushed first: the repo somebody came here to connect is a recent one. */
+const byPushed = (a: Repo, b: Repo): number => (b.pushedAt ?? '').localeCompare(a.pushedAt ?? '')
+
+/**
+ * The account's own repositories, through the `GITHUB_REPO_TOKEN` override.
+ * One page of 100: this is a personal account, and a picker that paginates is
+ * one nobody scrolls to the end of.
+ */
+async function listByToken(token: string): Promise<RepoList> {
+  const refused = (why: string): RepoList => ({
+    repos: [],
+    source: 'token',
+    error: `GITHUB_REPO_TOKEN is set, and ${why}`,
+  })
+  try {
+    const res = await fetch(
+      'https://api.github.com/user/repos?affiliation=owner&sort=pushed&per_page=100',
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          Authorization: `Bearer ${token}`,
+        },
+        signal: AbortSignal.timeout(10_000),
+      },
+    )
+    if (!res.ok) {
+      return refused(
+        `GitHub answered ${String(res.status)} to it${
+          res.status === 401
+            ? ': the token is rejected'
+            : res.status === 403
+              ? ': rate limited, or it lacks repository read'
+              : ''
+        }.`,
+      )
+    }
+    const body = (await res.json()) as GhRepo[]
+    const repos = body
+      .filter((r): r is GhRepo & { name: string } => typeof r.name === 'string')
+      .map((r) => ({
+        name: r.name,
+        description: text(r.description),
+        private: r.private === true,
+        archived: r.archived === true,
+        language: text(r.language),
+        pushedAt: text(r.pushed_at),
+        htmlUrl: text(r.html_url) ?? `https://github.com/${r.name}`,
+      }))
+    return { repos: repos.sort(byPushed), source: 'token', error: null }
+  } catch {
+    return refused('GitHub could not be reached.')
+  }
 }
 
 /**
- * The account's repositories, most recently pushed first.
- *
- * `/user/repos` with a token (it sees private ones), `/users/{owner}/repos`
- * without. One page of 100: this is a personal account, and a picker that
- * paginates is a picker nobody scrolls to the end of. The search box filters
- * what came back rather than querying — 100 names filter instantly and the
- * search API has a far tighter rate limit.
+ * What the picker lists. Server-only — it reaches the installation token
+ * through `ghApp` — and it never half-answers: a refusal comes back as an
+ * empty list WITH the reason, so an empty picker is never mistaken for an
+ * account with nothing in it.
  */
 export async function listRepos(): Promise<RepoList> {
-  return cache.get('repos', async () => {
-    const authenticated = token() !== null
-    const url = authenticated
-      ? 'https://api.github.com/user/repos?affiliation=owner&sort=pushed&per_page=100'
-      : `https://api.github.com/users/${OWNER}/repos?sort=pushed&per_page=100`
+  const override = key('GITHUB_REPO_TOKEN')
+  if (override !== '') return listByToken(override)
 
-    try {
-      const res = await fetch(url, { headers: headers(), signal: AbortSignal.timeout(10_000) })
-      if (!res.ok) {
-        return {
-          repos: [],
-          authenticated,
-          error: `GitHub answered ${String(res.status)} — ${
-            res.status === 401
-              ? 'the token is rejected; rotate DASH_GITHUB_REPO_TOKEN'
-              : res.status === 403
-                ? 'rate limited, or the token lacks repository read'
-                : 'unexpected'
-          }`,
-        }
-      }
-
-      const body = (await res.json()) as GhRepo[]
-      return {
-        authenticated,
-        error: null,
-        repos: body
-          .filter((r): r is GhRepo & { name: string } => typeof r.name === 'string')
-          .map((r) => ({
-            name: r.name,
-            description: r.description ?? null,
-            private: r.private ?? false,
-            archived: r.archived ?? false,
-            language: r.language ?? null,
-            pushedAt: r.pushed_at ?? null,
-            htmlUrl: r.html_url ?? `https://github.com/${OWNER}/${r.name}`,
-          })),
-      }
-    } catch {
-      return { repos: [], authenticated, error: 'GitHub could not be reached' }
-    }
-  })
+  const { makeCtx } = await import('../core/ctx')
+  const { listInstallationRepos } = await import('../core/github-app')
+  const listed = await listInstallationRepos(await makeCtx())
+  if (!listed.ok) return { repos: [], source: 'app', error: listed.reason }
+  return {
+    source: 'app',
+    error: null,
+    repos: listed.repos
+      .map((r) => ({
+        name: r.name,
+        description: r.description,
+        private: r.private,
+        archived: r.archived,
+        language: r.language,
+        pushedAt: r.pushedAt,
+        htmlUrl: r.htmlUrl,
+      }))
+      .sort(byPushed),
+  }
 }

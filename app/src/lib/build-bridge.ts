@@ -3,11 +3,13 @@ import { mkdir, open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeAtomic } from './bridge'
 import {
+  BUILD_CANCEL_FILE,
   BUILD_REQUEST_FILE,
   BUILD_STATUS_FILE,
   BUILD_STATUS_MAX_AGE_MS,
   type BuildRequest,
   type BuildStatus,
+  buildCancelRequest,
   buildLogPath,
   buildRequestDecoder,
   buildStatusDecoder,
@@ -21,9 +23,10 @@ import { readSnapshot, type SnapshotResult } from './contract/snapshot'
 
 // The file half of the `build` verb (lib/builds.ts is the contract). Server-only.
 //
-//   /apply/build-request.json   written here; daedalus-build.path starts the host builder
-//   /apply/build-status.json    written by host/build.sh, heartbeated while running
-//   /builds/<id>.log            the host's already-redacted log, mounted read-only
+//   /apply/build-request.json         written here; daedalus-build.path starts the host builder
+//   /apply/build-cancel-request.json  written here; daedalus-build-cancel.path stops it
+//   /apply/build-status.json          written by host/build.sh, heartbeated while running
+//   /builds/<id>.log                  the host's already-redacted log, mounted read-only
 
 const processEnv: EnvReader = (name) => {
   const v = process.env[name]
@@ -39,6 +42,22 @@ export async function requestBuild(req: BuildRequest, env: EnvReader = processEn
   await mkdir(dir, { recursive: true })
   // The same bytes the scheduler measured against BUILD_REQUEST_MAX_BYTES.
   await writeAtomic(join(dir, BUILD_REQUEST_FILE), serializeBuildRequest(checked))
+}
+
+/**
+ * Ask the host to stop the build with this id. Idempotent by construction: the
+ * file is rewritten in place, so pressing Cancel twice asks twice for the same
+ * thing, and the host's answer to a build that already ended is to do nothing.
+ */
+export async function requestBuildCancel(
+  id: string,
+  at: Date = new Date(),
+  env: EnvReader = processEnv,
+): Promise<void> {
+  const checked = buildCancelRequest(id, at)
+  const dir = applyDir(env)
+  await mkdir(dir, { recursive: true })
+  await writeAtomic(join(dir, BUILD_CANCEL_FILE), `${JSON.stringify(checked, null, 2)}\n`)
 }
 
 /**

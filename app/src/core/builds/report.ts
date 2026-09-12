@@ -554,7 +554,10 @@ function titleOf(row: BuildRow, site: SiteFacts, delivery: Delivery | null): str
       title = `Build failed on ${site.box}${row.error === null ? '' : `: ${row.error}`}`
       break
     case 'cancelled':
-      title = 'Build cancelled'
+      // The row's own words when it has them ("cancelled by the operator"):
+      // a cancel somebody asked for and one the queue decided on its own are
+      // different events, and the check run is where that difference is read.
+      title = row.error === null ? 'Build cancelled' : `Build ${row.error}`
       break
     case 'superseded':
       title = row.phase.startsWith('superseded by ')
@@ -856,6 +859,37 @@ async function newerDeployed(row: BuildRow, deploys: DeployLike[]): Promise<stri
     : null
 }
 
+/**
+ * Which repository to post this build to, by the id the sweep pinned.
+ *
+ * Never `owner/<app name>`: the app's name is daedalus's key for its own row
+ * and a display label everywhere else, and a repository renamed on GitHub kept
+ * that name here — so every check run and Deployment went to a repository that
+ * no longer exists, with nothing to show for it but a 404 in the log. The id
+ * is the one thing a rename does not move, and `repoById` reads today's name
+ * off it. Null when GitHub cannot say: the build stays unreported and the next
+ * tick asks again, which is the right answer — posting to a guessed name is not.
+ */
+async function repoRefOf(ctx: Ctx, row: BuildRow): Promise<RepoRef | null> {
+  const { getApp } = await import('../../lib/repo/apps')
+  const app = await getApp(row.app)
+  if (!app || app.githubRepoId === null) {
+    logOnce(row.id, 'no-repo-id', `${row.app} has no GitHub repository pinned; nothing was posted`)
+    return null
+  }
+  const { repoById } = await import('../github-app')
+  const found = await repoById(ctx, app.githubRepoId)
+  if (!found.ok) {
+    logOnce(
+      row.id,
+      `repo-lookup:${found.reason}`,
+      `could not read repository ${String(app.githubRepoId)}: ${found.reason}`,
+    )
+    return null
+  }
+  return { owner: found.repo.owner, repo: found.repo.name }
+}
+
 async function reportRow(ctx: Ctx, row: BuildRow, manual: boolean): Promise<void> {
   if (row.state === 'queued') return
   if (isTerminalBuildState(row.state) && row.reported) return
@@ -880,7 +914,8 @@ async function reportRow(ctx: Ctx, row: BuildRow, manual: boolean): Promise<void
       logOnce(row.id, 'no-app', 'site.json names no GitHub App; nothing was reported')
       return
     }
-    const repo: RepoRef = { owner: site.app.owner, repo: row.app }
+    const repo = await repoRefOf(ctx, row)
+    if (repo === null) return
     if (isActiveBuildState(row.state)) await reportProgress(ctx, row, repo, site)
     else await reportFinal(ctx, row, repo, site)
   } finally {

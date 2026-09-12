@@ -57,27 +57,46 @@ export type RunFacts = {
 
 export type BuildFacts = { image: ImageFacts | null; run: RunFacts | null }
 
+/**
+ * Null-as-absent, applied to the decoded object as a whole.
+ *
+ * The contract is that the agent OMITS a key it has nothing to say about, but
+ * it has published explicit nulls — `secretsHash: null` for an app with no
+ * build secrets — and an older agent's habits are not something this side gets
+ * to depend on. Every field decoder already reads a null as null, so the only
+ * thing left to decide is what an object of nothing but nulls means: it means
+ * the agent said nothing, so the whole key reads as absent and the view falls
+ * back to "nobody said" rather than rendering a card of empty rows.
+ */
+function saidSomething<T extends object>(decoded: T): T | null {
+  return Object.values(decoded).some((v) =>
+    Array.isArray(v) ? v.length > 0 : v !== null && v !== undefined,
+  )
+    ? decoded
+    : null
+}
+
 function readImage(raw: unknown): ImageFacts | null {
   if (!isRec(raw)) return null
-  return {
+  return saidSomething({
     tags: strings(raw.tags),
     layers: count(raw.layers),
     layerSizes: counts(raw.layerSizes),
     configSize: count(raw.configSize),
     mediaType: text(raw.mediaType),
-  }
+  })
 }
 
 function readRun(raw: unknown): RunFacts | null {
   if (!isRec(raw)) return null
-  return {
+  return saidSomething({
     runner: text(raw.runner),
     secretsHash: text(raw.secretsHash),
     cacheImported: flag(raw.cacheImported),
     cacheExported: flag(raw.cacheExported),
     stepsCached: count(raw.stepsCached),
     stepsTotal: count(raw.stepsTotal),
-  }
+  })
 }
 
 /**

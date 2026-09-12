@@ -17,13 +17,16 @@ import {
   BUILD_PUBLISH_MODES,
   BUILD_STRATEGIES,
   type BuildPublish,
+  type BuildState,
   type BuildStrategy,
+  isActiveBuildState,
+  isTerminalBuildState,
 } from '../lib/builds'
 
 // Server functions behind the build UI: the builds board, the build page, the
-// Build now and Retry report buttons and an app's build settings. Value imports
-// of anything that touches the database are dynamic, so it stays out of the
-// client bundle (server/registry.ts does the same).
+// Build now, Cancel and Retry report buttons and an app's build settings.
+// Value imports of anything that touches the database are dynamic, so it stays
+// out of the client bundle (server/registry.ts does the same).
 
 const APP_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/
 const SHA_RE = /^[0-9a-f]{40}$/
@@ -171,8 +174,6 @@ export const fetchBuild = createServerFn()
 const COMMITS = new Map<string, BuildCommit>()
 const COMMITS_MAX = 200
 
-type RepoBody = { id?: unknown; full_name?: unknown; default_branch?: unknown }
-
 /**
  * The author and message of a build's commit, asked of GitHub as the App.
  * Its own function because fetchBuild is polled every 3 s and this must not
@@ -194,15 +195,16 @@ export const fetchBuildCommit = createServerFn()
     const record = await getApp(data.app)
     if (!record || record.githubRepoId === null) return null
     const { makeCtx } = await import('../core/ctx')
-    const { ghApp } = await import('../core/github-app')
+    const { ghApp, repoById } = await import('../core/github-app')
     const ctx = await makeCtx()
-    const repo = await ghApp<RepoBody>(ctx, `/repositories/${String(record.githubRepoId)}`)
-    if (repo.status !== 200 || typeof repo.body?.full_name !== 'string') return null
+    // By id: the app's name is a label, and a renamed repo still answers here.
+    const found = await repoById(ctx, record.githubRepoId)
+    if (!found.ok) return null
     const r = await ghApp<{
       html_url?: unknown
       commit?: { message?: unknown; author?: { name?: unknown; date?: unknown } }
       author?: { login?: unknown } | null
-    }>(ctx, `/repos/${repo.body.full_name}/commits/${data.sha}`)
+    }>(ctx, `/repos/${found.repo.fullName}/commits/${data.sha}`)
     if (r.status !== 200 || r.body === null) return null
 
     const text = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
@@ -265,18 +267,13 @@ export const buildNowFn = createServerFn({ method: 'POST' })
     }
 
     const { makeCtx } = await import('../core/ctx')
-    const { ghApp, describeGhFailure } = await import('../core/github-app')
+    const { ghApp, describeGhFailure, repoById } = await import('../core/github-app')
     const ctx = await makeCtx()
-    // By id rather than owner/name: the id is what the sweep linked. The host
-    // still reads the repository by the app's name, so a renamed one fails there.
-    const repo = await ghApp<RepoBody>(ctx, `/repositories/${String(record.githubRepoId)}`)
-    if (repo.status !== 200 || repo.body === null) {
-      return { ok: false, reason: describeGhFailure(repo) }
-    }
-    const { id, full_name: fullName, default_branch: branch } = repo.body
-    if (id !== record.githubRepoId || typeof fullName !== 'string' || typeof branch !== 'string') {
-      return { ok: false, reason: 'GitHub answered with a repository this app is not linked to.' }
-    }
+    // By id rather than owner/name: the id is what the sweep linked, and it is
+    // still right after a rename. The name that comes back is a label.
+    const found = await repoById(ctx, record.githubRepoId)
+    if (!found.ok) return { ok: false, reason: found.reason }
+    const { fullName, defaultBranch: branch } = found.repo
     const tip = await ghApp<{ sha?: unknown }>(
       ctx,
       `/repos/${fullName}/commits/${encodeURIComponent(branch)}`,
@@ -311,6 +308,66 @@ export const buildNowFn = createServerFn({ method: 'POST' })
           : ''),
     )
     return { ok: true, id: enqueued.row.id, sha, existing: enqueued.alreadyQueued }
+  })
+
+export type CancelBuildResult = { ok: true } | { ok: false; reason: string }
+
+/**
+ * Stop a running build.
+ *
+ * Two writes, host first. The bridge file asks the host to stop the unit, whose
+ * reaper publishes a terminal status; the row is then marked `cancelled` here,
+ * because the host cannot tell a Cancel from a crash — both reach its reaper as
+ * `interrupted` (lib/build-queue.ts CANCELLED_BY_OPERATOR).
+ *
+ * Marking the row terminal is also what makes the two writes safe in either
+ * order: `updateFromStatus` refuses a row that is already final, so a build
+ * that finished on its own mid-request keeps its own ending, and the host's
+ * `interrupted` landing a moment later cannot overwrite a `cancelled` row
+ * (`applyStatus`). Idempotent: a second press re-asks the host for the same
+ * thing and finds the row already terminal.
+ */
+export const cancelBuildFn = createServerFn({ method: 'POST' })
+  .validator((input: { app: string; id: string }) => {
+    if (typeof input.id !== 'string') throw new Error('expected a build id')
+    return { app: appName(input.app), id: input.id }
+  })
+  .handler(async ({ data }): Promise<CancelBuildResult> => {
+    const { actorFrom, NO_ACTOR_REASON } = await import('../core/settings/github-app')
+    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    if (actor === null) return { ok: false, reason: NO_ACTOR_REASON }
+
+    const { getBuild, updateFromStatus } = await import('../lib/repo/builds')
+    const record = await getBuild(data.id)
+    if (!record || record.app !== data.app) return { ok: false, reason: 'No such build.' }
+    const state = record.state as BuildState
+    if (isTerminalBuildState(state)) return { ok: true }
+    if (!isActiveBuildState(state)) {
+      return {
+        ok: false,
+        reason: 'This build is still queued — nothing is running to stop.',
+      }
+    }
+
+    const { requestBuildCancel } = await import('../lib/build-bridge')
+    const { CANCELLED_BY_OPERATOR } = await import('../lib/build-queue')
+    await requestBuildCancel(record.id)
+    await updateFromStatus(
+      record.id,
+      {
+        state: 'cancelled',
+        phase: 'cancelled',
+        error: CANCELLED_BY_OPERATOR,
+        updatedAt: new Date(),
+      },
+      'engine',
+    )
+    // The actor is in the journal, never on the row: the row's words reach a
+    // GitHub check run, and an email address does not belong there.
+    console.info(
+      `[builds] ${actor} cancelled ${data.app}@${record.sha.slice(0, 7)} (${record.id}) during ${state}`,
+    )
+    return { ok: true }
   })
 
 export type RetryReportResult = { ok: true } | { ok: false; reason: string }
