@@ -1,5 +1,6 @@
 import type { SiteField } from '../core/site'
 import type { SiteDocument } from '../core/site/file'
+import { RESERVED_LABELS } from './hostname'
 
 // The client half of editing site.json: reading a dotted field out of the
 // document, and the light, local validators the inputs run before a save.
@@ -52,8 +53,8 @@ export function baseDomainError(value: string): string | null {
 /**
  * The control plane's name: the one label in front of the domain. Lower-case,
  * because that is what the build asserts for every published hostname, and
- * never `daedalus` — that name is the project's public landing page, a
- * hand-managed record the tunnel's reconciler would overwrite.
+ * never one of the reserved labels — the same list an app's hostname is held
+ * to, since the control plane is published exactly like one.
  */
 export function controlPlaneLabelError(value: string): string | null {
   const v = value.trim()
@@ -62,7 +63,8 @@ export function controlPlaneLabelError(value: string): string | null {
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(v)) {
     return 'lower-case letters, digits and inner hyphens — it is one part of a hostname.'
   }
-  if (v === 'daedalus') return 'daedalus is the project’s public landing page; pick another name.'
+  const reserved = RESERVED_LABELS[v]
+  if (reserved) return `${v} ${reserved} Pick another name.`
   return null
 }
 

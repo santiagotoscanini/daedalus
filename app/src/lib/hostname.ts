@@ -23,6 +23,24 @@ export { BASE_DOMAIN }
 const LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 
 /**
+ * Labels under the base domain that an app may never claim, and why.
+ *
+ * `daedalus` is the project's public landing page: a hand-managed CNAME to
+ * GitHub Pages that is deliberately NOT a fleet hostname, so it is absent from
+ * the `taken` list a collision check reads — nothing else would catch it, and
+ * cloudflared-route-sync would reconcile the Pages record away.
+ *
+ * `hooks` is the GitHub App's webhook, published on the tunnel entrypoint
+ * only. An app claiming it either collides with that router or lands behind a
+ * public CNAME the operator never chose. Nix asserts this one; the edit is
+ * where it should be caught.
+ */
+export const RESERVED_LABELS: Readonly<Record<string, string>> = {
+  daedalus: 'is the project’s public landing page, a record this box does not own.',
+  hooks: 'is reserved for the GitHub App’s webhook.',
+}
+
+/**
  * Is this usable as an app's key?
  *
  * The key is the most load-bearing string on the platform: it is the container
@@ -41,6 +59,9 @@ export function appNameError(name: string, taken: readonly string[] = []): strin
   if (!LABEL.test(n)) {
     return 'may use lowercase letters, digits and inner hyphens only. It becomes a DNS label, a container name and a postgres role.'
   }
+  // The name derives the default hostname, so a reserved label is reserved here too.
+  const reserved = RESERVED_LABELS[n]
+  if (reserved) return `${n} ${reserved}`
   // `app-<name>` is a container name and the left label of a hostname; 63 is
   // the DNS limit and the shorter of the two ceilings.
   if (n.length > 59) return 'too long. `app-<name>` has to fit in a 63-character DNS label.'
@@ -75,6 +96,11 @@ export function hostnameError(value: string, taken: readonly string[] = []): str
   if (!LABEL.test(label)) {
     return 'may use lowercase letters, digits and inner hyphens only.'
   }
+  // Checked after the shape rules so the message is about the name, not the
+  // syntax. `taken` cannot cover these: one is not published from this box at
+  // all, and the other is published by a raw router rather than a webApp.
+  const reserved = RESERVED_LABELS[label]
+  if (reserved) return `${label} ${reserved} Pick another name.`
   return null
 }
 

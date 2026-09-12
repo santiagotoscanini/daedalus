@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { appNameError, BASE_DOMAIN, effectiveHostname, hostnameError } from './hostname'
+import {
+  appNameError,
+  BASE_DOMAIN,
+  effectiveHostname,
+  hostnameError,
+  RESERVED_LABELS,
+} from './hostname'
 
 describe('appNameError', () => {
   it('accepts a plain label', () => {
@@ -77,5 +83,26 @@ describe('effectiveHostname', () => {
 
   it('derives the default from the name', () => {
     expect(effectiveHostname('anansi', null)).toBe(`anansi.${BASE_DOMAIN}`)
+  })
+})
+
+// The reserved labels are the one collision `taken` cannot catch: `daedalus`
+// is a GitHub Pages record this box does not publish at all, so it never
+// appears in the box's own hostname list, and route-sync would reconcile it
+// away. Before this rule both validators returned null for it.
+describe('reserved labels', () => {
+  for (const label of Object.keys(RESERVED_LABELS)) {
+    it(`refuses ${label} as a hostname`, () => {
+      expect(hostnameError(`${label}.${BASE_DOMAIN}`)).toContain(label)
+    })
+
+    it(`refuses ${label} as an app name, because the name derives the hostname`, () => {
+      expect(appNameError(label)).toContain(label)
+    })
+  }
+
+  it('still allows a name that merely contains a reserved label', () => {
+    expect(hostnameError(`daedalus-app.${BASE_DOMAIN}`)).toBeNull()
+    expect(appNameError('daedalus-app')).toBeNull()
   })
 })
