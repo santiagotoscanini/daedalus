@@ -20,12 +20,18 @@ const LEDGER: LedgerRow[] = [
   {
     vendor: "AWS RDS",
     sells: "managed Postgres",
-    ours: "One shared cluster. Every app is born with a database, a role and a DATABASE_URL.",
+    // `postgres.enable` defaults to false: an app that asks gets a database,
+    // a stateless one gets none. "Every app is born with a database" read
+    // better and was not true.
+    ours: "One shared cluster. An app that asks for a database is handed the role, the schema and a DATABASE_URL.",
   },
   {
     vendor: "Auth0",
     sells: "single sign-on",
-    ours: "Pocket ID fronts every app with OIDC. One account, every door.",
+    // `auth.mode` is none | proxy | native and defaults to none. Some apps
+    // cannot speak OIDC at all — a TV signing in to a media server — which is
+    // why the mode is a choice per app and not a policy over all of them.
+    ours: "Pocket ID issues the identity. Gate an app at the proxy or wire it as an OIDC client — one account either way.",
   },
   {
     vendor: "Route 53 + ACM",
@@ -40,7 +46,10 @@ const LEDGER: LedgerRow[] = [
   {
     vendor: "S3",
     sells: "backups",
-    ours: "ZFS snapshots every fifteen minutes, replicated to a second mirror.",
+    // The one row where the rented thing is genuinely better, and saying so
+    // costs nothing: a second pool in the same case survives a disk, not a
+    // fire. A reader who works this out alone stops believing the other five.
+    ours: "ZFS snapshots every fifteen minutes, replicated to a second pool. Same building, though — that part you still owe yourself.",
   },
 ];
 

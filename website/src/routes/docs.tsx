@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Reveal } from "~/components/reveal";
+import { pageHead } from "~/site-head";
 
 /** /docs — the boundary document. A daedalus-managed machine rebuilds from
  * its config repo; this page inventories what every install still needs
@@ -10,16 +11,13 @@ import { Reveal } from "~/components/reveal";
 
 export const Route = createFileRoute("/docs")({
   component: DocsPage,
-  head: () => ({
-    meta: [
-      { title: "Daedalus docs. What stays outside the repo." },
-      {
-        name: "description",
-        content:
-          "What a daedalus install still needs outside its config repo: a Cloudflare zone and tunnel, Let's Encrypt, a router that forwards only what you choose, GitHub, a mail relay, and two keys you cannot lose.",
-      },
-    ],
-  }),
+  head: () =>
+    pageHead({
+      path: "/docs",
+      title: "Daedalus docs. What stays outside the repo.",
+      description:
+        "What a daedalus install still needs outside its config repo: a Cloudflare zone and tunnel, a router, GitHub, a mail relay, and two keys you cannot lose.",
+    }),
 });
 
 /* ---------------------------------------------------------------- *

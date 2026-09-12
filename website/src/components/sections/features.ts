@@ -26,7 +26,11 @@ export const FEATURES: Feature[] = [
     view: "deploys",
     kicker: "deploys",
     title: "Push to main. Live in minutes.",
-    body: "Apps build on the box's own hardware, land in its own registry, and deploy the moment the digest moves. No cloud in the loop. The pipeline never leaves the house.",
+    // "No cloud in the loop" was too broad to survive a reader who knows how
+    // this works: GitHub IS in the loop — the remote, the push webhook, and
+    // where the check run lands. What never leaves the house is the build and
+    // the image.
+    body: "Apps build on the box's own hardware, land in its own registry, and deploy the moment the digest moves. GitHub holds the source and hears the result. No build minutes, no registry password, no image that ever left the house.",
     color: "#4ea87a",
   },
   {

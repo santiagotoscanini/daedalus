@@ -50,13 +50,20 @@ export function Nav() {
               {l.label}
             </Link>
           ))}
-          <Link
-            to="/docs"
-            className="rounded-md px-2.5 py-1.5 text-[13.5px] text-muted transition-colors hover:text-fg"
-          >
-            Docs
-          </Link>
         </div>
+
+        {/* Docs is the one nav link that survives to phone widths, and it has
+            to: the section links above are hidden below md and the primary
+            button below sm, so without it the mobile header offers no
+            navigation at all and the site's other page is reachable only from
+            the hero and the footer. `ml-auto` here, dropped at md where the
+            section links already took it. */}
+        <Link
+          to="/docs"
+          className="ml-auto rounded-md px-2.5 py-1.5 text-[13.5px] text-muted transition-colors hover:text-fg md:ml-0"
+        >
+          Docs
+        </Link>
 
         <div className="ml-2 flex items-center gap-1.5 md:ml-4">
           <a

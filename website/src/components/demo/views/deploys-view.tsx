@@ -133,9 +133,9 @@ export function DeploysView() {
         {/* Deploy history timeline */}
         <div>
           <div className="flex items-baseline gap-[10px]">
-            <h2 className="text-[14px] font-semibold" style={{ color: APP.text }}>
+            <p className="text-[14px] font-semibold" style={{ color: APP.text }}>
               Deploy history
-            </h2>
+            </p>
             <span className="text-[12px]" style={{ color: APP.dim }}>
               only the runs where the digest moved
             </span>

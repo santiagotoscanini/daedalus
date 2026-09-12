@@ -116,9 +116,13 @@ export function AppsView() {
         title="Apps"
         lede="What this box runs of its own, what lives on someone else's infrastructure, and the two registries everything here is built out of."
       />
+      {/* capitalize={false}: these three are the app's own written labels
+          (src/routes/apps.index.tsx), and title-casing them prints
+          "Npm Packages". */}
       <Tabs
         items={[{ label: "Apps" }, { label: "Container registry" }, { label: "npm packages" }]}
         active="Apps"
+        capitalize={false}
       />
 
       {/* Tallies + primary action */}
@@ -145,9 +149,9 @@ export function AppsView() {
 
       {/* Section head */}
       <div className="mt-[16px] flex items-baseline gap-[10px]">
-        <h2 className="text-[14px] font-semibold" style={{ color: APP.text }}>
+        <p className="text-[14px] font-semibold" style={{ color: APP.text }}>
           Daedalus
-        </h2>
+        </p>
         <span className="text-[12px]" style={{ color: APP.dim }}>
           deployed and watched on this box
         </span>
@@ -165,9 +169,9 @@ export function AppsView() {
 
       {/* Control plane */}
       <div className="mt-[14px] flex items-baseline gap-[10px]">
-        <h2 className="text-[14px] font-semibold" style={{ color: APP.text }}>
+        <p className="text-[14px] font-semibold" style={{ color: APP.text }}>
           Control plane
-        </h2>
+        </p>
         <span className="text-[12px]" style={{ color: APP.dim }}>
           declared in Nix, not editable here
         </span>

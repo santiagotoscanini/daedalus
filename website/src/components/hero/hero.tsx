@@ -50,9 +50,16 @@ export function Hero() {
             <VendorRoll />
           </span>
         </h1>
-        <p className="rise rise-1 mx-auto mt-6 max-w-lg text-pretty text-[15px] leading-relaxed text-[#b4b4be]">
-          Push-to-deploy, managed Postgres, single sign-on, certificates, monitoring and backups.
-          The platform you'd otherwise rent.
+        {/* The one paragraph that has to say what this IS. The headline sells
+            the feeling and names no category, so without this sentence a
+            visitor who has never heard of daedalus leaves the first screen
+            knowing only that something replaces AWS. Name the thing (a control
+            plane), its scope (one machine you already own), what it gives you,
+            and the mechanic nothing else does (a commit, not a click). */}
+        <p className="rise rise-1 mx-auto mt-6 max-w-xl text-pretty text-[15px] leading-relaxed text-[#b4b4be]">
+          One app that runs one machine: push-to-deploy, managed Postgres, single sign-on,
+          certificates, monitoring and backups. Every change it makes is a commit to the machine's
+          NixOS config.
         </p>
         <div className="rise rise-2 mt-10 flex flex-wrap items-center justify-center gap-3">
           <a href={REPO} className="btn btn-primary h-11 px-5">

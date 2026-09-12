@@ -1,7 +1,15 @@
 /** Shared chrome + leaf primitives for the demo windows: the app's real
  * shell (sidebar rail, boards, chips, sparklines) hand-rebuilt at desktop
  * density on the fixed 1280×800 canvas. Colors are the app's own tokens,
- * inlined — the demo must look like daedalus, not like this site. */
+ * inlined — the demo must look like daedalus, not like this site.
+ *
+ * NOTHING IN HERE IS A HEADING. These are pictures of another product's UI,
+ * wrapped in `role="img"` with a written description (demo-window.tsx), so
+ * every word inside is paint. Written as `h1`/`h2`/`h3` they were real
+ * headings in THIS document: the landing page carried seven `h1`s, four of
+ * them the word "Apps" from the four demo views mounted at once, and its
+ * outline was useless to anything that navigates by heading. A styled
+ * paragraph looks identical and claims nothing. Keep it that way. */
 
 import type { ReactNode } from "react";
 
@@ -150,12 +158,12 @@ export function Board({
         className="flex items-baseline justify-between border-b px-[15px] pb-[9px] pt-[11px]"
         style={{ borderColor: APP.hairline }}
       >
-        <h3
+        <p
           className="text-[13px] font-semibold uppercase tracking-[0.05em]"
           style={{ color: APP.text }}
         >
           {title}
-        </h3>
+        </p>
         {note ? (
           <span className="text-[12px]" style={{ color: APP.dim }}>
             {note}
@@ -371,9 +379,9 @@ export function Shell({ active, children }: { active: string; children: ReactNod
 export function PageHead({ title, lede }: { title: string; lede: string }) {
   return (
     <div>
-      <h1 className="text-[24px] font-semibold tracking-[-0.02em]" style={{ color: APP.text }}>
+      <p className="text-[24px] font-semibold tracking-[-0.02em]" style={{ color: APP.text }}>
         {title}
-      </h1>
+      </p>
       <p className="mt-[6px] max-w-[72ch] text-[13.5px] leading-relaxed" style={{ color: APP.muted }}>
         {lede}
       </p>
@@ -382,13 +390,22 @@ export function PageHead({ title, lede }: { title: string; lede: string }) {
 }
 
 /** The app's tab row — active tab gets a 2px accent underline; category
- * pages bake a status dot into each tab. */
+ * pages bake a status dot into each tab.
+ *
+ * `capitalize` is on by default because the app detail page names its tabs by
+ * their lowercase route ids ("overview", "deployments") and titles them in
+ * CSS. It has to be OFF wherever the real app writes the label itself: the
+ * Apps page ships "Container registry" and "npm packages", and title-casing
+ * them produced "Npm Packages" in a demo whose whole promise is that the
+ * labels are real. */
 export function Tabs({
   items,
   active,
+  capitalize = true,
 }: {
   items: Array<{ label: string; dot?: Tone }>;
   active: string;
+  capitalize?: boolean;
 }) {
   return (
     <div
@@ -400,7 +417,7 @@ export function Tabs({
         return (
           <span
             key={t.label}
-            className="flex items-center gap-[7px] pb-[9px] text-[13.5px] capitalize"
+            className={`flex items-center gap-[7px] pb-[9px] text-[13.5px] ${capitalize ? "capitalize" : ""}`}
             style={{
               color: on ? APP.text : APP.muted,
               boxShadow: on ? `inset 0 -2px 0 ${APP.accent}` : undefined,

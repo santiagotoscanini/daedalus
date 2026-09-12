@@ -6,29 +6,24 @@ import { Nav } from "~/components/nav";
 // injected by JS after the client bundle evaluates, so the SSR document
 // would arrive unstyled and repaint.
 import stylesCss from "../styles.css?url";
+import { SITE_URL } from "~/site-head";
 
-const SITE_URL = "https://daedalus.toscanini.me";
-const TITLE = "Daedalus. Build yourself a cloud.";
-const DESCRIPTION =
-  "Daedalus is an open-source personal cloud platform: push-to-deploy, managed Postgres, single sign-on, monitoring and backups, all on one box you own. Your own Vercel, your own AWS, with NixOS as the reproducible backend.";
-
+// Only tags that are byte-identical on EVERY page belong here. Anything a
+// page OWNS — title, description, canonical, and the og/twitter pair that
+// carries them — is built by `pageHead` in the route itself. Declared here,
+// they were inherited: /docs shipped a canonical pointing at `/` and previewed
+// with the landing page's headline. See src/site-head.ts.
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: TITLE },
-      { name: "description", content: DESCRIPTION },
       { name: "theme-color", content: "#08080a" },
       { property: "og:type", content: "website" },
       { property: "og:site_name", content: "daedalus" },
-      { property: "og:title", content: TITLE },
-      { property: "og:description", content: DESCRIPTION },
-      { property: "og:url", content: SITE_URL },
       { property: "og:image", content: `${SITE_URL}/og.png` },
+      { property: "og:image:alt", content: "The daedalus mark: a square labyrinth drawn in ember." },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: TITLE },
-      { name: "twitter:description", content: DESCRIPTION },
       { name: "twitter:image", content: `${SITE_URL}/og.png` },
     ],
     links: [
@@ -36,7 +31,6 @@ export const Route = createRootRoute({
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
       { rel: "icon", href: "/favicon.png", type: "image/png" },
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
-      { rel: "canonical", href: SITE_URL },
     ],
   }),
   shellComponent: RootDocument,

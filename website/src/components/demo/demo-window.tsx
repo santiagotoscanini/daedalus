@@ -116,22 +116,33 @@ export function AppDemo() {
 
   return (
     <div onPointerEnter={() => setHeld(true)}>
+      {/* Toggle buttons in a labelled group, NOT `role="tablist"` + `role="tab"`.
+          A tab has to own a tabpanel, and what these switch is one
+          `role="img"` — an element cannot be both. Announced as tabs, a screen
+          reader offered "tab, 1 of 4" and then had nowhere to go, and the
+          arrow-key navigation the role promises was never implemented.
+          `aria-pressed` describes exactly what these are.
+
+          Sized down below sm because this row is the one thing on the page
+          that could not shrink: at 360px the four labels ran 381px wide inside
+          a 312px gutter, and the hero's `overflow-hidden` sliced "UPDATES" in
+          half. `max-w-full overflow-x-auto` is the floor under that — narrower
+          still, it scrolls instead of clipping. */}
       <div
-        className="mb-5 flex justify-center gap-1 rounded-full border border-line bg-white/[0.03] p-1 sm:mx-auto sm:w-fit"
-        role="tablist"
+        className="mx-auto mb-5 flex w-fit max-w-full justify-center gap-0.5 overflow-x-auto rounded-full border border-line bg-white/[0.03] p-1 sm:gap-1"
+        role="group"
         aria-label="Views of the app"
       >
         {DEMO_VIEWS.map((v) => (
           <button
             key={v.id}
             type="button"
-            role="tab"
-            aria-selected={view === v.id}
+            aria-pressed={view === v.id}
             onClick={() => {
               setHeld(true);
               setView(v.id);
             }}
-            className={`rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
+            className={`shrink-0 rounded-full px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] transition-colors sm:px-3.5 sm:text-[11px] sm:tracking-[0.14em] ${
               view === v.id ? "bg-white/[0.08] text-fg" : "text-muted-2 hover:text-fg"
             }`}
           >

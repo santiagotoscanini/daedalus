@@ -7,9 +7,17 @@ import { OpenSource } from "~/components/sections/open-source";
 import { Principles } from "~/components/sections/principles";
 import { RentedCloud } from "~/components/sections/rented-cloud";
 import { SectionHeading } from "~/components/ui/section-heading";
+import { pageHead } from "~/site-head";
 
 export const Route = createFileRoute("/")({
   component: Landing,
+  head: () =>
+    pageHead({
+      path: "",
+      title: "Daedalus. Build yourself a cloud.",
+      description:
+        "An open-source control plane for one machine you own: push-to-deploy, managed Postgres, single sign-on, certificates, monitoring and backups, on NixOS.",
+    }),
 });
 
 function Landing() {

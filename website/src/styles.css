@@ -26,11 +26,16 @@
   --color-line: rgba(255, 255, 255, 0.08);
   --color-line-2: rgba(255, 255, 255, 0.12);
 
-  /* Text */
-  --color-fg: #ededef;
-  --color-muted: #8b8b95;
-  --color-muted-2: #75757e;
-  --color-dim: #5f5f68;
+  /* Text. Four steps down from the page's white, and the bottom two are
+   * where the ladder stops: every tier here clears WCAG AA (4.5:1) against
+   * both --color-app and --color-panel, because the quietest greys carry
+   * the smallest type — 10-11px mono kickers, the docs jump list, the
+   * footer rule. A darker `dim` reads better and fails: #5f5f68 measured
+   * 3.17:1. Anything new goes through the same check before it lands. */
+  --color-fg: #ededef; /* 17.11:1 */
+  --color-muted: #8b8b95; /* 5.93:1 */
+  --color-muted-2: #82828b; /* 5.26:1 */
+  --color-dim: #7a7a83; /* 4.71:1 */
 
   /* Status (the app's own semantics, reused as decoration) */
   --color-status-ok: #4ea87a;
@@ -82,6 +87,19 @@ html {
   background: rgba(226, 121, 90, 0.28);
 }
 
+/* Everything below is a COMPONENT class, and it has to live in the
+ * components layer. Tailwind v4 puts its utilities in a `utilities` layer,
+ * and an unlayered rule outranks every layered one no matter how specific:
+ * `.btn { display: inline-flex }` written at the top level silently beat
+ * `hidden` on `<a class="btn btn-primary hidden sm:inline-flex">`, and the
+ * header's desktop-only button showed up on every phone. Declaring the
+ * layer costs one line and makes `class=` win, which is what every caller
+ * already assumes.
+ *
+ * What stays OUTSIDE the layer, above: the element and pseudo-class rules
+ * (`html`, `:focus-visible`, `::selection`) — those are meant to be hard
+ * to override, the focus ring especially. */
+@layer components {
 /* ---------------------------------------------------------------- *
  * Atmosphere
  * ---------------------------------------------------------------- */
@@ -468,4 +486,5 @@ html {
   .vendor-roll-track {
     transition: none;
   }
+}
 }

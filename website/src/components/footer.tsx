@@ -29,20 +29,34 @@ export function Footer() {
                 Docs
               </Link>
             </li>
+            {/* Every link in this list must resolve in the PUBLIC repo. The
+                two that used to sit here pointed at docs/operations.md and
+                docs/recovery.md, which exist only in the private machine
+                configuration: both 404'd, from the footer of every page, for
+                as long as the site has been up. Open a link before adding it.
+
+                The two below carry Mermaid diagrams and stay in the repo
+                rather than on the site: GitHub renders Mermaid natively, while
+                shipping a renderer here would cost ~900 KB gzip against a
+                103 KB site, could not prerender, and would make a second copy
+                of facts like uid numbers and request filenames that nobody
+                would think to re-check. */}
             <li>
               <a
-                href={`${REPO}/blob/main/docs/operations.md`}
+                href={`${REPO}/blob/main/ARCHITECTURE.md`}
                 className="transition-colors hover:text-fg"
               >
-                Operations
+                Architecture
               </a>
             </li>
             <li>
-              <a
-                href={`${REPO}/blob/main/docs/recovery.md`}
-                className="transition-colors hover:text-fg"
-              >
-                Recovery
+              <a href={`${REPO}/blob/main/BUILDS.md`} className="transition-colors hover:text-fg">
+                Builds
+              </a>
+            </li>
+            <li>
+              <a href={`${REPO}/blob/main/PLAN.md`} className="transition-colors hover:text-fg">
+                Plan
               </a>
             </li>
           </ul>
