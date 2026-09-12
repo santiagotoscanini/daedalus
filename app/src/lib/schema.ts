@@ -350,10 +350,6 @@ export const appEnvVarsRelations = relations(appEnvVars, ({ one }) => ({
   app: one(apps, { fields: [appEnvVars.appId], references: [apps.id] }),
 }))
 
-export type App = typeof apps.$inferSelect
-export type AppEnvVar = typeof appEnvVars.$inferSelect
-export type Deployment = typeof deployments.$inferSelect
-
 // Operator preferences that the NixOS side does not consume.
 //
 // The dividing line matters and is the whole reason this table exists.
@@ -373,5 +369,3 @@ export const settings = pgTable('settings', {
   value: jsonb('value').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
-
-export type Setting = typeof settings.$inferSelect

@@ -1,4 +1,4 @@
-import { DASH, since } from '../../../format'
+import { DASH, localDay, since } from '../../../format'
 import { getJson } from '../../../http'
 import { key } from '../../../keys'
 import { type VersionGap, versionGap } from '../../github'
@@ -125,9 +125,6 @@ async function listExecutions(
   }
   return { rows, refused: false, partial: true }
 }
-
-/** `YYYY-MM-DD` in the box's timezone, so a column is the day you lived. */
-const localDay = (ms: number): string => new Date(ms).toLocaleDateString('en-CA')
 
 function median(xs: number[]): number | null {
   if (xs.length === 0) return null

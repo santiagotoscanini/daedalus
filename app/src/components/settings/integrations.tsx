@@ -30,7 +30,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Chip, Facts } from '../viz'
-import { ExtLink, Mono, Pending, Section, Unset, Value } from './shared'
+import { ExtLink, Mono, NOTE, Pending, Section, Unset, Value } from './shared'
 import { SiteText, SiteUnwritten } from './site-fields'
 
 // Two kinds of fact side by side: what is CONFIGURED (ids and whether a
@@ -117,7 +117,7 @@ export function Integrations({
         title="GitHub"
         icon="/icon-github.svg"
         mono
-        description="Where the app repos live, and how the box talks to GitHub: the two tokens below for now, and its own App once one is created and installed."
+        description="Where the app repos live, and how the box talks to GitHub: the repo-token override below, and its own App once one is created and installed."
         rows={[
           {
             k: 'Owner',
@@ -127,15 +127,6 @@ export function Integrations({
               ) : (
                 <ExtLink href={`https://github.com/${gh.owner}`}>{gh.owner}</ExtLink>
               ),
-          },
-          {
-            k: 'Token',
-            v: (
-              <Github
-                configured={gh.tokenConfigured}
-                check={status === null ? undefined : status.github.token}
-              />
-            ),
           },
           {
             k: 'Repo token',
@@ -317,8 +308,6 @@ function Github({ configured, check }: { configured: boolean; check: GithubCheck
     </span>
   )
 }
-
-const NOTE = 'm-0 text-[0.78rem] text-(--text-muted)'
 const ERROR_NOTE = 'm-0 text-[0.78rem] text-destructive'
 const FIELD_LABEL = 'font-medium text-[0.8rem]'
 const PANEL = 'flex flex-col gap-2 rounded-[9px] border border-(--border-soft) p-3'
@@ -375,11 +364,7 @@ function ReplaceToken() {
         >
           Replace token…
         </Button>
-        {outcome !== null && (
-          <span className={outcome.ok ? NOTE : 'm-0 text-[0.78rem] text-destructive'}>
-            {outcome.text}
-          </span>
-        )}
+        {outcome !== null && <span className={outcome.ok ? NOTE : ERROR_NOTE}>{outcome.text}</span>}
       </div>
     )
   }
@@ -413,7 +398,7 @@ function ReplaceToken() {
         everything that reads it restarts on its own.
       </p>
       {(local ?? (outcome !== null && !outcome.ok ? outcome.text : null)) !== null && (
-        <p role="alert" className="m-0 text-[0.78rem] text-destructive">
+        <p role="alert" className={ERROR_NOTE}>
           {local ?? outcome?.text}
         </p>
       )}

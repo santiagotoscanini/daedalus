@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { type Decoder, decode } from './contract/decode'
 
 // The file-drop bridge: how this container asks the host to do privileged
 // things without holding any privilege itself.
@@ -27,26 +28,58 @@ export async function writeAtomic(path: string, body: string): Promise<void> {
   await rename(tmp, path)
 }
 
+/** Throttled server-side complaint: a broken host agent says so once a minute. */
+const lastLogged = new Map<string, number>()
+function logOnce(file: string, message: string): void {
+  const now = Date.now()
+  if (now - (lastLogged.get(file) ?? 0) < 60_000) return
+  lastLogged.set(file, now)
+  console.error(`[bridge] ${file}: ${message}`)
+}
+
 export function defineBridge<S extends BridgeStatus>(opts: {
   requestFile: string
   statusFile: string
-  idle: S
+  /**
+   * The status file's shape, as a decoder rather than a cast.
+   *
+   * The file is written by a root-side agent this container cannot see, one
+   * release at a time: every field is `optional(…, <resting value>)` so a
+   * status from an older agent still reads, and decoding `{}` IS the idle
+   * status. That is why there is no separate idle literal beside this — one
+   * that drifted from the shape would be the bug the decoder exists to catch.
+   */
+  status: Decoder<S>
 }): {
+  idle: S
   readStatus: () => Promise<S>
   request: (body: Record<string, unknown>, payload?: string) => Promise<string>
 } {
   // Read per call rather than at module load so tests can point a bridge at a
   // temp directory; in the container the value never changes.
   const dir = (): string => process.env.APPLY_DIR ?? '/apply'
+  const idle = decode(opts.status, {})
 
   return {
+    idle,
+
     async readStatus(): Promise<S> {
+      let raw: string
       try {
-        const raw = await readFile(join(dir(), opts.statusFile), 'utf8')
-        return { ...opts.idle, ...(JSON.parse(raw) as Partial<S>) }
+        raw = await readFile(join(dir(), opts.statusFile), 'utf8')
       } catch {
         // No status file yet — nothing has ever been requested from here.
-        return opts.idle
+        return idle
+      }
+      // Past this point the file EXISTS, so anything wrong with it is a broken
+      // agent rather than a quiet resting state. Both still read as idle to the
+      // caller — `S` has nowhere to put "unreadable" — but only one of them
+      // leaves a line saying which field was wrong.
+      try {
+        return decode(opts.status, JSON.parse(raw))
+      } catch (e) {
+        logOnce(opts.statusFile, e instanceof Error ? e.message : 'unreadable status file')
+        return idle
       }
     },
 

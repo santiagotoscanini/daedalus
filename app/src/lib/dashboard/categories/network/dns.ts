@@ -1,4 +1,5 @@
 import { networkFacts } from '../../../contract/domains/network'
+import { localDay } from '../../../format'
 import { BASE_DOMAIN } from '../../../hostname'
 import { getJson } from '../../../http'
 import { key } from '../../../keys'
@@ -771,7 +772,7 @@ async function rdap(domain: string): Promise<Registration> {
         .map((l) => l.href ?? '')
         .find((h) => !h.includes('identitydigital')) ?? null,
     expiresIn: expiry === undefined ? null : (Date.parse(expiry) - Date.now()) / 1000,
-    expiresOn: expiry === undefined ? null : new Date(expiry).toLocaleDateString('en-CA'),
+    expiresOn: expiry === undefined ? null : localDay(Date.parse(expiry)),
     registeredAgo: age(when('registration')),
     changedAgo: age(when('last changed')),
     status: body.status ?? [],

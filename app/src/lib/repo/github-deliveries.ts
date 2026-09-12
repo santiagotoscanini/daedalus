@@ -1,10 +1,8 @@
-import { desc, eq, lt } from 'drizzle-orm'
+import { eq, lt } from 'drizzle-orm'
 import { db, type Executor } from '../db'
 import { githubDeliveries } from '../schema'
 
 // The webhook's replay guard. See the `github_deliveries` table comment.
-
-export type DeliveryRecord = typeof githubDeliveries.$inferSelect
 
 /**
  * Insert a delivery. True when the id is new; false when GitHub (or anybody
@@ -48,14 +46,4 @@ export async function pruneDeliveries(olderThan: Date): Promise<number> {
     .where(lt(githubDeliveries.receivedAt, olderThan))
     .returning({ id: githubDeliveries.id })
   return rows.length
-}
-
-/** The most recent delivery, for the Settings › GitHub "last delivery" line. */
-export async function lastDelivery(): Promise<DeliveryRecord | undefined> {
-  const [row] = await db
-    .select()
-    .from(githubDeliveries)
-    .orderBy(desc(githubDeliveries.receivedAt))
-    .limit(1)
-  return row
 }

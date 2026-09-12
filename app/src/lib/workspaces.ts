@@ -1,5 +1,15 @@
 import { defineBridge } from './bridge'
-import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from './contract/decode'
+import {
+  arrayOf,
+  bool,
+  type Decoder,
+  literal,
+  nullable,
+  num,
+  obj,
+  optional,
+  str,
+} from './contract/decode'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
 
 // Project workspaces: the working clones under ~/projects on the host, where
@@ -97,18 +107,21 @@ export type WorkspaceRequestStatus = {
   finishedAt: string | null
 }
 
+/** The status file the host agent writes; decoding `{}` is the idle status. */
+const WORKSPACE_STATUS: Decoder<WorkspaceRequestStatus> = obj({
+  id: optional(nullable(str), null),
+  repo: optional(nullable(str), null),
+  state: optional(literal('idle', 'running', 'done', 'failed'), 'idle'),
+  detail: optional(str, ''),
+  error: optional(str, ''),
+  startedAt: optional(nullable(str), null),
+  finishedAt: optional(nullable(str), null),
+})
+
 const bridge = defineBridge<WorkspaceRequestStatus>({
   requestFile: 'workspace-request.json',
   statusFile: 'workspace-status.json',
-  idle: {
-    id: null,
-    repo: null,
-    state: 'idle',
-    detail: '',
-    error: '',
-    startedAt: null,
-    finishedAt: null,
-  },
+  status: WORKSPACE_STATUS,
 })
 
 export async function readWorkspaceRequestStatus(): Promise<WorkspaceRequestStatus> {

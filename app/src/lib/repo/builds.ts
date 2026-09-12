@@ -303,11 +303,6 @@ export async function activeBuilds(): Promise<BuildRow[]> {
   return rows.map(toBuildRow)
 }
 
-/** The build the host is working on, if any. v1 runs one at a time. */
-export async function runningBuild(): Promise<BuildRow | undefined> {
-  return (await activeBuilds())[0]
-}
-
 /** Oldest first — queue order. */
 export async function queuedBuilds(): Promise<BuildRow[]> {
   const rows = await listWithApp().where(eq(builds.state, 'queued')).orderBy(asc(builds.createdAt))

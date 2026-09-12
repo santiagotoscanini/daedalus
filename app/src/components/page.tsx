@@ -47,11 +47,6 @@ export function Lede({ className, ...props }: ComponentProps<'p'>) {
   return <p className={cn('mt-1 max-w-[74ch] text-(--text-muted) text-sm', className)} {...props} />
 }
 
-/** A count or qualifier beside a page title, in the title's own baseline. */
-export function PageCount({ className, ...props }: ComponentProps<'span'>) {
-  return <span className={cn('text-(--dim) text-sm', className)} {...props} />
-}
-
 /** The trail above a detail page's title. */
 export function Crumbs({ className, ...props }: ComponentProps<'p'>) {
   return (

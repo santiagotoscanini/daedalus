@@ -26,74 +26,11 @@ import { cn } from '../lib/cn'
 import { num } from '../lib/format'
 import { type Tone, toneStyle } from '../lib/tone'
 import { Glyph, type GlyphName, isGlyph } from './glyph'
+// "There is nothing to draw here" is the same sentence in the same shape
+// whether a chart says it or a board does — see components/tokens.ts.
+import { EMPTY } from './tokens'
 
 export type { Tone }
-
-/** "There is nothing to draw here", in the one shape all five charts use. */
-const EMPTY = 'm-0 py-[0.9rem] text-center text-[0.8rem] text-(--dim)'
-
-/* ── headline numbers ─────────────────────────────────────────────────── */
-
-/* The boxes below are exported by name so components/skeleton.tsx can reserve
-   exactly the space the real thing will take — the same pattern as
-   service-head.tsx's SVC_HEAD. A skeleton that restates the box drifts. */
-
-/** `BigStat`'s outer box. The ::before hairline is the stat's own colour
-    along the top edge — enough to group the band by meaning without painting
-    four large blocks of colour. */
-export const BIG_STAT =
-  'relative flex min-w-0 flex-col gap-[0.15rem] overflow-hidden rounded-lg border border-(--border-soft) bg-card px-4 pt-[0.85rem] pb-[0.9rem] before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-(--tone) before:opacity-85'
-
-/** `StatBand`'s grid. */
-export const STAT_BAND =
-  'mb-6 grid grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))] gap-[0.7rem]'
-
-/**
- * One large number with its label — the top band of every category page.
- *
- * `value` is a pre-formatted string, not a number: the loader that read it
- * knows whether it is bytes, Mbps or a count, and re-deriving that here would
- * mean passing the unit along anyway.
- */
-export function BigStat({
-  label,
-  value,
-  unit,
-  sub,
-  tone = 'accent',
-  spark,
-}: {
-  label: string
-  value: string
-  unit?: string
-  sub?: ReactNode
-  tone?: Tone
-  spark?: number[]
-}) {
-  return (
-    <div className={BIG_STAT} style={toneStyle(tone)}>
-      <span className="text-xs font-medium text-(--text-muted)">{label}</span>
-      <span className="text-[1.75rem] leading-[1.15] font-semibold tracking-[-0.02em] tabular-nums [overflow-wrap:anywhere]">
-        {value}
-        {unit !== undefined && (
-          <em className="ml-[0.2rem] text-[0.85rem] font-medium text-(--text-muted) not-italic">
-            {unit}
-          </em>
-        )}
-      </span>
-      {spark !== undefined && spark.length > 1 && <MicroSpark values={spark} tone={tone} />}
-      {sub !== undefined && (
-        <span className="flex min-w-0 items-center gap-[0.35rem] text-[0.76rem] text-(--text-muted)">
-          {sub}
-        </span>
-      )}
-    </div>
-  )
-}
-
-export function StatBand({ children }: { children: ReactNode }) {
-  return <div className={STAT_BAND}>{children}</div>
-}
 
 /* ── ring gauge ───────────────────────────────────────────────────────── */
 
@@ -559,30 +496,6 @@ export function Stat({
   )
 }
 
-function MicroSpark({ values, tone }: { values: number[]; tone: Tone }) {
-  const w = 100
-  const h = 20
-  const max = Math.max(...values, 0.0001)
-  const step = w / (values.length - 1)
-  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`)
-  return (
-    <svg
-      className="mt-[0.2rem] mb-[0.1rem] h-5 w-full stroke-(--tone) opacity-75"
-      viewBox={`0 0 ${String(w)} ${String(h)}`}
-      preserveAspectRatio="none"
-      style={toneStyle(tone)}
-      aria-hidden="true"
-    >
-      <polyline
-        points={pts.join(' ')}
-        fill="none"
-        strokeWidth="1.5"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
-  )
-}
-
 /* ── progress ─────────────────────────────────────────────────────────── */
 
 /**
@@ -729,8 +642,9 @@ export function BoardGrid({ children }: { children: ReactNode }) {
  *
  * For a handful of numbers that are read ACROSS rather than compared against
  * each other: what a model has done, what a gateway carried today. The reason
- * this exists rather than four `BigStat`s is that a stat card is a claim on the
- * reader's attention, and four of them spend a whole band of the page saying
+ * this exists rather than a headline band of large stat cards is that a stat
+ * card is a claim on the reader's attention, and four of them spend a whole
+ * band of the page saying
  * things nobody came to look at. As a measure line the same numbers cost one
  * row inside the panel they belong to.
  *

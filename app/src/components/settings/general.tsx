@@ -13,7 +13,7 @@ import { saveSiteEditFn } from '../../server/site'
 import { ReleaseNotes, UpgradeChain } from '../release-notes'
 import { Button } from '../ui/button'
 import { Chip } from '../viz'
-import { ExtLink, Mono, Pending, Section, SourceNote, Unset, Value } from './shared'
+import { ExtLink, Mono, NOTE, Pending, Section, SourceNote, Unset, Value } from './shared'
 import { type SelectGroupSpec, SiteSelect, SiteText, SiteUnwritten } from './site-fields'
 
 // Settings › General: what the box calls itself, and what it runs.
@@ -30,8 +30,6 @@ import { type SelectGroupSpec, SiteSelect, SiteText, SiteUnwritten } from './sit
 const ASIDE = 'text-[0.72rem] text-(--dim)'
 const STACK = 'inline-flex max-w-full flex-col items-end gap-[0.1rem] text-right'
 const LINE = 'inline-flex flex-wrap items-center justify-end gap-2'
-const NOTE = 'm-0 text-[0.78rem] text-(--text-muted)'
-
 export function General({
   settings,
   edit,

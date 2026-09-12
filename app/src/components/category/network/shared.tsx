@@ -13,44 +13,12 @@ export function tone(ok: boolean | null): Tone | null {
   return ok === null ? null : ok ? 'ok' : 'bad'
 }
 
-/* ── the vocabulary the six tabs share ────────────────────────────────────
-   Each of these was one class in styles.css before the Tailwind migration,
-   and each is read on every tab of this category. They stay here rather than
-   being retyped per file for the reason they were classes in the first place:
-   a board caption set at 0.73rem on one tab and 0.75rem on the next reads as a
-   rendering fault, and nothing in a diff would show it. */
-
-/** The caption under a board's content. */
-export const FOOT =
-  'm-0 mt-[0.15rem] text-[0.73rem] leading-[1.45] text-(--dim) [overflow-wrap:anywhere]'
-
-/** The small grey reading in a board's header. */
-export const NOTE = 'text-[0.73rem] text-(--dim)'
-
-/** A heading inside a board's body. */
-export const SUB =
-  'mx-0 mt-[0.35rem] -mb-[0.2rem] text-[0.73rem] font-[550] tracking-normal text-(--dim)'
-
-/** A board header that carries a live dot beside its reading. */
-export const LIVE =
-  'inline-flex items-center gap-[0.35rem] text-[0.73rem] whitespace-nowrap text-(--text-muted)'
-
-/** "There is nothing to draw here." */
-export const EMPTY =
-  'm-0 py-[0.9rem] text-center text-[0.8rem] text-(--dim) [overflow-wrap:anywhere]'
-
-/**
- * An identifier: a hostname, an address, a hardware address.
- *
- * The size is an `em` on purpose — a monospace face at the size of the sans
- * text around it reads a step larger, so every one of these shrinks against
- * whatever it sits in. A row that sets its own size overrides it.
- */
-export const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
-
-/** The two dates under a column chart, and what is being counted. */
-export const AXIS =
-  'm-0 -mt-[0.35rem] flex justify-between gap-[0.6rem] text-[0.66rem] text-(--dim) tabular-nums'
+/* ── the vocabulary the six tabs share ─────────────────────────────────────
+   The board vocabulary is one module now (components/tokens.ts): it is the
+   same handful of strings on every category page, and was restated per file
+   only while styles.css was being retired. Re-exported here so a tab still
+   imports its own page's shared file. Below is what is genuinely Network's. */
+export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE, SUB } from '../../tokens'
 
 /* Rows of a table, not a stack of pills: a hairline between rows says what a
    filled capsule per fact said, at a fraction of the ink. */

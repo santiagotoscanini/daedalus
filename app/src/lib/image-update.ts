@@ -1,4 +1,14 @@
 import { defineBridge } from './bridge'
+import {
+  arrayOf,
+  bool,
+  type Decoder,
+  literal,
+  nullable,
+  obj,
+  optional,
+  str,
+} from './contract/decode'
 
 // The app half of an image update. It writes one file and reads another.
 //
@@ -70,24 +80,40 @@ export type ImageUpdateStatus = {
   commit: string | null
 }
 
-export const IDLE_UPDATE: ImageUpdateStatus = {
-  id: null,
-  container: '',
-  targets: [],
-  state: 'idle',
-  phase: '',
-  error: '',
-  moves: [],
-  startedAt: null,
-  finishedAt: null,
-  commit: null,
-}
+/** The status file the host agent writes; decoding `{}` is the idle status. */
+const IMAGE_STATUS: Decoder<ImageUpdateStatus> = obj({
+  id: optional(nullable(str), null),
+  container: optional(str, ''),
+  targets: optional(arrayOf(str), []),
+  state: optional(literal('idle', 'running', 'done', 'failed'), 'idle'),
+  phase: optional(str, ''),
+  error: optional(str, ''),
+  moves: optional(
+    arrayOf(
+      obj({
+        container: str,
+        repo: str,
+        fromTag: str,
+        fromDigest: str,
+        toTag: str,
+        toDigest: str,
+        changed: bool,
+      }),
+    ),
+    [],
+  ),
+  startedAt: optional(nullable(str), null),
+  finishedAt: optional(nullable(str), null),
+  commit: optional(nullable(str), null),
+})
 
 const bridge = defineBridge<ImageUpdateStatus>({
   requestFile: 'image-request.json',
   statusFile: 'image-status.json',
-  idle: IDLE_UPDATE,
+  status: IMAGE_STATUS,
 })
+
+export const IDLE_UPDATE: ImageUpdateStatus = bridge.idle
 
 /**
  * How long a `running` status may go unrefreshed before it is a corpse.

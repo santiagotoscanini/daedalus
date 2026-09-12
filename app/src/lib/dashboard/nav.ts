@@ -57,12 +57,15 @@ export type CategorySpec = {
      * This tab's own opening shape, when it differs from the category's.
      *
      * The category-level `boardSpans` are the DEFAULT tab's, so a sibling that
-     * opens differently reflows on arrival. `statBand: false` is the sharper
-     * case: a placeholder for four stat cards that never come is not a
-     * mis-sized skeleton, it is a promise the page then breaks.
+     * opens differently reflows on arrival.
+     *
+     * A `statBand` flag used to sit beside this one, opting a tab out of a
+     * placeholder for the headline band of stat cards. Three tabs never set it
+     * and so drew four grey cards that were replaced by nothing — no page
+     * draws that band any more. The band, its placeholder and the flag went
+     * together, rather than the flag gaining three more `false`s.
      */
     boardSpans?: number[]
-    statBand?: boolean
     /**
      * Draw a rule before this tab.
      *
@@ -131,8 +134,6 @@ export const CATEGORIES: CategorySpec[] = [
     // (what is resident, is the card full) actually changes hour to hour.
     tabs: [
       { id: 'lemonade', label: 'Lemonade', probe: 'lemonade' },
-      // The one tab here with no headline band: its numbers live inside the
-      // panel whose chart they describe.
       // Traffic + the tool list, then who is calling + the changelog. Paired
       // by height rather than by subject — see the note on that board.
       {
@@ -140,7 +141,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'LiteLLM',
         probe: 'litellm',
         boardSpans: [8, 4, 4, 8],
-        statBand: false,
       },
       // What it can reach + who gets in, then the changelog across.
       {
@@ -148,10 +148,9 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Open WebUI',
         probe: 'open-webui',
         boardSpans: [6, 6, 12],
-        statBand: false,
       },
       // Runs + the workflows behind them, same 8/4 pairing as the gateway.
-      { id: 'n8n', label: 'n8n', probe: 'n8n', boardSpans: [8, 4, 12], statBand: false },
+      { id: 'n8n', label: 'n8n', probe: 'n8n', boardSpans: [8, 4, 12] },
     ],
   },
   {
@@ -186,14 +185,12 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Jellyfin',
         probe: 'jellyfin',
         boardSpans: [8, 4, 4, 8],
-        statBand: false,
       },
       {
         id: 'calibre',
         label: 'Calibre',
         probe: 'calibre-web',
         boardSpans: [8, 4, 12],
-        statBand: false,
       },
       // Past the rule: everything that fills the two libraries above.
       {
@@ -201,7 +198,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Wanted',
         probes: ['seerr', 'sonarr', 'radarr', 'bazarr'],
         boardSpans: [8, 4, 4, 8],
-        statBand: false,
         dividerBefore: true,
       },
       {
@@ -209,14 +205,12 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Indexer',
         probe: 'prowlarr',
         boardSpans: [12, 12, 12],
-        statBand: false,
       },
       {
         id: 'downloaders',
         label: 'Downloaders',
         probes: ['qbittorrent', 'nzbget', 'metube', 'shelfmark'],
         boardSpans: [8, 4, 4, 8],
-        statBand: false,
       },
       // Only Cleanuparr answers HTTP; Janitorr is a timer with nothing to
       // probe, and carries its health inside on the switch instead.
@@ -225,7 +219,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Cleanup',
         probe: 'cleanuparr',
         boardSpans: [8, 4, 12],
-        statBand: false,
       },
     ],
   },
@@ -254,17 +247,15 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'House',
         probe: 'home-assistant',
         boardSpans: [8, 4, 4, 8],
-        statBand: false,
       },
-      { id: 'photos', label: 'Photos', probe: 'immich', boardSpans: [8, 4, 4, 8], statBand: false },
+      { id: 'photos', label: 'Photos', probe: 'immich', boardSpans: [8, 4, 4, 8] },
       {
         id: 'files',
         label: 'Files',
         probe: 'nextcloud',
         boardSpans: [8, 4, 4, 4],
-        statBand: false,
       },
-      { id: 'pantry', label: 'Pantry', probe: 'grocy', boardSpans: [8, 4, 12], statBand: false },
+      { id: 'pantry', label: 'Pantry', probe: 'grocy', boardSpans: [8, 4, 12] },
       // Pocket ID, which had a category of its own until now — see the note in
       // components/category/idp.tsx for why it stopped deserving one.
       {
@@ -272,7 +263,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Sign-in',
         probe: 'pocket-id',
         boardSpans: [6, 6, 3, 9],
-        statBand: false,
       },
       // Past the rule: one person's, not the household's.
       {
@@ -280,7 +270,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Finance',
         probe: 'wealthfolio',
         boardSpans: [12, 12, 12],
-        statBand: false,
         dividerBefore: true,
       },
       {
@@ -288,7 +277,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Tools',
         probe: 'stirling-pdf',
         boardSpans: [12, 12, 12],
-        statBand: false,
       },
     ],
   },
@@ -342,7 +330,6 @@ export const CATEGORIES: CategorySpec[] = [
         id: 'general',
         label: 'General',
         boardSpans: [8, 4, 4, 8],
-        statBand: false,
         head: false,
         health: 'uplink',
       },
@@ -354,7 +341,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Coming in',
         probe: 'wg-easy',
         boardSpans: [8, 4, 12],
-        statBand: false,
       },
       // What happens to a request once it has arrived. Pocket ID shared this
       // tab and is its own category now: the routing table still borrows the
@@ -366,7 +352,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Proxy',
         probe: 'traefik-dashboard',
         boardSpans: [12, 8, 4],
-        statBand: false,
       },
       // How a name becomes an address, on both sides of the front door: the
       // resolver every device in the house asks, and the zone the internet
@@ -380,7 +365,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'DNS',
         probe: 'pihole',
         boardSpans: [8, 4, 8, 4],
-        statBand: false,
       },
       // The other server inside the same process, and a separate tab because
       // sharing FTL is a fact about the software rather than about the
@@ -393,7 +377,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'DHCP',
         probe: 'pihole',
         boardSpans: [6, 6, 12],
-        statBand: false,
       },
       // No gatus probe: it checks HTTP endpoints, and a VPN egress tunnel
       // answers nothing — it is a network namespace. Its dot is computed from
@@ -403,7 +386,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Going out',
         health: 'vpn-egress',
         boardSpans: [8, 4, 12],
-        statBand: false,
       },
     ],
   },
@@ -436,22 +418,22 @@ export const CATEGORIES: CategorySpec[] = [
     // has a version, a release cycle and security fixes in its minors like any
     // other service here.
     tabs: [
-      { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4], statBand: false, head: false },
-      { id: 'memory', label: 'Memory', boardSpans: [8, 4, 4, 8], statBand: false, head: false },
+      { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4], head: false },
+      { id: 'memory', label: 'Memory', boardSpans: [8, 4, 4, 8], head: false },
       // Physical, then logical. SMART and throughput belong to a device;
       // capacity and snapshots belong to a pool, and one page holding both
       // was the same paragraph answering two questions.
       // Three thirds and a footer: one board per drive in this box, which is
       // the count the skeleton has to guess at because the disks are data.
-      { id: 'disks', label: 'Disks', boardSpans: [4, 4, 4, 12], statBand: false, head: false },
-      { id: 'pools', label: 'Pools', boardSpans: [6, 6, 12], statBand: false, head: false },
+      { id: 'disks', label: 'Disks', boardSpans: [4, 4, 4, 12], head: false },
+      { id: 'pools', label: 'Pools', boardSpans: [6, 6, 12], head: false },
       // The parts, as opposed to the layers. Every other tab in this row
       // answers "how is it behaving"; this one answers "what is it", which is
       // the question you cannot look up when you are in front of the open
       // case with a screwdriver. Four thirds and a wide row — the components
       // are peers, so none of them gets to be the big panel.
-      { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 12], statBand: false, head: false },
-      { id: 'database', label: 'Database', boardSpans: [8, 4, 12], statBand: false },
+      { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 12], head: false },
+      { id: 'database', label: 'Database', boardSpans: [8, 4, 12] },
       // The one tab in this row whose subject is the fleet rather than a layer
       // of the machine — every digest-pinned container and whether it is
       // behind. It sits here because it is the box's own maintenance state,
@@ -464,14 +446,12 @@ export const CATEGORIES: CategorySpec[] = [
         id: 'updates',
         label: 'Updates',
         boardSpans: [12, 12],
-        statBand: false,
         head: false,
       },
       {
         id: 'backups',
         label: 'Backups',
         boardSpans: [8, 4, 8, 4],
-        statBand: false,
         head: false,
         dividerBefore: true,
       },
@@ -506,15 +486,13 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Alerts',
         probe: 'grafana',
         boardSpans: [8, 4, 4, 8],
-        statBand: false,
       },
-      { id: 'probes', label: 'Probes', probe: 'gatus', boardSpans: [8, 4, 4, 12], statBand: false },
+      { id: 'probes', label: 'Probes', probe: 'gatus', boardSpans: [8, 4, 4, 12] },
       {
         id: 'metrics',
         label: 'Metrics',
         probe: 'prometheus',
         boardSpans: [8, 4, 8, 4],
-        statBand: false,
       },
       // Loki publishes no gatus endpoint — it is reached over the monitoring
       // bridge and has no published hostname to probe from outside. That left
@@ -530,9 +508,8 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Logs',
         health: 'log-pipeline',
         boardSpans: [8, 4, 4, 8],
-        statBand: false,
       },
-      { id: 'jobs', label: 'Jobs', probe: 'healthchecks', boardSpans: [8, 4, 12], statBand: false },
+      { id: 'jobs', label: 'Jobs', probe: 'healthchecks', boardSpans: [8, 4, 12] },
     ],
   },
 ]

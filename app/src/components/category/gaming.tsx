@@ -2,6 +2,7 @@ import type { GamingData } from '../../lib/dashboard/categories/gaming'
 import { LogBoard } from '../logs'
 import { Changelog, ReleaseNotes, UpgradeChain } from '../release-notes'
 import { ServiceHead } from '../service-head'
+import { EMPTY, FOOT, MONO, NOTE } from '../tokens'
 import { Button } from '../ui/button'
 import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../viz'
 
@@ -22,14 +23,6 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../viz'
 // three unrelated versions competing for the same glance. They live behind
 // the chip that summarises them instead: the chip already says the answer
 // ("current"), and hovering it shows the working.
-
-/* The board vocabulary styles.css used to carry, as utilities. Restated per
-   category file rather than shared: the legacy sheet is being retired file by
-   file, so a common module would be a second place to keep in step. */
-const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
-const NOTE = 'text-[0.73rem] text-(--dim)'
-const FOOT = 'mt-[0.15rem] text-[0.73rem] leading-[1.45] text-(--dim) [overflow-wrap:anywhere]'
-const EMPTY = 'py-[0.9rem] text-center text-[0.8rem] text-(--dim) [overflow-wrap:anywhere]'
 
 /* A dated line — a blog post, an arrival, a departure. */
 const NEWS = 'flex list-none flex-col gap-[0.3rem]'

@@ -22,6 +22,7 @@
 // people, and of what each of them can open. Its loader lives in ../idp
 // because the proxy's routing table still borrows the client list.
 
+import { localDay } from '../../format'
 import { getJson } from '../../http'
 import { key } from '../../keys'
 import { promScalars } from '../../prom'
@@ -439,7 +440,10 @@ type PantryData = {
 async function loadPantry(ctx: Ctx): Promise<PantryData> {
   const h = { headers: { 'GROCY-API-KEY': key('GROCY_API_KEY') } }
   const base = ctx.base('grocy')
-  const today = new Date().toISOString().slice(0, 10)
+  // The box's day, not UTC's: grocy states due dates in local time, and past
+  // 21:00 here a UTC 'today' is tomorrow — which marks a whole day's chores
+  // and tasks overdue that are not.
+  const today = localDay(Date.now())
 
   const [volatile, info, stock, chores, tasks] = await Promise.all([
     getJson<{

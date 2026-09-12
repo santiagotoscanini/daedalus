@@ -82,10 +82,7 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
         tunnelId: ctx.env('CF_TUNNEL_ID') ?? '',
         tokenConfigured: ctx.secret('CF_API_TOKEN') !== '',
       },
-      github: {
-        owner: s.owner,
-        tokenConfigured: ctx.secret('GITHUB_TOKEN') !== '',
-      },
+      github: { owner: s.owner },
       mail: s.mail,
       registryUrl: s.registryUrl,
       grafanaUrl: s.grafanaUrl,

@@ -3,25 +3,19 @@ import type { LogNeighbour } from '../../logs'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
-/* The board vocabulary, spelled once for the eight tabs that share it.
- *
- * Constants rather than repeated literals because the tabs are read as one
- * page — a caption or a list row that drifted by a hundredth of a rem on one
- * tab would be invisible in review and obvious in use. */
-
-/** The reading in a board's header. */
-export const BOARD_NOTE = 'text-[0.73rem] text-muted-foreground'
-
-/** A heading inside a board body, between two groups of content. */
-export const BOARD_SUB =
-  'mt-[0.35rem] -mb-[0.2rem] text-[0.73rem] text-muted-foreground tracking-normal [font-weight:550]'
-
-/** The caption under a board: what the numbers above it actually mean. */
-export const BOARD_FOOT =
-  'mt-[0.15rem] text-[0.73rem] text-muted-foreground leading-[1.45] wrap-anywhere'
-
-/** Absent data, drawn as absent. */
-export const VIZ_EMPTY = 'py-[0.9rem] text-center text-[0.8rem] text-muted-foreground wrap-anywhere'
+/* The board vocabulary is one module now (components/tokens.ts): it is the
+   same handful of strings on every category page, and was restated per file
+   only while styles.css was being retired. These eight tabs call four of them
+   by their own longer names, which is why this is an aliased re-export rather
+   than an import in each tab. */
+export {
+  EMPTY as VIZ_EMPTY,
+  FOOT as BOARD_FOOT,
+  MONO,
+  MONO_FACE,
+  NOTE as BOARD_NOTE,
+  SUB as BOARD_SUB,
+} from '../../tokens'
 
 /* A flat list of named things: rows of a table, not a stack of pills. The
    hairline is on every row and removed from the first, which is what `li + li`
@@ -34,12 +28,6 @@ export const ROW_MAIN = 'min-w-0 flex-auto truncate text-foreground'
 export const ROW_SIDE =
   'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-muted-foreground tabular-nums'
 export const ROW_N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
-
-/** Monospace without a size, for slots whose own rule sets one — putting both
-    here would emit two `text-*` utilities and leave the winner to the layer. */
-export const MONO_FACE = 'font-mono wrap-anywhere'
-/** Monospace at the size the legacy `.mono` carried: 0.86 of its context. */
-export const MONO = `${MONO_FACE} text-[0.86em]`
 
 /**
  * The host reader behind Disks, Pools and Backups.

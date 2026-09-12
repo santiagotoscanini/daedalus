@@ -15,32 +15,13 @@ export function comparePinned(gap: VersionGap, note: string): CompareRow[] {
   return [latestRow(gap), { k: 'Pinned by', v: null, note }]
 }
 
-/* ── the vocabulary the four tabs share ───────────────────────────────────
-   Each of these was one class in styles.css, read on every AI tab. Spelled
-   once for the reason they were classes: a caption at 0.73rem on one tab and
-   0.75rem on the next reads as a rendering fault, and no diff would show it. */
-
-/** The reading in a board's header. */
-export const NOTE = 'text-[0.73rem] text-muted-foreground'
-
-/** A board header that carries a live dot beside its reading. */
-export const LIVE =
-  'inline-flex items-center gap-[0.35rem] text-[0.73rem] whitespace-nowrap text-(--text-muted)'
-
-/** The caption under a board's content. */
-export const FOOT =
-  'm-0 mt-[0.15rem] text-[0.73rem] leading-[1.45] text-muted-foreground [overflow-wrap:anywhere]'
-
-/** "There is nothing here", said out loud. */
-export const EMPTY =
-  'm-0 py-[0.9rem] text-center text-[0.8rem] text-muted-foreground [overflow-wrap:anywhere]'
-
-/** An identifier: no spaces to break at, so it is allowed to break anywhere. */
-export const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
-
-/** The two dates under a column chart, and what is being counted. */
-export const AXIS =
-  'm-0 -mt-[0.35rem] flex justify-between gap-[0.6rem] text-[0.66rem] text-(--dim) tabular-nums'
+/* ── the vocabulary the four tabs share ────────────────────────────────────
+   The board vocabulary is one module now (components/tokens.ts): it is the
+   same handful of strings on every category page, and was restated per file
+   only while styles.css was being retired. Re-exported here so a tab still
+   imports its own page's shared file. Below is what is genuinely the AI
+   pages'. */
+export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE } from '../../tokens'
 
 /** A ranking: `RankRow`s, stacked. */
 export const RANKS = 'm-0 flex list-none flex-col gap-[0.1rem] p-0'

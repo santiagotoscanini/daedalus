@@ -1,4 +1,5 @@
 import { defineBridge } from './bridge'
+import { type Decoder, literal, nullable, obj, optional, str } from './contract/decode'
 
 // Asking the host to write the site files into the site directory — the one
 // directory daedalus owns inside the operator's configuration repository.
@@ -40,20 +41,23 @@ export type SiteRequestStatus = {
   commit: string | null
 }
 
+/** The status file the host agent writes; decoding `{}` is the idle status. */
+const SITE_STATUS: Decoder<SiteRequestStatus> = obj({
+  id: optional(nullable(str), null),
+  action: optional(nullable(literal('write')), null),
+  state: optional(literal('idle', 'running', 'done', 'failed'), 'idle'),
+  phase: optional(str, ''),
+  detail: optional(str, ''),
+  error: optional(str, ''),
+  startedAt: optional(nullable(str), null),
+  finishedAt: optional(nullable(str), null),
+  commit: optional(nullable(str), null),
+})
+
 const bridge = defineBridge<SiteRequestStatus>({
   requestFile: 'site-request.json',
   statusFile: 'site-status.json',
-  idle: {
-    id: null,
-    action: null,
-    state: 'idle',
-    phase: '',
-    detail: '',
-    error: '',
-    startedAt: null,
-    finishedAt: null,
-    commit: null,
-  },
+  status: SITE_STATUS,
 })
 
 export async function readSiteRequestStatus(): Promise<SiteRequestStatus> {

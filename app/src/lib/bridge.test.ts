@@ -3,8 +3,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defineBridge } from './bridge'
+import { type Decoder, literal, nullable, obj, optional, str } from './contract/decode'
 
-type Status = { id: string | null; state: string; phase: string }
+type Status = { id: string | null; state: 'idle' | 'running'; phase: string }
+
+const STATUS: Decoder<Status> = obj({
+  id: optional(nullable(str), null),
+  state: optional(literal('idle', 'running'), 'idle'),
+  phase: optional(str, ''),
+})
 
 const IDLE: Status = { id: null, state: 'idle', phase: '' }
 
@@ -24,9 +31,13 @@ afterEach(async () => {
 })
 
 const bridge = () =>
-  defineBridge<Status>({ requestFile: 'request.json', statusFile: 'status.json', idle: IDLE })
+  defineBridge<Status>({ requestFile: 'request.json', statusFile: 'status.json', status: STATUS })
 
 describe('readStatus', () => {
+  it('derives the idle status from the decoder', () => {
+    expect(bridge().idle).toEqual(IDLE)
+  })
+
   it('reports idle when nothing was ever requested', async () => {
     expect(await bridge().readStatus()).toEqual(IDLE)
   })
@@ -36,9 +47,23 @@ describe('readStatus', () => {
     expect(await bridge().readStatus()).toEqual(IDLE)
   })
 
-  it('spreads a partial status over the idle shape', async () => {
+  it('fills a partial status from the decoder instead of casting it', async () => {
     await writeFile(join(dir, 'status.json'), '{"state":"running"}', 'utf8')
     expect(await bridge().readStatus()).toEqual({ ...IDLE, state: 'running' })
+  })
+
+  // The cast this replaced took whatever JSON.parse produced, so a field of
+  // the wrong type reached the page as itself and a `state` nobody defined
+  // reached it as a state. Both are the host agent being broken, and idle is
+  // the only honest reading of a status that cannot be read.
+  it('reports idle on a well-formed file of the wrong shape', async () => {
+    await writeFile(join(dir, 'status.json'), '{"state":"running","phase":7}', 'utf8')
+    expect(await bridge().readStatus()).toEqual(IDLE)
+  })
+
+  it('reports idle on a state the verb does not have', async () => {
+    await writeFile(join(dir, 'status.json'), '{"state":"banana"}', 'utf8')
+    expect(await bridge().readStatus()).toEqual(IDLE)
   })
 })
 

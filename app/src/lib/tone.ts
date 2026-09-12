@@ -43,17 +43,3 @@ const TONE_TOKEN: Record<Tone, string> = {
 export function toneStyle(tone: Tone, extra?: CSSProperties): CSSProperties {
   return { ...extra, ['--tone' as string]: TONE_TOKEN[tone] }
 }
-
-/**
- * The tone as a bare CSS value, for the few places that need it in an
- * attribute rather than a stylesheet — an SVG `stroke`, a gradient stop.
- */
-export function toneValue(tone: Tone): string {
-  return TONE_TOKEN[tone]
-}
-
-/** Text in the tone. The commonest single use, so it is spelled once. */
-export const TONE_TEXT = 'text-(--tone)'
-
-/** Fill in the tone. */
-export const TONE_BG = 'bg-(--tone)'

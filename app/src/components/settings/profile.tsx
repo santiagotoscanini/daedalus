@@ -17,7 +17,7 @@ import { Card, CardContent } from '../ui/card'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
 import { Input } from '../ui/input'
 import { Chip } from '../viz'
-import { Mono, Pending, Section, Unset } from './shared'
+import { Mono, NOTE, Pending, Section, Unset } from './shared'
 
 // Settings › Profile — the person, where every other tab is the box.
 //
@@ -35,8 +35,6 @@ const INPUT = cn(
   'h-9 w-full rounded-[8px] bg-(--panel-2) px-3 md:text-[0.86rem] dark:bg-(--panel-2)',
 )
 const ASIDE = 'text-[0.74rem] text-(--dim)'
-const NOTE = 'm-0 text-[0.78rem] text-(--text-muted)'
-
 export function ProfileTab({
   operator,
   profile,

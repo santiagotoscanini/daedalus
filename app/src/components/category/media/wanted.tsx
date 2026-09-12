@@ -24,6 +24,7 @@ import {
   PROV,
   PROVS,
   ServiceBar,
+  SUB,
   TRANSFER_HEAD,
   TRANSFER_META,
   TRANSFER_NAME,
@@ -76,10 +77,6 @@ const EVENT_INK: Record<Wanted['sonarr']['history'][number]['tone'], string> = {
   bad: 'text-danger',
   muted: '',
 }
-
-/** A heading inside a board's body. */
-const SUB =
-  'mx-0 mt-[0.35rem] -mb-[0.2rem] text-[0.73rem] font-[550] tracking-normal text-muted-foreground'
 
 type Wanted = Extract<MediaData, { tab: 'wanted' }>
 

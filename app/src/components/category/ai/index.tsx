@@ -18,9 +18,10 @@ import { OpenWebUiView } from './open-webui'
 // layout is what the previous single-page version did, and it is why every
 // service got a quarter of a row it could not say anything useful in.
 //
-// No `StatBand`/`BigStat` anywhere on these four pages any more: every one of
-// them ended up saying either a number the panel below it states in context,
-// or a number that is zero almost always and means nothing when it is not.
+// No headline band of stat cards on these four pages: every one of them ended
+// up saying either a number the panel below it states in context, or a number
+// that is zero almost always and means nothing when it is not. These were the
+// last pages drawing that band anywhere, so the band itself went with them.
 
 export function AiView({ data }: { data: AiData }) {
   switch (data.tab) {

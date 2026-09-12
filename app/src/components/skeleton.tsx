@@ -12,16 +12,7 @@ import {
   REPO_ROW,
 } from './apps/repo-picker'
 import { SVC_HEAD, SVC_LOGO } from './service-head'
-import {
-  BIG_STAT,
-  BOARD,
-  BOARD_BODY,
-  BOARD_GRID,
-  BOARD_HEAD,
-  STAT,
-  STAT_BAND,
-  STAT_STRIP,
-} from './viz'
+import { BOARD, BOARD_BODY, BOARD_GRID, BOARD_HEAD, STAT, STAT_STRIP } from './viz'
 
 // Placeholders for content that has not arrived yet.
 //
@@ -92,24 +83,6 @@ export function ServiceHeadSkeleton() {
         <Bar w="34%" h={11} />
         <Bar w="72%" h={12} />
       </div>
-    </div>
-  )
-}
-
-// Cards borrow the real component's box so nothing reflows when the content
-// lands — only the innards are grey.
-const SK_CARD = 'flex flex-col justify-center gap-[0.55rem]'
-
-export function StatBandSkeleton({ count = 4 }: { count?: number }) {
-  return (
-    <div className={STAT_BAND}>
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className={cn(BIG_STAT, SK_CARD)}>
-          <Bar w="45%" h={9} />
-          <Bar w="70%" h={26} />
-          <Bar w="60%" h={9} />
-        </div>
-      ))}
     </div>
   )
 }

@@ -1,7 +1,8 @@
-import { Await, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { ClaudeView, ShotterView } from '../components/claude'
+import { GuardedAwait } from '../components/error'
 import { PageHead } from '../components/page'
-import { BoardsSkeleton, ServiceHeadSkeleton, StatBandSkeleton } from '../components/skeleton'
+import { BoardsSkeleton, ServiceHeadSkeleton, StripSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { fetchClaude } from '../server/claude'
 
@@ -72,12 +73,16 @@ function ClaudePage() {
         linkTo={(id) => ({ to: '/claude', search: id === 'shotter' ? { tab: 'shotter' } : {} })}
       />
 
-      <Await
+      <GuardedAwait
+        resetKey={active}
         promise={claude}
         fallback={
           <>
             <ServiceHeadSkeleton />
-            <StatBandSkeleton />
+            {/* Both views open with a `StatStrip` of four readings, so that is
+                the shape reserved. It was a stat BAND's, which is a taller box
+                nothing on this page has drawn since the strip replaced it. */}
+            <StripSkeleton count={4} />
             <BoardsSkeleton spans={[...SPANS[active]]} />
           </>
         }
@@ -85,7 +90,7 @@ function ClaudePage() {
         {(data) =>
           active === 'shotter' ? <ShotterView data={data} /> : <ClaudeView data={data} />
         }
-      </Await>
+      </GuardedAwait>
     </>
   )
 }

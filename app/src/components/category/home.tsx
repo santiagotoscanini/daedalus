@@ -3,6 +3,7 @@ import { bytes, DASH, num, pct } from '../../lib/format'
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'
 import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
+import { EMPTY, FOOT, FOOT_BASE, MONO, NOTE, SUB } from '../tokens'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Progress, Pulse, Ring } from '../viz'
 import { IdpView } from './idp'
 
@@ -16,20 +17,11 @@ import { IdpView } from './idp'
 // The rule on the tab row separates what the house shares from what one person
 // uses. See the note in the loader for why that is the line.
 
-/* The board vocabulary styles.css used to carry, as utilities. Restated per
-   category file rather than shared: the legacy sheet is being retired file by
-   file, so a common module would be a second place to keep in step. */
-const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
-const NOTE = 'text-[0.73rem] text-(--dim)'
-/* Split so the two coloured variants each state their own ink rather than
-   layering a second text utility over the first, where source order in the
-   emitted stylesheet — not the order in the string — would pick the winner. */
-const FOOT_BASE = 'mt-[0.15rem] text-[0.73rem] leading-[1.45] [overflow-wrap:anywhere]'
-const FOOT = `${FOOT_BASE} text-(--dim)`
+/* The one caption on these pages that is not grey. It states its own ink over
+   the colourless base rather than layering a second text utility over `FOOT`,
+   where source order in the emitted stylesheet — not the order in the string —
+   would pick the winner. */
 const FOOT_WARN = `${FOOT_BASE} text-warning`
-const SUB =
-  'mt-[0.35rem] mb-[-0.2rem] text-[0.73rem] tracking-normal text-(--dim) [font-weight:550]'
-const EMPTY = 'py-[0.9rem] text-center text-[0.8rem] text-(--dim) [overflow-wrap:anywhere]'
 
 /* A flat list of named things, each led by a chip saying what kind it is and
    trailed by whatever detail that kind has. Rows of a table, not a stack of

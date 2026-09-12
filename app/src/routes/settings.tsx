@@ -1,4 +1,4 @@
-import { Await, createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import {
   CodeIcon,
   FolderGit2Icon,
@@ -11,7 +11,9 @@ import {
 import { type ReactNode, useEffect, useRef, useState, useTransition } from 'react'
 
 import { ApplyBar } from '../components/apply-bar'
+import { GuardedAwait } from '../components/error'
 import { PageHead } from '../components/page'
+import { usePoll } from '../components/poll'
 import { Appearance } from '../components/settings/appearance'
 import { Developer } from '../components/settings/developer'
 import { General } from '../components/settings/general'
@@ -222,22 +224,22 @@ function SettingsPage() {
   }, [landed])
   const loaderApp = useRef(githubApp)
   loaderApp.current = githubApp
-  useEffect(() => {
-    if (watchUntil === null) return
-    const t = setInterval(() => {
-      void fetchGithubAppStatus()
-        .then((s) => {
-          setPolled({ over: loaderApp.current, status: s })
-          if (s.state === 'installed' || Date.now() >= watchUntil) setWatchUntil(null)
-        })
-        .catch(() => {
-          if (Date.now() >= watchUntil) setWatchUntil(null)
-        })
-    }, INSTALL_POLL_MS)
-    return () => {
-      clearInterval(t)
-    }
-  }, [watchUntil])
+  usePoll(
+    async () => {
+      // Re-read rather than closed over: `usePoll` calls the newest closure,
+      // so this is the current deadline and not the one the watch started with.
+      if (watchUntil === null) return
+      try {
+        const s = await fetchGithubAppStatus()
+        setPolled({ over: loaderApp.current, status: s })
+        if (s.state === 'installed' || Date.now() >= watchUntil) setWatchUntil(null)
+      } catch {
+        if (Date.now() >= watchUntil) setWatchUntil(null)
+      }
+    },
+    INSTALL_POLL_MS,
+    watchUntil !== null,
+  )
 
   const github = {
     app: polled !== null && polled.over === githubApp ? polled.status : githubApp,
@@ -275,14 +277,15 @@ function SettingsPage() {
           (live === null ? (
             <General settings={settings} edit={edit} timezones={timezones} live={null} />
           ) : (
-            <Await
+            <GuardedAwait
+              resetKey={tab}
               promise={live}
               fallback={
                 <General settings={settings} edit={edit} timezones={timezones} live={null} />
               }
             >
               {(l) => <General settings={settings} edit={edit} timezones={timezones} live={l} />}
-            </Await>
+            </GuardedAwait>
           ))}
         {tab === 'network' && <Network settings={settings} edit={edit} />}
         {tab === 'integrations' &&
@@ -294,7 +297,8 @@ function SettingsPage() {
               github={github}
             />
           ) : (
-            <Await
+            <GuardedAwait
+              resetKey={tab}
               promise={integrations}
               fallback={
                 <Integrations
@@ -313,26 +317,31 @@ function SettingsPage() {
                   github={github}
                 />
               )}
-            </Await>
+            </GuardedAwait>
           ))}
         {tab === 'repository' &&
           (site === null ? (
             <Repository settings={settings} site={null} />
           ) : (
-            <Await promise={site} fallback={<Repository settings={settings} site={null} />}>
+            <GuardedAwait
+              resetKey={tab}
+              promise={site}
+              fallback={<Repository settings={settings} site={null} />}
+            >
               {(state) => <Repository settings={settings} site={state} />}
-            </Await>
+            </GuardedAwait>
           ))}
         {tab === 'profile' &&
           (profile === null ? (
             <ProfileTab operator={settings.general.operator} profile={null} />
           ) : (
-            <Await
+            <GuardedAwait
+              resetKey={tab}
               promise={profile}
               fallback={<ProfileTab operator={settings.general.operator} profile={null} />}
             >
               {(p) => <ProfileTab operator={settings.general.operator} profile={p} />}
-            </Await>
+            </GuardedAwait>
           ))}
         {tab === 'appearance' && (
           <Appearance

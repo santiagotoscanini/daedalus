@@ -1,9 +1,10 @@
-import { Await, createFileRoute, notFound } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 
 import { CategoryBoards } from '../components/category/registry'
 import { StateDot } from '../components/controls'
+import { GuardedAwait } from '../components/error'
 import { PageHead } from '../components/page'
-import { BoardsSkeleton, ServiceHeadSkeleton, StatBandSkeleton } from '../components/skeleton'
+import { BoardsSkeleton, ServiceHeadSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { CATEGORIES, type CategoryName, type CategorySpec, resolveTab } from '../lib/dashboard/nav'
 import { fetchCategoryBoards, fetchTabStatus, type TabStatus } from '../server/category'
@@ -69,6 +70,9 @@ export const Route = createFileRoute('/c/$category')({
 function CategoryPage() {
   const { spec, tab, boards, tabStatus } = Route.useLoaderData()
   const { category } = Route.useParams()
+  // Switching category or tab clears a caught failure; staying put does not,
+  // so a section that failed stays failed until its loader is re-run.
+  const sectionKey = `${category}/${tab}`
 
   return (
     <>
@@ -81,17 +85,28 @@ function CategoryPage() {
           // The tabs are drawn immediately either way — navigation is the one
           // thing on this page that must never wait. The dot arrives in its
           // reserved slot, grey until it is known, so nothing moves.
-          <Await
+          //
+          // Guarded, like the boards below: this is the single render path for
+          // every category and every tab, and it fans out over a dozen
+          // upstreams. An unguarded rejection here throws past the Suspense
+          // fallback and blanks the whole dashboard — one dead upstream must
+          // cost its own row of dots, not the page.
+          <GuardedAwait
+            resetKey={sectionKey}
             promise={tabStatus}
             fallback={<TabNav spec={spec} category={category} tab={tab} status={null} />}
           >
             {(status) => <TabNav spec={spec} category={category} tab={tab} status={status} />}
-          </Await>
+          </GuardedAwait>
         ))}
 
-      <Await promise={boards} fallback={<BoardsPlaceholder spec={spec} tab={tab} />}>
+      <GuardedAwait
+        resetKey={sectionKey}
+        promise={boards}
+        fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
+      >
         {(payload) => <CategoryBoards payload={payload} />}
-      </Await>
+      </GuardedAwait>
     </>
   )
 }
@@ -155,12 +170,10 @@ function TabNav({
 }
 
 /**
- * The service header, the headline band and the grid, sized to the page that
- * is arriving.
+ * The service header and the grid, sized to the page that is arriving.
  *
  * Sized per TAB where a tab says so: the category's own spans describe its
- * default tab, and a sibling laid out differently would reflow on arrival —
- * worst of all a band of stat cards that the page turns out not to have.
+ * default tab, and a sibling laid out differently would reflow on arrival.
  *
  * The header is the same argument one level up. Almost every tab opens with
  * one, and without a placeholder for it the boards render at the top of the
@@ -174,7 +187,6 @@ function BoardsPlaceholder({ spec, tab }: { spec: CategorySpec; tab: string }) {
   return (
     <>
       {t?.head !== false && <ServiceHeadSkeleton />}
-      {t?.statBand !== false && <StatBandSkeleton />}
       <BoardsSkeleton spans={t?.boardSpans ?? spec.boardSpans} />
     </>
   )

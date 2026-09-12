@@ -12,7 +12,16 @@ import { Chip, Facts } from '../viz'
 // the section's facts came from and how old they are. The tabs differ in
 // what they show, not in how.
 
+/* Settings keeps its own two of the board vocabulary rather than taking
+   components/tokens.ts's, and the difference is deliberate: these are read as
+   prose in a form, not as a caption under a chart. A step larger (0.78/0.8rem
+   against 0.73rem and 0.86em) and, for the note, a step darker — `--text-muted`
+   sits nearer the body ink than `--muted-foreground` does in the light theme. */
+
 export const MONO = 'font-mono text-[0.8rem] [overflow-wrap:anywhere]'
+
+/** The sentence under a section: what the rows above it mean, or what to do. */
+export const NOTE = 'm-0 text-[0.78rem] text-(--text-muted)'
 
 export function Section({
   title,

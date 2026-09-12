@@ -51,10 +51,7 @@ export type BoxSettings = {
       /** The one Cloudflare API token (DASH_CF_API_TOKEN) is present. */
       tokenConfigured: boolean
     }
-    github: {
-      owner: string
-      tokenConfigured: boolean
-    }
+    github: { owner: string }
     mail: { sender: string; alertTo: string }
     registryUrl: string
     grafanaUrl: string
@@ -107,7 +104,8 @@ export type GithubCheck = {
 export type IntegrationStatus = {
   checkedAt: string
   cloudflare: CloudflareStatus
-  github: { token: GithubCheck; repoToken: GithubCheck }
+  /** Only the `GITHUB_REPO_TOKEN` override; the App is how the box talks to GitHub. */
+  github: { repoToken: GithubCheck }
   mail: { lastSentAt: string | null; lastRecipient: string | null }
 }
 

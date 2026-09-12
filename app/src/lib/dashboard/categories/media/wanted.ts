@@ -1,3 +1,4 @@
+import { localDay } from '../../../format'
 import { getJson, pool } from '../../../http'
 import { key } from '../../../keys'
 import { lokiEntries, lokiLatest, lokiScalar } from '../../../loki'
@@ -269,7 +270,10 @@ export async function loadArr(app: 'sonarr' | 'radarr', ctx: Ctx): Promise<ArrDa
         episodeFileId?: number
       }[]
     >(
-      `${base}/calendar?start=${iso(now)}&end=${iso(now + CALENDAR_DAYS * day)}&includeSeries=true&${k}`,
+      // The window is the box's days, not UTC's: a bare UTC date past 21:00
+      // here is already tomorrow, and the evening's own airings then drop out
+      // of "what is coming" at exactly the hour someone is looking at it.
+      `${base}/calendar?start=${localDay(now)}&end=${localDay(now + CALENDAR_DAYS * day)}&includeSeries=true&${k}`,
     ),
     getJson<{
       records?: {
@@ -396,11 +400,6 @@ const EVENTS: Record<string, { event: string; tone: 'ok' | 'warn' | 'bad' | 'mut
   episodeFileRenamed: { event: 'renamed', tone: 'muted' },
   movieFileRenamed: { event: 'renamed', tone: 'muted' },
   movieFolderImported: { event: 'imported', tone: 'muted' },
-}
-
-/** `2026-08-06` — what the *arrs' calendar endpoint wants. */
-function iso(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10)
 }
 
 /* ── Bazarr ───────────────────────────────────────────────────────────── */

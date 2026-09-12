@@ -1,4 +1,5 @@
 import { defineBridge } from '../lib/bridge'
+import { nullable, obj, optional, str } from '../lib/contract/decode'
 import { readCommittedSite } from '../lib/contract/domains/site-doc'
 import type { SnapshotResult } from '../lib/contract/snapshot'
 import { type GithubInstallation, readGithubInstallation, usableToken } from '../lib/github-token'
@@ -36,7 +37,9 @@ export function installationState(ctx: Ctx): Promise<SnapshotResult<GithubInstal
 const tokenRequest = defineBridge({
   requestFile: 'github-token-request.json',
   statusFile: 'github-token-status.json',
-  idle: { id: null, state: 'idle' },
+  // Nothing here reads the status — the minter's file is the answer — so the
+  // shape is the bridge's own minimum rather than a verb's.
+  status: obj({ id: optional(nullable(str), null), state: optional(str, 'idle') }),
 })
 
 // On globalThis so a Vite re-evaluation does not reset the debounce.

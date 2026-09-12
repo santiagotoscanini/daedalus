@@ -1,3 +1,4 @@
+import { localDay } from '../../../format'
 import { getJson } from '../../../http'
 import { lokiLatest } from '../../../loki'
 import { promBars, promScalar } from '../../../prom'
@@ -152,9 +153,12 @@ export async function loadLitellm(): Promise<LitellmData> {
   const auth = { headers: { Authorization: `Bearer ${process.env.LITELLM_API_KEY ?? ''}` } }
 
   // Every day in the window, oldest first — the chart's x axis, independent of
-  // which of them the ledger happens to have a row for.
+  // which of them the ledger happens to have a row for. The box's days, not
+  // UTC's: `today` below is what the tab measures its "today" figures against,
+  // and a UTC day rolls over three hours early here — which labels this
+  // evening as tomorrow and leaves the tab saying nothing was served today.
   const dates = Array.from({ length: DAYS }, (_, i) =>
-    new Date(Date.now() - (DAYS - 1 - i) * 86400_000).toISOString().slice(0, 10),
+    localDay(Date.now() - (DAYS - 1 - i) * 86400_000),
   )
   const from = dates[0] ?? ''
   const today = dates[DAYS - 1] ?? ''

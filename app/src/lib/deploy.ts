@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { defineBridge } from './bridge'
-import { type Decoder, nullable, num, obj, str } from './contract/decode'
+import { type Decoder, literal, nullable, num, obj, optional, str } from './contract/decode'
 import { readSnapshot } from './contract/snapshot'
 
 // Redeploy: pull the app's image and restart it if the digest moved.
@@ -31,10 +31,20 @@ export type DeployStatus = {
   finishedAt: string | null
 }
 
+/** The status file the host agent writes; decoding `{}` is the idle status. */
+const DEPLOY_STATUS: Decoder<DeployStatus> = obj({
+  id: optional(nullable(str), null),
+  app: optional(nullable(str), null),
+  state: optional(literal('idle', 'running', 'done', 'failed'), 'idle'),
+  error: optional(str, ''),
+  startedAt: optional(nullable(str), null),
+  finishedAt: optional(nullable(str), null),
+})
+
 const bridge = defineBridge<DeployStatus>({
   requestFile: 'deploy-request.json',
   statusFile: 'deploy-status.json',
-  idle: { id: null, app: null, state: 'idle', error: '', startedAt: null, finishedAt: null },
+  status: DEPLOY_STATUS,
 })
 
 export async function readDeployStatus(): Promise<DeployStatus> {

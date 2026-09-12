@@ -2,30 +2,23 @@ import { cn } from '../../../lib/cn'
 import { DASH } from '../../../lib/format'
 import { Segmented } from '../../controls'
 import type { LogNeighbour } from '../../logs'
+import { EMPTY } from '../../tokens'
 import type { Tone } from '../../viz'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
 /* The class strings more than one Media tab writes. Named once for the same
    reason the CSS they replace was: two tabs rendering the same object must not
-   drift into two slightly different rows. */
+   drift into two slightly different rows.
+
+   The board vocabulary itself is one module (components/tokens.ts): it is the
+   same handful of strings on every category page, and was restated per file
+   only while styles.css was being retired. Re-exported here so a tab still
+   imports its own page's shared file. */
+export { EMPTY, FOOT, MONO, NOTE, SUB } from '../../tokens'
 
 /** A bare vertical list — no marker, no padding, no default margins. */
 export const LIST = 'm-0 flex list-none flex-col p-0'
-
-/** A board's caption. */
-export const FOOT =
-  'm-0 mt-[0.15rem] text-[0.73rem] leading-[1.45] text-muted-foreground [overflow-wrap:anywhere]'
-
-/** The reading in a board's header. */
-export const NOTE = 'text-[0.73rem] text-muted-foreground'
-
-/** "There is nothing here", said out loud. */
-export const EMPTY =
-  'm-0 py-[0.9rem] text-center text-[0.8rem] text-muted-foreground [overflow-wrap:anywhere]'
-
-/** An identifier: no spaces to break at, so it is allowed to break anywhere. */
-export const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
 
 /* A download in flight, shared by qBittorrent, NZBGet, Shelfmark and the *arr
    queues — the same object every time: a name, a line of figures, a bar. */

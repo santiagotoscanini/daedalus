@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { BuildNowButton, BuildStateChip, requesterLabel, useNow } from '../components/apps/builds'
+import { BuildNowButton, BuildStateChip, requesterLabel } from '../components/apps/builds'
 import { BOARD_FOOT, GHOST_BTN, VIZ_EMPTY } from '../components/apps/shared'
 import { GuardedAwait } from '../components/error'
 import { Crumbs, PageHead } from '../components/page'
+import { useNow, usePoll } from '../components/poll'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
 import { BarList, Board, BoardGrid, Chip, Facts, Pulse } from '../components/viz'
@@ -148,19 +149,14 @@ function BuildDetail({
   const open = isOpenBuild(build.state)
   const now = useNow(open)
 
-  useEffect(() => {
-    if (!open) return
-    const t = setInterval(() => {
-      void fetchBuild({ data: { app: name, id: build.id } })
-        .then((b) => {
-          if (b !== null) setBuild(b)
-        })
-        .catch(() => {})
-    }, 3000)
-    return () => {
-      clearInterval(t)
-    }
-  }, [open, name, build.id])
+  usePoll(
+    async () => {
+      const b = await fetchBuild({ data: { app: name, id: build.id } }).catch(() => null)
+      if (b !== null) setBuild(b)
+    },
+    3000,
+    open,
+  )
 
   // Follow the log's end while it grows, unless the reader has scrolled up.
   const logRef = useRef<HTMLPreElement>(null)

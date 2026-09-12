@@ -1,4 +1,4 @@
-import { Await, Link, useRouter } from '@tanstack/react-router'
+import { Link, useRouter } from '@tanstack/react-router'
 import {
   ChevronsUpDownIcon,
   ExternalLinkIcon,
@@ -16,6 +16,7 @@ import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
 import { isScheme, type Scheme, type ThemeChoice } from '../lib/theme'
 import { saveTheme } from '../server/settings'
+import { GuardedAwait } from './error'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,9 +59,12 @@ type Props = {
 
 export function AccountMenu({ account, ...rest }: Props) {
   return (
-    <Await promise={account} fallback={<Menu account={null} {...rest} />}>
+    // Guarded: this is the root route, so an unguarded rejection from Pocket
+    // ID throws past the Suspense fallback and takes every page with it — the
+    // rail included, which is the one thing that must survive.
+    <GuardedAwait resetKey="account" promise={account} fallback={<Menu account={null} {...rest} />}>
       {(a) => <Menu account={a} {...rest} />}
-    </Await>
+    </GuardedAwait>
   )
 }
 

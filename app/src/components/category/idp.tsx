@@ -20,21 +20,12 @@ import { DASH, num } from '../../lib/format'
 import { GrafanaLogs, LogDetails } from '../logs'
 import { Changelog } from '../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../service-head'
+import { EMPTY, FOOT, MONO, NOTE, SUB } from '../tokens'
 import { Button } from '../ui/button'
 import { Board, BoardGrid, Chip, Columns, Measures } from '../viz'
 
 /** How many registrations the list shows before it is asked for the rest. */
 const APPS_SHOWN = 5
-
-/* The board vocabulary styles.css used to carry, as utilities. Restated per
-   category file rather than shared: the legacy sheet is being retired file by
-   file, so a common module would be a second place to keep in step. */
-const MONO = 'font-mono text-[0.86em] [overflow-wrap:anywhere]'
-const NOTE = 'text-[0.73rem] text-(--dim)'
-const FOOT = 'mt-[0.15rem] text-[0.73rem] leading-[1.45] text-(--dim) [overflow-wrap:anywhere]'
-const SUB =
-  'mt-[0.35rem] mb-[-0.2rem] text-[0.73rem] tracking-normal text-(--dim) [font-weight:550]'
-const EMPTY = 'py-[0.9rem] text-center text-[0.8rem] text-(--dim) [overflow-wrap:anywhere]'
 
 /* A flat list of named things, each led by a chip saying what kind it is and
    trailed by whatever detail that kind has. Rows of a table, not a stack of

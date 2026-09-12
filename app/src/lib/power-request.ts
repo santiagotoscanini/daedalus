@@ -1,4 +1,5 @@
 import { defineBridge } from './bridge'
+import { type Decoder, literal, nullable, obj, optional, str } from './contract/decode'
 
 // Asking the host to restart the machine.
 //
@@ -29,18 +30,21 @@ export type PowerRequestStatus = {
   finishedAt: string | null
 }
 
+/** The status file the host agent writes; decoding `{}` is the idle status. */
+const POWER_STATUS: Decoder<PowerRequestStatus> = obj({
+  id: optional(nullable(str), null),
+  action: optional(nullable(literal('reboot')), null),
+  state: optional(literal('idle', 'running', 'failed'), 'idle'),
+  detail: optional(str, ''),
+  error: optional(str, ''),
+  startedAt: optional(nullable(str), null),
+  finishedAt: optional(nullable(str), null),
+})
+
 const bridge = defineBridge<PowerRequestStatus>({
   requestFile: 'power-request.json',
   statusFile: 'power-status.json',
-  idle: {
-    id: null,
-    action: null,
-    state: 'idle',
-    detail: '',
-    error: '',
-    startedAt: null,
-    finishedAt: null,
-  },
+  status: POWER_STATUS,
 })
 
 /**

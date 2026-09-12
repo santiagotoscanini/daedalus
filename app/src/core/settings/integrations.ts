@@ -236,22 +236,20 @@ function failedGithub(token: string): GithubCheck {
 
 async function load(ctx: Ctx): Promise<IntegrationStatus> {
   const cfToken = ctx.secret('CF_API_TOKEN')
-  const ghToken = ctx.secret('GITHUB_TOKEN')
   const ghRepoToken = ctx.secret('GITHUB_REPO_TOKEN')
-  const [cf, token, repoToken, m] = await Promise.all([
+  const [cf, repoToken, m] = await Promise.all([
     settled(cloudflare(ctx), {
       token: failedToken(cfToken !== '', 'the check failed; it is asked again within five minutes'),
       zone: null,
       tunnel: null,
     }),
-    settled(checkGithub(ghToken), failedGithub(ghToken)),
     settled(checkGithub(ghRepoToken), failedGithub(ghRepoToken)),
     settled(mail(ctx), { lastSentAt: null, lastRecipient: null }),
   ])
   return {
     checkedAt: new Date().toISOString(),
     cloudflare: cf,
-    github: { token, repoToken },
+    github: { repoToken },
     mail: m,
   }
 }

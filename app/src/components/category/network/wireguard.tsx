@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { cn } from '../../../lib/cn'
 import type { NetworkData } from '../../../lib/dashboard/categories/network'
-import { bytes, DASH, ms, num, since, until } from '../../../lib/format'
+import { bytes, DASH, localDay, ms, num, since, until } from '../../../lib/format'
 import { BASE_DOMAIN, stripBaseDomain } from '../../../lib/site'
 import { Segmented } from '../../controls'
 import { LogBoard } from '../../logs'
+import { useNow } from '../../poll'
 import { Changelog } from '../../release-notes'
 import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse } from '../../viz'
@@ -595,7 +596,7 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
                   <span className={cn(MAIN, MONO)}>{h.ip}</span>
                   <span className={SIDE}>
                     {h.heldDays === null ? 'current' : `held ${String(h.heldDays)}d`} ·{' '}
-                    {new Date(h.at).toLocaleDateString('en-CA')}
+                    {localDay(h.at)}
                   </span>
                 </li>
               ))}
@@ -637,27 +638,16 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
  *
  * The timer lives in systemd and this container cannot see it, so the moment
  * is derived on the server (last run + interval) and handed over as an
- * absolute instant. The ticking is client-side and starts only after mount:
- * `now` is null through the server render AND the first client render, so both
- * produce the same markup and hydration has nothing to disagree about. A
- * countdown computed from `Date.now()` during render is the classic way to
- * break that.
+ * absolute instant. The ticking is `useNow`, which is where the after-mount
+ * rule it depends on is written down.
  *
  * mm:ss rather than one unit — a five-minute countdown reading "5 min" for
  * two and a half minutes is not a countdown.
  */
 function Countdown({ at }: { at: number | null }) {
-  const [now, setNow] = useState<number | null>(null)
-
-  useEffect(() => {
-    setNow(Date.now())
-    const t = setInterval(() => {
-      setNow(Date.now())
-    }, 1000)
-    return () => {
-      clearInterval(t)
-    }
-  }, [])
+  // Always ticking: unlike a build's elapsed time there is no idle state to
+  // stop at — the timer is always on its way round.
+  const now = useNow(true)
 
   if (at === null) return <span className={NOTE}>next run unknown</span>
 

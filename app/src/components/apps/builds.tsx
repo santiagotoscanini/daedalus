@@ -12,6 +12,7 @@ import type { BuildState } from '../../lib/builds'
 import { DASH, ms, since } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
 import { buildNowFn, fetchBuilds } from '../../server/builds'
+import { useNow, usePoll } from '../poll'
 import { Button } from '../ui/button'
 import { Board, Chip } from '../viz'
 import { BOARD_FOOT, GHOST_BTN, VIZ_EMPTY } from './shared'
@@ -44,25 +45,6 @@ export function requesterLabel(b: Pick<BuildSummary, 'requestedBy' | 'actor'>): 
   return b.actor ?? 'operator'
 }
 
-/**
- * `Date.now()` after mount only, ticking while something runs. A running
- * build's elapsed time rendered on the server would never match the client's.
- */
-export function useNow(active: boolean): number | null {
-  const [now, setNow] = useState<number | null>(null)
-  useEffect(() => {
-    setNow(Date.now())
-    if (!active) return
-    const t = setInterval(() => {
-      setNow(Date.now())
-    }, 1000)
-    return () => {
-      clearInterval(t)
-    }
-  }, [active])
-  return now
-}
-
 const ROW =
   'grid grid-cols-[6.2rem_4.6rem_minmax(0,1fr)_5.2rem_6.5rem] items-baseline gap-x-[0.8rem] border-t border-(--border-soft) px-[0.2rem] py-[0.45rem] text-[0.8rem] no-underline first:border-t-0 hover:bg-(--panel-2) hover:no-underline max-[40rem]:grid-cols-[6.2rem_4.6rem_minmax(0,1fr)]'
 
@@ -86,19 +68,14 @@ export function BuildsBoard({
   const open = builds.some((b) => isOpenBuild(b.state))
   const now = useNow(open)
 
-  useEffect(() => {
-    if (!open) return
-    const t = setInterval(() => {
-      void fetchBuilds({ data: { app, limit: 10 } })
-        .then((r) => {
-          if (r !== null) setBuilds(r)
-        })
-        .catch(() => {})
-    }, 3000)
-    return () => {
-      clearInterval(t)
-    }
-  }, [open, app])
+  usePoll(
+    async () => {
+      const r = await fetchBuilds({ data: { app, limit: 10 } }).catch(() => null)
+      if (r !== null) setBuilds(r)
+    },
+    3000,
+    open,
+  )
 
   const refusal = !buildOnBox
     ? 'Box builds are off for this app.'

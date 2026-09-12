@@ -1,4 +1,5 @@
 import { defineBridge } from './bridge'
+import { type Decoder, literal, nullable, obj, optional, str } from './contract/decode'
 
 // Asking the host to restart the Remote Control server.
 //
@@ -27,18 +28,21 @@ export type ClaudeRcStatus = {
   finishedAt: string | null
 }
 
+/** The status file the host agent writes; decoding `{}` is the idle status. */
+const CLAUDE_RC_STATUS: Decoder<ClaudeRcStatus> = obj({
+  id: optional(nullable(str), null),
+  action: optional(nullable(literal('restart')), null),
+  state: optional(literal('idle', 'running', 'done', 'failed'), 'idle'),
+  detail: optional(str, ''),
+  error: optional(str, ''),
+  startedAt: optional(nullable(str), null),
+  finishedAt: optional(nullable(str), null),
+})
+
 const bridge = defineBridge<ClaudeRcStatus>({
   requestFile: 'claude-rc-request.json',
   statusFile: 'claude-rc-status.json',
-  idle: {
-    id: null,
-    action: null,
-    state: 'idle',
-    detail: '',
-    error: '',
-    startedAt: null,
-    finishedAt: null,
-  },
+  status: CLAUDE_RC_STATUS,
 })
 
 export async function readClaudeRcStatus(): Promise<ClaudeRcStatus> {
