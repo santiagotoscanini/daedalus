@@ -137,7 +137,7 @@ const SECTIONS: DocSection[] = [
       },
       {
         name: "one repo per app",
-        body: "Each app is a repo. A push to main reaches the box as a webhook, which builds the image on its own hardware (from the Dockerfile, or from Railpack when there is none) and pushes it to the box's registry; the deploy timer picks up the digest change.",
+        body: "Each app is a repo. A push to main reaches the box as a webhook, which builds the image on its own hardware (Railpack when the repo carries a railpack.json, its Dockerfile otherwise) and pushes it to the box's registry; the deploy timer picks up the digest change.",
       },
       {
         name: "the box's own GitHub App",

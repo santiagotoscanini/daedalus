@@ -5,7 +5,7 @@ engine that any NixOS machine imports, configured from its own UI. Written
 2026-09-08 as draft v3, executed phase by phase since; each phase carries an
 **Outcome** paragraph once it lands, and the table below is the index.
 
-## Status (2026-09-11)
+## Status (2026-09-12)
 
 | Phase | What | State |
 |---|---|---|
@@ -16,7 +16,7 @@ engine that any NixOS machine imports, configured from its own UI. Written
 | 4 | Nix reads the app registry from `site/` | landed 2026-09-10 (s2-server `b09957f`, engine `4c64c81`) |
 | 5 | `site.json` is the source of the site constants, editable | landed 2026-09-10 (s2-server `c6ad8d0`, engine `2aceab5`, `ac60f42`) |
 | 6 | Secrets vault v1: the Cloudflare token | landed — vault copy, toggle ON and Replace token 2026-09-11 (s2-server `cf697b6`, `94d6415`); the gate (a real rotation from the UI) passed 2026-09-12, and `stacks/cloudflared/env.sops` and the toggle are deleted (s2-server `548255f`) |
-| 7 | GitHub: device flow, HTTPS pushes, JIT runners | not started |
+| 7 | GitHub: the box's own App, and builds on the box | landed 2026-09-12 (engine `6df93f7`) — reshaped from "device flow, HTTPS pushes, JIT runners" |
 | 8 | Auth hardening | not started |
 | 9 | Nix: enable surface, literals, state out of the tree | not started |
 | 10 | App module system and build | not started |
@@ -29,6 +29,16 @@ gone: on 2026-09-11 the operator decided both stay public, and their draft
 stage was put back to `live` through `saveApp`, so the apps table matches
 `site/apps.json` again. The Apply of 2026-09-10 went through the bridge by
 hand and ended `done / no-change`.
+
+Landed 2026-09-12 (Phase 7, reshaped): the box has its own GitHub App, a push
+to any app repo builds the image here — rootless BuildKit + Railpack, into the
+box's own zot — and reports back as a check run plus a Deployment. All seven
+app repos have had their `.github/workflows` and `REGISTRY_PASSWORD` deleted,
+and the engine's CI verbs and device-flow sign-in were removed with them. The
+engine's OWN repo still runs `ci.yml` and `website.yml` on GitHub-hosted
+runners. Deferred out of Phase 7, still unshipped: HTTPS pushes for the site
+and workspace repos (the SSH deploy key keeps doing those), and builds for
+pull requests with their per-PR previews.
 
 Cross-cutting items from §4 not yet done: the `just census` target, the
 nightly `git bundle` of the config repo into the state root, the nix+app
@@ -109,15 +119,19 @@ rotation from the UI restarted every consumer unaided, then
 `stacks/cloudflared/env.sops` and the toggle were deleted (s2-server
 `548255f`); the engine's `CF_TOKEN_FROM_SITE` gate went with them.
 
-**Phase 7 — GitHub without classic PATs.** A daedalus OAuth App with device
-flow; Settings › GitHub shows the code, polls, checks scopes and stores the
-token via the Phase 6 path, with a pasted fine-grained PAT as the fallback
-and a self-test that names the missing permission. Consumers move one at a
-time behind toggles: the token env var replaces the `ghcr-auth` grep,
-gha-runner mints single-use JIT configs instead of registration tokens,
-`ci.sh` sets secrets with it, site and workspace pushes go over HTTPS with a
-credential helper. The SSH deploy key stays for config-repo pushes until
-Phase 11.
+**Phase 7 — the box's own GitHub App, and builds on the box.** Landed
+2026-09-12, in a different shape from the draft: no interactive sign-in and no
+runners. Settings › Integrations creates the App from a manifest; its private
+key is sealed into the config repo by the Phase 6 vault path and never leaves
+the host, where a minter turns it into an hourly installation token the
+container reads. A push to an app repo's default branch reaches
+`hooks.<domain>` as a signed webhook, enters the build queue, and
+`daedalus-build.service` builds it with rootless BuildKit — Railpack when the
+repo carries a `railpack.json`, its Dockerfile otherwise — running the repo's
+own `pnpm ci` inside the image build. The image goes to the box's zot as
+`sha-<sha>` + `latest`, the deploy timer rolls it out, and GitHub gets a check
+run named `daedalus` plus a Deployment. PR builds and per-PR previews are the
+documented next stage, not shipped.
 
 **Phase 8 — who may press Apply.** An `admins`-group check on every mutating
 server function and API route, the group forwarded through traefik headers.
@@ -185,8 +199,9 @@ Operator constraints that shape v3:
   settings page, then configuring things from it (starting with the JSON
   repo), and only then nix starts reading from the new place.
 - Decisions already taken: personal stacks stay in the public engine as
-  enable-flagged catalog modules; GitHub sign-in is OAuth device flow with a
-  PAT fallback; the UI adopts Tailwind v4 + shadcn.
+  enable-flagged catalog modules; GitHub access is the box's own App, whose
+  installation token is minted host-side (no interactive sign-in); the UI
+  adopts Tailwind v4 + shadcn.
 
 ---
 
@@ -260,7 +275,7 @@ ENGINE  github.com/santiagotoscanini/daedalus   (public; keeps name + history)
   flake.nix           nixosModules.default (THE import), lib, packages.{init,image-stream}, templates.config
   nix/{platform,core,modules/<id>}   every stack gated by fleet.modules.<id>.enable
   app/                the TanStack Start app; src/core + src/modules/<id> (manifest, loaders, views, schema)
-  host/               the bridge agents (apply, image-update, deploy-trigger, ci, power, workspace, secrets)
+  host/               the bridge agents (apply, image-update, deploy-trigger, build, power, workspace, secrets)
 
 CONFIG  the user's own NixOS config at /etc/nixos   (theirs; this box keeps its flake + hardware here)
   flake.nix           inputs.daedalus (pinned by tag)
@@ -356,10 +371,10 @@ and the Claude MCP token).
 Settings): init CLI on an existing NixOS → LAN setup mode with a journal
 setup token → local admin + recovery key → domain + Cloudflare (token verify,
 zone pick, probe TXT over DoH, locally-managed tunnel created via API) →
-Pocket ID `/setup` then flip the gate to forward-auth + `admins` → GitHub
-device flow (`repo workflow`) → source control (is `/etc/nixos` a git work
+Pocket ID `/setup` then flip the gate to forward-auth + `admins` → install the
+box's GitHub App on the account → source control (is `/etc/nixos` a git work
 tree? offer the commit-on-change switch; suggest a private remote if it has
-none) → first app with JIT runners.
+none) → first app, whose first push to main builds here.
 
 ---
 
@@ -506,10 +521,12 @@ fetches) publishes `/etc/nixos`'s git facts to `/repo/repo.json`.
 
 Two findings:
 
-- **The GitHub token is a pre-prefix classic PAT.** Its kind cannot be read
-  off the string, so Integrations derives it from the `X-OAuth-Scopes` header
-  on `GET /user` instead. Anything keying on a `ghp_`/`github_pat_` prefix
-  would report the wrong kind here.
+- **The GitHub token was a pre-prefix classic PAT** (a Phase-2-era finding,
+  kept for the history). Its kind cannot be read off the string, so
+  Integrations derived it from the `X-OAuth-Scopes` header on `GET /user`
+  instead. Anything keying on a `ghp_`/`github_pat_` prefix would have
+  reported the wrong kind here. Since Phase 7 the box's own App supplies the
+  credential and this is no longer a live constraint.
 - **The literals sweep missed one.** `service-head.tsx`'s Open button still
   typed `.toscanini.me` and was fixed on 2026-09-09 (`BASE_DOMAIN` from
   `lib/site.ts`, which every neighbouring file already used). What remains in
@@ -834,23 +851,36 @@ trap's poster child.
 Compatibility: the toggle defaults to the old path; flipping is one option.
 ⚠ touches `stacks/cloudflared` and `stacks/traefik` restarts; off-hours.
 
-### Phase 7 — GitHub: device flow, HTTPS pushes, JIT runners (2–3 days)
+### Phase 7 — The box's own GitHub App, and builds on the box (landed 2026-09-12)
 
-1. Register the daedalus OAuth App (device flow enabled); `client_id` in
-   `site.json` (overridable). Settings › GitHub: "Sign in" shows the 8-char
-   code, polls, verifies scopes (`repo workflow`), stores the token as
-   `vault/github-token.sops` via the Phase 6 path; "Paste a fine-grained
-   PAT" as the fallback with a per-endpoint self-test that names the missing
-   permission (Administration, Contents, Workflows, Secrets, Actions).
-2. Nix consumers behind toggles: `DASH_GITHUB_TOKEN` (replaces the ghcr-auth
-   grep), `gha-runner` minting via `generate-jitconfig` (single-use, no
-   registration token), `ci.sh` secret setting, the site-repo and workspace
-   pushes over HTTPS with the token (git credential helper) instead of the
-   SSH deploy key. Flip one at a time; keep the SSH key for `/etc/nixos`
-   pushes until Phase 11.
+Shipped in a different shape from the draft above: no interactive sign-in and
+no runners. What landed:
 
-Compatibility: every consumer has a toggle; the classic PAT keeps working
-until each is flipped.
+1. **The App.** Settings › Integrations creates the box's own GitHub App from
+   a manifest (the operator approves it on GitHub; the code exchange lands
+   back here), and its private key is sealed into the config repo through the
+   Phase 6 vault path. The key never enters the container: a host minter
+   (`daedalus-github-token`) signs the JWT, exchanges it for an **hourly
+   installation token** scoped to contents/metadata read plus checks and
+   deployments write, and publishes it to a read-only mount the app reads.
+2. **A push builds on the box.** The App's push webhook arrives at
+   `hooks.<domain>`, is signature-checked, and becomes a row in the build
+   queue. `daedalus-build.service` (started by a `.path` unit watching
+   `/apply/build-request.json`) clones the sha, picks a strategy — `auto`
+   takes Railpack when the repo has a `railpack.json`, else its Dockerfile,
+   else Railpack — and builds under **rootless BuildKit**. The repo's own
+   `pnpm ci` runs inside the image build; nothing is installed on the host.
+3. **The image lands at home.** `sha-<sha>` and `latest` are pushed to the
+   box's zot as the `builder` user, and the existing per-app deploy timer
+   rolls the digest change out within two minutes.
+4. **GitHub is told.** Each build reports as a check run named `daedalus`
+   plus a Deployment, so the commit page carries the result without any
+   workflow file. All seven app repos had their `.github/workflows` and
+   `REGISTRY_PASSWORD` deleted; the engine's own repo keeps `ci.yml` and
+   `website.yml` on GitHub-hosted runners.
+
+**Next stage, not shipped:** builds for pull requests, and the per-PR preview
+deployment that would hang off them.
 
 ### Phase 8 — Auth hardening (1–2 days, app only)
 

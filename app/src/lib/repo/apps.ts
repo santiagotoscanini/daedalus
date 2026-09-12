@@ -198,8 +198,9 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
  * Drop a registry entry.
  *
  * Deliberately narrow: this removes the DECLARATION, and the next Apply
- * removes the container, the route, the DNS record, the probe, the Cloudflare
- * CNAME (route-sync prunes what is no longer declared) and the app's runner.
+ * removes the container, the route, the DNS record, the probe and the
+ * Cloudflare CNAME (route-sync prunes what is no longer declared); pushes to
+ * its repo stop building, because nothing declares the app any more.
  * It does NOT reclaim state, and nothing here pretends otherwise — the
  * postgres role and database, /home/santiago/selfhost/apps/<name>/data, the
  * per-app secrets dir and any <name>-env.sops all survive, because deleting

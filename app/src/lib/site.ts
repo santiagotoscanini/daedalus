@@ -11,7 +11,7 @@
 
 export const BASE_DOMAIN: string = import.meta.env.VITE_BASE_DOMAIN ?? 'localhost'
 
-/** GitHub account the app repos and CI live under. */
+/** GitHub account the app repos live under. */
 export const OWNER: string = import.meta.env.VITE_GITHUB_OWNER ?? 'unknown-owner'
 
 /** The box's own image registry (zot), as a bare host. */

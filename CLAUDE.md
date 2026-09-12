@@ -9,10 +9,15 @@ path-scoped rules load as you touch files.
   drizzle-orm, Tailwind v4 + shadcn) and its public landing site
   (`website/`, a standalone pnpm project deployed to GitHub Pages by
   `.github/workflows/website.yml`). Public: `santiagotoscanini/daedalus`.
+- **Also is:** the app builder. Since 2026-09-12 daedalus owns the fleet's
+  image builds — the box's GitHub App takes the push webhook, the queue and
+  the `build` bridge verb live in `app/src/lib/` (`builds.ts`,
+  `build-bridge.ts`, `build-queue.ts`), and results go back to GitHub as a
+  check run plus a Deployment. The app repos carry no workflow files.
 - **Is not:** the NixOS module that runs it. `stacks/daedalus/` in the
   private s2-server repo holds `daedalus.nix`, the host agents
-  (`host/*.sh` — apply, deploy, image and site bridges, the snapshot
-  scripts) and the runtime image context (`assets/`). Anything that
+  (`host/*.sh` — apply, deploy, build, image and site bridges, the
+  snapshot scripts) and the runtime image context (`assets/`). Anything that
   changes how the container is built, what env it gets, or what host
   fact reaches it is an s2-server change, not one here. Making this
   repo an importable `nixosModules.default` is future work (plan Phase

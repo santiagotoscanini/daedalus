@@ -54,9 +54,9 @@ export const apps = pgTable(
     // to undo it, so that entry stays in stacks/daedalus/daedalus.nix.
     managedInNix: boolean('managed_in_nix').notNull().default(false),
 
-    // "registry" (CI builds, zot hosts, deploy timer pulls) or "local"
-    // (source in the flake repo, bind-mounted, dev server). See the
-    // `source.mode` option in stacks/apps/apps.nix.
+    // "registry" (the box builds the image, zot hosts it, the deploy timer
+    // pulls it) or "local" (source in the flake repo, bind-mounted, dev
+    // server). See the `source.mode` option in stacks/apps/apps.nix.
     sourceMode: text('source_mode').notNull().default('registry'),
 
     // null = the platform default, registry.toscanini.me/<name>:latest.

@@ -120,11 +120,12 @@ the remote is still the copy that survives a disk. Commit often.
 ## Data-flow rules
 
 - Host facts arrive via **read-only /run snapshot mounts** (env at
-  /env-snapshot, image labels at /images, SMART/ZFS at /system, CI at
-  /ci, deploy state at /deploy-state, project workspace clones at
-  /workspaces, both repositories' git facts at /repo — remote, head,
-  dirty counts, drift, last Apply commit, plus the site repo's state
-  and a digest per managed file; never either tree itself)
+  /env-snapshot, image labels at /images, SMART/ZFS at /system, build
+  logs at /builds, the GitHub App's installation token at
+  /github-token, deploy state at /deploy-state, project workspace
+  clones at /workspaces, both repositories' git facts at /repo —
+  remote, head, dirty counts, drift, last Apply commit, plus the site
+  repo's state and a digest per managed file; never either tree itself)
   and the committed site directory at /site (read-only; the one directory
   daedalus writes, via the bridge — since Phase 5 its site.json is THE
   source of the site constants nix builds with, so the settings tabs edit
@@ -139,11 +140,16 @@ the remote is still the copy that survives a disk. Commit often.
 - Secrets (service API keys) arrive via rendered env files
   (`DASH_*`). The app only ever GETs with them.
 - Writes to the box go through the file-drop bridges (`/apply`
-  request.json / deploy-request.json / ci-request.json /
+  request.json / deploy-request.json / build-request.json /
   power-request.json / image-request.json / site-request.json) — the container
   deliberately holds no host privilege. Each has one flow module in
   `lib/` (`apply-flow.ts`, `update-flow.ts`) that BOTH doors — the
   button and the `api.*` route — go through, so the two cannot drift.
+  `build-request.json` is the one the box's own builder watches:
+  `daedalus-build.service` picks it up, writes progress back to
+  `/apply/build-status.json` (heartbeated; stale past 90 s) and its log
+  to `/var/log/daedalus-builds/<id>.log`, which is the `/builds` mount
+  above.
 - External-service reads follow the escalating-retry rule: retry only
   thrown requests with a `[400, 800, 1500, 2500]` ms ladder (the
   rootless-port first-SYN stall), never retry a busy upstream (Loki

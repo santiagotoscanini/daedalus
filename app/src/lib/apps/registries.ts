@@ -3,7 +3,7 @@
 // They belong under Apps rather than in a category of their own because they
 // are not a subject area — they are shared build infrastructure, and their
 // only consumer is the app list beside them. zot holds the images the deploy
-// timer pulls; verdaccio holds the npm packages the CI builds resolve. When a
+// timer pulls; verdaccio holds the npm packages the image builds resolve. When a
 // deploy stops moving, one of these two is usually why.
 //
 // A loader per registry rather than one for both: they are separate tabs now,

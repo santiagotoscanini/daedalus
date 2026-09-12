@@ -12,12 +12,12 @@
 
 ---
 
-Daedalus declares the apps on the machine it lives on, deploys them
-when CI ships a new image, publishes their hostnames and certificates,
-watches their containers, databases, disks and mail, and reads their
-logs. When you change something, it doesn't reach into a running
-system — it commits the change to git and rebuilds the machine to
-match. The craftsman, not the labyrinth.
+Daedalus declares the apps on the machine it lives on, builds and
+deploys them from their own repositories, publishes their hostnames and
+certificates, watches their containers, databases, disks and mail, and
+reads their logs. When you change something, it doesn't reach into a
+running system — it commits the change to git and rebuilds the machine
+to match. The craftsman, not the labyrinth.
 
 ## Why it's different
 
@@ -30,9 +30,9 @@ match. The craftsman, not the labyrinth.
   database to a committed JSON contract, rebuilds, and pushes — so the
   box can always be reproduced and every change can always be
   explained. A failed rebuild reverts itself.
-- **Push to main, live in minutes.** Apps build on the box's own CI
-  runners, land in its own registry, and deploy on a digest change.
-  Nothing leaves the house.
+- **Push to main, live in minutes.** A push wakes the box, which builds
+  the app's image itself, lands it in its own registry, and deploys on
+  the digest change. Nothing leaves the house.
 - **The app holds zero host privilege.** Daedalus runs in a rootless
   container and talks to the machine through file-drop bridges watched
   by systemd — it can't rebuild, restart or read anything the host

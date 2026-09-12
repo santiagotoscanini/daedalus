@@ -64,7 +64,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
             label="Build on this box"
             hint={
               nameRefusal ??
-              'Pushes to the repo’s default branch build here, and Build now works. The repo keeps its GitHub Actions workflows until you remove them.'
+              'Pushes to the repo’s default branch build here, and Build now works. Nothing in the repo needs a workflow file: the box takes the push webhook itself.'
             }
           />
           <div className="flex flex-col gap-[0.35rem]">

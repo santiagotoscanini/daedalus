@@ -33,24 +33,24 @@ const REPO_MUTED = 'bg-transparent text-muted-foreground'
 /**
  * zot's neighbours.
  *
- * The runners are what PUSH here, so "the image never arrived" is answered in
- * their log rather than zot's — zot only ever saw the pushes it got. The
- * config render is the other end: it writes the htpasswd zot authenticates
+ * The build service is what PUSHES here, so "the image never arrived" is
+ * answered in its log rather than zot's — zot only ever saw the pushes it got.
+ * The config render is the other end: it writes the htpasswd zot authenticates
  * against, and a failure there leaves a registry that starts and then refuses
  * every credential.
  */
 const ZOT_NEIGHBOURS: readonly LogNeighbour[] = [
   {
-    source: { stack: 'gha-runner' },
-    label: 'Actions runners',
+    source: { unit: 'daedalus-build.service' },
+    label: 'daedalus-build',
     role: 'what pushes here',
-    note: 'Every image in this registry arrives from a self-hosted runner. An image that never appeared is a build that never finished, and that is this log rather than zot’s: zot can only report the pushes it received.',
+    note: 'Every image in this registry is built on this box by daedalus’s own build agent and pushed as the builder user. An image that never appeared is a build that never finished, and that is this log rather than zot’s: zot can only report the pushes it received.',
   },
   {
     source: { unit: 'registry-config-render.service' },
     label: 'registry-config-render',
     role: 'writes the credentials zot checks',
-    note: 'A boot oneshot that renders zot’s config with its htpasswd from sops. If it fails, zot still starts and then rejects every push. The runners report an auth error and the registry log shows only the refusal.',
+    note: 'A boot oneshot that renders zot’s config with its htpasswd from sops. If it fails, zot still starts and then rejects every push. The build agent reports an auth error and the registry log shows only the refusal.',
   },
 ]
 
@@ -68,9 +68,9 @@ export function ImagesView({ d }: { d: ImagesData }) {
         compare={compareOf(d.gap, 'the commit label on zot_info')}
         lede={
           <>
-            The box’s own container registry. Every app here is built by a runner on this machine
-            and pushed to zot, and each app’s deploy timer pulls from it every two minutes. Nothing
-            an app runs ever leaves the house.
+            The box’s own container registry. Every app here is built on this machine by daedalus’s
+            own build service and pushed to zot, and each app’s deploy timer pulls from it every two
+            minutes. Nothing an app runs ever leaves the house.
           </>
         }
         actions={
@@ -165,7 +165,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
               { k: 'read', v: 'anonymous' },
               { k: 'push', v: 'htpasswd, from sops' },
               { k: 'pulled by', v: 'app deploy timers' },
-              { k: 'pushed by', v: 'Actions runners' },
+              { k: 'pushed by', v: 'the box’s build service' },
             ]}
           />
           <p className={BOARD_FOOT}>
@@ -217,9 +217,9 @@ export function PackagesView({ d }: { d: PackagesData }) {
         compare={compareOf(d.gap, 'the base image tag in stacks/verdaccio')}
         lede={
           <>
-            A private npm registry, and a pull-through cache for npmjs. Every CI build on this box
-            resolves through it, which keeps a dependency install off the public internet and fast,
-            and makes it the first thing to check when a build stops resolving.
+            A private npm registry, and a pull-through cache for npmjs. Every image build on this
+            box resolves through it, which keeps a dependency install off the public internet and
+            fast, and makes it the first thing to check when a build stops resolving.
           </>
         }
         actions={

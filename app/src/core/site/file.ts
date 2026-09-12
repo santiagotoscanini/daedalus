@@ -44,7 +44,7 @@ export type SiteDocument = {
     /** The label before a rename, served beside the new one until it is confirmed. */
     controlPlanePrevious: string | null
     timezone: string
-    /** The GitHub account the app repos and CI live under. */
+    /** The GitHub account the app repos live under. */
     owner: string
     operator: { user: string; group: string }
   }

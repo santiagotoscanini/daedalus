@@ -141,8 +141,9 @@ export const fetchApp = createServerFn()
     const manifest = entries.find((m) => m.name === name)
 
     // Every app repo lives under OWNER, keyed by the app's name — the same
-    // assumption the runner and the create flow make. True for the local-mode
-    // entry too: daedalus's repo is the flake repo, which carries its name.
+    // assumption the build service and the create flow make. True for the
+    // local-mode entry too: daedalus's repo is the flake repo, which carries
+    // its name.
     const repo = `${OWNER}/${record.name}`
 
     const [
