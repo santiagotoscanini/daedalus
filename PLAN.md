@@ -1040,8 +1040,12 @@ Registrar API (beta); generated-secrets-as-sops (Clan-vars style) — later;
   on the next run and Settings shows "site ahead of lock".
 - Phase 9b touches app-db (pg cascade) — alone, off-hours.
 - Cloudflare: locally-managed tunnels sidestep the `PUT …/configurations`
-  api-token issue; keep them. GitHub: the OAuth App needs "Enable Device
-  Flow"; `POST /user/repos` is UAT-only, which device flow satisfies.
+  api-token issue; keep them. GitHub: the box authenticates as its own App's
+  installation, so the repo picker lists `GET /installation/repositories` —
+  exactly the repositories the App was granted, and nothing the operator has
+  not handed over. Daedalus creates no repositories, so no endpoint on the
+  path needs a user token; `GITHUB_REPO_TOKEN` is the one override, for
+  listing a repository the App has not been given yet.
 - Non-flake (channel-based) configs cannot import the engine in v1; `init`
   always writes a flake.
 

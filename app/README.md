@@ -19,5 +19,6 @@ Everything else is one level up, and this file does not restate it:
   the 7-day release cooldown, in its comments.
 
 `/api/healthz` is load-bearing: it is the gatus probe, the forward-auth
-bypass and the deploy unit's post-restart check. Keep it unauthenticated
-and keep it meaning "can actually serve".
+bypass, the deploy unit's post-restart check, and — since gatus probes it
+every minute — what starts the build scheduler in a fresh process. Keep it
+unauthenticated and keep it meaning "can actually serve".

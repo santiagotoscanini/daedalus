@@ -439,7 +439,7 @@ function ReplaceToken() {
 
 // ── GitHub App ─────────────────────────────────────────────────────────────
 
-const WAITING_FOR_HOST = 'Waiting for the host to support GitHub Apps (plan step 1).'
+const WAITING_FOR_HOST = 'Waiting for the host to support GitHub Apps.'
 
 const APP_STATE: Record<GithubAppState, { tone: Tone; label: string }> = {
   none: { tone: 'muted', label: 'not created' },
@@ -497,7 +497,7 @@ function GithubApp({ app, notice, onDismissNotice }: GithubAppProps) {
  * code this table does not know reads as `unknown`.
  */
 const CALLBACK_SENTENCES: Record<GithubCallbackCode, string> = {
-  disabled: 'The host does not support GitHub Apps yet (plan step 1), so nothing was kept.',
+  disabled: 'The host does not support GitHub Apps yet, so nothing was kept.',
   'state-expired':
     'The creation expired. GitHub has to send you back within an hour of starting it.',
   'state-mismatch':

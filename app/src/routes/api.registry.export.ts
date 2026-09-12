@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-// Exactly the bytes Apply would write to stacks/apps/apps.json.
+// Exactly the bytes Apply would write to site/apps.json.
 //
 // Same renderer the Apply path uses, so this is a preview and not an
 // approximation. It is what makes the round-trip checkable: the export of a

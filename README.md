@@ -1,4 +1,3 @@
-| [`PLAN.md`](PLAN.md) | The productization plan: twelve phases, each with its outcome once it lands, and a status table at the top. |
 <div align="center">
   <img src="app/public/icon.svg" width="96" height="96" alt="Daedalus" />
 

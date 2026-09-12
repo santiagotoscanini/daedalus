@@ -1,9 +1,8 @@
 # Checks the engine on every push and pull request.
 #
-# On GitHub-hosted runners, deliberately — never the box's own self-hosted
-# runners (s2-server's stacks/gha-runner). This is the CI for the thing that
-# runs the box, so it has to keep answering when the box is down, and the repo
-# is public, so hosted minutes cost nothing.
+# On GitHub-hosted runners, deliberately — never the box's own builder. This is
+# the CI for the software that runs the box, so it has to keep answering when
+# the box is down, and the repo is public, so hosted minutes cost nothing.
 #
 # What each job proves:
 #   app        frozen install, route generation + tsc, biome, vitest, the
@@ -14,8 +13,8 @@
 #
 # The app job runs every check even after one fails, so a lint error does not
 # hide a broken test. There is no nix or shell in this repository yet: the NixOS
-# module lives in the private s2-server repo until PLAN.md Phase 11 moves it
-# here, and the nix checks join this file then.
+# module lives in the private machine configuration until PLAN.md Phase 11 moves
+# it here, and the nix checks join this file then.
 #
 # website/ has its own workflow (website.yml) and does not trigger this one.
 #

@@ -405,7 +405,7 @@ function Wizard({ options }: { options: Options }) {
               <p className="m-0 max-w-[46rem] text-[0.8rem] text-(--dim)">
                 {imageMissing
                   ? 'Blocked until the image exists. Push to the repo’s default branch and let the box build it. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
-                  : 'Writes the registry row. Nothing is built, routed or started until you Apply, which commits stacks/apps/apps.json and rebuilds.'}
+                  : 'Writes the registry row. Nothing is built, routed or started until you Apply, which commits site/apps.json and rebuilds.'}
               </p>
             </div>
           </section>

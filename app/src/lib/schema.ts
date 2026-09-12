@@ -16,7 +16,7 @@ import {
 // The app registry — daedalus's authoritative copy of what stacks/apps
 // declares. It mirrors the `fleet.apps` submodule (stacks/apps/apps.nix)
 // field for field, because the Apply flow has to be able to round-trip it
-// back out to stacks/apps/apps.json without losing anything.
+// back out to site/apps.json without losing anything.
 //
 // Two things this stores that Nix could not:
 //

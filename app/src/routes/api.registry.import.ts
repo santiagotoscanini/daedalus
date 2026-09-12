@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 // Load the registry from what Nix currently has (the mounted manifest).
 //
 // This is the seed AND the "re-sync from Nix" direction of the Apply loop —
-// the inverse of the export that writes stacks/apps/apps.json. Idempotent, so
+// the inverse of the export that writes site/apps.json. Idempotent, so
 // running it twice is a no-op.
 //
 // POST only: it writes. Trigger it with
