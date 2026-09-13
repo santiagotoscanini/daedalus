@@ -5,7 +5,7 @@ engine that any NixOS machine imports, configured from its own UI. Written
 2026-09-08 as draft v3, executed phase by phase since; each phase carries an
 **Outcome** paragraph once it lands, and the table below is the index.
 
-## Status (2026-09-12)
+## Status (2026-09-13)
 
 | Phase | What | State |
 |---|---|---|
@@ -39,6 +39,15 @@ engine's OWN repo still runs `ci.yml` and `website.yml` on GitHub-hosted
 runners. Deferred out of Phase 7, still unshipped: HTTPS pushes for the site
 and workspace repos (the SSH deploy key keeps doing those), and builds for
 pull requests with their per-PR previews.
+
+Landed 2026-09-13 (polish session): the `declared` stage fixed the new-app
+deadlock — an app can now be created before its image exists. `lib/stage.ts`
+is the single source for the four-rung ladder; `stageRuns`/`stageExposed`
+replaced every hand-written `stage !== 'off'`; the create form probes the
+repo for `railpack.json`/`Dockerfile` through the GitHub App; readiness
+reports but never gates. Error handling hardened across all four action
+buttons (the redaction bug in the build reporter is fixed). Two hydration
+failures gone (18 surfaces → 0). 916 tests, tsc 0 errors, biome clean.
 
 Cross-cutting items from §4 not yet done: the `just census` target, the
 nightly `git bundle` of the config repo into the state root, the nix+app
@@ -88,6 +97,151 @@ Outside the plan, landed 2026-09-11:
   `DATABASE_URL`, so no test can reach the live database even in the dev
   container. No nix or shell lives in this repo yet; those checks join in
   Phase 11.
+
+## What's owed — improvements, polish, and features not yet shipped
+
+Everything below was identified during the 2026-09-11–13 sessions. Items are
+grouped by kind, not priority. Each can be done independently unless noted.
+
+### Operator decisions still open
+
+1. **Production runtime for the engine.** The engine runs in dev mode
+   (`source.mode = "local"`, Vite dev server). A production build was
+   attempted but TanStack Start's build emits a fetch handler with zero
+   `.listen()` calls — the Nitro adapter was removed because it broke
+   server-function id resolution (path-derived in dev, sha256 in build;
+   moving a file changes every id). Proposal: prove the built handler
+   against a throwaway Postgres, then bring Nitro back if the id issue is
+   confirmed fixed in current TanStack versions. **Why it matters:** dev
+   mode is fine for one user, but HMR noise, no tree-shaking, slower cold
+   starts.
+
+2. **`~/.claude/projects` transcript pruning.** These transcripts can
+   contain secrets a session read. The claude-rc journal keeps its own copy
+   ≤1 month (root-only). Open question: exclude or prune them from ZFS
+   snapshots/backups.
+
+### Features
+
+1. **PR builds and previews (P1–P4).** Documented in the plan's Phase 7 as
+   four stages. Main-only in v1. The seams are in place: `builds.lane`,
+   `prNumber`, `candidate` publish mode, `pull_requests:write` already
+   granted. See the "Later: pull requests" section in the plan file at
+   `~/.claude/plans/piped-gathering-meerkat.md` for the full design.
+
+2. **Resumable Claude sessions.** Today, when the box reboots or the
+   `claude-remote-control` daemon restarts, any running Claude Code session
+   dies and the operator has to SSH in and run `claude --resume` by hand to
+   pick it up. Daedalus should own this:
+   - A **"Claude sessions"** board on the Claude page (Settings › Claude, or
+     a new top-level page) that lists recent sessions whose process is gone
+     — the ones `claude --resume` would show.
+   - A **"Resume"** button per session that starts a new
+     `claude-remote-control` process with `--resume <session-id>`, so the
+     operator can reopen a dead conversation from the UI instead of an SSH
+     terminal.
+   - Session metadata (start time, last activity, whether it ended cleanly
+     or was killed) read from `~/.claude/projects/` or wherever Claude Code
+     stores its session index.
+   - The board should auto-refresh and show which sessions are currently
+     alive vs resumable.
+   - Implementation: a new bridge verb (`claude-resume-request.json`) that
+     the host picks up and starts the process, or a direct host-side
+     systemd unit template `claude-session@<id>.service`. The container
+     cannot start processes on the host, so the bridge is the path.
+
+3. **Post-deploy checks for all apps.** Only anansi (26 probes) and voyra
+   (15 probes) have post-deploy assertion drivers in
+   `stacks/shotter/assets/checks/`. The remaining five apps (iris, hermes,
+   plutus, chismed, argus) have no automated post-deploy verification
+   beyond the deploy script's HTTP status check.
+
+4. **argus e2e suite.** Needs a seeded database; deliberately excluded from
+   the post-deploy checks because its e2e writes to the database and its
+   other two checks compare a PR to a base branch.
+
+### TypeScript improvements
+
+The operator asked: "Are we using TypeScript in the most advanced way, latest
+features?" These were identified but not acted on:
+
+- Audit for places where `as` casts hide real type narrowing opportunities
+- `satisfies` usage where appropriate (config objects, exhaustive checks)
+- `noUncheckedIndexedAccess` — would catch record-access bugs at the cost of
+  `!` on every array index; assess whether the codebase is ready
+- Template literal types for the bridge verb strings (type-safe file names)
+- Branded types for app names, sha hashes, build ids (prevent mixing
+  `string` values that mean different things)
+- `using` declarations (TC39 explicit resource management) for locks and
+  cleanup — TanStack Start's Vite plugin may not support this yet
+- `exactOptionalPropertyTypes` — assess viability
+- Review whether `isolatedDeclarations` and `verbatimModuleSyntax` are worth
+  enabling
+
+What was already done in the polish session: `noImplicitReturns`,
+`Result<T>` type, `AUTH_HEADERS` const, `isRecord` guard, `redact` module,
+`useSyncExternalStore` for SSR, `stageRuns`/`stageExposed` from a const
+tuple, `literal(...APP_STAGES)` (decoder reads the tuple), `swrCache`.
+
+### Documentation
+
+What exists: `ARCHITECTURE.md` (410 lines, 5 Mermaid diagrams),
+`BUILDS.md` (198 lines, build lifecycle), `CONTRIBUTING.md` (122 lines,
+tested from a fresh clone).
+
+What's missing:
+
+- **Website docs rendering.** The decision was "ARCHITECTURE.md as source of
+  truth + website renders a curated subset." The website half was not done —
+  Mermaid rendering on the static site was investigated and deferred (the
+  diagrams live as code blocks in the repo; the site would need a build-time
+  Mermaid→SVG pass or a client-side renderer).
+- **Bridge API reference.** The 10 file-drop request shapes (apply, build,
+  cancel, site-init, secret-apply, workspace-clone, deploy-trigger,
+  image-update, export-publish, claude-resume) have no standalone doc beyond
+  the code and `apply.sh`'s subject cases.
+- **Operational runbook** for the build pipeline beyond what BUILDS.md covers
+  — what to do when a build hangs, how to force-rebuild, how to read the
+  build log, how to cancel.
+
+### Registry and disk
+
+- `REGISTRY_CI_USER`/`REGISTRY_CI_PASSWORD` still sit unused in
+  `stacks/registry/env.sops` — strip them on the next sops edit (the `ci`
+  htpasswd user was deleted in step 9; these are dead keys).
+- zot was at 33 GB and falling after retention was enabled; monitor.
+
+### Security residuals (from the adversarial reviews)
+
+These are known and accepted, not forgotten:
+
+- A build step that escapes its sandbox lands as `buildkit` — which is the
+  daemon user and can see the zot push credential the buildctl session
+  passes. Mitigations: rootless user namespace, the egress fence, `builder`
+  has no delete permission.
+- A repo's own mise cache can carry files into its next `railpack prepare`
+  (per-build cache copy or a throwaway uid are the candidates).
+- A hostile base image's ONBUILD cache mounts are invisible to the scan (all
+  seven apps are Railpack now, so this is theoretical).
+- Repo rename should be carried by id, not name (the clone and three GitHub
+  hyperlinks still resolve by name).
+- Dataset mount failure alert is silent — `daedalus-builds-mounted` checks
+  hourly and mails, but the mount itself is `nofail`.
+
+### Small items
+
+- `polish-walk.mjs` driver in `<stateRoot>/shotter/drivers/` has a stale
+  "Runner" heuristic that false-flags 2 pages — verification tooling belongs
+  in the repo, not app state.
+- The repo picker consolidation: `lib/github-repos.ts` has its own `token()`
+  that would degrade to public repos if the `gh` CLI token ever went — the
+  App installation token should be the only source.
+- The engine logs nothing when it re-adopts a running build after a restart.
+- The webhook log line omits the superseded count.
+- Build-page live log during long checks may appear empty (markers arrive at
+  stage boundaries, not mid-stage).
+
+---
 
 ## What remains, in order
 
