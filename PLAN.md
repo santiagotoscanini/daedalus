@@ -211,11 +211,12 @@ Operator constraints that shape v3:
 traefik/pi-hole/CF/gatus), `platform/podman.nix` (the `mk*` helpers),
 `platform/export.nix` (versioned JSON export domains — already the nix→app
 product boundary), `stacks/apps/registry-lib.nix` + `apps.json` +
-`src/lib/contract/*` (UI-written JSON, nix reads it — the model Clan validates
-at scale; every GUI that edited Nix text instead is dead), the file-drop
-bridges (`host/lib.sh`, `src/lib/bridge.ts`: the app holds no host privilege —
-Comin and the HA Supervisor use the same writer/applier split),
-`contract/snapshot.ts` and `lib/http.ts` (the seams a module system needs).
+`src/lib/contract/*` + `src/host/contract/*` (UI-written JSON, nix reads it —
+the model Clan validates at scale; every GUI that edited Nix text instead is
+dead), the file-drop bridges (`host/lib.sh`, `src/host/bridge.ts`: the app
+holds no host privilege — Comin and the HA Supervisor use the same
+writer/applier split), `host/contract/snapshot.ts` and `lib/http.ts` (the
+seams a module system needs).
 Every OIDC client secret and DB password is already machine-generated.
 
 **Blockers, roughly in the order the plan removes them:**

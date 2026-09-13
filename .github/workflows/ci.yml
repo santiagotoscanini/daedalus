@@ -6,7 +6,7 @@
 #
 # What each job proves:
 #   app        frozen install, route generation + tsc, biome, vitest, the
-#              production build, and that src/lib/schema.ts and drizzle/ agree
+#              production build, and that src/host/schema.ts and drizzle/ agree
 #   workflows  actionlint and zizmor over every file in .github/workflows
 #   codeql     CodeQL's JavaScript/TypeScript and Actions queries; findings land
 #              in the Security tab rather than failing the run
@@ -104,7 +104,7 @@ jobs:
           pnpm exec drizzle-kit generate </dev/null
           if [ -n "$(git status --porcelain -- drizzle)" ]; then
             git status --short -- drizzle
-            echo "::error file=app/src/lib/schema.ts::schema.ts changed without a migration. Run pnpm db:generate inside the app-daedalus container and commit app/drizzle/."
+            echo "::error file=app/src/host/schema.ts::schema.ts changed without a migration. Run pnpm db:generate inside the app-daedalus container and commit app/drizzle/."
             exit 1
           fi
 

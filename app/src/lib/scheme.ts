@@ -21,6 +21,7 @@
 
 import { useLoaderData } from '@tanstack/react-router'
 import { useSyncExternalStore } from 'react'
+import { useHydrated } from './hydrated'
 import type { Scheme } from './theme'
 
 export type ResolvedScheme = 'light' | 'dark'
@@ -69,8 +70,31 @@ export function useResolvedScheme(choice: Scheme): ResolvedScheme {
  * The scheme in force, for a component anywhere under the root route — the
  * embedded Grafana frames, which take a `theme` of their own and would
  * otherwise sit as a dark rectangle on a light page.
+ *
+ * ── why this is not just `useResolvedScheme` ──────────────────────────────
+ *
+ * The hook above is right for `<html data-theme>` and wrong for everything
+ * else, and the difference is THEME_BOOT. That inline script runs before
+ * hydration and rewrites the attribute to the real answer, so by the time
+ * React hydrates, the DOM it is checking itself against already holds the
+ * truth — which is why that hook's "server" snapshot has to answer with the
+ * truth too.
+ *
+ * Nothing rewrites ordinary markup. A `?theme=dark` the server baked into an
+ * iframe's `src` is still `dark` in the DOM at hydration, so a hook that
+ * answers `light` there disagrees with the HTML — eleven "a tree hydrated but
+ * some attributes … didn't match" warnings, one per embedded Grafana panel,
+ * plus the geo map on an app's Access tab. Recoverable, unlike the document
+ * regeneration THEME_BOOT's mismatch caused, but the same bug: React's first
+ * client render disagreeing with the HTML it was handed.
+ *
+ * So this one answers with the guess through hydration and the truth after —
+ * which is the honest order anyway, because the guess is what the HTML says.
+ * The frames carry the resolved scheme in a `key`, so the correction remounts
+ * them: one extra panel load, and only for `system` on a light machine.
  */
 export function useScheme(): ResolvedScheme {
   const choice = useLoaderData({ from: '__root__', select: (d) => d.theme.scheme })
-  return useResolvedScheme(choice)
+  const resolved = useResolvedScheme(choice)
+  return useHydrated() ? resolved : serverScheme(choice)
 }

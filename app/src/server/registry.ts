@@ -1,6 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
 import type { AccessWindow } from '../lib/access-window'
+import type { ActivityRow } from '../lib/activity-lines'
+import { logTime } from '../lib/format'
 // Type-only, so the database module it lives next to is not pulled in here —
 // every value import in this file is dynamic for exactly that reason.
 import type { NewApp } from '../lib/repo/apps'
@@ -293,7 +295,6 @@ type AppResources = Awaited<ReturnType<typeof import('../host/metrics')['appReso
 type AppDatabase = Awaited<ReturnType<typeof import('../host/metrics')['appDatabase']>>
 type AppVpn = Awaited<ReturnType<typeof import('../host/metrics')['appVpn']>>
 type AppAccess = Awaited<ReturnType<typeof import('../host/access')['appAccess']>>
-type ActivityRow = { ts: string; line: string }
 type EnvSnapshotVar = Awaited<
   ReturnType<typeof import('../host/env-snapshot')['readEnvSnapshot']>
 >['vars'][number]
@@ -367,7 +368,16 @@ export const fetchAppTab = createServerFn()
         return {
           kind: 'deployments',
           builds,
-          activity: activity.map((l) => ({ ts: l.ts.toISOString(), line: l.line })),
+          // `at` is formatted HERE rather than in the component: `logTime`
+          // reads the clock and the timezone, and a browser in either a
+          // different zone or on the other side of midnight from the box
+          // formats the same instant differently — which is a hydration
+          // mismatch, and a whole-document one because it is text.
+          activity: activity.map((l) => ({
+            ts: l.ts.toISOString(),
+            at: logTime(l.ts.toISOString()),
+            line: l.line,
+          })),
           deployments: deploys.map((d) => ({
             id: d.id,
             digest: d.digest.replace('sha256:', ''),

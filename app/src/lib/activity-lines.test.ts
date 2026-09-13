@@ -24,7 +24,10 @@ describe('shortenDigests', () => {
   })
 })
 
-const row = (ts: string, line: string): ActivityRow => ({ ts, line })
+// `at` is the server's already-formatted rendering of `ts`; the fixture makes
+// it visibly distinct from `ts` so a row that carried the wrong one through
+// the fold would fail rather than pass by coincidence.
+const row = (ts: string, line: string): ActivityRow => ({ ts, at: `at:${ts}`, line })
 
 describe('rollUp', () => {
   it('returns nothing for nothing', () => {
@@ -41,11 +44,21 @@ describe('rollUp', () => {
       {
         key: '2026-08-12T04:00:00Z-0',
         ts: '2026-08-12T04:00:00Z',
+        at: 'at:2026-08-12T04:00:00Z',
         lastTs: '2026-08-12T04:04:00Z',
+        lastAt: 'at:2026-08-12T04:04:00Z',
         line: 'no change',
         count: 3,
       },
     ])
+  })
+
+  it('carries the display string of the first and last line of a fold', () => {
+    // The ×N badge names the most recent occurrence, so `lastAt` has to track
+    // `lastTs` through the whole run rather than staying on the first row.
+    const rolled = rollUp([row('t1', 'no change'), row('t2', 'no change'), row('t3', 'no change')])
+    expect(rolled[0]?.at).toBe('at:t1')
+    expect(rolled[0]?.lastAt).toBe('at:t3')
   })
 
   it('folds runs only — a real event between two runs keeps them apart', () => {

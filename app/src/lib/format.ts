@@ -137,6 +137,21 @@ export function when(iso: string): string {
  * not UTC — these lines are read to correlate with "what was I doing at
  * half past two", and an earlier version rendered the same-day clock in UTC,
  * which put every entry three hours into the future of the wall clock.
+ *
+ * ── CALL THIS ON THE SERVER, and ship the string ──────────────────────────
+ *
+ * It is the only formatter in this file that reads anything but its argument:
+ * the ambient timezone, for both of its branches, and `new Date()` for the
+ * choice between them. A browser in another zone — or simply on the far side
+ * of midnight from the box, which is a three-hour window here every night —
+ * formats the same instant differently, so calling this during a render that
+ * is also server-rendered is a hydration mismatch. Text, so React regenerates
+ * the whole document rather than patching an attribute.
+ *
+ * "The box's timezone" is the intent anyway, and the server is the only place
+ * that knows it. Both callers now format at the source and hand the component
+ * a finished string: `ActivityRow.at` (lib/activity-lines.ts) and
+ * `RejectRow.at` (host/access.ts).
  */
 export function logTime(iso: string): string {
   const d = new Date(iso)

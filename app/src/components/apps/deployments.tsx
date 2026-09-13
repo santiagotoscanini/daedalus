@@ -1,6 +1,6 @@
 import { rollUp } from '../../lib/activity-lines'
 import { cn } from '../../lib/cn'
-import { logTime, ms, when } from '../../lib/format'
+import { ms, when } from '../../lib/format'
 import { OWNER } from '../../lib/site'
 import { toneStyle } from '../../lib/tone'
 import type { AppTabData } from '../../server/registry'
@@ -184,7 +184,10 @@ function Activity({ activity }: { activity: ActivityData }) {
                 key={l.key}
                 className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-[0.7rem] border-t border-t-(--border-soft) px-[0.7rem] py-[0.26rem] first:border-t-0"
               >
-                <time className="whitespace-nowrap text-(--dim)">{logTime(l.ts)}</time>
+                {/* Already formatted by the server — see ActivityRow. */}
+                <time className="whitespace-nowrap text-(--dim)" dateTime={l.ts}>
+                  {l.at}
+                </time>
                 <span className="min-w-0 text-(--text-muted) [overflow-wrap:anywhere]">
                   {l.line}
                 </span>
@@ -193,7 +196,7 @@ function Activity({ activity }: { activity: ActivityData }) {
                   // column so the messages stay on one left edge.
                   <span
                     className="rounded-[5px] bg-(--panel-2) px-1 tabular-nums whitespace-nowrap text-(--dim)"
-                    title={`Repeated ${String(l.count)} times, most recently at ${logTime(l.lastTs)}`}
+                    title={`Repeated ${String(l.count)} times, most recently at ${l.lastAt}`}
                   >
                     ×{l.count}
                   </span>

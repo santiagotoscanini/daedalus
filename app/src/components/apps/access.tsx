@@ -2,7 +2,6 @@ import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { ACCESS_WINDOWS, type AccessWindow, WINDOW_SPEC } from '../../lib/access-window'
 import { cn } from '../../lib/cn'
-import { logTime } from '../../lib/format'
 import { useScheme } from '../../lib/scheme'
 import { GRAFANA_URL } from '../../lib/site'
 import { type Tone, toneStyle } from '../../lib/tone'
@@ -258,8 +257,12 @@ export function Access({
                     key={`${r.ts}-${String(i)}`}
                     className="grid grid-cols-[8.5rem_3rem_minmax(0,1fr)_auto] items-center gap-[0.7rem] py-[0.18rem] max-[34rem]:grid-cols-[3rem_minmax(0,1fr)] max-[34rem]:gap-y-0"
                   >
-                    <time className="font-mono text-[0.74rem] text-(--dim) max-[34rem]:hidden">
-                      {logTime(r.ts)}
+                    {/* Already formatted by the server — see RejectRow. */}
+                    <time
+                      className="font-mono text-[0.74rem] text-(--dim) max-[34rem]:hidden"
+                      dateTime={r.ts}
+                    >
+                      {r.at}
                     </time>
                     <StatusCode code={r.status} />
                     <span

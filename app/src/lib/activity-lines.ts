@@ -4,12 +4,22 @@
 // node:fs would ride the client bundle and throw "externalized for browser
 // compatibility" on every app page.
 
-export type ActivityRow = { ts: string; line: string }
+/**
+ * One journal line.
+ *
+ * `ts` is the machine-readable instant, and it is what keys and orders these.
+ * `at` is the SAME instant already formatted for display, computed where the
+ * box's clock and timezone are — see `logTime` in lib/format.ts for why that
+ * cannot be done here.
+ */
+export type ActivityRow = { ts: string; at: string; line: string }
 
 export type RolledLine = {
   key: string
   ts: string
+  at: string
   lastTs: string
+  lastAt: string
   line: string
   count: number
 }
@@ -35,12 +45,15 @@ export function rollUp(rows: ActivityRow[]): RolledLine[] {
     if (last && last.line === line) {
       last.count++
       last.lastTs = r.ts
+      last.lastAt = r.at
       continue
     }
     out.push({
       key: `${r.ts}-${String(out.length)}`,
       ts: r.ts,
+      at: r.at,
       lastTs: r.ts,
+      lastAt: r.at,
       line,
       count: 1,
     })
