@@ -182,6 +182,38 @@ grouped by kind, not priority. Each can be done independently unless noted.
    rebuild happens through the existing Apply path. Prerequisite: Phase
    10b (the production build must exist before there is something to
    toggle to).
+
+7. **Windows companion agent for remote machines.** A lightweight agent
+   installed on the gaming PC (the Lemonade model server) that reports
+   hardware telemetry daedalus cannot see today: GPU utilization and
+   temperature, CPU usage, RAM, BIOS/firmware version, disk health, and
+   whether the machine is awake. It also accepts commands from daedalus:
+   keep the display/machine awake (suppress sleep), restart, and
+   shutdown — so the operator can manage the AI workload machine from the
+   daedalus UI without walking to it or opening RDP. Windows-only for
+   now; a Linux agent is a future expansion.
+   - **Telemetry:** Prometheus-compatible `/metrics` endpoint (or a push
+     to the box's Prometheus via remote-write) exposing GPU load/temp/VRAM
+     (NVML or WMI), CPU per-core usage, RAM, disk SMART, BIOS version,
+     uptime, and sleep/wake state.
+   - **Commands:** a small authenticated API (or a polling model where the
+     agent checks daedalus for pending commands) for wake-lock, restart,
+     shutdown, and cancel-wake-lock.
+   - **UI:** a new page or section in daedalus showing the remote
+     machine's live metrics, hardware summary, and the power buttons.
+   - **Packaging:** a single `.exe` or MSI installer; runs as a Windows
+     service; auto-updates from a GitHub release (the engine repo or its
+     own repo). Written in Go or Rust for a single static binary with no
+     runtime dependency.
+
+8. **Git commit attribution from the signed-in user.** Today every
+   `site/` commit is authored by "daedalus" regardless of who pressed
+   Apply. The forward-auth headers carry the operator's email (and could
+   carry a display name via `preferred_username`). Pass the identity
+   through the bridge request and use `--author="Name <email>"` in the
+   git commit, so GitHub shows "Santiago Toscanini authored and daedalus
+   committed" instead of "daedalus committed".
+
 ### TypeScript improvements
 
 The operator asked: "Are we using TypeScript in the most advanced way, latest
