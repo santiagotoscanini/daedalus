@@ -79,7 +79,25 @@ function platformEntry(index: Manifest): Descriptor | null {
   )
 }
 
+/**
+ * An OCI repository path: lowercase segments joined by single slashes.
+ *
+ * `repo` arrives from an app's `image` field, which an operator types, so it is
+ * the one part of the URL below that is not ours. Interpolated raw, `../..`
+ * climbed out of `/v2/<repo>/` onto a different endpoint of the box's own
+ * registry. Encoding does not fix that — `encodeURIComponent('..')` is `'..'`
+ * — but refusing the segment does.
+ *
+ * Permissive about everything else on purpose: a namespace with slashes is
+ * ordinary, and `image` exists precisely so an app can point somewhere else.
+ */
+const REPO_PATH = /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/
+
 function pull(repo: string, path: string, accept?: string): Promise<Response> {
+  // `path` is ours — a tag, a digest, `manifests/<ref>`. `repo` is not.
+  if (!REPO_PATH.test(repo)) {
+    return Promise.reject(new Error(`not a repository path: ${repo}`))
+  }
   return fetch(`${REGISTRY()}/v2/${repo}/${path}`, {
     ...(accept === undefined ? {} : { headers: { Accept: accept } }),
     signal: AbortSignal.timeout(8_000),

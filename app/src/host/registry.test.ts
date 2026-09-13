@@ -243,3 +243,25 @@ describe('imageInfo', () => {
     })
   })
 })
+
+// `repo` is the one part of the registry URL an operator types (an app's
+// `image` field). Interpolated raw, `../..` climbed out of /v2/<repo>/ onto
+// another endpoint of the box's own zot. imageInfo is best-effort by contract,
+// so the refusal has to read as nulls AND as no request leaving at all.
+describe('repository paths that are not repository paths', () => {
+  const NOTHING = { digest: null, revision: null, sourceUrl: null, createdAt: null }
+
+  for (const repo of ['../..', 'a/../../v2/_catalog', 'a/./b', 'a//b', 'a?x=1', 'a b', 'A']) {
+    it(`refuses ${JSON.stringify(repo)} without asking the registry`, async () => {
+      const seen = serve({})
+      expect(await imageInfo(repo, 'latest')).toEqual(NOTHING)
+      expect(seen).toEqual([])
+    })
+  }
+
+  it('still allows an ordinary namespaced repo', async () => {
+    const seen = serve({})
+    await imageInfo('cache/plutus', 'latest')
+    expect(seen).toEqual(['/v2/cache/plutus/manifests/latest'])
+  })
+})
