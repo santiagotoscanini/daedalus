@@ -41,11 +41,27 @@ export function serverScheme(choice: Scheme): ResolvedScheme {
   return choice === 'system' ? 'dark' : choice
 }
 
+/** The real answer, available only where `matchMedia` is. */
+function browserScheme(choice: Scheme): ResolvedScheme {
+  if (choice !== 'system') return choice
+  return matchMedia(LIGHT).matches ? 'light' : 'dark'
+}
+
 export function useResolvedScheme(choice: Scheme): ResolvedScheme {
   return useSyncExternalStore(
     subscribe,
-    () => (choice === 'system' ? (matchMedia(LIGHT).matches ? 'light' : 'dark') : choice),
-    () => serverScheme(choice),
+    () => browserScheme(choice),
+    // The "server" snapshot has to answer for two different moments, and they
+    // want different things. On the server there is no OS preference to read,
+    // so it is the guess. But React also calls this during HYDRATION, in the
+    // browser — and by then THEME_BOOT has already replaced the guess on
+    // `<html data-theme>` with the real answer. Returning the guess there
+    // disagreed with the DOM on every machine whose preference is not `dark`,
+    // which is one failed hydration of the whole document per page load, on
+    // every page. It had been read as a `Date.now()` mismatch and written into
+    // the operator's notes as a baseline to expect: two page errors a load,
+    // masking every hydration bug that might come after it.
+    () => (typeof document === 'undefined' ? serverScheme(choice) : browserScheme(choice)),
   )
 }
 

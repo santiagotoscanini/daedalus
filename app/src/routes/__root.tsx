@@ -7,7 +7,14 @@ import {
   useMatches,
   useRouterState,
 } from '@tanstack/react-router'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import appCss from '../app.css?url'
 import { AccountMenu } from '../components/account-menu'
 import { ErrorPanel } from '../components/error'
@@ -627,8 +634,29 @@ function AppRail({ app }: { app: AppRailContext }) {
  * measurable percentage, and a fake number that stalls at 80% is worse than an
  * honest indeterminate one.
  */
+/** A store that never changes, so `useSyncExternalStore` answers "am I past hydration?". */
+const subscribeNever = () => () => {}
+
 function RouteProgress() {
-  const loading = useRouterState({ select: (s) => s.status === 'pending' })
+  // Never on the server, and never during hydration.
+  //
+  // The router's status is `pending` while the server resolves the route, so
+  // SSR rendered this bar on every page — and by the time the client hydrated,
+  // the navigation was long over and it rendered nothing. React found a div
+  // where its own output had none: one failed hydration of the whole document,
+  // per page load, on every page. `getServerSnapshot` answering false covers
+  // both moments at once, because React uses it for the server render AND the
+  // hydration pass.
+  //
+  // It is also the honest behaviour. A progress bar for a navigation that
+  // finished before the HTML arrived is a bar with nothing to wait for.
+  const hydrated = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  )
+  const pending = useRouterState({ select: (s) => s.status === 'pending' })
+  const loading = hydrated && pending
   return loading ? (
     <div
       className={cn(
