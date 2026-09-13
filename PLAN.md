@@ -551,9 +551,11 @@ the engine; `site/` never moves again.
 | Anything nix does not consume: theme, UI prefs, onboarding progress, deploy history, notes, drafts | Postgres | none |
 | The engine | engine repo | never written by a running system |
 
-**The app, end state.** Built by CI on GitHub-hosted runners into
-`ghcr.io/santiagotoscanini/daedalus:<semver>@sha256`, pinned by the engine;
-dev mode (`source.mode = "local"`, `vite dev`) stays as a developer setting.
+**The app, end state.** One image, built by CI on GitHub-hosted runners into
+`ghcr.io/santiagotoscanini/daedalus:<semver>@sha256`, pinned by the engine.
+Users run it as-is (production bundle, no repo clone needed). Developers set
+`DAEDALUS_DEV=1` and bind-mount their checkout to get `vite dev` with HMR
+from the same image — the entrypoint decides at runtime, not at build time.
 Core = registry, changeset Apply with diff preview, settings, secrets vault,
 onboarding, auth, integrations (Cloudflare, GitHub), module registry
 (`import.meta.glob` over `src/modules/*/manifest.ts`, splat route), a
@@ -1143,19 +1145,39 @@ Compatibility: defaults keep every module on; the closure is identical after
   per-module `releases.ts`. `Ctx` capabilities; `defineFlow` extracted from
   `apply-flow.ts`/`update-flow.ts`; typed HTTP results; `env.ts` becomes
   the single validated schema with LiteLLM optional.
-- **10b Build.** `vite build` (`ssr.noExternal: true`, srvx entry with the
-  rejection guard, migrations at start via the `drizzle-orm` migrator,
-  `drizzle/` in the image, site identity from `/site` at runtime, a build
-  check that fails on `__vite-browser-external`, npmjs registry in CI).
-  Multi-stage Dockerfile; CI on GitHub-hosted runners → ghcr by digest. Run
-  the built image on the box **beside** the dev container (`daedalus-next`
-  on a second hostname, same DB, read-only until parity), `shot` walk both,
-  then flip `source.mode` to `registry` with dev mode kept as the Developer
-  setting.
+- **10b Build — one image, runtime dev flag.** One Dockerfile, one image,
+  one `docker run`. The Dockerfile has a multi-stage build: the `build`
+  stage runs `vite build` (`ssr.noExternal: true`, srvx entry with the
+  rejection guard, a build check that fails on `__vite-browser-external`,
+  npmjs registry in CI); the final stage ships only the bundled output,
+  `drizzle/` (migrations at start via the `drizzle-orm` migrator), and
+  production dependencies. Site identity comes from `/site` at runtime.
+  CI on GitHub-hosted runners → ghcr by digest.
+
+  **The dev flag:** an env var (`DAEDALUS_DEV=1`) makes the entrypoint run
+  `pnpm install && pnpm dev` against the bind-mounted source instead of
+  the bundled output. The image ships dev dependencies too (or installs
+  them on first start), so the developer gets HMR without cloning a
+  separate dev image. The contract:
+  - **Default (no flag):** user runs the container, everything works, they
+    never clone the repo. This is how Phase 12's `init` installs daedalus.
+  - **`DAEDALUS_DEV=1` + bind mount:** the operator mounts their checkout
+    at `/app`, gets `vite dev` with hot reload, and edits on the host are
+    live in the container. This replaces today's `source.mode = "local"`
+    nix constant — the decision moves from nix eval time to container
+    runtime, so switching is `systemctl restart` with an env change, not a
+    rebuild.
+
+  `source.mode` in nix simplifies to a boolean that controls whether the
+  container gets the bind mount and the env var, or neither. The
+  two-hostname side-by-side from the earlier plan is dropped — the proof
+  is a `shot` walk of the built image against a throwaway Postgres before
+  the first release, not a permanent parallel deployment.
 
 Compatibility: 10a is a refactor with tests (module registry tests, the
 existing 121, plus fixture-driven loader tests that survive a null upstream);
-10b runs side by side before switching.
+10b is gated by `vite build` producing a working server (the TanStack Start
+build output must bind to a port and keep server-function IDs stable).
 
 ### Phase 11 — The engine becomes importable (revised 2026-09-10; the repos already split in Phase 3b)
 
