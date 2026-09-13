@@ -1,4 +1,5 @@
 import { publishingFacts } from '../../../../host/contract/domains/publishing'
+import type { Hosts } from '../../../../host/hosts'
 import { key } from '../../../../host/keys'
 import { lokiEntries, lokiScalar } from '../../../../host/loki'
 import { webAppHosts } from '../../../../host/nix-manifest'
@@ -192,8 +193,8 @@ function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null
  * same bytes. `getJson`'s coalescer cannot help: it only shares plain GETs,
  * and this one carries an Authorization header.
  */
-export async function loadInbound(ctx: { hc: string }): Promise<InboundData> {
-  void ctx
+export async function loadInbound(hosts: Hosts): Promise<InboundData> {
+  void hosts
   // Started, not awaited. Cloudflare's API is the slowest upstream this page
   // has — a second per call from here — so awaiting it before the fan-out put
   // that second in front of everything else instead of alongside it. The

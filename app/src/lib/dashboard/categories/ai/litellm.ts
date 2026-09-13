@@ -1,3 +1,4 @@
+import { env } from '../../../../host/env'
 import { lokiLatest } from '../../../../host/loki'
 import { promBars, promScalar } from '../../../../host/prom'
 import { localDay } from '../../../format'
@@ -150,7 +151,7 @@ const PAGE_SIZE = 1000
 const RANGE = `${String(DAYS)}d`
 
 export async function loadLitellm(): Promise<LitellmData> {
-  const auth = { headers: { Authorization: `Bearer ${process.env.LITELLM_API_KEY ?? ''}` } }
+  const auth = { headers: { Authorization: `Bearer ${env.litellmApiKey}` } }
 
   // Every day in the window, oldest first — the chart's x axis, independent of
   // which of them the ledger happens to have a row for. The box's days, not
@@ -166,7 +167,7 @@ export async function loadLitellm(): Promise<LitellmData> {
   const [activity, keys, version, freshness, inFlight, latSum, latCount, toolLatency, overhead] =
     await Promise.all([
       getJson<DailyActivity>(
-        `http://litellm:4000/user/daily/activity?start_date=${from}&end_date=${today}` +
+        `${env.litellmBaseUrl}/user/daily/activity?start_date=${from}&end_date=${today}` +
           `&page_size=${String(PAGE_SIZE)}`,
         auth,
       ),
@@ -180,7 +181,7 @@ export async function loadLitellm(): Promise<LitellmData> {
       // half-read key list would mark live keys as revoked, and a wrong
       // accusation is worse here than no annotation.
       getJson<{ keys?: { token?: string }[]; total_pages?: number }>(
-        'http://litellm:4000/key/list?return_full_object=true&size=100',
+        `${env.litellmBaseUrl}/key/list?return_full_object=true&size=100`,
         auth,
       ),
       litellmVersion(auth),
@@ -589,7 +590,7 @@ function callerName(hash: string, b: Bucket): string {
  */
 async function litellmVersion(init: RequestInit): Promise<string | null> {
   try {
-    const res = await fetch('http://litellm:4000/openapi.json', {
+    const res = await fetch(`${env.litellmBaseUrl}/openapi.json`, {
       ...init,
       signal: AbortSignal.timeout(4_000),
     })

@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../../host/hosts'
 import { key } from '../../../../host/keys'
 import { DASH, localDay, since } from '../../../format'
 import { getJson } from '../../../http'
@@ -149,7 +150,8 @@ const RUNNING = new Set(['running', 'new', 'waiting'])
  * archived TickTick experiments; they cannot run, and listing them would bury
  * the two that can under things that are finished.
  */
-export async function loadN8n(base: string): Promise<N8nData> {
+export async function loadN8n(hosts: Hosts): Promise<N8nData> {
+  const base = hosts.base('n8n')
   const auth = { headers: { 'X-N8N-API-KEY': key('N8N_API_KEY') } }
   // Pinned in the flake and passed in as an env var. n8n's public API has no
   // version endpoint and /rest/settings does not carry one either, so the tag

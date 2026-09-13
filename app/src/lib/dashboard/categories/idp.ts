@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../host/hosts'
 // Pocket ID: who can sign in to this house, and to what.
 //
 // A shared library rather than a category of its own, because two pages need
@@ -165,7 +166,8 @@ export type PocketClient = {
   isGroupRestricted?: boolean
 }
 
-export async function idpClients(base: string): Promise<PocketClient[]> {
+export async function idpClients(hosts: Hosts): Promise<PocketClient[]> {
+  const base = hosts.base('pocket-id')
   const body = await getJson<{ data?: PocketClient[] }>(
     // 100 against a box that has 33: one page, and a second page would be a
     // second round trip to discover there was nothing on it.
@@ -256,7 +258,8 @@ async function auditLog(
  * nobody has ever authorised is a redirect URI still trusted for an app that
  * may not exist.
  */
-export async function loadIdp(base: string, clientsP: Promise<PocketClient[]>): Promise<IdpData> {
+export async function loadIdp(hosts: Hosts, clientsP: Promise<PocketClient[]>): Promise<IdpData> {
+  const base = hosts.base('pocket-id')
   const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
   const windowStart = Date.now() - DAYS * 86400_000
   const version = process.env.POCKET_ID_VERSION || null

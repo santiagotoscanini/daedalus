@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import type { Hosts } from '../host/hosts'
 
 import type { CategoryDataMap, CategoryPayload } from '../lib/dashboard/category-data'
 import { CATEGORIES, type CategoryName, isCategoryName, resolveTab } from '../lib/dashboard/nav'
@@ -31,19 +32,6 @@ import { isRecord } from '../lib/is-record'
 
 export type { CategoryPayload }
 
-/** `https://<hostname>` per webApp, plus the host as containers see it. */
-async function makeCtx(): Promise<{ base: (app: string) => string; hc: string }> {
-  const { webAppHosts } = await import('../host/nix-manifest')
-  const hosts = await webAppHosts()
-  return {
-    // A missing webApp is a catalogue bug, not a runtime condition — the
-    // manifest carries every published hostname. Falling back to the bare
-    // name yields an obviously-broken link rather than a crashed page.
-    base: (app: string) => `https://${hosts[app] ?? app}`,
-    hc: 'http://host.containers.internal',
-  }
-}
-
 export const fetchCategoryBoards = createServerFn()
   // The category is a real check because `LOADERS[category]` below is indexed
   // with it. The tab is only checked for being a string: `resolveTab` answers
@@ -55,7 +43,8 @@ export const fetchCategoryBoards = createServerFn()
     return { category: data.category, tab: data.tab }
   })
   .handler(async ({ data }): Promise<CategoryPayload> => {
-    return loadCategory(data.category, resolveTab(data.category, data.tab), await makeCtx())
+    const { makeHosts } = await import('../host/hosts')
+    return loadCategory(data.category, resolveTab(data.category, data.tab), await makeHosts())
   })
 
 /** Tab id → is its subject answering. `null` = nothing probes it. */
@@ -231,8 +220,7 @@ async function logPipelineHealth(): Promise<boolean | null> {
   return worst === 1
 }
 
-type Ctx = { base: (app: string) => string; hc: string }
-type Loader<K extends CategoryName> = (tab: string, ctx: Ctx) => Promise<CategoryDataMap[K]>
+type Loader<K extends CategoryName> = (tab: string, hosts: Hosts) => Promise<CategoryDataMap[K]>
 
 /**
  * One dynamic-import thunk per category — the server half of the registry
@@ -254,11 +242,11 @@ const LOADERS: { [K in CategoryName]: () => Promise<Loader<K>> } = {
 async function loadCategory(
   category: CategoryName,
   tab: string,
-  ctx: Ctx,
+  hosts: Hosts,
 ): Promise<CategoryPayload> {
   const load = await LOADERS[category]()
   // TS cannot correlate an indexed record lookup with the union member the
   // same key selects, so this one cast carries what the record's mapped type
   // already proved: LOADERS[k] returns exactly CategoryDataMap[k].
-  return { kind: category, data: await load(tab, ctx) } as CategoryPayload
+  return { kind: category, data: await load(tab, hosts) } as CategoryPayload
 }

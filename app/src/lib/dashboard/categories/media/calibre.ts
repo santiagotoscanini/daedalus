@@ -1,9 +1,9 @@
+import type { Hosts } from '../../../../host/hosts'
 import { key } from '../../../../host/keys'
 import { promScalars } from '../../../../host/prom'
 import { getJson } from '../../../http'
 import { type VersionGap, versionGap } from '../../github'
 import { imageTag } from '../../images'
-import type { Ctx } from './shared'
 
 /* ── Calibre ──────────────────────────────────────────────────────────── */
 
@@ -25,14 +25,14 @@ export type CalibreData = {
   disk: { usedBytes: number | null; freeBytes: number | null }
 }
 
-export async function loadCalibre(ctx: Ctx): Promise<CalibreData> {
+export async function loadCalibre(hosts: Hosts): Promise<CalibreData> {
   const version = await imageTag('calibre-web')
 
   const [stats, disk, gap] = await Promise.all([
     // /opds is on calibre-web's forward-auth bypass and takes its own basic
     // auth (stacks/calibre-web), so this reads it with those credentials.
     getJson<{ books?: number; authors?: number; categories?: number; series?: number }>(
-      `${ctx.base('calibre-web')}/opds/stats`,
+      `${hosts.base('calibre-web')}/opds/stats`,
       {
         headers: {
           Authorization: `Basic ${Buffer.from(

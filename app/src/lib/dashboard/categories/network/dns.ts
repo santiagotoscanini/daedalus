@@ -1,4 +1,5 @@
 import { networkFacts } from '../../../../host/contract/domains/network'
+import type { Hosts } from '../../../../host/hosts'
 import { key } from '../../../../host/keys'
 import { lanHosts, webAppHosts } from '../../../../host/nix-manifest'
 import { localDay } from '../../../format'
@@ -214,9 +215,9 @@ export type DnsData = {
   admin: string | null
 }
 
-export async function loadDns(ctx: { base: (app: string) => string }): Promise<DnsData> {
-  const [resolver, zone, hosts, served, admin] = await Promise.all([
-    loadResolver(ctx.base('pihole')),
+export async function loadDns(hosts: Hosts): Promise<DnsData> {
+  const [resolver, zone, lanNames, served, admin] = await Promise.all([
+    loadResolver(hosts.base('pihole')),
     loadZone(),
     lanHosts(),
     servedHosts(),
@@ -229,7 +230,7 @@ export async function loadDns(ctx: { base: (app: string) => string }): Promise<D
     resolver,
     zone,
     admin,
-    lan: hosts.map((h) => {
+    lan: lanNames.map((h) => {
       const elsewhere = h.ip !== LAN_IP
       return {
         fqdn: h.host,

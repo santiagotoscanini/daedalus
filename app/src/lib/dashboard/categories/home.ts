@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../host/hosts'
 // The Home category: the household's own things — a tab per subject.
 //
 // It was one page of eight tiles, and the two biggest data stores on this box
@@ -30,8 +31,6 @@ import { type VersionGap, versionGap } from '../github'
 import { imageVersion, type RunningVersion } from '../images'
 import { type IdpData, idpClients, loadIdp } from './idp'
 
-type Ctx = { base: (app: string) => string; hc: string }
-
 export type HomeData =
   | ({ tab: 'house' } & HouseData)
   | ({ tab: 'photos' } & PhotosData)
@@ -41,24 +40,22 @@ export type HomeData =
   | ({ tab: 'finance' } & FinanceData)
   | ({ tab: 'tools' } & ToolsData)
 
-export async function loadHome(tab: string, ctx: Ctx): Promise<HomeData> {
+export async function loadHome(tab: string, hosts: Hosts): Promise<HomeData> {
   switch (tab) {
     case 'photos':
-      return { tab: 'photos', ...(await loadPhotos(ctx)) }
+      return { tab: 'photos', ...(await loadPhotos(hosts)) }
     case 'files':
-      return { tab: 'files', ...(await loadFiles(ctx)) }
+      return { tab: 'files', ...(await loadFiles(hosts)) }
     case 'pantry':
-      return { tab: 'pantry', ...(await loadPantry(ctx)) }
-    case 'signin': {
-      const base = ctx.base('pocket-id')
-      return { tab: 'signin', ...(await loadIdp(base, idpClients(base))) }
-    }
+      return { tab: 'pantry', ...(await loadPantry(hosts)) }
+    case 'signin':
+      return { tab: 'signin', ...(await loadIdp(hosts, idpClients(hosts))) }
     case 'finance':
       return { tab: 'finance', ...(await loadFinance()) }
     case 'tools':
-      return { tab: 'tools', ...(await loadTools(ctx)) }
+      return { tab: 'tools', ...(await loadTools(hosts)) }
     default:
-      return { tab: 'house', ...(await loadHouse(ctx)) }
+      return { tab: 'house', ...(await loadHouse(hosts)) }
   }
 }
 
@@ -113,11 +110,11 @@ type HouseData = {
 
 type HassState = { entity_id: string; state: string; attributes?: Record<string, unknown> }
 
-async function loadHouse(ctx: Ctx): Promise<HouseData> {
+async function loadHouse(hosts: Hosts): Promise<HouseData> {
   const h = { headers: { Authorization: `Bearer ${key('HASS_API_KEY')}` } }
 
   const [states, config] = await Promise.all([
-    getJson<HassState[]>(`${ctx.hc}:8123/api/states`, h),
+    getJson<HassState[]>(`${hosts.hc}:8123/api/states`, h),
     getJson<{
       version?: string
       location_name?: string
@@ -125,7 +122,7 @@ async function loadHouse(ctx: Ctx): Promise<HouseData> {
       time_zone?: string
       state?: string
       components?: string[]
-    }>(`${ctx.hc}:8123/api/config`, h),
+    }>(`${hosts.hc}:8123/api/config`, h),
   ])
 
   const version = config?.version ?? null
@@ -241,9 +238,9 @@ type ImmichUser = {
   quotaSizeInBytes?: number | null
 }
 
-async function loadPhotos(ctx: Ctx): Promise<PhotosData> {
+async function loadPhotos(hosts: Hosts): Promise<PhotosData> {
   const h = { headers: { 'x-api-key': key('IMMICH_API_KEY') } }
-  const base = ctx.base('immich')
+  const base = hosts.base('immich')
 
   const [stats, ver, disk] = await Promise.all([
     getJson<{
@@ -329,7 +326,7 @@ type FilesData = {
   cache: string | null
 }
 
-async function loadFiles(ctx: Ctx): Promise<FilesData> {
+async function loadFiles(hosts: Hosts): Promise<FilesData> {
   const body = await getJson<{
     ocs?: {
       data?: {
@@ -369,7 +366,7 @@ async function loadFiles(ctx: Ctx): Promise<FilesData> {
         }
       }
     }
-  }>(`${ctx.base('nextcloud')}/ocs/v2.php/apps/serverinfo/api/v1/info?format=json`, {
+  }>(`${hosts.base('nextcloud')}/ocs/v2.php/apps/serverinfo/api/v1/info?format=json`, {
     headers: { 'NC-Token': key('NEXTCLOUD_KEY'), 'OCS-APIRequest': 'true' },
   })
 
@@ -437,9 +434,9 @@ type PantryData = {
   tasks: { total: number | null; overdue: number | null }
 }
 
-async function loadPantry(ctx: Ctx): Promise<PantryData> {
+async function loadPantry(hosts: Hosts): Promise<PantryData> {
   const h = { headers: { 'GROCY-API-KEY': key('GROCY_API_KEY') } }
-  const base = ctx.base('grocy')
+  const base = hosts.base('grocy')
   // The box's day, not UTC's: grocy states due dates in local time, and past
   // 21:00 here a UTC 'today' is tomorrow — which marks a whole day's chores
   // and tasks overdue that are not.
@@ -511,9 +508,9 @@ type ToolsData = {
   status: string | null
 }
 
-async function loadTools(ctx: Ctx): Promise<ToolsData> {
+async function loadTools(hosts: Hosts): Promise<ToolsData> {
   const body = await getJson<{ version?: string; status?: string }>(
-    `${ctx.base('stirling-pdf')}/api/v1/info/status`,
+    `${hosts.base('stirling-pdf')}/api/v1/info/status`,
   )
   const version = body?.version ?? null
   return {

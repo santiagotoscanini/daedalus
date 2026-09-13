@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../host/hosts'
 // The Monitoring category: the machinery that watches everything else.
 //
 // Its own page rather than a corner of System because it answers a different
@@ -38,15 +39,13 @@
 
 import { siteMail } from '../../../host/contract/domains/site'
 import { key } from '../../../host/keys'
-import { lokiScalar, lokiSeries, lokiStreamsOrNull, lokiVector } from '../../../host/loki'
-import { promBars, promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
+import { LOKI, lokiScalar, lokiSeries, lokiStreamsOrNull, lokiVector } from '../../../host/loki'
+import { PROM, promBars, promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
 import { swrValue } from '../../cache'
 import { basicAuth, getJson } from '../../http'
 import { type VersionGap, versionGap } from '../github'
 import { hostFacts, type JobRun } from '../host-facts'
 import { imageVersion, type RunningVersion } from '../images'
-
-type Ctx = { base: (app: string) => string }
 
 /**
  * healthchecks numbers its releases with two segments — `v4.2`, `v4.1.1` — so
@@ -55,13 +54,6 @@ type Ctx = { base: (app: string) => string }
  */
 const TWO_OR_THREE = /^v?(\d+\.\d+(?:\.\d+)?)$/
 
-/**
- * Prometheus's own HTTP API, for the two things PromQL cannot answer: which
- * targets are failing and WHY, and what version the binary is. It publishes no
- * host port, so this is container DNS on the monitoring bridge.
- */
-const promBase = () => process.env.PROMETHEUS_URL ?? 'http://prometheus:9090'
-
 export type MonitoringData =
   | ({ tab: 'alerts' } & AlertsData)
   | ({ tab: 'probes' } & ProbesData)
@@ -69,7 +61,7 @@ export type MonitoringData =
   | ({ tab: 'logs' } & LogsData)
   | ({ tab: 'jobs' } & JobsData)
 
-export async function loadMonitoring(tab: string, ctx: Ctx): Promise<MonitoringData> {
+export async function loadMonitoring(tab: string, hosts: Hosts): Promise<MonitoringData> {
   switch (tab) {
     case 'probes':
       return { tab: 'probes', ...(await loadProbes()) }
@@ -78,7 +70,7 @@ export async function loadMonitoring(tab: string, ctx: Ctx): Promise<MonitoringD
     case 'logs':
       return { tab: 'logs', ...(await loadLogs()) }
     case 'jobs':
-      return { tab: 'jobs', ...(await loadJobs(ctx)) }
+      return { tab: 'jobs', ...(await loadJobs(hosts)) }
     default:
       return { tab: 'alerts', ...(await loadAlerts()) }
   }
@@ -378,7 +370,8 @@ async function loadMetrics(): Promise<MetricsData> {
     promSeries('prometheus_tsdb_head_series', 7 * 24 * 60, 3600),
     promBars('topk(8, scrape_duration_seconds)', 'job'),
     promScalar('prometheus_tsdb_lowest_timestamp_seconds'),
-    getJson<{ data?: { version?: string } }>(`${promBase()}/api/v1/status/buildinfo`),
+    // The HTTP API again: the binary's own version is not a metric.
+    getJson<{ data?: { version?: string } }>(`${PROM()}/api/v1/status/buildinfo`),
   ])
 
   const version = build?.data?.version ?? null
@@ -422,6 +415,8 @@ async function loadTargets(): Promise<{
   down: number | null
   list: { job: string; instance: string; error: string }[]
 }> {
+  // Prometheus's own HTTP API rather than PromQL: which targets are failing
+  // and WHY (`lastError`) is not in any series it exposes.
   const body = await getJson<{
     data?: {
       activeTargets?: {
@@ -431,7 +426,7 @@ async function loadTargets(): Promise<{
         scrapePool?: string
       }[]
     }
-  }>(`${promBase()}/api/v1/targets?state=any`)
+  }>(`${PROM()}/api/v1/targets?state=any`)
 
   const targets = body?.data?.activeTargets
   if (targets === undefined) return { up: null, down: null, list: [] }
@@ -505,9 +500,6 @@ function loadLogVolume(): Promise<number | null> {
   return lokiScalar('sum(count_over_time({level=~".+"}[1h])) or vector(0)')
 }
 
-/** Loki's own base URL — bridge-only, like prometheus. */
-const lokiBase = () => process.env.LOKI_URL ?? 'http://loki:3100'
-
 async function loadLogs(): Promise<LogsData> {
   const alloyRunning = await imageVersion('alloy')
 
@@ -543,7 +535,7 @@ async function loadLogs(): Promise<LogsData> {
       retries: 'sum(increase(loki_write_batch_retries_total[24h]))',
       configOk: 'min(alloy_config_last_load_successful)',
     }),
-    getJson<{ version?: string }>(`${lokiBase()}/loki/api/v1/status/buildinfo`),
+    getJson<{ version?: string }>(`${LOKI()}/loki/api/v1/status/buildinfo`),
     versionGap('grafana/alloy', alloyRunning.version),
   ])
 
@@ -647,12 +639,12 @@ type HcCheck = {
   n_pings?: number
 }
 
-async function loadJobs(ctx: Ctx): Promise<JobsData> {
+async function loadJobs(hosts: Hosts): Promise<JobsData> {
   const { monitoredJobs } = await import('../../../host/nix-manifest')
   const running = await imageVersion('healthchecks')
 
   const [body, registry, gap, facts] = await Promise.all([
-    getJson<{ checks?: HcCheck[] }>(`${ctx.base('healthchecks')}/api/v1/checks/`, {
+    getJson<{ checks?: HcCheck[] }>(`${hosts.base('healthchecks')}/api/v1/checks/`, {
       headers: { 'X-Api-Key': key('HEALTHCHECKS_API_KEY') },
     }),
     monitoredJobs(),

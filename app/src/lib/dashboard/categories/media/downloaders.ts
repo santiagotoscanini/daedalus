@@ -1,8 +1,8 @@
+import type { Hosts } from '../../../../host/hosts'
 import { promScalars } from '../../../../host/prom'
 import { ATTEMPT_MS, getJson, getText } from '../../../http'
 import { type VersionGap, versionGap } from '../../github'
 import { imageTag, imageVersion, type RunningVersion } from '../../images'
-import type { Ctx } from './shared'
 
 /* ── Downloads ────────────────────────────────────────────────────────── */
 
@@ -106,9 +106,9 @@ export type DownloadsData = {
   vpn: { up: boolean | null; country: string | null; port: number | null }
 }
 
-export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
-  const qbtBase = `${ctx.hc}:8090`
-  const nzbBase = `${ctx.hc}:6789`
+export async function loadDownloads(hosts: Hosts): Promise<DownloadsData> {
+  const qbtBase = `${hosts.hc}:8090`
+  const nzbBase = `${hosts.hc}:6789`
 
   const [
     qbt,
@@ -148,15 +148,15 @@ export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
       queue?: { title?: string; status?: string }[]
       pending?: { title?: string }[]
       done?: { title?: string; status?: string }[]
-    }>(`${ctx.base('metube')}/history`),
-    getJson<{ country?: string }>(`${ctx.hc}:8000/v1/publicip/ip`),
-    getJson<{ port?: number }>(`${ctx.hc}:8000/v1/portforward`),
+    }>(`${hosts.base('metube')}/history`),
+    getJson<{ country?: string }>(`${hosts.hc}:8000/v1/publicip/ip`),
+    getJson<{ port?: number }>(`${hosts.hc}:8000/v1/portforward`),
     promScalars({ up: 'gluetun_vpn_status' }),
     // Keyed by state, then by job id — see stacks/shelfmark. The inner
     // records are loosely typed on purpose: the fields vary by state and
     // only the title and progress are ever present.
     getJson<Record<string, Record<string, { title?: string; progress?: number }>>>(
-      `${ctx.hc}:8084/api/status`,
+      `${hosts.hc}:8084/api/status`,
     ),
     // Pinned by digest to a moving `:latest`, so only the image knows.
     imageVersion('shelfmark'),

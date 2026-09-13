@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../../host/hosts'
 // The Network category: everything between a packet and this box.
 //
 // Ordered the way traffic actually arrives — the WAN link, then the two ways
@@ -25,19 +26,16 @@ export type NetworkData =
   | ({ tab: 'dns' } & DnsData)
   | ({ tab: 'dhcp' } & DhcpData)
 
-export async function loadNetwork(
-  tab: string,
-  ctx: { base: (app: string) => string; hc: string },
-): Promise<NetworkData> {
+export async function loadNetwork(tab: string, hosts: Hosts): Promise<NetworkData> {
   switch (tab) {
     case 'wireguard':
-      return { tab: 'wireguard', ...(await loadInbound(ctx)) }
+      return { tab: 'wireguard', ...(await loadInbound(hosts)) }
     case 'proxy':
-      return { tab: 'proxy', ...(await loadProxy(ctx)) }
+      return { tab: 'proxy', ...(await loadProxy(hosts)) }
     case 'outbound':
-      return { tab: 'outbound', ...(await loadOutbound(ctx)) }
+      return { tab: 'outbound', ...(await loadOutbound(hosts)) }
     case 'dns':
-      return { tab: 'dns', ...(await loadDns(ctx)) }
+      return { tab: 'dns', ...(await loadDns(hosts)) }
     case 'dhcp':
       return { tab: 'dhcp', ...(await loadDhcp()) }
     default:

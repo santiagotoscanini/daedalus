@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../../host/hosts'
 import { key } from '../../../../host/keys'
 import { promScalars, promSeries } from '../../../../host/prom'
 import { getJson } from '../../../http'
@@ -27,7 +28,8 @@ export type JellyfinData = {
   people: { name: string; lastSeenDays: number | null; lastLoginDays: number | null }[]
 }
 
-export async function loadJellyfin(base: string): Promise<JellyfinData> {
+export async function loadJellyfin(hosts: Hosts): Promise<JellyfinData> {
+  const base = hosts.base('jellyfin')
   // `Authorization: MediaBrowser Token=` is the only scheme Jellyfin 12 keeps;
   // X-Emby-Token is gated behind EnableLegacyAuthorization there and removed next.
   const h = { headers: { Authorization: `MediaBrowser Token="${key('JELLYFIN_API_KEY')}"` } }

@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../../host/hosts'
 // The AI category, one tab per service.
 //
 // The stack is a chain — a caller speaks the OpenAI API to LiteLLM, LiteLLM
@@ -38,14 +39,14 @@ export type AiData =
   | ({ tab: 'open-webui' } & OpenWebUiData)
   | ({ tab: 'n8n' } & N8nData)
 
-export async function loadAi(tab: string, ctx: { base: (app: string) => string }): Promise<AiData> {
+export async function loadAi(tab: string, hosts: Hosts): Promise<AiData> {
   switch (tab) {
     case 'litellm':
       return { tab: 'litellm', ...(await loadLitellm()) }
     case 'open-webui':
-      return { tab: 'open-webui', ...(await loadOpenWebUi(ctx.base('open-webui'))) }
+      return { tab: 'open-webui', ...(await loadOpenWebUi(hosts)) }
     case 'n8n':
-      return { tab: 'n8n', ...(await loadN8n(ctx.base('n8n'))) }
+      return { tab: 'n8n', ...(await loadN8n(hosts)) }
     default:
       return { tab: 'lemonade', ...(await loadLemonade()) }
   }

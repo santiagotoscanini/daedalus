@@ -15,6 +15,7 @@
 // usual reason — it is one round trip for a number the box is collecting
 // anyway.
 
+import type { Hosts } from '../../host/hosts'
 import { promBars, promScalar, promVector } from '../../host/prom'
 import { type VersionGap, versionGap } from '../dashboard/github'
 import { imageVersion, type RunningVersion } from '../dashboard/images'
@@ -56,7 +57,8 @@ export type PackagesData = {
   url: string
 }
 
-export async function loadImages(base: (app: string) => string): Promise<ImagesData> {
+export async function loadImages(hosts: Hosts): Promise<ImagesData> {
+  const base = hosts.base
   const [catalog, storage, pulls, pushes, requests, errors, info] = await Promise.all([
     // Anonymous read is deliberately allowed on zot (stacks/registry), which is
     // what lets this work with no credential at all.
@@ -98,7 +100,8 @@ export async function loadImages(base: (app: string) => string): Promise<ImagesD
   }
 }
 
-export async function loadPackages(base: (app: string) => string): Promise<PackagesData> {
+export async function loadPackages(hosts: Hosts): Promise<PackagesData> {
+  const base = hosts.base
   const [npm, requests, errors, running] = await Promise.all([
     // Served by the cached-packages plugin (stacks/verdaccio/assets):
     // verdaccio's own /-/v1/search saturates at that endpoint's 250-result cap

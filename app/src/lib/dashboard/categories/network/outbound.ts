@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../../host/hosts'
 import { lokiLatest } from '../../../../host/loki'
 import { promPoints, promScalar, promVector } from '../../../../host/prom'
 import { declaredVpnEgress, type VpnEgress } from '../../../../host/vpn-egress'
@@ -79,7 +80,7 @@ export type OutboundData = {
  * where it comes out now, how reliable it has been, and which containers are
  * currently sharing its namespace.
  */
-export async function loadOutbound(ctx: { hc: string }): Promise<OutboundData> {
+export async function loadOutbound(hosts: Hosts): Promise<OutboundData> {
   const declared = await declaredVpnEgress()
 
   if (declared.length === 0) {
@@ -100,7 +101,7 @@ export async function loadOutbound(ctx: { hc: string }): Promise<OutboundData> {
   }
 
   const [tunnels, gluetun, exporter] = await Promise.all([
-    Promise.all(declared.map((d) => loadTunnel(d, ctx.hc, upOf))),
+    Promise.all(declared.map((d) => loadTunnel(d, hosts.hc, upOf))),
     // Read from the first instance's banner, and correct for all of them:
     // `mkGluetunInstance` pins one image digest, so a second tunnel is the
     // same binary. See `OutboundData.gluetun`.

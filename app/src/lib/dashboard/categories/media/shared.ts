@@ -1,7 +1,5 @@
 /* ── shared ───────────────────────────────────────────────────────────── */
 
-export type Ctx = { base: (app: string) => string; hc: string }
-
 /** Four-segment tags: the *arrs number their builds — see `cmp` in github.ts. */
 export const ARR_TAG = /^v?(\d+\.\d+\.\d+\.\d+)$/
 

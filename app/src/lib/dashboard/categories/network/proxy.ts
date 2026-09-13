@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../../host/hosts'
 import { promBars, promPoints, promScalar, promScalars, promVector } from '../../../../host/prom'
 import { localDay } from '../../../format'
 import { getJson } from '../../../http'
@@ -95,8 +96,8 @@ export type TraefikData = {
  * from an open door — an app doing its own OIDC has a registration, and an
  * unprotected one does not. One request, for one column.
  */
-export async function loadProxy(ctx: { base: (app: string) => string }): Promise<TraefikData> {
-  return loadTraefik(idpClients(ctx.base('pocket-id')))
+export async function loadProxy(hosts: Hosts): Promise<TraefikData> {
+  return loadTraefik(idpClients(hosts))
 }
 
 /**

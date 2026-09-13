@@ -1,10 +1,11 @@
+import type { Hosts } from '../../../../host/hosts'
 import { key } from '../../../../host/keys'
 import { lokiEntries, lokiLatest, lokiScalar } from '../../../../host/loki'
 import { localDay } from '../../../format'
 import { getJson, pool } from '../../../http'
 import { type VersionGap, versionGap } from '../../github'
 import { imageVersion, type RunningVersion } from '../../images'
-import { ARR_TAG, CLEANUP_DAYS, type Ctx, daysSince } from './shared'
+import { ARR_TAG, CLEANUP_DAYS, daysSince } from './shared'
 
 /* ── Seerr ────────────────────────────────────────────────────────────── */
 
@@ -56,7 +57,8 @@ const REQUEST_STATE: Record<
 /** How many recent requests get their title looked up. See `titleOf`. */
 const REQUESTS_SHOWN = 8
 
-export async function loadSeerr(base: string): Promise<SeerrData> {
+export async function loadSeerr(hosts: Hosts): Promise<SeerrData> {
+  const base = hosts.base('seerr')
   const h = { headers: { 'X-Api-Key': key('SEERR_API_KEY') } }
   const now = Date.now()
 
@@ -225,11 +227,11 @@ const ARRS = {
 /** How far ahead the calendar looks. Two weeks is a fortnight of evenings. */
 const CALENDAR_DAYS = 14
 
-export async function loadArr(app: 'sonarr' | 'radarr', ctx: Ctx): Promise<ArrData> {
+export async function loadArr(app: 'sonarr' | 'radarr', hosts: Hosts): Promise<ArrData> {
   const cfg = ARRS[app]
   // gluetun owns the netns, so only gluetun publishes ports — the *arrs are
   // reachable at the host port and nowhere else.
-  const base = `${ctx.hc}:${String(cfg.port)}/api/v3`
+  const base = `${hosts.hc}:${String(cfg.port)}/api/v3`
   const k = `apikey=${key(cfg.keyName)}`
   const now = Date.now()
   const day = 86_400_000
@@ -423,9 +425,9 @@ export type BazarrData = {
   subgen: string | null
 }
 
-export async function loadBazarr(ctx: Ctx): Promise<BazarrData> {
+export async function loadBazarr(hosts: Hosts): Promise<BazarrData> {
   const h = { headers: { 'X-API-KEY': key('BAZARR_API_KEY') } }
-  const base = `${ctx.hc}:6767/api`
+  const base = `${hosts.hc}:6767/api`
 
   const [status, eps, movies, providers, subgen] = await Promise.all([
     getJson<{
@@ -437,7 +439,7 @@ export async function loadBazarr(ctx: Ctx): Promise<BazarrData> {
       `${base}/providers`,
       h,
     ),
-    getJson<{ version?: string }>(`${ctx.hc}:9000/status`),
+    getJson<{ version?: string }>(`${hosts.hc}:9000/status`),
   ])
 
   const version = status?.data?.bazarr_version ?? null

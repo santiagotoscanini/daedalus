@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../host/hosts'
 // The Gaming category — two game servers, asked the same three questions.
 //
 // Its own page rather than a corner of Home because the questions are its
@@ -139,15 +140,12 @@ const PORT = 34197
  */
 const wanHost = () => process.env.WAN_HOST ?? ''
 
-export async function loadGaming(
-  tab: string,
-  ctx: { base: (app: string) => string },
-): Promise<GamingData> {
+export async function loadGaming(tab: string, hosts: Hosts): Promise<GamingData> {
   if (tab === 'minecraft') return { tab: 'minecraft', ...(await loadMinecraft()) }
-  return { tab: 'factorio', ...(await loadFactorio(ctx)) }
+  return { tab: 'factorio', ...(await loadFactorio(hosts)) }
 }
 
-async function loadFactorio(ctx: { base: (app: string) => string }): Promise<FactorioData> {
+async function loadFactorio(hosts: Hosts): Promise<FactorioData> {
   const installed = process.env.FACTORIO_VERSION ?? null
 
   const [releases, graph, feed, containerUp, gameLog] = await Promise.all([
@@ -184,7 +182,7 @@ async function loadFactorio(ctx: { base: (app: string) => string }): Promise<Fac
       // wherever they are sitting.
       connect: `${wanHost()}:${String(PORT)}`,
       port: PORT,
-      adminUrl: ctx.base('factorio-admin'),
+      adminUrl: hosts.base('factorio-admin'),
     },
     live: {
       containerUp: containerUp === null ? null : containerUp >= 1,

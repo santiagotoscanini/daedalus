@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../../host/hosts'
 import { key } from '../../../../host/keys'
 import { getJson } from '../../../http'
 import { type VersionGap, versionGap } from '../../github'
@@ -59,7 +60,8 @@ export type OpenWebUiData = {
  * which is the point: a panel nobody reads still costs two requests on every
  * page load.
  */
-export async function loadOpenWebUi(base: string): Promise<OpenWebUiData> {
+export async function loadOpenWebUi(hosts: Hosts): Promise<OpenWebUiData> {
+  const base = hosts.base('open-webui')
   const auth = { headers: { Authorization: `Bearer ${key('OPENWEBUI_KEY')}` } }
 
   const [usage, ver, models, knowledge, tools, freshness] = await Promise.all([

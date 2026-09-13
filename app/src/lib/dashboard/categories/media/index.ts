@@ -1,3 +1,4 @@
+import type { Hosts } from '../../../../host/hosts'
 // The Media category: a tab per JOB, in the order a file travels, and a switch
 // inside the page for the services that share one.
 //
@@ -32,7 +33,7 @@ import { type CleanupData, loadCleanup } from './cleanup'
 import { type DownloadsData, loadDownloads } from './downloaders'
 import { loadProwlarr, type ProwlarrData } from './indexer'
 import { type JellyfinData, loadJellyfin } from './jellyfin'
-import type { Ctx } from './shared'
+
 import {
   type ArrData,
   type BazarrData,
@@ -78,31 +79,31 @@ export type MediaData =
   | ({ tab: 'downloaders' } & DownloadsData)
   | ({ tab: 'cleanup' } & CleanupData)
 
-export async function loadMedia(tab: string, ctx: Ctx): Promise<MediaData> {
+export async function loadMedia(tab: string, hosts: Hosts): Promise<MediaData> {
   switch (tab) {
     case 'calibre':
-      return { tab: 'calibre', ...(await loadCalibre(ctx)) }
+      return { tab: 'calibre', ...(await loadCalibre(hosts)) }
     case 'wanted': {
       // All five, because all five are on the page — the switch chooses what
       // is SHOWN, not what is fetched. Fetching on selection would put a
       // spinner behind a button that is meant to feel like a toggle.
       const [seerr, sonarr, radarr, recyclarr, bazarr] = await Promise.all([
-        loadSeerr(ctx.base('seerr')),
-        loadArr('sonarr', ctx),
-        loadArr('radarr', ctx),
+        loadSeerr(hosts),
+        loadArr('sonarr', hosts),
+        loadArr('radarr', hosts),
         loadRecyclarr(),
-        loadBazarr(ctx),
+        loadBazarr(hosts),
       ])
       return { tab: 'wanted', seerr, sonarr, radarr, recyclarr, bazarr }
     }
     case 'indexer':
-      return { tab: 'indexer', ...(await loadProwlarr(ctx)) }
+      return { tab: 'indexer', ...(await loadProwlarr(hosts)) }
     case 'downloaders':
-      return { tab: 'downloaders', ...(await loadDownloads(ctx)) }
+      return { tab: 'downloaders', ...(await loadDownloads(hosts)) }
     case 'cleanup':
       return { tab: 'cleanup', ...(await loadCleanup()) }
     default:
-      return { tab: 'jellyfin', ...(await loadJellyfin(ctx.base('jellyfin'))) }
+      return { tab: 'jellyfin', ...(await loadJellyfin(hosts)) }
   }
 }
 

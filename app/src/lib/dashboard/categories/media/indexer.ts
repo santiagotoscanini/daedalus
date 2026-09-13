@@ -1,7 +1,8 @@
+import type { Hosts } from '../../../../host/hosts'
 import { key } from '../../../../host/keys'
 import { getJson } from '../../../http'
 import { type VersionGap, versionGap } from '../../github'
-import { ARR_TAG, type Ctx } from './shared'
+import { ARR_TAG } from './shared'
 import type { ArrData } from './wanted'
 
 /* ── Prowlarr ─────────────────────────────────────────────────────────── */
@@ -25,8 +26,8 @@ export type ProwlarrData = {
   }[]
 }
 
-export async function loadProwlarr(ctx: Ctx): Promise<ProwlarrData> {
-  const base = `${ctx.hc}:9696/api/v1`
+export async function loadProwlarr(hosts: Hosts): Promise<ProwlarrData> {
+  const base = `${hosts.hc}:9696/api/v1`
   const k = `apikey=${key('PROWLARR_API_KEY')}`
 
   const [status, health, stats, indexers] = await Promise.all([
