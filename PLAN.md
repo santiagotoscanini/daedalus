@@ -107,14 +107,15 @@ grouped by kind, not priority. Each can be done independently unless noted.
 
 1. **Production runtime for the engine.** The engine runs in dev mode
    (`source.mode = "local"`, Vite dev server). A production build was
-   attempted but TanStack Start's build emits a fetch handler with zero
-   `.listen()` calls — the Nitro adapter was removed because it broke
-   server-function id resolution (path-derived in dev, sha256 in build;
-   moving a file changes every id). Proposal: prove the built handler
-   against a throwaway Postgres, then bring Nitro back if the id issue is
-   confirmed fixed in current TanStack versions. **Why it matters:** dev
-   mode is fine for one user, but HMR noise, no tree-shaking, slower cold
-   starts.
+   attempted but TanStack Start's build output (which uses Nitro
+   internally as its server layer) emitted a fetch handler with zero
+   `.listen()` calls, and server-function IDs changed between dev and
+   build (path-derived vs sha256 — moving a file broke every call).
+   Proposal: prove the built handler against a throwaway Postgres on a
+   current TanStack Start version (the ID issue may be fixed upstream).
+   **Why it matters:** dev mode is fine for one user, but HMR noise, no
+   tree-shaking, slower cold starts. Unrelated to the other seven apps —
+   they each have their own `start.mjs` and build fine through Railpack.
 
 2. **`~/.claude/projects` transcript pruning.** These transcripts can
    contain secrets a session read. The claude-rc journal keeps its own copy
