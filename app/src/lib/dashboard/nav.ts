@@ -515,6 +515,16 @@ export const CATEGORIES: CategorySpec[] = [
 ]
 
 /**
+ * Is this one of the categories, as a request may claim?
+ *
+ * Over CATEGORIES rather than over a second list of the same seven names. The
+ * server functions index `LOADERS` with the result, and `LOADERS[x]` for an x
+ * that is not a category is `undefined()` — a TypeError three frames below the
+ * request that said it.
+ */
+export const isCategoryName = (v: unknown): v is CategoryName => CATEGORIES.some((c) => c.id === v)
+
+/**
  * Resolve a requested sub-tab against what a category actually declares:
  * the tab if it exists, the category's first tab otherwise. Lives beside
  * CATEGORIES because both the route loader and the server functions need

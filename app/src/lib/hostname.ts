@@ -23,6 +23,37 @@ export { BASE_DOMAIN }
 const LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 
 /**
+ * `app-<name>` is a container name and the left label of a hostname; 63 is the
+ * DNS limit and the shorter of the two ceilings.
+ */
+export const APP_NAME_MAX = 59
+
+/**
+ * Is this string, exactly as it arrived, an app name?
+ *
+ * The shape half of `appNameError` below, without the creation-time questions
+ * (is the name taken, is the label reserved) — so a request naming an app that
+ * already exists is checked against the same rule the app was created under.
+ * That rule was written out four more times as `/^[a-z0-9][a-z0-9-]{0,62}$/`,
+ * which accepts a trailing hyphen and 63 characters that creation refuses: the
+ * one string that is the container name, the DNS label, the postgres role and
+ * the systemd unit name had two definitions. This is the stricter one.
+ *
+ * Nothing is trimmed or lowercased here. `appNameError` does that because it
+ * reads a repository name a person just picked; a name arriving over the wire
+ * is either the app's name or it is not.
+ */
+export function isAppName(v: unknown): v is string {
+  return typeof v === 'string' && v.length <= APP_NAME_MAX && LABEL.test(v)
+}
+
+/** `isAppName` as a parser, for the request boundaries that must refuse. */
+export function appName(v: unknown): string {
+  if (!isAppName(v)) throw new Error('expected an app name')
+  return v
+}
+
+/**
  * Labels under the base domain that an app may never claim, and why.
  *
  * `daedalus` is the project's public landing page: a hand-managed CNAME to
@@ -62,9 +93,11 @@ export function appNameError(name: string, taken: readonly string[] = []): strin
   // The name derives the default hostname, so a reserved label is reserved here too.
   const reserved = RESERVED_LABELS[n]
   if (reserved) return `${n} ${reserved}`
-  // `app-<name>` is a container name and the left label of a hostname; 63 is
-  // the DNS limit and the shorter of the two ceilings.
-  if (n.length > 59) return 'too long. `app-<name>` has to fit in a 63-character DNS label.'
+  // Last, so the message is about the length rather than the syntax — and it
+  // is the one part of `isAppName` worth its own sentence.
+  if (n.length > APP_NAME_MAX) {
+    return 'too long. `app-<name>` has to fit in a 63-character DNS label.'
+  }
   return null
 }
 

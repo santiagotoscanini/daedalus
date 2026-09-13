@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
+import { actorLabel } from '../core/auth'
 import type { SiteEdit, SiteField, SiteState } from '../core/site'
 import type { SiteRequestStatus } from '../host/site-request'
 
@@ -43,7 +44,7 @@ export const writeSiteFiles = createServerFn({ method: 'POST' }).handler(async (
   const { writeSite } = await import('../core/site')
   // The forward-auth middleware forwards the Pocket ID claim, so the commit
   // records a person rather than "daedalus".
-  const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+  const actor = actorLabel()
   return writeSite(await makeCtx(), actor)
 })
 

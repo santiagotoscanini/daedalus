@@ -13,6 +13,7 @@ import {
   buildEnvNameRefusal,
   railpackValueRefusal,
 } from './builds'
+import { isAppName } from './hostname'
 
 // Apps › <name> › Settings › Builds: what a request may change. Engine-only
 // columns (host/schema.ts): nix never reads them, so a save here ships nothing
@@ -25,7 +26,6 @@ export const PLACEHOLDER_NAME_RE = BUILD_ENV_PLACEHOLDER_RE
 export const RAILPACK_KEY_RE = BUILD_ENV_RAILPACK_RE
 export const ENV_VALUE_MAX = BUILD_ENV_VALUE_MAX
 export const ENV_ENTRIES_MAX = BUILD_ENV_ENTRIES_MAX
-const APP_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/
 // A value reaches the build as one env line; a newline in it would be a second.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point.
 const CONTROL = /[\x00-\x1f\x7f]/
@@ -134,7 +134,7 @@ export function validateBuildSettings(input: unknown): { app: string; patch: Bui
     throw new Error('expected build settings')
   }
   const { app, ...rest } = input as Record<string, unknown>
-  if (typeof app !== 'string' || !APP_NAME_RE.test(app)) throw new Error('expected an app name')
+  if (!isAppName(app)) throw new Error('expected an app name')
 
   const patch: BuildSettingsPatch = {}
   for (const [k, v] of Object.entries(rest)) {

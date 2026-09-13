@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { isRecord } from '../lib/is-record'
 
 // The two things worth a button on the Lemonade tab.
 //
@@ -32,6 +33,20 @@ const BASE = () => process.env.LEMONADE_URL ?? ''
 export type ModelActionResult = { ok: boolean; message: string }
 
 /**
+ * A model id, as a request may carry one.
+ *
+ * A shape check, not a list: Lemonade's catalogue lives on the gaming PC and
+ * changes when a model is registered there, so the authority on what may be
+ * loaded is Lemonade, which answers a name it does not know with a 4xx that
+ * `call` reports in words. What this refuses is a request that is not a name
+ * at all — which would otherwise reach Lemonade as `{"model_name": null}`.
+ */
+const modelName = (v: unknown, what: string): string => {
+  if (typeof v !== 'string' || v.trim() === '') throw new Error(`expected ${what}`)
+  return v
+}
+
+/**
  * Evict a model, freeing its VRAM and releasing its file handle.
  *
  * The file-handle half matters more often than the VRAM half: a model that is
@@ -39,7 +54,10 @@ export type ModelActionResult = { ok: boolean; message: string }
  * download is frequently just this.
  */
 export const unloadLemonadeModel = createServerFn({ method: 'POST' })
-  .inputValidator((input: { model: string }) => input)
+  .validator((data: unknown): { model: string } => {
+    if (!isRecord(data)) throw new Error('expected a model')
+    return { model: modelName(data.model, 'a model to unload') }
+  })
   .handler(async ({ data }): Promise<ModelActionResult> => {
     return call('/api/v1/unload', { model_name: data.model })
   })
@@ -63,7 +81,19 @@ export const unloadLemonadeModel = createServerFn({ method: 'POST' })
  * change whether the slot survives the next squeeze.
  */
 export const switchLemonadeModel = createServerFn({ method: 'POST' })
-  .inputValidator((input: { from: string | null; to: string; pinned: boolean }) => input)
+  .validator((data: unknown): { from: string | null; to: string; pinned: boolean } => {
+    if (!isRecord(data)) throw new Error('expected a model switch')
+    // `pinned` carries the incumbent's state forward and decides whether the
+    // new resident survives the next squeeze, so it is a boolean or nothing —
+    // never a truthy string that would pin a slot nobody asked to pin.
+    if (typeof data.pinned !== 'boolean') throw new Error('expected pinned to be true or false')
+    const from = data.from ?? null
+    return {
+      from: from === null ? null : modelName(from, 'the model being replaced'),
+      to: modelName(data.to, 'a model to load'),
+      pinned: data.pinned,
+    }
+  })
   .handler(async ({ data }): Promise<ModelActionResult> => {
     if (data.from !== null) {
       const freed = await call('/api/v1/unload', { model_name: data.from })

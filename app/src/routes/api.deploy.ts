@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { actorLabelOf } from '../core/auth'
 import { safeEqual } from '../host/github-app-crypto'
 import { isRecord } from '../lib/is-record'
 
@@ -134,7 +135,7 @@ export const Route = createFileRoute('/api/deploy')({
         const id = await requestDeploy({
           app,
           reason: eventType || 'registry push',
-          actor: request.headers.get('x-forwarded-email') ?? 'registry',
+          actor: actorLabelOf(request, 'registry'),
         })
 
         // The new image may ship a new icon, and the icon cache holds answers

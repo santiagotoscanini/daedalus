@@ -1,11 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeader } from '@tanstack/react-start/server'
-import type { AccessWindow } from '../lib/access-window'
+import { actorLabel } from '../core/auth'
+import { type AccessWindow, isAccessWindow } from '../lib/access-window'
 import type { ActivityRow } from '../lib/activity-lines'
 import { logTime } from '../lib/format'
-// Type-only, so the database module it lives next to is not pulled in here —
-// every value import in this file is dynamic for exactly that reason.
-import type { NewApp } from '../lib/repo/apps'
+import { appName } from '../lib/hostname'
+import { isRecord } from '../lib/is-record'
 import { defaultImage, OWNER, REGISTRY_HOST_PATTERN } from '../lib/site'
 
 // Server functions behind the Apps UI. Kept in one module so the list page,
@@ -14,6 +13,20 @@ import { defaultImage, OWNER, REGISTRY_HOST_PATTERN } from '../lib/site'
 // Everything here runs server-side only: the database URL, the LiteLLM key and
 // the metrics endpoints must not cross to the browser, and neither must the
 // ability to write an apply request.
+//
+// ── what a request has to prove ───────────────────────────────────────────
+//
+// Every validator below is a real check, not a type annotation: `.validator`
+// takes `unknown` and parses, because the browser is what sends this and a
+// `(input: { name: string }) => input` is a cast the request never agreed to.
+// The deep handlers re-check what they act on — `getApp` answers null for a
+// name it does not know, `validateNewApp` and `validateAppPatch` own the field
+// rules — so what belongs here is the shape, refused with a sentence instead
+// of thrown three frames down.
+//
+// `appName` is lib/hostname's, the same rule the create form applies: a name
+// is a DNS label, a container name and a postgres role, and there is one
+// definition of it.
 
 export const fetchApps = createServerFn().handler(async () => {
   const { listApps, driftOf } = await import('../lib/repo/apps')
@@ -123,7 +136,10 @@ export const fetchPackagesTab = createServerFn().handler(async () => {
  * streams.
  */
 export const fetchApp = createServerFn()
-  .inputValidator((input: { name: string }) => input)
+  .validator((data: unknown): { name: string } => {
+    if (!isRecord(data)) throw new Error('expected an app name')
+    return { name: appName(data.name) }
+  })
   .handler(async ({ data }) => {
     const { name } = data
     const { getApp, driftOf } = await import('../lib/repo/apps')
@@ -324,7 +340,16 @@ type DeployRow = {
 }
 
 export const fetchAppTab = createServerFn()
-  .inputValidator((input: { name: string; tab: string; accessWindow: AccessWindow }) => input)
+  // `tab` is only checked to be a string: the switch below has a default, and
+  // an unknown tab is a page that renders its settings, not a bad request.
+  // `accessWindow` is not so forgiving — it indexes WINDOW_SPEC and builds a
+  // Loki range — so it is the union it always claimed to be.
+  .validator((data: unknown): { name: string; tab: string; accessWindow: AccessWindow } => {
+    if (!isRecord(data)) throw new Error('expected an app tab request')
+    if (typeof data.tab !== 'string') throw new Error('expected a tab')
+    if (!isAccessWindow(data.accessWindow)) throw new Error('expected an access window')
+    return { name: appName(data.name), tab: data.tab, accessWindow: data.accessWindow }
+  })
   .handler(async ({ data }): Promise<AppTabData> => {
     const { name, tab, accessWindow } = data
     const { getApp } = await import('../lib/repo/apps')
@@ -509,7 +534,20 @@ export const fetchNewAppOptions = createServerFn().handler(async () => {
  * failing container fails the switch, which makes the Apply revert itself.
  */
 export const fetchAppPreflight = createServerFn()
-  .inputValidator((i: { name: string; image: string | null }) => i)
+  // Both fields are checked for their type and nothing more. This runs on
+  // every keystroke in the create form, against a name the operator has not
+  // finished choosing and a repository GitHub may well have called `My.Repo`
+  // — the form's own `appNameError` is what says so, and refusing here would
+  // turn a red input box into a failed request behind it.
+  .validator((data: unknown): { name: string; image: string | null } => {
+    if (!isRecord(data)) throw new Error('expected a name and an image')
+    if (typeof data.name !== 'string') throw new Error('expected a name')
+    const image = data.image ?? null
+    if (image !== null && typeof image !== 'string') {
+      throw new Error('expected an image or null')
+    }
+    return { name: data.name, image }
+  })
   .handler(async ({ data }) => {
     const { imageInfo } = await import('../host/registry')
 
@@ -535,14 +573,25 @@ export const fetchAppPreflight = createServerFn()
   })
 
 export const createAppFn = createServerFn({ method: 'POST' })
-  .inputValidator((i: { app: NewApp }) => i)
-  .handler(async ({ data }) => {
+  // The field rules are validateNewApp's, in lib/repo/apps next to the table
+  // it writes — including the name, which it checks with appNameError so a
+  // create refuses a reserved or taken label too. All this owes is a record to
+  // hand it, which is also what retires the `as unknown as` the handler used
+  // to need to pretend the cast above had happened.
+  .validator((data: unknown): { app: Record<string, unknown> } => {
+    if (!isRecord(data) || !isRecord(data.app)) throw new Error('expected an app to create')
+    return { app: data.app }
+  })
+  .handler(async ({ data }): Promise<{ name: string }> => {
     const { createApp, validateNewApp } = await import('../lib/repo/apps')
-    return createApp(validateNewApp(data.app as unknown as Record<string, unknown>))
+    return createApp(validateNewApp(data.app))
   })
 
 export const deleteAppFn = createServerFn({ method: 'POST' })
-  .inputValidator((i: { name: string }) => i)
+  .validator((data: unknown): { name: string } => {
+    if (!isRecord(data)) throw new Error('expected an app name')
+    return { name: appName(data.name) }
+  })
   .handler(async ({ data }) => {
     const { deleteApp } = await import('../lib/repo/apps')
     await deleteApp(data.name)
@@ -550,15 +599,12 @@ export const deleteAppFn = createServerFn({ method: 'POST' })
   })
 
 export const saveApp = createServerFn({ method: 'POST' })
-  .inputValidator((input: { name: string; patch: Record<string, unknown> }) => {
-    // The type annotation describes the request; it does not check it. These
-    // two lines are the actual boundary — the field values are checked in
-    // validateAppPatch below, where the field list lives.
-    if (typeof input.name !== 'string') throw new Error('name must be a string')
-    if (typeof input.patch !== 'object' || input.patch === null) {
-      throw new Error('patch must be an object')
-    }
-    return input
+  // The field values are checked in validateAppPatch below, where the field
+  // list lives; this is the shape around them.
+  .validator((data: unknown): { name: string; patch: Record<string, unknown> } => {
+    if (!isRecord(data)) throw new Error('expected an app edit')
+    if (!isRecord(data.patch)) throw new Error('patch must be an object')
+    return { name: appName(data.name), patch: data.patch }
   })
   .handler(async ({ data }) => {
     const { updateApp, validateAppPatch } = await import('../lib/repo/apps')
@@ -575,7 +621,7 @@ export const saveApp = createServerFn({ method: 'POST' })
  */
 export const applyRegistry = createServerFn({ method: 'POST' }).handler(async () => {
   const { runApply } = await import('../host/apply-flow')
-  const outcome = await runApply(getRequestHeader('x-forwarded-email') ?? 'unknown operator')
+  const outcome = await runApply(actorLabel())
   return outcome.ok
     ? { ok: true as const, id: outcome.id, changed: outcome.changed }
     : { ok: false as const, reason: outcome.reason }
@@ -591,7 +637,9 @@ export const fetchApplyStatus = createServerFn().handler(async () => {
  * two minutes for its timer. Same unit either way — this only removes latency.
  */
 export const triggerDeploy = createServerFn({ method: 'POST' })
-  .inputValidator((name: string) => name)
+  // The one server function here whose request is the bare name rather than a
+  // record around it.
+  .validator((data: unknown): string => appName(data))
   .handler(async ({ data: name }) => {
     const { requestDeploy } = await import('../host/deploy')
     const { getApp } = await import('../lib/repo/apps')
@@ -602,7 +650,7 @@ export const triggerDeploy = createServerFn({ method: 'POST' })
       throw new Error(`${name} builds from source in the flake repo — there is no image to pull`)
     }
 
-    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+    const actor = actorLabel()
     return { id: await requestDeploy({ app: name, reason: 'manual redeploy', actor }) }
   })
 
@@ -614,7 +662,11 @@ export const triggerDeploy = createServerFn({ method: 'POST' })
  * already shipped. Behind the Pocket ID gate like the rest of the app.
  */
 export const revealEnvVar = createServerFn({ method: 'POST' })
-  .inputValidator((i: { name: string; key: string }) => i)
+  .validator((data: unknown): { name: string; key: string } => {
+    if (!isRecord(data)) throw new Error('expected an app and a variable')
+    if (typeof data.key !== 'string' || data.key === '') throw new Error('expected a variable name')
+    return { name: appName(data.name), key: data.key }
+  })
   .handler(async ({ data }) => {
     const { readEnvSnapshot } = await import('../host/env-snapshot')
     const { getApp } = await import('../lib/repo/apps')
@@ -653,7 +705,12 @@ export const fetchDeployStatus = createServerFn().handler(async () => {
  * the bridge from being a general "clone anything as the operator" door.
  */
 export const cloneWorkspaceFn = createServerFn({ method: 'POST' })
-  .inputValidator((i: { repo: string }) => i)
+  // A string, then the allowlist below — which is the check that matters and
+  // has to stay in the handler, since it is built from the registry.
+  .validator((data: unknown): { repo: string } => {
+    if (!isRecord(data) || typeof data.repo !== 'string') throw new Error('expected a repo')
+    return { repo: data.repo }
+  })
   .handler(async ({ data }) => {
     const { requestWorkspaceClone } = await import('../host/workspaces')
     const { listApps } = await import('../lib/repo/apps')
@@ -669,7 +726,7 @@ export const cloneWorkspaceFn = createServerFn({ method: 'POST' })
       throw new Error(`${data.repo} is not one of this box's project repos`)
     }
 
-    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+    const actor = actorLabel()
     return { id: await requestWorkspaceClone({ repo: data.repo, actor }) }
   })
 

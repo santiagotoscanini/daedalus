@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { AUTH_HEADERS } from '../core/auth'
 import { makeCtx } from '../core/ctx'
 import { profilePicture } from '../core/settings/profile'
 
@@ -16,8 +17,8 @@ export const Route = createFileRoute('/api/profile-picture')({
       GET: async ({ request }) => {
         const header = (name: string) => request.headers.get(name) || null
         const picture = await profilePicture(await makeCtx(), {
-          sub: header('x-forwarded-user'),
-          email: header('x-forwarded-email'),
+          sub: header(AUTH_HEADERS.SUBJECT),
+          email: header(AUTH_HEADERS.EMAIL),
         })
         // A plain 404, not the router's not-found: this answers an <img>.
         if (picture === null) return new Response(null, { status: 404 })

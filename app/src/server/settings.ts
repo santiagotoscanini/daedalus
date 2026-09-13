@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeader } from '@tanstack/react-start/server'
+import { actorLabel, actorOrNull, requireActor } from '../core/auth'
 import type { TokenReplaceOutcome } from '../core/settings/cloudflare-token'
 import type {
   BoxSettings,
@@ -65,7 +65,7 @@ export const replaceCloudflareTokenFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<TokenReplaceOutcome> => {
     const { makeCtx } = await import('../core/ctx')
     const { replaceCloudflareToken } = await import('../core/settings/cloudflare-token')
-    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+    const actor = actorLabel()
     return replaceCloudflareToken(await makeCtx(), actor, data.token)
   })
 
@@ -91,9 +91,9 @@ export const startGithubAppFn = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<GithubAppStart> => {
     const { makeCtx } = await import('../core/ctx')
-    const { actorFrom, startAppCreation } = await import('../core/settings/github-app')
+    const { startAppCreation } = await import('../core/settings/github-app')
     // No fallback name: a missing identity is null, and every App mutation refuses it.
-    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    const actor = actorOrNull(requireActor())
     return startAppCreation(await makeCtx(), actor, data)
   })
 
@@ -113,16 +113,16 @@ export const pasteAppKeyFn = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<GithubAppApply> => {
     const { makeCtx } = await import('../core/ctx')
-    const { actorFrom, pasteAppKey } = await import('../core/settings/github-app')
-    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    const { pasteAppKey } = await import('../core/settings/github-app')
+    const actor = actorOrNull(requireActor())
     return pasteAppKey(await makeCtx(), actor, data)
   })
 
 export const retryGithubApplyFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<GithubAppApply> => {
     const { makeCtx } = await import('../core/ctx')
-    const { actorFrom, retryPendingApply } = await import('../core/settings/github-app')
-    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    const { retryPendingApply } = await import('../core/settings/github-app')
+    const actor = actorOrNull(requireActor())
     return retryPendingApply(await makeCtx(), actor)
   },
 )
@@ -134,8 +134,8 @@ export const retryGithubApplyFn = createServerFn({ method: 'POST' }).handler(
 export const discardGithubPendingApplyFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<GithubAppDiscard> => {
     const { makeCtx } = await import('../core/ctx')
-    const { actorFrom, discardPendingApply } = await import('../core/settings/github-app')
-    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
+    const { discardPendingApply } = await import('../core/settings/github-app')
+    const actor = actorOrNull(requireActor())
     return discardPendingApply(await makeCtx(), actor)
   },
 )
@@ -148,8 +148,7 @@ export const discardGithubPendingApplyFn = createServerFn({ method: 'POST' }).ha
  */
 export const githubInstallLandedFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<{ ok: boolean }> => {
-    const { actorFrom } = await import('../core/settings/github-app')
-    if (actorFrom(getRequestHeader('x-forwarded-email')) === null) return { ok: false }
+    if (!requireActor().ok) return { ok: false }
     const { requestTokenRefresh } = await import('../core/github-app')
     await requestTokenRefresh()
     return { ok: true }

@@ -12,6 +12,7 @@ import {
 import { getJsonResult } from '../../lib/http'
 import { isRecord } from '../../lib/is-record'
 import { BASE_DOMAIN, OWNER } from '../../lib/site'
+import { actorOf, actorOrNull, NO_ACTOR_REASON } from '../auth'
 import type { Ctx } from '../ctx'
 import { GITHUB_API, GITHUB_API_VERSION, installationState } from '../github-app'
 import { renderSiteFile, type SiteDocument, type SiteGithubApp } from '../site/file'
@@ -49,7 +50,7 @@ import type {
 // Every mutation refuses until the host can take the vault file
 // (GITHUB_APP_ENABLED=1, set by the nix change that teaches apply.sh and sops
 // about it): an App created earlier would lose its key in the Apply. Every
-// mutation also refuses without a signed-in identity (actorFrom).
+// mutation also refuses without a signed-in identity (core/auth requireActor).
 
 export const APP_NAME_MAX = 34
 const CREATION_TTL_MS = 60 * 60_000
@@ -58,7 +59,6 @@ const CONVERSION_TIMEOUT_MS = 8_000
 const VAULT_NAME = 'github-app'
 
 export const DISABLED_REASON = 'Waiting for the host to support GitHub Apps.'
-export const NO_ACTOR_REASON = 'The request carried no signed-in identity, so nothing was done.'
 
 const enabled = (ctx: Ctx): boolean => ctx.env('GITHUB_APP_ENABLED') === '1'
 
@@ -68,16 +68,6 @@ const GITHUB_HEADERS = {
   Accept: 'application/vnd.github+json',
   'X-GitHub-Api-Version': GITHUB_API_VERSION,
   'User-Agent': 'daedalus',
-}
-
-/**
- * The operator, from the gate's X-Forwarded-Email. Missing or blank is null,
- * never a placeholder: two requests without an identity must not match each
- * other as the same actor.
- */
-export function actorFrom(header: string | null | undefined): string | null {
-  const v = header?.trim() ?? ''
-  return v === '' ? null : v
 }
 
 // ── stored records ─────────────────────────────────────────────────────────
@@ -844,7 +834,7 @@ export function callbackResponse(result: GithubAppFinish): Response {
 /** GET /settings/github/callback?code&state, behind the gate like every page. */
 export async function githubCallback(ctx: Ctx, request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams
-  const actor = actorFrom(request.headers.get('x-forwarded-email'))
+  const actor = actorOrNull(actorOf(request))
   const code = params.get('code') ?? ''
   const state = params.get('state') ?? ''
   // Neither the code nor the state reaches a log line, even inside an error.

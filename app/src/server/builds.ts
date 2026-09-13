@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeader } from '@tanstack/react-start/server'
+import { requireActor } from '../core/auth'
 import {
   type BuildCommit,
   type BuildReportFailure,
@@ -15,6 +15,7 @@ import {
 } from '../lib/build-settings'
 import {
   BUILD_PUBLISH_MODES,
+  BUILD_SHA_RE,
   BUILD_STRATEGIES,
   type BuildPublish,
   type BuildState,
@@ -22,32 +23,56 @@ import {
   isActiveBuildState,
   isTerminalBuildState,
 } from '../lib/builds'
+import { appName } from '../lib/hostname'
+import { isRecord } from '../lib/is-record'
 
 // Server functions behind the build UI: the builds board, the build page, the
 // Build now, Cancel and Retry report buttons and an app's build settings.
 // Value imports of anything that touches the database are dynamic, so it stays
-// out of the client bundle (server/registry.ts does the same).
+// out of the client bundle (server/registry.ts does the same). core/auth and
+// lib/hostname are pure and imported statically on purpose: what a request has
+// to prove should be legible from the top of the file.
 
-const APP_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/
-const SHA_RE = /^[0-9a-f]{40}$/
 const LOG_TAIL_BYTES = 64_000
 
-function appName(v: unknown): string {
-  if (typeof v !== 'string' || !APP_NAME_RE.test(v)) throw new Error('expected an app name')
-  return v
+/**
+ * `{ app }`, which is what all but two requests here carry.
+ *
+ * `isRecord` first, and not as ceremony: these validators used to annotate
+ * their parameter as `{ app: string }` and read `input.app` off it, so a
+ * request body of `null` or `7` was a TypeError inside the validator — a 500
+ * for a request that had already been caught, one line earlier, if anyone had
+ * asked whether it was an object.
+ */
+const appRequest = (data: unknown): { app: string } => {
+  if (!isRecord(data)) throw new Error('expected an app name')
+  return { app: appName(data.app) }
+}
+
+/** `{ app, id }`: a build, named under the app whose page is asking. */
+const buildRequest = (data: unknown): { app: string; id: string } => {
+  if (!isRecord(data)) throw new Error('expected a build')
+  if (typeof data.id !== 'string') throw new Error('expected a build id')
+  return { app: appName(data.app), id: data.id }
 }
 
 const summarize = (row: BuildRow): BuildSummary => summarizeBuild(row)
 
 /** The recent builds of one app, newest first; null when there is no such app. */
 export const fetchBuilds = createServerFn()
-  .validator((input: { app: string; limit?: number }) => ({
-    app: appName(input.app),
-    limit:
-      typeof input.limit === 'number' && Number.isInteger(input.limit)
-        ? Math.min(50, Math.max(1, input.limit))
-        : 10,
-  }))
+  // `limit` is clamped rather than refused: it is a page size, and the only
+  // wrong answer is one that lets a request ask for the whole table.
+  .validator((data: unknown): { app: string; limit: number } => {
+    const { app } = appRequest(data)
+    const limit = isRecord(data) ? data.limit : undefined
+    return {
+      app,
+      limit:
+        typeof limit === 'number' && Number.isInteger(limit)
+          ? Math.min(50, Math.max(1, limit))
+          : 10,
+    }
+  })
   .handler(async ({ data }): Promise<BuildSummary[] | null> => {
     const { getApp } = await import('../lib/repo/apps')
     const { listBuilds, toBuildRow } = await import('../lib/repo/builds')
@@ -70,7 +95,7 @@ export type BuildPageApp = {
 
 /** The app around a build page: one row, for the rail and the Build again button. */
 export const fetchBuildApp = createServerFn()
-  .validator((input: { app: string }) => ({ app: appName(input.app) }))
+  .validator(appRequest)
   .handler(async ({ data }): Promise<BuildPageApp | null> => {
     const { getApp } = await import('../lib/repo/apps')
     const { effectiveHostname } = await import('../lib/hostname')
@@ -110,10 +135,7 @@ async function reportFailureOf(id: string): Promise<BuildReportFailure | null> {
  * app's build under this app's URL.
  */
 export const fetchBuild = createServerFn()
-  .validator((input: { app: string; id: string }) => {
-    if (typeof input.id !== 'string') throw new Error('expected a build id')
-    return { app: appName(input.app), id: input.id }
-  })
+  .validator(buildRequest)
   .handler(async ({ data }): Promise<BuildView | null> => {
     const { getBuild, toBuildRow } = await import('../lib/repo/builds')
     // getBuild answers undefined for anything that is not a uuid.
@@ -180,11 +202,13 @@ const COMMITS_MAX = 200
  * be; null when GitHub cannot say.
  */
 export const fetchBuildCommit = createServerFn()
-  .validator((input: { app: string; sha: string }) => {
-    if (typeof input.sha !== 'string' || !SHA_RE.test(input.sha)) {
+  .validator((data: unknown): { app: string; sha: string } => {
+    const { app } = appRequest(data)
+    const sha = isRecord(data) ? data.sha : undefined
+    if (typeof sha !== 'string' || !BUILD_SHA_RE.test(sha)) {
       throw new Error('expected a commit sha')
     }
-    return { app: appName(input.app), sha: input.sha }
+    return { app, sha }
   })
   .handler(async ({ data }): Promise<BuildCommit | null> => {
     const key = `${data.app}@${data.sha}`
@@ -240,11 +264,11 @@ const orDefault = <T extends string>(allowed: readonly T[], v: string, fallback:
  * already queued or running is the answer instead of a second one.
  */
 export const buildNowFn = createServerFn({ method: 'POST' })
-  .validator((input: { app: string }) => ({ app: appName(input.app) }))
+  .validator(appRequest)
   .handler(async ({ data }): Promise<BuildNowResult> => {
-    const { actorFrom, NO_ACTOR_REASON } = await import('../core/settings/github-app')
-    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
-    if (actor === null) return { ok: false, reason: NO_ACTOR_REASON }
+    const gate = requireActor()
+    if (!gate.ok) return { ok: false, reason: gate.reason }
+    const actor = gate.actor
 
     const { getApp } = await import('../lib/repo/apps')
     const record = await getApp(data.app)
@@ -282,7 +306,7 @@ export const buildNowFn = createServerFn({ method: 'POST' })
       return { ok: false, reason: describeGhFailure(tip) }
     }
     const sha = tip.body.sha
-    if (typeof sha !== 'string' || !SHA_RE.test(sha)) {
+    if (typeof sha !== 'string' || !BUILD_SHA_RE.test(sha)) {
       return { ok: false, reason: `GitHub did not name a commit at the tip of ${branch}.` }
     }
 
@@ -328,14 +352,11 @@ export type CancelBuildResult = { ok: true } | { ok: false; reason: string }
  * thing and finds the row already terminal.
  */
 export const cancelBuildFn = createServerFn({ method: 'POST' })
-  .validator((input: { app: string; id: string }) => {
-    if (typeof input.id !== 'string') throw new Error('expected a build id')
-    return { app: appName(input.app), id: input.id }
-  })
+  .validator(buildRequest)
   .handler(async ({ data }): Promise<CancelBuildResult> => {
-    const { actorFrom, NO_ACTOR_REASON } = await import('../core/settings/github-app')
-    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
-    if (actor === null) return { ok: false, reason: NO_ACTOR_REASON }
+    const gate = requireActor()
+    if (!gate.ok) return { ok: false, reason: gate.reason }
+    const actor = gate.actor
 
     const { getBuild, updateFromStatus } = await import('../lib/repo/builds')
     const record = await getBuild(data.id)
@@ -378,14 +399,11 @@ export type RetryReportResult = { ok: true } | { ok: false; reason: string }
  * refuses again, with what it said.
  */
 export const retryReportFn = createServerFn({ method: 'POST' })
-  .validator((input: { app: string; id: string }) => {
-    if (typeof input.id !== 'string') throw new Error('expected a build id')
-    return { app: appName(input.app), id: input.id }
-  })
+  .validator(buildRequest)
   .handler(async ({ data }): Promise<RetryReportResult> => {
-    const { actorFrom, NO_ACTOR_REASON } = await import('../core/settings/github-app')
-    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
-    if (actor === null) return { ok: false, reason: NO_ACTOR_REASON }
+    const gate = requireActor()
+    if (!gate.ok) return { ok: false, reason: gate.reason }
+    const actor = gate.actor
 
     const { getBuild } = await import('../lib/repo/builds')
     const record = await getBuild(data.id)
@@ -419,9 +437,9 @@ export const setBuildSettingsFn = createServerFn({ method: 'POST' })
       validateBuildSettings(input),
   )
   .handler(async ({ data }): Promise<BuildSettingsResult> => {
-    const { actorFrom, NO_ACTOR_REASON } = await import('../core/settings/github-app')
-    const actor = actorFrom(getRequestHeader('x-forwarded-email'))
-    if (actor === null) return { ok: false, reason: NO_ACTOR_REASON }
+    const gate = requireActor()
+    if (!gate.ok) return { ok: false, reason: gate.reason }
+    const actor = gate.actor
 
     const { getApp } = await import('../lib/repo/apps')
     const record = await getApp(data.app)

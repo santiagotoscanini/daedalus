@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GITHUB_APP_EVENTS, GITHUB_APP_PERMISSIONS } from '../../lib/github-app'
+import { NO_ACTOR_REASON } from '../auth'
 import type { Ctx } from '../ctx'
 import type { SiteDocument, SiteGithubApp } from '../site/file'
 
@@ -48,8 +49,6 @@ vi.mock('../github-app', async (importOriginal) => ({
 const {
   DISABLED_REASON,
   FINISH_LOCK_MS,
-  NO_ACTOR_REASON,
-  actorFrom,
   callbackLocation,
   discardPendingApply,
   finishAppCreation,
@@ -299,14 +298,7 @@ describe('the disabled flag', () => {
 })
 
 describe('the signed-in identity', () => {
-  it('reads a missing or blank header as no one', () => {
-    expect(actorFrom(undefined)).toBeNull()
-    expect(actorFrom(null)).toBeNull()
-    expect(actorFrom('')).toBeNull()
-    expect(actorFrom('   ')).toBeNull()
-    expect(actorFrom(' op@example.test ')).toBe('op@example.test')
-  })
-
+  // The header rule itself is core/auth.test.ts's; this is what it gates.
   it('refuses every mutation without one', async () => {
     const { ctx, store } = fakeCtx()
     h.site = committed(APP)

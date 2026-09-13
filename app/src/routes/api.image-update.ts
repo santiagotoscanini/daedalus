@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { actorLabelOf } from '../core/auth'
 // Type-only, so it is erased rather than pulling the bridge's node:fs into a
 // bundle — the value import below stays dynamic like every other server reach.
 import type { ImageTarget } from '../host/image-update'
@@ -94,7 +95,7 @@ export const Route = createFileRoute('/api/image-update')({
 
         const outcome = await runImageUpdate({
           targets,
-          actor: request.headers.get('x-forwarded-email') ?? 'api',
+          actor: actorLabelOf(request, 'api'),
         })
 
         if (!outcome.ok) {

@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeader } from '@tanstack/react-start/server'
+import { actorLabel } from '../core/auth'
 
 // Server functions that act on the MACHINE rather than on an app.
 //
@@ -26,7 +26,7 @@ export const requestRebootFn = createServerFn({ method: 'POST' }).handler(async 
   const { requestReboot } = await import('../host/power-request')
   // The forward-auth middleware forwards the Pocket ID claim, so the request
   // records a person rather than "daedalus".
-  const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+  const actor = actorLabel()
   return { id: await requestReboot({ actor }) }
 })
 

@@ -1,11 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import {
+  appName,
   appNameError,
   BASE_DOMAIN,
   effectiveHostname,
   hostnameError,
+  isAppName,
   RESERVED_LABELS,
 } from './hostname'
+
+describe('isAppName', () => {
+  it('takes every name on this box', () => {
+    // site/apps.json as of this change, plus `daedalus` — hand-declared in
+    // nix rather than in the registry, and an app name all the same. The four
+    // private copies of this rule accepted more than creation ever did, so the
+    // stricter one had to be checked against the names already live.
+    for (const n of ['anansi', 'argus', 'chismed', 'daedalus', 'hermes', 'iris', 'plutus', 'voyra'])
+      expect(isAppName(n)).toBe(true)
+  })
+
+  it('refuses what the four copies used to accept', () => {
+    // `/^[a-z0-9][a-z0-9-]{0,62}$/` took both of these; creation never did.
+    expect(isAppName('abc-')).toBe(false)
+    expect(isAppName('a'.repeat(63))).toBe(false)
+    expect(isAppName('a'.repeat(59))).toBe(true)
+  })
+
+  it('refuses anything that is not a string, and does not normalise', () => {
+    for (const v of [undefined, null, 42, {}, ['iris'], '', ' iris ', 'Iris', 'a_b', '-a', 'a.b'])
+      expect(isAppName(v)).toBe(false)
+  })
+
+  it('agrees with the creation validator on shape and length', () => {
+    // appNameError adds the reserved and taken lists; on everything else the
+    // two must not be able to disagree, which is what a divergence was.
+    for (const n of ['iris', 'app-2', 'a', 'abc-', 'a'.repeat(59), 'a'.repeat(60), 'a_b', '-a'])
+      expect(isAppName(n)).toBe(appNameError(n) === null)
+  })
+
+  it('parses or throws', () => {
+    expect(appName('iris')).toBe('iris')
+    expect(() => appName('abc-')).toThrow('expected an app name')
+  })
+})
 
 describe('appNameError', () => {
   it('accepts a plain label', () => {

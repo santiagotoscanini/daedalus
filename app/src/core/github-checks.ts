@@ -1,3 +1,4 @@
+import { BUILD_SHA_RE } from '../lib/builds'
 import { CHECK_RUN_NAME } from '../lib/github-app'
 import type { Ctx } from './ctx'
 import { type GhResult, ghApp } from './github-app'
@@ -151,7 +152,7 @@ export async function createCheckRun(
   },
 ): Promise<GhCall<CheckRun>> {
   const base = repoPath(repo)
-  if (base === null || !/^[0-9a-f]{40}$/.test(input.headSha)) return refused()
+  if (base === null || !BUILD_SHA_RE.test(input.headSha)) return refused()
   const body: Record<string, unknown> = {
     name: CHECK_RUN_NAME,
     head_sha: input.headSha,
@@ -222,7 +223,7 @@ export async function createDeployment(
   input: { sha: string; buildId: string; description: string },
 ): Promise<GhCall<{ id: number }>> {
   const base = repoPath(repo)
-  if (base === null || !/^[0-9a-f]{40}$/.test(input.sha)) return refused()
+  if (base === null || !BUILD_SHA_RE.test(input.sha)) return refused()
   const r = await send(ctx, 'POST', `${base}/deployments`, {
     ref: input.sha,
     environment: 'production',

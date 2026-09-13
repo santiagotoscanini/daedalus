@@ -1,7 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
 
 import type { CategoryDataMap, CategoryPayload } from '../lib/dashboard/category-data'
-import { CATEGORIES, type CategoryName, resolveTab } from '../lib/dashboard/nav'
+import { CATEGORIES, type CategoryName, isCategoryName, resolveTab } from '../lib/dashboard/nav'
+import { isRecord } from '../lib/is-record'
 
 // The loaders behind every category page.
 //
@@ -44,7 +45,15 @@ async function makeCtx(): Promise<{ base: (app: string) => string; hc: string }>
 }
 
 export const fetchCategoryBoards = createServerFn()
-  .inputValidator((input: { category: CategoryName; tab: string }) => input)
+  // The category is a real check because `LOADERS[category]` below is indexed
+  // with it. The tab is only checked for being a string: `resolveTab` answers
+  // the category's first tab for one it does not recognise, which is the
+  // behaviour a stale link depends on.
+  .validator((data: unknown): { category: CategoryName; tab: string } => {
+    if (!isRecord(data) || !isCategoryName(data.category)) throw new Error('expected a category')
+    if (typeof data.tab !== 'string') throw new Error('expected a tab')
+    return { category: data.category, tab: data.tab }
+  })
   .handler(async ({ data }): Promise<CategoryPayload> => {
     return loadCategory(data.category, resolveTab(data.category, data.tab), await makeCtx())
   })
@@ -87,8 +96,13 @@ const PROBE_WINDOW = '3m'
  * page, to draw a circle. This is one Prometheus query and lands first.
  */
 export const fetchTabStatus = createServerFn()
-  .inputValidator((input: { category: CategoryName }) => input)
+  .validator((data: unknown): { category: CategoryName } => {
+    if (!isRecord(data) || !isCategoryName(data.category)) throw new Error('expected a category')
+    return { category: data.category }
+  })
   .handler(async ({ data }): Promise<TabStatus> => {
+    // Kept even though the validator has already proved this: `find` is what
+    // narrows the spec for everything below it.
     const spec = CATEGORIES.find((c) => c.id === data.category)
     if (spec === undefined) return {}
 

@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeader } from '@tanstack/react-start/server'
+import { actorLabel } from '../core/auth'
 
 // The Claude page's one loader.
 //
@@ -30,7 +30,7 @@ export const requestClaudeRestartFn = createServerFn({ method: 'POST' }).handler
   const { requestClaudeRcRestart } = await import('../host/claude-rc-request')
   // The forward-auth middleware forwards the Pocket ID claim, so the request
   // records a person rather than "daedalus".
-  const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
+  const actor = actorLabel()
   return { id: await requestClaudeRcRestart({ actor }) }
 })
 

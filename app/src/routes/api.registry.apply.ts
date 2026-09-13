@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { actorLabelOf } from '../core/auth'
 
 // Trigger an apply without the UI, and read back where it got to.
 //
@@ -20,7 +21,7 @@ export const Route = createFileRoute('/api/registry/apply')({
 
       POST: async ({ request }) => {
         const { runApply } = await import('../host/apply-flow')
-        const outcome = await runApply(request.headers.get('x-forwarded-email') ?? 'api')
+        const outcome = await runApply(actorLabelOf(request, 'api'))
         if (!outcome.ok) {
           return Response.json({ status: outcome.code, reason: outcome.reason }, { status: 409 })
         }

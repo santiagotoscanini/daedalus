@@ -12,6 +12,7 @@ import {
   recordOf,
   str,
 } from './contract/decode'
+import { isAppName } from './hostname'
 
 // The `build` bridge verb: what this container asks the host builder to do,
 // and what the host says back. Client-safe on purpose — the build page renders
@@ -42,7 +43,6 @@ export const BUILD_STATUS_MAX_AGE_MS = 90_000
 /** Also the log file's stem, so nothing a request carries can name a path. */
 export const BUILD_ID_RE = /^[0-9a-fA-F-]{1,64}$/
 export const BUILD_SHA_RE = /^[0-9a-f]{40}$/
-const APP_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/
 
 export const BUILD_STRATEGIES = ['auto', 'railpack', 'dockerfile'] as const
 export const BUILD_PUBLISH_MODES = ['live', 'candidate'] as const
@@ -454,6 +454,13 @@ function matching(re: RegExp, what: string): Decoder<string> {
   }
 }
 
+/** The one app-name rule (lib/hostname.ts), as a decoder. */
+const appNameField: Decoder<string> = (v, p) => {
+  const s = str(v, p)
+  if (!isAppName(s)) throw new DecodeError(p, 'expected an app name')
+  return s
+}
+
 const repoId: Decoder<number> = (v, p) => {
   const n = num(v, p)
   if (!Number.isSafeInteger(n) || n <= 0) throw new DecodeError(p, 'expected a positive integer')
@@ -510,7 +517,7 @@ const buildEnvDecoder: Decoder<BuildEnv> = obj({
 const buildRequestCore = obj({
   version: versionOne,
   id: matching(BUILD_ID_RE, 'a build id'),
-  app: matching(APP_NAME_RE, 'an app name'),
+  app: appNameField,
   sha: matching(BUILD_SHA_RE, 'a 40-hex commit sha'),
   repoId,
   strategy: literal(...BUILD_STRATEGIES),

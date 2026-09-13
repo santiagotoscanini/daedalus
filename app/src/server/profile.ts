@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
+import { AUTH_HEADERS } from '../core/auth'
 import type { Account, ProfilePatch, ProfileRead } from '../core/settings/types'
 import { PICTURE_TYPES, type PictureType } from '../lib/profile-fields'
 
@@ -10,14 +11,24 @@ import { PICTURE_TYPES, type PictureType } from '../lib/profile-fields'
 // Value imports are dynamic so the database and filesystem modules are not
 // pulled into a client bundle, matching server/settings.ts.
 
-const PATCH_KEYS = ['username', 'firstName', 'lastName', 'displayName', 'email'] as const
+// `satisfies` rather than a bare `as const`: this list and ProfilePatch were
+// hand-kept in sync, and a field added to one and not the other is now a
+// compile error rather than a save that silently refuses the new field (or a
+// validator that lets through one updateProfile does not write).
+const PATCH_KEYS = [
+  'username',
+  'firstName',
+  'lastName',
+  'displayName',
+  'email',
+] as const satisfies readonly (keyof ProfilePatch)[]
 
 function who() {
   const header = (name: string) => {
     const v = getRequestHeader(name)
     return v === undefined || v === '' ? null : v
   }
-  return { sub: header('x-forwarded-user'), email: header('x-forwarded-email') }
+  return { sub: header(AUTH_HEADERS.SUBJECT), email: header(AUTH_HEADERS.EMAIL) }
 }
 
 export const fetchProfile = createServerFn().handler(async (): Promise<ProfileRead> => {

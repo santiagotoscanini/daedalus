@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestHeader } from '@tanstack/react-start/server'
+import { actorLabel } from '../core/auth'
+import { isRecord } from '../lib/is-record'
 
 // Server functions behind the Updates page and the Update button.
 //
@@ -12,6 +13,22 @@ import { getRequestHeader } from '@tanstack/react-start/server'
 //
 // Value imports are dynamic, like every other server module here: the bridge
 // reaches for node:fs and nothing below may be pulled into a client bundle.
+// core/auth and lib/is-record are pure, so they are static — see the note at
+// the top of server/builds.ts.
+
+/**
+ * A container name, as a request may carry one.
+ *
+ * Deliberately a shape check rather than an allowlist: what the containers on
+ * this box are called is the nix-rendered pin registry's answer, and the host
+ * checks every target against it (stacks/daedalus/host/image-update.sh). What
+ * belongs here is that a name is a string at all — everything downstream,
+ * including a `jq` expression in a shell script, has been assuming it.
+ */
+const containerName = (v: unknown, what: string): string => {
+  if (typeof v !== 'string' || v === '') throw new Error(`${what} must be a container name`)
+  return v
+}
 
 /**
  * The notes for one container, on demand.
@@ -21,7 +38,10 @@ import { getRequestHeader } from '@tanstack/react-start/server'
  * budget on sixty-four containers nobody expanded.
  */
 export const fetchUpdateNotes = createServerFn()
-  .inputValidator((input: { container: string }) => input)
+  .validator((data: unknown): { container: string } => {
+    if (!isRecord(data)) throw new Error('expected a container')
+    return { container: containerName(data.container, 'container') }
+  })
   .handler(async ({ data }) => {
     const { loadUpdateNotes } = await import('../lib/dashboard/categories/system/updates')
     return loadUpdateNotes(data.container)
@@ -44,13 +64,29 @@ export const fetchImageUpdateStatus = createServerFn().handler(async () => {
  * Always a list, even for one: the button and the queue are the same call, so
  * there is no single-container path that could behave differently from the
  * batch one.
+ *
+ * The validator says what POST /api/image-update's body check already said:
+ * both are doors onto the same runImageUpdate, and a request one refuses is
+ * not one the other should publish to the host.
  */
 export const requestImageUpdateFn = createServerFn({ method: 'POST' })
-  .inputValidator((input: { targets: { container: string; toTag?: string }[] }) => input)
+  .validator((data: unknown): { targets: { container: string; toTag?: string }[] } => {
+    if (!isRecord(data) || !Array.isArray(data.targets)) {
+      throw new Error('expected a list of targets')
+    }
+    return {
+      targets: data.targets.map((t: unknown) => {
+        if (!isRecord(t)) throw new Error('each target must name a container')
+        const container = containerName(t.container, 'each target')
+        if (t.toTag === undefined) return { container }
+        if (typeof t.toTag !== 'string') throw new Error('toTag must be a string when present')
+        return { container, toTag: t.toTag }
+      }),
+    }
+  })
   .handler(async ({ data }) => {
     const { runImageUpdate } = await import('../host/update-flow')
     // The forward-auth middleware forwards the Pocket ID claim, so the commit
     // this produces records a person rather than "daedalus".
-    const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
-    return runImageUpdate({ targets: data.targets, actor })
+    return runImageUpdate({ targets: data.targets, actor: actorLabel() })
   })

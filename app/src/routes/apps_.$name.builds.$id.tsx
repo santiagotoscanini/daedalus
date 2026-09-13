@@ -26,6 +26,7 @@ import {
 import { cacheHitRatio } from '../lib/build-facts'
 import { isActiveBuildState } from '../lib/builds'
 import { bytes, DASH, ms, pct } from '../lib/format'
+import { isAppName } from '../lib/hostname'
 import { OWNER, REGISTRY_HOST } from '../lib/site'
 import type { Tone } from '../lib/tone'
 import {
@@ -45,11 +46,12 @@ import {
 // must not nest under it. The rail still treats it as part of the app
 // (__root.tsx useAppRailContext).
 
-const APP_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/
-
 export const Route = createFileRoute('/apps_/$name/builds/$id')({
   loader: async ({ params }) => {
-    if (!APP_NAME_RE.test(params.name)) return { app: null, build: null, commit: null }
+    // The server functions refuse a name that is not an app's (lib/hostname
+    // appName), and a hand-edited URL deserves this page's own "no such
+    // build", not an error boundary.
+    if (!isAppName(params.name)) return { app: null, build: null, commit: null }
     const [app, build] = await Promise.all([
       fetchBuildApp({ data: { app: params.name } }),
       fetchBuild({ data: { app: params.name, id: params.id } }),

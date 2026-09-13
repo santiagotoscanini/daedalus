@@ -1,4 +1,5 @@
 import { stripAnsi } from './ansi'
+import { BUILD_SHA_RE } from './builds'
 import { bool, type Decoder, nullable, num, obj, optional, str } from './contract/decode'
 
 // The daedalus GitHub App, the pure half: the manifest the operator registers,
@@ -142,7 +143,6 @@ export type PushContext = {
   app: { githubRepoId: number | null } | null
 }
 
-const SHA = /^[0-9a-f]{40}$/
 const ZERO_SHA = '0'.repeat(40)
 
 /**
@@ -158,7 +158,7 @@ export function classifyPush(event: GithubPushEvent, ctx: PushContext): PushClas
   if (event.ref.startsWith('refs/tags/')) return ignore('tag')
   if (event.ref !== `refs/heads/${repo.default_branch}`) return ignore('non-default-branch')
   if (event.after === ZERO_SHA) return ignore('zero-sha')
-  if (!SHA.test(event.after)) return ignore('invalid-sha')
+  if (!BUILD_SHA_RE.test(event.after)) return ignore('invalid-sha')
   if (repo.owner.id !== ctx.ownerId) return ignore('owner-mismatch')
   if (repo.fork) return ignore('fork')
   if (
