@@ -31,22 +31,22 @@ flowchart LR
   Browser["operator's browser"]
   GH["GitHub<br/>daedalus-server App"]
   CF["Cloudflare Tunnel"]
-  Traefik["traefik<br/>websecure :443 · cfweb :8888"]
+  Traefik["traefik<br/>websecure :443, cfweb :8888"]
   PID["pocket-id<br/>forward-auth"]
 
   subgraph pod["rootless podman — uid 1000"]
     App["app-daedalus<br/>TanStack Start :3000"]
-    PG[("pg · database daedalus")]
+    PG[("pg, database daedalus")]
     Zot["zot<br/>the box's own registry"]
     Apps["the managed apps"]
   end
 
-  Bridge[/"apply/ — the one writable mount<br/>NAME-request.json ⇄ NAME-status.json"/]
-  Snaps[/"/export /repo /site /system /images /claude<br/>/workspaces /deploy-state /env-snapshot<br/>/dhcp /builds /github /github-token — all ro"/]
+  Bridge[/"apply/ the one writable mount<br/>NAME-request.json, NAME-status.json"/]
+  Snaps[/"/export /repo /site /system /images /claude<br/>/workspaces /deploy-state /env-snapshot<br/>/dhcp /builds /github /github-token (all ro)"/]
 
   subgraph root["systemd — root"]
     Paths["daedalus-*.path"]
-    Agents["daedalus-apply · -build · -build-cancel<br/>-image-update · -deploy-trigger · -site-write<br/>-power · -workspace-clone · -claude-rc · -github-token"]
+    Agents["daedalus-apply, -build, -build-cancel<br/>-image-update, -deploy-trigger, -site-write<br/>-power, -workspace-clone, -claude-rc, -github-token"]
     SnapJobs["daedalus-*-snapshot timers"]
     DeployU["app-NAME-deploy.service / .timer"]
   end
@@ -55,7 +55,7 @@ flowchart LR
   BK["buildkitd uid 350<br/>daedalus-build uid 351<br/>egress-fenced"]
 
   Browser --> Traefik
-  GH -- "push · the hooks hostname" --> CF --> Traefik
+  GH -- "push via the hooks hostname" --> CF --> Traefik
   Traefik -- "forward-auth" --> PID
   Traefik --> App
   App --- PG
@@ -63,7 +63,7 @@ flowchart LR
   Agents --> Nix
   Agents --> BK -- "push sha-SHA + latest" --> Zot
   Agents -- "systemctl start" --> DeployU
-  DeployU -- "pull · restart only if the digest moved" --> Apps
+  DeployU -- "pull, restart only if the digest moved" --> Apps
   SnapJobs --> Snaps --> App
   App -- "check run + Deployment" --> GH
 ```
@@ -83,17 +83,17 @@ does goes through it.
 
 ```mermaid
 flowchart TB
-  subgraph unpriv["app-daedalus — rootless podman, container root maps to an unprivileged host user"]
+  subgraph unpriv["app-daedalus: rootless podman, container root maps to an unprivileged host user"]
     Engine["the engine<br/>TanStack Start + drizzle"]
     Rd[/"reads, all ro: /export /repo /site /system /images<br/>/claude /workspaces /deploy-state /env-snapshot<br/>/dhcp /builds /github /github-token /registry"/]
-    Sops["/usr/local/bin/sops — static, holds no age identity<br/>so it can encrypt and never decrypt"]
+    Sops["/usr/local/bin/sops: static, holds no age identity<br/>so it can encrypt and never decrypt"]
   end
 
   Wr[/"the ONE writable mount: apply/<br/>10 request files, their status files, payload-ID.json"/]
 
   subgraph priv["systemd — root"]
-    P["daedalus-apply · -build · -build-cancel · -image-update<br/>-deploy-trigger · -site-write · -power<br/>-workspace-clone · -claude-rc · -github-token<br/>each a .path watching one filename"]
-    Caps["may: commit and push as the operator<br/>nixos-rebuild switch under the rebuild lock<br/>start a deploy unit · reboot<br/>read the sops vault · sign as the GitHub App"]
+    P["daedalus-apply, -build, -build-cancel, -image-update<br/>-deploy-trigger, -site-write, -power<br/>-workspace-clone, -claude-rc, -github-token<br/>each a .path watching one filename"]
+    Caps["may: commit and push as the operator<br/>nixos-rebuild switch under the rebuild lock<br/>start a deploy unit, reboot<br/>read the sops vault, sign as the GitHub App"]
   end
 
   subgraph fenced["unprivileged build users"]
@@ -170,21 +170,21 @@ registry → deploy. It is the subject of [BUILDS.md](BUILDS.md).
 
 ```mermaid
 flowchart TB
-  UI["Apps or Settings — the operator edits"]
-  DBT[("apps table · settings · site fields")]
+  UI["Apps or Settings: the operator edits"]
+  DBT[("apps table, settings, site fields")]
   Render["render the EXACT bytes"]
   Req[/"apply/request.json {actor, summary, commit}<br/>+ apply/payload-ID.json"/]
   PathU["daedalus-apply.path"]
-  Sh["daedalus-apply.service · root<br/>restartIfChanged = false"]
-  Allow{"payload filename in the allowlist?<br/>apps.json · site.json<br/>vault/cloudflare-api-token.sops<br/>vault/github-app.sops"}
+  Sh["daedalus-apply.service, root<br/>restartIfChanged = false"]
+  Allow{"payload filename in the allowlist?<br/>apps.json, site.json<br/>vault/cloudflare-api-token.sops<br/>vault/github-app.sops"}
   Prev["copy the current bytes aside,<br/>outside the bridge directory"]
-  Git["write verbatim · git add · commit<br/>as the operator, never as root"]
+  Git["write verbatim, git add, commit<br/>as the operator, never as root"]
   Lock["take the shared rebuild lock"]
   Sw["nixos-rebuild switch"]
-  Ok(["status: done · commit recorded"])
-  Roll["restore the previous bytes · revert the commit<br/>rebuild again — and keep the FIRST error,<br/>because the rollback's own log ends in Done."]
+  Ok(["status: done, commit recorded"])
+  Roll["restore the previous bytes, revert the commit<br/>rebuild again and keep the FIRST error<br/>because the rollback's own log ends in Done."]
   Bad(["status: failed, with the real error verbatim"])
-  NixRead["nix reads the committed file — evaluation is pure<br/>and can never query Postgres"]
+  NixRead["nix reads the committed file: evaluation is pure<br/>and can never query Postgres"]
 
   UI --> DBT --> Render --> Req --> PathU --> Sh --> Allow
   Allow -- no --> Bad
@@ -219,41 +219,41 @@ and preferences, not the system.
 ```mermaid
 flowchart TB
   subgraph client["runs in the browser"]
-    Routes["src/routes/**<br/>/ · /apps · /apps/NAME · /apps/NAME/builds/ID<br/>/c/CATEGORY · /settings · /claude"]
+    Routes["src/routes/**<br/>/, /apps, /apps/NAME, /apps/NAME/builds/ID<br/>/c/CATEGORY, /settings, /claude"]
     Comps["src/components/**"]
   end
 
   subgraph edge["server only — the two doors"]
-    Srv["src/server/**  createServerFn<br/>registry · builds · settings · site · category<br/>host · claude · profile · updates"]
-    Api["src/routes/api.*.ts<br/>/api/healthz · /api/github/webhook · /api/deploy<br/>/api/image-update · /api/registry/apply|export|import"]
+    Srv["src/server/**  createServerFn<br/>registry, builds, settings, site, category<br/>host, claude, profile, updates"]
+    Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/deploy<br/>/api/image-update, /api/registry/apply|export|import"]
   end
 
   subgraph core["src/core/ — server-only decisions"]
-    Ctx["ctx.ts — the capability set every reader is handed<br/>env · secret · exportPath · snapshot · store · http · loki"]
-    Bld["builds/scheduler.ts · builds/report.ts"]
-    Ghc["github-app.ts · github-checks.ts"]
-    Set["settings/** · site/** · vault.ts"]
+    Ctx["ctx.ts: the capability set every reader is handed<br/>env, secret, exportPath, snapshot, store, http, loki"]
+    Bld["builds/scheduler.ts, builds/report.ts"]
+    Ghc["github-app.ts, github-checks.ts"]
+    Set["settings/**, site/**, vault.ts"]
   end
 
   subgraph lib["src/lib/ — pure, client-safe, unit-tested"]
-    BuildLib["builds · build-queue · build-detect<br/>build-facts · build-settings · build-display"]
-    Decode["contract/decode · contract/version<br/>the pure half of the host contract"]
-    Shared["http · cache · format · hostname<br/>site-fields · env-groups · cn · …"]
+    BuildLib["builds, build-queue, build-detect<br/>build-facts, build-settings, build-display"]
+    Decode["contract/decode, contract/version<br/>the pure half of the host contract"]
+    Shared["http, cache, format, hostname<br/>site-fields, env-groups, cn, ..."]
   end
 
-  subgraph named["still src/lib/ — server-only, and the name says so"]
-    Repo["repo/** — the only path to the database"]
-    Dash["dashboard/** — the category pages' data"]
+  subgraph named["still src/lib/: server-only, and the name says so"]
+    Repo["repo/**: the only path to the database"]
+    Dash["dashboard/**: the category pages' data"]
   end
 
-  subgraph host["src/host/ — needs the machine<br/>node builtins · the database · process.env"]
+  subgraph host["src/host/: needs the machine, node builtins, the database, process.env"]
     Bridges["bridge.ts + one module per verb"]
-    Contract["contract/** — one reader per host file"]
-    Dbm["db · schema"]
-    Clients["env · keys · prom · loki · metrics · registry<br/>nix-manifest · env-snapshot · workspaces<br/>github-token · github-repos · app-icon"]
+    Contract["contract/**: one reader per host file"]
+    Dbm["db, schema"]
+    Clients["env, keys, prom, loki, metrics, registry<br/>nix-manifest, env-snapshot, workspaces<br/>github-token, github-repos, app-icon"]
   end
 
-  DB[("Postgres · apps · app_env_vars · deployments<br/>builds · github_deliveries · settings")]
+  DB[("Postgres: apps, app_env_vars, deployments<br/>builds, github_deliveries, settings")]
   Snap[/"read-only mounts"/]
   Apply[/"apply/ — write"/]
 

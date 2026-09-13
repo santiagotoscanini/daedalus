@@ -21,39 +21,39 @@ how the unprivileged engine gets a privileged build to happen at all.
 ```mermaid
 sequenceDiagram
   autonumber
-  participant GH as GitHub · the App
+  participant GH as GitHub (the App)
   participant WH as POST /api/github/webhook
-  participant DB as Postgres · builds + github_deliveries
+  participant DB as Postgres (builds + deliveries)
   participant SC as the scheduler tick
-  participant BR as apply/ · build-request ⇄ build-status
-  participant AG as daedalus-build.service · root
-  participant BK as buildkitd uid 350 · daedalus-build uid 351
+  participant BR as apply/ (request and status)
+  participant AG as daedalus-build.service (root)
+  participant BK as buildkitd uid 350 / daedalus-build uid 351
   participant ZOT as the box's registry
   participant DP as app-NAME-deploy.service
 
   GH->>WH: push + signature header
   WH->>WH: verify HMAC over the raw body
   Note over WH: nothing is believed before it verifies
-  WH->>DB: insert the delivery id AND enqueue, one transaction
+  WH->>DB: insert the delivery id AND enqueue in one transaction
   Note over DB: an older queued row on this<br/>(app, lane) becomes superseded
-  SC->>DB: claim the queued row — the only dispatch edge
+  SC->>DB: claim the queued row (the only dispatch edge)
   SC->>BR: write build-request.json
   BR-->>AG: the path unit fires on rename-into-place
-  AG->>AG: 0. validate · re-check the egress fence · probe the builder
-  AG->>GH: 1. mint a token for this ONE repo, read-only
+  AG->>AG: 0. validate, re-check the egress fence, probe the builder
+  AG->>GH: 1. mint a token for this ONE repo (read-only)
   AG->>AG: 2. clone at depth 1, check out, revoke the token
   Note over AG: tip moved? publish superseded and requeue the tip
-  AG->>BK: 3. detect what the app is — detecting
-  AG->>BK: 4. the repo's own checks, exporting nothing — checking
-  AG->>BK: 5. build the image — building
-  BK->>ZOT: push sha-SHA and latest — publishing
+  AG->>BK: 3. detect what the app is (detecting)
+  AG->>BK: 4. the repo's own checks, exporting nothing (checking)
+  AG->>BK: 5. build the image (building)
+  BK->>ZOT: push sha-SHA and latest (publishing)
   loop every 20 s while running
     AG-->>BR: rewrite build-status.json
-    SC->>BR: read it; older than 90 s reads as interrupted
-    SC->>DB: record phase, state, digest, facts
+    SC->>BR: read it, older than 90 s reads as interrupted
+    SC->>DB: record phase + state + digest + facts
   end
   AG->>DP: 6. start the deploy unit directly
-  DP->>ZOT: pull; restart only if the digest moved
+  DP->>ZOT: pull and restart only if the digest moved
   SC->>GH: check run + Deployment
 ```
 
@@ -82,7 +82,7 @@ build a commit that is no longer the tip, queueing the real tip instead.
 stateDiagram-v2
   direction LR
 
-  [*] --> queued : webhook push · hourly sweep · operator asks
+  [*] --> queued : webhook push / hourly sweep / operator asks
 
   state "the host's phases, from build-status.json" as active {
     direction LR
@@ -92,16 +92,16 @@ stateDiagram-v2
     building --> publishing
   }
 
-  queued --> cloning : claimed — the only dispatch edge
+  queued --> cloning : claimed (the only dispatch edge)
   queued --> superseded : a newer sha queues on the same app and lane
-  queued --> cancelled : building on the box is off · the App is not installed
+  queued --> cancelled : building on the box is off, or the App is not installed
   queued --> failed : the request was refused
 
   publishing --> succeeded : image pushed
 
-  active --> failed : the host reports failure · no heartbeat for 90 s · past the hard cap
+  active --> failed : host reports failure / no heartbeat for 90 s / past the hard cap
   active --> cancelled : the operator cancels
-  active --> superseded : the sha is no longer the tip; the tip is requeued
+  active --> superseded : the sha is no longer the tip, the tip is requeued
 
   succeeded --> [*]
   failed --> [*]
