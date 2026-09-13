@@ -7,6 +7,7 @@ import { manifestEntries } from '../../host/nix-manifest'
 import { readWorkspaceRequestStatus, readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { effectiveHostname } from '../hostname'
 import { driftOf, listApps } from '../repo/apps'
+import { stageExposed } from '../stage'
 
 // Everything the Apps list page shows: the registry rows, the off-box
 // projects beside them, and the three live facts a row draws — whether the
@@ -35,8 +36,11 @@ export async function loadAppList() {
       Promise.all(
         records.map(
           async (r) =>
-            (await appIcon(r.name, effectiveHostname(r.name, r.hostname), r.stage !== 'off')) !==
-            null,
+            (await appIcon(
+              r.name,
+              effectiveHostname(r.name, r.hostname),
+              stageExposed(r.stage),
+            )) !== null,
         ),
       ),
       Promise.all(EXTERNAL_APPS.map(async (e) => (await siteIcon(e.id, e.host)) !== null)),

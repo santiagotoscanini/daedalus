@@ -319,7 +319,7 @@ erDiagram
   apps {
     uuid id PK
     text name UK "drives hostname, container, pg role, repo"
-    text stage "lab or live"
+    text stage "declared, off, lab or live"
     text source_mode "registry or local"
     boolean managed_in_nix "true only for daedalus itself"
     text auth_mode "none, proxy or native"
@@ -426,7 +426,13 @@ Most of this vocabulary is invented here, so it is worth stating plainly.
 - **The site directory** — the git directory daedalus writes: `apps.json`,
   `site.json`, and the sops vault. The one directory the engine owns.
 - **Drift** — the database and the committed file disagree; an Apply is owed.
-- **Stage** — an app's exposure: `off`, `lab` (LAN only), `live` (published).
+- **Stage** — how much of an app exists, as four rungs: `declared` (the row,
+  its database, data dir and secrets — no container, no ingress), `off` (the
+  container runs, nothing can reach it), `lab` (LAN only), `live` (published
+  through the tunnel). A new app is created `declared`, because the box only
+  builds apps already in the committed registry and an entry whose image does
+  not exist yet would fail the switch and revert its own Apply. The order is
+  create → Apply → build → promote → Apply.
 - **Publish mode** — what a build does with its image: `live` tags and deploys,
   `candidate` builds and publishes under a candidate tag and deploys nothing.
 - **Lane** — which stream of commits a build belongs to. One queued build per

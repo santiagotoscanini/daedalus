@@ -1,12 +1,20 @@
-// Step 3 of "add an app": is there an image in the registry this box can pull?
+// Step 3 of "add an app": what the box will find when it goes to build and run
+// this repo — and, deliberately, nothing that stops it being created.
 //
 // It used to be a graph. Seven repo-side checks came back from GitHub — the
 // workflows, the publishing one, the repo secret, the runner credential — and
-// this module untangled which of them were causes and which were consequences,
-// because a repo with no workflows failed five rows at once and reported one
-// cause five times. Builds run on the box now (the GitHub App, the build
-// queue, Railpack), so none of those repo-side facts is daedalus's to read any
-// more, and the step is back to the one question it always existed to answer.
+// this module untangled which of them were causes and which were consequences.
+// Builds run on the box now (the GitHub App, the build queue, Railpack), so
+// none of those facts is daedalus's to read any more.
+//
+// What changed after that: the image check stopped being a gate. It was one
+// because an entry whose image does not exist declares a container that cannot
+// pull, which fails the switch and reverts the Apply — but the fix for that is
+// the `declared` stage (stacks/apps/apps.nix), not a disabled button. A new
+// app is created declared, so a missing image is not a failure here; it is the
+// expected state, and the whole reason the entry has to exist first. Nothing
+// in this file blocks any more, and nothing should: being in site/apps.json is
+// what earns an app its first build.
 //
 // Pure on purpose — no React, no server imports. The component that renders
 // this should have nothing left to decide.
@@ -16,7 +24,7 @@
  *
  * `unknown` is a first-class state and NOT a synonym for `bad`: an image
  * override pointing at a registry this box cannot see is unverified, not
- * broken, and reporting that as a failure would block a legitimate fork.
+ * broken, and reporting that as a failure would misread a legitimate fork.
  */
 export type CheckState = 'ok' | 'warn' | 'bad' | 'unknown'
 
@@ -31,49 +39,117 @@ export type Check = {
 
 export type ImageState = 'present' | 'missing' | 'unverifiable'
 
+/**
+ * What the repository says about how it wants to be built, as the GitHub App
+ * can see it. `unknown` is GitHub declining to answer, not an empty repo.
+ */
+export type RepoBuild = 'railpack' | 'dockerfile' | 'none' | 'unknown'
+
 export type Readiness = {
-  /** Nothing left to do: the image exists. */
+  /** Every row is settled — nothing here is worth stopping over. */
   ready: boolean
   verdict: { state: CheckState; headline: string; subject: string }
-  /** Actionable root causes. Only `bad` lands here. */
+  /** Rows worth reading before creating. Nothing here prevents creating. */
   act: Check[]
-  /** Passing, warning, or unknowable — nothing to do about any of them. */
+  /** Passing or unknowable — nothing to do about any of them. */
   settled: Check[]
 }
 
 function imageCheck(state: ImageState, effectiveImage: string): Check {
+  if (state === 'present') {
+    return {
+      id: 'image',
+      label: 'Image',
+      state: 'ok',
+      detail: `${effectiveImage} is already in the registry`,
+      fix: 'Already built, so this app can be promoted to internal or external as soon as the entry is applied.',
+    }
+  }
+  if (state === 'unverifiable') {
+    return {
+      id: 'image',
+      label: 'Image',
+      state: 'unknown',
+      detail: `${effectiveImage} is not on this box's registry — cannot be checked from here`,
+    }
+  }
   return {
     id: 'image',
-    label: 'Image published',
-    state: state === 'present' ? 'ok' : state === 'missing' ? 'bad' : 'unknown',
-    detail:
-      state === 'present'
-        ? `${effectiveImage} is in the registry`
-        : state === 'missing'
-          ? `${effectiveImage} does not exist yet`
-          : `${effectiveImage} is not on this box's registry — cannot be checked from here`,
+    label: 'Image',
+    state: 'ok',
+    detail: `${effectiveImage} does not exist yet — which is expected`,
     fix:
-      state === 'missing'
-        ? 'Push to the default branch, or build the repo from its app page once the entry exists. Until the image exists, the container would restart-loop from the moment this entry is applied — which is why this is the one check that blocks.'
-        : undefined,
+      'The entry comes first: the box only builds apps already in site/apps.json. Create it, ' +
+      'Apply, then build the repo from its app page — and promote it off `declared` once that ' +
+      'build has published an image.',
   }
 }
 
-export function readiness(input: { imageState: ImageState; effectiveImage: string }): Readiness {
-  const check = imageCheck(input.imageState, input.effectiveImage)
-  const bad = check.state === 'bad'
+const BUILD_ID = 'build-config'
+const BUILD_LABEL = 'Build configuration'
+
+function buildCheck(repoBuild: RepoBuild): Check {
+  switch (repoBuild) {
+    case 'railpack':
+      return {
+        id: BUILD_ID,
+        label: BUILD_LABEL,
+        state: 'ok',
+        detail: 'The repo has a railpack.json, so Railpack will build it',
+      }
+    case 'dockerfile':
+      return {
+        id: BUILD_ID,
+        label: BUILD_LABEL,
+        state: 'ok',
+        detail: 'No railpack.json, but the repo has a Dockerfile',
+        fix: 'The build will use the Dockerfile strategy — the repo describes its own image.',
+      }
+    case 'none':
+      return {
+        id: BUILD_ID,
+        label: BUILD_LABEL,
+        state: 'warn',
+        detail: 'The repo has neither a railpack.json nor a Dockerfile',
+        fix:
+          'Railpack can work zero-config, but none of this box’s seven apps did: each one needed ' +
+          'a start command and exact toolchain pins in a railpack.json before its image ran. ' +
+          'Creating the entry is fine — the first build is where you would find out.',
+      }
+    case 'unknown':
+      return {
+        id: BUILD_ID,
+        label: BUILD_LABEL,
+        state: 'unknown',
+        detail: 'GitHub did not say whether the repo has a railpack.json or a Dockerfile',
+      }
+  }
+}
+
+/** warn outranks unknown outranks ok; `bad` still wins, though nothing emits one. */
+const RANK: Record<CheckState, number> = { ok: 0, unknown: 1, warn: 2, bad: 3 }
+
+export function readiness(input: {
+  imageState: ImageState
+  effectiveImage: string
+  repoBuild: RepoBuild
+}): Readiness {
+  const image = imageCheck(input.imageState, input.effectiveImage)
+  const checks = [image, buildCheck(input.repoBuild)]
+  // `unknown` is not something to act on — it is the honest answer to a
+  // question this box cannot answer — so only warn and bad reach the act list.
+  const act = checks.filter((c) => c.state === 'warn' || c.state === 'bad')
+  const worst = checks.reduce((a, b) => (RANK[b.state] > RANK[a.state] ? b : a), image)
+
   return {
-    ready: input.imageState === 'present',
+    ready: act.length === 0,
     verdict: {
-      // Unverifiable is not a failure and does not block: an override pointing
-      // at GHCR is a legitimate app, and the honest answer is that this box
-      // cannot see that registry.
-      state: check.state,
+      state: worst.state,
       headline: headline(input.imageState),
       subject: input.effectiveImage,
     },
-    act: bad ? [check] : [],
-    settled: bad ? [] : [check],
+    act,
+    settled: checks.filter((c) => !act.includes(c)),
   }
 }
 
@@ -81,6 +157,8 @@ function headline(imageState: ImageState): string {
   if (imageState === 'unverifiable') {
     return 'That image lives on a registry this box cannot see, so nothing here can confirm it'
   }
-  if (imageState === 'present') return 'The image is published and this box can pull it'
-  return 'The image hasn’t been built yet'
+  if (imageState === 'present') {
+    return 'The image is published, so this app can be promoted as soon as it is applied'
+  }
+  return 'Nothing is blocking: a new app is created declared, and its first build comes after the Apply'
 }

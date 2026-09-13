@@ -4,12 +4,14 @@ import { findExternalApp } from '../core/settings/external-apps'
 import { appIcon, type ResolvedIcon, siteIcon } from '../host/app-icon'
 import { effectiveHostname } from '../lib/hostname'
 import { getApp } from '../lib/repo/apps'
+import { stageExposed } from '../lib/stage'
 
 // Serves an app's own icon, fetched from the app. See host/app-icon.ts for why
 // it is read from the app rather than stored beside it.
 //
 // Proxied through here rather than pointed at directly with an <img src> to
-// the app's hostname, for three reasons: an app with stage = "off" has no
+// the app's hostname, for three reasons: an app with no ingress ("off", or
+// "declared" before its first promotion) has no
 // hostname to point at, a forward-auth'd app would answer the browser with a
 // redirect to Pocket ID, and daedalus can reach a container over app-db-net
 // that the page's origin cannot. The bytes are already in memory from the
@@ -34,7 +36,7 @@ export const Route = createFileRoute('/api/app-icon/$name')({
           ? await appIcon(
               record.name,
               effectiveHostname(record.name, record.hostname),
-              record.stage !== 'off',
+              stageExposed(record.stage),
             )
           : external && (await siteIcon(external.id, external.host))
         // The page has already asked whether an icon exists and drawn a

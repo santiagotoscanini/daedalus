@@ -3,7 +3,7 @@ import { type ReactNode, useEffect, useId, useState } from 'react'
 import { ReadinessPanel } from '../components/apps/readiness'
 import { RepoPicker } from '../components/apps/repo-picker'
 import { BOARD_FOOT, SECTION_HEAD, SECTION_HEAD_SMALL } from '../components/apps/shared'
-import { Segmented, Toggle } from '../components/controls'
+import { Toggle } from '../components/controls'
 import { GuardedAwait } from '../components/error'
 import { Crumbs, PageHead } from '../components/page'
 import { NewAppSkeleton } from '../components/skeleton'
@@ -24,18 +24,25 @@ import { createAppFn, fetchAppPreflight, fetchNewAppOptions } from '../server/re
 //
 // The platform half of this has always been one entry: stacks/apps turns a
 // `fleet.apps.<name>` into a container, a route, DNS, a probe, a database and
-// a deploy timer. What was never written down anywhere a person could see it
-// is the one repo-side fact that fails late and confusingly when skipped: an
+// a deploy timer. The part that used to fail late and confusingly is that an
 // app whose image was never published restart-loops from the moment its entry
 // is applied, which fails the switch, which makes the Apply revert itself.
 //
-// So this page is a checklist first and a form second. It creates a database
-// row — the same thing the app's own page edits, shipped by the same Apply —
-// and everything else it does is tell you what is not ready yet.
+// This page answered that by refusing to create the entry until an image
+// existed — which was a deadlock, because the box only builds apps already in
+// site/apps.json. The fix is the `declared` stage: an entry that materializes
+// the app's database, data dir and secrets and runs NOTHING. So this form
+// writes the row, always declared, and the order is
 //
-// What it deliberately cannot do: create the repo or push to it. Daedalus
-// reads GitHub; it does not write it. Building is the build queue's job, and
-// it starts from a push.
+//   create (declared) → Apply → build → promote to internal/external → Apply
+//
+// with the promotion offered on the app's own page once the build lands.
+// Step 3 below reports what the box will find when it builds the repo. It
+// gates nothing: no fact about a repository is a reason to refuse a row that
+// starts nothing.
+//
+// What this page deliberately cannot do: create the repo or push to it.
+// Daedalus reads GitHub; it does not write it.
 
 export const Route = createFileRoute('/apps/new')({
   loader: () => ({ options: fetchNewAppOptions() }),
@@ -95,7 +102,6 @@ function Wizard({ options }: { options: Options }) {
   const [search, setSearch] = useState('')
 
   const [description, setDescription] = useState('')
-  const [stage, setStage] = useState<'off' | 'lab' | 'live'>('lab')
   const [postgres, setPostgres] = useState(false)
   const [storage, setStorage] = useState(false)
   const [litellm, setLitellm] = useState(false)
@@ -151,8 +157,6 @@ function Wizard({ options }: { options: Options }) {
     }
   }, [repo, name, image, recheck])
 
-  const imageMissing = preflight?.imageState === 'missing'
-
   // Re-runs the same effect the debounce owns, rather than a second path
   // alongside it — so a refresh cannot race the run a keystroke already
   // scheduled, and every one of them still lands through the single `live`
@@ -161,14 +165,20 @@ function Wizard({ options }: { options: Options }) {
     setRecheck((n) => n + 1)
   }
 
-  // The one answer, as a plan: whether there is anything to act on.
+  // The one answer, as a plan: what is worth knowing before creating this.
   const plan =
     preflight === null
       ? null
-      : readiness({ imageState: preflight.imageState, effectiveImage: preflight.effectiveImage })
+      : readiness({
+          imageState: preflight.imageState,
+          effectiveImage: preflight.effectiveImage,
+          repoBuild: preflight.repoBuild,
+        })
 
-  const canCreate =
-    repo !== null && nameErr === null && hostErr === null && !imageMissing && !busy && !checking
+  // No readiness term: the entry is a database row, and the app it declares
+  // starts nothing until it is promoted. What is still checked is what would
+  // corrupt the registry — a name or a hostname that is not free or not legal.
+  const canCreate = repo !== null && nameErr === null && hostErr === null && !busy && !checking
 
   const create = () => {
     if (!repo) return
@@ -179,7 +189,6 @@ function Wizard({ options }: { options: Options }) {
         app: {
           name,
           description: description.trim(),
-          stage,
           postgres,
           storage,
           litellm,
@@ -190,9 +199,9 @@ function Wizard({ options }: { options: Options }) {
       },
     })
       .then(() => {
-        // Straight to the app's own page: the entry exists in the database but
-        // nothing is running yet, and that page is where the Apply that makes
-        // it real lives.
+        // Straight to the app's own page: the entry exists in the database as
+        // `declared`, and that page is where the Apply that makes it real
+        // lives — and, after the first build, the promotion off `declared`.
         void router.navigate({ to: '/apps/$name', params: { name }, search: { tab: 'settings' } })
       })
       .catch((e: unknown) => {
@@ -336,23 +345,20 @@ function Wizard({ options }: { options: Options }) {
                 </p>
               </Board>
 
-              <Board title="Exposure" icon="↗" span={4}>
-                <Segmented
-                  value={stage}
-                  onChange={setStage}
-                  label="Exposure"
-                  options={[
-                    { value: 'off', label: 'Off', icon: '⏻' },
-                    { value: 'lab', label: 'Internal', icon: '⛨' },
-                    { value: 'live', label: 'External', icon: '↗' },
-                  ]}
-                />
+              <Board title="Address" icon="↗" span={4}>
+                {/* No exposure picker here, on purpose. A new app is created
+                    `declared`: the row, its database, its data dir and its
+                    AUTH_SECRET, and nothing running. It is the only stage that
+                    can be applied before an image exists — anything higher
+                    declares a container that cannot pull, which fails the
+                    switch and reverts the Apply. The choice is not lost, it is
+                    moved to where it can be made safely: one click on the app's
+                    page once its first build has published an image. */}
                 <p className={BOARD_FOOT}>
-                  {stage === 'off'
-                    ? 'No traefik router, no DNS, no probe. The container still runs and still deploys.'
-                    : stage === 'lab'
-                      ? 'LAN only: HTTPS through traefik with the wildcard certificate, resolved by pi-hole.'
-                      : 'Also published through the Cloudflare tunnel, with a public CNAME. Anyone on the internet can reach it.'}
+                  Created <b>declared</b>: the registry row, the database, the data directory and
+                  the generated secrets — and nothing running. Promote it to internal or external on
+                  its own page once its first build has published an image. The hostname below is
+                  the one it will answer on then.
                 </p>
                 <WizardField
                   label="Hostname"
@@ -404,9 +410,9 @@ function Wizard({ options }: { options: Options }) {
                 {busy ? 'Creating…' : 'Create entry'}
               </Button>
               <p className="m-0 max-w-[46rem] text-[0.8rem] text-(--dim)">
-                {imageMissing
-                  ? 'Blocked until the image exists. Push to the repo’s default branch and let the box build it. Declaring it first would make the container fail to start, which fails the switch, which makes the Apply revert itself.'
-                  : 'Writes the registry row. Nothing is built, routed or started until you Apply, which commits site/apps.json and rebuilds.'}
+                Writes the registry row, declared. The next Apply commits site/apps.json and
+                rebuilds — which creates its database, its data directory and its secrets, and
+                starts nothing. Being in that file is what lets the box build the repo at all.
               </p>
             </div>
           </section>

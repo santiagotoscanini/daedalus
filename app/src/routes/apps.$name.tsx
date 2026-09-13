@@ -13,8 +13,9 @@ import { GuardedAwait } from '../components/error'
 import { GrafanaLogs } from '../components/logs'
 import { Crumbs, PageHead } from '../components/page'
 import { BlockSkeleton, BoardsSkeleton, StripSkeleton } from '../components/skeleton'
-import { Alert, AlertDescription } from '../components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { Badge } from '../components/ui/badge'
+import { Button } from '../components/ui/button'
 // ./access-window, NOT ./access — same split as env-groups below. The window
 // table is a value the picker and validateSearch both need in the browser;
 // ./access talks to Loki and must never follow it there.
@@ -324,7 +325,9 @@ function AppDetail() {
           </h1>
           <p className={LEDE}>{app.description || 'No description.'}</p>
           <p className={HERO_LINKS}>
-            {app.stage === 'off' ? (
+            {app.stage === 'declared' ? (
+              <span className="text-(--text-muted)">◌ not running</span>
+            ) : app.stage === 'off' ? (
               <span className="text-(--text-muted)">⏻ not exposed</span>
             ) : (
               <a href={`https://${app.effectiveHostname}`} target="_blank" rel="noreferrer">
@@ -352,10 +355,24 @@ function AppDetail() {
             onChange={(v) => {
               patch({ stage: v })
             }}
-            // Three rungs, each adding to the last. "Off" removes the ingress
-            // entirely — no traefik router, no DNS, no probe — but does NOT
-            // stop the container; it keeps running and keeps deploying.
+            // Four rungs, each adding to the last. "Declared" runs nothing at
+            // all: the row, its database, its data directory and its secrets,
+            // and no container — where every app sits between being created
+            // and having an image. "Off" adds the container back and withholds
+            // only the ingress: no traefik router, no DNS, no probe, but it
+            // runs and it deploys.
             options={[
+              {
+                value: 'declared',
+                label: 'Declared',
+                icon: '◌',
+                // Same rule as "Off", and for the same reason below it.
+                disabled: app.authMode === 'proxy',
+                reason:
+                  app.authMode === 'proxy'
+                    ? 'Auth is enforced at the ingress (proxy mode), so this app cannot be unexposed while it relies on that gate.'
+                    : 'Nothing runs: no container, no deploy unit, no ingress. The database, the data directory and the secrets stay.',
+              },
               {
                 value: 'off',
                 label: 'Off',
@@ -379,6 +396,11 @@ function AppDetail() {
               No route, DNS or probe. The container still runs.
             </p>
           )}
+          {app.stage === 'declared' && (
+            <p className="mt-[0.45rem] mr-0 mb-0 ml-auto max-w-[15rem] text-right text-[0.72rem] text-(--dim)">
+              Nothing runs. Its database, data directory and secrets exist.
+            </p>
+          )}
         </div>
       </section>
 
@@ -387,6 +409,44 @@ function AppDetail() {
           <AlertDescription>
             Declared by hand in <code>stacks/daedalus/daedalus.nix</code>, so it is read-only here.
             An Apply that broke this entry would take down the interface you would use to undo it.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* The last step of adding an app, on the page where it happens.
+          `declared` is a resting state the platform is perfectly happy to
+          leave an app in forever, and forever is what it would be if the only
+          way to leave it were to remember the exposure control in the corner.
+          One affordance, the one that is right in almost every case: internal.
+          External is the same control above, one click further. */}
+      {!readOnly && app.stage === 'declared' && (
+        <Alert className="mb-[1.35rem]">
+          <AlertTitle>Declared — nothing is running yet</AlertTitle>
+          <AlertDescription>
+            <p className="m-0">
+              {drift.length > 0
+                ? 'Apply first: that writes site/apps.json and rebuilds, which creates this app’s database, data directory and secrets — and is what lets the box build its repo at all. Then build it, and promote it here.'
+                : 'Applied. Build it from its deployments tab; once that build has published an image, promote it and Apply again.'}
+            </p>
+            <div className="mt-[0.7rem] flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  patch({ stage: 'lab' })
+                }}
+              >
+                Promote to internal
+              </Button>
+              <Link
+                to="/apps/$name"
+                params={{ name: app.name }}
+                search={{ tab: 'deployments' as const }}
+                className="text-[0.82rem]"
+              >
+                Builds and deployments →
+              </Link>
+            </div>
           </AlertDescription>
         </Alert>
       )}

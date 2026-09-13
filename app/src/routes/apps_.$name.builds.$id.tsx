@@ -29,6 +29,7 @@ import { bytes, DASH, ms, pct } from '../lib/format'
 import { isAppName } from '../lib/hostname'
 import { errorText } from '../lib/redact'
 import { OWNER, REGISTRY_HOST } from '../lib/site'
+import { stageExposed } from '../lib/stage'
 import type { Tone } from '../lib/tone'
 import {
   type BuildPageApp,
@@ -345,7 +346,7 @@ function BuildDetail({
             />
           )}
           <Facts list rows={[{ k: 'deploy', v: <Outcome outcome={build.deploy} /> }]} />
-          {app !== null && app.stage !== 'off' && build.deploy.kind === 'deployed' && (
+          {app !== null && stageExposed(app.stage) && build.deploy.kind === 'deployed' && (
             <p className="m-0 text-[0.82rem]">
               <a href={`https://${app.effectiveHostname}`} target="_blank" rel="noreferrer">
                 ↗ {app.effectiveHostname}

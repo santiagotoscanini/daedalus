@@ -33,6 +33,7 @@ import { effectiveHostname } from '../../lib/hostname'
 import { isRecord } from '../../lib/is-record'
 import { errorText } from '../../lib/redact'
 import type { AppRecord } from '../../lib/repo/apps'
+import { stageExposed } from '../../lib/stage'
 import type { Ctx } from '../ctx'
 import {
   type CheckRunConclusion,
@@ -817,8 +818,12 @@ async function followDeployment(
     if (match !== null) {
       status = {
         ...deployStatus(match),
-        environmentUrl:
-          app.stage === 'off' ? null : `https://${effectiveHostname(app.name, app.hostname)}`,
+        // No ingress, no environment to link: `off` and `declared` both leave
+        // the deployment URL empty rather than pointing GitHub at a hostname
+        // nothing answers on.
+        environmentUrl: stageExposed(app.stage)
+          ? `https://${effectiveHostname(app.name, app.hostname)}`
+          : null,
       }
     } else {
       const newer = await newerDeployed(row, deploys)

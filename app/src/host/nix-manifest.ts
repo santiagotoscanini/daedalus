@@ -13,6 +13,7 @@ import {
   str,
 } from '../lib/contract/decode'
 import { REGISTRY_SCHEMA_VERSION } from '../lib/contract/version'
+import { APP_STAGES, type AppStage } from '../lib/stage'
 
 // What Nix last built, as handed to this container by stacks/daedalus/daedalus.nix.
 //
@@ -25,7 +26,10 @@ import { REGISTRY_SCHEMA_VERSION } from '../lib/contract/version'
 // It is a /nix/store path, so it can only change via a rebuild, and a rebuild
 // restarts this container with the new one. There is no cache to invalidate.
 
-export type AppStage = 'off' | 'lab' | 'live'
+// The ladder itself lives in lib/stage.ts, which the browser can also load.
+// Re-exported here because this module is where the registry's shape is
+// written down, and a decoder's neighbours are where callers look for it.
+export type { AppStage }
 
 export type ManifestEnvVar = { key: string; value: string; note?: string | null }
 
@@ -113,7 +117,9 @@ const ns = optional(nullable(str), null)
 const nn = optional(nullable(num), null)
 
 const manifestApp: Decoder<ManifestApp> = obj({
-  stage: literal('off', 'lab', 'live'),
+  // From the tuple, so a rung added to the ladder is decodable here without a
+  // second edit — and a file Nix accepts can never fail to parse here.
+  stage: literal(...APP_STAGES),
   sourceMode: optional(literal('registry', 'local'), 'registry'),
   postgres: bool,
   storage: bool,

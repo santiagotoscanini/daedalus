@@ -9,6 +9,7 @@ import {
 import { appEnvVars, apps } from '../../host/schema'
 import { REGISTRY_SCHEMA_VERSION } from '../contract/version'
 import { appNameError, BASE_DOMAIN, effectiveHostname, hostnameError } from '../hostname'
+import { APP_STAGES, isAppStage, stageExposed } from '../stage'
 
 // Reads and writes over the app registry, plus the drift comparison against
 // what Nix actually built.
@@ -92,11 +93,13 @@ export async function importFromNix(): Promise<{ imported: string[] }> {
  * gate in a second, deliberate step, and egress needs a gluetun instance to
  * exist before anything can join its netns. Operator secrets are not a field at
  * all any more — a tracked `stacks/apps/<name>-env.sops` is the whole switch.
+ *
+ * `stage` is not here either, and that one is not a default but a fact: a new
+ * app is born `declared` (see createApp). There is nothing to choose yet.
  */
 export type NewApp = {
   name: string
   description: string
-  stage: 'off' | 'lab' | 'live'
   postgres: boolean
   storage: boolean
   litellm: boolean
@@ -124,14 +127,20 @@ export function validateNewApp(input: Record<string, unknown>): NewApp {
     if (v !== null && typeof v !== 'string') throw new Error(`${k} must be a string or null`)
     return v
   }
-  const stage = input.stage
-  if (stage !== 'off' && stage !== 'lab' && stage !== 'live') {
-    throw new Error('stage must be off | lab | live')
+  // Refused rather than ignored. A caller that asks for `live` here has the
+  // old model in mind — create it exposed, then apply — and that model is what
+  // deadlocked: the image does not exist yet, so the Apply would fail the
+  // switch and revert the very row it was shipping. Saying so beats silently
+  // creating something other than what was asked for.
+  if (input.stage !== undefined && input.stage !== 'declared') {
+    throw new Error(
+      'stage cannot be chosen at create: a new app is declared — the row, its database and its ' +
+        'secrets, and nothing running. Promote it once its first build has published an image.',
+    )
   }
   return {
     name: str('name'),
     description: str('description'),
-    stage,
     postgres: bool('postgres'),
     storage: bool('storage'),
     litellm: bool('litellm'),
@@ -144,13 +153,19 @@ export function validateNewApp(input: Record<string, unknown>): NewApp {
 /**
  * Create a registry entry. The row only — no repo, no image, no rebuild.
  *
- * This is a database write that the NEXT Apply ships, which is the whole
- * reason the create form checks the repo first: an entry whose image does not
- * exist yet builds fine and then restart-loops on `podman run`, and it would
- * ride out on somebody else's unrelated Apply. The checks live in the UI (and
- * in server/registry.ts, which cannot be bypassed by a hand-made request);
- * what is enforced HERE is only what would corrupt the registry itself —
- * a duplicate name, a name Nix already owns, a colliding hostname.
+ * Always at `declared`, the bottom rung: the row, its postgres role and
+ * database, its data dir and its AUTH_SECRET, and nothing running. That is not
+ * a conservative default, it is the only value that can be applied — an entry
+ * whose image does not exist yet declares a container that cannot pull, which
+ * fails the switch, which makes the Apply revert itself. And being in
+ * site/apps.json is exactly what earns the app its first build, so `declared`
+ * is the rung that ends the deadlock rather than one that waits it out.
+ *
+ * Exposure is chosen on the app's own page after that first build, where it is
+ * one click and cannot fail.
+ *
+ * What is enforced HERE is only what would corrupt the registry itself — a
+ * duplicate name, a name Nix already owns, a colliding hostname.
  */
 export async function createApp(input: NewApp): Promise<{ name: string }> {
   const name = input.name.trim().toLowerCase()
@@ -177,7 +192,7 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
 
   await db.insert(apps).values({
     name,
-    stage: input.stage,
+    stage: 'declared',
     managedInNix: false,
     sourceMode: 'registry',
     image: input.image?.trim() || null,
@@ -269,7 +284,7 @@ export function validateAppPatch(patch: Record<string, unknown>): AppPatch {
   for (const [k, v] of Object.entries(patch)) {
     switch (k as EditableField) {
       case 'stage':
-        if (v !== 'off' && v !== 'lab' && v !== 'live') bad(k, 'off | lab | live')
+        if (!isAppStage(v)) bad(k, APP_STAGES.join(' | '))
         clean.stage = v as AppPatch['stage']
         break
       case 'authMode':
@@ -362,8 +377,12 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
       'forward-auth (proxy) needs a health path — an unauthenticated path the app itself serves, so the probe and the deploy check test the app rather than the login redirect',
     )
   }
-  if (mode === 'proxy' && stage === 'off') {
-    throw new Error('forward-auth (proxy) needs an ingress to gate; this app is not exposed')
+  if (mode === 'proxy' && !stageExposed(stage)) {
+    throw new Error(
+      stage === 'declared'
+        ? 'forward-auth (proxy) needs an ingress to gate, and a declared app has none — promote it first'
+        : 'forward-auth (proxy) needs an ingress to gate; this app is not exposed',
+    )
   }
 
   await db

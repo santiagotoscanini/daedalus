@@ -240,7 +240,10 @@ describe('driftOf', () => {
       validateAppPatch({ stage: 'live', postgres: true, limitCpus: 1.5, image: null }),
     ).toEqual({ stage: 'live', postgres: true, limitCpus: 1.5, image: null })
 
-    expect(() => validateAppPatch({ stage: 'production' })).toThrow('off | lab | live')
+    // The promote patch, which is how an app leaves `declared`, and the
+    // demote back to it — both plain stage edits.
+    expect(validateAppPatch({ stage: 'declared' })).toEqual({ stage: 'declared' })
+    expect(() => validateAppPatch({ stage: 'production' })).toThrow('declared | off | lab | live')
     expect(() => validateAppPatch({ authMode: 'oauth' })).toThrow('none | proxy | native')
     expect(() => validateAppPatch({ postgres: 'yes' })).toThrow('boolean')
     expect(() => validateAppPatch({ deployEnable: 'frozen' })).toThrow('boolean')
@@ -256,7 +259,6 @@ describe('driftOf', () => {
     const good = {
       name: 'demo',
       description: 'x',
-      stage: 'lab',
       postgres: true,
       storage: false,
       litellm: false,
@@ -265,7 +267,12 @@ describe('driftOf', () => {
       hostname: null,
     }
     expect(validateNewApp(good)).toEqual(good)
-    expect(() => validateNewApp({ ...good, stage: 'prod' })).toThrow('off | lab | live')
+    // A new app is born `declared` — there is nothing to choose, and a caller
+    // asking for anything else is told so rather than quietly given a row that
+    // would fail its first Apply.
+    expect(validateNewApp({ ...good, stage: 'declared' })).toEqual(good)
+    expect(() => validateNewApp({ ...good, stage: 'live' })).toThrow('cannot be chosen at create')
+    expect(() => validateNewApp({ ...good, stage: 'lab' })).toThrow('Promote it')
     expect(() => validateNewApp({ ...good, name: 7 })).toThrow('name must be a string')
     expect(() => validateNewApp({ ...good, postgres: 'yes' })).toThrow('boolean')
     expect(() => validateNewApp({ ...good, hostname: 7 })).toThrow('string or null')

@@ -223,6 +223,27 @@ the remote is still the copy that survives a disk. Commit often.
   thrown requests with a `[400, 800, 1500, 2500]` ms ladder (the
   rootless-port first-SYN stall), never retry a busy upstream (Loki
   gets ONE patient attempt).
+- **Stages are a four-rung ladder, spelled out in exactly one place —
+  the `APP_STAGES` tuple in `lib/stage.ts`**: `declared` → `off` →
+  `lab` → `live`, each adding to the last. `declared` runs nothing at
+  all (no container, no deploy unit, no ingress) while still
+  materializing the app's postgres role, data dir and `AUTH_SECRET`,
+  so **a new app is created `declared`, and creating one is not gated
+  on anything**: `createApp` forces it and `validateNewApp` refuses
+  any other value, because the box only builds apps already present in
+  the committed `apps.json` and an entry above `declared` whose image
+  does not exist fails the switch and reverts its own Apply. The order
+  is create → Apply → build → promote → Apply, and the promotion is
+  offered on the app's page rather than left to be remembered. When
+  reading a stage, ask the question you mean — `stageRuns` or
+  `stageExposed` — never `!== 'off'`, which counts a declared app as
+  exposed.
+- The create form (`routes/apps.new.tsx` + `lib/readiness.ts`)
+  **reports; it does not gate**. A missing image is the expected state
+  of a new app, and a repo with neither a `railpack.json` nor a
+  `Dockerfile` is a warning — Railpack can work zero-config, even
+  though no app here has. Anything that would block creation again
+  needs a better reason than either of those had.
 
 ## Style
 

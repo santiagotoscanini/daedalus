@@ -262,6 +262,38 @@ export async function listInstallationRepos(ctx: Ctx): Promise<InstallationRepos
   return { ok: true, repos, total: Math.max(total, repos.length) }
 }
 
+/**
+ * Whether a path exists in a repository, as the installation can see it.
+ *
+ * `unknown` is not `absent`: a rate limit, a missing token, or a repository
+ * the App was never given all answer "cannot say", and a caller that collapsed
+ * that into "the file is not there" would report a repo as unconfigured
+ * because GitHub was busy.
+ */
+export type RepoFile = 'present' | 'absent' | 'unknown'
+
+/**
+ * One `contents` read, reduced to the only thing its callers need: is the file
+ * there on the default branch?
+ *
+ * The App's `contents:read` is what makes this possible and `ghApp` is the one
+ * door, so the token never leaves it. No file CONTENT is returned — nothing a
+ * repository holds can reach a page or a log through this function.
+ */
+export async function repoFileExists(ctx: Ctx, fullName: string, path: string): Promise<RepoFile> {
+  // `owner/name`, nothing else: the path is interpolated into a URL, and a
+  // slash or a `..` from a caller would address a different endpoint entirely.
+  if (!/^[\w.-]+\/[\w.-]+$/.test(fullName)) return 'unknown'
+  const encoded = path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+  const r = await ghApp(ctx, `/repos/${fullName}/contents/${encoded}`)
+  if (r.status === 200) return 'present'
+  if (r.status === 404) return 'absent'
+  return 'unknown'
+}
+
 /** A repository as GitHub names it now. `owner`/`name` are `fullName`, split. */
 export type RepoById = {
   id: number

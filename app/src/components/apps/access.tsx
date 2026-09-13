@@ -44,8 +44,13 @@ export function Access({
       <BoardGrid>
         <Board title="Access patterns" icon="⊕" span={12}>
           <p className={VIZ_EMPTY}>
-            {name} is {stage === 'off' ? 'not exposed' : 'internal'}, so there are no remote clients
-            to break down.
+            {name} is{' '}
+            {stage === 'declared'
+              ? 'declared but not running'
+              : stage === 'off'
+                ? 'not exposed'
+                : 'internal'}
+            , so there are no remote clients to break down.
           </p>
           <p className={BOARD_FOOT}>
             Client IP and country come from the headers Cloudflare adds at the edge, which only

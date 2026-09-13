@@ -1,10 +1,16 @@
-// Step 3 of "add an app": one verdict, and whatever is left to do about it.
+// Step 3 of "add an app": one verdict, and whatever is worth reading before
+// pressing the button.
 //
 // The panel is deliberately dumb — lib/readiness.ts has already decided what
-// needs acting on and what needs nothing, and every string on a row is the
+// is worth reading and what needs nothing, and every string on a row is the
 // check's own copy, verbatim. What is left here is the shape: the answer
-// first, and anything settled folded away, so the step gets SHORTER as the
-// repo gets closer to creatable.
+// first, and anything settled folded away, so the step gets SHORTER the less
+// there is to say.
+//
+// Nothing it draws is a blocker any more. A new app is created `declared` —
+// nothing runs until it is promoted — so the step reports rather than gates,
+// and the one red thing it could once draw (a missing image) is now the
+// expected state of the app being created.
 
 import { cn } from '../../lib/cn'
 import type { Check, CheckState, Readiness } from '../../lib/readiness'
@@ -51,7 +57,7 @@ export function ReadinessPanel({
     <>
       <h2 className={SECTION_HEAD}>
         3. Readiness
-        <small className={SECTION_HEAD_SMALL}>is there an image this box can pull?</small>
+        <small className={SECTION_HEAD_SMALL}>what the box will find when it builds this</small>
         <RefreshButton busy={refreshing} label="Re-run the checks" onClick={onRefresh} />
       </h2>
 
@@ -59,15 +65,16 @@ export function ReadinessPanel({
           panel: the verdict, then whatever is still to be done about it. */}
       <div className="mb-[1.2rem] overflow-hidden rounded-lg border border-(--border-soft) bg-(--panel) [&>*+*]:border-t [&>*+*]:border-t-(--border-soft)">
         {plan.ready ? (
-          // The whole step, once there is nothing left to do about it. It is
+          // The whole step, once there is nothing worth stopping over. It is
           // the answer now, not a fold under one, so it is drawn at the
-          // panel's own weight.
+          // panel's own weight — and it carries the verdict's own sentence,
+          // so this file never says anything readiness.ts did not.
           <details className="group">
             <summary className={cn(FOLD_SUMMARY, 'py-[0.85rem] text-[0.92rem] text-foreground')}>
               <span className="text-success" aria-hidden="true">
                 ✓
               </span>{' '}
-              Ready: the image is published
+              {plan.verdict.headline}
             </summary>
             <ul className={CHECKLIST}>
               {plan.settled.map((c) => (
@@ -98,7 +105,12 @@ export function ReadinessPanel({
             {plan.act.length > 0 && (
               <ol className={CHECKLIST}>
                 {plan.act.map((c, i) => (
-                  <Row key={c.id} check={c} step={i + 1} />
+                  // Numbered only when something actually failed: a numbered
+                  // list reads as "do these, in this order", and a warning is
+                  // something to know, not a step to perform. Nothing emits
+                  // `bad` today — the branch stays so a future blocker gets
+                  // the ordering back for free.
+                  <Row key={c.id} check={c} step={c.state === 'bad' ? i + 1 : undefined} />
                 ))}
               </ol>
             )}

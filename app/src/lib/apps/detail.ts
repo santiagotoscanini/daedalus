@@ -9,6 +9,7 @@ import { deployShot as readDeployShot } from '../dashboard/shotter'
 import { effectiveHostname } from '../hostname'
 import { driftOf, getApp } from '../repo/apps'
 import { defaultImage, OWNER } from '../site'
+import { stageExposed } from '../stage'
 
 // The app detail page's frame: the record, whether it has drifted from nix,
 // and the live signals the hero draws. Null for a name the registry does not
@@ -57,7 +58,7 @@ export async function loadAppDetail(data: { name: string }) {
     appIcon(
       record.name,
       effectiveHostname(record.name, record.hostname),
-      record.stage !== 'off',
+      stageExposed(record.stage),
     ).then((icon) => icon !== null),
     readWorkspaces(),
     readWorkspaceRequestStatus(),

@@ -15,6 +15,7 @@ import { Spark } from '../components/viz'
 import { CloneButton } from '../components/workspace'
 import { cn } from '../lib/cn'
 import { PLATFORMS, type Platform } from '../lib/external-apps'
+import { type AppStage, isAppStage } from '../lib/stage'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
 import { fetchSiteEdit } from '../server/site'
 
@@ -106,15 +107,27 @@ const APP_DESC = 'm-0 line-clamp-2 text-[0.8rem] leading-[1.45] text-(--text-mut
 /** The spark sizes itself from its height and is pushed to the right edge. */
 const CARD_FOOT = 'mt-auto flex items-center gap-[0.6rem] pt-[0.15rem] [&>svg]:ml-auto'
 
-/** The exposure chip, by stage. `lab` is the fourth status colour: a fact
-    about where the app is reachable, not a verdict on it. */
+/** The exposure chip, by stage — the label included, so the row has nothing
+    left to decide. `lab` is the fourth status colour: a fact about where the
+    app is reachable, not a verdict on it. `declared` is dashed, the same
+    visual the aside cards use for "listed here, not one of the things being
+    run". */
 const STAGE_CHIP: Record<
-  'live' | 'lab' | 'off',
-  { variant: 'success' | 'outline'; className: string }
+  AppStage,
+  { variant: 'success' | 'outline'; className: string; label: string }
 > = {
-  live: { variant: 'success', className: CHIP },
-  lab: { variant: 'outline', className: cn(CHIP, 'border-info/35 bg-info/8 text-info') },
-  off: { variant: 'outline', className: cn(CHIP, 'text-(--dim)') },
+  live: { variant: 'success', className: CHIP, label: 'external' },
+  lab: {
+    variant: 'outline',
+    className: cn(CHIP, 'border-info/35 bg-info/8 text-info'),
+    label: 'internal',
+  },
+  off: { variant: 'outline', className: cn(CHIP, 'text-(--dim)'), label: 'not exposed' },
+  declared: {
+    variant: 'outline',
+    className: cn(CHIP, 'border-dashed text-(--dim)'),
+    label: 'declared',
+  },
 }
 
 function AppsPage() {
@@ -162,7 +175,7 @@ export function AppsList({ data }: { data: ListData }) {
   const { apps, applyStatus, external, workspaceStatus } = data
   const [search, setSearch] = useState('')
   const [state, setState] = useState<'all' | AppState>('all')
-  const [exposure, setExposure] = useState<'all' | 'live' | 'lab' | 'off'>('all')
+  const [exposure, setExposure] = useState<'all' | AppStage>('all')
 
   const counts = useMemo(
     () => ({
@@ -170,6 +183,10 @@ export function AppsList({ data }: { data: ListData }) {
       attention: apps.filter((r) => r.status.state === 'attention').length,
       stopped: apps.filter((r) => r.status.state === 'stopped' || r.status.state === 'unknown')
         .length,
+      // Not a state anything probes — nothing is running to probe — so it is
+      // counted off the registry rather than off prometheus. It is the one
+      // tally that is a to-do: these are waiting to be built and promoted.
+      declared: apps.filter((r) => r.stage === 'declared').length,
     }),
     [apps],
   )
@@ -224,6 +241,24 @@ export function AppsList({ data }: { data: ListData }) {
         <span className={TALLY}>
           <StateDot state="stopped" /> <b className={TALLY_COUNT}>{counts.stopped}</b> stopped
         </span>
+        {/* Only when there are any: a zero here would be a permanent slot for
+            a state most of the fleet is never in. Clicking it filters, because
+            the next thing anybody does with this number is go look. */}
+        {counts.declared > 0 && (
+          <button
+            type="button"
+            className={cn(TALLY, 'cursor-pointer border-0 bg-transparent p-0 text-inherit')}
+            title="Declared only: no container, no ingress. Build the repo, then set exposure on the app’s page."
+            onClick={() => {
+              setExposure('declared')
+            }}
+          >
+            <span aria-hidden="true" className="text-(--dim)">
+              ◌
+            </span>{' '}
+            <b className={TALLY_COUNT}>{counts.declared}</b> declared
+          </button>
+        )}
         {/* The create flow is a page rather than a dialog: it makes a GitHub
             round trip per repo it checks, and a checklist you can leave open
             in a tab while you go fix a workflow is worth more than one that
@@ -265,6 +300,7 @@ export function AppsList({ data }: { data: ListData }) {
             { value: 'live', label: 'external' },
             { value: 'lab', label: 'internal' },
             { value: 'off', label: 'off' },
+            { value: 'declared', label: 'declared' },
           ]}
         />
       </div>
@@ -407,8 +443,9 @@ function ExternalRow({
 }
 
 function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
-  const stage =
-    row.stage === 'live' ? STAGE_CHIP.live : row.stage === 'off' ? STAGE_CHIP.off : STAGE_CHIP.lab
+  // The column is text, so a value the ladder does not know is possible in
+  // principle; it reads as the platform's own default rather than as nothing.
+  const stage = STAGE_CHIP[isAppStage(row.stage) ? row.stage : 'lab']
   return (
     <li className={cn(CARD, aside && CARD_ASIDE)}>
       {/* `tab` is a required search param on the detail route (it is what
@@ -453,7 +490,7 @@ function AppRow({ row, aside = false }: { row: Row; aside?: boolean }) {
 
         <div className={CARD_FOOT}>
           <Badge variant={stage.variant} className={stage.className}>
-            {row.stage === 'live' ? 'external' : row.stage === 'off' ? 'not exposed' : 'internal'}
+            {stage.label}
           </Badge>
 
           {/* Neutral unless the app is in trouble: the dot in the head

@@ -3,6 +3,7 @@ import { type ReactNode, useId, useState } from 'react'
 import { BASE_DOMAIN, hostnameError } from '../../lib/hostname'
 import { errorText } from '../../lib/redact'
 import { defaultImage } from '../../lib/site'
+import { stageExposed } from '../../lib/stage'
 import { deleteAppFn } from '../../server/registry'
 import { Segmented, Slider, Toggle } from '../controls'
 import { Alert, AlertDescription } from '../ui/alert'
@@ -223,13 +224,14 @@ export function Settings({
               icon: '⛨',
               // Both are assertions in stacks/apps/apps.nix. Greyed out with
               // the reason rather than accepted and failed mid-Apply.
-              disabled: app.stage === 'off' || !app.authHealthPath,
-              reason:
-                app.stage === 'off'
-                  ? 'Nothing to gate: the middleware is generated from the ingress, and this app is not exposed.'
-                  : !app.authHealthPath
-                    ? 'Set a health path first. It is the unauthenticated path the gate lets through, so the probe tests the app instead of the login redirect.'
-                    : undefined,
+              disabled: !stageExposed(app.stage) || !app.authHealthPath,
+              reason: !stageExposed(app.stage)
+                ? app.stage === 'declared'
+                  ? 'Nothing to gate: this app is declared only — no container, no ingress. Promote it first.'
+                  : 'Nothing to gate: the middleware is generated from the ingress, and this app is not exposed.'
+                : !app.authHealthPath
+                  ? 'Set a health path first. It is the unauthenticated path the gate lets through, so the probe tests the app instead of the login redirect.'
+                  : undefined,
             },
             { value: 'native', label: 'App is the client', icon: '⚿' },
           ]}
