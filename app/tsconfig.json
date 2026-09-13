@@ -23,6 +23,11 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    /* The render switches. A `switch (data.tab)` whose return type is inferred
+       widens to `ReactNode | undefined` the moment a tab has no case, and the
+       page renders nothing with no error anywhere. This turns that into
+       TS7030 at the function that stopped being exhaustive. */
+    "noImplicitReturns": true,
     "noUncheckedSideEffectImports": true
   }
 }

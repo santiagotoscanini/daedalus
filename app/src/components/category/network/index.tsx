@@ -29,7 +29,10 @@ export function NetworkView({ data }: { data: NetworkData }) {
       return <DnsView data={data} />
     case 'dhcp':
       return <DhcpView data={data} />
-    default:
+    // Named, not `default`: a default would go on quietly rendering General
+    // for a seventh tab nobody wrote a case for, which is the one outcome
+    // worth failing on.
+    case 'general':
       return <GeneralView data={data} />
   }
 }

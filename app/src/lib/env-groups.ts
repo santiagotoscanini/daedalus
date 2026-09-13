@@ -24,16 +24,29 @@
  */
 export type EnvOrigin = 'platform' | 'registry' | 'secrets' | 'image'
 
-/** Sub-grouping within `platform`: which feature put it there. */
-export type EnvGroup =
-  | 'identity'
-  | 'database'
-  | 'auth'
-  | 'sso'
-  | 'litellm'
-  | 'observability'
-  | 'runtime'
-  | 'other'
+/**
+ * Sub-grouping within `platform`: which feature put it there, in the order the
+ * Secrets tab renders them.
+ *
+ * The list is the source and the type is read off it, because the two had
+ * already drifted the other way round: the group order lived in the component
+ * as its own literal array and was missing `runtime`, which nothing could
+ * catch. Order and membership are now the same declaration, and GROUP_LABELS
+ * being keyed by the derived type closes the far end — a group added here is
+ * an error until it has a label.
+ */
+export const ENV_GROUP_ORDER = [
+  'identity',
+  'database',
+  'auth',
+  'sso',
+  'litellm',
+  'observability',
+  'runtime',
+  'other',
+] as const
+
+export type EnvGroup = (typeof ENV_GROUP_ORDER)[number]
 
 export type EnvVar = {
   key: string

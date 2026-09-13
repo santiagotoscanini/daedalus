@@ -5,7 +5,7 @@ import { cn } from '../../lib/cn'
 // so importing a VALUE from that module — even a lookup table — makes the
 // page throw on load. Type-only imports would be erased and safe; GROUP_LABELS
 // is not.
-import { type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../../lib/env-groups'
+import { ENV_GROUP_ORDER, type EnvGroup, type EnvOrigin, GROUP_LABELS } from '../../lib/env-groups'
 import { when } from '../../lib/format'
 import { revealEnvVar } from '../../server/registry'
 import { Alert, AlertDescription } from '../ui/alert'
@@ -56,7 +56,7 @@ export function Secrets({
 
   const of = (o: EnvRowData['origin']) => env.vars.filter((v) => v.origin === o)
   const platform = of('platform')
-  const groups = GROUP_ORDER.map((g) => ({
+  const groups = ENV_GROUP_ORDER.map((g) => ({
     g,
     vars: platform.filter((v) => v.group === g),
   })).filter((x) => x.vars.length > 0)
@@ -154,16 +154,6 @@ export function Secrets({
     </>
   )
 }
-
-const GROUP_ORDER = [
-  'identity',
-  'database',
-  'auth',
-  'sso',
-  'litellm',
-  'observability',
-  'other',
-] as const
 
 function EnvSection({
   title,

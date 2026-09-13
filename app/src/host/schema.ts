@@ -12,6 +12,20 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
+// TYPE-ONLY, all four, and they have to stay that way: `import type` is erased
+// whole (verbatimModuleSyntax), so naming the build vocabulary here costs the
+// schema no import edge at all — see host/boundary.test.ts on why the
+// one-keyword difference between this and `import { type X }` matters.
+import type { DetectionWarning } from '../lib/build-detect'
+import type { BuildFacts } from '../lib/build-facts'
+import type { BuildLane } from '../lib/build-queue'
+import type {
+  BuildChecks,
+  BuildPublish,
+  BuildRequester,
+  BuildState,
+  BuildStrategy,
+} from '../lib/builds'
 
 // The app registry — daedalus's authoritative copy of what stacks/apps
 // declares. It mirrors the `fleet.apps` submodule (stacks/apps/apps.nix)
@@ -244,19 +258,32 @@ export const builds = pgTable(
       .notNull()
       .references(() => apps.id, { onDelete: 'cascade' }),
 
+    // Eleven columns below carry `.$type<>()`. Postgres knows these as text and
+    // jsonb and would take any string or any document; every one of them in
+    // fact holds a member of a union lib/builds.ts owns. Recording that here
+    // rather than at the reader is the same trust either way — this module is
+    // written by lib/repo/builds.ts alone — but it puts the narrowing where the
+    // next reader looks first, and it makes a column whose vocabulary changes
+    // an error at every use instead of a cast that keeps compiling.
+    //
+    // What it does NOT buy: a row written before a union member was renamed
+    // still reads back as a confident, wrong `BuildState`. Nothing in the type
+    // system reaches rows already in the table — which is exactly why the
+    // partition over BUILD_STATES is asserted in lib/build-states.test.ts.
+
     // 'main' in v1; pull-request lanes come later, with prNumber set.
-    lane: text('lane').notNull().default('main'),
+    lane: text('lane').$type<BuildLane>().notNull().default('main'),
     prNumber: integer('pr_number'),
     sha: text('sha').notNull(),
 
     // As requested: "auto" | "railpack" | "dockerfile". The host resolves
     // "auto"; what it chose lands in resolvedStrategy.
-    strategy: text('strategy').notNull(),
-    resolvedStrategy: text('resolved_strategy'),
+    strategy: text('strategy').$type<BuildStrategy>().notNull(),
+    resolvedStrategy: text('resolved_strategy').$type<Exclude<BuildStrategy, 'auto'>>(),
     // "live" | "candidate", copied from the app at request time.
-    publish: text('publish').notNull().default('live'),
+    publish: text('publish').$type<BuildPublish>().notNull().default('live'),
 
-    requestedBy: text('requested_by').notNull(),
+    requestedBy: text('requested_by').$type<BuildRequester>().notNull(),
     actor: text('actor'),
     // X-GitHub-Delivery of the push that asked. Not unique: operator and sweep
     // builds have none, and the replay guard is github_deliveries' primary
@@ -265,7 +292,7 @@ export const builds = pgTable(
 
     // queued → cloning → detecting → checking → building → publishing →
     // succeeded | failed | cancelled | superseded.
-    state: text('state').notNull().default('queued'),
+    state: text('state').$type<BuildState>().notNull().default('queued'),
     phase: text('phase'),
     error: text('error'),
     // When the request was handed to the host; null while queued. The hard cap
@@ -274,16 +301,21 @@ export const builds = pgTable(
     // from the host, which is what the staleness check reads.
     startedAt: timestamp('started_at', { withTimezone: true }),
 
-    // Shapes are owned by the status decoder in lib/builds.ts, not here.
+    // Shapes are owned by the status decoder in lib/builds.ts, not here — so
+    // this one stays `unknown`, which is what bare jsonb already infers and
+    // what BuildRow.detected declares. Readers decode it (detectionFromStatus)
+    // rather than trusting it, which is how a Railpack field the engine learns
+    // to read later is there in old rows too.
     detected: jsonb('detected'),
     // NULL and [] mean different things here and the difference is load-bearing:
     // NULL is "nobody computed warnings for this build" — a Dockerfile build, a
     // failure before `railpack prepare`, or a row from before the engine
     // computed them at all — while [] is "computed, and there was nothing to
     // say". The build page shows which rather than calling every silence clean.
-    warnings: jsonb('warnings'),
-    checks: jsonb('checks'),
-    timings: jsonb('timings'),
+    warnings: jsonb('warnings').$type<DetectionWarning[]>(),
+    checks: jsonb('checks').$type<BuildChecks>(),
+    /** Milliseconds per phase, keyed by phase name. */
+    timings: jsonb('timings').$type<Record<string, number>>(),
     // The agent's `image` and `build` status keys, decoded (lib/build-facts.ts:
     // the pushed tags, the layer count and compressed sizes, the media type;
     // the runner, the secrets fingerprint, what the cache did). ONE jsonb rather
@@ -292,7 +324,7 @@ export const builds = pgTable(
     // host agent grows keys faster than a migration per key would be worth.
     // digest and size_bytes stay their own columns: those two ARE matched
     // against deploy rows and summed.
-    facts: jsonb('facts'),
+    facts: jsonb('facts').$type<BuildFacts>(),
 
     // GitHub's ids for what this build posted. Numbers, not bigint: both are
     // far below 2^53, and a bigint would not survive the server-function wire.

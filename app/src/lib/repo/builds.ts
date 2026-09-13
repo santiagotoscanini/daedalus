@@ -15,12 +15,9 @@ import {
 } from 'drizzle-orm'
 import { db, type Executor, type Tx } from '../../host/db'
 import { apps, builds } from '../../host/schema'
-import type { DetectionWarning } from '../build-detect'
-import type { BuildFacts } from '../build-facts'
 import { type BuildLane, type BuildRow, ENGINE_VERDICTS } from '../build-queue'
 import {
   ACTIVE_BUILD_STATES,
-  type BuildChecks,
   type BuildPublish,
   type BuildRequester,
   type BuildState,
@@ -179,10 +176,13 @@ const listWithApp = () =>
 /**
  * A row in the queue reducer's shape (build-queue.ts `BuildRow`).
  *
- * The table is looser than the reducer on purpose — nullable phase, timings
- * and warnings, text enums — and this is the one place that tightens it. The
- * casts are sound because this module is the only writer and its inputs are
- * typed.
+ * The table is still looser than the reducer where it has to be — phase,
+ * timings and warnings are nullable in postgres and are not here — and this is
+ * the one place that resolves that. What it no longer does is assert the
+ * vocabularies: the schema carries `.$type<>()` on all eleven of those columns,
+ * so `state`, `lane`, `strategy`, `publish`, `requestedBy`, the two jsonb
+ * caches and the timings arrive narrowed. The trust behind that is unchanged —
+ * this module is the only writer — it is just written down where the column is.
  *
  * A list record (every read but getBuild) has no detected, checks, timings or
  * warnings, so its row reads as none of them — warnings as null, "nobody
@@ -197,27 +197,29 @@ export function toBuildRow(
     id: r.id,
     appId: r.appId,
     app: r.app,
-    lane: r.lane as BuildLane,
+    lane: r.lane,
     prNumber: r.prNumber,
     sha: r.sha,
-    strategy: r.strategy as BuildStrategy,
-    resolvedStrategy: r.resolvedStrategy as BuildRow['resolvedStrategy'],
-    publish: r.publish as BuildPublish,
-    requestedBy: r.requestedBy as BuildRequester,
+    strategy: r.strategy,
+    resolvedStrategy: r.resolvedStrategy,
+    publish: r.publish,
+    requestedBy: r.requestedBy,
     actor: r.actor,
     deliveryId: r.deliveryId,
-    state: r.state as BuildState,
+    state: r.state,
     phase: r.phase ?? '',
     error: r.error,
     // Raw, as the status carried it; decoded on read (detectionFromStatus).
     detected: r.detected ?? null,
-    warnings: (r.warnings as DetectionWarning[] | null | undefined) ?? null,
-    facts: (r.facts as BuildFacts | null | undefined) ?? null,
-    checks: (r.checks as BuildChecks | null | undefined) ?? null,
+    // `?? null` still earns its place on all four: a list read does not select
+    // these columns at all, so the value here is `undefined` — not "none".
+    warnings: r.warnings ?? null,
+    facts: r.facts ?? null,
+    checks: r.checks ?? null,
     digest: r.digest,
     imageRef: r.imageRef,
     sizeBytes: r.sizeBytes,
-    timings: (r.timings as Record<string, number> | null | undefined) ?? {},
+    timings: r.timings ?? {},
     checkRunId: r.checkRunId,
     deploymentId: r.deploymentId,
     reported: r.reported,

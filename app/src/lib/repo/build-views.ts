@@ -3,8 +3,9 @@ import { db } from '../../host/db'
 import { apps, builds, deployments } from '../../host/schema'
 import { detectionFromStatus } from '../build-detect'
 import { type BuildSummary, summarizeBuild } from '../build-display'
+import type { BuildLane } from '../build-queue'
 import type { BuildSettingsPatch } from '../build-settings'
-import { ACTIVE_BUILD_STATES } from '../builds'
+import { ACTIVE_BUILD_STATES, type BuildState } from '../builds'
 import { getBuild, latestSucceeded, listBuilds, toBuildRow } from './builds'
 
 // The reads the build UI needs that lib/repo/builds.ts (the queue's own
@@ -54,8 +55,8 @@ export async function overviewBuild(appId: string) {
 export async function openBuildOf(
   appId: string,
   sha: string,
-  lane = 'main',
-): Promise<{ id: string; state: string } | undefined> {
+  lane: BuildLane = 'main',
+): Promise<{ id: string; state: BuildState } | undefined> {
   const [row] = await db
     .select({ id: builds.id, state: builds.state })
     .from(builds)

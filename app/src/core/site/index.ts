@@ -42,29 +42,15 @@ export type SiteState = {
   commit: boolean
 }
 
-/** One field of the document that the UI may edit. Dotted path into SiteDocument. */
-export type SiteField =
-  | 'identity.baseDomain'
-  | 'identity.controlPlane'
-  | 'identity.controlPlanePrevious'
-  | 'identity.timezone'
-  | 'network.lanIp'
-  | 'network.interface'
-  | 'network.gateway'
-  | 'network.wanHost'
-  | 'network.dhcp.active'
-  | 'network.dhcp.router'
-  | 'network.dhcp.start'
-  | 'network.dhcp.end'
-  | 'network.dhcp.leaseTime'
-  | 'network.dnsUpstreams'
-  | 'mail.sender'
-  | 'mail.alertTo'
-  | 'cloudflare.zoneId'
-
 /** The fields nix sources from site.json — the only ones an edit may touch.
-    Everything else in the document is still a copy of the configuration. */
-export const EDITABLE: readonly SiteField[] = [
+    Everything else in the document is still a copy of the configuration.
+
+    The list comes first and the type is read off it, not the other way round.
+    Written as `readonly SiteField[]` against a hand-kept union, a field left
+    out of the list still typechecks everywhere and the only symptom is a
+    settings input that quietly refuses to save. Now there is one declaration,
+    so there is nothing to leave out. */
+export const EDITABLE = [
   'identity.baseDomain',
   'identity.controlPlane',
   'identity.controlPlanePrevious',
@@ -82,7 +68,10 @@ export const EDITABLE: readonly SiteField[] = [
   'mail.sender',
   'mail.alertTo',
   'cloudflare.zoneId',
-]
+] as const
+
+/** One field of the document that the UI may edit. Dotted path into SiteDocument. */
+export type SiteField = (typeof EDITABLE)[number]
 
 export type SiteEdit = {
   /** The committed document; null before the first write. */

@@ -20,6 +20,7 @@ import { Badge } from '../components/ui/badge'
 // ./access talks to Loki and must never follow it there.
 import { type AccessWindow, DEFAULT_WINDOW, isAccessWindow } from '../lib/access-window'
 import { cn } from '../lib/cn'
+import { isAppName } from '../lib/hostname'
 import { OWNER } from '../lib/site'
 import { type Tone, toneStyle } from '../lib/tone'
 import { fetchApp, fetchAppTab, saveApp } from '../server/registry'
@@ -85,6 +86,11 @@ export const Route = createFileRoute('/apps/$name')({
   // bar and the app's identity on screen immediately and fills the body in
   // when it arrives.
   loader: async ({ params, deps }) => {
+    // fetchApp refuses a name that could not be an app's (lib/hostname
+    // appName). Nothing links here with one, so a URL that carries one was
+    // typed, and a typed URL deserves the not-found page below rather than an
+    // error boundary over a rejected request.
+    if (!isAppName(params.name)) throw notFound()
     const shell = await fetchApp({ data: { name: params.name } })
     if (!shell) throw notFound()
     return {
@@ -145,6 +151,145 @@ function AppDetail() {
   // client-side draft to lose on a refresh.
   const patch = (p: Record<string, unknown>) => {
     void saveApp({ data: { name: app.name, patch: p } }).then(() => router.invalidate())
+  }
+
+  // The sections, as one switch over the tab rather than as eight independent
+  // `{tab === 'x' && …}` siblings. Siblings, a ninth entry in APP_TABS renders
+  // a blank page and nothing anywhere says so; here it is TS7030 at this
+  // function, because the return type is inferred and noImplicitReturns is on.
+  // Called inline rather than mounted as a <Section/> so each branch stays a
+  // direct child of this component's tree, exactly as it was.
+  const section = () => {
+    switch (tab) {
+      case 'overview':
+        return (
+          <GuardedAwait
+            resetKey={sectionKey}
+            promise={tabData}
+            fallback={
+              <>
+                <BlockSkeleton h={86} />
+                <BoardsSkeleton spans={[4, 4, 4]} />
+              </>
+            }
+          >
+            {(d) =>
+              d.kind !== 'overview' ? null : (
+                <Overview
+                  app={app}
+                  status={status}
+                  deployStatus={deployStatus}
+                  lastDeploy={lastDeploy}
+                  pullBroken={pullBroken}
+                  deployShot={deployShot}
+                  repo={repo}
+                  workspace={workspace}
+                  workspaceRoot={workspaceRoot}
+                  workspaceStatus={workspaceStatus}
+                  d={d}
+                />
+              )
+            }
+          </GuardedAwait>
+        )
+      case 'deployments':
+        return (
+          <GuardedAwait
+            resetKey={sectionKey}
+            promise={tabData}
+            fallback={<BlockSkeleton h={420} />}
+          >
+            {(td) => (td.kind !== 'deployments' ? null : <Deployments app={app} td={td} />)}
+          </GuardedAwait>
+        )
+      case 'database':
+        return (
+          <GuardedAwait
+            resetKey={sectionKey}
+            promise={tabData}
+            fallback={
+              <>
+                <StripSkeleton count={6} />
+                <BoardsSkeleton spans={[4, 4, 4]} />
+              </>
+            }
+          >
+            {(td) => (td.kind !== 'database' ? null : <Database app={app} data={td.database} />)}
+          </GuardedAwait>
+        )
+      case 'vpn':
+        return (
+          <GuardedAwait
+            resetKey={sectionKey}
+            promise={tabData}
+            fallback={
+              <>
+                <StripSkeleton count={4} />
+                <BoardsSkeleton spans={[6, 6]} />
+              </>
+            }
+          >
+            {(td) => (td.kind !== 'vpn' ? null : <Vpn app={app} data={td.vpn} />)}
+          </GuardedAwait>
+        )
+      case 'access':
+        return (
+          <GuardedAwait
+            resetKey={sectionKey}
+            promise={tabData}
+            fallback={
+              <>
+                <StripSkeleton count={4} />
+                <BoardsSkeleton spans={[12, 6, 6]} />
+              </>
+            }
+          >
+            {(td) =>
+              td.kind !== 'access' ? null : (
+                <Access
+                  name={app.name}
+                  hostname={app.effectiveHostname}
+                  stage={app.stage}
+                  access={td.access}
+                  range={range ?? DEFAULT_WINDOW}
+                />
+              )
+            }
+          </GuardedAwait>
+        )
+      case 'settings':
+        return (
+          <Settings
+            app={app}
+            readOnly={readOnly}
+            patch={patch}
+            takenHostnames={takenHostnames}
+            stateRoot={stateRoot}
+          />
+        )
+      case 'secrets':
+        return (
+          <GuardedAwait
+            resetKey={sectionKey}
+            promise={tabData}
+            fallback={<BlockSkeleton h={400} />}
+          >
+            {(td) =>
+              td.kind !== 'secrets' ? null : (
+                <Secrets app={app.name} env={td.env} hasSecretsFile={app.operatorSecrets} />
+              )
+            }
+          </GuardedAwait>
+        )
+      // Grafana renders these. Nothing is fetched for this tab any more — the
+      // frame does its own querying, so opening it costs one request to
+      // Grafana rather than a Loki round trip through here AND sixty log lines
+      // serialised into the page for hydration. No Panel around it either: you
+      // are already on the Logs tab, so a box captioned "Logs" inside it is a
+      // second label for the same thing.
+      case 'logs':
+        return <GrafanaLogs source={{ container: `app-${app.name}` }} title={`${app.name} logs`} />
+    }
   }
 
   return (
@@ -250,127 +395,7 @@ function AppDetail() {
           the shell swaps the category nav for the app-scoped one while this
           route is matched (__root.tsx). */}
 
-      {tab === 'overview' && (
-        <GuardedAwait
-          resetKey={sectionKey}
-          promise={tabData}
-          fallback={
-            <>
-              <BlockSkeleton h={86} />
-              <BoardsSkeleton spans={[4, 4, 4]} />
-            </>
-          }
-        >
-          {(d) =>
-            d.kind !== 'overview' ? null : (
-              <Overview
-                app={app}
-                status={status}
-                deployStatus={deployStatus}
-                lastDeploy={lastDeploy}
-                pullBroken={pullBroken}
-                deployShot={deployShot}
-                repo={repo}
-                workspace={workspace}
-                workspaceRoot={workspaceRoot}
-                workspaceStatus={workspaceStatus}
-                d={d}
-              />
-            )
-          }
-        </GuardedAwait>
-      )}
-
-      {tab === 'deployments' && (
-        <GuardedAwait resetKey={sectionKey} promise={tabData} fallback={<BlockSkeleton h={420} />}>
-          {(td) => (td.kind !== 'deployments' ? null : <Deployments app={app} td={td} />)}
-        </GuardedAwait>
-      )}
-
-      {tab === 'database' && (
-        <GuardedAwait
-          resetKey={sectionKey}
-          promise={tabData}
-          fallback={
-            <>
-              <StripSkeleton count={6} />
-              <BoardsSkeleton spans={[4, 4, 4]} />
-            </>
-          }
-        >
-          {(td) => (td.kind !== 'database' ? null : <Database app={app} data={td.database} />)}
-        </GuardedAwait>
-      )}
-
-      {tab === 'vpn' && (
-        <GuardedAwait
-          resetKey={sectionKey}
-          promise={tabData}
-          fallback={
-            <>
-              <StripSkeleton count={4} />
-              <BoardsSkeleton spans={[6, 6]} />
-            </>
-          }
-        >
-          {(td) => (td.kind !== 'vpn' ? null : <Vpn app={app} data={td.vpn} />)}
-        </GuardedAwait>
-      )}
-
-      {tab === 'access' && (
-        <GuardedAwait
-          resetKey={sectionKey}
-          promise={tabData}
-          fallback={
-            <>
-              <StripSkeleton count={4} />
-              <BoardsSkeleton spans={[12, 6, 6]} />
-            </>
-          }
-        >
-          {(td) =>
-            td.kind !== 'access' ? null : (
-              <Access
-                name={app.name}
-                hostname={app.effectiveHostname}
-                stage={app.stage}
-                access={td.access}
-                range={range ?? DEFAULT_WINDOW}
-              />
-            )
-          }
-        </GuardedAwait>
-      )}
-
-      {tab === 'settings' && (
-        <Settings
-          app={app}
-          readOnly={readOnly}
-          patch={patch}
-          takenHostnames={takenHostnames}
-          stateRoot={stateRoot}
-        />
-      )}
-
-      {tab === 'secrets' && (
-        <GuardedAwait resetKey={sectionKey} promise={tabData} fallback={<BlockSkeleton h={400} />}>
-          {(td) =>
-            td.kind !== 'secrets' ? null : (
-              <Secrets app={app.name} env={td.env} hasSecretsFile={app.operatorSecrets} />
-            )
-          }
-        </GuardedAwait>
-      )}
-
-      {/* Grafana renders these. Nothing is fetched for this tab any more —
-          the frame does its own querying, so opening it costs one request to
-          Grafana rather than a Loki round trip through here AND sixty log
-          lines serialised into the page for hydration. */}
-      {/* No Panel around it: you are already on the Logs tab, so a box
-          captioned "Logs" inside it is a second label for the same thing. */}
-      {tab === 'logs' && (
-        <GrafanaLogs source={{ container: `app-${app.name}` }} title={`${app.name} logs`} />
-      )}
+      {section()}
 
       <ApplyBar
         changed={readOnly || drift.length === 0 ? [] : [{ name: app.name, fields: drift }]}
