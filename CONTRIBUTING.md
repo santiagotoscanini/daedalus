@@ -55,11 +55,11 @@ pnpm dev           # http://localhost:3000
 
 (Verified with podman; the flags are identical.)
 
-`DATABASE_URL` is the only variable you must set. `src/lib/db.ts` reads it
+`DATABASE_URL` is the only variable you must set. `src/host/db.ts` reads it
 at module scope, so without it every route — `/api/healthz` included —
 answers 500 with `DATABASE_URL is not set`. The dev server does not exit;
 it serves 500s until you give it one. The two other `required()` entries in
-`src/lib/env.ts` have no callers today, so nothing asks for them.
+`src/host/env.ts` have no callers today, so nothing asks for them.
 
 `/` redirects to `/apps`, and `/apps` is the one page that fails out of the
 box: its loader throws `NIX_MANIFEST_PATH / NIX_REGISTRY_PATH are not set`

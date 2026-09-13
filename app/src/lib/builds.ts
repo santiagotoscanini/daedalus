@@ -16,7 +16,7 @@ import {
 // The `build` bridge verb: what this container asks the host builder to do,
 // and what the host says back. Client-safe on purpose — the build page renders
 // statuses and log tails in the browser. The file half (writing the request,
-// reading the status and the log) is lib/build-bridge.ts.
+// reading the status and the log) is host/build-bridge.ts.
 //
 // The request id is the builds row id, not a bridge-minted one: the host names
 // the log `<id>.log` and stamps the status with it, and the queue matches the
@@ -345,7 +345,7 @@ export function railpackValueRefusal(name: string, value: string): string | null
 
 const encoder = new TextEncoder()
 
-/** The request file's exact bytes (lib/build-bridge.ts writes this). */
+/** The request file's exact bytes (host/build-bridge.ts writes this). */
 export function serializeBuildRequest(req: BuildRequest): string {
   return `${JSON.stringify(req, null, 2)}\n`
 }

@@ -12,7 +12,8 @@ path-scoped rules load as you touch files.
 - **Also is:** the app builder. Since 2026-09-12 daedalus owns the fleet's
   image builds — the box's GitHub App takes the push webhook, the queue and
   the `build` bridge verb live in `app/src/lib/` (`builds.ts`,
-  `build-bridge.ts`, `build-queue.ts`), the driver that dispatches them and
+  `build-queue.ts`) and `app/src/host/` (`build-bridge.ts`, the half that
+  touches the disk), the driver that dispatches them and
   reports back in `app/src/core/builds/` (`scheduler.ts`, `report.ts`), and
   results reach GitHub as a check run plus a Deployment. The app repos carry
   no workflow files; a `railpack.json` is the normal build path, and a repo's

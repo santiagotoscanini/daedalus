@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ManifestApp } from './nix-manifest'
+import type { ManifestApp } from '../host/nix-manifest'
 import { renderRegistryFile } from './registry-file'
 
 const APP: ManifestApp = {

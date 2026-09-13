@@ -1,10 +1,10 @@
 import { and, desc, eq, inArray } from 'drizzle-orm'
+import { db } from '../../host/db'
+import { apps, builds, deployments } from '../../host/schema'
 import { detectionFromStatus } from '../build-detect'
 import { type BuildSummary, summarizeBuild } from '../build-display'
 import type { BuildSettingsPatch } from '../build-settings'
 import { ACTIVE_BUILD_STATES } from '../builds'
-import { db } from '../db'
-import { apps, builds, deployments } from '../schema'
 import { getBuild, latestSucceeded, listBuilds, toBuildRow } from './builds'
 
 // The reads the build UI needs that lib/repo/builds.ts (the queue's own

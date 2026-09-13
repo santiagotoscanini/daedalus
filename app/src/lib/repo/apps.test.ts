@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ManifestEntry } from '../nix-manifest'
+import type { ManifestEntry } from '../../host/nix-manifest'
 import { renderRegistryFile } from '../registry-file'
 import {
   type AppRecord,

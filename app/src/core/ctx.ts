@@ -1,9 +1,9 @@
 import { join } from 'node:path'
+import { readSnapshot, type SnapshotResult } from '../host/contract/snapshot'
+import { key } from '../host/keys'
+import { lokiEntries, lokiLatest } from '../host/loki'
 import type { Decoder } from '../lib/contract/decode'
-import { readSnapshot, type SnapshotResult } from '../lib/contract/snapshot'
 import { getJson } from '../lib/http'
-import { key } from '../lib/keys'
-import { lokiEntries, lokiLatest } from '../lib/loki'
 
 // The capability set a reader is handed instead of reaching for process.env.
 //
@@ -33,7 +33,7 @@ export type Ctx = {
     acceptVersions?: number[]
     maxAgeMs?: number
   }) => Promise<SnapshotResult<T>>
-  /** The preferences store. Nothing in it is rebuild-relevant — see lib/schema.ts. */
+  /** The preferences store. Nothing in it is rebuild-relevant — see host/schema.ts. */
   store: {
     read<T>(key: string, guard: (v: unknown) => v is T): Promise<T | undefined>
     write(key: string, value: unknown): Promise<void>

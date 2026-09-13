@@ -36,12 +36,12 @@
 // number the running process stated is a measurement, and a number read off
 // the tag the flake pins is only true while the tag names a release.
 
+import { siteMail } from '../../../host/contract/domains/site'
+import { key } from '../../../host/keys'
+import { lokiScalar, lokiSeries, lokiStreamsOrNull, lokiVector } from '../../../host/loki'
+import { promBars, promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
 import { swrValue } from '../../cache'
-import { siteMail } from '../../contract/domains/site'
 import { basicAuth, getJson } from '../../http'
-import { key } from '../../keys'
-import { lokiScalar, lokiSeries, lokiStreamsOrNull, lokiVector } from '../../loki'
-import { promBars, promScalar, promScalars, promSeries, promVector } from '../../prom'
 import { type VersionGap, versionGap } from '../github'
 import { hostFacts, type JobRun } from '../host-facts'
 import { imageVersion, type RunningVersion } from '../images'
@@ -648,7 +648,7 @@ type HcCheck = {
 }
 
 async function loadJobs(ctx: Ctx): Promise<JobsData> {
-  const { monitoredJobs } = await import('../../nix-manifest')
+  const { monitoredJobs } = await import('../../../host/nix-manifest')
   const running = await imageVersion('healthchecks')
 
   const [body, registry, gap, facts] = await Promise.all([

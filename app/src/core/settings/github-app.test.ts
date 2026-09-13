@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
   installation: null as unknown,
 }))
 
-vi.mock('../../lib/apply-flow', () => ({
+vi.mock('../../host/apply-flow', () => ({
   secretApplyBlocker: async () => h.blocker,
   runSecretApply: async (...args: unknown[]) => {
     h.applyCalls.push(args)
@@ -32,7 +32,7 @@ vi.mock('../vault', () => ({
     return typeof h.seal === 'function' ? await (h.seal as () => Promise<unknown>)() : h.seal
   },
 }))
-vi.mock('../../lib/contract/domains/site-doc', () => ({ readCommittedSite: async () => h.site }))
+vi.mock('../../host/contract/domains/site-doc', () => ({ readCommittedSite: async () => h.site }))
 vi.mock('../../lib/repo/settings', () => ({
   SETTING_KEYS: {
     githubAppCreation: 'github.app.creation',

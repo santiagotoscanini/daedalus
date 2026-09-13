@@ -16,9 +16,9 @@ import { defaultImage, OWNER, REGISTRY_HOST_PATTERN } from '../lib/site'
 export const fetchApps = createServerFn().handler(async () => {
   const { listApps, driftOf } = await import('../lib/repo/apps')
   const { effectiveHostname } = await import('../lib/hostname')
-  const { manifestEntries } = await import('../lib/nix-manifest')
-  const { appStatuses } = await import('../lib/metrics')
-  const { readApplyStatus } = await import('../lib/apply')
+  const { manifestEntries } = await import('../host/nix-manifest')
+  const { appStatuses } = await import('../host/metrics')
+  const { readApplyStatus } = await import('../host/apply')
 
   // Independent reads — the registry rows and the manifest file — fetched
   // together rather than one behind the other.
@@ -26,12 +26,12 @@ export const fetchApps = createServerFn().handler(async () => {
   const manifest = new Map(entries.map((m) => [m.name, m]))
   // appStatuses degrades per-app rather than rejecting, so a prometheus
   // outage costs the status column, not the page.
-  const { appIcon, siteIcon } = await import('../lib/app-icon')
+  const { appIcon, siteIcon } = await import('../host/app-icon')
   const { makeCtx } = await import('../core/ctx')
   const { listExternalApps } = await import('../core/settings/external-apps')
   const EXTERNAL_APPS = await listExternalApps(await makeCtx())
   const { readWorkspaces, readWorkspaceRequestStatus, workspaceFor } = await import(
-    '../lib/workspaces'
+    '../host/workspaces'
   )
   const [statuses, applyStatus, icons, externalIcons, workspaces, workspaceStatus] =
     await Promise.all([
@@ -96,7 +96,7 @@ export const fetchApps = createServerFn().handler(async () => {
  */
 export const fetchImagesTab = createServerFn().handler(async () => {
   const { loadImages } = await import('../lib/apps/registries')
-  const { webAppHosts } = await import('../lib/nix-manifest')
+  const { webAppHosts } = await import('../host/nix-manifest')
   const hosts = await webAppHosts()
   return loadImages((app) => `https://${hosts[app] ?? app}`)
 })
@@ -104,7 +104,7 @@ export const fetchImagesTab = createServerFn().handler(async () => {
 /** The npm registry tab. See above for why it is not folded into that one. */
 export const fetchPackagesTab = createServerFn().handler(async () => {
   const { loadPackages } = await import('../lib/apps/registries')
-  const { webAppHosts } = await import('../lib/nix-manifest')
+  const { webAppHosts } = await import('../host/nix-manifest')
   const hosts = await webAppHosts()
   return loadPackages((app) => `https://${hosts[app] ?? app}`)
 })
@@ -126,13 +126,13 @@ export const fetchApp = createServerFn()
     const { name } = data
     const { getApp, driftOf } = await import('../lib/repo/apps')
     const { effectiveHostname } = await import('../lib/hostname')
-    const { hostnamesTakenBy, operatorSecretApps } = await import('../lib/nix-manifest')
-    const { manifestEntries } = await import('../lib/nix-manifest')
-    const { appStatuses } = await import('../lib/metrics')
-    const { readApplyStatus } = await import('../lib/apply')
-    const { lastDeploy, pullFailing, readDeployStatus } = await import('../lib/deploy')
+    const { hostnamesTakenBy, operatorSecretApps } = await import('../host/nix-manifest')
+    const { manifestEntries } = await import('../host/nix-manifest')
+    const { appStatuses } = await import('../host/metrics')
+    const { readApplyStatus } = await import('../host/apply')
+    const { lastDeploy, pullFailing, readDeployStatus } = await import('../host/deploy')
     const { readWorkspaces, readWorkspaceRequestStatus, workspaceFor } = await import(
-      '../lib/workspaces'
+      '../host/workspaces'
     )
 
     const [record, entries] = await Promise.all([getApp(name), manifestEntries()])
@@ -167,7 +167,7 @@ export const fetchApp = createServerFn()
       // So the hostname field can reject a collision as it is typed rather
       // than during the rebuild it would otherwise fail.
       hostnamesTakenBy(effectiveHostname(record.name, record.hostname)),
-      import('../lib/app-icon').then(
+      import('../host/app-icon').then(
         async ({ appIcon }) =>
           (await appIcon(
             record.name,
@@ -178,7 +178,7 @@ export const fetchApp = createServerFn()
       readWorkspaces(),
       readWorkspaceRequestStatus(),
       import('../lib/dashboard/shotter').then(({ deployShot: read }) => read(name)),
-      import('../lib/contract/domains/site').then(({ siteIdentity }) => siteIdentity()),
+      import('../host/contract/domains/site').then(({ siteIdentity }) => siteIdentity()),
     ])
 
     return {
@@ -234,7 +234,7 @@ export const fetchApp = createServerFn()
         egressContainer: record.egressContainer,
         egressHostPort: record.egressHostPort,
         notes: record.notes,
-        // Engine-only build settings (lib/schema.ts): shown and edited on the
+        // Engine-only build settings (host/schema.ts): shown and edited on the
         // Settings tab's Builds board, never part of drift.
         buildOnBox: record.buildOnBox,
         buildStrategy: record.buildStrategy,
@@ -289,13 +289,13 @@ export type AppTabData =
   | { kind: 'vpn'; vpn: AppVpn }
   | { kind: 'settings' }
 
-type AppResources = Awaited<ReturnType<typeof import('../lib/metrics')['appResources']>>
-type AppDatabase = Awaited<ReturnType<typeof import('../lib/metrics')['appDatabase']>>
-type AppVpn = Awaited<ReturnType<typeof import('../lib/metrics')['appVpn']>>
-type AppAccess = Awaited<ReturnType<typeof import('../lib/access')['appAccess']>>
+type AppResources = Awaited<ReturnType<typeof import('../host/metrics')['appResources']>>
+type AppDatabase = Awaited<ReturnType<typeof import('../host/metrics')['appDatabase']>>
+type AppVpn = Awaited<ReturnType<typeof import('../host/metrics')['appVpn']>>
+type AppAccess = Awaited<ReturnType<typeof import('../host/access')['appAccess']>>
 type ActivityRow = { ts: string; line: string }
 type EnvSnapshotVar = Awaited<
-  ReturnType<typeof import('../lib/env-snapshot')['readEnvSnapshot']>
+  ReturnType<typeof import('../host/env-snapshot')['readEnvSnapshot']>
 >['vars'][number]
 type EnvPayload = {
   available: boolean
@@ -335,7 +335,7 @@ export const fetchAppTab = createServerFn()
     switch (tab) {
       case 'overview': {
         const { appResources, databaseSize, logVolume, NO_RESOURCES } = await import(
-          '../lib/metrics'
+          '../host/metrics'
         )
         const { overviewBuild } = await import('../lib/repo/build-views')
         const [resources, dbSize, logs1h, build] = await Promise.all([
@@ -349,8 +349,8 @@ export const fetchAppTab = createServerFn()
       }
 
       case 'deployments': {
-        const { activityLog } = await import('../lib/metrics')
-        const { commitUrl } = await import('../lib/registry')
+        const { activityLog } = await import('../host/metrics')
+        const { commitUrl } = await import('../host/registry')
         // Fold deploy.sh's journal into Postgres before reading it back. Done
         // on demand here; the build reporter (core/builds/report.ts) also
         // ingests an app's journal on its own tick while a GitHub Deployment
@@ -361,7 +361,7 @@ export const fetchAppTab = createServerFn()
         const [deploys, activity, deploy, builds] = await Promise.all([
           listDeployments(record.id),
           activityLog(name, 60),
-          (await import('../lib/deploy')).lastDeploy(name),
+          (await import('../host/deploy')).lastDeploy(name),
           record.sourceMode === 'local' ? Promise.resolve([]) : recentBuilds(record.id, 10),
         ])
         return {
@@ -385,7 +385,7 @@ export const fetchAppTab = createServerFn()
       }
 
       case 'access': {
-        const { appAccess, noAccess } = await import('../lib/access')
+        const { appAccess, noAccess } = await import('../host/access')
         // Gated on the app actually being published through the tunnel:
         // `stage != live` means there is no cfweb traffic to find, so the ten
         // queries would all be a round trip to confirm zero.
@@ -403,8 +403,8 @@ export const fetchAppTab = createServerFn()
         // serialised into the HTML, so shipping them and masking with CSS
         // would put every database password in view-source — theatre, not
         // concealment. The reveal button fetches one value at a time.
-        const { readEnvSnapshot } = await import('../lib/env-snapshot')
-        const { operatorSecretApps } = await import('../lib/nix-manifest')
+        const { readEnvSnapshot } = await import('../host/env-snapshot')
+        const { operatorSecretApps } = await import('../host/nix-manifest')
         const declared = new Map(record.envVars.map((e) => [e.key, e.note]))
         const snapshot = await readEnvSnapshot(
           name,
@@ -435,7 +435,7 @@ export const fetchAppTab = createServerFn()
         return { kind: 'logs' }
 
       case 'database': {
-        const { appDatabase, NO_DATABASE } = await import('../lib/metrics')
+        const { appDatabase, NO_DATABASE } = await import('../host/metrics')
         // Gated on the app actually having a database: without it every app
         // without postgres would pay for sixteen round trips to be told that
         // `pg_database_size_bytes{datname="…"}` matches nothing.
@@ -448,7 +448,7 @@ export const fetchAppTab = createServerFn()
       }
 
       case 'vpn': {
-        const { appVpn, NO_VPN } = await import('../lib/metrics')
+        const { appVpn, NO_VPN } = await import('../host/metrics')
         return {
           kind: 'vpn',
           vpn:
@@ -470,14 +470,14 @@ export const fetchAppTab = createServerFn()
  * pick from, and the names already spoken for.
  *
  * The repo list is the slow half (a GitHub round trip, as the App installation
- * — lib/github-repos.ts) and the taken names are two file reads plus a query,
+ * — host/github-repos.ts) and the taken names are two file reads plus a query,
  * but they are fetched together: the form cannot usefully render half of
  * itself, since picking a repo is what every later step keys off.
  */
 export const fetchNewAppOptions = createServerFn().handler(async () => {
-  const { listRepos } = await import('../lib/github-repos')
+  const { listRepos } = await import('../host/github-repos')
   const { listApps } = await import('../lib/repo/apps')
-  const { manifestEntries } = await import('../lib/nix-manifest')
+  const { manifestEntries } = await import('../host/nix-manifest')
 
   const [repos, records, manifest] = await Promise.all([listRepos(), listApps(), manifestEntries()])
 
@@ -501,7 +501,7 @@ export const fetchNewAppOptions = createServerFn().handler(async () => {
 export const fetchAppPreflight = createServerFn()
   .inputValidator((i: { name: string; image: string | null }) => i)
   .handler(async ({ data }) => {
-    const { imageInfo } = await import('../lib/registry')
+    const { imageInfo } = await import('../host/registry')
 
     const effectiveImage = data.image?.trim() || defaultImage(data.name)
 
@@ -557,14 +557,14 @@ export const saveApp = createServerFn({ method: 'POST' })
   })
 
 /**
- * Publish an apply request — an adapter over lib/apply-flow.ts, which owns
+ * Publish an apply request — an adapter over host/apply-flow.ts, which owns
  * the whole check-and-write. The only thing decided here is the actor:
  * whoever passed the Pocket ID gate. The forward-auth middleware forwards
  * the claim as a header (auth.headers in stacks/daedalus/daedalus.nix), so
  * the commit records a person rather than "daedalus".
  */
 export const applyRegistry = createServerFn({ method: 'POST' }).handler(async () => {
-  const { runApply } = await import('../lib/apply-flow')
+  const { runApply } = await import('../host/apply-flow')
   const outcome = await runApply(getRequestHeader('x-forwarded-email') ?? 'unknown operator')
   return outcome.ok
     ? { ok: true as const, id: outcome.id, changed: outcome.changed }
@@ -572,7 +572,7 @@ export const applyRegistry = createServerFn({ method: 'POST' }).handler(async ()
 })
 
 export const fetchApplyStatus = createServerFn().handler(async () => {
-  const { readApplyStatus } = await import('../lib/apply')
+  const { readApplyStatus } = await import('../host/apply')
   return readApplyStatus()
 })
 
@@ -583,7 +583,7 @@ export const fetchApplyStatus = createServerFn().handler(async () => {
 export const triggerDeploy = createServerFn({ method: 'POST' })
   .inputValidator((name: string) => name)
   .handler(async ({ data: name }) => {
-    const { requestDeploy } = await import('../lib/deploy')
+    const { requestDeploy } = await import('../host/deploy')
     const { getApp } = await import('../lib/repo/apps')
 
     const record = await getApp(name)
@@ -606,7 +606,7 @@ export const triggerDeploy = createServerFn({ method: 'POST' })
 export const revealEnvVar = createServerFn({ method: 'POST' })
   .inputValidator((i: { name: string; key: string }) => i)
   .handler(async ({ data }) => {
-    const { readEnvSnapshot } = await import('../lib/env-snapshot')
+    const { readEnvSnapshot } = await import('../host/env-snapshot')
     const { getApp } = await import('../lib/repo/apps')
 
     // Confirms the app is one this instance manages, so the app name cannot be
@@ -627,7 +627,7 @@ export const revealEnvVar = createServerFn({ method: 'POST' })
   })
 
 export const fetchDeployStatus = createServerFn().handler(async () => {
-  const { readDeployStatus } = await import('../lib/deploy')
+  const { readDeployStatus } = await import('../host/deploy')
   return readDeployStatus()
 })
 
@@ -635,7 +635,7 @@ export const fetchDeployStatus = createServerFn().handler(async () => {
  * Ask the host to clone a project's repo into the workspace root — or, when
  * the workspace already exists, to pull it. What crosses the bridge is a
  * repo slug; the clone happens host-side over the operator's SSH identity,
- * which never enters this container (lib/workspaces.ts).
+ * which never enters this container (host/workspaces.ts).
  *
  * The allowlist is exactly the repos this UI offers a button for: the
  * registry apps (keyed OWNER/<name>) and the off-box projects' hand-declared
@@ -645,7 +645,7 @@ export const fetchDeployStatus = createServerFn().handler(async () => {
 export const cloneWorkspaceFn = createServerFn({ method: 'POST' })
   .inputValidator((i: { repo: string }) => i)
   .handler(async ({ data }) => {
-    const { requestWorkspaceClone } = await import('../lib/workspaces')
+    const { requestWorkspaceClone } = await import('../host/workspaces')
     const { listApps } = await import('../lib/repo/apps')
     const { makeCtx } = await import('../core/ctx')
     const { listExternalApps } = await import('../core/settings/external-apps')
@@ -664,6 +664,6 @@ export const cloneWorkspaceFn = createServerFn({ method: 'POST' })
   })
 
 export const fetchWorkspaceRequestStatus = createServerFn().handler(async () => {
-  const { readWorkspaceRequestStatus } = await import('../lib/workspaces')
+  const { readWorkspaceRequestStatus } = await import('../host/workspaces')
   return readWorkspaceRequestStatus()
 })

@@ -123,7 +123,7 @@ export const fetchBuild = createServerFn()
     const { getApp } = await import('../lib/repo/apps')
     const { deploymentOfDigest } = await import('../lib/repo/build-views')
     const { detectionFromStatus } = await import('../lib/build-detect')
-    const { readBuildLogTail } = await import('../lib/build-bridge')
+    const { readBuildLogTail } = await import('../host/build-bridge')
     const { deployOutcome } = await import('../lib/build-display')
 
     const row = toBuildRow(record)
@@ -349,7 +349,7 @@ export const cancelBuildFn = createServerFn({ method: 'POST' })
       }
     }
 
-    const { requestBuildCancel } = await import('../lib/build-bridge')
+    const { requestBuildCancel } = await import('../host/build-bridge')
     const { CANCELLED_BY_OPERATOR } = await import('../lib/build-queue')
     await requestBuildCancel(record.id)
     await updateFromStatus(

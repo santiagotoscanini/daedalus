@@ -1,4 +1,4 @@
-import { promScalar, promVector } from '../../../prom'
+import { promScalar, promVector } from '../../../../host/prom'
 import { hostFacts, type SmartDisk } from '../../host-facts'
 
 /* ── Disks ────────────────────────────────────────────────────────────── */

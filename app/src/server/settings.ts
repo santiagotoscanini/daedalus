@@ -15,7 +15,7 @@ import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../l
 // Server functions behind Settings: the read-only facts (core/settings), the
 // live integration checks, and the one preference that is editable. Values
 // in the preference store never reach the site repo and never trigger a
-// rebuild — see the `settings` table comment in lib/schema.ts for where that
+// rebuild — see the `settings` table comment in host/schema.ts for where that
 // line is drawn.
 //
 // Value imports are dynamic so the database module is not pulled into a client
@@ -44,7 +44,7 @@ export const fetchGeneralLive = createServerFn().handler(async (): Promise<Gener
   const { makeCtx } = await import('../core/ctx')
   const { listZones } = await import('../core/settings/zones')
   const { nixosRelease } = await import('../core/settings/nixos')
-  const { siteIdentity } = await import('../lib/contract/domains/site')
+  const { siteIdentity } = await import('../host/contract/domains/site')
   const [ctx, site] = await Promise.all([makeCtx(), siteIdentity()])
   const [zones, nixos] = await Promise.all([listZones(ctx), nixosRelease(site.data.nixos)])
   return { zones, nixos }

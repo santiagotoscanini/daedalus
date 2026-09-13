@@ -30,7 +30,7 @@
 // one dead service blanks the page is worse than no dashboard: the whole point
 // is to see WHICH thing is down. Tiles render "—" for a stat they could not
 // read and keep their status dot, which comes from gatus. (The one deliberate
-// exception lives in lib/access.ts, where a throw is what distinguishes "Loki
+// exception lives in host/access.ts, where a throw is what distinguishes "Loki
 // down" from "no traffic".)
 
 /**

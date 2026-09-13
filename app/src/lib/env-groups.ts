@@ -1,6 +1,6 @@
 // Pure classification of environment variables — NO node builtins.
 //
-// Split out of env-snapshot.ts deliberately. That module reads the snapshot
+// Split out of host/env-snapshot.ts deliberately. That module reads the snapshot
 // off disk, so importing anything from it — even a plain lookup table — drags
 // `node:fs/promises` into the client bundle and Vite externalises it, which
 // fails at runtime with "Module has been externalized for browser
@@ -9,6 +9,8 @@
 //
 // Rule of thumb for this codebase: a module a route imports VALUES from must
 // be free of node builtins. Type-only imports are erased and are always safe.
+// That rule is now a directory — anything that needs the machine lives under
+// src/host/ — and host/boundary.test.ts is what keeps it true.
 
 /**
  * Where a variable came from — which is also who can change it.

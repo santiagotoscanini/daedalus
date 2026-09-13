@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 // Type-only, so it is erased rather than pulling the bridge's node:fs into a
 // bundle — the value import below stays dynamic like every other server reach.
-import type { ImageTarget } from '../lib/image-update'
+import type { ImageTarget } from '../host/image-update'
 import { isRecord } from '../lib/is-record'
 
 // Move a container's image pin without the UI, and read back where it got to.
 //
 // Same code path as the Update button — both are adapters over
-// lib/update-flow.ts's runImageUpdate — so this is the scriptable door onto
+// host/update-flow.ts's runImageUpdate — so this is the scriptable door onto
 // exactly the mechanism a person drives from the Updates page, not a second
 // one that could drift from it. Useful for testing the host agent, and for
 // the eventual "take patch updates on a schedule" without anything having to
@@ -31,12 +31,12 @@ export const Route = createFileRoute('/api/image-update')({
   server: {
     handlers: {
       GET: async () => {
-        const { readImageUpdateStatus } = await import('../lib/image-update')
+        const { readImageUpdateStatus } = await import('../host/image-update')
         return Response.json(await readImageUpdateStatus())
       },
 
       POST: async ({ request }) => {
-        const { runImageUpdate } = await import('../lib/update-flow')
+        const { runImageUpdate } = await import('../host/update-flow')
 
         // `null` is valid JSON: the parse succeeds, the catch never fires, and
         // a cast to a record would leave every read below to throw outside the

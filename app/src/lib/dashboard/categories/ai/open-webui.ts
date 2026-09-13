@@ -1,5 +1,5 @@
+import { key } from '../../../../host/keys'
 import { getJson } from '../../../http'
-import { key } from '../../../keys'
 import { type VersionGap, versionGap } from '../../github'
 import { type ImageFreshness, imageFreshness } from '../../images'
 

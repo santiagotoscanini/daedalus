@@ -11,7 +11,7 @@ const h = vi.hoisted(() => ({
   calls: [] as { where: unknown }[],
 }))
 
-vi.mock('../db', () => ({
+vi.mock('../../host/db', () => ({
   db: {
     query: {
       apps: {

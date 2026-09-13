@@ -78,14 +78,14 @@ vi.mock('../../lib/repo/deployments', () => ({
   },
   listDeployments: async () => h.deploys,
 }))
-vi.mock('../../lib/build-bridge', () => ({ readBuildLogTail: async () => h.log }))
-vi.mock('../../lib/contract/domains/site-doc', () => ({
+vi.mock('../../host/build-bridge', () => ({ readBuildLogTail: async () => h.log }))
+vi.mock('../../host/contract/domains/site-doc', () => ({
   readCommittedSite: async () => {
     boom('site')
     return h.site
   },
 }))
-vi.mock('../../lib/contract/domains/site', () => ({
+vi.mock('../../host/contract/domains/site', () => ({
   siteIdentity: async () => ({ data: { controlPlane: { hostname: null } } }),
 }))
 

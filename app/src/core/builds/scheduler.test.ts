@@ -54,7 +54,7 @@ const h = vi.hoisted(() => ({
   readStatusHook: null as null | (() => Promise<void>),
 }))
 
-vi.mock('../../lib/build-bridge', () => ({
+vi.mock('../../host/build-bridge', () => ({
   readBuildStatus: async () => {
     h.calls.readStatus++
     if (h.readStatusHook) await h.readStatusHook()
@@ -109,8 +109,8 @@ vi.mock('../../lib/repo/github-deliveries', () => ({
 vi.mock('../../lib/repo/settings', () => ({
   SETTING_KEYS: { buildsLastSweep: 'builds.lastSweep' },
 }))
-vi.mock('../../lib/nix-manifest', () => ({ manifestEntries: async () => h.manifest }))
-vi.mock('../../lib/github-token', () => ({ tokenUsable: () => h.tokenOk }))
+vi.mock('../../host/nix-manifest', () => ({ manifestEntries: async () => h.manifest }))
+vi.mock('../../host/github-token', () => ({ tokenUsable: () => h.tokenOk }))
 vi.mock('../github-app', () => ({
   installationState: async () => h.installation,
   listInstallationRepos: async () => h.repos,

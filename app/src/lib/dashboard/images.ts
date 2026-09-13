@@ -31,10 +31,10 @@
 // Published by daedalus-image-snapshot (stacks/daedalus/host/image-snapshot.sh)
 // because this app cannot run podman — it is a container itself.
 
+import { imagePins, imageTagMap } from '../../host/contract/domains/images'
+import { readSnapshot } from '../../host/contract/snapshot'
 import { swrValue } from '../cache'
 import { arrayOf, bool, nullable, obj, optional, recordOf, str } from '../contract/decode'
-import { imagePins, imageTagMap } from '../contract/domains/images'
-import { readSnapshot } from '../contract/snapshot'
 
 export type ImageLabels = {
   /** `org.opencontainers.image.version`. */

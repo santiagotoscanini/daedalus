@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react'
 
 import type { BoxSettings, GeneralLive, NixosRelease, ZoneList } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
-import type { NixosFacts } from '../../lib/contract/domains/site'
+import type { NixosFacts } from '../../host/contract/domains/site'
 import { num, since } from '../../lib/format'
 import { builtOn, type Support } from '../../lib/nixos'
 import { controlPlaneLabelError } from '../../lib/site-fields'

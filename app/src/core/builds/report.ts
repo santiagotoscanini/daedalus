@@ -326,14 +326,14 @@ type SiteFacts = {
 
 /** The control plane host as core/settings/github-app.ts derives it. Never a request header. */
 async function siteFacts(ctx: Ctx): Promise<SiteFacts> {
-  const { readCommittedSite } = await import('../../lib/contract/domains/site-doc')
+  const { readCommittedSite } = await import('../../host/contract/domains/site-doc')
   const site = await readCommittedSite()
   const doc = site.present ? site.doc : null
   let controlPlane: string | null = null
   if (doc !== null && doc.identity.controlPlane !== '' && doc.identity.baseDomain !== '') {
     controlPlane = `${doc.identity.controlPlane}.${doc.identity.baseDomain}`
   } else {
-    const { siteIdentity } = await import('../../lib/contract/domains/site')
+    const { siteIdentity } = await import('../../host/contract/domains/site')
     const host = (await siteIdentity()).data.controlPlane.hostname ?? ctx.env('APP_HOSTNAME') ?? ''
     controlPlane = host === '' ? null : host
   }
@@ -723,7 +723,7 @@ async function reportFinal(ctx: Ctx, row: BuildRow, repo: RepoRef, site: SiteFac
 
   const conclusion = CONCLUSION[row.state]
   if (conclusion !== undefined && m.completed.get(row.id) !== row.state) {
-    const { readBuildLogTail } = await import('../../lib/build-bridge')
+    const { readBuildLogTail } = await import('../../host/build-bridge')
     const [tail, whole] = await Promise.all([readBuildLogTail(row.id), withDetails(row)])
     const out = checkRunOutput({
       title: titleOf(whole, site, delivery),

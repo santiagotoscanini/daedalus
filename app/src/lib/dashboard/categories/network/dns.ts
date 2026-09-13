@@ -1,9 +1,9 @@
-import { networkFacts } from '../../../contract/domains/network'
+import { networkFacts } from '../../../../host/contract/domains/network'
+import { key } from '../../../../host/keys'
+import { lanHosts, webAppHosts } from '../../../../host/nix-manifest'
 import { localDay } from '../../../format'
 import { BASE_DOMAIN } from '../../../hostname'
 import { getJson } from '../../../http'
-import { key } from '../../../keys'
-import { lanHosts, webAppHosts } from '../../../nix-manifest'
 import { type VersionGap, versionGap } from '../../github'
 import { LAN_IP, piholeAdmin, type TraefikRouter } from './shared'
 

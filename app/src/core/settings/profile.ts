@@ -1,4 +1,4 @@
-import { webAppHosts } from '../../lib/nix-manifest'
+import { webAppHosts } from '../../host/nix-manifest'
 import {
   lengthError,
   MAX_PICTURE_BYTES,

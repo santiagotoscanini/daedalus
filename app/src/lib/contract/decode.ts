@@ -1,5 +1,10 @@
 // A hand-rolled decoder, because the alternative was a validation library.
 //
+// The pure half of the host contract, which is why it stayed in lib/ when the
+// readers moved: these combinators touch no file and no environment, and
+// lib/repo and lib/dashboard decode with them too. The readers that open the
+// host's files are host/contract/.
+//
 // Every fact this app renders arrives as JSON from outside its type system —
 // nix exports, host snapshots, service APIs — and for years each read site
 // cast with `as T`, which is a promise the file never made. These combinators

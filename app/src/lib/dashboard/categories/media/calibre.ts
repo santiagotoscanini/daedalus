@@ -1,6 +1,6 @@
+import { key } from '../../../../host/keys'
+import { promScalars } from '../../../../host/prom'
 import { getJson } from '../../../http'
-import { key } from '../../../keys'
-import { promScalars } from '../../../prom'
 import { type VersionGap, versionGap } from '../../github'
 import { imageTag } from '../../images'
 import type { Ctx } from './shared'

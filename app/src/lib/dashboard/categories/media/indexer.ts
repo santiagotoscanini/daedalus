@@ -1,5 +1,5 @@
+import { key } from '../../../../host/keys'
 import { getJson } from '../../../http'
-import { key } from '../../../keys'
 import { type VersionGap, versionGap } from '../../github'
 import { ARR_TAG, type Ctx } from './shared'
 import type { ArrData } from './wanted'

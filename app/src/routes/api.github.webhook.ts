@@ -2,9 +2,9 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
 import type { Ctx } from '../core/ctx'
+import { verifyWebhookSignature } from '../host/github-app-crypto'
 import { decode } from '../lib/contract/decode'
 import { type GithubPushEvent, pushEventDecoder } from '../lib/github-app'
-import { verifyWebhookSignature } from '../lib/github-app-crypto'
 import {
   alreadyHandled,
   appsPinnedTo,
@@ -149,7 +149,7 @@ async function handleDelivery(delivery: Delivery, deps: WebhookDeps): Promise<Re
 
   const [{ withTransaction }, { recordDelivery, setDeliveryOutcome }, { insertOrSupersedeQueued }] =
     await Promise.all([
-      import('../lib/db'),
+      import('../host/db'),
       import('../lib/repo/github-deliveries'),
       import('../lib/repo/builds'),
     ])

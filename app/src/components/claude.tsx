@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 // helpers this page needs live at the bottom of this file for the same
 // reason. claude-rc-request is under the same rule (it imports the bridge,
 // which reads node:fs), which is why its idle shape is restated below.
-import type { ClaudeRcStatus } from '../lib/claude-rc-request'
+import type { ClaudeRcStatus } from '../host/claude-rc-request'
 import { cn } from '../lib/cn'
 import type { ClaudeData, ClaudeFacts, ClaudeSession, RcEvent } from '../lib/dashboard/claude'
 import type { VersionGap } from '../lib/dashboard/github'

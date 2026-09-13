@@ -28,9 +28,9 @@
 // what a transcript never contains, and be wrong the first time somebody
 // pasted a log into a session.
 
+import { readSnapshot } from '../../host/contract/snapshot'
+import { lokiStreams } from '../../host/loki'
 import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '../contract/decode'
-import { readSnapshot } from '../contract/snapshot'
-import { lokiStreams } from '../loki'
 import { type VersionGap, versionGap } from './github'
 import { loadShotter, playwrightInstalled, type ShotterData } from './shotter'
 

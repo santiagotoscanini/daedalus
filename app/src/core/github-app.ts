@@ -1,8 +1,8 @@
-import { defineBridge } from '../lib/bridge'
+import { defineBridge } from '../host/bridge'
+import { readCommittedSite } from '../host/contract/domains/site-doc'
+import type { SnapshotResult } from '../host/contract/snapshot'
+import { type GithubInstallation, readGithubInstallation, usableToken } from '../host/github-token'
 import { nullable, obj, optional, str } from '../lib/contract/decode'
-import { readCommittedSite } from '../lib/contract/domains/site-doc'
-import type { SnapshotResult } from '../lib/contract/snapshot'
-import { type GithubInstallation, readGithubInstallation, usableToken } from '../lib/github-token'
 import type { Ctx } from './ctx'
 import type { SiteGithubApp } from './site/file'
 

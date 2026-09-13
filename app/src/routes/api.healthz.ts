@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { ensureScheduler } from '../core/builds/scheduler'
-import { sql } from '../lib/db'
+import { sql } from '../host/db'
 
 // Liveness + readiness. This one path carries three jobs, all declared in
 // stacks/daedalus/daedalus.nix as `auth.healthPath = "/api/healthz"`:

@@ -28,7 +28,7 @@ export const fetchUpdateNotes = createServerFn()
   })
 
 export const fetchImageUpdateStatus = createServerFn().handler(async () => {
-  const { readImageUpdateStatus } = await import('../lib/image-update')
+  const { readImageUpdateStatus } = await import('../host/image-update')
   return readImageUpdateStatus()
 })
 
@@ -48,7 +48,7 @@ export const fetchImageUpdateStatus = createServerFn().handler(async () => {
 export const requestImageUpdateFn = createServerFn({ method: 'POST' })
   .inputValidator((input: { targets: { container: string; toTag?: string }[] }) => input)
   .handler(async ({ data }) => {
-    const { runImageUpdate } = await import('../lib/update-flow')
+    const { runImageUpdate } = await import('../host/update-flow')
     // The forward-auth middleware forwards the Pocket ID claim, so the commit
     // this produces records a person rather than "daedalus".
     const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'

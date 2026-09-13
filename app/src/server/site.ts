@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
 import type { SiteEdit, SiteField, SiteState } from '../core/site'
-import type { SiteRequestStatus } from '../lib/site-request'
+import type { SiteRequestStatus } from '../host/site-request'
 
 // Server functions behind Settings › Site: the directory's state against what
 // this box would write, the commit switch, and the one action that writes.
@@ -20,7 +20,7 @@ export const fetchSiteState = createServerFn().handler(async (): Promise<SiteSta
 
 export const fetchSiteRequestStatus = createServerFn().handler(
   async (): Promise<SiteRequestStatus> => {
-    const { readSiteRequestStatus } = await import('../lib/site-request')
+    const { readSiteRequestStatus } = await import('../host/site-request')
     return readSiteRequestStatus()
   },
 )

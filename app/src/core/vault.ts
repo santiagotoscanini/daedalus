@@ -18,7 +18,7 @@ import {
 // a snapshotted dataset) only ever sees ciphertext. Every secret the UI sets
 // goes through here — the Cloudflare token (core/settings/cloudflare-token.ts)
 // and the GitHub App's key (core/settings/github-app.ts) — and then to Apply
-// as its own change (lib/apply-flow.ts runSecretApply).
+// as its own change (host/apply-flow.ts runSecretApply).
 
 export type Sealed = { ok: true; ciphertext: string } | { ok: false; reason: string }
 

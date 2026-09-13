@@ -12,8 +12,8 @@ import { Button } from '../components/ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../components/ui/field'
 import { Input } from '../components/ui/input'
 import { Board, BoardGrid } from '../components/viz'
+import type { Repo } from '../host/github-repos'
 import { cn } from '../lib/cn'
-import type { Repo } from '../lib/github-repos'
 import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import { readiness } from '../lib/readiness'
 import { defaultImage, OWNER } from '../lib/site'
@@ -295,7 +295,7 @@ function Wizard({ options }: { options: Options }) {
                   onChange={setDescription}
                 />
                 {/* No icon field: the app publishes its own and daedalus
-                    reads it from there (lib/app-icon.ts). Until the first
+                    reads it from there (host/app-icon.ts). Until the first
                     image is built there is nothing serving one, and the list
                     shows a monogram in the meantime. */}
               </Board>

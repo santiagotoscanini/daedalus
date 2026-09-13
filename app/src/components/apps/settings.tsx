@@ -122,7 +122,7 @@ export function Settings({
           }}
         />
         {/* No icon field: the app publishes one and daedalus reads it. See
-            lib/app-icon.ts — a column here could only ever agree or
+            host/app-icon.ts — a column here could only ever agree or
             disagree with what the browser tab already shows. */}
         <TextField
           label="Image override"

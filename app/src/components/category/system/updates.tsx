@@ -1,5 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
+import type { ImageUpdateStatus } from '../../../host/image-update'
 import { cn } from '../../../lib/cn'
 import type {
   UpdateRow,
@@ -7,7 +8,6 @@ import type {
   UpdateVerdict,
 } from '../../../lib/dashboard/categories/system/updates'
 import { DASH } from '../../../lib/format'
-import type { ImageUpdateStatus } from '../../../lib/image-update'
 import {
   fetchImageUpdateStatus,
   fetchUpdateNotes,

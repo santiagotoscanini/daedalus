@@ -1,7 +1,7 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
+import type { ImageUpdateStatus } from '../host/image-update'
 import { cn } from '../lib/cn'
-import type { ImageUpdateStatus } from '../lib/image-update'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../server/updates'
 import { MONO, MONO_FACE } from './category/system/shared'
 import { usePolledStatus } from './status'

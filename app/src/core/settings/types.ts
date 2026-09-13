@@ -1,7 +1,7 @@
-import type { ApplyStatus } from '../../lib/apply'
-import type { RepoFacts } from '../../lib/contract/domains/repo'
-import type { NixosFacts } from '../../lib/contract/domains/site'
-import type { GithubInstallation, GithubTokenKind } from '../../lib/github-token'
+import type { ApplyStatus } from '../../host/apply'
+import type { RepoFacts } from '../../host/contract/domains/repo'
+import type { NixosFacts } from '../../host/contract/domains/site'
+import type { GithubInstallation, GithubTokenKind } from '../../host/github-token'
 import type { NixosCycle, NixosNotes, Support } from '../../lib/nixos'
 import type { SiteGithubApp } from '../site/file'
 

@@ -1,5 +1,5 @@
+import type { NixosFacts } from '../../host/contract/domains/site'
 import { swrCache } from '../../lib/cache'
-import type { NixosFacts } from '../../lib/contract/domains/site'
 import { githubHeaders } from '../../lib/dashboard/github'
 import {
   latestCycle,

@@ -11,9 +11,9 @@
 // would blank three tabs at once, and a file that is ten minutes stale about
 // facts which move in hours is strictly better than that.
 
+import { readSnapshot } from '../../host/contract/snapshot'
 import { swrValue } from '../cache'
 import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '../contract/decode'
-import { readSnapshot } from '../contract/snapshot'
 
 export type SmartDisk = {
   device: string

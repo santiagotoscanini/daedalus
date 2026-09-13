@@ -59,7 +59,7 @@ export const ACTIVE_TICK_MS = 3_000
 export const IDLE_TICK_MS = 30_000
 /** A tick or sweep still running after this is presumed hung; the next one takes over. */
 export const TICK_TIMEOUT_MS = 5 * 60_000
-/** A written request the host has not answered blocks another this long (lib/apply-flow.ts). */
+/** A written request the host has not answered blocks another this long (host/apply-flow.ts). */
 export const PICKUP_MS = 120_000
 export const FIRST_SWEEP_MS = 60_000
 export const SWEEP_EVERY_MS = 60 * 60_000
@@ -379,7 +379,7 @@ async function warningsOf(app: string, status: BuildStatus): Promise<DetectionWa
  * cadence of the next one. Exported for the tests; the interval calls `tick`.
  */
 export async function runTick(ctx: Ctx, now: Date, state: SchedulerState): Promise<boolean> {
-  const bridge = await import('../../lib/build-bridge')
+  const bridge = await import('../../host/build-bridge')
   const repo = await import('../../lib/repo/builds')
   const { reportBuildChange, reportTick } = await import('./report')
   const { createHash } = await import('node:crypto')
@@ -566,7 +566,7 @@ async function settleQueue(
   const apps = new Map(records.map((a) => [a.name, a as AppBuildFacts]))
   let inManifest: Set<string> | null = null
   if (!inFlight && installed) {
-    const { manifestEntries } = await import('../../lib/nix-manifest')
+    const { manifestEntries } = await import('../../host/nix-manifest')
     // apps.json: the registry-mode apps the host builder will accept.
     inManifest = new Set(
       (await manifestEntries())
@@ -632,7 +632,7 @@ async function settleQueue(
   const claimed = await repo.claimQueued(row.id, now)
   if (claimed === undefined) return false
   try {
-    await (await import('../../lib/build-bridge')).requestBuild(request)
+    await (await import('../../host/build-bridge')).requestBuild(request)
     state.pending = { id: row.id, at: now.getTime() }
   } catch (e) {
     console.warn(`[builds] ${row.app}: the build request could not be written: ${errorText(e)}`)
@@ -734,7 +734,7 @@ async function sweepGithub(
   if (at < state.githubBackoffUntil) return 'rate limited'
 
   const github = await import('../github-app')
-  const { tokenUsable } = await import('../../lib/github-token')
+  const { tokenUsable } = await import('../../host/github-token')
   if (!tokenUsable(await github.installationState(ctx), at)) {
     logOnce(state, 'github:no-token', 'sweep: no usable installation token; GitHub skipped', at)
     return 'no usable installation token'

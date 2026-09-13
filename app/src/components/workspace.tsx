@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import type { WorkspaceRequestStatus } from '../lib/workspaces'
+import type { WorkspaceRequestStatus } from '../host/workspaces'
 import { cloneWorkspaceFn, fetchWorkspaceRequestStatus } from '../server/registry'
 import { usePolledStatus } from './status'
 import { Button } from './ui/button'

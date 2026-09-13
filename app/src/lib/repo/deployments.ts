@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { desc, eq } from 'drizzle-orm'
+import { db } from '../../host/db'
+import { imageInfo } from '../../host/registry'
+import { deployments } from '../../host/schema'
 import { decode, num, obj, optional, str } from '../contract/decode'
-import { db } from '../db'
-import { imageInfo } from '../registry'
-import { deployments } from '../schema'
 
 // Ingests deploy.sh's journal into Postgres, and reads it back for the UI.
 

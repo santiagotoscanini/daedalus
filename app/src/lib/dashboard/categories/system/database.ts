@@ -1,4 +1,4 @@
-import { promScalar, promScalars, promVector } from '../../../prom'
+import { promScalar, promScalars, promVector } from '../../../../host/prom'
 import type { VersionGap } from '../../github'
 import { postgresGap } from '../../postgres'
 

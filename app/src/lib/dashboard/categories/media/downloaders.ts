@@ -1,5 +1,5 @@
+import { promScalars } from '../../../../host/prom'
 import { ATTEMPT_MS, getJson, getText } from '../../../http'
-import { promScalars } from '../../../prom'
 import { type VersionGap, versionGap } from '../../github'
 import { imageTag, imageVersion, type RunningVersion } from '../../images'
 import type { Ctx } from './shared'

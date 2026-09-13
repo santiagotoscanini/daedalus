@@ -1,5 +1,5 @@
-import { imagePins } from '../../../contract/domains/images'
-import { type ImageUpdateStatus, readImageUpdateStatus } from '../../../image-update'
+import { imagePins } from '../../../../host/contract/domains/images'
+import { type ImageUpdateStatus, readImageUpdateStatus } from '../../../../host/image-update'
 import { type CommitGap, commitsSince, EMPTY_GAP, type VersionGap, versionGap } from '../../github'
 import { releaseSourceFor } from '../../image-repos'
 import {

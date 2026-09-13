@@ -116,7 +116,7 @@ a generic icon set does not survive.
 
 `pnpm typecheck` and `pnpm lint` do not see a single pixel, and there
 are no component tests — the suite is node-side table tests over
-`src/lib`. So the check is a browser:
+`src/lib` and `src/host`. So the check is a browser:
 
 1. `events.json` before the pictures, always. Baseline under the gate
    is **2 page errors per load** (the HMR websocket 302s, plus a

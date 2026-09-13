@@ -27,7 +27,7 @@ export const fetchClaude = createServerFn().handler(async () => {
  * ~ten seconds.
  */
 export const requestClaudeRestartFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { requestClaudeRcRestart } = await import('../lib/claude-rc-request')
+  const { requestClaudeRcRestart } = await import('../host/claude-rc-request')
   // The forward-auth middleware forwards the Pocket ID claim, so the request
   // records a person rather than "daedalus".
   const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
@@ -35,6 +35,6 @@ export const requestClaudeRestartFn = createServerFn({ method: 'POST' }).handler
 })
 
 export const fetchClaudeRcStatusFn = createServerFn().handler(async () => {
-  const { readClaudeRcStatus } = await import('../lib/claude-rc-request')
+  const { readClaudeRcStatus } = await import('../host/claude-rc-request')
   return readClaudeRcStatus()
 })

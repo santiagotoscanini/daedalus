@@ -32,10 +32,10 @@
 //                                 and Friday Facts, which is the closest thing
 //                                 to a changelog that is machine-readable
 
+import { lokiEntries } from '../../../host/loki'
+import { promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
 import { getJson } from '../../http'
-import { lokiEntries } from '../../loki'
 import { decodeEntities } from '../../plain-text'
-import { promScalar, promScalars, promSeries, promVector } from '../../prom'
 import type { Commit, CommitGap } from '../github'
 
 /**
@@ -201,7 +201,7 @@ async function loadFactorio(ctx: { base: (app: string) => string }): Promise<Fac
  * Everything the game says about itself, in one Loki query.
  *
  * One rather than two on purpose — Loki's budget is a single patient attempt
- * (lib/loki.ts), so lifecycle and joins ride the same line filter and are told
+ * (host/loki.ts), so lifecycle and joins ride the same line filter and are told
  * apart here. The shapes are ofsm's and the game's own:
  *
  *   Factorio server with save: … started on port: 34197     (ofsm)

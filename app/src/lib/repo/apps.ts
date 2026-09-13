@@ -1,14 +1,14 @@
 import { asc, eq } from 'drizzle-orm'
-import { REGISTRY_SCHEMA_VERSION } from '../contract/version'
-import { db } from '../db'
-import { appNameError, BASE_DOMAIN, effectiveHostname, hostnameError } from '../hostname'
+import { db } from '../../host/db'
 import {
   type AppStage,
   type ManifestApp,
   type ManifestEntry,
   manifestEntries,
-} from '../nix-manifest'
-import { appEnvVars, apps } from '../schema'
+} from '../../host/nix-manifest'
+import { appEnvVars, apps } from '../../host/schema'
+import { REGISTRY_SCHEMA_VERSION } from '../contract/version'
+import { appNameError, BASE_DOMAIN, effectiveHostname, hostnameError } from '../hostname'
 
 // Reads and writes over the app registry, plus the drift comparison against
 // what Nix actually built.
@@ -155,7 +155,7 @@ export function validateNewApp(input: Record<string, unknown>): NewApp {
 export async function createApp(input: NewApp): Promise<{ name: string }> {
   const name = input.name.trim().toLowerCase()
 
-  const { manifestEntries, hostnamesTakenBy } = await import('../nix-manifest')
+  const { manifestEntries, hostnamesTakenBy } = await import('../../host/nix-manifest')
   const existing = await listApps()
   const taken = [
     ...existing.map((a) => a.name),
@@ -333,7 +333,7 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
   // and an invalid hostname does not fail here — it fails inside
   // `nixos-rebuild` during an Apply, after the commit, which costs a revert.
   if (typeof clean.hostname === 'string') {
-    const { hostnamesTakenBy } = await import('../nix-manifest')
+    const { hostnamesTakenBy } = await import('../../host/nix-manifest')
     const own = record.hostname ?? `${name}.${BASE_DOMAIN}`
     const err = hostnameError(clean.hostname, await hostnamesTakenBy(own))
     if (err) throw new Error(`hostname ${err}`)

@@ -1,6 +1,6 @@
+import { promVector } from '../../../../host/prom'
 import { DASH } from '../../../format'
 import { getJson } from '../../../http'
-import { promVector } from '../../../prom'
 import { type VersionGap, versionGap } from '../../github'
 
 /**

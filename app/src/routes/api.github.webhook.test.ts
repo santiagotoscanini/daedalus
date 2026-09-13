@@ -45,7 +45,7 @@ const h = vi.hoisted(() => ({
   seq: 0,
 }))
 
-vi.mock('../lib/db', () => ({
+vi.mock('../host/db', () => ({
   withTransaction: async <T>(fn: (tx: FakeTx) => Promise<T>): Promise<T> => {
     const tx: FakeTx = {
       deliveries: new Map(h.deliveries),

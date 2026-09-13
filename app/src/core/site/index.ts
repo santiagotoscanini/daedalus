@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
-import type { RepoFacts, SiteDir, SiteFileStatus } from '../../lib/contract/domains/repo'
-import { repoFacts } from '../../lib/contract/domains/repo'
-import { decodeSiteDocument, readCommittedSite } from '../../lib/contract/domains/site-doc'
+import type { RepoFacts, SiteDir, SiteFileStatus } from '../../host/contract/domains/repo'
+import { repoFacts } from '../../host/contract/domains/repo'
+import { decodeSiteDocument, readCommittedSite } from '../../host/contract/domains/site-doc'
+import { requestSiteWrite, type SiteFileName } from '../../host/site-request'
 import { controlPlaneLabelError } from '../../lib/site-fields'
-import { requestSiteWrite, type SiteFileName } from '../../lib/site-request'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
 import { renderSiteFile, renderSiteReadme, type SiteDocument, siteDocument } from './file'
@@ -17,7 +17,7 @@ import { renderSiteFile, renderSiteReadme, type SiteDocument, siteDocument } fro
 // them is what an Apply writes. Before any edit the desired document is
 // simply the committed one; after an Apply they agree again.
 //
-//   committed   /site/site.json, mounted read-only (lib/contract/domains/site-doc)
+//   committed   /site/site.json, mounted read-only (host/contract/domains/site-doc)
 //   desired     the `site.draft` preference, or committed when there is none
 //   running     what the box was actually built with (the /export domains, via
 //               BoxSettings) — the fallback for the very first write, before a
@@ -231,7 +231,7 @@ async function refuseUnknown(
     const own = [committed?.identity.controlPlane, committed?.identity.controlPlanePrevious]
       .filter((l): l is string => typeof l === 'string' && l !== '')
       .map((l) => `${l}.${domain}`)
-    const { publishingFacts } = await import('../../lib/contract/domains/publishing')
+    const { publishingFacts } = await import('../../host/contract/domains/publishing')
     const { takenHostnames } = await publishingFacts()
     if (takenHostnames.includes(host) && !own.includes(host)) {
       throw new Error(`${host} is already published on this box.`)
@@ -380,10 +380,10 @@ export type WriteOutcome = { ok: true; id: string } | { ok: false; reason: strin
  * Ask the host to write site.json (and the README) as desired. This is the
  * Site tab's door and does NOT rebuild — it exists for the first write, and
  * for a directory that fell out of step. A change to a value nix reads goes
- * through Apply (lib/apply-flow.ts), which writes the same bytes and rebuilds.
+ * through Apply (host/apply-flow.ts), which writes the same bytes and rebuilds.
  */
 export async function writeSite(ctx: Ctx, actor: string): Promise<WriteOutcome> {
-  const { readSiteRequestStatus } = await import('../../lib/site-request')
+  const { readSiteRequestStatus } = await import('../../host/site-request')
   const inFlight = await readSiteRequestStatus()
   if (inFlight.state === 'running') {
     return { ok: false, reason: `the host is already working on this (${inFlight.phase})` }

@@ -1,7 +1,7 @@
+import { key } from '../../../../host/keys'
+import { webAppHosts } from '../../../../host/nix-manifest'
+import { promScalar, promScalars, promSeries, promVector } from '../../../../host/prom'
 import { getJson, getJsonResult, getText } from '../../../http'
-import { key } from '../../../keys'
-import { webAppHosts } from '../../../nix-manifest'
-import { promScalar, promScalars, promSeries, promVector } from '../../../prom'
 import { CF_TUNNEL_READ, type CfTunnel, cfReadError, LAN_IP, PIHOLE, piholeSid } from './shared'
 
 /**

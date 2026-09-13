@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import { db } from '../db'
-import { settings } from '../schema'
+import { db } from '../../host/db'
+import { settings } from '../../host/schema'
 
 // The preferences store. One row per key; see the `settings` table comment in
 // schema.ts for what does and does not belong in it.

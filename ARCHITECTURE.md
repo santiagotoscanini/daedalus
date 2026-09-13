@@ -235,12 +235,22 @@ flowchart TB
     Set["settings/** · site/** · vault.ts"]
   end
 
-  subgraph lib["src/lib/ — pure, unit-tested"]
-    Bridges["bridge.ts + one module per verb"]
+  subgraph lib["src/lib/ — pure, client-safe, unit-tested"]
     BuildLib["builds · build-queue · build-detect<br/>build-facts · build-settings · build-display"]
-    Contract["contract/** — decode + one reader per host file"]
+    Decode["contract/decode · contract/version<br/>the pure half of the host contract"]
+    Shared["http · cache · format · hostname<br/>site-fields · env-groups · cn · …"]
+  end
+
+  subgraph named["still src/lib/ — server-only, and the name says so"]
     Repo["repo/** — the only path to the database"]
     Dash["dashboard/** — the category pages' data"]
+  end
+
+  subgraph host["src/host/ — needs the machine<br/>node builtins · the database · process.env"]
+    Bridges["bridge.ts + one module per verb"]
+    Contract["contract/** — one reader per host file"]
+    Dbm["db · schema"]
+    Clients["env · keys · prom · loki · metrics · registry<br/>nix-manifest · env-snapshot · workspaces<br/>github-token · github-repos · app-icon"]
   end
 
   DB[("Postgres · apps · app_env_vars · deployments<br/>builds · github_deliveries · settings")]
@@ -261,15 +271,33 @@ flowchart TB
   BuildLib --> Repo
   Set --> Contract
   Dash --> Contract
-  Repo --> DB
+  Dash --> Clients
+  Repo --> Dbm --> DB
+  Contract --> Decode
   Contract --> Snap
+  Clients --> Snap
   Bridges --> Apply
   Ctx -.-> Snap
 ```
 
 The invariants the picture states: nothing in `client` imports a *value* from
-`core`, `lib/repo` is the only path to the database, and `core` is imported
-dynamically so it never reaches a client bundle.
+`core` or from `host`, `lib/repo` is the only path to the database, and `core`
+is imported dynamically so it never reaches a client bundle.
+
+The `lib` / `host` line is the one a reader uses first, so it is drawn to be
+answerable from the path alone: **a module lives in `src/host/` if it needs the
+machine** — a `node:` builtin, the database, or `process.env` — or if it
+statically imports something that does. `lib/repo/**` and `lib/dashboard/**`
+are server-only as well and stay where they are, because *their* names already
+carry the same information.
+
+None of that holds by discipline. `src/host/boundary.test.ts` builds the real
+import graph — static value imports only, since `import type` is erased by
+`verbatimModuleSyntax` and a `createServerFn` handler is erased from the client
+build — and fails if a component or a page route can reach a module that needs
+the machine, or if such a module appears outside the server regions. A
+component may still name a host module's *type*; deleting the `type` keyword
+from that import is the mistake the test is there to catch.
 
 `Ctx` is the seam that makes the server half testable — it is the set of
 capabilities a reader is handed (environment, secrets, export paths, snapshots,

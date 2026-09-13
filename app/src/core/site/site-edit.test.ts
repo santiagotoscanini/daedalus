@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import type { RepoFacts } from '../../lib/contract/domains/repo'
+import type { RepoFacts } from '../../host/contract/domains/repo'
 import type { Ctx } from '../ctx'
+import { renderSiteFiles, saveSiteEdit, siteEdit, siteState } from './'
 import { renderSiteFile, type SiteDocument } from './file'
-import { renderSiteFiles, saveSiteEdit, siteEdit, siteState } from './index'
 
 // The GitHub block rides every path that renders site.json: the edit the
 // Settings tabs and the Apply bar read (siteEdit, whose render.after is what

@@ -1,6 +1,6 @@
+import { promBars, promPoints, promScalar, promScalars, promVector } from '../../../../host/prom'
 import { localDay } from '../../../format'
 import { getJson } from '../../../http'
-import { promBars, promPoints, promScalar, promScalars, promVector } from '../../../prom'
 import { type VersionGap, versionGap } from '../../github'
 import { clientHost, idpClients, type PocketClient } from '../idp'
 import { DAYS, type TraefikRouter } from './shared'

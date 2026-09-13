@@ -15,7 +15,7 @@ import {
 } from './builds'
 
 // Apps › <name> › Settings › Builds: what a request may change. Engine-only
-// columns (lib/schema.ts): nix never reads them, so a save here ships nothing
+// columns (host/schema.ts): nix never reads them, so a save here ships nothing
 // and lights no Apply bar. Client-safe, so the editors show the same verdicts
 // the server enforces. The name and value rules themselves are lib/builds.ts's,
 // shared with the request decoder, so a setting that saves is one the host

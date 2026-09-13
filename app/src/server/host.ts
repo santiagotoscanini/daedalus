@@ -23,7 +23,7 @@ import { getRequestHeader } from '@tanstack/react-start/server'
  * status will ever be written.
  */
 export const requestRebootFn = createServerFn({ method: 'POST' }).handler(async () => {
-  const { requestReboot } = await import('../lib/power-request')
+  const { requestReboot } = await import('../host/power-request')
   // The forward-auth middleware forwards the Pocket ID claim, so the request
   // records a person rather than "daedalus".
   const actor = getRequestHeader('x-forwarded-email') ?? 'unknown operator'
@@ -31,6 +31,6 @@ export const requestRebootFn = createServerFn({ method: 'POST' }).handler(async 
 })
 
 export const fetchPowerRequestStatus = createServerFn().handler(async () => {
-  const { readPowerRequestStatus } = await import('../lib/power-request')
+  const { readPowerRequestStatus } = await import('../host/power-request')
   return readPowerRequestStatus()
 })

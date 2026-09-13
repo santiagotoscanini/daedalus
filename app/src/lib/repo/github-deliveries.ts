@@ -1,6 +1,6 @@
 import { eq, lt } from 'drizzle-orm'
-import { db, type Executor } from '../db'
-import { githubDeliveries } from '../schema'
+import { db, type Executor } from '../../host/db'
+import { githubDeliveries } from '../../host/schema'
 
 // The webhook's replay guard. See the `github_deliveries` table comment.
 

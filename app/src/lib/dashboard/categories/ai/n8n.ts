@@ -1,6 +1,6 @@
+import { key } from '../../../../host/keys'
 import { DASH, localDay, since } from '../../../format'
 import { getJson } from '../../../http'
-import { key } from '../../../keys'
 import { type VersionGap, versionGap } from '../../github'
 import { DAYS } from './shared'
 

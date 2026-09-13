@@ -1,5 +1,7 @@
 import { createHash, createPrivateKey, randomBytes } from 'node:crypto'
-import { readCommittedSite } from '../../lib/contract/domains/site-doc'
+import { readCommittedSite } from '../../host/contract/domains/site-doc'
+import { safeEqual } from '../../host/github-app-crypto'
+import { publicInstallation } from '../../host/github-token'
 import {
   buildManifest,
   GITHUB_APP_EVENTS,
@@ -7,8 +9,6 @@ import {
   GITHUB_APP_PERMISSIONS,
   installUrl,
 } from '../../lib/github-app'
-import { safeEqual } from '../../lib/github-app-crypto'
-import { publicInstallation } from '../../lib/github-token'
 import { getJsonResult } from '../../lib/http'
 import { isRecord } from '../../lib/is-record'
 import { BASE_DOMAIN, OWNER } from '../../lib/site'
@@ -263,7 +263,7 @@ async function fetchOwner(): Promise<{ ok: true; owner: Owner } | { ok: false; r
 async function controlPlaneHost(ctx: Ctx, doc: SiteDocument): Promise<string | null> {
   const { baseDomain, controlPlane } = doc.identity
   if (controlPlane !== '' && baseDomain !== '') return `${controlPlane}.${baseDomain}`
-  const { siteIdentity } = await import('../../lib/contract/domains/site')
+  const { siteIdentity } = await import('../../host/contract/domains/site')
   const host = (await siteIdentity()).data.controlPlane.hostname ?? ctx.env('APP_HOSTNAME') ?? ''
   return host === '' ? null : host
 }
@@ -285,7 +285,7 @@ export async function startAppCreation(
   if ((await ctx.store.read(SETTING_KEYS.githubAppPendingApply, isPendingApply)) !== undefined) {
     return refuse('A created App is still waiting for its Apply. Retry or discard that first.')
   }
-  const { secretApplyBlocker } = await import('../../lib/apply-flow')
+  const { secretApplyBlocker } = await import('../../host/apply-flow')
   const blocked = await secretApplyBlocker()
   if (blocked !== null) return refuse(blocked)
 
@@ -455,7 +455,7 @@ async function applyApp(
   }
   const siteJson = renderSiteFile({ ...site.doc, github: { app } })
   try {
-    const { runSecretApply } = await import('../../lib/apply-flow')
+    const { runSecretApply } = await import('../../host/apply-flow')
     const outcome = await runSecretApply(
       actor,
       { file: GITHUB_APP_FILE, name: VAULT_NAME, ciphertext },
@@ -737,7 +737,7 @@ export async function pasteAppKey(
   if (!sealed.ok) return refuse(sealed.reason)
 
   try {
-    const { runSecretApply } = await import('../../lib/apply-flow')
+    const { runSecretApply } = await import('../../host/apply-flow')
     const outcome = await runSecretApply(actor, {
       file: GITHUB_APP_FILE,
       name: VAULT_NAME,

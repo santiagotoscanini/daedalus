@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /** The marks the fleet's own apps serve at `/icon.svg`, redrawn inline.
  *
  * daedalus fetches each app's icon from the app itself and falls back to a
- * monogram only when it answers with none (see `src/lib/app-icon.ts` in the
+ * monogram only when it answers with none (see `src/host/app-icon.ts` in the
  * app). A demo built entirely out of monograms therefore shows the failure
  * mode rather than the product, so the seven apps that ship a mark carry it
  * here.

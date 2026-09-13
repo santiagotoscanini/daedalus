@@ -13,10 +13,10 @@
 // files, the pantry — this is plainly one of the household's own things: it is
 // the list of people, and of what each of them can open.
 
-import { declaredSsoClients } from '../../contract/domains/sso'
+import { declaredSsoClients } from '../../../host/contract/domains/sso'
+import { key } from '../../../host/keys'
 import { localDay, since } from '../../format'
 import { getJson } from '../../http'
-import { key } from '../../keys'
 import { type VersionGap, versionGap } from '../github'
 
 /** How far back the activity columns go. A column per day, as on the AI tabs. */

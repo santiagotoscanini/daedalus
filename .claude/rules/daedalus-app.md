@@ -81,13 +81,25 @@ the remote is still the copy that survives a disk. Commit often.
   VIEWS (static components). `src/lib/dashboard/nav.ts` declares
   categories/tabs. A new category = nav entry + all three records;
   the compiler enforces agreement.
-- **The shared client layer**: `lib/http.ts` (retry ladder, request
-  coalescer, pool), `lib/prom.ts` (PromQL + promEscape), `lib/loki.ts`
-  (LogQL, one-patient-attempt budget), `lib/cache.ts` (swrCache /
-  swrValue, the two-clock stale-serving contract), `lib/format.ts`
-  (isomorphic formatters), `lib/keys.ts` (the DASH_* secrets
-  accessor — the one process.env read, kept out of format.ts so
-  components can import it).
+- **`src/lib/` versus `src/host/` — the split the path names**:
+  a module goes in `src/host/` if it needs the machine (a `node:`
+  builtin, the database, or `process.env`) or statically imports
+  something that does; `src/lib/`'s top level is pure and a component
+  may import values from it. `lib/repo/**` (drizzle), `lib/dashboard/**`
+  (the category data layer) and `lib/apps/**` are server-only too and
+  stay in `lib/` because their own names already say so. **New rule for
+  a new file: if it reaches for the host, it goes under `src/host/`** —
+  `src/host/boundary.test.ts` walks the real import graph and fails
+  otherwise, naming the file and the edge.
+- **The shared fetch layer**: `lib/http.ts` (retry ladder, request
+  coalescer, pool) and `lib/cache.ts` (swrCache / swrValue, the
+  two-clock stale-serving contract) are pure and stayed in `lib/`;
+  `host/prom.ts` (PromQL + promEscape) and `host/loki.ts` (LogQL,
+  one-patient-attempt budget) read their base URL from the env and did
+  not. `lib/format.ts` (isomorphic formatters) is importable from a
+  component precisely because `host/keys.ts` — the DASH_* secrets
+  accessor, the one `process.env` read it used to carry — was split out
+  of it.
 - `src/core/` — the productization core (plan, Phases 2+). `ctx.ts` is
   the capability set a reader is handed instead of `process.env`
   (env, secrets, snapshots, the preferences store, http, loki) —
@@ -116,13 +128,33 @@ the remote is still the copy that survives a disk. Commit often.
   Apply those two legitimately differ.
   `types.ts` is client-safe; nothing else in `core/` is.
 - `src/server/` — server functions (category, lemonade, registry,
-  settings).
+  settings). The seam a route imports STATICALLY, so its module top
+  level must be client-safe: **every value import here is `await
+  import(...)` inside the handler**, which the Start plugin erases from
+  the client build. A static import of `host/`, `core/`, `lib/repo/` or
+  `lib/dashboard/` from this directory puts that module in the browser
+  chunk of every route that uses the server function; `host/boundary.test.ts`
+  fails on it.
 - `src/lib/repo/` — drizzle repositories (apps, deployments);
-  `src/lib/schema.ts` + `db.ts` for the database side
-  (`pnpm db:generate` / `db:migrate` for schema changes).
-- `src/lib/contract/` — the decode layer for everything the host
-  publishes (`/export` domains, snapshots, the registry schema
-  version).
+  `src/host/schema.ts` + `host/db.ts` for the database side
+  (`pnpm db:generate` / `db:migrate` for schema changes; drizzle.config
+  points at `src/host/schema.ts`).
+- `src/host/` — everything that needs the machine: the bridge and one
+  module per verb (`bridge.ts`, `apply.ts`, `apply-flow.ts`,
+  `deploy.ts`, `image-update.ts`, `update-flow.ts`, `site-request.ts`,
+  `power-request.ts`, `claude-rc-request.ts`, `build-bridge.ts`), the
+  database (`db.ts`, `schema.ts`), the env schema and the snapshot
+  readers (`env.ts`, `env-snapshot.ts`, `nix-manifest.ts`,
+  `workspaces.ts`), the credential-carrying clients (`keys.ts`,
+  `prom.ts`, `loki.ts`, `metrics.ts`, `access.ts`, `registry.ts`,
+  `github-token.ts`, `github-repos.ts`, `github-app-crypto.ts`,
+  `app-icon.ts`, `vpn-egress.ts`), and `host/contract/`.
+- **The contract, in two halves.** `src/lib/contract/` is the pure
+  half — `decode.ts` (the combinators; `lib/repo` and `lib/dashboard`
+  decode with them too) and `version.ts` (the registry schema version).
+  `src/host/contract/` is the half that opens files: `snapshot.ts` (the
+  one reader for every host-published file) and `domains/*.ts` (one
+  reader per `/export` domain).
 
 ## Data-flow rules
 
@@ -150,7 +182,7 @@ the remote is still the copy that survives a disk. Commit often.
   snapshot script in the s2-server repo's `stacks/daedalus/host/` and
   its nix wiring.
 - Config values come from env vars bound in `daedalus.nix` (in the
-  s2-server repo's `stacks/daedalus/`; `src/lib/env.ts` is the schema)
+  s2-server repo's `stacks/daedalus/`; `src/host/env.ts` is the schema)
   — never hardcode hostnames, IPs, versions, or tokens in TypeScript;
   the nix side already knows them and binds them so they can't drift.
 - Secrets (service API keys) arrive via rendered env files
@@ -171,17 +203,17 @@ the remote is still the copy that survives a disk. Commit often.
   `power-request.json` → `daedalus-power` → `power-status.json`;
   `claude-rc-request.json` → `daedalus-claude-rc` →
   `claude-rc-status.json`; `github-token-request.json` →
-  `daedalus-github-token` → `github-token-status.json`. `lib/bridge.ts`
+  `daedalus-github-token` → `github-token-status.json`. `host/bridge.ts`
   is the one implementation of the mechanics (temp + rename, payload
   written before the request that points at it).
-  A dedicated flow module in `lib/` exists for exactly two of them —
+  A dedicated flow module in `host/` exists for exactly two of them —
   `apply-flow.ts` and `update-flow.ts` — because apply and image-update
   are the verbs whose button and `api.*` route would otherwise be two
   hand-copied bodies. The rest write their bridge straight from their
   own module (`deploy.ts`, whose redeploy button and zot push event
   both call its `requestDeploy`; `build-bridge.ts`, `site-request.ts`,
   `workspaces.ts`, `power-request.ts`, `claude-rc-request.ts`,
-  `core/github-app.ts`).
+  `core/github-app.ts`) — all of them under `host/`.
   `build-request.json` is the one the box's own builder watches:
   `daedalus-build.service` picks it up, writes progress back to
   `/apply/build-status.json` (heartbeated; stale past 90 s) and its log

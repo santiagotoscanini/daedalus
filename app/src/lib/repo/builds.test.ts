@@ -2,8 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { getTableColumns } from 'drizzle-orm'
 import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core'
 import { describe, expect, it } from 'vitest'
-import type { Executor } from '../db'
-import { builds } from '../schema'
+import type { Executor } from '../../host/db'
+import { builds } from '../../host/schema'
 import {
   BUILD_LIST_COLUMNS,
   type BuildRecord,
@@ -205,7 +205,7 @@ describe('toBuildRow', () => {
       phase: '',
       timings: {},
       // Null, not []: nobody computed warnings for this row, and the two are
-      // different claims (lib/schema.ts builds.warnings).
+      // different claims (host/schema.ts builds.warnings).
       warnings: null,
       strategy: 'auto',
       resolvedStrategy: 'railpack',

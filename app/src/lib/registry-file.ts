@@ -1,4 +1,4 @@
-import type { ManifestApp } from './nix-manifest'
+import type { ManifestApp } from '../host/nix-manifest'
 
 // Renders site/apps.json — the exact bytes that land in the configuration repo.
 //

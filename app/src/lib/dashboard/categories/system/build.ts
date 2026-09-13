@@ -1,4 +1,4 @@
-import { promScalars, promVector } from '../../../prom'
+import { promScalars, promVector } from '../../../../host/prom'
 import { type Hardware, hostFacts } from '../../host-facts'
 
 /* ── Build ────────────────────────────────────────────────────────────── */

@@ -15,8 +15,8 @@
 
 import { Link, useRouter } from '@tanstack/react-router'
 import { Fragment, type KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
+import type { Repo } from '../../host/github-repos'
 import { cn } from '../../lib/cn'
-import type { Repo } from '../../lib/github-repos'
 import { BASE_DOMAIN } from '../../lib/hostname'
 import { defaultImage } from '../../lib/site'
 import { Badge } from '../ui/badge'

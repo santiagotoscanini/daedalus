@@ -24,9 +24,9 @@
 // not a cache, because every other number on this dashboard has to be live.
 // Release history is the one upstream where staleness is free.
 
+import { readGithubInstallation, usableToken } from '../../host/github-token'
+import { key } from '../../host/keys'
 import { swrCache } from '../cache'
-import { readGithubInstallation, usableToken } from '../github-token'
-import { key } from '../keys'
 import { stripTags } from '../plain-text'
 
 /**

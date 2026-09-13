@@ -1,6 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import type { ApplyStatus } from '../lib/apply'
+import type { ApplyStatus } from '../host/apply'
 import { cn } from '../lib/cn'
 import { applyRegistry, fetchApplyStatus } from '../server/registry'
 import { usePolledStatus } from './status'
@@ -26,7 +26,7 @@ const PHASES = [
 
 /**
  * "2 apps changed", "The site changed", "1 app and the site changed". The
- * entry named `site` is the site document (lib/apply-flow.ts), not an app,
+ * entry named `site` is the site document (host/apply-flow.ts), not an app,
  * and counting it as one would misstate what the rebuild is for.
  */
 function heading(changed: { name: string }[]): string {

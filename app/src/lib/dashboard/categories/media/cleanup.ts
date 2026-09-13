@@ -1,4 +1,4 @@
-import { lokiLatest, lokiScalar } from '../../../loki'
+import { lokiLatest, lokiScalar } from '../../../../host/loki'
 import { type VersionGap, versionGap } from '../../github'
 import {
   type ImageFreshness,

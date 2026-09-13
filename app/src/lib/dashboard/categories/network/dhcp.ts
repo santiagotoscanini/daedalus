@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { type NetworkFacts, networkFacts } from '../../../contract/domains/network'
+import { type NetworkFacts, networkFacts } from '../../../../host/contract/domains/network'
 import { getJson } from '../../../http'
 import { PIHOLE, piholeAdmin, piholeSid } from './shared'
 

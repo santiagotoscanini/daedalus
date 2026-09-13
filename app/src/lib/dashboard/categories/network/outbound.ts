@@ -1,8 +1,8 @@
+import { lokiLatest } from '../../../../host/loki'
+import { promPoints, promScalar, promVector } from '../../../../host/prom'
+import { declaredVpnEgress, type VpnEgress } from '../../../../host/vpn-egress'
 import { localDay } from '../../../format'
 import { getJson } from '../../../http'
-import { lokiLatest } from '../../../loki'
-import { promPoints, promScalar, promVector } from '../../../prom'
-import { declaredVpnEgress, type VpnEgress } from '../../../vpn-egress'
 import {
   type CommitGap,
   commitsSince,

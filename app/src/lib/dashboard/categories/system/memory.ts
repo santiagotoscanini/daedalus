@@ -1,5 +1,5 @@
+import { promBars, promScalar, promScalars, promVector } from '../../../../host/prom'
 import { bytes } from '../../../format'
-import { promBars, promScalar, promScalars, promVector } from '../../../prom'
 import { type Hardware, hostFacts } from '../../host-facts'
 
 /* ── Memory ───────────────────────────────────────────────────────────── */

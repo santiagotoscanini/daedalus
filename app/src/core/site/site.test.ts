@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { decodeSiteDocument } from '../../lib/contract/domains/site-doc'
+import { decodeSiteDocument } from '../../host/contract/domains/site-doc'
+import { changesBetween, getField } from './'
 import { renderSiteFile, type SiteDocument, type SiteGithubApp } from './file'
-import { changesBetween, getField } from './index'
 
 // The renderer and the decoder are two halves of one contract: what one
 // writes the other must read back unchanged, or the Site tab reports a

@@ -1,6 +1,6 @@
+import { key } from '../../../../host/keys'
+import { webAppHosts } from '../../../../host/nix-manifest'
 import { getJson, type JsonResult } from '../../../http'
-import { key } from '../../../keys'
-import { webAppHosts } from '../../../nix-manifest'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 

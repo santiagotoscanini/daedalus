@@ -13,6 +13,8 @@ import {
   type SQL,
   sql,
 } from 'drizzle-orm'
+import { db, type Executor, type Tx } from '../../host/db'
+import { apps, builds } from '../../host/schema'
 import type { DetectionWarning } from '../build-detect'
 import type { BuildFacts } from '../build-facts'
 import { type BuildLane, type BuildRow, ENGINE_VERDICTS } from '../build-queue'
@@ -26,8 +28,6 @@ import {
   isTerminalBuildState,
   TERMINAL_BUILD_STATES,
 } from '../builds'
-import { db, type Executor, type Tx } from '../db'
-import { apps, builds } from '../schema'
 
 // Build history for the box's own builder. This module only persists: the
 // queue's rules are lib/build-queue.ts, the vocabulary is lib/builds.ts.

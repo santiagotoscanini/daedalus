@@ -1,6 +1,6 @@
 import { asc, eq } from 'drizzle-orm'
-import { db } from '../db'
-import { apps } from '../schema'
+import { db } from '../../host/db'
+import { apps } from '../../host/schema'
 
 // Which app a GitHub repository belongs to, for the webhook.
 

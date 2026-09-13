@@ -1,6 +1,6 @@
+import { key } from '../../../../host/keys'
+import { promScalars, promSeries } from '../../../../host/prom'
 import { getJson } from '../../../http'
-import { key } from '../../../keys'
-import { promScalars, promSeries } from '../../../prom'
 import { type VersionGap, versionGap } from '../../github'
 import { daysSince } from './shared'
 

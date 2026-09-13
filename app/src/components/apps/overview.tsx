@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import type { DeployStatus } from '../../lib/deploy'
+import type { DeployStatus } from '../../host/deploy'
 import { DASH, since } from '../../lib/format'
 import { type AppTabData, fetchDeployStatus, triggerDeploy } from '../../server/registry'
 import { usePolledStatus } from '../status'

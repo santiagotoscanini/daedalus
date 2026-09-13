@@ -17,7 +17,7 @@ import { sealForVault } from '../vault'
 // before anything changes. Only then is it encrypted, HERE, for site/vault/
 // (core/vault.ts): the container holds no age identity, so it can write the
 // secret and never read it back. The ciphertext goes to Apply as its own
-// change (lib/apply-flow.ts runSecretApply); nix renders it for all four
+// change (host/apply-flow.ts runSecretApply); nix renders it for all four
 // consumers and restarts them (stacks/cloudflared). site/vault/ is the token's
 // only home: the old env.sops copy and the toggle beside it are gone.
 //
@@ -146,7 +146,7 @@ export async function replaceCloudflareToken(
   const sealed = await sealForVault(CLOUDFLARE_TOKEN_FILE, token)
   if (!sealed.ok) return sealed
 
-  const { runSecretApply } = await import('../../lib/apply-flow')
+  const { runSecretApply } = await import('../../host/apply-flow')
   const outcome = await runSecretApply(actor, {
     file: CLOUDFLARE_TOKEN_FILE,
     name: CLOUDFLARE_TOKEN_SECRET,

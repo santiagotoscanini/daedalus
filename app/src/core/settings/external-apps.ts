@@ -6,7 +6,7 @@ import type { Ctx } from '../ctx'
 // hand-edited literal as the seed. Nothing on the box builds or serves these
 // sites, so nix never consumes the list — which is exactly the kind of value
 // that belongs in Postgres rather than the site repository (see the
-// `settings` table comment in lib/schema.ts). Read-only until the settings
+// `settings` table comment in host/schema.ts). Read-only until the settings
 // page grows an editor for it; until then the seed is what renders, and a row
 // written by hand under `apps.external` overrides it whole.
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { safeEqual } from '../lib/github-app-crypto'
+import { safeEqual } from '../host/github-app-crypto'
 import { isRecord } from '../lib/is-record'
 
 // "A new image landed — redeploy this app."
@@ -28,7 +28,7 @@ export const Route = createFileRoute('/api/deploy')({
         const denied = authFailure(request)
         if (denied) return denied
 
-        const { readDeployStatus } = await import('../lib/deploy')
+        const { readDeployStatus } = await import('../host/deploy')
         return Response.json(await readDeployStatus())
       },
 
@@ -36,7 +36,7 @@ export const Route = createFileRoute('/api/deploy')({
         const denied = authFailure(request)
         if (denied) return denied
 
-        const { requestDeploy } = await import('../lib/deploy')
+        const { requestDeploy } = await import('../host/deploy')
         const { getApp } = await import('../lib/repo/apps')
 
         // `null` is valid JSON: the parse succeeds, the catch never fires, and
@@ -139,7 +139,7 @@ export const Route = createFileRoute('/api/deploy')({
 
         // The new image may ship a new icon, and the icon cache holds answers
         // for an hour — a redeploy is the one event that invalidates it.
-        const { forgetAppIcon } = await import('../lib/app-icon')
+        const { forgetAppIcon } = await import('../host/app-icon')
         forgetAppIcon(app)
 
         return Response.json({ status: 'queued', id, app })

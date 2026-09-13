@@ -1,11 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { makeCtx } from '../core/ctx'
 import { findExternalApp } from '../core/settings/external-apps'
-import { appIcon, type ResolvedIcon, siteIcon } from '../lib/app-icon'
+import { appIcon, type ResolvedIcon, siteIcon } from '../host/app-icon'
 import { effectiveHostname } from '../lib/hostname'
 import { getApp } from '../lib/repo/apps'
 
-// Serves an app's own icon, fetched from the app. See lib/app-icon.ts for why
+// Serves an app's own icon, fetched from the app. See host/app-icon.ts for why
 // it is read from the app rather than stored beside it.
 //
 // Proxied through here rather than pointed at directly with an <img src> to

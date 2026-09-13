@@ -32,7 +32,7 @@ export type { CategoryPayload }
 
 /** `https://<hostname>` per webApp, plus the host as containers see it. */
 async function makeCtx(): Promise<{ base: (app: string) => string; hc: string }> {
-  const { webAppHosts } = await import('../lib/nix-manifest')
+  const { webAppHosts } = await import('../host/nix-manifest')
   const hosts = await webAppHosts()
   return {
     // A missing webApp is a catalogue bug, not a runtime condition — the
@@ -92,7 +92,7 @@ export const fetchTabStatus = createServerFn()
     const spec = CATEGORIES.find((c) => c.id === data.category)
     if (spec === undefined) return {}
 
-    const { promVector } = await import('../lib/prom')
+    const { promVector } = await import('../host/prom')
     const [probes, egress, uplink, logs] = await Promise.all([
       promVector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`),
       // Only when a tab actually asks for it — this is two more prometheus
@@ -147,13 +147,13 @@ export const fetchTabStatus = createServerFn()
  * is unreadable or prometheus has no answer — "cannot tell", not "down".
  */
 async function vpnEgressHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../lib/prom')
-  const { declaredVpnEgress } = await import('../lib/vpn-egress')
+  const { promScalar } = await import('../host/prom')
+  const { declaredVpnEgress } = await import('../host/vpn-egress')
 
   const declared = await declaredVpnEgress()
   if (declared.length === 0) return null
 
-  const { promEscape } = await import('../lib/prom')
+  const { promEscape } = await import('../host/prom')
   const names = declared.flatMap((d) => [d.container, d.exporter])
   const [tunnels, containers, seen] = await Promise.all([
     // `min` over the set, and `count` beside it: min alone would report
@@ -180,7 +180,7 @@ async function vpnEgressHealth(): Promise<boolean | null> {
  * the same.
  */
 async function uplinkHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../lib/prom')
+  const { promScalar } = await import('../host/prom')
   const [worst, seen] = await Promise.all([
     promScalar('min(network_hop_up)'),
     promScalar('count(network_hop_up)'),
@@ -208,7 +208,7 @@ async function uplinkHealth(): Promise<boolean | null> {
  * min over an empty set is not a failure, it is no answer.
  */
 async function logPipelineHealth(): Promise<boolean | null> {
-  const { promScalar } = await import('../lib/prom')
+  const { promScalar } = await import('../host/prom')
   const [worst, seen] = await Promise.all([
     promScalar('min(up{job=~"loki|alloy"})'),
     promScalar('count(up{job=~"loki|alloy"})'),
