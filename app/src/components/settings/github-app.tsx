@@ -1,7 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { ExternalLinkIcon } from 'lucide-react'
 import { type ReactNode, useEffect, useId, useRef, useState, useTransition } from 'react'
-
 import type {
   GithubAppState,
   GithubAppStatus,
@@ -11,6 +10,7 @@ import type {
 } from '../../core/settings/types'
 import type { SiteGithubApp } from '../../core/site/file'
 import { until, when } from '../../lib/format'
+import { errorText } from '../../lib/redact'
 import type { Tone } from '../../lib/tone'
 import {
   discardGithubPendingApplyFn,
@@ -57,23 +57,24 @@ export function Github({
 }) {
   if (!configured) return <Chip tone="muted">not configured</Chip>
   if (check === undefined) return <Pending />
-  if (!check.ok) return <Bad>{check.error ?? 'rejected'}</Bad>
+  if (!check.ok) return <Bad>{check.reason ?? 'rejected'}</Bad>
+  const { kind, login, scopes, rateLimit } = check.value
   const budget =
-    check.rateLimit === null
+    rateLimit === null
       ? null
-      : `${String(check.rateLimit.remaining)} of ${String(check.rateLimit.limit)} requests left this hour`
+      : `${String(rateLimit.remaining)} of ${String(rateLimit.limit)} requests left this hour`
   return (
     <span className="inline-flex flex-col items-end gap-[0.1rem]">
       <span className="inline-flex items-center gap-2">
-        <Chip tone="ok">{check.kind}</Chip>
-        {check.login !== null && <Mono>{check.login}</Mono>}
+        <Chip tone="ok">{kind}</Chip>
+        {login !== null && <Mono>{login}</Mono>}
       </span>
       <span className="text-[0.78rem] text-(--text-muted)">
-        {check.kind === 'fine-grained'
+        {kind === 'fine-grained'
           ? 'scopes are per-repository and not reported by the API'
-          : check.scopes.length === 0
+          : scopes.length === 0
             ? 'no scopes'
-            : check.scopes.join(', ')}
+            : scopes.join(', ')}
       </span>
       {budget !== null && <span className="text-[0.72rem] text-(--dim)">{budget}</span>}
     </span>
@@ -266,10 +267,10 @@ function CreateApp({ app }: { app: GithubAppStatus }) {
     start(async () => {
       try {
         const r = await startGithubAppFn({ data: { name: trimmed } })
-        if (r.ok) setLaunch({ action: r.action, manifest: r.manifest, state: r.state })
+        if (r.ok) setLaunch(r.value)
         else setError(r.reason)
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
+        setError(errorText(e))
       }
     })
   }
@@ -458,10 +459,10 @@ function PendingApply({
     start(async () => {
       try {
         const r = await discardGithubPendingApplyFn()
-        if (r.ok) setDiscarded(r.slug)
+        if (r.ok) setDiscarded(r.value.slug)
         else setOutcome({ ok: false, text: r.reason })
       } catch (e) {
-        setOutcome({ ok: false, text: e instanceof Error ? e.message : String(e) })
+        setOutcome({ ok: false, text: errorText(e) })
       }
     })
   }
@@ -513,7 +514,7 @@ function PendingApply({
           setOutcome({ ok: false, text: r.reason })
         }
       } catch (e) {
-        setOutcome({ ok: false, text: e instanceof Error ? e.message : String(e) })
+        setOutcome({ ok: false, text: errorText(e) })
       }
     })
   }

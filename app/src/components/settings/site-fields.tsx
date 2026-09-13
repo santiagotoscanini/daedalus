@@ -1,8 +1,8 @@
 import { useRouter } from '@tanstack/react-router'
 import { type ReactNode, useId, useState, useTransition } from 'react'
-
 import type { SiteEdit, SiteField } from '../../core/site'
 import { cn } from '../../lib/cn'
+import { errorText } from '../../lib/redact'
 import { getSiteField, parseUpstreams } from '../../lib/site-fields'
 import {
   type DiffLine,
@@ -66,7 +66,7 @@ function useSiteSave() {
         await saveSiteEditFn({ data: patch })
         await router.invalidate()
       } catch (e) {
-        setRefused(e instanceof Error ? e.message : String(e))
+        setRefused(errorText(e))
       }
     })
   }

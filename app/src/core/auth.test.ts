@@ -21,7 +21,7 @@ describe('the gate', () => {
   })
 
   it('trims the identity it does find', () => {
-    expect(actorOf(req(' op@example.test '))).toEqual({ ok: true, actor: 'op@example.test' })
+    expect(actorOf(req(' op@example.test '))).toEqual({ ok: true, value: 'op@example.test' })
     expect(actorOrNull(actorOf(req(' op@example.test ')))).toBe('op@example.test')
   })
 })

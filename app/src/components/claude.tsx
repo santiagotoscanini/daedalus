@@ -433,7 +433,7 @@ const RC_ARM_MS = 10_000
  */
 function RestartServerControl({ live }: { live: number }) {
   const [armed, setArmed] = useState(false)
-  const { status, running, start } = usePolledStatus<ClaudeRcStatus>({
+  const { status, running, refusal, start } = usePolledStatus<ClaudeRcStatus>({
     initial: RC_IDLE,
     fetch: () => fetchClaudeRcStatusFn(),
     claimTimeoutMs: 30_000,
@@ -478,10 +478,7 @@ function RestartServerControl({ live }: { live: number }) {
             size="sm"
             onClick={() => {
               setArmed(false)
-              start(async () => {
-                const r = await requestClaudeRestartFn()
-                return r.id
-              })
+              start(async () => ({ ok: true, value: (await requestClaudeRestartFn()).id }))
             }}
           >
             Confirm restart
@@ -511,7 +508,8 @@ function RestartServerControl({ live }: { live: number }) {
           snapshot is on a timer.
         </p>
       )}
-      {status.state === 'failed' && (
+      {refusal !== null && <p className={cn(RESTART_STATE, 'text-danger')}>{refusal}</p>}
+      {refusal === null && status.state === 'failed' && (
         <p className={cn(RESTART_STATE, 'text-danger')}>{status.error}</p>
       )}
       <Button

@@ -113,7 +113,13 @@ export function Integrations({
             k: 'Repo token',
             v: (
               <Github
-                configured={status === null || status.github.repoToken.configured}
+                // A null reason is the check saying there was no token to ask
+                // about — everything else is a token that exists and did not work.
+                configured={
+                  status === null ||
+                  status.github.repoToken.ok ||
+                  status.github.repoToken.reason !== null
+                }
                 check={status === null ? undefined : status.github.repoToken}
               />
             ),

@@ -11,6 +11,7 @@ import {
 } from '../../lib/github-app'
 import { getJsonResult } from '../../lib/http'
 import { isRecord } from '../../lib/is-record'
+import type { Result } from '../../lib/result'
 import { BASE_DOMAIN, OWNER } from '../../lib/site'
 import { actorOf, actorOrNull, NO_ACTOR_REASON } from '../auth'
 import type { Ctx } from '../ctx'
@@ -223,7 +224,7 @@ export function grantError(raw: unknown): string | null {
 
 type Owner = { id: number; login: string; type: string }
 
-async function fetchOwner(): Promise<{ ok: true; owner: Owner } | { ok: false; reason: string }> {
+async function fetchOwner(): Promise<Result<Owner>> {
   const res = await getJsonResult<{ id?: unknown; login?: unknown; type?: unknown }>(
     `${GITHUB_API}/users/${encodeURIComponent(OWNER)}`,
     { headers: GITHUB_HEADERS },
@@ -233,21 +234,21 @@ async function fetchOwner(): Promise<{ ok: true; owner: Owner } | { ok: false; r
     return {
       ok: false,
       reason:
-        res.status === null
+        res.reason.status === null
           ? 'GitHub did not answer. Nothing changed.'
-          : res.status === 404
+          : res.reason.status === 404
             ? `GitHub has no account named ${OWNER}.`
-            : `GitHub answered ${String(res.status)} when asked about ${OWNER}. Nothing changed.`,
+            : `GitHub answered ${String(res.reason.status)} when asked about ${OWNER}. Nothing changed.`,
     }
   }
-  const { id, login, type } = res.body
+  const { id, login, type } = res.value
   if (typeof id !== 'number' || typeof login !== 'string' || typeof type !== 'string') {
     return { ok: false, reason: `GitHub's answer about ${OWNER} was missing its account id.` }
   }
   if (login.toLowerCase() !== OWNER.toLowerCase()) {
     return { ok: false, reason: `GitHub answered for ${login}, not ${OWNER}.` }
   }
-  return { ok: true, owner: { id, login, type } }
+  return { ok: true, value: { id, login, type } }
 }
 
 async function controlPlaneHost(ctx: Ctx, doc: SiteDocument): Promise<string | null> {
@@ -280,16 +281,16 @@ export async function startAppCreation(
   if (blocked !== null) return refuse(blocked)
 
   const site = await readCommittedSite()
-  if (!site.present) {
+  if (!site.ok) {
     return refuse(
       'There is no committed site.json to record the App in. Write it from the Site tab first.',
     )
   }
-  const existing = site.doc.github?.app ?? null
+  const existing = site.value.doc.github?.app ?? null
   if (existing !== null && input.replace !== true) {
     return refuse(`This box already has a GitHub App, ${existing.slug}.`)
   }
-  const host = await controlPlaneHost(ctx, site.doc)
+  const host = await controlPlaneHost(ctx, site.value.doc)
   if (host === null) {
     return refuse(
       'The control plane’s address is not known yet, so GitHub would have nowhere to send you back.',
@@ -303,27 +304,29 @@ export async function startAppCreation(
   const record: CreationRecord = {
     stateHash: sha256(state),
     actor,
-    ownerId: owner.owner.id,
+    ownerId: owner.value.id,
     expiresAt: Date.now() + CREATION_TTL_MS,
     replace: input.replace === true,
   }
   await ctx.store.write(SETTING_KEYS.githubAppCreation, record)
 
   const path =
-    owner.owner.type === 'Organization'
-      ? `https://github.com/organizations/${encodeURIComponent(owner.owner.login)}/settings/apps/new`
+    owner.value.type === 'Organization'
+      ? `https://github.com/organizations/${encodeURIComponent(owner.value.login)}/settings/apps/new`
       : 'https://github.com/settings/apps/new'
   const manifest = buildManifest({
     name,
-    baseDomain: site.doc.identity.baseDomain,
+    baseDomain: site.value.doc.identity.baseDomain,
     controlPlaneHost: host,
   })
   return {
     ok: true,
-    // GitHub's documented form carries `state` in the action's query string.
-    action: `${path}?state=${encodeURIComponent(state)}`,
-    manifest: JSON.stringify(manifest),
-    state,
+    value: {
+      // GitHub's documented form carries `state` in the action's query string.
+      action: `${path}?state=${encodeURIComponent(state)}`,
+      manifest: JSON.stringify(manifest),
+      state,
+    },
   }
 }
 
@@ -364,9 +367,8 @@ function readConversion(raw: unknown): Conversion | null {
 }
 
 /** One attempt: the code is single-use, so a retry after a slow reply finds it spent. */
-async function convert(
-  code: string,
-): Promise<
+async function convert(code: string): Promise<
+  // lib/result.ts's shape plus a `code`, which becomes the callback redirect's.
   | { ok: true; app: Conversion }
   | { ok: false; code: 'conversion-failed' | 'conversion-timeout'; reason: string }
 > {
@@ -430,10 +432,10 @@ async function applyApp(
   // The committed document, not the Settings draft: runSecretApply refuses
   // while anything else is pending, so committed is exactly what stays.
   const site = await readCommittedSite()
-  if (!site.present) {
+  if (!site.ok) {
     return { ok: false, reason: 'There is no committed site.json to record the App in.' }
   }
-  const current = site.doc.github?.app?.id ?? null
+  const current = site.value.doc.github?.app?.id ?? null
   if (current !== priorAppId) {
     return {
       ok: false,
@@ -443,7 +445,7 @@ async function applyApp(
           : `site.json now names another GitHub App (id ${String(current)}). Discard ${app.slug} and start again.`,
     }
   }
-  const siteJson = renderSiteFile({ ...site.doc, github: { app } })
+  const siteJson = renderSiteFile({ ...site.value.doc, github: { app } })
   try {
     const { runSecretApply } = await import('../../host/apply-flow')
     const outcome = await runSecretApply(
@@ -451,7 +453,7 @@ async function applyApp(
       { file: GITHUB_APP_FILE, name: VAULT_NAME, ciphertext },
       { extraFiles: { 'site.json': siteJson } },
     )
-    return outcome.ok ? { ok: true, id: outcome.id } : { ok: false, reason: outcome.reason }
+    return outcome.ok ? { ok: true, value: outcome.id } : { ok: false, reason: outcome.reason }
   } catch {
     return { ok: false, reason: 'The Apply could not be requested.' }
   }
@@ -593,7 +595,7 @@ async function finish(
   if (!CODE_SHAPE.test(code)) return failed('conversion-failed', 'GitHub sent no usable code')
 
   const site = await readCommittedSite()
-  const existing = site.present ? (site.doc.github?.app ?? null) : null
+  const existing = site.ok ? (site.value.doc.github?.app ?? null) : null
   if (existing !== null && !record.replace) {
     return failed('already-created', `site.json already names ${existing.slug}`)
   }
@@ -630,15 +632,15 @@ async function finish(
     ownerId: c.ownerId,
   }
   if (!owns()) return SUPERSEDED
-  const applied = await applyApp(actor, sealed.ciphertext, app, priorAppId)
+  const applied = await applyApp(actor, sealed.value, app, priorAppId)
   if (applied.ok) {
     await ctx.store.delete(SETTING_KEYS.githubAppPendingApply)
-    return { outcome: 'created', id: applied.id }
+    return { outcome: 'created', id: applied.value }
   }
 
   if (!owns()) return SUPERSEDED
   const pending: PendingApply = {
-    ciphertext: sealed.ciphertext,
+    ciphertext: sealed.value,
     github: app,
     at: new Date().toISOString(),
     reason: applied.reason,
@@ -688,7 +690,7 @@ export async function discardPendingApply(
   console.info(
     `[github-app] ${actor} discarded the pending Apply for ${pending.github.slug} (App ${String(pending.github.id)})`,
   )
-  return { ok: true, slug: pending.github.slug, htmlUrl: pending.github.htmlUrl }
+  return { ok: true, value: { slug: pending.github.slug, htmlUrl: pending.github.htmlUrl } }
 }
 
 /**
@@ -706,7 +708,7 @@ export async function pasteAppKey(
   if (actor === null) return refuse(NO_ACTOR_REASON)
 
   const site = await readCommittedSite()
-  const app = site.present ? (site.doc.github?.app ?? null) : null
+  const app = site.ok ? (site.value.doc.github?.app ?? null) : null
   if (app === null) return refuse('There is no GitHub App in site.json to give a key to.')
   const { SETTING_KEYS } = await import('../../lib/repo/settings')
   if ((await ctx.store.read(SETTING_KEYS.githubAppPendingApply, isPendingApply)) !== undefined) {
@@ -731,9 +733,9 @@ export async function pasteAppKey(
     const outcome = await runSecretApply(actor, {
       file: GITHUB_APP_FILE,
       name: VAULT_NAME,
-      ciphertext: sealed.ciphertext,
+      ciphertext: sealed.value,
     })
-    return outcome.ok ? { ok: true, id: outcome.id } : refuse(outcome.reason)
+    return outcome.ok ? { ok: true, value: outcome.id } : refuse(outcome.reason)
   } catch {
     return refuse('The Apply could not be requested.')
   }
@@ -749,7 +751,7 @@ export async function githubAppStatus(ctx: Ctx): Promise<GithubAppStatus> {
     ctx.store.read(SETTING_KEYS.githubAppPendingApply, isPendingApply).catch(() => undefined),
     installationState(ctx),
   ])
-  const identity = site.present ? (site.doc.github?.app ?? null) : null
+  const identity = site.ok ? (site.value.doc.github?.app ?? null) : null
   const installation = snapshot.available
     ? { ...publicInstallation(snapshot.data), stale: snapshot.stale }
     : undefined
@@ -770,7 +772,7 @@ export async function githubAppStatus(ctx: Ctx): Promise<GithubAppStatus> {
     enabled: enabled(ctx),
     state,
     owner: OWNER,
-    defaultName: defaultAppName(site.present ? site.doc.identity.baseDomain : BASE_DOMAIN),
+    defaultName: defaultAppName(site.ok ? site.value.doc.identity.baseDomain : BASE_DOMAIN),
     nameMax: APP_NAME_MAX,
     // Where an orphaned App is deleted. A user's list; site.json does not say
     // whether the owner is an organization, whose list lives elsewhere.

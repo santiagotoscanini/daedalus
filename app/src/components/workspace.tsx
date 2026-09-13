@@ -24,7 +24,7 @@ export function CloneButton({
   initial: WorkspaceRequestStatus
 }) {
   const router = useRouter()
-  const { status, running, start } = usePolledStatus({
+  const { status, running, refusal, start } = usePolledStatus({
     initial,
     fetch: () => fetchWorkspaceRequestStatus(),
     onSettle: () => {
@@ -37,7 +37,8 @@ export function CloneButton({
 
   return (
     <span className="inline-flex items-center gap-2">
-      {status.state === 'failed' && mine && (
+      {refusal !== null && <span className="text-danger text-xs">{refusal}</span>}
+      {refusal === null && status.state === 'failed' && mine && (
         <span className="text-danger text-xs" title={status.error}>
           failed
         </span>
@@ -48,7 +49,7 @@ export function CloneButton({
         size="sm"
         disabled={running}
         onClick={() => {
-          start(async () => (await cloneWorkspaceFn({ data: { repo } })).id)
+          start(async () => ({ ok: true, value: (await cloneWorkspaceFn({ data: { repo } })).id }))
         }}
       >
         {running

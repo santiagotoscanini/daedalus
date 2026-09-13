@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { errorText } from '../lib/redact'
+import type { Result } from '../lib/result'
 
 // Polling a host-side status file, without being lied to by it.
 //
@@ -15,6 +17,15 @@ import { useEffect, useRef, useState } from 'react'
 // `claimTimeoutMs` means the host agent never picked the request up (a crashed
 // path unit), and settles as a synthesized failure rather than spinning
 // forever.
+//
+// The other half is `refusal`: a request that never became a run at all. The
+// host can decline one (already busy, nothing to do) and the server function
+// can throw before the host is even asked (an app that builds from source has
+// no image to pull; a repo is not one of this box's). Both live here rather
+// than in each caller, because when they did not, three buttons swallowed the
+// throw entirely — they spun, reset, and said nothing. A submit is a Result
+// and a rejection becomes one, so there is no path out of this hook that
+// leaves a failure unsaid.
 
 type HostStatus = { id: string | null; state: string; error: string }
 
@@ -30,16 +41,19 @@ export function usePolledStatus<S extends HostStatus>(opts: {
 }): {
   status: S
   running: boolean
+  /** Why the last click never became a run, or null. Render it. */
+  refusal: string | null
   /**
-   * Fire a host action. `submit` returns the request id to claim, or null
-   * when the request was refused (the caller shows the reason); a throw
-   * counts as refused.
+   * Fire a host action. `submit` resolves with the request id to claim, or
+   * with the reason it was refused; a rejection is a refusal too, and its
+   * message becomes the reason.
    */
-  start: (submit: () => Promise<string | null>) => void
+  start: (submit: () => Promise<Result<string>>) => void
 } {
   const [status, setStatus] = useState<S>(opts.initial)
   const [claim, setClaim] = useState<{ id: string; at: number } | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [refusal, setRefusal] = useState<string | null>(null)
 
   // The callbacks are fresh closures every render; going through a ref keeps
   // the poll effect from tearing down the interval on each one.
@@ -106,16 +120,24 @@ export function usePolledStatus<S extends HostStatus>(opts: {
   return {
     status,
     running,
+    refusal,
     start: (submit) => {
       setSubmitting(true)
+      setRefusal(null)
       void submit()
-        .then((id) => {
-          if (id === null) setSubmitting(false)
-          else setClaim({ id, at: Date.now() })
+        .then((r) => {
+          if (r.ok) setClaim({ id: r.value, at: Date.now() })
+          else {
+            setSubmitting(false)
+            setRefusal(r.reason)
+          }
         })
-        .catch(() => {
-          // The caller's submit shows its own errors; here it just un-runs.
+        .catch((e: unknown) => {
+          // A rejection means the request was never published, so there is no
+          // id to claim and no status file that will ever mention this click.
+          // The message is the only account of it there will be.
           setSubmitting(false)
+          setRefusal(errorText(e))
         })
     },
   }

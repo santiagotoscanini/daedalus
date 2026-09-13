@@ -1,6 +1,7 @@
 import { useRouter } from '@tanstack/react-router'
 import { type ReactNode, useId, useState } from 'react'
 import { BASE_DOMAIN, hostnameError } from '../../lib/hostname'
+import { errorText } from '../../lib/redact'
 import { defaultImage } from '../../lib/site'
 import { deleteAppFn } from '../../server/registry'
 import { Segmented, Slider, Toggle } from '../controls'
@@ -326,7 +327,7 @@ function RemovePanel({
     void deleteAppFn({ data: { name } })
       .then(() => router.navigate({ to: '/apps' }))
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e))
+        setError(errorText(e))
         setBusy(false)
       })
   }

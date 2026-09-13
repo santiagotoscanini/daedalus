@@ -9,6 +9,7 @@ import {
   envMapError,
 } from '../../lib/build-settings'
 import { type BuildPublish, type BuildStrategy, RAILPACK_KNOB_NAMES } from '../../lib/builds'
+import { errorText } from '../../lib/redact'
 import { OWNER } from '../../lib/site'
 import { type BuildSettingsResult, setBuildSettingsFn } from '../../server/builds'
 import { Segmented, Toggle } from '../controls'
@@ -44,7 +45,7 @@ export function BuildSettings({ app }: { app: AppRecord }) {
       await router.invalidate()
       return true
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(errorText(e))
       return false
     } finally {
       setSaving(false)

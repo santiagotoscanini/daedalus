@@ -3,6 +3,7 @@ import { actorLabel } from '../core/auth'
 import { type AccessWindow, isAccessWindow } from '../lib/access-window'
 import { appName } from '../lib/hostname'
 import { isRecord } from '../lib/is-record'
+import type { Result } from '../lib/result'
 
 // The RPC seam behind the Apps UI: the list page, the detail page, the create
 // form and the apply bar. Nothing here does any work — each function proves
@@ -174,13 +175,18 @@ export const saveApp = createServerFn({ method: 'POST' })
  * the claim as a header (auth.headers in stacks/daedalus/daedalus.nix), so
  * the commit records a person rather than "daedalus".
  */
-export const applyRegistry = createServerFn({ method: 'POST' }).handler(async () => {
-  const { runApply } = await import('../host/apply-flow')
-  const outcome = await runApply(actorLabel())
-  return outcome.ok
-    ? { ok: true as const, id: outcome.id, changed: outcome.changed }
-    : { ok: false as const, reason: outcome.reason }
-})
+export const applyRegistry = createServerFn({ method: 'POST' }).handler(
+  // The outcome's `code` stops here: it exists so the scriptable door
+  // (routes/api.registry.apply.ts) can map a refusal to an HTTP status, and
+  // the button has nothing to do with it but read the sentence.
+  async (): Promise<Result<{ id: string; changed: { name: string; fields: string[] }[] }>> => {
+    const { runApply } = await import('../host/apply-flow')
+    const outcome = await runApply(actorLabel())
+    return outcome.ok
+      ? { ok: true, value: { id: outcome.id, changed: outcome.changed } }
+      : { ok: false, reason: outcome.reason }
+  },
+)
 
 export const fetchApplyStatus = createServerFn().handler(async () => {
   const { readApplyStatus } = await import('../host/apply')

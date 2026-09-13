@@ -1,3 +1,4 @@
+import { errorText } from '../lib/redact'
 // The error surface, at its two sizes.
 //
 // `ErrorPanel` is a whole page: the root route's errorComponent, reached when
@@ -19,7 +20,7 @@ import { Alert } from './ui/alert'
 import { Button } from './ui/button'
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return errorText(error)
 }
 
 /**

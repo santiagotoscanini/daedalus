@@ -48,5 +48,5 @@ export async function listZones(ctx: Ctx): Promise<ZoneList> {
   const zones = await cached()
   return zones === null
     ? { ok: false, reason: 'Cloudflare did not answer, or refused the API token' }
-    : { ok: true, zones }
+    : { ok: true, value: zones }
 }

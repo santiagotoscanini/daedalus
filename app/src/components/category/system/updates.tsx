@@ -308,7 +308,6 @@ function QueuePanel({
   onClear: () => void
 }) {
   const router = useRouter()
-  const [refusal, setRefusal] = useState<string | null>(null)
   // Whether the batch on screen is one this browser started.
   //
   // The status file is never cleared, so without this a finished batch would
@@ -318,7 +317,7 @@ function QueuePanel({
   // disabled and that needs explaining.
   const [startedHere, setStartedHere] = useState(false)
 
-  const { status, running, start } = usePolledStatus({
+  const { status, running, refusal, start } = usePolledStatus({
     initial: initialStatus,
     fetch: () => fetchImageUpdateStatus(),
     onSettle: (s) => {
@@ -442,7 +441,6 @@ function QueuePanel({
               size="sm"
               disabled={running || n === 0}
               onClick={() => {
-                setRefusal(null)
                 setStartedHere(true)
                 start(async () => {
                   const r = await requestImageUpdateFn({
@@ -453,11 +451,8 @@ function QueuePanel({
                       })),
                     },
                   })
-                  if (!r.ok) {
-                    setRefusal(r.reason)
-                    return null
-                  }
-                  return r.id
+                  // The outcome's `code` is for the scriptable door's status.
+                  return r.ok ? { ok: true, value: r.id } : { ok: false, reason: r.reason }
                 })
               }}
             >

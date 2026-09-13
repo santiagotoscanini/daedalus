@@ -47,9 +47,9 @@ import {
   buildRequestBytes,
   isActiveBuildState,
   isTerminalBuildState,
-  redactBuildLog,
 } from '../../lib/builds'
 import { isRecord } from '../../lib/is-record'
+import { errorText } from '../../lib/redact'
 import type { BuildStatusPatch } from '../../lib/repo/builds'
 import type { Ctx } from '../ctx'
 
@@ -249,11 +249,6 @@ export function stopScheduler(): void {
 }
 
 // ── logging ────────────────────────────────────────────────────────────────
-
-export function errorText(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e)
-  return redactBuildLog(raw.split('\n')[0] ?? '').slice(0, 300)
-}
 
 /** Log a failure once per kind per LOG_EVERY_MS. */
 export function logOnce(state: SchedulerState, kind: string, message: string, now = Date.now()) {

@@ -25,6 +25,7 @@ import {
 } from '../lib/builds'
 import { appName } from '../lib/hostname'
 import { isRecord } from '../lib/is-record'
+import type { Result } from '../lib/result'
 
 // Server functions behind the build UI: the builds board, the build page, the
 // Build now, Cancel and Retry report buttons and an app's build settings.
@@ -228,7 +229,7 @@ export const fetchBuildCommit = createServerFn()
       html_url?: unknown
       commit?: { message?: unknown; author?: { name?: unknown; date?: unknown } }
       author?: { login?: unknown } | null
-    }>(ctx, `/repos/${found.repo.fullName}/commits/${data.sha}`)
+    }>(ctx, `/repos/${found.value.fullName}/commits/${data.sha}`)
     if (r.status !== 200 || r.body === null) return null
 
     const text = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
@@ -246,9 +247,8 @@ export const fetchBuildCommit = createServerFn()
     return commit
   })
 
-export type BuildNowResult =
-  | { ok: true; id: string; sha: string; existing: boolean }
-  | { ok: false; reason: string }
+/** The build row the click produced (a queued one when the sha was already in flight). */
+export type BuildNowResult = Result<{ id: string; sha: string; existing: boolean }>
 
 const orDefault = <T extends string>(allowed: readonly T[], v: string, fallback: T): T =>
   allowed.includes(v as T) ? (v as T) : fallback
@@ -268,7 +268,7 @@ export const buildNowFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<BuildNowResult> => {
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
-    const actor = gate.actor
+    const actor = gate.value
 
     const { getApp } = await import('../lib/repo/apps')
     const record = await getApp(data.app)
@@ -297,7 +297,7 @@ export const buildNowFn = createServerFn({ method: 'POST' })
     // still right after a rename. The name that comes back is a label.
     const found = await repoById(ctx, record.githubRepoId)
     if (!found.ok) return { ok: false, reason: found.reason }
-    const { fullName, defaultBranch: branch } = found.repo
+    const { fullName, defaultBranch: branch } = found.value
     const tip = await ghApp<{ sha?: unknown }>(
       ctx,
       `/repos/${fullName}/commits/${encodeURIComponent(branch)}`,
@@ -312,7 +312,7 @@ export const buildNowFn = createServerFn({ method: 'POST' })
 
     const { openBuildOf } = await import('../lib/repo/build-views')
     const open = await openBuildOf(record.id, sha)
-    if (open !== undefined) return { ok: true, id: open.id, sha, existing: true }
+    if (open !== undefined) return { ok: true, value: { id: open.id, sha, existing: true } }
 
     const { insertOrSupersedeQueued } = await import('../lib/repo/builds')
     const enqueued = await insertOrSupersedeQueued({
@@ -331,10 +331,10 @@ export const buildNowFn = createServerFn({ method: 'POST' })
           ? `, superseding ${String(enqueued.superseded.length)}`
           : ''),
     )
-    return { ok: true, id: enqueued.row.id, sha, existing: enqueued.alreadyQueued }
+    return { ok: true, value: { id: enqueued.row.id, sha, existing: enqueued.alreadyQueued } }
   })
 
-export type CancelBuildResult = { ok: true } | { ok: false; reason: string }
+export type CancelBuildResult = Result<null>
 
 /**
  * Stop a running build.
@@ -356,13 +356,13 @@ export const cancelBuildFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<CancelBuildResult> => {
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
-    const actor = gate.actor
+    const actor = gate.value
 
     const { getBuild, updateFromStatus } = await import('../lib/repo/builds')
     const record = await getBuild(data.id)
     if (!record || record.app !== data.app) return { ok: false, reason: 'No such build.' }
     const state = record.state as BuildState
-    if (isTerminalBuildState(state)) return { ok: true }
+    if (isTerminalBuildState(state)) return { ok: true, value: null }
     if (!isActiveBuildState(state)) {
       return {
         ok: false,
@@ -388,10 +388,10 @@ export const cancelBuildFn = createServerFn({ method: 'POST' })
     console.info(
       `[builds] ${actor} cancelled ${data.app}@${record.sha.slice(0, 7)} (${record.id}) during ${state}`,
     )
-    return { ok: true }
+    return { ok: true, value: null }
   })
 
-export type RetryReportResult = { ok: true } | { ok: false; reason: string }
+export type RetryReportResult = Result<null>
 
 /**
  * Retry report: forget a build's failed GitHub report and post it now, however
@@ -403,12 +403,12 @@ export const retryReportFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<RetryReportResult> => {
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
-    const actor = gate.actor
+    const actor = gate.value
 
     const { getBuild } = await import('../lib/repo/builds')
     const record = await getBuild(data.id)
     if (!record || record.app !== data.app) return { ok: false, reason: 'No such build.' }
-    if (record.reported) return { ok: true }
+    if (record.reported) return { ok: true, value: null }
 
     const { makeCtx } = await import('../core/ctx')
     const { readReportFailures, retryReport } = await import('../core/builds/report')
@@ -418,14 +418,14 @@ export const retryReportFn = createServerFn({ method: 'POST' })
       `[builds] ${actor} retried the GitHub report of ${data.app}@${record.sha.slice(0, 7)} (${record.id})`,
     )
     const again = (await readReportFailures(ctx))[record.id]
-    if (again === undefined) return { ok: true }
+    if (again === undefined) return { ok: true, value: null }
     return {
       ok: false,
       reason: `GitHub refused it again: ${again.kind}${again.status === null ? '' : ` (HTTP ${String(again.status)})`}.`,
     }
   })
 
-export type BuildSettingsResult = { ok: true } | { ok: false; reason: string }
+export type BuildSettingsResult = Result<null>
 
 /**
  * Apps › <name> › Settings › Builds. The columns are engine-only, so a save
@@ -439,7 +439,7 @@ export const setBuildSettingsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<BuildSettingsResult> => {
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
-    const actor = gate.actor
+    const actor = gate.value
 
     const { getApp } = await import('../lib/repo/apps')
     const record = await getApp(data.app)
@@ -459,5 +459,5 @@ export const setBuildSettingsFn = createServerFn({ method: 'POST' })
     const { updateBuildSettings } = await import('../lib/repo/build-views')
     await updateBuildSettings(data.app, data.patch)
     console.info(`[builds] ${actor} set ${Object.keys(data.patch).join(', ')} on ${data.app}`)
-    return { ok: true }
+    return { ok: true, value: null }
   })

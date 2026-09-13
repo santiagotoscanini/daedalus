@@ -33,6 +33,8 @@
 // exception lives in host/access.ts, where a throw is what distinguishes "Loki
 // down" from "no traffic".)
 
+import type { Result } from './result'
+
 /**
  * Per-attempt budgets, escalating — see `getJson` for what they work around.
  *
@@ -132,10 +134,29 @@ export function getJson<T>(
 }
 
 /**
- * What a JSON read came back as: the body, or why there is none. `status` is
- * the HTTP status the service answered with, and null when it never answered.
+ * Why a JSON read has no body.
+ *
+ * `status` is what the service answered with, and null when it never
+ * answered — and WHICH WAY it did not answer is what this type used to drop.
+ * `{ ok: false; status: null }` was the whole failure, so a timeout, a
+ * refused connection and a 200 carrying something that is not JSON were one
+ * indistinguishable value, and every caller had to render them as the same
+ * sentence. `error` is that missing half, in the same vocabulary
+ * core/github-app.ts's `GhResult` already uses for the same problem; it is
+ * null exactly when there IS a status, because then the service spoke for
+ * itself.
  */
-export type JsonResult<T> = { ok: true; body: T } | { ok: false; status: number | null }
+export type HttpFailure = {
+  status: number | null
+  error: 'timeout' | 'unreachable' | 'malformed' | null
+}
+
+/** What a JSON read came back as: the body, or why there is none. */
+export type JsonResult<T> = Result<T, HttpFailure>
+
+/** The abort a timed-out fetch throws, told apart from a dead connection. */
+const timedOut = (e: unknown): boolean =>
+  e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')
 
 /**
  * getJson, keeping the reason it came back empty.
@@ -152,6 +173,9 @@ export async function getJsonResult<T>(
   init: RequestInit = {},
   attempts: number[] = ATTEMPT_MS,
 ): Promise<JsonResult<T>> {
+  // The last attempt's account of itself. `unreachable` until something
+  // throws, for the degenerate case of an empty ladder.
+  let error: HttpFailure['error'] = 'unreachable'
   for (const ms of attempts) {
     try {
       const res = await fetch(url, {
@@ -159,13 +183,16 @@ export async function getJsonResult<T>(
         redirect: 'manual',
         ...init,
       })
-      if (!res.ok) return { ok: false, status: res.status }
-      return { ok: true, body: (await res.json()) as T }
-    } catch {
-      // fall through to the next, longer attempt; the last one reports no answer
+      if (!res.ok) return { ok: false, reason: { status: res.status, error: null } }
+      return { ok: true, value: (await res.json()) as T }
+    } catch (e) {
+      // A body that is not JSON throws here too, and is retried like a stalled
+      // connection on purpose: the usual cause is a response the timeout cut
+      // in half. What changes is only what the last attempt reports.
+      error = e instanceof SyntaxError ? 'malformed' : timedOut(e) ? 'timeout' : 'unreachable'
     }
   }
-  return { ok: false, status: null }
+  return { ok: false, reason: { status: null, error } }
 }
 
 /**

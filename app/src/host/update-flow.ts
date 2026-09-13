@@ -16,6 +16,7 @@ import {
 // which is what keeps "several at once" from becoming a second mechanism with
 // its own busy rule and its own way of being wrong.
 
+/** lib/result.ts's shape plus a `code`, for the same reason ApplyOutcome has one. */
 export type UpdateOutcome =
   | { ok: true; id: string; targets: { container: string; toTag: string | null }[] }
   | { ok: false; code: 'busy' | 'refused'; reason: string }

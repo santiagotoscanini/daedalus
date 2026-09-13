@@ -17,13 +17,8 @@ import type { CloudflareStatus, GithubCheck, IntegrationStatus, TokenCheck } fro
 const CF = 'https://api.cloudflare.com/client/v4'
 const TTL_MS = 5 * 60_000
 
-const NOT_CONFIGURED: TokenCheck = {
-  configured: false,
-  ok: false,
-  status: null,
-  expiresOn: null,
-  error: null,
-}
+/** No token to ask about — which is what a null reason means here. */
+const NOT_CONFIGURED = { ok: false, reason: null } as const
 
 type CfVerify = {
   success?: boolean
@@ -43,22 +38,16 @@ async function verifyCloudflare(ctx: Ctx, token: string): Promise<TokenCheck> {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (body === null) {
-    return {
-      configured: true,
-      ok: false,
-      status: null,
-      expiresOn: null,
-      error: 'Cloudflare rejected the token, or did not answer',
-    }
+    return { ok: false, reason: 'Cloudflare rejected the token, or did not answer' }
   }
   const status = body.result?.status ?? null
-  return {
-    configured: true,
-    ok: body.success === true && status === 'active',
-    status,
-    expiresOn: body.result?.expires_on ?? null,
-    error: body.success === true ? null : (body.errors?.[0]?.message ?? 'verification failed'),
+  if (body.success !== true) {
+    return { ok: false, reason: body.errors?.[0]?.message ?? 'verification failed' }
   }
+  // Verified, but not active: Cloudflare's own word for the state (`expired`,
+  // `disabled`) is the whole reason, and it says it without an error.
+  if (status !== 'active') return { ok: false, reason: status }
+  return { ok: true, value: { status, expiresOn: body.result?.expires_on ?? null } }
 }
 
 async function cloudflare(ctx: Ctx): Promise<CloudflareStatus> {
@@ -98,7 +87,7 @@ async function cloudflare(ctx: Ctx): Promise<CloudflareStatus> {
   }
 }
 
-function rateLimitOf(h: Headers): GithubCheck['rateLimit'] {
+function rateLimitOf(h: Headers): { remaining: number; limit: number; resetAt: string } | null {
   const remaining = Number(h.get('x-ratelimit-remaining'))
   const limit = Number(h.get('x-ratelimit-limit'))
   const reset = Number(h.get('x-ratelimit-reset'))
@@ -120,21 +109,12 @@ function rateLimitOf(h: Headers): GithubCheck['rateLimit'] {
  * asking again would not change its mind.
  */
 async function checkGithub(token: string): Promise<GithubCheck> {
-  const none: GithubCheck = {
-    configured: false,
-    ok: false,
-    login: null,
-    kind: 'unknown',
-    scopes: [],
-    rateLimit: null,
-    error: null,
-  }
-  if (token === '') return none
+  if (token === '') return NOT_CONFIGURED
   // Provisional, from the prefix; settled by the response below. A classic
   // token minted before GitHub prefixed them is forty hex characters and
   // says nothing about itself — but only a classic token gets an
   // X-OAuth-Scopes header back, so the answer is in the reply.
-  let kind: GithubCheck['kind'] = githubTokenKind(token)
+  let kind = githubTokenKind(token)
 
   for (const ms of ATTEMPT_MS) {
     let res: Response
@@ -155,11 +135,8 @@ async function checkGithub(token: string): Promise<GithubCheck> {
     const rateLimit = rateLimitOf(res.headers)
     if (!res.ok) {
       return {
-        ...none,
-        configured: true,
-        kind,
-        rateLimit,
-        error:
+        ok: false,
+        reason:
           res.status === 401
             ? 'GitHub rejected the token (401): expired or revoked'
             : `GitHub answered ${String(res.status)}`,
@@ -171,17 +148,9 @@ async function checkGithub(token: string): Promise<GithubCheck> {
       .map((s) => s.trim())
       .filter((s) => s !== '')
     if (kind === 'unknown') kind = scopeHeader === null ? 'fine-grained' : 'classic'
-    return {
-      configured: true,
-      ok: true,
-      login: body.login ?? null,
-      kind,
-      scopes,
-      rateLimit,
-      error: null,
-    }
+    return { ok: true, value: { login: body.login ?? null, kind, scopes, rateLimit } }
   }
-  return { ...none, configured: true, kind, error: 'GitHub did not answer' }
+  return { ok: false, reason: 'GitHub did not answer' }
 }
 
 /**
@@ -218,32 +187,22 @@ async function settled<T>(work: Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-function failedToken(configured: boolean, error: string): TokenCheck {
-  return { configured, ok: false, status: null, expiresOn: null, error: configured ? error : null }
-}
+/**
+ * The check itself threw. There is nothing to say about a token that is not
+ * there, so an absent one stays NOT_CONFIGURED rather than reporting a
+ * failure nobody caused.
+ */
+const CHECK_FAILED = 'the check failed; it is asked again within five minutes'
 
-function failedGithub(token: string): GithubCheck {
-  return {
-    configured: token !== '',
-    ok: false,
-    login: null,
-    kind: 'unknown',
-    scopes: [],
-    rateLimit: null,
-    error: token === '' ? null : 'the check failed; it is asked again within five minutes',
-  }
-}
+const failedCheck = (token: string): { ok: false; reason: string | null } =>
+  token === '' ? NOT_CONFIGURED : { ok: false, reason: CHECK_FAILED }
 
 async function load(ctx: Ctx): Promise<IntegrationStatus> {
   const cfToken = ctx.secret('CF_API_TOKEN')
   const ghRepoToken = ctx.secret('GITHUB_REPO_TOKEN')
   const [cf, repoToken, m] = await Promise.all([
-    settled(cloudflare(ctx), {
-      token: failedToken(cfToken !== '', 'the check failed; it is asked again within five minutes'),
-      zone: null,
-      tunnel: null,
-    }),
-    settled(checkGithub(ghRepoToken), failedGithub(ghRepoToken)),
+    settled(cloudflare(ctx), { token: failedCheck(cfToken), zone: null, tunnel: null }),
+    settled(checkGithub(ghRepoToken), failedCheck(ghRepoToken)),
     settled(mail(ctx), { lastSentAt: null, lastRecipient: null }),
   ])
   return {

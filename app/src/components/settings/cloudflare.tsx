@@ -1,8 +1,8 @@
 import { useRouter } from '@tanstack/react-router'
 import { useId, useState, useTransition } from 'react'
-
 import type { TokenCheck } from '../../core/settings/types'
 import { tokenShapeError } from '../../lib/cloudflare-token'
+import { errorText } from '../../lib/redact'
 import { replaceCloudflareTokenFn } from '../../server/settings'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -60,12 +60,14 @@ export function Token({
 }) {
   if (!configured) return <Chip tone="muted">not configured</Chip>
   if (check === undefined) return <Pending />
-  if (!check.ok) return <Bad>{check.error ?? check.status ?? 'rejected'}</Bad>
+  if (!check.ok) return <Bad>{check.reason ?? 'rejected'}</Bad>
   return (
     <span className="inline-flex items-center gap-2">
-      <Chip tone="ok">{check.status ?? 'active'}</Chip>
+      <Chip tone="ok">{check.value.status ?? 'active'}</Chip>
       <span className="text-[0.78rem] text-(--text-muted)">
-        {check.expiresOn === null ? 'no expiry' : `expires ${check.expiresOn.slice(0, 10)}`}
+        {check.value.expiresOn === null
+          ? 'no expiry'
+          : `expires ${check.value.expiresOn.slice(0, 10)}`}
       </span>
     </span>
   )
@@ -98,14 +100,14 @@ export function ReplaceToken() {
           setOpen(false)
           setOutcome({
             ok: true,
-            text: `Checked and applying. It sees ${r.zones.join(', ')}; the rebuild restarts everything that reads the token.`,
+            text: `Checked and applying. It sees ${r.value.zones.join(', ')}; the rebuild restarts everything that reads the token.`,
           })
           await router.invalidate()
         } else {
           setOutcome({ ok: false, text: r.reason })
         }
       } catch (e) {
-        setOutcome({ ok: false, text: e instanceof Error ? e.message : String(e) })
+        setOutcome({ ok: false, text: errorText(e) })
       }
     })
   }

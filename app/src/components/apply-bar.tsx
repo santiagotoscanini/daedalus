@@ -1,5 +1,4 @@
 import { useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
 import type { ApplyStatus } from '../host/apply'
 import { cn } from '../lib/cn'
 import { applyRegistry, fetchApplyStatus } from '../server/registry'
@@ -47,11 +46,10 @@ export function ApplyBar({
   initialStatus: ApplyStatus
 }) {
   const router = useRouter()
-  // Why the host refused to start (already running, nothing to apply) —
-  // distinct from status.error, which is a run that started and failed.
-  const [refusal, setRefusal] = useState<string | null>(null)
-
-  const { status, running, start } = usePolledStatus({
+  // `refusal` is why the host would not start (already running, nothing to
+  // apply) — distinct from status.error, which is a run that started and
+  // failed.
+  const { status, running, refusal, start } = usePolledStatus({
     initial: initialStatus,
     fetch: () => fetchApplyStatus(),
     onSettle: () => {
@@ -126,14 +124,9 @@ export function ApplyBar({
         type="button"
         disabled={running || changed.length === 0}
         onClick={() => {
-          setRefusal(null)
           start(async () => {
             const r = await applyRegistry()
-            if (!r.ok) {
-              setRefusal(r.reason)
-              return null
-            }
-            return r.id
+            return r.ok ? { ok: true, value: r.value.id } : r
           })
         }}
       >

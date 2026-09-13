@@ -5,6 +5,7 @@ import {
   type PictureType,
   usernameError,
 } from '../../lib/profile-fields'
+import type { Result } from '../../lib/result'
 import { mailAddressError } from '../../lib/site-fields'
 import type { Ctx } from '../ctx'
 import type { Account, Profile, ProfilePatch, ProfileRead } from './types'
@@ -54,9 +55,26 @@ type PocketUser = {
   userGroups?: { name?: string; friendlyName?: string }[]
 }
 
-type Call =
-  | { ok: true; bytes: ArrayBuffer; contentType: string }
-  | { ok: false; status: number | null; message: string }
+/**
+ * Why a call to Pocket ID is not an answer. The status is load-bearing, not
+ * decoration: `lookUp` reads a 404 as "no such account, try the email" and
+ * anything else as "Pocket ID has a problem", and every `new Error` raised
+ * from one of these carries the whole reason as its `cause`.
+ */
+type CallFailure = { status: number | null; message: string }
+
+type Call = Result<{ bytes: ArrayBuffer; contentType: string }, CallFailure>
+
+/**
+ * A refusal, as the throw that becomes the server function's 500.
+ *
+ * The status rides on `cause` rather than in the sentence: it is the one
+ * thing the shape went to the trouble of carrying that the message cannot
+ * say, and dropping it made every failure here look alike from upstack —
+ * which is the same loss routes/api.github.webhook.ts walks a cause chain to
+ * avoid.
+ */
+const refusal = (f: CallFailure): Error => new Error(f.message, { cause: f })
 
 // A new connection to a port published out of the rootless netns can stall on
 // its SYN, so a THROWN attempt is retried on a rising budget; a 4xx/5xx is
@@ -88,14 +106,19 @@ async function pocketHost(): Promise<string | null> {
 async function pocket(ctx: Ctx, path: string, init: RequestInit = {}): Promise<Call> {
   const host = await pocketHost()
   if (host === null) {
-    return { ok: false, status: null, message: 'Pocket ID is not published on this box.' }
+    return {
+      ok: false,
+      reason: { status: null, message: 'Pocket ID is not published on this box.' },
+    }
   }
   const apiKey = ctx.secret('POCKETID_KEY')
   if (apiKey === '') {
     return {
       ok: false,
-      status: null,
-      message: 'No Pocket ID API key in this container. See daedalus-dashboard-keys.',
+      reason: {
+        status: null,
+        message: 'No Pocket ID API key in this container. See daedalus-dashboard-keys.',
+      },
     }
   }
   for (const ms of LADDER) {
@@ -110,14 +133,14 @@ async function pocket(ctx: Ctx, path: string, init: RequestInit = {}): Promise<C
       // like a stalled connection rather than thrown at the caller.
       const bytes = await res.arrayBuffer()
       if (res.ok) {
-        return { ok: true, bytes, contentType: res.headers.get('content-type') ?? '' }
+        return { ok: true, value: { bytes, contentType: res.headers.get('content-type') ?? '' } }
       }
-      return { ok: false, status: res.status, message: errorOf(bytes, res.status) }
+      return { ok: false, reason: { status: res.status, message: errorOf(bytes, res.status) } }
     } catch {
       // the next, longer attempt; the last one reports no answer
     }
   }
-  return { ok: false, status: null, message: 'Pocket ID did not answer.' }
+  return { ok: false, reason: { status: null, message: 'Pocket ID did not answer.' } }
 }
 
 function errorOf(bytes: ArrayBuffer, status: number): string {
@@ -130,16 +153,25 @@ function errorOf(bytes: ArrayBuffer, status: number): string {
   return `Pocket ID answered HTTP ${String(status)}.`
 }
 
-function json<T>(call: { bytes: ArrayBuffer }): T {
-  return JSON.parse(new TextDecoder().decode(call.bytes)) as T
+function json<T>(bytes: ArrayBuffer): T {
+  return JSON.parse(new TextDecoder().decode(bytes)) as T
 }
 
-type Found = { ok: true; user: PocketUser } | { ok: false; reason: string }
+/** The account, or why there is not one. The failure keeps the call's status. */
+type Found = Result<PocketUser, CallFailure>
 
 const NO_IDENTITY: Found = {
   ok: false,
-  reason:
-    'This request carries no signed-in identity, so it did not come through the Pocket ID gate.',
+  reason: {
+    status: null,
+    message:
+      'This request carries no signed-in identity, so it did not come through the Pocket ID gate.',
+  },
+}
+
+const NO_ACCOUNT: Found = {
+  ok: false,
+  reason: { status: null, message: 'No Pocket ID account matches the signed-in identity.' },
 }
 
 /** The account, asked of Pocket ID now. What every write reads before writing. */
@@ -147,19 +179,19 @@ async function lookUp(ctx: Ctx, who: Who): Promise<Found> {
   if (who.sub === null && who.email === null) return NO_IDENTITY
   if (who.sub !== null) {
     const r = await pocket(ctx, `/api/users/${encodeURIComponent(who.sub)}`)
-    if (r.ok) return { ok: true, user: json<PocketUser>(r) }
-    if (r.status !== 404) return { ok: false, reason: r.message }
+    if (r.ok) return { ok: true, value: json<PocketUser>(r.value.bytes) }
+    if (r.reason.status !== 404) return r
   }
   if (who.email !== null) {
     const r = await pocket(ctx, '/api/users?pagination[limit]=100')
-    if (!r.ok) return { ok: false, reason: r.message }
+    if (!r.ok) return r
     const wanted = who.email.toLowerCase()
-    const user = (json<{ data?: PocketUser[] }>(r).data ?? []).find(
+    const user = (json<{ data?: PocketUser[] }>(r.value.bytes).data ?? []).find(
       (u) => typeof u.email === 'string' && u.email.toLowerCase() === wanted,
     )
-    if (user !== undefined) return { ok: true, user }
+    if (user !== undefined) return { ok: true, value: user }
   }
-  return { ok: false, reason: 'No Pocket ID account matches the signed-in identity.' }
+  return NO_ACCOUNT
 }
 
 /** The account for reading: from the cache when it is fresh. */
@@ -167,9 +199,9 @@ async function findUser(ctx: Ctx, who: Who): Promise<Found> {
   if (who.sub === null && who.email === null) return NO_IDENTITY
   const key = who.sub !== null ? `sub:${who.sub}` : `email:${(who.email ?? '').toLowerCase()}`
   const hit = fresh(accounts.get(key), ACCOUNT_TTL_MS)
-  if (hit !== undefined) return { ok: true, user: hit.user }
+  if (hit !== undefined) return { ok: true, value: hit.user }
   const found = await lookUp(ctx, who)
-  if (found.ok) accounts.set(key, { at: Date.now(), user: found.user })
+  if (found.ok) accounts.set(key, { at: Date.now(), user: found.value })
   return found
 }
 
@@ -204,14 +236,17 @@ export function nameOf(p: Pick<Profile, 'displayName' | 'firstName' | 'lastName'
 
 export async function readProfile(ctx: Ctx, who: Who): Promise<ProfileRead> {
   const found = await findUser(ctx, who)
-  return found.ok ? { ok: true, profile: await toProfile(found.user) } : found
+  // The page gets the sentence; the status is for the callers that branch on it.
+  return found.ok
+    ? { ok: true, value: await toProfile(found.value) }
+    : { ok: false, reason: found.reason.message }
 }
 
 /** The rail's account button. Null when nobody is signed in or Pocket ID cannot say. */
 export async function readAccount(ctx: Ctx, who: Who): Promise<Account | null> {
   const found = await findUser(ctx, who)
   if (!found.ok) return null
-  const p = await toProfile(found.user)
+  const p = await toProfile(found.value)
   return {
     name: nameOf(p),
     username: p.username,
@@ -240,8 +275,8 @@ export async function updateProfile(ctx: Ctx, who: Who, patch: ProfilePatch): Pr
   // Fresh, not cached: the three booleans below are re-sent as read, and a
   // minute-old copy could undo a change just made in Pocket ID's own UI.
   const found = await lookUp(ctx, who)
-  if (!found.ok) throw new Error(found.reason)
-  const u = found.user
+  if (!found.ok) throw refusal(found.reason)
+  const u = found.value
   if (fromLdap(u)) {
     throw new Error('This account is synced from LDAP; Pocket ID will not take edits to it.')
   }
@@ -273,7 +308,7 @@ export async function updateProfile(ctx: Ctx, who: Who, patch: ProfilePatch): Pr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw new Error(r.message)
+  if (!r.ok) throw refusal(r.reason)
   accounts.clear()
   // By id from here: an email edit has just made the email header stale.
   return readProfile(ctx, { sub: u.id, email: null })
@@ -290,7 +325,7 @@ export async function uploadPicture(
   picture: { contentType: PictureType; base64: string },
 ): Promise<void> {
   const found = await findUser(ctx, who)
-  if (!found.ok) throw new Error(found.reason)
+  if (!found.ok) throw refusal(found.reason)
   const bytes = new Uint8Array(Buffer.from(picture.base64, 'base64'))
   if (bytes.length === 0) throw new Error('The picture is empty.')
   if (bytes.length > MAX_PICTURE_BYTES) throw new Error('The picture is over 5 MB.')
@@ -300,23 +335,23 @@ export async function uploadPicture(
     new Blob([bytes], { type: picture.contentType }),
     picture.contentType === 'image/png' ? 'picture.png' : 'picture.jpg',
   )
-  const r = await pocket(ctx, `/api/users/${encodeURIComponent(found.user.id)}/profile-picture`, {
+  const r = await pocket(ctx, `/api/users/${encodeURIComponent(found.value.id)}/profile-picture`, {
     method: 'PUT',
     body: form,
   })
-  if (!r.ok) throw new Error(r.message)
-  pictureChanged(found.user.id)
+  if (!r.ok) throw refusal(r.reason)
+  pictureChanged(found.value.id)
 }
 
 /** Back to Pocket ID's generated initials. */
 export async function resetPicture(ctx: Ctx, who: Who): Promise<void> {
   const found = await findUser(ctx, who)
-  if (!found.ok) throw new Error(found.reason)
-  const r = await pocket(ctx, `/api/users/${encodeURIComponent(found.user.id)}/profile-picture`, {
+  if (!found.ok) throw refusal(found.reason)
+  const r = await pocket(ctx, `/api/users/${encodeURIComponent(found.value.id)}/profile-picture`, {
     method: 'DELETE',
   })
-  if (!r.ok) throw new Error(r.message)
-  pictureChanged(found.user.id)
+  if (!r.ok) throw refusal(r.reason)
+  pictureChanged(found.value.id)
 }
 
 /** The picture's bytes, or null when there is no account to show one for. */
@@ -326,12 +361,12 @@ export async function profilePicture(
 ): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
   const found = await findUser(ctx, who)
   if (!found.ok) return null
-  const id = found.user.id
+  const id = found.value.id
   const hit = fresh(pictures.get(id), PICTURE_TTL_MS)
   if (hit !== undefined) return hit
   const r = await pocket(ctx, `/api/users/${encodeURIComponent(id)}/profile-picture.png`)
   if (!r.ok) return null
-  const picture = { at: Date.now(), bytes: r.bytes, contentType: r.contentType || 'image/png' }
+  const picture = { at: Date.now(), ...r.value, contentType: r.value.contentType || 'image/png' }
   pictures.set(id, picture)
   return picture
 }

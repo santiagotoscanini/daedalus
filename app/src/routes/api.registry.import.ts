@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { errorText } from '../lib/redact'
 
 // Load the registry from what Nix currently has (the mounted manifest).
 //
@@ -23,10 +24,7 @@ export const Route = createFileRoute('/api/registry/import')({
           const result = await importFromNix()
           return Response.json({ status: 'ok', ...result })
         } catch (err) {
-          return Response.json(
-            { status: 'error', error: err instanceof Error ? err.message : String(err) },
-            { status: 500 },
-          )
+          return Response.json({ status: 'error', error: errorText(err) }, { status: 500 })
         }
       },
     },

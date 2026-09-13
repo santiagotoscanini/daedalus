@@ -57,10 +57,13 @@ export function cfReadError(r: JsonResult<unknown>, needs: string): string | nul
   if (key('CF_API_TOKEN') === '') {
     return 'No Cloudflare API token in this container. See daedalus-dashboard-keys.'
   }
-  if (r.status === 401 || r.status === 403) return `Cloudflare refused the token: it needs ${needs}`
-  return r.status === null
-    ? 'Cloudflare did not answer'
-    : `Cloudflare answered HTTP ${String(r.status)}`
+  const { status, error } = r.reason
+  if (status === 401 || status === 403) return `Cloudflare refused the token: it needs ${needs}`
+  if (status !== null) return `Cloudflare answered HTTP ${String(status)}`
+  // Silence and an answer that is not JSON used to read as the same sentence.
+  return error === 'malformed'
+    ? 'Cloudflare answered with something that is not JSON'
+    : 'Cloudflare did not answer'
 }
 
 export type TraefikRouter = {

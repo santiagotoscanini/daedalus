@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '../../../lib/cn'
 import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { DASH, duration, num, pct } from '../../../lib/format'
+import { errorText } from '../../../lib/redact'
 import { fetchPowerRequestStatus, requestRebootFn } from '../../../server/host'
 import { GHOST_BTN } from '../../apps/shared'
 import { LogBoard } from '../../logs'
@@ -190,7 +191,7 @@ function RestartControl({
                   setRequest({ id: r.id, at: Date.now() })
                 })
                 .catch((e: unknown) => {
-                  setRefusal(e instanceof Error ? e.message : String(e))
+                  setRefusal(errorText(e))
                   setPhase('refused')
                 })
             }}

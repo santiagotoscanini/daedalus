@@ -1,4 +1,4 @@
-import { type EnvReader, redactBuildLog } from '../lib/builds'
+import type { EnvReader } from '../lib/builds'
 import {
   DecodeError,
   type Decoder,
@@ -9,6 +9,7 @@ import {
   optional,
   str,
 } from '../lib/contract/decode'
+import { redactSecrets } from '../lib/redact'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
 
 // The GitHub App installation token, as the host's minter publishes it
@@ -65,12 +66,18 @@ function withoutValues<T>(d: Decoder<T>): Decoder<T> {
     try {
       return d(v, p)
     } catch (e) {
-      if (!(e instanceof DecodeError)) throw new DecodeError(p, 'malformed installation file')
+      // The original is kept as `cause`, never as words: the rewritten message
+      // is the only one anything prints, and `cause` is what a debugger
+      // (or an errorCode walk) follows back to what actually failed.
+      if (!(e instanceof DecodeError)) {
+        throw new DecodeError(p, 'malformed installation file', { cause: e })
+      }
       const prefix = `${e.path === '' ? '$' : e.path}: `
       const bare = e.message.startsWith(prefix) ? e.message.slice(prefix.length) : e.message
       throw new DecodeError(
         e.path,
-        redactBuildLog(bare.replace(/, got "[\s\S]*$/, ', got another string')),
+        redactSecrets(bare.replace(/, got "[\s\S]*$/, ', got another string')),
+        { cause: e },
       )
     }
   }
@@ -81,7 +88,7 @@ export const githubInstallationDecoder: Decoder<GithubInstallation> = withoutVal
     version: versionOne,
     state: literal('ok', 'not-installed', 'error'),
     reason: optional(
-      nullable((v, p) => redactBuildLog(str(v, p))),
+      nullable((v, p) => redactSecrets(str(v, p))),
       null,
     ),
     installationId: optional(nullable(num), null),

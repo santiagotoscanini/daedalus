@@ -3,6 +3,7 @@ import { readCommittedSite } from '../host/contract/domains/site-doc'
 import type { SnapshotResult } from '../host/contract/snapshot'
 import { type GithubInstallation, readGithubInstallation, usableToken } from '../host/github-token'
 import { nullable, obj, optional, str } from '../lib/contract/decode'
+import type { Result } from '../lib/result'
 import type { Ctx } from './ctx'
 import type { SiteGithubApp } from './site/file'
 
@@ -26,7 +27,7 @@ const REFRESH_DEBOUNCE_MS = 60_000
 /** The App as the committed site.json records it; null when there is none. */
 export async function appIdentity(_ctx: Ctx): Promise<SiteGithubApp | null> {
   const site = await readCommittedSite()
-  return site.present ? (site.doc.github?.app ?? null) : null
+  return site.ok ? (site.value.doc.github?.app ?? null) : null
 }
 
 /** The installation file the host's minter publishes (GITHUB_TOKEN_PATH). */
@@ -201,6 +202,7 @@ export type InstallationRepo = {
   language: string | null
 }
 
+/** lib/result.ts's shape plus the backoff a rate-limited listing asks for. */
 export type InstallationRepos =
   | { ok: true; repos: InstallationRepo[]; total: number }
   | { ok: false; reason: string; retryAfterMs: number | null }
@@ -269,7 +271,7 @@ export type RepoById = {
   defaultBranch: string
 }
 
-export type RepoLookup = { ok: true; repo: RepoById } | { ok: false; reason: string }
+export type RepoLookup = Result<RepoById>
 
 /**
  * The repository with this id — the ONE way anything in the build and report
@@ -296,7 +298,7 @@ export async function repoById(ctx: Ctx, id: number): Promise<RepoLookup> {
   }
   return {
     ok: true,
-    repo: {
+    value: {
       id,
       fullName,
       owner,

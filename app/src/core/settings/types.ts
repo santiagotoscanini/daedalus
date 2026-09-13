@@ -3,6 +3,7 @@ import type { RepoFacts } from '../../host/contract/domains/repo'
 import type { NixosFacts } from '../../host/contract/domains/site'
 import type { GithubInstallation, GithubTokenKind } from '../../host/github-token'
 import type { NixosCycle, NixosNotes, Support } from '../../lib/nixos'
+import type { Result } from '../../lib/result'
 import type { SiteGithubApp } from '../site/file'
 
 // What the settings page renders. Types only — this file is imported by
@@ -74,15 +75,24 @@ export type BoxSettings = {
   sources: { site: SourceMeta; network: SourceMeta }
 }
 
+/**
+ * The two credential checks below share one rule, which is what the separate
+ * `configured` boolean used to say: **a null reason means there was no
+ * credential to ask about.** A refusal always has words. That boolean and
+ * `ok` were independent fields, so `configured: false, ok: true` typechecked;
+ * as a union it cannot be written down.
+ */
+
 /** A credential checked against the service that issued it. */
-export type TokenCheck = {
-  configured: boolean
-  ok: boolean
-  /** The issuer's own word for it (`active`, `expired`, …); null when unreachable. */
-  status: string | null
-  expiresOn: string | null
-  error: string | null
-}
+export type TokenCheck = Result<
+  {
+    /** The issuer's own word for it (`active`, `expired`, …); null when unreachable. */
+    status: string | null
+    expiresOn: string | null
+  },
+  /** The issuer's complaint, or its own word for a token that is not active. */
+  string | null
+>
 
 export type CloudflareStatus = {
   token: TokenCheck
@@ -90,16 +100,16 @@ export type CloudflareStatus = {
   tunnel: { name: string; status: string } | null
 }
 
-export type GithubCheck = {
-  configured: boolean
-  ok: boolean
-  login: string | null
-  /** From the token's prefix; a fine-grained token reports no scopes header. */
-  kind: GithubTokenKind
-  scopes: string[]
-  rateLimit: { remaining: number; limit: number; resetAt: string } | null
-  error: string | null
-}
+export type GithubCheck = Result<
+  {
+    login: string | null
+    /** From the token's prefix; a fine-grained token reports no scopes header. */
+    kind: GithubTokenKind
+    scopes: string[]
+    rateLimit: { remaining: number; limit: number; resetAt: string } | null
+  },
+  string | null
+>
 
 export type IntegrationStatus = {
   checkedAt: string
@@ -139,7 +149,7 @@ export type Account = {
   accountUrl: string
 }
 
-export type ProfileRead = { ok: true; profile: Profile } | { ok: false; reason: string }
+export type ProfileRead = Result<Profile>
 
 /** The fields the page may change; everything else is re-sent as read. */
 export type ProfilePatch = Partial<
@@ -150,7 +160,7 @@ export type ProfilePatch = Partial<
 export type CloudflareZone = { id: string; name: string; status: string }
 
 /** What the domain picker offers, or why it cannot offer anything. */
-export type ZoneList = { ok: true; zones: CloudflareZone[] } | { ok: false; reason: string }
+export type ZoneList = Result<CloudflareZone[]>
 
 /** The live half of the Engine card: support, the channel, the notes. */
 export type NixosRelease = {
@@ -204,9 +214,8 @@ export type GithubAppStatus = {
   pending?: { slug: string; htmlUrl: string; at: string; reason: string }
 }
 
-export type GithubAppStart =
-  | { ok: true; action: string; manifest: string; state: string }
-  | { ok: false; reason: string }
+/** The form GitHub's App-creation flow is POSTed to, and the state it carries. */
+export type GithubAppStart = Result<{ action: string; manifest: string; state: string }>
 
 /**
  * Why the callback did not create an App, as its redirect carries it: a code,
@@ -232,12 +241,11 @@ export type GithubAppFinish =
   | { outcome: 'pending'; code: 'apply-refused'; reason: string }
   | { outcome: 'failed'; code: Exclude<GithubCallbackCode, 'apply-refused'>; reason: string }
 
-export type GithubAppApply = { ok: true; id: string } | { ok: false; reason: string }
+/** The Apply's request id, or why it was not requested. */
+export type GithubAppApply = Result<string>
 
 /** A discarded pending Apply: which App the box forgot (it may still exist on GitHub). */
-export type GithubAppDiscard =
-  | { ok: true; slug: string; htmlUrl: string }
-  | { ok: false; reason: string }
+export type GithubAppDiscard = Result<{ slug: string; htmlUrl: string }>
 
 /**
  * What the callback's redirect said, shown once on the Integrations tab.

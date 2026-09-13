@@ -365,8 +365,7 @@ const IDLE = {
 
 function WriteControl() {
   const router = useRouter()
-  const [refusal, setRefusal] = useState('')
-  const { status, running, start } = usePolledStatus({
+  const { status, running, refusal, start } = usePolledStatus({
     initial: IDLE,
     fetch: fetchSiteRequestStatus,
     // The host refreshes the repository snapshot BEFORE it reports done, so
@@ -382,24 +381,16 @@ function WriteControl() {
         size="sm"
         disabled={running}
         onClick={() => {
-          setRefusal('')
-          start(async () => {
-            const out = await writeSiteFiles()
-            if (!out.ok) {
-              setRefusal(out.reason)
-              return null
-            }
-            return out.id
-          })
+          start(writeSiteFiles)
         }}
       >
         {running ? (status.phase === '' ? 'working…' : `${status.phase}…`) : 'Write site.json'}
       </Button>
-      {refusal !== '' && <span className="text-[0.78rem] text-danger">{refusal}</span>}
-      {refusal === '' && status.state === 'failed' && (
+      {refusal !== null && <span className="text-[0.78rem] text-danger">{refusal}</span>}
+      {refusal === null && status.state === 'failed' && (
         <span className="text-[0.78rem] text-danger">{status.error}</span>
       )}
-      {refusal === '' && status.state === 'done' && status.detail !== '' && (
+      {refusal === null && status.state === 'done' && status.detail !== '' && (
         <span className="text-[0.78rem] text-(--text-muted)">{status.detail}</span>
       )}
     </div>

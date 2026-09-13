@@ -76,7 +76,7 @@ describe('the sops kill timer', () => {
     await read
     child.emit('close', 0)
 
-    await expect(sealing).resolves.toEqual({ ok: true, ciphertext: SOPS_FILE })
+    await expect(sealing).resolves.toEqual({ ok: true, value: SOPS_FILE })
     await vi.advanceTimersByTimeAsync(SOPS_TIMEOUT_MS * 2)
     expect(child.kill).not.toHaveBeenCalled()
   })

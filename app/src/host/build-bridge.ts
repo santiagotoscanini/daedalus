@@ -14,10 +14,10 @@ import {
   buildStatusDecoder,
   type EnvReader,
   NO_BUILD,
-  redactBuildLog,
   serializeBuildRequest,
   tailFromBytes,
 } from '../lib/builds'
+import { redactSecrets } from '../lib/redact'
 import { writeAtomic } from './bridge'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
 
@@ -111,7 +111,7 @@ export async function readBuildLogTail(
     const { bytesRead } = await handle.read(buffer, 0, length, start)
     return {
       available: true,
-      text: redactBuildLog(tailFromBytes(buffer.subarray(0, bytesRead), start > 0)),
+      text: redactSecrets(tailFromBytes(buffer.subarray(0, bytesRead), start > 0)),
       truncated: start > 0,
       sizeBytes: size,
     }

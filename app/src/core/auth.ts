@@ -1,4 +1,5 @@
 import { getRequestHeader } from '@tanstack/react-start/server'
+import type { Result } from '../lib/result'
 
 // Who is making this request.
 //
@@ -55,11 +56,11 @@ export const UNKNOWN_ACTOR = 'unknown operator'
 export const NO_ACTOR_REASON = 'The request carried no signed-in identity, so nothing was done.'
 
 /** A signed-in operator, or the refusal to hand back. */
-export type Actor = { ok: true; actor: string } | { ok: false; reason: string }
+export type Actor = Result<string>
 
 const gate = (header: string | null | undefined): Actor => {
   const v = header?.trim() ?? ''
-  return v === '' ? { ok: false, reason: NO_ACTOR_REASON } : { ok: true, actor: v }
+  return v === '' ? { ok: false, reason: NO_ACTOR_REASON } : { ok: true, value: v }
 }
 
 /**
@@ -84,7 +85,7 @@ export function requireActor(): Actor {
  * They check it themselves and shape their own refusal (github-app.ts), so
  * they want the null rather than this module's sentence.
  */
-export const actorOrNull = (a: Actor): string | null => (a.ok ? a.actor : null)
+export const actorOrNull = (a: Actor): string | null => (a.ok ? a.value : null)
 
 const label = (header: string | null | undefined, fallback: string): string => header ?? fallback
 

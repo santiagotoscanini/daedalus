@@ -1,7 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { ExternalLinkIcon, KeyRoundIcon, LogOutIcon } from 'lucide-react'
 import { useId, useRef, useState, useTransition } from 'react'
-
 import type { BoxSettings, Profile, ProfilePatch, ProfileRead } from '../../core/settings/types'
 import { cn } from '../../lib/cn'
 import {
@@ -10,6 +9,7 @@ import {
   pictureFileError,
   usernameError,
 } from '../../lib/profile-fields'
+import { errorText } from '../../lib/redact'
 import { mailAddressError } from '../../lib/site-fields'
 import { resetProfilePictureFn, saveProfileFn, uploadProfilePictureFn } from '../../server/profile'
 import { Button, buttonVariants } from '../ui/button'
@@ -52,7 +52,7 @@ export function ProfileTab({
           </CardContent>
         </Card>
       ) : profile.ok ? (
-        <Account profile={profile.profile} />
+        <Account profile={profile.value} />
       ) : (
         <Section title="Profile" icon="/icon-pocket-id.svg" mono>
           <p className={NOTE}>{profile.reason}</p>
@@ -211,7 +211,7 @@ function Identity({
         await work()
         await router.invalidate()
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
+        setError(errorText(e))
       }
     })
   }
@@ -348,7 +348,7 @@ function TextInner({
         await saveProfileFn({ data: patch })
         await router.invalidate()
       } catch (e) {
-        setRefused(e instanceof Error ? e.message : String(e))
+        setRefused(errorText(e))
       }
     })
   }

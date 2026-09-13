@@ -14,9 +14,9 @@ const h = vi.hoisted(() => ({
   apply: { ok: true, id: 'apply-1', changed: [] } as unknown,
   applyCalls: [] as unknown[][],
   /** A value, or a function returning one (to hold the seal open). */
-  seal: { ok: true, ciphertext: 'ENC[sealed-github-app]' } as unknown,
+  seal: { ok: true, value: 'ENC[sealed-github-app]' } as unknown,
   sealCalls: [] as unknown[][],
-  site: { present: false, error: null } as unknown,
+  site: { ok: false, reason: null } as unknown,
   installation: null as unknown,
 }))
 
@@ -120,9 +120,8 @@ const DOC: SiteDocument = {
 }
 
 const committed = (app: SiteGithubApp | null) => ({
-  present: true,
-  doc: app === null ? DOC : { ...DOC, github: { app } },
-  bytes: '',
+  ok: true,
+  value: { doc: app === null ? DOC : { ...DOC, github: { app } }, bytes: '' },
 })
 
 const pendingRecord = (over: Record<string, unknown> = {}) => ({
@@ -216,7 +215,7 @@ const conversions = () => calls.filter((u) => u.includes('/app-manifests/')).len
 async function begin(ctx: Ctx, replace = false): Promise<string> {
   const r = await startAppCreation(ctx, ACTOR, { name: 'daedalus-example', replace })
   if (!r.ok) throw new Error(r.reason)
-  return r.state
+  return r.value.state
 }
 
 const leaks = (text: string) => SECRETS.filter((s) => text.includes(s))
@@ -232,7 +231,7 @@ beforeEach(() => {
   h.blocker = null
   h.apply = { ok: true, id: 'apply-1', changed: [] }
   h.applyCalls = []
-  h.seal = { ok: true, ciphertext: 'ENC[sealed-github-app]' }
+  h.seal = { ok: true, value: 'ENC[sealed-github-app]' }
   h.sealCalls = []
   h.site = committed(null)
   h.installation = {
@@ -346,22 +345,22 @@ describe('startAppCreation', () => {
     const r = await startAppCreation(ctx, ACTOR, { name: '  daedalus-example ' })
     if (!r.ok) throw new Error(r.reason)
 
-    expect(r.state).toMatch(/^[A-Za-z0-9_-]{43}$/)
-    expect(r.action).toBe(`https://github.com/settings/apps/new?state=${r.state}`)
-    const manifest = JSON.parse(r.manifest)
+    expect(r.value.state).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(r.value.action).toBe(`https://github.com/settings/apps/new?state=${r.value.state}`)
+    const manifest = JSON.parse(r.value.manifest)
     expect(manifest.name).toBe('daedalus-example')
     expect(manifest.redirect_url).toBe('https://ctl.example.test/settings/github/callback')
     expect(manifest.hook_attributes.url).toBe('https://hooks.example.test/api/github/webhook')
 
     const record = store.get(CREATION)
     expect(record).toEqual({
-      stateHash: createHash('sha256').update(r.state).digest('hex'),
+      stateHash: createHash('sha256').update(r.value.state).digest('hex'),
       actor: ACTOR,
       ownerId: OWNER_ID,
       expiresAt: Date.parse('2026-09-11T21:00:00Z'),
       replace: false,
     })
-    expect(JSON.stringify(record)).not.toContain(r.state)
+    expect(JSON.stringify(record)).not.toContain(r.value.state)
   })
 
   it('posts to the organization form when the owner is an organization', async () => {
@@ -369,7 +368,7 @@ describe('startAppCreation', () => {
     const r = await startAppCreation(fakeCtx().ctx, ACTOR, { name: 'daedalus-example' })
     if (!r.ok) throw new Error(r.reason)
     expect(
-      r.action.startsWith('https://github.com/organizations/octo/settings/apps/new?state='),
+      r.value.action.startsWith('https://github.com/organizations/octo/settings/apps/new?state='),
     ).toBe(true)
   })
 
@@ -416,7 +415,7 @@ describe('startAppCreation', () => {
   })
 
   it('refuses without a committed site.json to record the App in', async () => {
-    h.site = { present: false, error: null }
+    h.site = { ok: false, reason: null }
     expect(
       await startAppCreation(fakeCtx().ctx, ACTOR, { name: 'daedalus-example' }),
     ).toMatchObject({ ok: false })
@@ -643,7 +642,7 @@ describe('finishAppCreation', () => {
     )
 
     h.apply = { ok: true, id: 'apply-2', changed: [] }
-    expect(await retryPendingApply(ctx, ACTOR)).toEqual({ ok: true, id: 'apply-2' })
+    expect(await retryPendingApply(ctx, ACTOR)).toEqual({ ok: true, value: 'apply-2' })
     expect(store.has(PENDING)).toBe(false)
     const last = h.applyCalls.at(-1) as [
       string,
@@ -688,7 +687,7 @@ describe('finishAppCreation', () => {
     })
 
     h.site = committed(APP)
-    expect(await retryPendingApply(ctx, ACTOR)).toEqual({ ok: true, id: 'apply-2' })
+    expect(await retryPendingApply(ctx, ACTOR)).toEqual({ ok: true, value: 'apply-2' })
     const last = h.applyCalls.at(-1) as [string, unknown, { extraFiles: { 'site.json': string } }]
     expect(JSON.parse(last[2].extraFiles['site.json']).github.app.id).toBe(222)
   })
@@ -713,7 +712,7 @@ describe('finishAppCreation', () => {
     const hung = finishAppCreation(ctx, ACTOR, CODE, first)
     await atSeal
 
-    h.seal = { ok: true, ciphertext: 'ENC[second]' }
+    h.seal = { ok: true, value: 'ENC[second]' }
     const second = await begin(ctx)
     const waiting = finishAppCreation(ctx, ACTOR, CODE, second)
 
@@ -768,8 +767,7 @@ describe('discardPendingApply', () => {
     store.set(PENDING, pendingRecord())
     expect(await discardPendingApply(ctx, ACTOR)).toEqual({
       ok: true,
-      slug: APP.slug,
-      htmlUrl: APP.htmlUrl,
+      value: { slug: APP.slug, htmlUrl: APP.htmlUrl },
     })
     expect(store.has(PENDING)).toBe(false)
     expect(
@@ -795,7 +793,7 @@ describe('pasteAppKey', () => {
     const pasted = `  ${PEM.trim().split('\n').join('\r\n  ')}\r\n\r\n`
     expect(await pasteAppKey(fakeCtx().ctx, ACTOR, { ...input, pem: pasted })).toEqual({
       ok: true,
-      id: 'apply-1',
+      value: 'apply-1',
     })
     expect(h.sealCalls).toEqual([['vault/github-app.sops', input]])
     expect(h.applyCalls[0]).toHaveLength(2)

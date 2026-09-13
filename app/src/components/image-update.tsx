@@ -116,11 +116,10 @@ export function UpdateControl({
   queue?: QueueBinding
 }) {
   const router = useRouter()
-  const [refusal, setRefusal] = useState<string | null>(null)
   const [chosen, setChosen] = useState<string | null>(null)
   const [typed, setTyped] = useState('')
 
-  const { status, running, start } = usePolledStatus({
+  const { status, running, refusal, start } = usePolledStatus({
     initial: initialStatus,
     fetch: () => fetchImageUpdateStatus(),
     onSettle: () => {
@@ -268,7 +267,6 @@ export function UpdateControl({
           size="sm"
           disabled={running || !armed}
           onClick={() => {
-            setRefusal(null)
             start(async () => {
               const r = await requestImageUpdateFn({
                 data: {
@@ -282,11 +280,8 @@ export function UpdateControl({
                   ],
                 },
               })
-              if (!r.ok) {
-                setRefusal(r.reason)
-                return null
-              }
-              return r.id
+              // The outcome's `code` is for the scriptable door's HTTP status.
+              return r.ok ? { ok: true, value: r.id } : { ok: false, reason: r.reason }
             })
           }}
         >

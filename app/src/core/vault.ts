@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
+import { errorText } from '../lib/redact'
+import type { Result } from '../lib/result'
 import {
   ciphertextError,
   jsonCiphertextError,
@@ -20,7 +22,8 @@ import {
 // and the GitHub App's key (core/settings/github-app.ts) — and then to Apply
 // as its own change (host/apply-flow.ts runSecretApply).
 
-export type Sealed = { ok: true; ciphertext: string } | { ok: false; reason: string }
+/** The sops file's bytes, or why nothing was sealed. */
+export type Sealed = Result<string>
 
 /** Longest first, so a value never survives as the tail of a shorter match. */
 function redact(text: string, secrets: string[]): string {
@@ -95,7 +98,9 @@ function encrypt(
     })
     child.on('error', (e) => {
       settle(() => {
-        reject(new Error(`sops could not run (${e.message})`))
+        // The spawn error keeps its errno and syscall on `cause`; the message
+        // is the only part that is ever printed.
+        reject(new Error(`sops could not run (${e.message})`, { cause: e }))
       })
     })
     child.on('close', (code) => {
@@ -124,11 +129,11 @@ export async function sealForVault(file: VaultFile, value: string): Promise<Seal
   try {
     out = await encrypt(file, 'binary', value, [value])
   } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : 'sops failed' }
+    return { ok: false, reason: errorText(e) }
   }
   const bad = ciphertextError(out, value)
   return bad === null
-    ? { ok: true, ciphertext: out }
+    ? { ok: true, value: out }
     : { ok: false, reason: `Nothing was sent: ${bad}.` }
 }
 
@@ -162,11 +167,11 @@ export async function sealJsonForVault<F extends VaultJsonFile>(
     try {
       out = await encrypt(file, 'json', JSON.stringify(Object.fromEntries(declared)), secrets)
     } catch (e) {
-      return { ok: false, reason: e instanceof Error ? e.message : 'sops failed' }
+      return { ok: false, reason: errorText(e) }
     }
     const bad = jsonCiphertextError(file, out, values)
     return bad === null
-      ? { ok: true, ciphertext: out }
+      ? { ok: true, value: out }
       : { ok: false, reason: `Nothing was sent: ${bad}.` }
   } catch {
     return { ok: false, reason: 'Nothing was sent: the values could not be sealed.' }

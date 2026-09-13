@@ -12,6 +12,8 @@ import {
   optional,
   str,
 } from '../../../lib/contract/decode'
+import { errorText } from '../../../lib/redact'
+import type { Result } from '../../../lib/result'
 
 // /site/site.json — the committed document, read from the site directory
 // mounted read-only into the container. Since Phase 5 this is THE source of
@@ -77,9 +79,13 @@ export function decodeSiteDocument(raw: unknown): SiteDocument {
   return { ...d, schemaVersion: 1 }
 }
 
-export type CommittedSite =
-  | { present: true; doc: SiteDocument; bytes: string }
-  | { present: false; error: string | null }
+/**
+ * The committed document with the bytes it was read from, or the reason there
+ * is none: `null` for "no file yet", a sentence when there is one that would
+ * not decode. Two very different situations, which is why the reason is
+ * nullable rather than empty.
+ */
+export type CommittedSite = Result<{ doc: SiteDocument; bytes: string }, string | null>
 
 /** The committed site.json, or the reason there is none. */
 export async function readCommittedSite(): Promise<CommittedSite> {
@@ -88,11 +94,11 @@ export async function readCommittedSite(): Promise<CommittedSite> {
   try {
     bytes = await readFile(path, 'utf8')
   } catch {
-    return { present: false, error: null }
+    return { ok: false, reason: null }
   }
   try {
-    return { present: true, doc: decodeSiteDocument(JSON.parse(bytes)), bytes }
+    return { ok: true, value: { doc: decodeSiteDocument(JSON.parse(bytes)), bytes } }
   } catch (e) {
-    return { present: false, error: e instanceof Error ? e.message : String(e) }
+    return { ok: false, reason: errorText(e) }
   }
 }

@@ -334,7 +334,7 @@ async function loadCfTunnel(cfP: Promise<CfTunnelRead>): Promise<TunnelData> {
     promPoints('sum(increase(cloudflared_tunnel_total_requests[1d]))', DAYS * 24 * 60, 86400),
   ])
 
-  const summary = summariseTunnel(cfRead.ok ? cfRead.body.result : undefined, rph)
+  const summary = summariseTunnel(cfRead.ok ? cfRead.value.result : undefined, rph)
   const version = summary.clientVersion
 
   return {
@@ -355,7 +355,7 @@ async function loadCfTunnel(cfP: Promise<CfTunnelRead>): Promise<TunnelData> {
     errors,
     inFlight,
     daily: daily.map((p) => ({ date: localDay(p.t * 1000), requests: p.v })),
-    published: (config.ok ? (config.body.result?.config?.ingress ?? []) : [])
+    published: (config.ok ? (config.value.result?.config?.ingress ?? []) : [])
       // The last rule is the catch-all, which has no hostname and is not a
       // published name — dropping it is what makes this list a list of names.
       .filter((r) => r.hostname !== undefined && r.hostname !== '')
@@ -433,7 +433,7 @@ async function loadDdns(cfP: Promise<CfTunnelRead>): Promise<DdnsData> {
     intervalSeconds: seconds,
     resolved: resolved.ip,
     ttl: resolved.ttl,
-    actual: cf.ok ? (cf.body.result?.connections?.[0]?.origin_ip ?? null) : null,
+    actual: cf.ok ? (cf.value.result?.connections?.[0]?.origin_ip ?? null) : null,
     lastRunAt,
     // Derived rather than asked: the timer lives in systemd and this container
     // cannot see it. `OnUnitActiveSec` restarts the clock when the last run

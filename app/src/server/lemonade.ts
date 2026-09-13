@@ -1,5 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { isRecord } from '../lib/is-record'
+import { errorText } from '../lib/redact'
+import type { Result } from '../lib/result'
 
 // The two things worth a button on the Lemonade tab.
 //
@@ -30,7 +32,13 @@ import { isRecord } from '../lib/is-record'
 
 const BASE = () => process.env.LEMONADE_URL ?? ''
 
-export type ModelActionResult = { ok: boolean; message: string }
+/**
+ * What Lemonade said, either way. It was `{ ok: boolean; message: string }`,
+ * which does not narrow: `if (!r.ok)` left `message` meaning "the reason" and
+ * "what happened" at the same type, and the compiler could not tell the page
+ * it was reading a failure.
+ */
+export type ModelActionResult = Result<string>
 
 /**
  * A model id, as a request may carry one.
@@ -99,7 +107,7 @@ export const switchLemonadeModel = createServerFn({ method: 'POST' })
       const freed = await call('/api/v1/unload', { model_name: data.from })
       // Report the eviction failure rather than pressing on into the 409 it
       // guarantees — "could not free the slot" is the actionable sentence.
-      if (!freed.ok) return { ok: false, message: `could not evict ${data.from}: ${freed.message}` }
+      if (!freed.ok) return { ok: false, reason: `could not evict ${data.from}: ${freed.reason}` }
     }
     return call('/api/v1/load', { model_name: data.to, pinned: data.pinned })
   })
@@ -122,11 +130,14 @@ async function call(path: string, body: Record<string, unknown>): Promise<ModelA
       signal: AbortSignal.timeout(120_000),
     })
     const text = await res.text()
-    if (!res.ok) return { ok: false, message: `Lemonade answered HTTP ${String(res.status)}` }
+    if (!res.ok) return { ok: false, reason: `Lemonade answered HTTP ${String(res.status)}` }
 
     const parsed = JSON.parse(text) as { message?: string; status?: string }
-    return { ok: parsed.status !== 'error', message: parsed.message ?? 'done' }
+    // A 200 whose body says `status: error` is still a failure: Lemonade
+    // reports a refused load that way rather than with a status code.
+    const said = parsed.message ?? 'done'
+    return parsed.status === 'error' ? { ok: false, reason: said } : { ok: true, value: said }
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : 'request failed' }
+    return { ok: false, reason: errorText(e) }
   }
 }

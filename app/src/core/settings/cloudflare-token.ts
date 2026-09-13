@@ -4,6 +4,7 @@ import {
   tokenShapeError,
 } from '../../lib/cloudflare-token'
 import { getJsonResult } from '../../lib/http'
+import type { Result } from '../../lib/result'
 import type { Ctx } from '../ctx'
 import { sealForVault } from '../vault'
 
@@ -26,11 +27,11 @@ import { sealForVault } from '../vault'
 
 const CF = 'https://api.cloudflare.com/client/v4'
 
-export type TokenReplaceOutcome =
-  | { ok: true; id: string; zones: string[] }
-  | { ok: false; reason: string }
+/** The Apply's request id, and the zones the new token proved it can see. */
+export type TokenReplaceOutcome = Result<{ id: string; zones: string[] }>
 
-type Checked = { ok: true; zones: string[] } | { ok: false; reason: string }
+/** The zone names the token can see, or the permission it turned out to lack. */
+type Checked = Result<string[]>
 
 async function check(ctx: Ctx, token: string): Promise<Checked> {
   const headers = { Authorization: `Bearer ${token}` }
@@ -42,12 +43,12 @@ async function check(ctx: Ctx, token: string): Promise<Checked> {
     return {
       ok: false,
       reason:
-        verify.status === null
+        verify.reason.status === null
           ? 'Cloudflare did not answer; nothing was changed.'
           : 'Cloudflare does not recognise this token.',
     }
   }
-  const status = verify.body.result?.status
+  const status = verify.value.result?.status
   if (status !== 'active') {
     return { ok: false, reason: `Cloudflare says this token is ${status ?? 'not active'}.` }
   }
@@ -59,7 +60,7 @@ async function check(ctx: Ctx, token: string): Promise<Checked> {
   if (!zones.ok) {
     return { ok: false, reason: 'The token cannot list zones: it needs Zone › Zone › Read.' }
   }
-  const list = zones.body.result ?? []
+  const list = zones.value.result ?? []
   const names = list
     .map((z) => z.name ?? '')
     .filter((n) => n !== '')
@@ -90,7 +91,7 @@ async function check(ctx: Ctx, token: string): Promise<Checked> {
         }),
       },
     )
-    const recordId = created.ok ? created.body.result?.id : undefined
+    const recordId = created.ok ? created.value.result?.id : undefined
     if (recordId === undefined) {
       return {
         ok: false,
@@ -124,7 +125,7 @@ async function check(ctx: Ctx, token: string): Promise<Checked> {
     }
   }
 
-  return { ok: true, zones: names }
+  return { ok: true, value: names }
 }
 
 export async function replaceCloudflareToken(
@@ -150,9 +151,9 @@ export async function replaceCloudflareToken(
   const outcome = await runSecretApply(actor, {
     file: CLOUDFLARE_TOKEN_FILE,
     name: CLOUDFLARE_TOKEN_SECRET,
-    ciphertext: sealed.ciphertext,
+    ciphertext: sealed.value,
   })
   return outcome.ok
-    ? { ok: true, id: outcome.id, zones: checked.zones }
+    ? { ok: true, value: { id: outcome.id, zones: checked.value } }
     : { ok: false, reason: outcome.reason }
 }

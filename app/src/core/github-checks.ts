@@ -30,6 +30,11 @@ export type GhFailure =
   | 'server'
   | 'unexpected'
 
+/**
+ * lib/result.ts's shape with a failure the caller BRANCHES on rather than
+ * shows: `rate-limited` decides whether to back off, and the status decides
+ * whether to retry at all.
+ */
 export type GhCall<T> =
   | { ok: true; value: T }
   | { ok: false; failure: GhFailure; status: number | null; retryAfterMs: number | null }

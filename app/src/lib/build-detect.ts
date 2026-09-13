@@ -1,5 +1,5 @@
-import { redactBuildLog } from './builds'
 import { isRecord } from './is-record'
+import { redactSecrets } from './redact'
 
 // What Railpack decided an app is, and what about that decision is likely
 // wrong. Pure and client-safe; the build page and the overview render it.
@@ -145,7 +145,7 @@ function logsOf(logs: unknown): DetectionLog[] {
     if (message === null) continue
     out.push({
       level: text(entry.Level) ?? text(entry.level) ?? 'info',
-      message: redactBuildLog(message),
+      message: redactSecrets(message),
       docsPath: text(entry.DocsPath) ?? text(entry.docsPath),
     })
   }

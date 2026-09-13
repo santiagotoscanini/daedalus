@@ -213,7 +213,7 @@ beforeEach(() => {
     },
     repo: {
       ok: true,
-      repo: {
+      value: {
         id: 4242,
         fullName: 'octo/iris',
         owner: 'octo',
@@ -222,15 +222,17 @@ beforeEach(() => {
       },
     },
     site: {
-      present: true,
-      doc: {
-        identity: {
-          hostname: 's2-server',
-          baseDomain: 'example.test',
-          controlPlane: 'daedalus-app',
-        },
-        github: {
-          app: { id: 1, slug: 'x', clientId: 'c', htmlUrl: 'h', owner: 'octo', ownerId: 9 },
+      ok: true,
+      value: {
+        doc: {
+          identity: {
+            hostname: 's2-server',
+            baseDomain: 'example.test',
+            controlPlane: 'daedalus-app',
+          },
+          github: {
+            app: { id: 1, slug: 'x', clientId: 'c', htmlUrl: 'h', owner: 'octo', ownerId: 9 },
+          },
         },
       },
     },
@@ -382,7 +384,7 @@ describe('the check run', () => {
   })
 
   it('sends nothing when site.json names no App', async () => {
-    ;(h.site as { doc: { github: unknown } }).doc.github = { app: null }
+    ;(h.site as { value: { doc: { github: unknown } } }).value.doc.github = { app: null }
     await reportBuildChange(ctx, row({ state: 'cloning' }))
     expect(h.calls).toEqual([])
   })
@@ -391,7 +393,7 @@ describe('the check run', () => {
     // Renamed on GitHub: the app is still `iris` here and the repo is not.
     h.repo = {
       ok: true,
-      repo: {
+      value: {
         id: 4242,
         fullName: 'octo/iris-web',
         owner: 'octo',

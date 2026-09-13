@@ -10,6 +10,11 @@
 // the lock, the busy checks and the pickup window, and differs in one rule: it
 // is always its own Apply.
 
+/**
+ * lib/result.ts's shape with a `code` on the failure — the one thing the
+ * scriptable door (routes/api.registry.apply.ts) maps to an HTTP status, and
+ * the reason this is not a plain `Result`.
+ */
 export type ApplyOutcome =
   | { ok: true; id: string; changed: { name: string; fields: string[] }[] }
   | { ok: false; code: 'busy' | 'noop' | 'pending'; reason: string }

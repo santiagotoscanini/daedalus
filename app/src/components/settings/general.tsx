@@ -1,12 +1,12 @@
 import { useRouter } from '@tanstack/react-router'
 import { BookOpenIcon, IdCardIcon } from 'lucide-react'
 import { useEffect, useState, useTransition } from 'react'
-
 import type { BoxSettings, GeneralLive, NixosRelease, ZoneList } from '../../core/settings/types'
 import type { SiteEdit } from '../../core/site'
 import type { NixosFacts } from '../../host/contract/domains/site'
 import { num, since } from '../../lib/format'
 import { builtOn, type Support } from '../../lib/nixos'
+import { errorText } from '../../lib/redact'
 import { controlPlaneLabelError } from '../../lib/site-fields'
 import { groupZones } from '../../lib/timezones'
 import { saveSiteEditFn } from '../../server/site'
@@ -163,7 +163,7 @@ export function General({
 
 /** The domain, from the zones the API token can see; the zone id rides along. */
 function DomainPicker({ edit, zones }: { edit: SiteEdit; zones: ZoneList | undefined }) {
-  const list = zones?.ok === true ? zones.zones : []
+  const list = zones?.ok === true ? zones.value : []
   const groups: SelectGroupSpec[] =
     list.length === 0
       ? []
@@ -269,7 +269,7 @@ function RetireOldAddress({ old }: { old: string }) {
                 await saveSiteEditFn({ data: { 'identity.controlPlanePrevious': null } })
                 await router.invalidate()
               } catch (e) {
-                setError(e instanceof Error ? e.message : String(e))
+                setError(errorText(e))
               }
             })
           }}

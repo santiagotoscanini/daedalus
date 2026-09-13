@@ -3,6 +3,7 @@ import type { RepoFacts, SiteDir, SiteFileStatus } from '../../host/contract/dom
 import { repoFacts } from '../../host/contract/domains/repo'
 import { decodeSiteDocument, readCommittedSite } from '../../host/contract/domains/site-doc'
 import { requestSiteWrite, type SiteFileName } from '../../host/site-request'
+import type { Result } from '../../lib/result'
 import { controlPlaneLabelError } from '../../lib/site-fields'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
@@ -164,7 +165,7 @@ function withControlPlane(doc: SiteDocument, from: SiteDocument): SiteDocument {
 export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
   const committed = await readCommittedSite()
   const running = await runningSite(ctx)
-  const committedDoc = committed.present ? withControlPlane(committed.doc, running) : null
+  const committedDoc = committed.ok ? withControlPlane(committed.value.doc, running) : null
   const base = committedDoc ?? running
   const stored = await readDraft(ctx)
   const draft = stored === null ? null : withControlPlane(stored, base)
@@ -177,7 +178,7 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
     committed: committedDoc,
     desired,
     changes: committedDoc === null ? [] : changesBetween(committedDoc, desired),
-    render: { before: committed.present ? committed.bytes : null, after: renderSiteFile(desired) },
+    render: { before: committed.ok ? committed.value.bytes : null, after: renderSiteFile(desired) },
   }
 }
 
@@ -262,7 +263,7 @@ async function refuseUnknown(
   const { listZones } = await import('../settings/zones')
   const list = await listZones(ctx)
   if (!list.ok) throw new Error(`${list.reason}, so the zone cannot be confirmed`)
-  const match = list.zones.find((z) => z.id === patch['cloudflare.zoneId'])
+  const match = list.value.find((z) => z.id === patch['cloudflare.zoneId'])
   if (match === undefined || match.name !== patch['identity.baseDomain']) {
     throw new Error(
       `${String(patch['identity.baseDomain'])} is not a zone the Cloudflare API token can see`,
@@ -363,7 +364,8 @@ export async function siteState(ctx: Ctx, facts?: RepoFacts): Promise<SiteState>
   }
 }
 
-export type WriteOutcome = { ok: true; id: string } | { ok: false; reason: string }
+/** The request id the caller polls for, or why the host would not take it. */
+export type WriteOutcome = Result<string>
 
 /**
  * Ask the host to write site.json (and the README) as desired. This is the
@@ -383,5 +385,5 @@ export async function writeSite(ctx: Ctx, actor: string): Promise<WriteOutcome> 
     actor,
     files: await renderSiteFiles(ctx),
   })
-  return { ok: true, id }
+  return { ok: true, value: id }
 }

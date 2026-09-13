@@ -27,6 +27,7 @@ import { cacheHitRatio } from '../lib/build-facts'
 import { isActiveBuildState } from '../lib/builds'
 import { bytes, DASH, ms, pct } from '../lib/format'
 import { isAppName } from '../lib/hostname'
+import { errorText } from '../lib/redact'
 import { OWNER, REGISTRY_HOST } from '../lib/site'
 import type { Tone } from '../lib/tone'
 import {
@@ -436,7 +437,7 @@ function CancelBuildButton({ app, id }: { app: string; id: string }) {
         await router.invalidate()
       })
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e))
+        setError(errorText(e))
       })
       .finally(() => {
         setBusy(false)
@@ -481,7 +482,7 @@ function RetryReportButton({ app, id }: { app: string; id: string }) {
         await router.invalidate()
       })
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e))
+        setError(errorText(e))
       })
       .finally(() => {
         setBusy(false)

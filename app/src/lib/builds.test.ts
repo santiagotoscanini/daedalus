@@ -13,11 +13,11 @@ import {
   RESERVED_ENV_NAMES,
   RESERVED_ENV_PREFIXES,
   railpackValueRefusal,
-  redactBuildLog,
   serializeBuildRequest,
   tailFromBytes,
 } from './builds'
 import { DecodeError, decode } from './contract/decode'
+import { redactSecrets } from './redact'
 
 const SHA = '159be4d0c2a1f3e4b5d6c7a8e9f0a1b2c3d4e5f6'
 const TIP = '2a8f0c1d3e4b5a6978c0d1e2f3a4b5c6d7e8f901'
@@ -563,48 +563,48 @@ describe('tailFromBytes', () => {
   })
 })
 
-describe('redactBuildLog', () => {
+describe('redactSecrets', () => {
   it.each([
     ['an installation token', `token=${GHS} ok`, GHS],
     ['a classic PAT', `using ${GHP}`, GHP],
     ['a fine-grained PAT', `GH_TOKEN=${PAT}`, PAT],
     ['a JWT', `jwt: ${JWT}`, JWT],
   ])('removes %s', (_label, input, secret) => {
-    const out = redactBuildLog(input)
+    const out = redactSecrets(input)
     expect(out).not.toContain(secret)
     expect(out).toContain('[redacted]')
   })
 
   it('removes the credential in an x-access-token URL, keeping the host', () => {
-    const out = redactBuildLog(`remote: https://x-access-token:${GHS}@github.com/o/r.git`)
+    const out = redactSecrets(`remote: https://x-access-token:${GHS}@github.com/o/r.git`)
     expect(out).toBe('remote: https://x-access-token:[redacted]@github.com/o/r.git')
   })
 
   it('removes Authorization header values, keeping the scheme', () => {
-    const basic = redactBuildLog('> Authorization: Basic YnVpbGRlcjpodW50ZXIy')
-    const bearer = redactBuildLog(`authorization: bearer ${GHS}`)
+    const basic = redactSecrets('> Authorization: Basic YnVpbGRlcjpodW50ZXIy')
+    const bearer = redactSecrets(`authorization: bearer ${GHS}`)
     expect(basic).toBe('> Authorization: Basic [redacted]')
     expect(bearer).toBe('authorization: bearer [redacted]')
   })
 
   it('removes a whole multi-line private key block', () => {
-    const out = redactBuildLog(`#5 before\n${PEM}\n#5 after`)
+    const out = redactSecrets(`#5 before\n${PEM}\n#5 after`)
     expect(out).toBe('#5 before\n[redacted]\n#5 after')
   })
 
   it('removes a block whose END has not been written yet', () => {
-    const out = redactBuildLog(`#5 before\n${BEGIN}\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo`)
+    const out = redactSecrets(`#5 before\n${BEGIN}\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo`)
     expect(out).toBe('#5 before\n[redacted]')
   })
 
   it('removes the body of a key whose BEGIN fell before the tail', () => {
-    const out = redactBuildLog(`4lgOEePzNm0tRgeLezV6ffAt0gunVTLw\n${END}\n#6 next step`)
+    const out = redactSecrets(`4lgOEePzNm0tRgeLezV6ffAt0gunVTLw\n${END}\n#6 next step`)
     expect(out).toBe('[redacted]\n#6 next step')
   })
 
   it('leaves ordinary build output alone', () => {
     const line = `#7 [build 3/4] RUN pnpm build — ghost_mode=on sha ${SHA} Authorization: none`
-    expect(redactBuildLog(line)).toBe(line)
+    expect(redactSecrets(line)).toBe(line)
     for (const plain of [
       'listening on http://localhost:3000/healthz',
       'cloning git@github.com:owner/iris.git',
@@ -612,7 +612,7 @@ describe('redactBuildLog', () => {
       'wrote {"auths":{}} to config.json',
       'npm notice _authToken is not set',
     ]) {
-      expect(redactBuildLog(plain)).toBe(plain)
+      expect(redactSecrets(plain)).toBe(plain)
     }
   })
 
@@ -680,15 +680,15 @@ describe('redactBuildLog', () => {
     ],
     ['a quoted _authToken', '_authToken = "npm_opaqueValue123"', '_authToken = "[redacted]"'],
   ])('removes %s', (_label, input, expected) => {
-    expect(redactBuildLog(input)).toBe(expected)
+    expect(redactSecrets(input)).toBe(expected)
   })
 
   it('removes a whole PGP private key block', () => {
     const begin = `-----BEGIN ${'PGP PRIVATE KEY'} BLOCK-----`
     const end = `-----END ${'PGP PRIVATE KEY'} BLOCK-----`
     const block = `${begin}\n\nlQOYBGbcXyIBCADcZ9s0oV1uKq3nR0dS\n=x7Qa\n${end}`
-    expect(redactBuildLog(`#5 before\n${block}\n#5 after`)).toBe('#5 before\n[redacted]\n#5 after')
-    expect(redactBuildLog(`lQOYBGbcXyIBCADcZ9s0oV1uKq3nR0dS\n${end}\n#6 next`)).toBe(
+    expect(redactSecrets(`#5 before\n${block}\n#5 after`)).toBe('#5 before\n[redacted]\n#5 after')
+    expect(redactSecrets(`lQOYBGbcXyIBCADcZ9s0oV1uKq3nR0dS\n${end}\n#6 next`)).toBe(
       '[redacted]\n#6 next',
     )
   })
@@ -698,21 +698,21 @@ describe('redactBuildLog', () => {
     const body = 'A1b2C3d4'.repeat(5)
 
     it('strips them before matching, so a colour code cannot split a token', () => {
-      const out = redactBuildLog(
+      const out = redactSecrets(
         `token=gh${esc}[1ms${'_'}${body.slice(0, 8)}${esc}[0m${body.slice(8)}`,
       )
       expect(out).toBe('token=[redacted]')
     })
 
     it('strips them from an x-access-token URL and a JWT too', () => {
-      const url = redactBuildLog(`https://x-access-${esc}[2mtoken:opaque-value-123@github.com/o/r`)
+      const url = redactSecrets(`https://x-access-${esc}[2mtoken:opaque-value-123@github.com/o/r`)
       expect(url).toBe('https://x-access-token:[redacted]@github.com/o/r')
-      const jwt = redactBuildLog(`jwt: ${JWT.slice(0, 10)}${esc}[33m${JWT.slice(10)}${esc}[0m`)
+      const jwt = redactSecrets(`jwt: ${JWT.slice(0, 10)}${esc}[33m${JWT.slice(10)}${esc}[0m`)
       expect(jwt).toBe('jwt: [redacted]')
     })
 
     it('leaves no escape behind in ordinary output', () => {
-      expect(redactBuildLog(`${esc}[32m#8 DONE 4.2s${esc}[0m`)).toBe('#8 DONE 4.2s')
+      expect(redactSecrets(`${esc}[32m#8 DONE 4.2s${esc}[0m`)).toBe('#8 DONE 4.2s')
     })
   })
 
@@ -731,9 +731,9 @@ describe('redactBuildLog', () => {
       ['an unterminated escape', `${esc}]${fill('a')}`],
       ['a BEGIN line with no END', `-----BEGIN PRIVATE KEY-----${fill('A')}`],
     ])('redacts a MiB of %s in under 200 ms', (_label, input) => {
-      redactBuildLog('warm up the patterns')
+      redactSecrets('warm up the patterns')
       const start = performance.now()
-      redactBuildLog(input)
+      redactSecrets(input)
       expect(performance.now() - start).toBeLessThan(200)
     })
   })

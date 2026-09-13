@@ -19,8 +19,14 @@
 
 export class DecodeError extends Error {
   readonly path: string
-  constructor(path: string, message: string) {
-    super(`${path === '' ? '$' : path}: ${message}`)
+  /**
+   * `cause` is for the one place that REBUILDS a DecodeError from another's
+   * text (host/github-token.ts, which cuts values out of a message that could
+   * quote a token): the rewritten error is what is shown, and the original is
+   * what says where it really came from.
+   */
+  constructor(path: string, message: string, options?: { cause?: unknown }) {
+    super(`${path === '' ? '$' : path}: ${message}`, options)
     this.path = path
   }
 }

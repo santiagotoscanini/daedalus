@@ -179,7 +179,7 @@ export async function loadGeneral(): Promise<GeneralData> {
       ...router,
       gateway: process.env.GATEWAY_IP ?? DASH_IP,
       lan: LAN_IP,
-      wan: tunnel.ok ? (tunnel.body.result?.connections?.[0]?.origin_ip ?? null) : null,
+      wan: tunnel.ok ? (tunnel.value.result?.connections?.[0]?.origin_ip ?? null) : null,
       wanError: cfReadError(tunnel, CF_TUNNEL_READ),
       adminUrl: process.env.ROUTER_ADMIN_URL ?? '',
     },

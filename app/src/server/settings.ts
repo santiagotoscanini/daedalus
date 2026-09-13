@@ -10,6 +10,7 @@ import type {
   GithubAppStatus,
   IntegrationStatus,
 } from '../core/settings/types'
+import type { Result } from '../lib/result'
 import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../lib/theme'
 
 // Server functions behind Settings: the read-only facts (core/settings), the
@@ -147,11 +148,12 @@ export const discardGithubPendingApplyFn = createServerFn({ method: 'POST' }).ha
  * now; the minter finds the installation on its own.
  */
 export const githubInstallLandedFn = createServerFn({ method: 'POST' }).handler(
-  async (): Promise<{ ok: boolean }> => {
-    if (!requireActor().ok) return { ok: false }
+  async (): Promise<Result<null>> => {
+    const gate = requireActor()
+    if (!gate.ok) return gate
     const { requestTokenRefresh } = await import('../core/github-app')
     await requestTokenRefresh()
-    return { ok: true }
+    return { ok: true, value: null }
   },
 )
 

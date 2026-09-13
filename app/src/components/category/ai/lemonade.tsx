@@ -495,7 +495,7 @@ function ModelAlt({ model, replacing }: { model: Model; replacing: Model | null 
             },
           })
             .then((r) => {
-              if (!r.ok) setError(r.message)
+              if (!r.ok) setError(r.reason)
               return router.invalidate()
             })
             .finally(() => {

@@ -1,6 +1,7 @@
 import { useRouter } from '@tanstack/react-router'
 import { ExternalLinkIcon } from 'lucide-react'
 import { useId, useState, useTransition } from 'react'
+import { errorText } from '../../lib/redact'
 
 import { pasteAppKeyFn } from '../../server/settings'
 import { Button } from '../ui/button'
@@ -64,7 +65,7 @@ export function PasteKey({
           setOutcome({ ok: false, text: r.reason })
         }
       } catch (e) {
-        setOutcome({ ok: false, text: e instanceof Error ? e.message : String(e) })
+        setOutcome({ ok: false, text: errorText(e) })
       }
     })
   }

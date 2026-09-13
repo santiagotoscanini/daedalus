@@ -1,4 +1,3 @@
-import { stripAnsi } from './ansi'
 import {
   arrayOf,
   bool,
@@ -13,6 +12,7 @@ import {
   str,
 } from './contract/decode'
 import { isAppName } from './hostname'
+import { redactSecrets } from './redact'
 
 // The `build` bridge verb: what this container asks the host builder to do,
 // and what the host says back. Client-safe on purpose — the build page renders
@@ -427,7 +427,7 @@ export type BuildStatus = {
   /** `{ runner, secretsHash, cacheImported, cacheExported, stepsCached, stepsTotal }`. */
   build: unknown
   checks: BuildChecks | null
-  /** Host words, already passed through redactBuildLog. */
+  /** Host words, already passed through redactSecrets. */
   error: string | null
   /** Milliseconds per phase. */
   timings: Record<string, number>
@@ -469,7 +469,7 @@ const repoId: Decoder<number> = (v, p) => {
 
 const unknownValue: Decoder<unknown> = (v) => v
 
-const redacted: Decoder<string> = (v, p) => redactBuildLog(str(v, p))
+const redacted: Decoder<string> = (v, p) => redactSecrets(str(v, p))
 
 // A value reaches the host as one NAME=value line; a NUL cannot be exported.
 const LINE_BREAK_OR_NUL = /[\0\r\n]/
@@ -606,53 +606,4 @@ export function tailFromBytes(bytes: Uint8Array, cutAtStart: boolean): string {
   if (!cutAtStart) return text
   const nl = text.indexOf('\n')
   return nl === -1 ? '' : text.slice(nl + 1)
-}
-
-const REDACTED = '[redacted]'
-
-// A private key block, PEM or PGP armour: BEGIN to END, or to the end of the
-// text when END has not been written yet.
-const PEM_BLOCK =
-  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END [A-Z0-9 ]*-----|$)/g
-// A key whose BEGIN line fell before a tail's start: everything up to its END.
-const PEM_ORPHAN_END = /^[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----/
-
-// Every pattern runs over a log of up to a MiB on the event loop, so each must
-// stay linear on hostile input: it starts at a literal or behind a lookbehind
-// that refuses a start inside a run it would rescan, and no two unbounded
-// quantifiers in it can trade characters.
-const TOKEN_PATTERNS: [RegExp, string][] = [
-  [/github_pat_[A-Za-z0-9_]+/g, REDACTED],
-  [/gh[opusr]_[A-Za-z0-9_]{20,}/g, REDACTED],
-  [/(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g, REDACTED],
-  [/x-access-token:[^@\s]+/g, `x-access-token:${REDACTED}`],
-  [/x-access-token%3A[^@%\s]+/gi, `x-access-token%3A${REDACTED}`],
-  // scheme://user:secret@ — the scheme and user stay. The secret runs to the
-  // last @ before a slash or a space, so an unencoded @ in it does not leak.
-  [/(?<![A-Za-z0-9+.-])([a-z][a-z0-9+.-]*:\/\/[^\s:@/]*:)[^\s/]+@/gi, `$1${REDACTED}@`],
-  // A Docker config.json credential.
-  [/("auth"\s*:\s*")[A-Za-z0-9+/=]+"/g, `$1${REDACTED}"`],
-  // A header as curl, git and JSON (plain or escaped inside a string) print it.
-  [
-    /(authorization\\?["']?\s*[:=]\s*(?:\\?["'])?(?:basic|bearer|token)\s+)[^\s"'\\,;]+/gi,
-    `$1${REDACTED}`,
-  ],
-  // An .npmrc registry credential.
-  [/(_authToken\s*=\s*["']?)[^\s"']+/gi, `$1${REDACTED}`],
-]
-
-/**
- * The second redaction layer: the host filters the log as it writes, and
- * everything leaving this server passes through here again. Patterns only —
- * no knowledge of the real values, so it also catches a token the host never
- * knew it printed.
- *
- * Terminal escapes are stripped first, and stay stripped: a colour code in the
- * middle of a token would otherwise end the pattern's run before the secret
- * does.
- */
-export function redactBuildLog(text: string): string {
-  let out = stripAnsi(text).replace(PEM_BLOCK, REDACTED).replace(PEM_ORPHAN_END, REDACTED)
-  for (const [re, replacement] of TOKEN_PATTERNS) out = out.replace(re, replacement)
-  return out
 }

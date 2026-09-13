@@ -31,6 +31,7 @@ import { bytes, ms } from '../../lib/format'
 import { checkRunOutput } from '../../lib/github-app'
 import { effectiveHostname } from '../../lib/hostname'
 import { isRecord } from '../../lib/is-record'
+import { errorText } from '../../lib/redact'
 import type { AppRecord } from '../../lib/repo/apps'
 import type { Ctx } from '../ctx'
 import {
@@ -196,8 +197,6 @@ function logOnce(id: string, key: string, message: string): void {
   console.warn(`[build-report] ${id.slice(0, 8)} ${message}`)
 }
 
-const errorName = (e: unknown): string => (e instanceof Error ? e.message : String(e))
-
 // ── failures ────────────────────────────────────────────────────────────────
 
 function isFailures(v: unknown): v is ReportFailures {
@@ -219,7 +218,7 @@ async function failures(ctx: Ctx): Promise<Map<string, ReportFailure & { nextAt:
   try {
     stored = (await ctx.store.read(REPORT_FAILURES_KEY, isFailures)) ?? {}
   } catch (e) {
-    logOnce('store', 'read', `could not read ${REPORT_FAILURES_KEY}: ${errorName(e)}`)
+    logOnce('store', 'read', `could not read ${REPORT_FAILURES_KEY}: ${errorText(e)}`)
   }
   m.failures = new Map(Object.entries(stored).map(([id, f]) => [id, { ...f, nextAt: 0 }]))
   return m.failures
@@ -243,7 +242,7 @@ async function persistFailures(ctx: Ctx): Promise<void> {
     if (all.length === 0) await ctx.store.delete(REPORT_FAILURES_KEY)
     else await ctx.store.write(REPORT_FAILURES_KEY, value)
   } catch (e) {
-    logOnce('store', 'write', `could not write ${REPORT_FAILURES_KEY}: ${errorName(e)}`)
+    logOnce('store', 'write', `could not write ${REPORT_FAILURES_KEY}: ${errorText(e)}`)
   }
 }
 
@@ -328,7 +327,7 @@ type SiteFacts = {
 async function siteFacts(ctx: Ctx): Promise<SiteFacts> {
   const { readCommittedSite } = await import('../../host/contract/domains/site-doc')
   const site = await readCommittedSite()
-  const doc = site.present ? site.doc : null
+  const doc = site.ok ? site.value.doc : null
   let controlPlane: string | null = null
   if (doc !== null && doc.identity.controlPlane !== '' && doc.identity.baseDomain !== '') {
     controlPlane = `${doc.identity.controlPlane}.${doc.identity.baseDomain}`
@@ -631,7 +630,7 @@ async function save(
     logOnce(
       id,
       `db:${Object.keys(report).join(',')}`,
-      `could not record the report: ${errorName(e)}`,
+      `could not record the report: ${errorText(e)}`,
     )
   }
 }
@@ -810,7 +809,7 @@ async function followDeployment(
       try {
         await deployments.ingestDeployments(row.appId, row.app)
       } catch (e) {
-        logOnce(row.id, 'ingest', `deploy journal ingest failed: ${errorName(e)}`)
+        logOnce(row.id, 'ingest', `deploy journal ingest failed: ${errorText(e)}`)
       }
     }
     const deploys = await deployments.listDeployments(row.appId, 25)
@@ -887,7 +886,7 @@ async function repoRefOf(ctx: Ctx, row: BuildRow): Promise<RepoRef | null> {
     )
     return null
   }
-  return { owner: found.repo.owner, repo: found.repo.name }
+  return { owner: found.value.owner, repo: found.value.name }
 }
 
 async function reportRow(ctx: Ctx, row: BuildRow, manual: boolean): Promise<void> {
@@ -928,7 +927,7 @@ export async function reportBuildChange(ctx: Ctx, row: BuildRow): Promise<void> 
   try {
     await reportRow(ctx, row, false)
   } catch (e) {
-    logOnce(row.id, `crash:${errorName(e)}`, `report failed: ${errorName(e)}`)
+    logOnce(row.id, `crash:${errorText(e)}`, `report failed: ${errorText(e)}`)
   }
 }
 
@@ -965,7 +964,7 @@ export async function reportTick(ctx: Ctx): Promise<void> {
       await reportRow(ctx, row, false)
     }
   } catch (e) {
-    logOnce('tick', `crash:${errorName(e)}`, `report tick failed: ${errorName(e)}`)
+    logOnce('tick', `crash:${errorText(e)}`, `report tick failed: ${errorText(e)}`)
   }
 }
 
@@ -977,6 +976,6 @@ export async function retryReport(ctx: Ctx, buildId: string): Promise<void> {
     const record = await getBuild(buildId)
     if (record !== undefined) await reportRow(ctx, toBuildRow(record), true)
   } catch (e) {
-    logOnce(buildId, `retry:${errorName(e)}`, `retry failed: ${errorName(e)}`)
+    logOnce(buildId, `retry:${errorText(e)}`, `retry failed: ${errorText(e)}`)
   }
 }

@@ -16,6 +16,7 @@ import type { Repo } from '../host/github-repos'
 import { cn } from '../lib/cn'
 import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
 import { readiness } from '../lib/readiness'
+import { errorText } from '../lib/redact'
 import { defaultImage, OWNER } from '../lib/site'
 import { createAppFn, fetchAppPreflight, fetchNewAppOptions } from '../server/registry'
 
@@ -195,7 +196,7 @@ function Wizard({ options }: { options: Options }) {
         void router.navigate({ to: '/apps/$name', params: { name }, search: { tab: 'settings' } })
       })
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e))
+        setError(errorText(e))
         setBusy(false)
       })
   }

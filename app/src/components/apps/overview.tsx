@@ -344,7 +344,7 @@ export function Overview({
  */
 function RedeployButton({ name, initial }: { name: string; initial: DeployStatus }) {
   const router = useRouter()
-  const { status, running, start } = usePolledStatus({
+  const { status, running, refusal, start } = usePolledStatus({
     initial,
     fetch: () => fetchDeployStatus(),
     onSettle: () => {
@@ -354,7 +354,8 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
 
   return (
     <span className="inline-flex items-center gap-[0.6rem] text-[0.76rem]">
-      {status.state === 'failed' && status.app === name && (
+      {refusal !== null && <span className="text-danger">{refusal}</span>}
+      {refusal === null && status.state === 'failed' && status.app === name && (
         <span className="text-danger" title={status.error}>
           last attempt failed
         </span>
@@ -366,7 +367,7 @@ function RedeployButton({ name, initial }: { name: string; initial: DeployStatus
         className={GHOST_BTN}
         disabled={running}
         onClick={() => {
-          start(async () => (await triggerDeploy({ data: name })).id)
+          start(async () => ({ ok: true, value: (await triggerDeploy({ data: name })).id }))
         }}
       >
         {running ? '↻ deploying…' : '↻ Redeploy'}

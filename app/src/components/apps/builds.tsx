@@ -10,6 +10,7 @@ import {
 } from '../../lib/build-display'
 import type { BuildState } from '../../lib/builds'
 import { DASH, ms, since } from '../../lib/format'
+import { errorText } from '../../lib/redact'
 import type { Tone } from '../../lib/tone'
 import { buildNowFn, fetchBuilds } from '../../server/builds'
 import { useNow, usePoll } from '../poll'
@@ -175,13 +176,16 @@ export function BuildNowButton({
     void buildNowFn({ data: { app } })
       .then(async (r) => {
         if (r.ok) {
-          await router.navigate({ to: '/apps/$name/builds/$id', params: { name: app, id: r.id } })
+          await router.navigate({
+            to: '/apps/$name/builds/$id',
+            params: { name: app, id: r.value.id },
+          })
         } else {
           setError(r.reason)
         }
       })
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : String(e))
+        setError(errorText(e))
       })
       .finally(() => {
         setBusy(false)

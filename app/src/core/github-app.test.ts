@@ -212,7 +212,7 @@ describe('repoById', () => {
     })
     expect(await repoById(ctx, 4242)).toEqual({
       ok: true,
-      repo: {
+      value: {
         id: 4242,
         fullName: 'octo/iris-web',
         owner: 'octo',
@@ -234,7 +234,7 @@ describe('repoById', () => {
 
   it('falls back to main when GitHub names no default branch', async () => {
     answer(() => Response.json(body({ default_branch: null })))
-    expect(await repoById(ctx, 4242)).toMatchObject({ ok: true, repo: { defaultBranch: 'main' } })
+    expect(await repoById(ctx, 4242)).toMatchObject({ ok: true, value: { defaultBranch: 'main' } })
   })
 
   it('says why when GitHub refuses, and asks nothing for a non-id', async () => {
