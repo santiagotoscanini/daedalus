@@ -10,10 +10,16 @@ import { defineConfig, type Plugin } from 'vite'
 // including it in dev adds a Vite environment that breaks server-function id
 // resolution ("Invalid server function ID" at call time, not at startup).
 //
-// The container bind-mounts /etc/nixos/stacks/daedalus/app at /app, so the
-// files Vite watches ARE the files in the flake repo. Editing one is the whole
-// deploy; `nixos-rebuild` is only needed for the .nix module or the
-// Containerfile.
+// The container bind-mounts this repository's `app/` at /app, so the files Vite
+// watches ARE the files in the clone. Editing one is the whole deploy;
+// `nixos-rebuild` is only needed for the .nix module or the Containerfile,
+// which live in the machine's private configuration.
+//
+// The consequence of having no adapter, for anyone costing out a switch to a
+// built runtime: `vite build` emits `dist/server/server.js` as a *fetch
+// handler* — zero `.listen()` calls — so there is nothing to `node`. Serving it
+// means bringing Nitro back, which is the change the paragraph above says broke
+// server functions. The build itself is fast (~800ms); the adapter is the work.
 
 // Injected by the apps platform (stacks/apps/apps.nix sets APP_HOSTNAME from
 // the webApp's hostname). Read rather than restated so the vhost has one source
