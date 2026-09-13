@@ -160,6 +160,27 @@ grouped by kind, not priority. Each can be done independently unless noted.
    the post-deploy checks because its e2e writes to the database and its
    other two checks compare a PR to a base branch.
 
+
+5. **Self-hosted Gitea with two-way GitHub mirroring.** A Gitea instance on
+   the box that mirrors every project repo to and from GitHub
+   (https://docs.gitea.com/usage/repository/repo-mirror/). When GitHub is
+   down the operator can still push, review, and merge — and Gitea runs CI
+   on its own, so builds and checks keep working during an outage. The
+   mirror is two-way: pushes land on both sides once connectivity returns.
+   Implementation: a new `stacks/gitea` module, Gitea's built-in mirror
+   feature pointed at each GitHub repo, and Gitea's Actions runner for CI
+   (reuses the box's existing BuildKit and Railpack tooling where possible).
+
+6. **Dev mode toggle for the engine.** Today `source.mode = "local"` is a
+   nix constant — switching between the dev server (bind-mount + `vite dev`,
+   for working on the app) and the real production image requires editing
+   `daedalus.nix` and rebuilding. Daedalus should expose this as a toggle
+   in Settings > Developer: flip to dev mode when working on the engine,
+   flip back to the built image when done. The toggle writes to
+   `site.json` (so it survives a reboot but is easy to revert), and the
+   rebuild happens through the existing Apply path. Prerequisite: Phase
+   10b (the production build must exist before there is something to
+   toggle to).
 ### TypeScript improvements
 
 The operator asked: "Are we using TypeScript in the most advanced way, latest
