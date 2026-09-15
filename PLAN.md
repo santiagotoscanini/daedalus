@@ -565,6 +565,94 @@ priority; each can be done independently unless noted.
     - Redaction already covers the bridge log and the build log; add the
       new verb to the `redact` fixtures and the secrets-grep drill.
 
+13. **The app contract as packages, published to the box's own Verdaccio.**
+    daedalus defines a contract with its apps — which env names are
+    injected, what `/api/healthz` answers, how migrations run at start, how
+    auth works, where flags come from — and today every app re-implements
+    it by hand: six different `start.mjs` (four of them the same
+    migrations-fallback shape), the same `check:bundle` grep pasted into
+    five `package.json`s, a 100–250-line `env.ts` per app validating mostly
+    the same names, and a copy of iris's hybrid auth (`@auth/core` against
+    Pocket ID + bcrypt local login + invite codes) in every app that has
+    users. Publish the contract as small `@daedalus/*` packages instead;
+    Verdaccio already allows scoped publishes from authenticated users, so
+    nothing on the box changes. Ranked by duplicated lines removed:
+    - **`@daedalus/auth`** — the hybrid auth as a package: the Pocket ID
+      OIDC provider config, session, invite gating, the `Actor` type; plus a
+      **proxy mode** that trusts the forward-auth headers when the app runs
+      behind `auth = "oidc"` and fails closed when they are absent, so an app
+      without per-user records can drop its own login entirely. One place to
+      fix a security bug instead of seven.
+    - **`daedalus-start`** (a bin) — replaces every `start.mjs`: find the
+      migrations dir by `meta/_journal.json`, run drizzle's migrator, refuse
+      to boot if none is found, then start. The silent-migration-skip trap
+      the cutover found becomes impossible to reintroduce.
+    - **`@daedalus/env`** — a typed schema of the platform-injected names
+      (`DATABASE_URL`, `AUTH_SECRET`, `PORT`, `HOST`, `LITELLM_*`, `FLIPT_*`,
+      `DAEDALUS_ENV=preview|production`); each app's `env.ts` shrinks to its
+      own extras, and a renamed platform variable fails in one place.
+    - **`@daedalus/health`** — the `/api/healthz` handler: DB ping, revision,
+      uptime; the shape gatus and `deploy.sh` already expect.
+    - **`@daedalus/flags`** — OpenFeature + the Flipt provider with the
+      evaluation context set from env; item 11 becomes one import per app.
+    - **`@daedalus/log`** — structured stdout in the shape Alloy's
+      level-inference expects (podman's journald priority is a lie), with the
+      redaction rules; Loki levels become right for every app at once.
+    - **`@daedalus/ai`** — the LiteLLM client with gateway/key/model from env
+      and the thinking-model `max_tokens` gotcha baked in.
+    - **`daedalus-check-bundle`** (a bin) — the leak grep, versioned once.
+    - **Shared configs** — `@daedalus/tsconfig`, `@daedalus/biome-config`,
+      the `.prettierignore` entries for `.output`/`routeTree.gen.ts` that
+      cost the chismed cutover a commit.
+
+    **Mechanism:** a `libs/` workspace (in the engine repo, or its own
+    `daedalus-libs` repo), each package small enough to read in one sitting
+    with its own tests; a third build strategy beside `railpack` and
+    `dockerfile` — **`publish`** — so a push runs the checks and `pnpm
+    publish` to Verdaccio through the same webhook, queue, token-revoke and
+    check-run path as an image build. Versions via changesets; apps pin
+    exact versions; the app page shows "auth 1.3.0 (latest 1.4.0)" from the
+    lockfile the build already reads — bumping stays a commit in the app
+    repo (daedalus has `contents:read`; Renovate is a standing no). The
+    genuinely generic ones (`auth`, `health`, `log`) should also be
+    publishable to npmjs under a public scope with Verdaccio as the cache,
+    because Verdaccio is LAN/VPN-only and GitHub-hosted CI cannot reach it.
+    **Not this:** a UI kit — the apps' designs are deliberately different.
+
+14. **Self-hosted GitHub Actions runners, managed from daedalus.** The old
+    runner stack was deleted because it was the deploy path; runners are
+    still worth having for everything else — the free plan gives a fixed
+    number of minutes for private repos, and heavy CI (browser e2e, argus's
+    seeded-database suite from item 4, release builds) burns through it.
+    Bring runners back as a daedalus feature with a firm policy: **runners
+    run CI, never fleet images** — the box's build path stays the only way
+    an image reaches zot.
+    - **Ephemeral, on demand, per job.** Subscribe to `workflow_job`; on
+      `queued` with a matching label, mint a JIT runner config and start one
+      rootless podman container (`--ephemeral`, dedicated uid, resource
+      limits, the same owner-match egress fence the builder uses, no
+      secrets beyond the single-use JIT token); it takes exactly that job and
+      exits; `completed` records the usage. No idle runners, no long-lived
+      registration, nothing to leak between jobs. A configurable cap on
+      concurrent runners, and a queue view when the cap is hit.
+    - **A second, narrow GitHub App.** Registering a runner needs
+      `administration:write` on the repository (verify against the current
+      API doc) — far broader than the build App's `contents:read`, so it
+      gets its own App (`daedalus-runners`) installed only on repos that
+      opt in, created through the same manifest flow and sealed in the same
+      vault. Attaching a repo = installing that App on it; the panel lists
+      installed repos and their label sets.
+    - **The panel:** runners now (idle / busy / starting), jobs queued and
+      running with links to GitHub, per-repo **minutes this month** against
+      the plan's allowance (so the saving is visible), history, failures
+      (a runner that never picked up its job, a job killed by the cap).
+      Metrics through `fleet.prometheusScrapes` — `runners_busy`,
+      `jobs_queued`, `job_minutes_total{repo}` — so Grafana and the
+      existing alerting see them; runner logs through the journal to Loki.
+    - **Later:** a Windows runner on the gaming PC through the companion
+      agent (item 7) for Windows builds; a `gpu` label for jobs that want
+      the model server. macOS stays on GitHub (santree's signed releases).
+
 ---
 
 ## Operator decisions still open
