@@ -312,16 +312,30 @@ grouped by kind, not priority. Each can be done independently unless noted.
     needed). Simple, professional, and the missing half of trunk-based
     development with one box and no staging.
 
-12. **App secrets edited from the UI.** Today an app's operator secrets are
-    `stacks/apps/<name>-env.sops` — the file is the switch
-    (`operator-secrets-lib.nix`), edited with `sops` over SSH, and the UI
-    shows the names as a read-only `secrets` group (`env-groups.ts`). The
-    vault path built in Phase 6 (encrypt in the container → bridge → commit
-    → rebuild) already does this for two secrets; generalise it, with one
-    rule the container's identity forces: **values are write-only.** The
-    container has an encrypt-only sops identity and no decryption key, so it
-    can never display a value or re-emit a file — it can only hand the host
-    a new value for one key.
+12. **App variables and secrets, one editor, two kinds.** An app's
+    environment is two lists that already exist and should look like one:
+    - **Variables** — plain text, readable and editable in the UI, stored in
+      `apps.json` `env` (today's `registry` origin), committed in clear,
+      diffed in the Apply preview. `PORT`, feature toggles, public URLs,
+      model names.
+    - **Secrets** — write-only. Today they are `stacks/apps/<name>-env.sops`
+      — the file is the switch (`operator-secrets-lib.nix`), edited with
+      `sops` over SSH, shown as a read-only `secrets` group
+      (`env-groups.ts`). The vault path built in Phase 6 (encrypt in the
+      container → bridge → commit → rebuild) already does this for two
+      secrets; generalise it, with one rule the container's identity
+      forces: the container has an encrypt-only sops identity and no
+      decryption key, so it can never display a value or re-emit a file —
+      it can only hand the host a new value for one key.
+
+    The kind is chosen when the variable is created and shown as a badge.
+    **Convert to secret** exists (the value moves from `apps.json` into the
+    sops file in one Apply; the old plaintext remains in git history, and
+    the UI says so). **Convert to variable** does not — a secret cannot be
+    read back, only removed and re-created as a variable by typing it.
+    Both kinds carry the same runtime/build-time flag and the same
+    preview-scope switch (item 1). The rest of this item is the secrets
+    half:
     - **Move the files into `site/vault/apps/<name>-env.sops`.** `site/` is
       the one directory daedalus writes and the bridge's `MANAGED` allowlist
       is `site/`-only; `operator-secrets-lib.nix` reads the new directory,
