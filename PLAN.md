@@ -312,6 +312,44 @@ grouped by kind, not priority. Each can be done independently unless noted.
     needed). Simple, professional, and the missing half of trunk-based
     development with one box and no staging.
 
+12. **App secrets edited from the UI.** Today an app's operator secrets are
+    `stacks/apps/<name>-env.sops` — the file is the switch
+    (`operator-secrets-lib.nix`), edited with `sops` over SSH, and the UI
+    shows the names as a read-only `secrets` group (`env-groups.ts`). The
+    vault path built in Phase 6 (encrypt in the container → bridge → commit
+    → rebuild) already does this for two secrets; generalise it, with one
+    rule the container's identity forces: **values are write-only.** The
+    container has an encrypt-only sops identity and no decryption key, so it
+    can never display a value or re-emit a file — it can only hand the host
+    a new value for one key.
+    - **Move the files into `site/vault/apps/<name>-env.sops`.** `site/` is
+      the one directory daedalus writes and the bridge's `MANAGED` allowlist
+      is `site/`-only; `operator-secrets-lib.nix` reads the new directory,
+      still "the file is the switch". Also the right home once the engine
+      is importable and the config repo is tiny (Phase 11).
+    - **Set / remove one key at a time, host-side merge.** The container
+      age-encrypts the single value to the host's recipient and drops
+      `secret-set-request.json` `{ app, key, ciphertext }` (never plaintext
+      on the bridge, even briefly); the host decrypts in memory, runs
+      `sops --set` / `sops unset` on the app's file, commits
+      `secrets: <app> set KEY` (names only, never values), and the Apply's
+      rebuild restarts the app because its sops secret changed
+      (`restartUnits` — verify against the false-success trap in CLAUDE.md,
+      not assume). Git history is the audit trail: who set which key when,
+      through commit attribution (item 8).
+    - **UI:** the `secrets` group becomes editable per key — Add (name +
+      value, value field never echoed back), Replace, Remove — with "set
+      <date> by <actor>" from git, plus the runtime/build-time flag per
+      variable so a real build-time secret goes to the build agent as a
+      BuildKit secret rather than a placeholder. The preview env group
+      (item 1) is the same list scoped to previews.
+    - **Rotate the machine-generated ones too:** `AUTH_SECRET` and the
+      app's database password are "delete the file + rebuild" today
+      (CLAUDE.md, Secrets); a Rotate button per app is one more bridge verb
+      doing exactly that, with a confirm.
+    - Redaction already covers the bridge log and the build log; add the
+      new verb to the `redact` fixtures and the secrets-grep drill.
+
 ### TypeScript improvements
 
 The operator asked: "Are we using TypeScript in the most advanced way, latest
