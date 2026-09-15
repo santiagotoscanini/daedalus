@@ -124,11 +124,60 @@ grouped by kind, not priority. Each can be done independently unless noted.
 
 ### Features
 
-1. **PR builds and previews (P1–P4).** Documented in the plan's Phase 7 as
-   four stages. Main-only in v1. The seams are in place: `builds.lane`,
-   `prNumber`, `candidate` publish mode, `pull_requests:write` already
-   granted. See the "Later: pull requests" section in the plan file at
-   `~/.claude/plans/piped-gathering-meerkat.md` for the full design.
+1. **Preview deployments — a URL per branch, for vibecoding, testing and
+   play.** Push a branch of plutus and a minute later
+   `plutus-<branch>.toscanini.me` is running that commit; push again and it
+   updates in place; delete the branch (or close the PR) and it is gone.
+   Main-only builds today; the seams are in place (`builds.lane`,
+   `prNumber`, `candidate` publish mode, `pull_requests:write` granted). The
+   four-stage design (P1 checks → P2 required check → P3 previews → P4 fork
+   policy) is in `~/.claude/plans/piped-gathering-meerkat.md`; what follows
+   are the decisions that plan left open.
+   - **Hostname keyed by branch, not by sha.** `plutus-<branch>.<d>` is one
+     label (the wildcard certificate matches one label only), stays stable
+     across pushes so bookmarks and the derived Pocket ID client's redirect
+     URI survive, and the deployed sha is shown on the preview's card and in
+     the GitHub Deployment. A sha-keyed name (`plutus-a1b2c3d`) would mint a
+     new hostname, DNS record, tunnel route and OIDC client on every push.
+     Optional later: "pin this build" keeps a `plutus-<sha7>` alive beside
+     the branch preview for comparing two revisions.
+   - **Runtime-managed, not nix-declared.** Previews come and go too often
+     for a rebuild each: a `daedalus-preview@` template unit, a writable
+     traefik file-provider directory (one router per preview, behind the
+     same forward-auth), pi-hole records through its API. `lab` by default
+     (LAN/VPN only); a per-preview switch to `live` publishes it through the
+     tunnel for showing someone.
+   - **Database: a fresh copy, never production.** Each preview gets its own
+     database and role (`plutus_<branch>`), created from the **latest
+     logical dump of production** (the backups feature) so it has real data
+     to play with, then the branch's own migrations run forward on the copy
+     via the app's `start.mjs`. Empty + `db:seed` when the app declares it or
+     the operator asks. Production is never read live and never written.
+   - **Migrations are the hard part, so make them visible.** The build page
+     for a branch shows the migration delta against main ("adds 0004_x,
+     0005_y"); the preview's first boot applies them to the copied data,
+     which is the earliest possible signal that a migration breaks on real
+     rows. Rule for merging: migrations must be **expand/contract** —
+     additive on the way in, cleanup in a later commit — because production
+     deploys are deploy-and-report with no schema rollback, and a
+     revert-to-previous-image after a failed health check would run the old
+     code against the new schema. The check run says so when a migration
+     drops or renames.
+   - **Secrets: a preview env group.** Previews never see production
+     credentials: `DATABASE_URL` points at the copy, `AUTH_SECRET` is fresh,
+     everything else comes from a per-app `previewEnv` allowlist (LiteLLM
+     keys, map tokens) that the operator fills once. P4: fork PRs are held
+     until an operator approves that exact head sha.
+   - **Lifecycle:** created on the first push to a branch of an app with
+     previews enabled (or on PR open, per app setting), redeployed on push,
+     destroyed on branch delete / PR close, after 7 idle days, or by LRU
+     beyond a box-wide cap. GitHub gets a Deployment with
+     `environment: plutus-<branch>`, `transient_environment: true`, and a
+     PR comment with the link edited in place. The preview list lives on the
+     app's page with sha, age, database size, and Destroy.
+   - **Pairs with feature flags (item 11):** a half-built feature can merge
+     to main behind a flag that is on in previews and off in production,
+     which is what makes trunk-based work with one box and no staging.
 
 2. **Resumable Claude sessions.** Today, when the box reboots or the
    `claude-remote-control` daemon restarts, any running Claude Code session
@@ -213,6 +262,55 @@ grouped by kind, not priority. Each can be done independently unless noted.
    through the bridge request and use `--author="Name <email>"` in the
    git commit, so GitHub shows "Santiago Toscanini authored and daedalus
    committed" instead of "daedalus committed".
+
+9. **An MCP server for daedalus.** Today daedalus has four API routes and
+   a browser; in this project a "Build now" had to be pressed with a
+   headless-browser driver because there was no other door. Expose the
+   engine's existing server functions as MCP tools over Streamable HTTP at
+   `/mcp`: reads (`apps.list/get`, `builds.list/get/log`, `deployments`,
+   `health`, `images.freshness`, `dns.records`, `site.get`, `apply.preview`
+   = the diff without committing) and the already-fenced writes
+   (`build.now`, `build.cancel`, `deploy.trigger`, `image.update`, `apply`)
+   — the writes go through the same bridge verbs and the same guards, so an
+   MCP call can do nothing the UI cannot. Auth is the deploy-token model
+   with two scopes: read tokens by default, write tokens minted explicitly
+   in Settings and shown once. Register it in `fleet.mcpServers` like
+   `stacks/litellm/mcp.nix` does for the others, so the box's Claude
+   sessions, `/triage`, Open WebUI and LiteLLM all get the same tools;
+   `ceremony` image updates still require the typed name. Resources:
+   ARCHITECTURE.md and BUILDS.md, so an agent can read the design before
+   acting.
+
+10. **Scheduled tasks per app (crons with history).** A cron for an app is
+    a nix edit and a rebuild today. Declare tasks on the app in daedalus —
+    `tasks: [{ id, schedule, command (argv), timeoutSec }]` in `apps.json` —
+    and `apps.nix` generates `app-<name>-task-<id>.{timer,service}` running
+    `podman exec app-<name> <argv>` as santiago, with a `monitoredJobs`
+    entry (a failed run mails, like every other job) and output in the
+    journal, hence Loki under the app's stack label. The app page gets a
+    Tasks tab: schedule, last run, duration, exit status, the captured
+    output read back from Loki, and **Run now** (a `task-run-request.json`
+    bridge verb that starts the unit). Edits go through Apply like any other
+    app setting. Never schedule on the hour (CLAUDE.md: myspeed's `:00`
+    blackout); the UI offsets a bare `hourly`/`daily` by a per-app minute.
+
+11. **Feature flags via a self-hosted service, wired per app.** Run
+    **Flipt** as a stack (single Go binary; its flags can be **declarative
+    from a file or a git repo**, so the flag definitions live in the config
+    repo like everything else; OpenFeature-compatible SDKs for Node; UI
+    behind Pocket ID via `webApps`; storage on the shared cluster through
+    `fleet.appDatabases.flipt`). daedalus does not reimplement flags; it
+    wires them: a `fleet.flagClients.<app>` in the spirit of
+    `fleet.litellmKeys` gives each app a namespace and injects `FLIPT_URL`
+    + a client token into its env, and the preview runtime sets the
+    evaluation context (`environment: preview|production`, `branch`) so a
+    flag can be on in every preview and off in production. The app page
+    shows the app's flags with a link into Flipt's UI. Alternatives
+    considered: Unleash (heavier, own schema, fine if the UI matters more
+    than file-backed flags), Flagsmith and GrowthBook (heavier still, Mongo
+    for the latter), PostHog (a product-analytics suite, far more than
+    needed). Simple, professional, and the missing half of trunk-based
+    development with one box and no staging.
 
 ### TypeScript improvements
 
