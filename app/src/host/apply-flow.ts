@@ -126,6 +126,7 @@ async function locked(actor: string): Promise<ApplyOutcome> {
   const { toRegistryExport } = await import('../lib/repo/apps')
   const { requestApply, summarise } = await import('./apply')
   const { renderRegistryFile } = await import('../lib/registry-file')
+  const { renderSiteStampFile } = await import('../core/site')
 
   const blocked = await refuseBusy()
   if (blocked !== null) return blocked
@@ -139,10 +140,13 @@ async function locked(actor: string): Promise<ApplyOutcome> {
     // Finished files, not data structures: the host agent writes these bytes
     // verbatim and never parses either. apps.json always — its render is
     // idempotent and the agent reports no-change; site.json only when its
-    // desired document differs from the committed one.
+    // desired document differs from the committed one; daedalus.json always,
+    // because the point of the stamp is that every write into the directory
+    // says which engine made it.
     files: {
       'apps.json': renderRegistryFile(toRegistryExport(records)),
       ...(site.changes.length > 0 ? { 'site.json': site.render.after } : {}),
+      'daedalus.json': await renderSiteStampFile('apply', actor),
     },
     summary: summarise(changed),
     actor,
@@ -189,6 +193,7 @@ export function runSecretApply(
 ): Promise<ApplyOutcome> {
   return serialised(async () => {
     const { requestApply } = await import('./apply')
+    const { renderSiteStampFile } = await import('../core/site')
 
     const blocked = await refuseBusy()
     if (blocked !== null) return blocked
@@ -199,7 +204,14 @@ export function runSecretApply(
     }
 
     const id = await requestApply({
-      files: { ...opts?.extraFiles, [secret.file]: secret.ciphertext },
+      // The stamp rides this door too — every write into the directory records
+      // what wrote it. It never changes the commit's subject: the agent leaves
+      // it out of that decision, so this stays `vault: replace …`.
+      files: {
+        ...opts?.extraFiles,
+        [secret.file]: secret.ciphertext,
+        'daedalus.json': await renderSiteStampFile('apply', actor),
+      },
       summary: `replace ${secret.name}`,
       actor,
       commit: await commitSwitch(),

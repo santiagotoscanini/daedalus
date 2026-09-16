@@ -54,6 +54,9 @@ export async function readApplyStatus(): Promise<ApplyStatus> {
 export type ApplyFiles = {
   'apps.json'?: string
   'site.json'?: string
+  /** The provenance stamp (core/site/file.ts): who wrote this directory, with
+      which engine, when. Rides every Apply, and never decides its subject. */
+  'daedalus.json'?: string
 } & Partial<
   /** Ciphertext only — sealed in this container (core/vault.ts). */
   Record<import('../lib/vault').VaultFile, string>

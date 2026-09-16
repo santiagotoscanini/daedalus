@@ -32,7 +32,14 @@ export type SiteDir = {
   toplevel: string | null
   /** That work tree is the configuration repository — the intended arrangement. */
   inThisRepo: boolean
-  files: { 'site.json': SiteFile; 'apps.json': SiteFile }
+  /** Every file daedalus writes there. README.md and daedalus.json arrived
+      with the v4 snapshot; an older one decodes them as absent. */
+  files: {
+    'site.json': SiteFile
+    'apps.json': SiteFile
+    'README.md': SiteFile
+    'daedalus.json': SiteFile
+  }
 }
 
 export type RepoFacts = {
@@ -67,7 +74,12 @@ export const NO_SITE_DIR: SiteDir = {
   exists: false,
   toplevel: null,
   inThisRepo: false,
-  files: { 'site.json': NO_FILE, 'apps.json': NO_FILE },
+  files: {
+    'site.json': NO_FILE,
+    'apps.json': NO_FILE,
+    'README.md': NO_FILE,
+    'daedalus.json': NO_FILE,
+  },
 }
 
 const siteShape = obj({
@@ -76,7 +88,15 @@ const siteShape = obj({
   toplevel: optional(nullable(str), null),
   inThisRepo: optional(bool, false),
   files: optional(
-    obj({ 'site.json': optional(siteFile, NO_FILE), 'apps.json': optional(siteFile, NO_FILE) }),
+    obj({
+      'site.json': optional(siteFile, NO_FILE),
+      'apps.json': optional(siteFile, NO_FILE),
+      // Published from v4 on. Each is optional so a v3 snapshot — the one on
+      // disk for the minutes between a switch and the timer's next run —
+      // still decodes, reporting them absent rather than failing whole.
+      'README.md': optional(siteFile, NO_FILE),
+      'daedalus.json': optional(siteFile, NO_FILE),
+    }),
     NO_SITE_DIR.files,
   ),
 })
@@ -121,7 +141,9 @@ export async function repoFacts(): Promise<SnapshotResult<RepoFacts>> {
     fallback: NO_REPO,
     // v2 carried a `site` of a different shape (the retired separate-repo
     // design); decoding it lands on the fallbacks, which is the honest answer.
-    acceptVersions: [1, 2, 3],
+    // v3 is v4 without README.md and daedalus.json, and is kept because a
+    // snapshot written before the rebuild that added them must still decode.
+    acceptVersions: [1, 2, 3, 4],
     maxAgeMs: MAX_AGE_MS,
   })
 }

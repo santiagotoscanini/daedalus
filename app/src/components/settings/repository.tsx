@@ -336,9 +336,17 @@ function SiteFiles({ dir, site }: { dir: SiteDir; site: SiteState | null }) {
       )}
       {site.files.some((f) => f.current === false) && (
         <p className="m-0 text-[0.78rem] text-(--text-muted)">
-          <Mono>site.json</Mono> is not what this box would write now — the configuration changed
-          since, or it was edited by hand. Writing it again brings the two back together; nothing is
-          rebuilt.
+          {/* Named, not assumed: two files are compared now, and telling the
+              operator site.json differs when it is the README that does sends
+              them looking in the wrong file. */}
+          <Mono>
+            {site.files
+              .filter((f) => f.current === false)
+              .map((f) => f.name)
+              .join(', ')}
+          </Mono>{' '}
+          is not what this box would write now — the configuration changed since, or it was edited
+          by hand. Writing again brings the two back together; nothing is rebuilt.
         </p>
       )}
       {site.files.find((f) => f.name === 'apps.json')?.status === 'absent' && (

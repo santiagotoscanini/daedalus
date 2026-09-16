@@ -150,7 +150,7 @@ describe('the github block through the site edit paths', () => {
     expect(edit.changes).toEqual(['mail.alertTo'])
     expect(edit.desired.github).toEqual(committed.github)
     expect(edit.render.after).toBe(expected)
-    expect((await renderSiteFiles(ctx))['site.json']).toBe(expected)
+    expect((await renderSiteFiles(ctx, 'tester'))['site.json']).toBe(expected)
   })
 
   it('comes from the committed file, never from a stored draft', async () => {
@@ -179,6 +179,8 @@ describe('the github block through the site edit paths', () => {
         files: {
           'site.json': { status: 'clean', sha256 },
           'apps.json': { status: 'clean', sha256: null },
+          'README.md': { status: 'clean', sha256: null },
+          'daedalus.json': { status: 'clean', sha256: null },
         },
       },
     } as unknown as RepoFacts

@@ -1,13 +1,26 @@
 import { createHash } from 'node:crypto'
-import type { RepoFacts, SiteDir, SiteFileStatus } from '../../host/contract/domains/repo'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import type { RepoFacts, SiteDir, SiteFile, SiteFileStatus } from '../../host/contract/domains/repo'
 import { repoFacts } from '../../host/contract/domains/repo'
+import { siteIdentity } from '../../host/contract/domains/site'
 import { decodeSiteDocument, readCommittedSite } from '../../host/contract/domains/site-doc'
+import type { SnapshotResult } from '../../host/contract/snapshot'
 import { requestSiteWrite, type SiteFileName } from '../../host/site-request'
+import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import type { Result } from '../../lib/result'
 import { controlPlaneLabelError } from '../../lib/site-fields'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
-import { renderSiteFile, renderSiteReadme, type SiteDocument, siteDocument } from './file'
+import {
+  renderSiteFile,
+  renderSiteReadme,
+  renderSiteStamp,
+  type SiteDocument,
+  type SiteStamp,
+  type SiteStampDoor,
+  siteDocument,
+} from './file'
 
 // The site directory, from this container's side.
 //
@@ -26,11 +39,13 @@ import { renderSiteFile, renderSiteReadme, type SiteDocument, siteDocument } fro
 //
 // "Current" on the Site tab is decided by digest, never by content: the host
 // publishes a sha256 per managed file; this hashes the bytes it would write.
-// apps.json is NOT rendered here — only an Apply writes it, from the apps
-// table — this module reports its status and nothing more. Server-only.
+// Two files are reported without a comparison: apps.json, which is not
+// rendered here at all (only an Apply writes it, from the apps table), and
+// daedalus.json, which is rendered here but carries a timestamp — see
+// siteState. Server-only.
 
 export type SiteFileView = {
-  name: 'site.json' | 'apps.json'
+  name: 'site.json' | 'apps.json' | 'README.md' | 'daedalus.json'
   status: SiteFileStatus
   /** Byte-identical to what this box would write now. Null = not compared. */
   current: boolean | null
@@ -338,27 +353,118 @@ export async function saveSiteEdit(
   return siteEdit(ctx)
 }
 
+// --- the provenance stamp -------------------------------------------------
+//
+// daedalus.json answers "which engine wrote this directory, and when" for
+// somebody reading the repository's history months later. It is written by
+// BOTH doors, so every write into site/ refreshes it, and nix never reads it.
+//
+// The one rule the gatherers below all obey: a fact this container cannot
+// READ is null. Not a default, not an empty string, not a stale value from a
+// snapshot whose producer stopped. A stamp that occasionally invents a
+// revision is worth less than no stamp, because nothing distinguishes the
+// invented entries from the real ones afterwards.
+
+/** The engine's own repository, as the workspace snapshot names its remote. */
+const ENGINE_REPO = 'santiagotoscanini/daedalus'
+
+/** A snapshot's data, or null when it is missing, undecodable or stale. */
+function fresh<T>(snap: SnapshotResult<T>): T | null {
+  return snap.available && !snap.stale ? snap.data : null
+}
+
+const nonEmpty = (v: string | null | undefined): string | null =>
+  typeof v === 'string' && v !== '' ? v : null
+
+/**
+ * The engine's package version. Read from the source tree the dev server is
+ * running out of (`/app`, the workspace clone daedalus.nix bind-mounts), which
+ * is the only place this container can learn it — the version is not in the
+ * environment and no snapshot carries it.
+ */
+async function engineVersion(): Promise<string | null> {
+  try {
+    const path = process.env.ENGINE_PACKAGE_JSON ?? join(process.cwd(), 'package.json')
+    const parsed: unknown = JSON.parse(await readFile(path, 'utf8'))
+    const version = (parsed as { version?: unknown }).version
+    return typeof version === 'string' ? nonEmpty(version) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Which commit of the engine is serving this write, from the workspace
+ * snapshot. Stale means the sync timer stopped, and a head from an unknown
+ * number of hours ago is exactly the kind of plausible-looking wrong answer
+ * this file exists to avoid — so a stale snapshot yields nulls.
+ */
+async function engineFacts(): Promise<SiteStamp['engine']> {
+  const version = await engineVersion()
+  const data = fresh(await readWorkspaces())
+  const ws = data === null ? null : workspaceFor(ENGINE_REPO, data)
+  if (ws === null) return { version, head: null, dirty: null, branch: null }
+  return { version, head: nonEmpty(ws.head), dirty: ws.dirty, branch: nonEmpty(ws.branch) }
+}
+
+/**
+ * The provenance stamp's bytes.
+ *
+ * `config.revision` is the configuration repository's HEAD as it stands
+ * BEFORE this write — the commit these files were rendered against. The
+ * commit this write creates cannot be in its own stamp.
+ */
+export async function renderSiteStampFile(door: SiteStampDoor, actor: string): Promise<string> {
+  const [engine, repo, identity] = await Promise.all([engineFacts(), repoFacts(), siteIdentity()])
+  return renderSiteStamp({
+    writtenAt: new Date().toISOString(),
+    writtenBy: { actor, door },
+    engine,
+    config: { revision: nonEmpty(fresh(repo)?.head?.rev) },
+    nixos: { version: nonEmpty(fresh(identity)?.nixos?.version) },
+  })
+}
+
 /** The bytes the Site tab's "Write" action hands to the host. */
-export async function renderSiteFiles(ctx: Ctx): Promise<Record<SiteFileName, string>> {
+export async function renderSiteFiles(
+  ctx: Ctx,
+  actor: string,
+): Promise<Record<SiteFileName, string>> {
   const { desired } = await siteEdit(ctx)
-  return { 'site.json': renderSiteFile(desired), 'README.md': renderSiteReadme(desired) }
+  return {
+    'site.json': renderSiteFile(desired),
+    'README.md': renderSiteReadme(desired),
+    'daedalus.json': await renderSiteStampFile('site-write', actor),
+  }
 }
 
 export async function siteState(ctx: Ctx, facts?: RepoFacts): Promise<SiteState> {
   const dir = (facts ?? (await repoFacts()).data).site
-  const bodies = await renderSiteFiles(ctx)
-  const rendered = sha256(bodies['site.json'])
-  const site = dir.files['site.json']
-  const apps = dir.files['apps.json']
+  const { desired } = await siteEdit(ctx)
+  const compare = (f: SiteFile, bytes: string): boolean | null =>
+    f.sha256 === null ? null : f.sha256 === sha256(bytes)
+  const files = dir.files
   return {
     dir,
     files: [
       {
         name: 'site.json',
-        status: site.status,
-        current: site.sha256 === null ? null : site.sha256 === rendered,
+        status: files['site.json'].status,
+        current: compare(files['site.json'], renderSiteFile(desired)),
       },
-      { name: 'apps.json', status: apps.status, current: null },
+      { name: 'apps.json', status: files['apps.json'].status, current: null },
+      {
+        name: 'README.md',
+        status: files['README.md'].status,
+        current: compare(files['README.md'], renderSiteReadme(desired)),
+      },
+      // Never compared, for the same reason apps.json is not — but a
+      // different one. apps.json is not rendered here at all; daedalus.json
+      // IS, and still cannot be compared: it carries `writtenAt`, so the
+      // bytes this box would write now differ from the committed ones by
+      // construction and "differs" would be the permanent answer. A digest
+      // that is always red says nothing.
+      { name: 'daedalus.json', status: files['daedalus.json'].status, current: null },
     ],
     commit: await readSiteCommit(ctx),
   }
@@ -368,7 +474,8 @@ export async function siteState(ctx: Ctx, facts?: RepoFacts): Promise<SiteState>
 export type WriteOutcome = Result<string>
 
 /**
- * Ask the host to write site.json (and the README) as desired. This is the
+ * Ask the host to write site.json (with the README and the stamp) as desired.
+ * This is the
  * Site tab's door and does NOT rebuild — it exists for the first write, and
  * for a directory that fell out of step. A change to a value nix reads goes
  * through Apply (host/apply-flow.ts), which writes the same bytes and rebuilds.
@@ -383,7 +490,7 @@ export async function writeSite(ctx: Ctx, actor: string): Promise<WriteOutcome> 
     commit: await readSiteCommit(ctx),
     summary: 'site: what this box is',
     actor,
-    files: await renderSiteFiles(ctx),
+    files: await renderSiteFiles(ctx, actor),
   })
   return { ok: true, value: id }
 }

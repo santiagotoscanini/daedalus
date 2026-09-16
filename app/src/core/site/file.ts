@@ -151,33 +151,120 @@ export function renderSiteFile(doc: SiteDocument): string {
 }
 
 /**
- * The directory's README. Rewritten with every write, like the rest — it is
- * short and says what the directory is, which is the one thing a person
- * landing in `site/` from a `git log` needs before touching anything.
+ * The directory's README. Rewritten with every write, like the rest — which
+ * makes this function, and not the committed file, the source of truth for
+ * what it says. Hand-improving the file in the repository is how the two
+ * drifted once: the next write silently reverted it, and nothing surfaced
+ * that, because README.md is not part of the digest set the Site tab compares.
+ *
+ * So: edit the text HERE, and let a write carry it into the directory.
  */
 export function renderSiteReadme(doc: SiteDocument): string {
   return `# site/ — what ${doc.identity.hostname} is, as data
 
 The one directory in this configuration that
 [daedalus](https://github.com/santiagotoscanini/daedalus) writes. Nothing else
-in the repository is touched by it.
+in the repository is touched by it — and everything generated in here is
+written BY it, from the UI. A hand edit to a generated file lasts until the
+next write and no longer.
 
 | File | What it holds |
 |---|---|
 | \`site.json\` | The box's identity: domain, addresses, mail, the Cloudflare ids. |
 | \`apps.json\` | The app registry — one entry per self-hosted app, exported from daedalus's database by an Apply. |
+| \`daedalus.json\` | Provenance: which engine wrote this directory, when, and on whose say-so. |
+| \`README.md\` | This file. |
+| \`vault/\` | The box's own secrets, sops-encrypted: \`cloudflare-api-token.sops\` and \`github-app.sops\`. |
+| \`.sops.yaml\` | Who can decrypt \`vault/\`. Hand-written, once; daedalus reads it to encrypt and never writes it. |
+
+Which surface writes which file:
+
+- **Settings › Site** writes \`site.json\`, this README and \`daedalus.json\`. It
+  does not rebuild.
+- **Apply** writes \`apps.json\`, \`site.json\` when the document changed, a
+  \`vault/\` entry when a secret was replaced, and \`daedalus.json\` — and then
+  rebuilds.
 
 **Do not hand-edit \`apps.json\`.** It is generated from daedalus's \`apps\`
-table and overwritten on the next Apply; daedalus reports the app as drifted
-until then. Edit it in the UI instead.
+table, and only an Apply ever writes it — which is what keeps it from holding
+drift that was never applied. Until the Apply lands, daedalus reports the app
+as drifted. Edit it in the UI instead.
 
 \`site.json\` is written by Settings › Site. Editing it by hand is allowed —
 it is a plain JSON file and git is the audit trail — but daedalus will show
 it as differing from what it would write, which is the honest reading until
 the two agree again.
 
-Nothing secret is in here. Credentials live in the box's encrypted secret
-tree; when this directory gains a vault, its values are encrypted with
-\`sops\` and only the box can read them.
+\`daedalus.json\` records which engine wrote this directory and when. **Nix
+does not read it**: it is here so that a \`git log\` of this repository can say
+which version of daedalus produced a commit. Anything it could not read is
+\`null\` rather than guessed — a stamp that sometimes invents a revision is
+worth less than no stamp at all.
+
+Nothing readable is secret. \`site.json\`, \`apps.json\` and \`daedalus.json\`
+are plain JSON; everything in \`vault/\` is sops ciphertext, safe to commit, and
+readable only by the two recipients in \`.sops.yaml\` — the box and
+${doc.identity.operator.user}'s age key. daedalus is neither: it writes those files
+without ever being able to read one back — the container carries an
+encrypt-only \`sops\` and no age key — so replacing a credential means pasting
+the new value, never editing the old one.
 `
+}
+
+/** Which of the two doors into the site directory did the writing. */
+export type SiteStampDoor = 'apply' | 'site-write'
+
+/**
+ * The provenance stamp: which engine wrote this directory, and when.
+ *
+ * Every field is `| null` where the fact can be missing, and the gatherer
+ * (core/site/index.ts) fills a null rather than a guess whenever the snapshot
+ * it would read is absent, undecodable or stale. That rule is the whole value
+ * of the file: a stamp that sometimes invents a revision is worth less than no
+ * stamp, because a reader cannot tell the invented ones from the real ones.
+ *
+ * `dirty` is nullable for the same reason. A workspace daedalus cannot see is
+ * not a clean one, and writing `false` there would be the one guess that reads
+ * exactly like a fact.
+ */
+export type SiteStamp = {
+  writtenAt: string
+  writtenBy: { actor: string; door: SiteStampDoor }
+  engine: {
+    version: string | null
+    /** 12 characters, as the workspace snapshot publishes it. */
+    head: string | null
+    dirty: boolean | null
+    branch: string | null
+  }
+  /** The configuration repository this directory lives in, as it was BEFORE this write. */
+  config: { revision: string | null }
+  nixos: { version: string | null }
+}
+
+const STAMP_GENERATED =
+  'Written by daedalus on every write into this directory: it records which engine wrote these files, when, and on whose say-so. Nix does not read it — it is provenance for a person reading the repository’s history.'
+
+/**
+ * The stamp's exact bytes. Key by key rather than by spread, like
+ * renderSiteFile's github block: this renders into a committed file, and
+ * nothing the caller happens to be carrying may reach one. Same byte
+ * conventions as the rest of the directory — two spaces, trailing newline.
+ */
+export function renderSiteStamp(stamp: SiteStamp): string {
+  const body = {
+    _generated: STAMP_GENERATED,
+    schemaVersion: 1,
+    writtenAt: stamp.writtenAt,
+    writtenBy: { actor: stamp.writtenBy.actor, door: stamp.writtenBy.door },
+    engine: {
+      version: stamp.engine.version,
+      head: stamp.engine.head,
+      dirty: stamp.engine.dirty,
+      branch: stamp.engine.branch,
+    },
+    config: { revision: stamp.config.revision },
+    nixos: { version: stamp.nixos.version },
+  }
+  return `${JSON.stringify(body, null, 2)}\n`
 }

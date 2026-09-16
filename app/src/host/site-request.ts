@@ -22,8 +22,9 @@ export type SiteRequestState = 'idle' | 'running' | 'done' | 'failed'
 
 /** The names the host is allowed to write, fixed HERE and again in the
     agent: a filename that travelled in a payload is a path traversal.
-    apps.json is deliberately absent — only an Apply writes it. */
-export const SITE_FILES = ['site.json', 'README.md'] as const
+    apps.json is deliberately absent — only an Apply writes it.
+    daedalus.json is the provenance stamp, refreshed by every write. */
+export const SITE_FILES = ['site.json', 'README.md', 'daedalus.json'] as const
 export type SiteFileName = (typeof SITE_FILES)[number]
 
 export type SiteRequestStatus = {

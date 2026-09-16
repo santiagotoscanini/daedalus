@@ -41,6 +41,10 @@ vi.mock('./nix-manifest', () => ({ manifestEntries: async () => [] }))
 vi.mock('../core/ctx', () => ({ makeCtx: async () => ({}) }))
 vi.mock('../core/site', () => ({
   siteEdit: async () => ({ changes: h.siteChanges, render: { after: '{"site":true}\n' } }),
+  // The provenance stamp rides every Apply. Fixed bytes here: the real one
+  // reads three host snapshots and a clock, none of which this file has, and
+  // what it says is core/site's business, not the flow's.
+  renderSiteStampFile: async () => '{"stamp":true}\n',
 }))
 vi.mock('../lib/repo/settings', () => ({
   readSetting: async () => false,
