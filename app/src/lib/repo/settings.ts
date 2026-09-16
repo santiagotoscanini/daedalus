@@ -61,4 +61,14 @@ export const SETTING_KEYS = {
   buildsLastSweep: 'builds.lastSweep',
   /** Builds whose GitHub report failed, for "Retry report" (core/builds/report.ts). */
   buildsReportFailures: 'builds.reportFailures',
+  /**
+   * Whether a mutation refuses a caller outside the `admins` group (core/authz).
+   *
+   * Off by default, and deliberately not rebuild-relevant: the groups header it
+   * reads only exists once daedalus.nix's `auth.headers` change has been built
+   * and switched, so enforcing before that would refuse the operator on a box
+   * where nobody can yet prove they are one. Settings › Developer shows the
+   * groups actually arriving; turn this on once it names `admins`.
+   */
+  authEnforceAdmins: 'auth.enforceAdmins',
 } as const

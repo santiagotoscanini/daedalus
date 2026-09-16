@@ -85,6 +85,8 @@ export const requestImageUpdateFn = createServerFn({ method: 'POST' })
     }
   })
   .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { runImageUpdate } = await import('../host/update-flow')
     // The forward-auth middleware forwards the Pocket ID claim, so the commit
     // this produces records a person rather than "daedalus".

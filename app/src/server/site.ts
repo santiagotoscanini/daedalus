@@ -33,6 +33,8 @@ export const setSiteCommit = createServerFn({ method: 'POST' })
     return data
   })
   .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { makeCtx } = await import('../core/ctx')
     const { writeSiteCommit } = await import('../core/site')
     await writeSiteCommit(await makeCtx(), data)
@@ -40,6 +42,8 @@ export const setSiteCommit = createServerFn({ method: 'POST' })
   })
 
 export const writeSiteFiles = createServerFn({ method: 'POST' }).handler(async () => {
+  const { assertAdmin } = await import('../core/authz')
+  await assertAdmin()
   const { makeCtx } = await import('../core/ctx')
   const { writeSite } = await import('../core/site')
   // The forward-auth middleware forwards the Pocket ID claim, so the commit
@@ -69,6 +73,8 @@ export const saveSiteEditFn = createServerFn({ method: 'POST' })
     return data as Partial<Record<SiteField, unknown>>
   })
   .handler(async ({ data }): Promise<SiteEdit> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { makeCtx } = await import('../core/ctx')
     const { saveSiteEdit } = await import('../core/site')
     // The address this request reached the box at — traefik passes the Host

@@ -266,6 +266,10 @@ const orDefault = <T extends string>(allowed: readonly T[], v: string, fallback:
 export const buildNowFn = createServerFn({ method: 'POST' })
   .validator(appRequest)
   .handler(async ({ data }): Promise<BuildNowResult> => {
+    // Above the identity gate, not instead of it: a refusal here is a broken
+    // gate rather than an answer, so it throws where requireActor returns.
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
     const actor = gate.value
@@ -354,6 +358,8 @@ export type CancelBuildResult = Result<null>
 export const cancelBuildFn = createServerFn({ method: 'POST' })
   .validator(buildRequest)
   .handler(async ({ data }): Promise<CancelBuildResult> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
     const actor = gate.value
@@ -401,6 +407,8 @@ export type RetryReportResult = Result<null>
 export const retryReportFn = createServerFn({ method: 'POST' })
   .validator(buildRequest)
   .handler(async ({ data }): Promise<RetryReportResult> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
     const actor = gate.value
@@ -437,6 +445,8 @@ export const setBuildSettingsFn = createServerFn({ method: 'POST' })
       validateBuildSettings(input),
   )
   .handler(async ({ data }): Promise<BuildSettingsResult> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
     const actor = gate.value

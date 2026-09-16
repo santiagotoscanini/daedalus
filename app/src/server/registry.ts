@@ -139,6 +139,10 @@ export const createAppFn = createServerFn({ method: 'POST' })
     return { app: data.app }
   })
   .handler(async ({ data }): Promise<{ name: string }> => {
+    // Dynamic like every other value import at this seam: core/authz reads the
+    // preference store, and src/server/** may static-import nothing impure.
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { createApp, validateNewApp } = await import('../lib/repo/apps')
     return createApp(validateNewApp(data.app))
   })
@@ -149,6 +153,8 @@ export const deleteAppFn = createServerFn({ method: 'POST' })
     return { name: appName(data.name) }
   })
   .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { deleteApp } = await import('../lib/repo/apps')
     await deleteApp(data.name)
     return { ok: true }
@@ -163,6 +169,8 @@ export const saveApp = createServerFn({ method: 'POST' })
     return { name: appName(data.name), patch: data.patch }
   })
   .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { updateApp, validateAppPatch } = await import('../lib/repo/apps')
     await updateApp(data.name, validateAppPatch(data.patch))
     return { ok: true }
@@ -180,6 +188,8 @@ export const applyRegistry = createServerFn({ method: 'POST' }).handler(
   // (routes/api.registry.apply.ts) can map a refusal to an HTTP status, and
   // the button has nothing to do with it but read the sentence.
   async (): Promise<Result<{ id: string; changed: { name: string; fields: string[] }[] }>> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { runApply } = await import('../host/apply-flow')
     const outcome = await runApply(actorLabel())
     return outcome.ok
@@ -198,6 +208,8 @@ export const triggerDeploy = createServerFn({ method: 'POST' })
   // record around it.
   .validator((data: unknown): string => appName(data))
   .handler(async ({ data: name }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { requestManualDeploy } = await import('../lib/apps/deploy')
     return requestManualDeploy(name)
   })
@@ -209,6 +221,8 @@ export const revealEnvVar = createServerFn({ method: 'POST' })
     return { name: appName(data.name), key: data.key }
   })
   .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { revealAppEnvVar } = await import('../lib/apps/secrets')
     return revealAppEnvVar(data)
   })
@@ -227,6 +241,8 @@ export const cloneWorkspaceFn = createServerFn({ method: 'POST' })
     return { repo: data.repo }
   })
   .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { cloneOfferedWorkspace } = await import('../lib/apps/workspaces')
     return cloneOfferedWorkspace(data)
   })

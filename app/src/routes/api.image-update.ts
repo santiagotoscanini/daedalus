@@ -37,6 +37,8 @@ export const Route = createFileRoute('/api/image-update')({
       },
 
       POST: async ({ request }) => {
+        const { assertAdminOf } = await import('../core/authz')
+        await assertAdminOf(request)
         const { runImageUpdate } = await import('../host/update-flow')
 
         // `null` is valid JSON: the parse succeeds, the catch never fires, and

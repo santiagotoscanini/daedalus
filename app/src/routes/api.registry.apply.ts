@@ -20,6 +20,8 @@ export const Route = createFileRoute('/api/registry/apply')({
       },
 
       POST: async ({ request }) => {
+        const { assertAdminOf } = await import('../core/authz')
+        await assertAdminOf(request)
         const { runApply } = await import('../host/apply-flow')
         const outcome = await runApply(actorLabelOf(request, 'api'))
         if (!outcome.ok) {

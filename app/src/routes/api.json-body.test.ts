@@ -1,4 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+
+// The admin gate is the first statement of /api/image-update's POST handler,
+// and it reads the preference store — which these cases have no database
+// behind. What is under test is the body guard, so the gate is stubbed to the
+// answer a signed-in admin gets rather than moved out of its way.
+vi.mock('../core/authz', () => ({ assertAdminOf: async () => 'operator@example.com' }))
 
 // `null` is valid JSON.
 //

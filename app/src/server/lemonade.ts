@@ -67,6 +67,8 @@ export const unloadLemonadeModel = createServerFn({ method: 'POST' })
     return { model: modelName(data.model, 'a model to unload') }
   })
   .handler(async ({ data }): Promise<ModelActionResult> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     return call('/api/v1/unload', { model_name: data.model })
   })
 
@@ -103,6 +105,8 @@ export const switchLemonadeModel = createServerFn({ method: 'POST' })
     }
   })
   .handler(async ({ data }): Promise<ModelActionResult> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     if (data.from !== null) {
       const freed = await call('/api/v1/unload', { model_name: data.from })
       // Report the eviction failure rather than pressing on into the 409 it

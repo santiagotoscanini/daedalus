@@ -23,6 +23,8 @@ import { actorLabel } from '../core/auth'
  * status will ever be written.
  */
 export const requestRebootFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const { assertAdmin } = await import('../core/authz')
+  await assertAdmin()
   const { requestReboot } = await import('../host/power-request')
   // The forward-auth middleware forwards the Pocket ID claim, so the request
   // records a person rather than "daedalus".

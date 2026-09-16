@@ -64,6 +64,8 @@ export const replaceCloudflareTokenFn = createServerFn({ method: 'POST' })
     return { token }
   })
   .handler(async ({ data }): Promise<TokenReplaceOutcome> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { makeCtx } = await import('../core/ctx')
     const { replaceCloudflareToken } = await import('../core/settings/cloudflare-token')
     const actor = actorLabel()
@@ -91,6 +93,8 @@ export const startGithubAppFn = createServerFn({ method: 'POST' })
     return { name: d.name, replace: d.replace === true }
   })
   .handler(async ({ data }): Promise<GithubAppStart> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { makeCtx } = await import('../core/ctx')
     const { startAppCreation } = await import('../core/settings/github-app')
     // No fallback name: a missing identity is null, and every App mutation refuses it.
@@ -113,6 +117,8 @@ export const pasteAppKeyFn = createServerFn({ method: 'POST' })
     return { pem: d.pem, webhookSecret: d.webhookSecret, clientSecret: d.clientSecret }
   })
   .handler(async ({ data }): Promise<GithubAppApply> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { makeCtx } = await import('../core/ctx')
     const { pasteAppKey } = await import('../core/settings/github-app')
     const actor = actorOrNull(requireActor())
@@ -121,6 +127,8 @@ export const pasteAppKeyFn = createServerFn({ method: 'POST' })
 
 export const retryGithubApplyFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<GithubAppApply> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { makeCtx } = await import('../core/ctx')
     const { retryPendingApply } = await import('../core/settings/github-app')
     const actor = actorOrNull(requireActor())
@@ -134,6 +142,8 @@ export const retryGithubApplyFn = createServerFn({ method: 'POST' }).handler(
  */
 export const discardGithubPendingApplyFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<GithubAppDiscard> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { makeCtx } = await import('../core/ctx')
     const { discardPendingApply } = await import('../core/settings/github-app')
     const actor = actorOrNull(requireActor())
@@ -149,6 +159,8 @@ export const discardGithubPendingApplyFn = createServerFn({ method: 'POST' }).ha
  */
 export const githubInstallLandedFn = createServerFn({ method: 'POST' }).handler(
   async (): Promise<Result<null>> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const gate = requireActor()
     if (!gate.ok) return gate
     const { requestTokenRefresh } = await import('../core/github-app')
@@ -184,6 +196,8 @@ export const saveTheme = createServerFn({ method: 'POST' })
     return { presetId: data.presetId, scheme: data.scheme }
   })
   .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { writeSetting, SETTING_KEYS } = await import('../lib/repo/settings')
     await writeSetting(SETTING_KEYS.theme, data)
     return data

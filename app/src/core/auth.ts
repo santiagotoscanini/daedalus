@@ -45,9 +45,62 @@ import type { Result } from '../lib/result'
 export const AUTH_HEADERS = {
   EMAIL: 'x-forwarded-email',
   SUBJECT: 'x-forwarded-user',
+  GROUPS: 'x-forwarded-groups',
 } as const
 
 const HEADER: string = AUTH_HEADERS.EMAIL
+
+/**
+ * The Pocket ID group that may change this box.
+ *
+ * The real gate is one layer earlier — the derived Pocket ID client allows
+ * `authGroups`, default [ "admins" ], so someone outside it never gets a
+ * session and never reaches us. What this module adds is a second check at
+ * the thing that actually writes, so a widened client (an app shared with
+ * "family", say) cannot silently become a licence to press Apply.
+ */
+export const ADMIN_GROUP = 'admins'
+
+/** The sentence a mutation answers with when the caller is signed in but not an admin. */
+export const NOT_ADMIN_REASON = `Only members of the ${ADMIN_GROUP} group can change this box, so nothing was done.`
+
+/**
+ * The groups the forward-auth proxy says this session carries.
+ *
+ * The header is a JSON array, because Go renders a bare claim list as
+ * `[admins family]` — neither JSON nor comma-separated — so daedalus.nix
+ * pipes it through the plugin's own `mapToJsonArray`.
+ *
+ * Every failure is the empty list rather than a throw: absent (the nix change
+ * has not landed yet), blank (traefik strips the header inbound, and only
+ * re-sets it on gated paths — so a bypassed path like /api/deploy arrives
+ * with none), or unparseable. An empty list can never satisfy `isAdmin`, so
+ * every one of those degrades to "not an admin" rather than to an error page.
+ */
+function parseGroups(header: string | null | undefined): string[] {
+  const raw = header?.trim() ?? ''
+  if (raw === '') return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((g): g is string => typeof g === 'string' && g.trim() !== '')
+  } catch {
+    return []
+  }
+}
+
+/** The groups on a request a caller is holding. Never throws; unknown is `[]`. */
+export function groupsOf(request: Request): string[] {
+  return parseGroups(request.headers.get(AUTH_HEADERS.GROUPS))
+}
+
+/** The groups on the request this server function is running inside. */
+export function requireGroups(): string[] {
+  return parseGroups(getRequestHeader(AUTH_HEADERS.GROUPS))
+}
+
+/** Whether a group list carries the one that may change this box. */
+export const isAdmin = (groups: readonly string[]): boolean => groups.includes(ADMIN_GROUP)
 
 /** What a record says when the request carried no identity to name. */
 export const UNKNOWN_ACTOR = 'unknown operator'

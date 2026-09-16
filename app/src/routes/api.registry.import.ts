@@ -18,7 +18,12 @@ import { errorText } from '../lib/redact'
 export const Route = createFileRoute('/api/registry/import')({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }) => {
+        // The request is taken only for its headers: this writes the registry,
+        // so the in-container recipe above needs an admin session's headers
+        // once `auth.enforceAdmins` is armed.
+        const { assertAdminOf } = await import('../core/authz')
+        await assertAdminOf(request)
         const { importFromNix } = await import('../lib/repo/apps')
         try {
           const result = await importFromNix()

@@ -27,6 +27,8 @@ export const fetchClaude = createServerFn().handler(async () => {
  * ~ten seconds.
  */
 export const requestClaudeRestartFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const { assertAdmin } = await import('../core/authz')
+  await assertAdmin()
   const { requestClaudeRcRestart } = await import('../host/claude-rc-request')
   // The forward-auth middleware forwards the Pocket ID claim, so the request
   // records a person rather than "daedalus".

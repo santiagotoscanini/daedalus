@@ -64,6 +64,8 @@ export const saveProfileFn = createServerFn({ method: 'POST' })
     return out
   })
   .handler(async ({ data }): Promise<ProfileRead> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { makeCtx } = await import('../core/ctx')
     const { updateProfile } = await import('../core/settings/profile')
     return updateProfile(await makeCtx(), who(), data)
@@ -82,6 +84,8 @@ export const uploadProfilePictureFn = createServerFn({ method: 'POST' })
     return { contentType: d.contentType as PictureType, base64: d.base64 }
   })
   .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
     const { makeCtx } = await import('../core/ctx')
     const { uploadPicture } = await import('../core/settings/profile')
     await uploadPicture(await makeCtx(), who(), data)
@@ -89,6 +93,8 @@ export const uploadProfilePictureFn = createServerFn({ method: 'POST' })
   })
 
 export const resetProfilePictureFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const { assertAdmin } = await import('../core/authz')
+  await assertAdmin()
   const { makeCtx } = await import('../core/ctx')
   const { resetPicture } = await import('../core/settings/profile')
   await resetPicture(await makeCtx(), who())
