@@ -129,6 +129,18 @@ export async function loadAppDetail(data: { name: string }) {
       githubRepoId: record.githubRepoId,
       updatedAt: record.updatedAt.toISOString(),
       envVars: record.envVars.map((e) => ({ key: e.key, value: e.value, note: e.note })),
+      // In the FRAME rather than only in the tab payload, because this is what
+      // the editor EDITS: a save sends the whole list back, so it has to be the
+      // authored list rather than the tab's rendering of it (which carries run
+      // facts the registry knows nothing about). The contract's shape, not the
+      // row's: `taskId` is the id, and the row's uuid is nobody's business
+      // outside the repository.
+      tasks: record.tasks.map((t) => ({
+        id: t.taskId,
+        schedule: t.schedule,
+        command: t.command,
+        timeoutSec: t.timeoutSec,
+      })),
     },
   }
 }

@@ -4,6 +4,7 @@ import { type AccessWindow, isAccessWindow } from '../lib/access-window'
 import { appName } from '../lib/hostname'
 import { isRecord } from '../lib/is-record'
 import type { Result } from '../lib/result'
+import { taskId } from '../lib/tasks'
 
 // The RPC seam behind the Apps UI: the list page, the detail page, the create
 // form and the apply bar. Nothing here does any work — each function proves
@@ -250,4 +251,31 @@ export const cloneWorkspaceFn = createServerFn({ method: 'POST' })
 export const fetchWorkspaceRequestStatus = createServerFn().handler(async () => {
   const { readWorkspaceRequestStatus } = await import('../host/workspaces')
   return readWorkspaceRequestStatus()
+})
+
+/**
+ * Run one of an app's scheduled tasks now, rather than at its next elapse.
+ *
+ * `taskId` is lib/tasks's — the same rule the export and the generated unit
+ * name are built from — and it is the boundary that matters most on this page:
+ * what this request names becomes part of a systemd unit that ROOT starts. So
+ * the charset is refused here, the task is checked against the app's DECLARED
+ * list in lib/apps/tasks.ts, and the host agent checks it a third time. None
+ * of the three is meant to be the only one.
+ */
+export const runTaskNow = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { name: string; task: string } => {
+    if (!isRecord(data)) throw new Error('expected an app and a task')
+    return { name: appName(data.name), task: taskId(data.task) }
+  })
+  .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { runAppTaskNow } = await import('../lib/apps/tasks')
+    return runAppTaskNow(data)
+  })
+
+export const fetchTaskRunStatus = createServerFn().handler(async () => {
+  const { readTaskRunStatus } = await import('../host/task-run')
+  return readTaskRunStatus()
 })

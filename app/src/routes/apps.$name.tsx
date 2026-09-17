@@ -7,6 +7,7 @@ import { Overview } from '../components/apps/overview'
 import { Secrets } from '../components/apps/secrets'
 import { Settings } from '../components/apps/settings'
 import { CHIP, LEDE } from '../components/apps/shared'
+import { Tasks } from '../components/apps/tasks'
 import { Vpn } from '../components/apps/vpn'
 import { AppIcon, type AppState, Segmented, StatePill } from '../components/controls'
 import { GuardedAwait } from '../components/error'
@@ -27,11 +28,13 @@ import { type Tone, toneStyle } from '../lib/tone'
 import { fetchApp, fetchAppTab, saveApp } from '../server/registry'
 
 // Every tab this route can render. Two of them are conditional — `database`
-// only exists for an app with postgres, `vpn` only for one with an egress
+// only exists for an app with postgres and `vpn` only for one with an egress
 // container — but they stay in this list because it is what validateSearch
 // checks. A URL naming a tab the app does not have renders an explanation of
 // how to turn the feature on, which is strictly more useful than silently
-// bouncing to the overview.
+// bouncing to the overview. `tasks` is unconditional on purpose: it is the one
+// tab whose subject is AUTHORED on it, so hiding it until the app had a task
+// would make the first one unwritable (see AppRail in __root.tsx).
 // Exported for the shell: when this route is matched, the global rail swaps
 // to an app-scoped one (see __root.tsx) and renders these as its sections.
 export const APP_TABS = [
@@ -39,6 +42,7 @@ export const APP_TABS = [
   'deployments',
   'database',
   'vpn',
+  'tasks',
   'access',
   'settings',
   'secrets',
@@ -231,6 +235,16 @@ function AppDetail() {
             }
           >
             {(td) => (td.kind !== 'vpn' ? null : <Vpn app={app} data={td.vpn} />)}
+          </GuardedAwait>
+        )
+      case 'tasks':
+        return (
+          <GuardedAwait
+            resetKey={sectionKey}
+            promise={tabData}
+            fallback={<BlockSkeleton h={300} />}
+          >
+            {(td) => (td.kind !== 'tasks' ? null : <Tasks app={app} td={td} />)}
           </GuardedAwait>
         )
       case 'access':

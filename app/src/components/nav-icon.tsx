@@ -40,6 +40,7 @@ export type NavIconName =
   | 'settings'
   | 'secrets'
   | 'logs'
+  | 'tasks'
 
 const PATHS: Record<NavIconName, React.ReactNode> = {
   // Four tiles: the app list.
@@ -170,6 +171,13 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
     <>
       <rect x="3.2" y="4.4" width="17.6" height="15.2" rx="2.2" />
       <path d="m7 9.4 3 2.7-3 2.7M12.8 15h4.4" />
+    </>
+  ),
+  // A clock face: the one thing every scheduled task has in common.
+  tasks: (
+    <>
+      <circle cx="12" cy="12" r="8.6" />
+      <path d="M12 6.9V12l3.4 2" />
     </>
   ),
 

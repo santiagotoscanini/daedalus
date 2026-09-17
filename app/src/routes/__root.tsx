@@ -563,6 +563,12 @@ function useAppRailContext(): AppRailContext | null {
  * The two feature tabs are hidden rather than disabled when the feature is
  * off — a greyed-out "vpn" on an app with no egress is a question the page
  * has already answered (this rule moved here from the old tab bar).
+ *
+ * `tasks` is NOT one of them, and the difference is the whole distinction this
+ * rule turns on: database and vpn reflect infrastructure an app either has or
+ * does not, so the tab is a report. Tasks are something you ADD — hiding the
+ * tab until one exists is a door that can only be opened from inside, and the
+ * first task could never be written. The empty state invites it instead.
  */
 function AppRail({ app }: { app: AppRailContext }) {
   const tabs = APP_TABS.filter(

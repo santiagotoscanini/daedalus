@@ -14,6 +14,7 @@ import {
 } from '../../host/metrics'
 import { operatorSecretApps } from '../../host/nix-manifest'
 import { commitUrl } from '../../host/registry'
+import { readTaskRunStatus, type TaskRunStatus } from '../../host/task-run'
 import type { AccessWindow } from '../access-window'
 import type { ActivityRow } from '../activity-lines'
 import { logTime } from '../format'
@@ -21,6 +22,7 @@ import { effectiveHostname } from '../hostname'
 import { getApp } from '../repo/apps'
 import { overviewBuild, recentBuilds } from '../repo/build-views'
 import { ingestDeployments, listDeployments } from '../repo/deployments'
+import { loadTasksTab, type TasksPayload } from './tasks'
 
 // The app detail page's tab bodies — one branch per tab, and nothing a tab
 // does not need.
@@ -73,6 +75,17 @@ export type AppTabData =
   | { kind: 'logs' }
   | { kind: 'database'; database: AppDatabase }
   | { kind: 'vpn'; vpn: AppVpn }
+  | {
+      kind: 'tasks'
+      tasks: TasksPayload
+      /**
+       * The run bridge's current state, so the Run now button starts from what
+       * the box is actually doing rather than from `idle` — a page opened
+       * while a task is running shows that run instead of offering to start a
+       * second one.
+       */
+      runStatus: TaskRunStatus
+    }
   | { kind: 'settings' }
 
 type AppResources = Awaited<ReturnType<typeof appResources>>
@@ -230,6 +243,16 @@ export async function loadAppTab(data: {
         kind: 'database',
         database: record.postgres ? await appDatabase(name).catch(() => NO_DATABASE) : NO_DATABASE,
       }
+    }
+
+    // Cheap on purpose: the declared tasks come from the record the frame
+    // already read, and the run facts from a snapshot that is cached for a
+    // minute. Nothing here is a query, which is why there is no gate on the
+    // app having tasks — the answer for an app with none is an empty list,
+    // and the rail hides the tab anyway.
+    case 'tasks': {
+      const [tasks, runStatus] = await Promise.all([loadTasksTab(name), readTaskRunStatus()])
+      return { kind: 'tasks', tasks, runStatus }
     }
 
     case 'vpn': {

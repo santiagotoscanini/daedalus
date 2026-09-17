@@ -38,7 +38,35 @@ const h = vi.hoisted(() => ({
   manifest: [] as { name: string }[],
   inserted: [] as Row[],
   updated: [] as Row[],
+  /** Task rows the transaction inserted, and how many times it cleared them. */
+  insertedTasks: [] as Row[],
+  taskDeletes: 0,
 }))
+
+// `updateApp` writes inside a transaction — the column UPDATE and the task
+// rows land together or not at all — so the fake has to offer one. The handle
+// it hands the callback records the same way the outer fake does, which is
+// what lets a test assert that a refusal wrote NOTHING: no column set, no task
+// row inserted, and no delete of the rows that were there.
+const tx = {
+  update: () => ({
+    set: (row: Row) => ({
+      where: async () => {
+        h.updated.push(row)
+      },
+    }),
+  }),
+  delete: () => ({
+    where: async () => {
+      h.taskDeletes += 1
+    },
+  }),
+  insert: () => ({
+    values: async (rows: Row[]) => {
+      h.insertedTasks.push(...rows)
+    },
+  }),
+}
 
 vi.mock('../../host/db', () => ({
   db: {
@@ -53,13 +81,7 @@ vi.mock('../../host/db', () => ({
         h.inserted.push(row)
       },
     }),
-    update: () => ({
-      set: (row: Row) => ({
-        where: async () => {
-          h.updated.push(row)
-        },
-      }),
-    }),
+    transaction: async (fn: (t: typeof tx) => Promise<void>) => fn(tx),
   },
 }))
 
@@ -70,7 +92,7 @@ vi.mock('../../host/nix-manifest', () => ({
   hostnamesTakenBy: async (others: string) => h.taken.filter((x) => x !== others),
 }))
 
-const { createApp, updateApp } = await import('./apps')
+const { createApp, updateApp, validateAppPatch } = await import('./apps')
 
 const host = (label: string) => `${label}.${BASE_DOMAIN}`
 
@@ -106,6 +128,8 @@ beforeEach(() => {
   h.manifest = []
   h.inserted = []
   h.updated = []
+  h.insertedTasks = []
+  h.taskDeletes = 0
 })
 
 describe('createApp re-checks the hostname', () => {
@@ -213,5 +237,133 @@ describe('forward auth needs an ingress and a health path', () => {
     await updateApp('voyra', { authMode: 'proxy', authHealthPath: '/api/healthz' })
     expect(h.updated).toHaveLength(1)
     expect(h.updated[0]).toMatchObject({ authMode: 'proxy', authHealthPath: '/api/healthz' })
+  })
+})
+
+// The scheduled-tasks half of the same boundary. Every rule below is also an
+// assertion in stacks/apps/apps.nix — and that one fires inside the rebuild an
+// Apply has already committed, so it costs a revert. These tests are what says
+// the cheap refusal happens first, and that a refused patch writes NOTHING:
+// no column set, no task row inserted, and crucially no delete of the rows the
+// app already had (the write is delete-then-insert, so a half-applied refusal
+// would be a silent un-scheduling).
+describe('tasks in a patch', () => {
+  const save = async (tasks: unknown) =>
+    updateApp('voyra', validateAppPatch({ tasks } as Record<string, unknown>))
+
+  const task = (over: Row = {}) => ({
+    id: 'digest',
+    schedule: '*-*-* 04:23:00',
+    command: ['node', 'scripts/digest.mjs'],
+    timeoutSec: 900,
+    ...over,
+  })
+
+  const refuses = async (tasks: unknown, sentence: RegExp) => {
+    h.record = record()
+    await expect(save(tasks)).rejects.toThrow(sentence)
+    expect(h.updated).toEqual([])
+    expect(h.insertedTasks).toEqual([])
+    expect(h.taskDeletes).toBe(0)
+  }
+
+  it('writes the rows in authored order, with position as the only thing that keeps it', async () => {
+    h.record = record()
+
+    await save([
+      task(),
+      task({
+        id: 'prune',
+        schedule: '*:41:00',
+        command: ['bin/prune', '--older-than', '30d'],
+        timeoutSec: 120,
+      }),
+    ])
+
+    expect(h.taskDeletes).toBe(1)
+    expect(h.insertedTasks).toEqual([
+      {
+        appId: 'app-1',
+        taskId: 'digest',
+        schedule: '*-*-* 04:23:00',
+        command: ['node', 'scripts/digest.mjs'],
+        timeoutSec: 900,
+        position: 0,
+      },
+      {
+        appId: 'app-1',
+        taskId: 'prune',
+        schedule: '*:41:00',
+        command: ['bin/prune', '--older-than', '30d'],
+        timeoutSec: 120,
+        position: 1,
+      },
+    ])
+    // The record itself is still touched: `updatedAt` is when this app last
+    // changed, and its tasks are part of it.
+    expect(h.updated).toHaveLength(1)
+  })
+
+  it('clears the rows when the last task is removed, and inserts none', async () => {
+    h.record = record()
+
+    await save([])
+
+    expect(h.taskDeletes).toBe(1)
+    expect(h.insertedTasks).toEqual([])
+  })
+
+  it('leaves the rows alone when the patch does not mention tasks', async () => {
+    h.record = record()
+
+    await updateApp('voyra', { description: 'still voyra' })
+
+    expect(h.taskDeletes).toBe(0)
+    expect(h.insertedTasks).toEqual([])
+    expect(h.updated).toHaveLength(1)
+  })
+
+  it('refuses an id outside the unit-name charset', async () => {
+    for (const id of ['With Space', 'dots.are.units', 'under_score', '-leading', 'a'.repeat(41)]) {
+      await refuses([task({ id })], /systemd unit name/)
+    }
+  })
+
+  it('refuses two tasks sharing an id — one id is one unit', async () => {
+    await refuses([task(), task()], /already a task on this app/)
+  })
+
+  it('refuses an empty command, and an empty argument inside one', async () => {
+    await refuses([task({ command: [] })], /give it something to run/)
+    await refuses([task({ command: ['node', '  '] })], /argument 2 is empty/)
+    await refuses([task({ command: 'node scripts/digest.mjs' })], /argv, not a shell line/)
+    await refuses([task({ command: ['node', 7] })], /argv, not a shell line/)
+  })
+
+  it('refuses a timeout that is not a positive whole number of seconds', async () => {
+    for (const timeoutSec of [0, -1, 1.5]) {
+      await refuses([task({ timeoutSec })], /whole number of seconds above zero/)
+    }
+    await refuses([task({ timeoutSec: '900' })], /must be a number of seconds/)
+  })
+
+  it('refuses an empty schedule', async () => {
+    await refuses([task({ schedule: '   ' })], /pick a schedule first/)
+  })
+
+  // The one that is not about typing: `hourly` is a perfectly valid systemd
+  // calendar, and that is the problem — it elapses at :00, inside myspeed's
+  // house-wide DNS blackout, where a starved run can still report success.
+  it('refuses every systemd shorthand, however valid systemd finds it', async () => {
+    for (const schedule of ['hourly', 'daily', 'weekly', 'monthly', 'minutely', 'yearly']) {
+      await refuses([task({ schedule })], /fires exactly on the hour/)
+    }
+    await refuses([task({ schedule: 'Daily' })], /fires exactly on the hour/)
+  })
+
+  it('refuses a tasks value that is not a list of tasks at all', async () => {
+    await refuses('digest', /must be an array of scheduled tasks/)
+    await refuses([null], /must be an object with id, schedule, command and timeoutSec/)
+    await refuses([{ schedule: '*:41:00' }], /id must be a string/)
   })
 })

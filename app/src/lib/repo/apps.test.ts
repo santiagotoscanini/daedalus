@@ -48,6 +48,24 @@ const RICH: ManifestEntry = {
   },
   presentation: { description: 'the rich fixture' },
   resources: { cpus: 1.5, memoryMb: 512, pids: 200 },
+  // Two, in a deliberately non-alphabetical order, with a multi-word argv.
+  // One task would not show a reordering at all, and `command` is the one
+  // exported field that is an array of its own — the coverage walk below
+  // mutates each element separately.
+  tasks: [
+    {
+      id: 'digest',
+      schedule: '*-*-* 04:23:00',
+      command: ['node', 'scripts/digest.mjs'],
+      timeoutSec: 900,
+    },
+    {
+      id: 'cleanup',
+      schedule: '*:41:00',
+      command: ['bin/prune', '--older-than', '30d'],
+      timeoutSec: 120,
+    },
+  ],
   notes: { stage: 'went live 2025-12', image: 'pinned for the migration' },
 }
 
@@ -72,6 +90,15 @@ function recordOf(entry: ManifestEntry): AppRecord {
       key: e.key,
       value: e.value,
       note: e.note ?? null,
+      position: i,
+    })),
+    tasks: (entry.tasks ?? []).map((t, i) => ({
+      id: `${id}-task-${String(i)}`,
+      appId: id,
+      taskId: t.id,
+      schedule: t.schedule,
+      command: t.command,
+      timeoutSec: t.timeoutSec,
       position: i,
     })),
   }
@@ -235,6 +262,50 @@ describe('driftOf', () => {
     expect(driftOf(record, swapped)).toContain('env')
   })
 
+  // Same rule as env, and the consequence is sharper: a task's position is
+  // what the generated unit list is built from, so a reorder that read as "no
+  // drift" would leave the box running the previous order forever.
+  it('treats a task reorder as drift — position is authored, nix would sort it', () => {
+    const record = recordOf(RICH)
+    const [entry] = reparse(renderRegistryFile(toRegistryExport([record])))
+    expect(entry).toBeDefined()
+    const swapped = { ...(entry as ManifestEntry) }
+    swapped.tasks = [...(swapped.tasks ?? [])].reverse()
+    expect(driftOf(record, swapped)).toContain('tasks')
+  })
+
+  // The argv rule: two different commands must never compare equal. Joining
+  // on a space (the obvious shortcut) collapses these two into one string.
+  it('tells `["echo","a b"]` apart from `["echo","a","b"]`', () => {
+    const record = recordOf(RICH)
+    const [entry] = reparse(renderRegistryFile(toRegistryExport([record])))
+    expect(entry).toBeDefined()
+    const regrouped = {
+      ...(entry as ManifestEntry),
+      tasks: [
+        {
+          id: 'digest',
+          schedule: '*-*-* 04:23:00',
+          command: ['node scripts/digest.mjs'],
+          timeoutSec: 900,
+        },
+        ...((entry as ManifestEntry).tasks ?? []).slice(1),
+      ],
+    }
+    expect(driftOf(record, regrouped)).toContain('tasks')
+  })
+
+  // The tolerant-reader half of the contract: apps.json as it exists on the
+  // box today has no `tasks` key at all, and an app with no tasks must not
+  // light the Apply bar the moment this field ships.
+  it('shows no drift when an app has no tasks and the file predates the field', () => {
+    const plain = recordOf({ ...RICH, tasks: [] })
+    const [entry] = reparse(renderRegistryFile(toRegistryExport([plain])))
+    expect(entry).toBeDefined()
+    const { tasks: _dropped, ...withoutTasks } = entry as ManifestEntry
+    expect(driftOf(plain, withoutTasks as ManifestEntry)).toEqual([])
+  })
+
   it('validateAppPatch accepts well-typed fields and refuses the rest', () => {
     expect(
       validateAppPatch({ stage: 'live', postgres: true, limitCpus: 1.5, image: null }),
@@ -293,5 +364,109 @@ describe('driftOf', () => {
     )
     expect(entry).toBeDefined()
     expect(driftOf(a, entry)).toContain('env')
+  })
+})
+
+// `tasks` rides the same patch as every editable column (there is no task
+// server function — saveApp already carries the assertAdmin gate), so this is
+// the boundary that keeps a malformed task out of the registry. Refusals are
+// asserted on the sentence, because the sentence is what the operator reads:
+// each one names the task and the rule rather than "invalid input".
+describe('validateAppPatch accepts a task list', () => {
+  const task = (over: Record<string, unknown> = {}) => ({
+    id: 'digest',
+    schedule: '*-*-* 04:23:00',
+    command: ['node', 'scripts/digest.mjs'],
+    timeoutSec: 900,
+    ...over,
+  })
+
+  it('normalises what it accepts and keeps authored order', () => {
+    const out = validateAppPatch({
+      tasks: [task({ id: ' Digest ', schedule: ' *-*-* 04:23:00 ' }), task({ id: 'prune' })],
+    })
+    expect(out.tasks).toEqual([
+      {
+        id: 'digest',
+        schedule: '*-*-* 04:23:00',
+        command: ['node', 'scripts/digest.mjs'],
+        timeoutSec: 900,
+      },
+      {
+        id: 'prune',
+        schedule: '*-*-* 04:23:00',
+        command: ['node', 'scripts/digest.mjs'],
+        timeoutSec: 900,
+      },
+    ])
+  })
+
+  it('accepts an empty list — that is how the last task is removed', () => {
+    expect(validateAppPatch({ tasks: [] })).toEqual({ tasks: [] })
+  })
+
+  it('refuses an id that could name a unit other than its own', () => {
+    expect(() => validateAppPatch({ tasks: [task({ id: 'with space' })] })).toThrow(
+      /systemd unit name/,
+    )
+    expect(() => validateAppPatch({ tasks: [task({ id: 'with.dot' })] })).toThrow(
+      /systemd unit name/,
+    )
+    expect(() => validateAppPatch({ tasks: [task({ id: '../etc' })] })).toThrow(/systemd unit name/)
+    expect(() => validateAppPatch({ tasks: [task({ id: '' })] })).toThrow(/pick an id first/)
+  })
+
+  it('refuses two tasks with one id', () => {
+    expect(() => validateAppPatch({ tasks: [task(), task()] })).toThrow(
+      /digest is already a task on this app/,
+    )
+  })
+
+  it('refuses a command that is not a non-empty argv of non-empty strings', () => {
+    expect(() => validateAppPatch({ tasks: [task({ command: [] })] })).toThrow(
+      /give it something to run/,
+    )
+    expect(() => validateAppPatch({ tasks: [task({ command: ['node', ''] })] })).toThrow(
+      /argument 2 is empty/,
+    )
+    expect(() => validateAppPatch({ tasks: [task({ command: 'node x.mjs' })] })).toThrow(
+      /argv, not a shell line/,
+    )
+  })
+
+  it('refuses a timeout that is not a positive integer', () => {
+    expect(() => validateAppPatch({ tasks: [task({ timeoutSec: 0 })] })).toThrow(
+      /whole number of seconds above zero/,
+    )
+    expect(() => validateAppPatch({ tasks: [task({ timeoutSec: 90.5 })] })).toThrow(
+      /whole number of seconds above zero/,
+    )
+    expect(() => validateAppPatch({ tasks: [task({ timeoutSec: null })] })).toThrow(
+      /must be a number of seconds/,
+    )
+  })
+
+  // The shorthands are valid systemd and still refused: they elapse at :00,
+  // inside myspeed's house-wide DNS blackout, where a starved run can still
+  // report success. The UI expands its presets to a concrete OnCalendar on the
+  // app's own minute; this is the backstop for everything that is not the UI.
+  it('refuses the systemd shorthands and an empty schedule', () => {
+    for (const schedule of ['hourly', 'daily', 'weekly', 'monthly']) {
+      expect(() => validateAppPatch({ tasks: [task({ schedule })] }), schedule).toThrow(
+        /fires exactly on the hour/,
+      )
+    }
+    expect(() => validateAppPatch({ tasks: [task({ schedule: '' })] })).toThrow(
+      /pick a schedule first/,
+    )
+  })
+
+  it('refuses a tasks value that is not a list of task objects', () => {
+    expect(() => validateAppPatch({ tasks: { id: 'digest' } })).toThrow(
+      /must be an array of scheduled tasks/,
+    )
+    expect(() => validateAppPatch({ tasks: ['digest'] })).toThrow(
+      /must be an object with id, schedule, command and timeoutSec/,
+    )
   })
 })

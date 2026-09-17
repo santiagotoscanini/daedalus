@@ -4,23 +4,38 @@ import {
   type AppStage,
   type ManifestApp,
   type ManifestEntry,
+  type ManifestTask,
   manifestEntries,
 } from '../../host/nix-manifest'
-import { appEnvVars, apps } from '../../host/schema'
+import { appEnvVars, apps, appTasks } from '../../host/schema'
 import { REGISTRY_SCHEMA_VERSION } from '../contract/version'
 import { appNameError, BASE_DOMAIN, effectiveHostname, hostnameError } from '../hostname'
 import { APP_STAGES, isAppStage, stageExposed } from '../stage'
+import { taskCommandError, taskIdError, taskScheduleError, taskTimeoutError } from '../tasks'
 
 // Reads and writes over the app registry, plus the drift comparison against
 // what Nix actually built.
 
 export type AppRecord = typeof apps.$inferSelect & {
   envVars: (typeof appEnvVars.$inferSelect)[]
+  tasks: (typeof appTasks.$inferSelect)[]
+}
+
+/**
+ * Both ordered children, by their authored position. Spelled once, because
+ * every read of an app needs both and a query that forgot one would hand back
+ * a record whose type says the list is there.
+ *
+ * Not `as const`: drizzle's query config wants a mutable `orderBy` array.
+ */
+const WITH_CHILDREN = {
+  envVars: { orderBy: [asc(appEnvVars.position)] },
+  tasks: { orderBy: [asc(appTasks.position)] },
 }
 
 export async function listApps(): Promise<AppRecord[]> {
   return db.query.apps.findMany({
-    with: { envVars: { orderBy: [asc(appEnvVars.position)] } },
+    with: WITH_CHILDREN,
     orderBy: [asc(apps.name)],
   })
 }
@@ -28,7 +43,7 @@ export async function listApps(): Promise<AppRecord[]> {
 export async function getApp(name: string): Promise<AppRecord | undefined> {
   return db.query.apps.findFirst({
     where: eq(apps.name, name),
-    with: { envVars: { orderBy: [asc(appEnvVars.position)] } },
+    with: WITH_CHILDREN,
   })
 }
 
@@ -68,6 +83,25 @@ export async function importFromNix(): Promise<{ imported: string[] }> {
             key: e.key,
             value: e.value,
             note: e.note ?? null,
+            position: i,
+          })),
+        )
+      }
+
+      // Tasks the same way, and for the same reason: a small ordered list the
+      // manifest owns outright, where a partial merge would silently keep a
+      // task somebody deleted in the file — and a kept task is a timer that
+      // keeps firing.
+      await tx.delete(appTasks).where(eq(appTasks.appId, saved.id))
+      const tasks = entry.tasks ?? []
+      if (tasks.length > 0) {
+        await tx.insert(appTasks).values(
+          tasks.map((t, i) => ({
+            appId: saved.id,
+            taskId: t.id,
+            schedule: t.schedule,
+            command: t.command,
+            timeoutSec: t.timeoutSec,
             position: i,
           })),
         )
@@ -265,7 +299,76 @@ export const EDITABLE_FIELDS = [
 ] as const
 
 export type EditableField = (typeof EDITABLE_FIELDS)[number]
-export type AppPatch = Partial<Pick<typeof apps.$inferInsert, EditableField>>
+
+/**
+ * An edit to one app.
+ *
+ * `tasks` is deliberately not one of EDITABLE_FIELDS and cannot be: those are
+ * columns on `apps`, set by one UPDATE, while the tasks are rows in a child
+ * table this patch replaces wholesale. It rides the same patch anyway so the
+ * Tasks tab needs no server function of its own — `saveApp` already carries
+ * the `assertAdmin()` gate and this validator.
+ */
+export type AppPatch = Partial<Pick<typeof apps.$inferInsert, EditableField>> & {
+  /** The whole list, in authored order. Absent = leave the task rows alone. */
+  tasks?: ManifestTask[]
+}
+
+/**
+ * The `tasks` of a patch, or an error naming the task and the rule it broke.
+ *
+ * Every rule here mirrors an assertion in stacks/apps/apps.nix, and that is
+ * the point rather than duplication for its own sake: the nix assertion fires
+ * INSIDE the rebuild an Apply has already committed, so reaching it costs a
+ * revert. Catching it here is the cheap path to the same answer — the same
+ * reasoning the hostname collision check in `updateApp` already uses.
+ *
+ * The sentences come from lib/tasks.ts, which is also what the editor shows as
+ * you type: one definition, so a form and its boundary cannot come to disagree
+ * about what is allowed.
+ */
+function validateTasks(v: unknown): ManifestTask[] {
+  if (!Array.isArray(v)) throw new Error('tasks must be an array of scheduled tasks')
+
+  const seen: string[] = []
+  return v.map((raw, i): ManifestTask => {
+    const where = `tasks[${String(i)}]`
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error(`${where} must be an object with id, schedule, command and timeoutSec`)
+    }
+    const t = raw as Record<string, unknown>
+
+    if (typeof t.id !== 'string') throw new Error(`${where}.id must be a string`)
+    const id = t.id.trim().toLowerCase()
+    // `seen` as the taken list, so a repeated id is refused by the same
+    // function the form uses: two tasks sharing one id would define ONE unit
+    // twice, and the module system would merge them into whichever ExecStart
+    // won — one task in daedalus, another on the box.
+    const idErr = taskIdError(id, seen)
+    if (idErr) throw new Error(`task id “${t.id}” ${idErr}`)
+    seen.push(id)
+
+    if (typeof t.schedule !== 'string') throw new Error(`task “${id}”: schedule must be a string`)
+    const schedule = t.schedule.trim()
+    const scheduleErr = taskScheduleError(schedule)
+    if (scheduleErr) throw new Error(`task “${id}”: schedule ${scheduleErr}`)
+
+    if (!Array.isArray(t.command) || t.command.some((a) => typeof a !== 'string')) {
+      throw new Error(`task “${id}”: command must be an array of strings — argv, not a shell line`)
+    }
+    const command = t.command as string[]
+    const commandErr = taskCommandError(command)
+    if (commandErr) throw new Error(`task “${id}”: command ${commandErr}`)
+
+    if (typeof t.timeoutSec !== 'number') {
+      throw new Error(`task “${id}”: timeoutSec must be a number of seconds`)
+    }
+    const timeoutErr = taskTimeoutError(t.timeoutSec)
+    if (timeoutErr) throw new Error(`task “${id}”: timeoutSec ${timeoutErr}`)
+
+    return { id, schedule, command: [...command], timeoutSec: t.timeoutSec }
+  })
+}
 
 /**
  * A request body into an AppPatch, or an error naming what was wrong.
@@ -282,7 +385,10 @@ export function validateAppPatch(patch: Record<string, unknown>): AppPatch {
   }
 
   for (const [k, v] of Object.entries(patch)) {
-    switch (k as EditableField) {
+    switch (k as EditableField | 'tasks') {
+      case 'tasks':
+        clean.tasks = validateTasks(v)
+        break
       case 'stage':
         if (!isAppStage(v)) bad(k, APP_STAGES.join(' | '))
         clean.stage = v as AppPatch['stage']
@@ -338,11 +444,17 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
   // Whitelist rather than trust the caller's keys: this object is written
   // straight into an UPDATE, and the server function boundary is the only
   // thing between it and the request body.
-  const clean: AppPatch = {}
+  // Typed WITHOUT `tasks`: what this half becomes is the `SET` of an UPDATE on
+  // `apps`, and `tasks` is not a column there.
+  const clean: Omit<AppPatch, 'tasks'> = {}
   for (const k of EDITABLE_FIELDS) {
     if (k in patch) (clean as Record<string, unknown>)[k] = patch[k]
   }
-  if (Object.keys(clean).length === 0) return
+  // The task rows are their own write, so they are pulled out of the column
+  // set rather than left in it — `tasks` is not a column on `apps` and an
+  // UPDATE carrying it would be a SQL error, not a no-op.
+  const tasks = patch.tasks
+  if (Object.keys(clean).length === 0 && tasks === undefined) return
 
   // Checked on the way in, not just in the form. The form is not a boundary,
   // and an invalid hostname does not fail here — it fails inside
@@ -385,10 +497,38 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
     )
   }
 
-  await db
-    .update(apps)
-    .set({ ...clean, updatedAt: new Date() })
-    .where(eq(apps.name, name))
+  // One transaction, for the reason importFromNix states: the task write is a
+  // delete-then-insert, and a failure between the two would leave the app
+  // stripped of every task it had — which the next Apply would ship, deleting
+  // the timers. The column UPDATE joins it so an edit that moves both lands
+  // whole or not at all.
+  await db.transaction(async (tx) => {
+    // Still an UPDATE when only the tasks moved: `updatedAt` is when this
+    // RECORD last changed, and the tasks are part of the record.
+    await tx
+      .update(apps)
+      .set({ ...clean, updatedAt: new Date() })
+      .where(eq(apps.name, name))
+
+    if (tasks === undefined) return
+    await tx.delete(appTasks).where(eq(appTasks.appId, record.id))
+    if (tasks.length > 0) {
+      // `position` is the authored order, exactly as env vars carry theirs:
+      // the export turns this list into JSON that nix reads into an attrset,
+      // which has no order at all, so the index written here is the only
+      // thing that survives an export → import round trip.
+      await tx.insert(appTasks).values(
+        tasks.map((t, i) => ({
+          appId: record.id,
+          taskId: t.id,
+          schedule: t.schedule,
+          command: t.command,
+          timeoutSec: t.timeoutSec,
+          position: i,
+        })),
+      )
+    }
+  })
 }
 
 /**
@@ -445,6 +585,26 @@ const envLine = (e: { key: string; value: string; note?: string | null }): strin
   JSON.stringify([e.key, e.value, e.note ?? null])
 
 /**
+ * One task as a comparable line, same rationale as `envLine` — and with one
+ * extra: `command` is an array, so it is carried as one rather than joined.
+ * Joining argv on a space would make `["echo", "a b"]` and `["echo","a","b"]`
+ * compare equal, and those are two different commands.
+ *
+ * The database calls the contract's id `taskId` (`id` there is the row's
+ * uuid), so the caller normalises before this sees it.
+ */
+const taskLine = (t: ManifestTask): string =>
+  JSON.stringify([t.id, t.schedule, t.command, t.timeoutSec])
+
+/** A task row as the contract shape, which is what both sides compare in. */
+const taskOf = (t: typeof appTasks.$inferSelect): ManifestTask => ({
+  id: t.taskId,
+  schedule: t.schedule,
+  command: t.command,
+  timeoutSec: t.timeoutSec,
+})
+
+/**
  * Does the database still describe what Nix built?
  *
  * Compared field by field on the normalised shape, so ordering and formatting
@@ -482,6 +642,7 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     description: record.description,
     notes: stableNotes(record.notes),
     env: record.envVars.map(envLine).join('\n'),
+    tasks: record.tasks.map(taskOf).map(taskLine).join('\n'),
   }
 
   const fromNix = {
@@ -507,6 +668,7 @@ export function driftOf(record: AppRecord, manifest: ManifestEntry | undefined):
     description: manifest.presentation.description,
     notes: stableNotes(manifest.notes ?? {}),
     env: manifest.env.map(envLine).join('\n'),
+    tasks: (manifest.tasks ?? []).map(taskLine).join('\n'),
   }
 
   return (Object.keys(fromNix) as (keyof typeof fromNix)[]).filter(
@@ -551,6 +713,12 @@ export function toRegistryExport(records: AppRecord[]): {
                 ? { container: r.egressContainer, hostPort: r.egressHostPort }
                 : null,
             env: r.envVars.map((e) => ({ key: e.key, value: e.value, note: e.note })),
+            // Always emitted, `[]` included, like `env` above: the file is
+            // what a person reads to see what this app runs on a clock, and
+            // an absent key reads as "this writer did not know about tasks"
+            // where an explicit empty list reads as "none". declarations.nix
+            // tolerates either (`a.tasks or [ ]`).
+            tasks: r.tasks.map(taskOf),
             auth: {
               mode: r.authMode as 'none' | 'proxy' | 'native',
               ...(r.authHealthPath ? { healthPath: r.authHealthPath } : {}),
