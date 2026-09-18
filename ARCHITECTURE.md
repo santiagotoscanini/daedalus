@@ -226,6 +226,7 @@ flowchart TB
   subgraph edge["server only — the two doors"]
     Srv["src/server/**  createServerFn<br/>registry, builds, settings, site, category<br/>host, claude, profile, updates"]
     Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/deploy<br/>/api/image-update, /api/registry/apply|export|import"]
+    Mcp["src/routes/mcp.ts → src/host/mcp/**<br/>/mcp — Streamable HTTP, 16 tools, 2 resources<br/>a scoped token, not a session"]
   end
 
   subgraph core["src/core/ — server-only decisions"]
@@ -305,10 +306,78 @@ the settings store, HTTP, logs) rather than reaching for them directly.
 
 ---
 
+## The MCP server
+
+The third door, beside the pages and the `api.*` routes: `POST /mcp`, Streamable
+HTTP, served by the app itself. It exists because before it the only way to
+press "Build now" from outside a browser was to *drive* a browser — a
+headless-Chromium script clicking a button — and a control plane an agent
+cannot reach is a control plane an agent works around.
+
+**It is an adapter, not a second implementation.** Every read tool calls the
+loader the corresponding page calls; every write tool calls the same
+`host/apply-flow.ts`, `host/update-flow.ts` or `core/builds/actions.ts` the
+button calls. So an MCP call can do nothing the UI cannot, and an MCP answer
+cannot disagree with the page that mirrors it. Sixteen tools:
+
+| | |
+|---|---|
+| reads | `apps.list`, `apps.get`, `builds.list`, `builds.get`, `builds.log`, `deployments`, `images.freshness`, `dns.records`, `site.get`, `apply.preview`, `health` |
+| writes | `build.now`, `build.cancel`, `deploy.trigger`, `image.update`, `apply` |
+
+`apply.preview` is the diff an Apply would carry, computed by the very function
+`runApply` computes it with, and committing nothing. Two resources —
+`ARCHITECTURE.md` (this file) and `BUILDS.md` — are served so an agent can read
+the design before acting.
+
+**Authentication is a scoped token, and nothing else.** `/mcp` is in daedalus's
+`authBypassRule`, so the request never sees Pocket ID: an agent cannot complete
+a passkey redirect any more than zot can on `/api/deploy`. Instead the request
+carries `Authorization: Bearer dmcp_…`, which is hashed and matched against a
+stored SHA-256 digest in constant time **before any work** — no body parse, no
+tool registration, no database read beyond the one indexed lookup. Fail-closed
+in every direction: absent, unknown, malformed and revoked tokens all answer the
+same 401, and with no token minted the endpoint refuses everything rather than
+becoming open. The token value exists once, at mint, in Settings › Developer;
+the database never holds it.
+
+**Two scopes.** `read` reaches the eleven loaders; `write` reaches those plus
+the five mutations. Every tool is registered for both, so a read token can still
+*see* what a write token would reach and the refusal happens at the call rather
+than hiding inside "unknown tool".
+
+**Authorization is the token, deliberately and narrowly.** An MCP request has no
+forward-auth headers at all, so `assertAdmin()` — which asks "is this session in
+`admins`" — would refuse every tool call once the flag is armed. The answer is
+not a bypass flag on the human gate but one named function beside it,
+`core/authz.ts assertMachineActor`, which takes a proof of what the token said
+and returns the actor to record. There are exactly as many machine-authorised
+call sites as there are references to that symbol.
+
+**What a write is recorded as** is the token's LABEL, namespaced: a build queued
+through `/mcp` says `mcp:claude-code`, never "unknown operator". Naming the
+holder at mint time is what makes that trail worth having.
+
+**The ceremony survives.** `fleet.imageUpdates.<c>.ceremony` names what else an
+update takes down, and the Updates panel arms its button only when the operator
+types the container's name. `image.update` enforces the same predicate
+(`lib/image-ceremony.ts`, shared with the panel) on a `confirm` argument — an
+agent is precisely the caller that gate exists for.
+
+**It is LAN-only, on purpose.** daedalus is `stage = "lab"`: no Cloudflare
+tunnel route, no public name, and `isolated = true` means traefik is the only
+thing that can dial the container. It is deliberately NOT registered in the
+box's `fleet.mcpServers` gateway registry — fronting a write-capable control
+plane with LiteLLM would hand it to Open WebUI, to every virtual key, and
+potentially to an off-box model key, which is a wider blast radius than the
+control plane's own UI has.
+
+---
+
 ## The data model
 
-Six tables. Columns are trimmed to the load-bearing ones; the schema itself is
-the complete answer.
+Columns are trimmed to the load-bearing ones; the schema itself is the complete
+answer.
 
 ```mermaid
 erDiagram
@@ -381,6 +450,16 @@ erDiagram
     jsonb value
     timestamptz updated_at
   }
+
+  mcp_tokens {
+    uuid id PK
+    text label "becomes the actor of every write the token makes"
+    text scope "read or write"
+    text token_hash UK "SHA-256 — the value itself is never stored"
+    timestamptz created_at
+    timestamptz last_used_at
+    timestamptz revoked_at "revoked rather than deleted, so old records keep their label"
+  }
 ```
 
 Two of these carry load-bearing constraints rather than just data. A **partial
@@ -398,6 +477,7 @@ happen in one transaction, so a redelivered webhook collides and is ignored.
 |---|---|---|
 | Internet → engine | GitHub webhooks only, over the tunnel, on one hostname and one path | HMAC over the raw body, verified before anything is believed; a body cap enforced while streaming; the delivery id inserted before any work |
 | Operator → engine | Every page and action | Forward-auth in front of the whole host; the engine trusts a header it can only receive from the proxy |
+| Agent → engine | The MCP tools at `/mcp`, on the LAN only | A scoped bearer token, matched against a stored SHA-256 digest in constant time before any work; fail-closed with none minted; write tools additionally pass `assertMachineActor` and are recorded under the token's label |
 | Engine → host | Ten filenames | The rules in [The bridge](#the-bridge) |
 | Engine → GitHub | An installation token, minted by the host, never the private key | The key is root-only on the host and never enters the container; the token carries contents+metadata read, checks+deployments write |
 | Host → repository code | A clone and a build | Repository content only ever runs as an unprivileged user inside an egress fence; the registry push credential exists for the duration of the one publishing call and is deleted after it |
@@ -406,8 +486,10 @@ happen in one transaction, so a redelivered webhook collides and is ignored.
 The residual risks, stated rather than hidden: a build step that escapes its
 sandbox lands as the BuildKit daemon's user, which can push images for any app;
 a repository's own toolchain cache persists between its builds and could carry
-files forward; and the operator's browser session is as privileged as the
-operator.
+files forward; the operator's browser session is as privileged as the operator;
+and a leaked MCP write token is as privileged as the UI until it is revoked,
+which is why it is LAN-only, labelled, stamped on every use, and revocable from
+Settings in one click.
 
 ---
 

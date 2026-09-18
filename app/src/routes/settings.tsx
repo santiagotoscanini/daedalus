@@ -31,6 +31,7 @@ import {
   fetchGeneralLive,
   fetchGithubAppStatus,
   fetchIntegrationStatus,
+  fetchMcpTokens,
   fetchTheme,
   fetchTimezones,
   githubInstallLandedFn,
@@ -128,16 +129,20 @@ export const Route = createFileRoute('/settings')({
   // only for the tab that shows them.
   loader: async ({ deps }) => {
     const general = !isTab(deps.tab) || deps.tab === 'general'
-    const [theme, settings, edit, applyStatus, timezones, githubApp] = await Promise.all([
-      fetchTheme(),
-      fetchBoxSettings(),
-      fetchSiteEdit(),
-      fetchApplyStatus(),
-      // A file read, so awaited like the facts; only General has the picker.
-      general ? fetchTimezones() : Promise.resolve<string[]>([]),
-      // Two file reads and a row, no upstream: awaited, for the tab that shows it.
-      deps.tab === 'integrations' ? fetchGithubAppStatus() : Promise.resolve(null),
-    ])
+    const [theme, settings, edit, applyStatus, timezones, githubApp, mcpTokens] = await Promise.all(
+      [
+        fetchTheme(),
+        fetchBoxSettings(),
+        fetchSiteEdit(),
+        fetchApplyStatus(),
+        // A file read, so awaited like the facts; only General has the picker.
+        general ? fetchTimezones() : Promise.resolve<string[]>([]),
+        // Two file reads and a row, no upstream: awaited, for the tab that shows it.
+        deps.tab === 'integrations' ? fetchGithubAppStatus() : Promise.resolve(null),
+        // One indexed table read, and only for the tab that lists them.
+        deps.tab === 'developer' ? fetchMcpTokens() : Promise.resolve([]),
+      ],
+    )
     return {
       theme,
       settings,
@@ -145,6 +150,7 @@ export const Route = createFileRoute('/settings')({
       applyStatus,
       timezones,
       githubApp,
+      mcpTokens,
       // The zone list and the NixOS release ask Cloudflare, endoflife.date and
       // GitHub, so they stream in behind the tab like the integration checks.
       live: general ? fetchGeneralLive() : null,
@@ -171,6 +177,7 @@ function SettingsPage() {
     timezones,
     live,
     githubApp,
+    mcpTokens,
   } = Route.useLoaderData()
   // The bar's vocabulary is the registry's — a list of named things and the
   // fields that changed — so the site document is one entry named `site`.
@@ -357,7 +364,7 @@ function SettingsPage() {
             }}
           />
         )}
-        {tab === 'developer' && <Developer settings={settings} />}
+        {tab === 'developer' && <Developer settings={settings} tokens={mcpTokens} />}
       </div>
 
       <ApplyBar changed={changed} initialStatus={applyStatus} />

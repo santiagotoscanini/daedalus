@@ -38,11 +38,13 @@ import {
 // Until step 2 the check still RUNS and still reports, it simply does not
 // refuse. That is what `authorize` returns `enforced` for.
 //
-// MACHINE CALLERS ARE NOT IN SCOPE. /api/deploy (a shared token, checked in
-// constant time) and /api/github/webhook (an HMAC signature) authenticate
-// something that has no person behind it and no session to carry groups —
-// traefik does not even set the header on the paths it bypasses. They keep
-// their own auth and must never be given this one.
+// MACHINE CALLERS DO NOT USE THE GATE ABOVE. /api/deploy (a shared token,
+// checked in constant time), /api/github/webhook (an HMAC signature) and /mcp
+// (a scoped token) authenticate something that has no person behind it and no
+// session to carry groups — traefik does not even set the header on the paths
+// it bypasses. They keep their own auth, and the one of them that MUTATES
+// reaches its own narrow door at the bottom of this file (assertMachineActor)
+// rather than a flag that would weaken this one.
 
 /** What an authorization decision knows. `enforced` is false while the flag is off. */
 export type Authorization = {
@@ -133,4 +135,61 @@ export async function assertAdminOf(request: Request): Promise<string> {
   const decision = await requireAdminOf(request)
   if (!decision.ok) throw new Error(decision.reason)
   return decision.value
+}
+
+// ── The one door for a caller that is not a person ─────────────────────────
+//
+// Everything above answers "which signed-in human is this, and are they an
+// admin". The MCP server at /mcp has no such caller: there are no forward-auth
+// headers on that path at all (traefik's plugin only sets them on gated paths,
+// and /mcp is in `authBypassRule` precisely so an agent can reach it), so
+// `assertAdmin()` would read an absent identity as a refusal and turn every
+// tool call into a 500 the moment `auth.enforceAdmins` is armed.
+//
+// The answer is NOT to weaken `assertAdmin`. A bypass flag on the human gate
+// is how a gate stops meaning anything: it would be one boolean away from
+// letting an unauthenticated browser request through the same hole. So the
+// machine caller gets its own named function, which can be grepped, reviewed
+// and counted — there are exactly as many machine-authorised call sites as
+// there are references to this symbol.
+//
+// WHAT AUTHORISES IT. The scoped token, checked in constant time against a
+// stored digest before any work happens (host/mcp/tokens.ts), exactly as
+// `/api/deploy`'s X-Deploy-Token is the authorization for that path and
+// `/api/github/webhook`'s HMAC is for that one. The token IS the
+// authorization; this function's job is to refuse a proof that does not
+// actually say so, and to name the actor the write will be recorded under.
+
+/**
+ * What a verified machine caller hands in. A nominal-ish shape rather than a
+ * bare string, so `assertMachineActor(someUserInput)` does not typecheck.
+ */
+export type MachineProof = {
+  /** Which machine door this came through. One value today; more would each need their own review. */
+  door: 'mcp-token'
+  /** The token's label. This is what the write is recorded under. */
+  label: string
+  /** The token's scope. Only `write` may authorise a mutation. */
+  scope: 'read' | 'write'
+}
+
+/**
+ * The actor a token-authenticated mutation may proceed with, or a throw.
+ *
+ * Mirrors `assertAdmin()`'s contract deliberately — same return type, same
+ * failure mode, so a write flow reads identically whichever door reached it —
+ * and shares none of its mechanism, because there is no session and no group
+ * header to read.
+ */
+export function assertMachineActor(proof: MachineProof): string {
+  if (proof.door !== 'mcp-token') throw new Error('unknown machine door')
+  if (proof.scope !== 'write') {
+    throw new Error('this token is read-only, so nothing was done')
+  }
+  const label = proof.label.trim()
+  if (label === '') throw new Error('the token carried no label to record the write under')
+  // Namespaced, always. A record that says `triage` is indistinguishable from
+  // a person called triage; one that says `mcp:triage` says which door it came
+  // through, which is the fact an audit actually wants.
+  return `mcp:${label}`
 }

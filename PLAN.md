@@ -32,8 +32,8 @@ App key), and builds on the box through the box's own GitHub App.
 | 12 | Onboarding, `init`, catalog, release | not started |
 
 Beside the phases, the **Features** section lists what the product is missing
-regardless of phase — previews, an MCP server, scheduled tasks, feature flags,
-secrets from the UI, and more — each with its mechanism.
+regardless of phase — previews, scheduled tasks, feature flags, secrets from
+the UI, and more — each with its mechanism.
 
 ---
 
@@ -464,38 +464,20 @@ priority; each can be done independently unless noted.
    git commit, so GitHub shows "Santiago Toscanini authored and daedalus
    committed" instead of "daedalus committed".
 
-9. **An MCP server for daedalus.** Today daedalus has four API routes and
-   a browser; in this project a "Build now" had to be pressed with a
-   headless-browser driver because there was no other door. Expose the
-   engine's existing server functions as MCP tools over Streamable HTTP at
-   `/mcp`: reads (`apps.list/get`, `builds.list/get/log`, `deployments`,
-   `health`, `images.freshness`, `dns.records`, `site.get`, `apply.preview`
-   = the diff without committing) and the already-fenced writes
-   (`build.now`, `build.cancel`, `deploy.trigger`, `image.update`, `apply`)
-   — the writes go through the same bridge verbs and the same guards, so an
-   MCP call can do nothing the UI cannot. Auth is the deploy-token model
-   with two scopes: read tokens by default, write tokens minted explicitly
-   in Settings and shown once. Register it in `fleet.mcpServers` like
-   `stacks/litellm/mcp.nix` does for the others, so the box's Claude
-   sessions, `/triage`, Open WebUI and LiteLLM all get the same tools;
-   `ceremony` image updates still require the typed name. Resources:
-   ARCHITECTURE.md and BUILDS.md, so an agent can read the design before
-   acting.
+9. **Scheduled tasks per app (crons with history).** A cron for an app is
+   a nix edit and a rebuild today. Declare tasks on the app in daedalus —
+   `tasks: [{ id, schedule, command (argv), timeoutSec }]` in `apps.json` —
+   and `apps.nix` generates `app-<name>-task-<id>.{timer,service}` running
+   `podman exec app-<name> <argv>` as santiago, with a `monitoredJobs`
+   entry (a failed run mails, like every other job) and output in the
+   journal, hence Loki under the app's stack label. The app page gets a
+   Tasks tab: schedule, last run, duration, exit status, the captured
+   output read back from Loki, and **Run now** (a `task-run-request.json`
+   bridge verb that starts the unit). Edits go through Apply like any other
+   app setting. Never schedule on the hour (CLAUDE.md: myspeed's `:00`
+   blackout); the UI offsets a bare `hourly`/`daily` by a per-app minute.
 
-10. **Scheduled tasks per app (crons with history).** A cron for an app is
-    a nix edit and a rebuild today. Declare tasks on the app in daedalus —
-    `tasks: [{ id, schedule, command (argv), timeoutSec }]` in `apps.json` —
-    and `apps.nix` generates `app-<name>-task-<id>.{timer,service}` running
-    `podman exec app-<name> <argv>` as santiago, with a `monitoredJobs`
-    entry (a failed run mails, like every other job) and output in the
-    journal, hence Loki under the app's stack label. The app page gets a
-    Tasks tab: schedule, last run, duration, exit status, the captured
-    output read back from Loki, and **Run now** (a `task-run-request.json`
-    bridge verb that starts the unit). Edits go through Apply like any other
-    app setting. Never schedule on the hour (CLAUDE.md: myspeed's `:00`
-    blackout); the UI offsets a bare `hourly`/`daily` by a per-app minute.
-
-11. **Feature flags via a self-hosted service, wired per app.** Run
+10. **Feature flags via a self-hosted service, wired per app.** Run
     **Flipt** as a stack (single Go binary; its flags can be **declarative
     from a file or a git repo**, so the flag definitions live in the config
     repo like everything else; OpenFeature-compatible SDKs for Node; UI
@@ -513,7 +495,7 @@ priority; each can be done independently unless noted.
     needed). Simple, professional, and the missing half of trunk-based
     development with one box and no staging.
 
-12. **App variables and secrets, one editor, two kinds.** An app's
+11. **App variables and secrets, one editor, two kinds.** An app's
     environment is two lists that already exist and should look like one:
     - **Variables** — plain text, readable and editable in the UI, stored in
       `apps.json` `env` (today's `registry` origin), committed in clear,
@@ -565,7 +547,7 @@ priority; each can be done independently unless noted.
     - Redaction already covers the bridge log and the build log; add the
       new verb to the `redact` fixtures and the secrets-grep drill.
 
-13. **The app contract as packages, published to the box's own Verdaccio.**
+12. **The app contract as packages, published to the box's own Verdaccio.**
     daedalus defines a contract with its apps — which env names are
     injected, what `/api/healthz` answers, how migrations run at start, how
     auth works, where flags come from — and today every app re-implements
@@ -619,7 +601,7 @@ priority; each can be done independently unless noted.
     because Verdaccio is LAN/VPN-only and GitHub-hosted CI cannot reach it.
     **Not this:** a UI kit — the apps' designs are deliberately different.
 
-14. **Self-hosted GitHub Actions runners, managed from daedalus.** The old
+13. **Self-hosted GitHub Actions runners, managed from daedalus.** The old
     runner stack was deleted because it was the deploy path; runners are
     still worth having for everything else — the free plan gives a fixed
     number of minutes for private repos, and heavy CI (browser e2e, argus's

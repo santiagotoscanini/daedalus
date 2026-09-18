@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { requireActor } from '../core/auth'
+import type { BuildNowResult, CancelBuildResult } from '../core/builds/actions'
 import {
   type BuildCommit,
   type BuildReportFailure,
@@ -13,16 +14,7 @@ import {
   buildEnvSizeError,
   validateBuildSettings,
 } from '../lib/build-settings'
-import {
-  BUILD_PUBLISH_MODES,
-  BUILD_SHA_RE,
-  BUILD_STRATEGIES,
-  type BuildPublish,
-  type BuildState,
-  type BuildStrategy,
-  isActiveBuildState,
-  isTerminalBuildState,
-} from '../lib/builds'
+import { BUILD_SHA_RE } from '../lib/builds'
 import { appName } from '../lib/hostname'
 import { isRecord } from '../lib/is-record'
 import type { Result } from '../lib/result'
@@ -247,21 +239,15 @@ export const fetchBuildCommit = createServerFn()
     return commit
   })
 
-/** The build row the click produced (a queued one when the sha was already in flight). */
-export type BuildNowResult = Result<{ id: string; sha: string; existing: boolean }>
-
-const orDefault = <T extends string>(allowed: readonly T[], v: string, fallback: T): T =>
-  allowed.includes(v as T) ? (v as T) : fallback
+/** The build row the click produced. Re-exported: the shape is core/builds/actions.ts's. */
+export type { BuildNowResult, CancelBuildResult } from '../core/builds/actions'
 
 /**
- * Build the default branch's tip now. The tip is asked of GitHub, never taken
- * from the page. Refused without a signed-in identity, for an app whose box
- * builds are off, and for one the sweep has not linked to its repository yet.
+ * Build now, as the button's door onto `core/builds/actions.ts buildNow`.
  *
- * Always forced: insertOrSupersedeQueued has no "already built" skip (only
- * build-queue.ts `enqueue` does), so pressing this on a tip that already built
- * builds it again, which is what "Build again" means. A build of the same sha
- * already queued or running is the answer instead of a second one.
+ * Everything this adds is WHO: the admin gate, then the signed-in identity the
+ * row and the journal line are recorded under. What to build and what to
+ * refuse is one implementation, shared with the MCP tool of the same name.
  */
 export const buildNowFn = createServerFn({ method: 'POST' })
   .validator(appRequest)
@@ -272,89 +258,12 @@ export const buildNowFn = createServerFn({ method: 'POST' })
     await assertAdmin()
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
-    const actor = gate.value
 
-    const { getApp } = await import('../lib/repo/apps')
-    const record = await getApp(data.app)
-    if (!record) return { ok: false, reason: `No app named ${data.app}.` }
-    if (record.managedInNix || record.sourceMode === 'local') {
-      return { ok: false, reason: `${data.app} runs its working tree; there is nothing to build.` }
-    }
-    if (!record.buildOnBox) {
-      return {
-        ok: false,
-        reason: `Box builds are off for ${data.app}. Turn on Build on this box in its settings.`,
-      }
-    }
-    if (record.githubRepoId === null) {
-      return {
-        ok: false,
-        reason:
-          'Waiting for the sweep to link the repo: the box has not matched this app to a GitHub repository yet.',
-      }
-    }
-
-    const { makeCtx } = await import('../core/ctx')
-    const { ghApp, describeGhFailure, repoById } = await import('../core/github-app')
-    const ctx = await makeCtx()
-    // By id rather than owner/name: the id is what the sweep linked, and it is
-    // still right after a rename. The name that comes back is a label.
-    const found = await repoById(ctx, record.githubRepoId)
-    if (!found.ok) return { ok: false, reason: found.reason }
-    const { fullName, defaultBranch: branch } = found.value
-    const tip = await ghApp<{ sha?: unknown }>(
-      ctx,
-      `/repos/${fullName}/commits/${encodeURIComponent(branch)}`,
-    )
-    if (tip.status !== 200 || tip.body === null) {
-      return { ok: false, reason: describeGhFailure(tip) }
-    }
-    const sha = tip.body.sha
-    if (typeof sha !== 'string' || !BUILD_SHA_RE.test(sha)) {
-      return { ok: false, reason: `GitHub did not name a commit at the tip of ${branch}.` }
-    }
-
-    const { openBuildOf } = await import('../lib/repo/build-views')
-    const open = await openBuildOf(record.id, sha)
-    if (open !== undefined) return { ok: true, value: { id: open.id, sha, existing: true } }
-
-    const { insertOrSupersedeQueued } = await import('../lib/repo/builds')
-    const enqueued = await insertOrSupersedeQueued({
-      appId: record.id,
-      sha,
-      strategy: orDefault<BuildStrategy>(BUILD_STRATEGIES, record.buildStrategy, 'auto'),
-      publish: orDefault<BuildPublish>(BUILD_PUBLISH_MODES, record.buildPublish, 'live'),
-      requestedBy: 'operator',
-      actor,
-    })
-    const { ensureScheduler } = await import('../core/builds/scheduler')
-    ensureScheduler()
-    console.info(
-      `[builds] ${actor} queued ${data.app}@${sha.slice(0, 7)} as ${enqueued.row.id}` +
-        (enqueued.superseded.length > 0
-          ? `, superseding ${String(enqueued.superseded.length)}`
-          : ''),
-    )
-    return { ok: true, value: { id: enqueued.row.id, sha, existing: enqueued.alreadyQueued } }
+    const { buildNow } = await import('../core/builds/actions')
+    return buildNow({ app: data.app, actor: gate.value })
   })
 
-export type CancelBuildResult = Result<null>
-
-/**
- * Stop a running build.
- *
- * Two writes, host first. The bridge file asks the host to stop the unit, whose
- * reaper publishes a terminal status; the row is then marked `cancelled` here,
- * because the host cannot tell a Cancel from a crash — both reach its reaper as
- * `interrupted` (lib/build-queue.ts CANCELLED_BY_OPERATOR).
- *
- * Marking the row terminal is also what makes the two writes safe in either
- * order: `updateFromStatus` refuses a row that is already final, so a build
- * that finished on its own mid-request keeps its own ending, and the host's
- * `interrupted` landing a moment later cannot overwrite a `cancelled` row
- * (`applyStatus`). Idempotent: a second press re-asks the host for the same
- * thing and finds the row already terminal.
- */
+/** Cancel, as the button's door onto `core/builds/actions.ts cancelBuild`. */
 export const cancelBuildFn = createServerFn({ method: 'POST' })
   .validator(buildRequest)
   .handler(async ({ data }): Promise<CancelBuildResult> => {
@@ -362,39 +271,9 @@ export const cancelBuildFn = createServerFn({ method: 'POST' })
     await assertAdmin()
     const gate = requireActor()
     if (!gate.ok) return { ok: false, reason: gate.reason }
-    const actor = gate.value
 
-    const { getBuild, updateFromStatus } = await import('../lib/repo/builds')
-    const record = await getBuild(data.id)
-    if (!record || record.app !== data.app) return { ok: false, reason: 'No such build.' }
-    const state = record.state as BuildState
-    if (isTerminalBuildState(state)) return { ok: true, value: null }
-    if (!isActiveBuildState(state)) {
-      return {
-        ok: false,
-        reason: 'This build is still queued — nothing is running to stop.',
-      }
-    }
-
-    const { requestBuildCancel } = await import('../host/build-bridge')
-    const { CANCELLED_BY_OPERATOR } = await import('../lib/build-queue')
-    await requestBuildCancel(record.id)
-    await updateFromStatus(
-      record.id,
-      {
-        state: 'cancelled',
-        phase: 'cancelled',
-        error: CANCELLED_BY_OPERATOR,
-        updatedAt: new Date(),
-      },
-      'engine',
-    )
-    // The actor is in the journal, never on the row: the row's words reach a
-    // GitHub check run, and an email address does not belong there.
-    console.info(
-      `[builds] ${actor} cancelled ${data.app}@${record.sha.slice(0, 7)} (${record.id}) during ${state}`,
-    )
-    return { ok: true, value: null }
+    const { cancelBuild } = await import('../core/builds/actions')
+    return cancelBuild({ app: data.app, id: data.id, actor: gate.value })
   })
 
 export type RetryReportResult = Result<null>

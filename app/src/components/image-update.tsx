@@ -2,6 +2,7 @@ import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { ImageUpdateStatus } from '../host/image-update'
 import { cn } from '../lib/cn'
+import { ceremonyArmed } from '../lib/image-ceremony'
 import { fetchImageUpdateStatus, requestImageUpdateFn } from '../server/updates'
 import { MONO, MONO_FACE } from './category/system/shared'
 import { usePolledStatus } from './status'
@@ -151,7 +152,7 @@ export function UpdateControl({
   // A channel pin moves to the tag it is already on: the digest is the change,
   // so "update to latest" is right and "update to a newer tag" is not.
   const sameTag = to === t.tag
-  const armed = t.ceremony === null || typed.trim() === t.container
+  const armed = ceremonyArmed(t.container, t.ceremony, typed)
 
   if (mine && running) return <UpdateProgress status={status} />
 

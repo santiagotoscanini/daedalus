@@ -10,6 +10,9 @@ import type {
   GithubAppStatus,
   IntegrationStatus,
 } from '../core/settings/types'
+import type { McpTokenRow } from '../host/mcp/tokens'
+import { isRecord } from '../lib/is-record'
+import { isMcpScope, type McpScope } from '../lib/mcp'
 import type { Result } from '../lib/result'
 import { DEFAULT_THEME, isThemeChoice, presetById, type ThemeChoice } from '../lib/theme'
 
@@ -201,4 +204,49 @@ export const saveTheme = createServerFn({ method: 'POST' })
     const { writeSetting, SETTING_KEYS } = await import('../lib/repo/settings')
     await writeSetting(SETTING_KEYS.theme, data)
     return data
+  })
+
+// ── Settings › Developer › MCP tokens ──────────────────────────────────────
+//
+// The credentials that reach /mcp. Minting is a mutation like any other and
+// goes through the same admin gate; the VALUE is returned exactly once, from
+// this call, and is never recoverable afterwards — host/mcp/tokens.ts stores a
+// digest. The panel shows it once and then forgets it too.
+
+export const fetchMcpTokens = createServerFn().handler(async (): Promise<McpTokenRow[]> => {
+  const { listMcpTokens } = await import('../host/mcp/tokens')
+  return listMcpTokens()
+})
+
+/** Mint a token. The one call in this app whose response is a secret. */
+export const mintMcpTokenFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { label: string; scope: McpScope } => {
+    if (!isRecord(data)) throw new Error('expected a label and a scope')
+    if (typeof data.label !== 'string') throw new Error('expected a label')
+    if (!isMcpScope(data.scope)) throw new Error('scope must be read or write')
+    return { label: data.label, scope: data.scope }
+  })
+  .handler(async ({ data }): Promise<Result<{ row: McpTokenRow; token: string }>> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { mintMcpToken } = await import('../host/mcp/tokens')
+    try {
+      return { ok: true, value: await mintMcpToken(data) }
+    } catch (err) {
+      return { ok: false, reason: err instanceof Error ? err.message : 'could not mint the token' }
+    }
+  })
+
+/** Revoke a token. The row stays, so its label still explains what it wrote. */
+export const revokeMcpTokenFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { id: string } => {
+    if (!isRecord(data) || typeof data.id !== 'string') throw new Error('expected a token id')
+    return { id: data.id }
+  })
+  .handler(async ({ data }): Promise<Result<null>> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { revokeMcpToken } = await import('../host/mcp/tokens')
+    const done = await revokeMcpToken(data.id)
+    return done ? { ok: true, value: null } : { ok: false, reason: 'No such token.' }
   })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ADMIN_GROUP, groupsOf, isAdmin, NO_ACTOR_REASON, NOT_ADMIN_REASON } from './auth'
-import { type Authorization, allow } from './authz'
+import { type Authorization, allow, assertMachineActor } from './authz'
 
 // Two rules, asserted apart from the database that stores the flag.
 //
@@ -94,5 +94,50 @@ describe('the decision', () => {
     expect(
       allow(decision({ actor: anonymous, groups: [], admin: false, enforced: false })),
     ).toEqual(anonymous)
+  })
+})
+
+describe('the machine door', () => {
+  // The MCP server's callers have no session and no groups header — /mcp is in
+  // authBypassRule, so traefik does not set one. `assertMachineActor` is the
+  // ONE place that authorises them, and these are the three things it must
+  // refuse, so it can never become the bypass flag it exists instead of.
+
+  it('names the actor a write token writes under', () => {
+    expect(assertMachineActor({ door: 'mcp-token', label: 'claude-code', scope: 'write' })).toBe(
+      'mcp:claude-code',
+    )
+  })
+
+  it('namespaces the label, so a record says which door it came through', () => {
+    // `mcp:triage` and a person called triage must not be the same string in a
+    // commit message, a build row or a journal line.
+    expect(assertMachineActor({ door: 'mcp-token', label: 'triage', scope: 'write' })).toBe(
+      'mcp:triage',
+    )
+  })
+
+  it('refuses a read token', () => {
+    expect(() => assertMachineActor({ door: 'mcp-token', label: 'triage', scope: 'read' })).toThrow(
+      /read-only/,
+    )
+  })
+
+  it('refuses a token with nothing to record the write under', () => {
+    expect(() => assertMachineActor({ door: 'mcp-token', label: '  ', scope: 'write' })).toThrow(
+      /no label/,
+    )
+  })
+
+  it('refuses a door it does not know', () => {
+    // The `door` field is not decoration: a future machine caller gets its own
+    // value here and its own review, rather than inheriting this one's licence.
+    expect(() =>
+      assertMachineActor({
+        door: 'something-else' as 'mcp-token',
+        label: 'x',
+        scope: 'write',
+      }),
+    ).toThrow(/unknown machine door/)
   })
 })

@@ -220,3 +220,31 @@ export function runSecretApply(
     return { ok: true, id, changed: [{ name: 'vault', fields: [secret.name] }] }
   })
 }
+
+/**
+ * What an Apply would carry right now, WITHOUT publishing anything.
+ *
+ * The read half of `runApply`, and literally the same `currentChanges()` the
+ * write half uses — which is the whole point of exporting it rather than
+ * rebuilding the comparison somewhere else. A preview that could disagree with
+ * the Apply it previews would be worse than no preview.
+ *
+ * Nothing here takes the lock, writes a request file, or touches `pending`:
+ * two callers previewing at once is a pair of reads. Added for the MCP
+ * `apply.preview` tool, which is how an agent sees what it is about to commit
+ * to before it calls `apply`.
+ */
+export async function applyPreview(): Promise<{
+  changed: { name: string; fields: string[] }[]
+  /** The site-document fields an Apply would write, if any. */
+  site: string[]
+  /** Why a new Apply would be refused right now, or null. */
+  blocked: string | null
+}> {
+  const [{ changed, site }, blocker] = await Promise.all([currentChanges(), refuseBusy()])
+  return {
+    changed,
+    site: [...site.changes],
+    blocked: blocker !== null && !blocker.ok ? blocker.reason : null,
+  }
+}

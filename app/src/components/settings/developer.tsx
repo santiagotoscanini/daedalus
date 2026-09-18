@@ -1,14 +1,19 @@
 import { FileCodeIcon } from 'lucide-react'
 import type { BoxSettings } from '../../core/settings/types'
+import type { McpTokenRow } from '../../host/mcp/tokens'
 import { Chip } from '../viz'
+import { McpTokens } from './mcp-tokens'
 import { Section, Value } from './shared'
 
-// Inert by design. This is where developer settings will live — the
-// image-vs-local source switch, verbose logging — once the module system
-// gives them something to act on. Today it states how this instance runs and
-// changes nothing.
+// How this instance runs, and the credentials that let a machine drive it.
+//
+// The first two sections are inert by design — they state what the flake
+// declared and change nothing. The third is not: MCP tokens are the one thing
+// on this tab an operator creates, and they live here rather than under
+// Integrations because the caller they authenticate is an agent working on
+// this box, not a service the box talks to.
 
-export function Developer({ settings }: { settings: BoxSettings }) {
+export function Developer({ settings, tokens }: { settings: BoxSettings; tokens: McpTokenRow[] }) {
   const d = settings.developer
   return (
     <div className="flex flex-col gap-6">
@@ -50,9 +55,7 @@ export function Developer({ settings }: { settings: BoxSettings }) {
         ]}
       />
 
-      <p className="m-0 text-[0.74rem] text-(--dim)">
-        Nothing on this tab is editable yet. Developer settings arrive with the module system.
-      </p>
+      <McpTokens tokens={tokens} />
     </div>
   )
 }

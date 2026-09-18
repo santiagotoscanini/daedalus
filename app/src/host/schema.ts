@@ -12,7 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-// TYPE-ONLY, all four, and they have to stay that way: `import type` is erased
+// TYPE-ONLY, all five, and they have to stay that way: `import type` is erased
 // whole (verbatimModuleSyntax), so naming the build vocabulary here costs the
 // schema no import edge at all — see host/boundary.test.ts on why the
 // one-keyword difference between this and `import { type X }` matters.
@@ -26,6 +26,7 @@ import type {
   BuildState,
   BuildStrategy,
 } from '../lib/builds'
+import type { McpScope } from '../lib/mcp'
 
 // The app registry — daedalus's authoritative copy of what stacks/apps
 // declares. It mirrors the `fleet.apps` submodule (stacks/apps/apps.nix)
@@ -442,3 +443,43 @@ export const settings = pgTable('settings', {
   value: jsonb('value').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+// Tokens that let a machine call the MCP server at /mcp.
+//
+// The one door into this box that no person opens. Everything else the app
+// serves is behind the Pocket ID gate, which authenticates a human with a
+// passkey; an agent cannot hold one, exactly as zot cannot (see
+// routes/api.deploy.ts). So /mcp carries its own credential, and this is where
+// the credential lives.
+//
+// WHAT IS STORED IS A HASH, never the token. The value is shown once, at mint,
+// and is then unrecoverable — a leaked database row cannot be replayed as a
+// token, and "reveal it again" is not a feature this table can grow. SHA-256
+// rather than argon2 on purpose: the secret is 32 bytes from `randomBytes`, so
+// there is no dictionary to slow down, and the lookup has to be a single
+// indexed read on every call.
+//
+// `scope` is lib/mcp.ts's, and it is the whole authorization model: `read`
+// reaches the loaders, `write` reaches those plus the five mutations. `label`
+// is not decoration — it becomes the ACTOR of every write the token makes, so
+// a commit, a build row and a journal line say "mcp:triage" rather than
+// "unknown operator". Name a token after who holds it.
+//
+// `revokedAt` rather than a delete, so a revoked token's label still explains
+// the records it left behind. `lastUsedAt` is the only thing a call writes,
+// and it is what makes an unused token visible enough to revoke.
+export const mcpTokens = pgTable(
+  'mcp_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    label: text('label').notNull(),
+    scope: text('scope').$type<McpScope>().notNull(),
+    tokenHash: text('token_hash').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  // Unique, and the lookup index: a call hashes what it was given and selects
+  // on this column exactly once.
+  (t) => [uniqueIndex('mcp_tokens_hash_idx').on(t.tokenHash)],
+)
