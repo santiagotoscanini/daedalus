@@ -30,6 +30,7 @@
 
 import { readSnapshot } from '../../host/contract/snapshot'
 import { lokiStreams } from '../../host/loki'
+import { type ClaudeRoster, NO_ROSTER } from '../claude-roster'
 import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '../contract/decode'
 import { type VersionGap, versionGap } from './github'
 import { loadShotter, playwrightInstalled, type ShotterData } from './shotter'
@@ -51,9 +52,16 @@ export type ClaudeSession = {
   startedAt: number | null
   /** The pid is alive AND is still the process this file was written for. */
   alive: boolean
+  /** `busy` while the session is working. Absent from an older snapshot. */
+  status: string | null
   cpuMs: number | null
   rssBytes: number | null
-  /** From the bridge's debug log. The only clock a session has — see below. */
+  /**
+   * The later of two clocks: the session file's own `updatedAt` /
+   * `statusUpdatedAt`, and the bridge debug log's mtime. The file used to be
+   * written once at start, which left every session with no `cse_…` — every
+   * console and tmux-resumed one — reporting no activity at all.
+   */
   lastActivityAt: number | null
   logBytes: number | null
 }
@@ -76,6 +84,14 @@ export type ClaudeFacts = {
     environmentId: string | null
   }
   sessions: ClaudeSession[]
+  /**
+   * Every session this box could still be asked about, as against `sessions`
+   * above, which is only what is connected right now. Absent from any
+   * snapshot written before this key existed — which is what the `optional`
+   * in the decoder is for: the rollout window is one timer tick wide and the
+   * page has to render through it.
+   */
+  roster: ClaudeRoster
   credentials: {
     present: boolean
     subscriptionType: string | null
@@ -102,6 +118,7 @@ const NO_FACTS: ClaudeFacts = {
   },
   remote: { version: null, spawnMode: null, maxSessions: null, environmentId: null },
   sessions: [],
+  roster: NO_ROSTER,
   credentials: {
     present: false,
     subscriptionType: null,
@@ -117,7 +134,16 @@ const NO_FACTS: ClaudeFacts = {
 const ns: Decoder<string | null> = nullable(str)
 const nn: Decoder<number | null> = nullable(num)
 
-const factsShape = obj({
+/**
+ * Exported for its test, which is the only other caller.
+ *
+ * Worth a test of its own rather than one through `loadClaude`: the property
+ * that matters is tolerance of a snapshot the CURRENT host script did not
+ * write — every rollout of a new key has a window where the file on disk is
+ * the previous script's — and reaching that through the loader would mean
+ * standing up GitHub, Loki and the shotter archive to assert one default.
+ */
+export const factsShape = obj({
   service: optional(
     obj({
       activeState: optional(str, 'unknown'),
@@ -152,6 +178,7 @@ const factsShape = obj({
         version: optional(ns, null),
         startedAt: optional(nn, null),
         alive: optional(bool, false),
+        status: optional(ns, null),
         cpuMs: optional(nn, null),
         rssBytes: optional(nn, null),
         lastActivityAt: optional(nn, null),
@@ -159,6 +186,52 @@ const factsShape = obj({
       }),
     ),
     [],
+  ),
+  // Every field optional, the whole block optional, and the fallback a real
+  // empty roster: this key did not exist one snapshot ago, and the page has
+  // to draw correctly against a file written by the previous script.
+  roster: optional(
+    obj({
+      agentsAvailable: optional(bool, false),
+      agents: optional(
+        arrayOf(
+          obj({
+            id: optional(ns, null),
+            sessionId: optional(ns, null),
+            pid: optional(nn, null),
+            kind: optional(ns, null),
+            state: optional(ns, null),
+            status: optional(ns, null),
+            name: optional(ns, null),
+            cwd: optional(ns, null),
+            startedAt: optional(nn, null),
+          }),
+        ),
+        [],
+      ),
+      transcripts: optional(
+        arrayOf(
+          obj({
+            // The one required field on the row: it is the join key and the
+            // thing `--resume` would be handed. A row without it is not a
+            // row with a hole, it is a row about nothing.
+            id: str,
+            project: optional(str, ''),
+            cwd: optional(str, ''),
+            cwdExact: optional(bool, false),
+            title: optional(ns, null),
+            titleSource: optional(ns, null),
+            startedAt: optional(nn, null),
+            modifiedAt: optional(num, 0),
+            sizeBytes: optional(num, 0),
+          }),
+        ),
+        [],
+      ),
+      transcriptTotal: optional(num, 0),
+      emptyCount: optional(num, 0),
+    }),
+    NO_ROSTER,
   ),
   credentials: optional(
     obj({

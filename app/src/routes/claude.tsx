@@ -32,7 +32,7 @@ import { fetchClaude } from '../server/claude'
  * before the data exists, and a uniform grid would visibly reflow.
  */
 const SPANS = {
-  claude: [4, 8, 6, 6],
+  claude: [4, 8, 12, 6, 6],
   shotter: [4, 8, 12],
 } as const
 
@@ -41,7 +41,8 @@ type ClaudeTab = keyof typeof SPANS
 const LEDE = {
   claude:
     'The remote-control server that lets this box be worked on from anywhere. What is connected ' +
-    'to it, whether it has stayed connected, and which version it is running.',
+    'to it, whether it has stayed connected, which version it is running — and every session on ' +
+    'the box that could still be asked about.',
   shotter:
     'The headless-browser lab those sessions see through. Every shot invocation, what the last ' +
     'one looked at, and the Playwright underneath it.',

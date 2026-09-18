@@ -7,6 +7,14 @@ import { useEffect, useState } from 'react'
 // reason. claude-rc-request is under the same rule (it imports the bridge,
 // which reads node:fs), which is why its idle shape is restated below.
 import type { ClaudeRcStatus } from '../host/claude-rc-request'
+// Pure and client-safe — the whole reason the roster's types and its join live
+// in lib/ rather than beside the loader. See the header of claude-roster.ts.
+import {
+  countByState,
+  type RosterEntry,
+  type SessionState,
+  sessionRows,
+} from '../lib/claude-roster'
 import { cn } from '../lib/cn'
 import type { ClaudeData, ClaudeFacts, ClaudeSession, RcEvent } from '../lib/dashboard/claude'
 import type { VersionGap } from '../lib/dashboard/github'
@@ -277,17 +285,21 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
             </p>
           )}
           <p className={BOARD_FOOT}>
-            <b>Last seen</b> is the mtime of the session's own bridge debug log, which is the only
-            clock a session has: the file in <span className={MONO}>~/.claude/sessions</span> is
-            written once, at start, so it says when a session BEGAN and nothing about whether
-            anybody is still typing into it. A session idle for hours is normal. What a session does
-            not survive is the server: Remote Control is a bridge for STARTING sessions, not for
-            re-attaching to ones that lost their process, so once the server dies the web side can
-            only mint new sessions — the "restart" button claude.ai offers on a dead one starts
-            fresh. The transcript survives on this box, and{' '}
-            <span className={MONO}>claude --resume</span> at the console is the way back into it.
+            <b>Last seen</b> is the later of two clocks. The file in{' '}
+            <span className={MONO}>~/.claude/sessions</span> used to be written once at start, and
+            the only other clock was the bridge's debug log — which exists only for sessions started
+            from claude.ai, so anything started at the console or resumed in a tmux reported no
+            activity at all. CLI 2.1.260 keeps that file current as the session runs, so both
+            populations now have a reading and the later one wins. A session idle for hours is
+            normal. What a session does not survive is the server: Remote Control is a bridge for
+            STARTING sessions, not for re-attaching to ones that lost their process, so once the
+            server dies the web side can only mint new sessions — the "restart" button claude.ai
+            offers on a dead one starts fresh. The transcript survives on this box, and the roster
+            below is what it looks like afterwards.
           </p>
         </Board>
+
+        <RosterBoard data={data} />
 
         <Board
           title="Connection"
@@ -827,11 +839,11 @@ function SessionRow({ session }: { session: ClaudeSession }) {
 
   return (
     <li className={ROW} title={session.transcriptId ?? undefined}>
-      {/* Working means "touched in the last minute", which for a session
-          being driven from a phone is the honest reading of active. */}
-      <Chip tone={idle !== null && idle < 60 ? 'ok' : 'muted'}>
-        {idle !== null && idle < 60 ? 'working' : 'idle'}
-      </Chip>
+      {/* The session's own word first, when it has one: `busy` is the CLI
+          saying it is mid-turn, which no clock can infer. Falling back to
+          "touched in the last minute", the honest reading of active for a
+          session being driven from a phone. */}
+      <Chip tone={working(session) ? 'ok' : 'muted'}>{working(session) ? 'working' : 'idle'}</Chip>
       <span className={ROW_MAIN}>{session.name ?? `pid ${String(session.pid)}`}</span>
       {/* `item-min` on the four that a phone drops. What survives is the
           answer to "which session is this and is anything happening in it";
@@ -845,6 +857,137 @@ function SessionRow({ session }: { session: ClaudeSession }) {
       <span className={ROW_SIDE}>last seen {idle === null ? DASH : since(idle)}</span>
       <span className={cn(ROW_SIDE, NARROW_HIDE)}>{bytes(session.rssBytes)}</span>
       <span className={cn(ROW_SIDE, NARROW_HIDE)}>{ms(session.cpuMs)} cpu</span>
+    </li>
+  )
+}
+
+/* ── the roster ───────────────────────────────────────────────────────────
+   The board above is what is CONNECTED. This one is everything this box could
+   still be asked about, joined from two sources that disagree on purpose. */
+
+const STATE_TONE: Record<SessionState, Tone> = {
+  alive: 'ok',
+  background: 'info',
+  orphan: 'warn',
+  resumable: 'muted',
+}
+
+const STATE_LABEL: Record<SessionState, string> = {
+  alive: 'alive',
+  background: 'background',
+  orphan: 'no transcript',
+  resumable: 'resumable',
+}
+
+/** As many rows as read as a list rather than as a log. The rest are counted. */
+const ROSTER_ROWS = 24
+
+function RosterBoard({ data }: { data: ClaudeData }) {
+  const { roster } = data.facts
+  const rows = sessionRows(roster, data.facts.sessions)
+  const counts = countByState(rows)
+  const shown = rows.slice(0, ROSTER_ROWS)
+
+  return (
+    <Board
+      title="Session roster"
+      icon="panels"
+      span={12}
+      aside={
+        <span className={BOARD_NOTE}>
+          {rows.length === 0
+            ? 'nothing on disk'
+            : `${num(counts.alive + counts.background)} running · ${num(counts.resumable)} resumable`}
+        </span>
+      }
+    >
+      {rows.length === 0 ? (
+        <p className={VIZ_EMPTY}>
+          No transcripts and no agents. Either this snapshot predates the roster — the boards above
+          still read correctly without it — or nobody has ever run{' '}
+          <span className={MONO}>claude</span> as this user.
+        </p>
+      ) : (
+        <ul className={LIST}>
+          {shown.map((r) => (
+            <RosterRow key={r.key} row={r} />
+          ))}
+        </ul>
+      )}
+
+      {rows.length > shown.length && (
+        <p className={BOARD_FOOT}>
+          {num(rows.length - shown.length)} older transcript
+          {rows.length - shown.length === 1 ? '' : 's'} not listed, of {num(roster.transcriptTotal)}{' '}
+          on disk.
+          {roster.emptyCount > 0 && (
+            <>
+              {' '}
+              {num(roster.emptyCount)} more {roster.emptyCount === 1 ? 'is' : 'are'} empty — opened
+              and never spoken to, so there is nothing in them to resume.
+            </>
+          )}
+        </p>
+      )}
+
+      <p className={BOARD_FOOT}>
+        Two sources, and which one said a thing is part of the answer.{' '}
+        <span className={MONO}>claude agents</span> is authoritative for what is <b>running</b> — it
+        is the only thing that knows about background agents, including ones whose project directory
+        is gone (drawn <b>no transcript</b>). The <span className={MONO}>.jsonl</span> files under{' '}
+        <span className={MONO}>~/.claude/projects</span> are authoritative for what is{' '}
+        <b>resumable</b> and for nothing else: a transcript records that a conversation happened,
+        never that anything is still behind it.
+      </p>
+
+      <p className={BOARD_FOOT}>
+        <b>Resume is not re-attach.</b> <span className={MONO}>claude --resume &lt;id&gt;</span> at
+        the console mints a NEW session id and a NEW transcript and freezes the one it read, with no
+        link recorded between them — so resuming a row here <b>forks a branch</b> rather than
+        returning to a conversation, and every dead ancestor of a session running right now sits in
+        this list looking just as resumable as anything else. A <b>background</b> row is the
+        exception and the only true re-attach on the box:{' '}
+        <span className={MONO}>claude attach &lt;short id&gt;</span> returns to a process that never
+        stopped. There is no end-of-session marker anywhere, so "finished cleanly" is not a thing
+        this board can know — a transcript with nothing running behind it is all it can honestly
+        say.
+      </p>
+
+      <p className={BOARD_FOOT}>
+        Titles are labels, never content. What is copied out of the transcript tree is an{' '}
+        <span className={MONO}>ai-title</span>, a title the operator typed, or the short name the
+        CLI derives — and nothing else. Those files hold pasted keys, tokens and the output of{' '}
+        <span className={MONO}>sops -d</span>; this page is served out of a world-readable snapshot,
+        so a row falls back to its id rather than borrowing a line of the conversation.
+      </p>
+    </Board>
+  )
+}
+
+function RosterRow({ row }: { row: RosterEntry }) {
+  return (
+    <li className={ROW} title={row.id ?? undefined}>
+      <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
+      <span className={ROW_MAIN}>{row.label}</span>
+      {/* An INTERACTIVE session's name is derived by the CLI (`nixos-ac`) and
+          names the session rather than the work, so it is marked as the weak
+          label it is. A background agent's name is the one it was launched
+          with — a real title — and marking that would be a lie. */}
+      {row.labelSource === 'agent' && row.state !== 'background' && (
+        <span className={cn(ROW_SIDE, NARROW_HIDE)}>cli name</span>
+      )}
+      {row.lifecycle !== null && <span className={ROW_SIDE}>{row.lifecycle}</span>}
+      <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>
+        {row.shortId ?? (row.id === null ? DASH : row.id.slice(0, 8))}
+      </span>
+      <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>
+        {text(row.cwd)}
+        {!row.cwdExact && '?'}
+      </span>
+      <span className={ROW_SIDE}>
+        {row.modifiedAt === null ? DASH : since((Date.now() - row.modifiedAt) / 1000)}
+      </span>
+      <span className={cn(ROW_SIDE, NARROW_HIDE)}>{bytes(row.sizeBytes)}</span>
     </li>
   )
 }
@@ -879,6 +1022,12 @@ function EventRow({ event }: { event: RcEvent }) {
    Beside the view rather than beside the loader, and not by preference: the
    loader's module reads the host snapshot through node:fs, so importing a
    value from it here is what takes the page down. */
+
+/** Mid-turn now, by the session's own word or by its clock. */
+function working(session: ClaudeSession): boolean {
+  if (session.status === 'busy') return true
+  return session.lastActivityAt !== null && Date.now() - session.lastActivityAt < 60_000
+}
 
 /** Sessions actually connected, newest first. */
 function liveSessions(facts: ClaudeFacts): ClaudeSession[] {
