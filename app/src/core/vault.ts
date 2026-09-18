@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
+import { appSecretFile } from '../lib/apps/secret-keys'
 import { errorText } from '../lib/redact'
 import type { Result } from '../lib/result'
 import {
@@ -10,6 +11,7 @@ import {
   type VaultFile,
   type VaultJsonFile,
   type VaultJsonValues,
+  type VaultPath,
 } from '../lib/vault'
 
 // Encrypting a secret for site/vault/, in this container.
@@ -44,7 +46,7 @@ function redact(text: string, secrets: string[]): string {
 export const SOPS_TIMEOUT_MS = 30_000
 
 function encrypt(
-  file: VaultFile,
+  file: VaultPath,
   type: 'binary' | 'json',
   input: string,
   secrets: string[],
@@ -176,4 +178,39 @@ export async function sealJsonForVault<F extends VaultJsonFile>(
   } catch {
     return { ok: false, reason: 'Nothing was sent: the values could not be sealed.' }
   }
+}
+
+/**
+ * ONE app secret, sealed for `site/vault/apps/<app>-env.sops`.
+ *
+ * The whole of what this container can do to an app's secrets. It produces a
+ * sops document holding a single value, sealed to the recipients that file's
+ * creation rule names — the same two the host decrypts with — and hands it to
+ * the bridge; the host opens it in memory and merges the key
+ * (stacks/daedalus/host/secret-set.sh). Reading the file back, re-emitting it,
+ * or replacing it whole are all impossible here, because the identity that
+ * could is deliberately absent.
+ *
+ * `--filename-override` is what makes the creation rule match, so the path is
+ * built by `appSecretFile` and never spelled out at a call site. The output is
+ * checked exactly like `sealForVault`'s: sops exits 0 on more than success, so
+ * "is this a real sops file, and does it fail to contain the value" is the
+ * last thing that happens before anything leaves this process.
+ */
+export async function sealAppSecret(app: string, value: string): Promise<Sealed> {
+  // An empty secret is refused rather than sealed: it would read back as "the
+  // variable is set" while the app sees nothing, which is the failure mode
+  // operator-secrets-lib.nix's header calls the worst kind — green units, no
+  // value. Removing the key is the way to say "not set".
+  if (value === '') return { ok: false, reason: 'Nothing was sent: the value is empty.' }
+  let out: string
+  try {
+    out = await encrypt(appSecretFile(app), 'binary', value, [value])
+  } catch (e) {
+    return { ok: false, reason: errorText(e) }
+  }
+  const bad = ciphertextError(out, value)
+  return bad === null
+    ? { ok: true, value: out }
+    : { ok: false, reason: `Nothing was sent: ${bad}.` }
 }

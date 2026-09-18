@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { actorLabel } from '../core/auth'
 import { type AccessWindow, isAccessWindow } from '../lib/access-window'
+import { secretKeyError } from '../lib/apps/secret-keys'
 import { appName } from '../lib/hostname'
 import { isRecord } from '../lib/is-record'
 import type { Result } from '../lib/result'
@@ -227,6 +228,50 @@ export const revealEnvVar = createServerFn({ method: 'POST' })
     const { revealAppEnvVar } = await import('../lib/apps/secrets')
     return revealAppEnvVar(data)
   })
+
+// ── the app-secrets editor ────────────────────────────────────────────────
+//
+// Write-only, and the validator is where that starts. The VALUE is never
+// echoed back by any of these: `setAppSecretFn` returns a request id, the
+// status poll returns key names, and there is no function anywhere that reads
+// a secret out of the sops file — the container could not answer one.
+
+export const setAppSecretFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { name: string; key: string; value: string } => {
+    if (!isRecord(data)) throw new Error('expected an app, a variable and a value')
+    // The key's shape is checked here AND in lib/apps/secrets.ts AND by the
+    // host agent. This one is the parse that lets the rest of the function
+    // treat it as a name; the refusal an operator reads comes from the next.
+    const bad = secretKeyError(data.key)
+    if (bad !== null) throw new Error(bad)
+    if (typeof data.value !== 'string') throw new Error('expected a value')
+    return { name: appName(data.name), key: data.key as string, value: data.value }
+  })
+  .handler(async ({ data }): Promise<Result<string>> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { setAppSecret } = await import('../lib/apps/secrets')
+    return setAppSecret({ ...data, actor: actorLabel() })
+  })
+
+export const removeAppSecretFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { name: string; key: string } => {
+    if (!isRecord(data)) throw new Error('expected an app and a variable')
+    const bad = secretKeyError(data.key)
+    if (bad !== null) throw new Error(bad)
+    return { name: appName(data.name), key: data.key as string }
+  })
+  .handler(async ({ data }): Promise<Result<string>> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { removeAppSecret } = await import('../lib/apps/secrets')
+    return removeAppSecret({ ...data, actor: actorLabel() })
+  })
+
+export const fetchSecretSetStatus = createServerFn().handler(async () => {
+  const { readSecretSetStatus } = await import('../host/secret-set-request')
+  return readSecretSetStatus()
+})
 
 export const fetchDeployStatus = createServerFn().handler(async () => {
   const { readDeployStatus } = await import('../host/deploy')

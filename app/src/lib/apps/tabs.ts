@@ -22,6 +22,8 @@ import { effectiveHostname } from '../hostname'
 import { getApp } from '../repo/apps'
 import { overviewBuild, recentBuilds } from '../repo/build-views'
 import { ingestDeployments, listDeployments } from '../repo/deployments'
+import type { AppSecretKey } from './secret-keys'
+import { loadAppSecrets } from './secrets'
 import { loadTasksTab, type TasksPayload } from './tasks'
 
 // The app detail page's tab bodies — one branch per tab, and nothing a tab
@@ -71,7 +73,7 @@ export type AppTabData =
       builds: import('../build-display').BuildSummary[]
     }
   | { kind: 'access'; access: AppAccess }
-  | { kind: 'secrets'; env: EnvPayload }
+  | { kind: 'secrets'; env: EnvPayload; secrets: AppSecretKey[] }
   | { kind: 'logs' }
   | { kind: 'database'; database: AppDatabase }
   | { kind: 'vpn'; vpn: AppVpn }
@@ -214,6 +216,13 @@ export async function loadAppTab(data: {
       )
       return {
         kind: 'secrets',
+        // The KEYS of the operator-secrets file, read off its ciphertext — the
+        // one thing about it this container can know. What the env snapshot
+        // labels `origin: secrets` is an inference from "the app has a file and
+        // nothing else claims this name"; this is the file itself, so it also
+        // lists a key the container has not picked up yet (set since its last
+        // start) and drops one the file no longer holds.
+        secrets: await loadAppSecrets(name),
         env: {
           available: snapshot.available,
           takenAt: snapshot.takenAt,

@@ -14,6 +14,24 @@ export const VAULT_FILES = ['vault/github-app.sops', 'vault/cloudflare-api-token
 export type VaultFile = (typeof VAULT_FILES)[number]
 
 /**
+ * An app's operator-secrets file, the vault's one nested level.
+ *
+ * Not in `VAULT_FILES`, because those are the entries an Apply writes WHOLE
+ * and this one is never written whole by this container: it holds keys
+ * daedalus cannot read back, so it is only ever merged into, one key at a
+ * time, by the host (host/secret-set-request.ts). What it shares with them is
+ * the thing this type exists for — it is a path sops must be told about, and
+ * site/.sops.yaml's creation rule (`^vault/(apps/)?[a-z0-9-]+\.sops$`) is
+ * matched against exactly this string.
+ *
+ * Built only by `appSecretFile` in lib/apps/secret-keys.ts.
+ */
+export type VaultAppSecretFile = `vault/apps/${string}-env.sops`
+
+/** Anything this container may hand to sops as a destination path. */
+export type VaultPath = VaultFile | VaultAppSecretFile
+
+/**
  * The vault entries sealed as sops JSON rather than binary, and the exact keys
  * each holds. Nix extracts one key per secret (`format = "json"; key = …`), so
  * a key that is missing, renamed or extra is a build that cannot decrypt.

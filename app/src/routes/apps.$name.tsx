@@ -291,7 +291,12 @@ function AppDetail() {
           >
             {(td) =>
               td.kind !== 'secrets' ? null : (
-                <Secrets app={app.name} env={td.env} hasSecretsFile={app.operatorSecrets} />
+                <Secrets
+                  app={app.name}
+                  env={td.env}
+                  hasSecretsFile={app.operatorSecrets}
+                  secrets={td.secrets}
+                />
               )
             }
           </GuardedAwait>

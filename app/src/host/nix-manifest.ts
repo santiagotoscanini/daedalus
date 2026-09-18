@@ -109,7 +109,7 @@ export type NixManifest = {
   registry: { schemaVersion: number; apps: Record<string, ManifestApp> }
   nixManaged: Record<string, ManifestApp>
   /**
-   * Apps with a tracked `stacks/apps/<name>-env.sops`.
+   * Apps with a tracked `site/vault/apps/<name>-env.sops`.
    *
    * A fact, not a setting — the file existing is the only thing that decides
    * whether an app gets operator secrets, so there is nothing for the database

@@ -1,4 +1,14 @@
-import { bool, literal, nullable, num, obj, optional, str } from '../../../lib/contract/decode'
+import type { SecretKeyHistory } from '../../../lib/apps/secret-keys'
+import {
+  bool,
+  literal,
+  nullable,
+  num,
+  obj,
+  optional,
+  recordOf,
+  str,
+} from '../../../lib/contract/decode'
 import { readSnapshot, type SnapshotResult } from '../snapshot'
 
 // /repo/repo.json — the configuration repository as the host sees it, and
@@ -24,6 +34,17 @@ export type SiteFileStatus =
   | 'unversioned'
 
 export type SiteFile = { status: SiteFileStatus; sha256: string | null }
+/**
+ * When each app secret was last written, and by whom: `<app> → <KEY> →
+ * facts`. Published from v5 on; an older snapshot decodes as {}.
+ *
+ * Derived from the git history of `site/vault/apps/<app>-env.sops` — the
+ * newest commit whose diff added that key's line. Git IS the audit trail
+ * here, and this is the only form of it the container can be shown: the
+ * values are unreadable to it by design, so "who set this, and when" is
+ * exactly as much as there is to say.
+ */
+export type AppSecretHistory = Record<string, Record<string, SecretKeyHistory>>
 
 export type SiteDir = {
   path: string
@@ -40,6 +61,8 @@ export type SiteDir = {
     'README.md': SiteFile
     'daedalus.json': SiteFile
   }
+  /** Per-key git facts; see `AppSecretHistory`. Empty on a pre-v5 snapshot. */
+  appSecrets: AppSecretHistory
 }
 
 export type RepoFacts = {
@@ -80,6 +103,7 @@ export const NO_SITE_DIR: SiteDir = {
     'README.md': NO_FILE,
     'daedalus.json': NO_FILE,
   },
+  appSecrets: {},
 }
 
 const siteShape = obj({
@@ -98,6 +122,14 @@ const siteShape = obj({
       'daedalus.json': optional(siteFile, NO_FILE),
     }),
     NO_SITE_DIR.files,
+  ),
+  // Published from v5 on: the key names are already visible to the container
+  // (it reads the ciphertext), so what is added here is only WHEN and BY WHOM.
+  // `recordOf(recordOf(...))` rather than a fixed key set — the apps and their
+  // variables are both open sets.
+  appSecrets: optional(
+    recordOf(recordOf(obj({ setAt: str, actor: optional(str, ''), rev: optional(str, '') }))),
+    {},
   ),
 })
 
@@ -143,7 +175,7 @@ export async function repoFacts(): Promise<SnapshotResult<RepoFacts>> {
     // design); decoding it lands on the fallbacks, which is the honest answer.
     // v3 is v4 without README.md and daedalus.json, and is kept because a
     // snapshot written before the rebuild that added them must still decode.
-    acceptVersions: [1, 2, 3, 4],
+    acceptVersions: [1, 2, 3, 4, 5],
     maxAgeMs: MAX_AGE_MS,
   })
 }
