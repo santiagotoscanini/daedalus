@@ -22,20 +22,34 @@
 // The join is on the session uuid, and a row present on only one side is a
 // reading rather than a gap — see `SessionState` below.
 //
-// ── the honest word for "resume" ──────────────────────────────────────────
+// ── what resume actually does ─────────────────────────────────────────────
 //
-// `claude --resume <id>` does NOT reattach. It mints a NEW session id and a
-// NEW transcript, freezes the ancestor, and records no parent link between
-// them — traced on this box as 63a9d108 → 61b502ae → the session that wrote
-// this. Two consequences this module exists to keep the UI honest about:
+// `claude --resume <id>` CONTINUES that session: same id, same transcript,
+// appended to. Measured on this box with CLI 2.1.260, both plain and with
+// `--remote-control` (the form a Resume button would use) — the transcript
+// grew in place and the live session reported back the id it had been given.
+// Branching is the opt-in, `--fork-session`; nothing here passes it.
 //
-//   - every dead ANCESTOR of a live session still looks resumable, because on
-//     disk it is indistinguishable from any other frozen transcript;
-//   - resuming forks a branch rather than returning to a conversation.
+// An earlier reading of the tree claimed the opposite. It inferred a fork
+// from three transcripts with millisecond-adjacent timestamps; the experiment
+// refuted that inference. What did produce those separate files is not known,
+// and this module does not guess.
 //
-// Background agents are the exception: `claude attach <short id>` is a true
-// reattach to a process that is still running. So the two are never given the
-// same word here, and `resumeForks` is what the view reads to say so.
+// So `canResume` below is about whether there is anything to pick up, not
+// about what picking it up would do to it. A row that is already running is
+// excluded for a different reason: the CLI's own help says a resume of a
+// session that is already running starts a COPY and says so, and the board
+// should not invite that. Background agents keep their own two verbs,
+// `claude attach` and `claude stop`, which take the SHORT id, not the uuid.
+//
+// ── one trap for the Resume button that does not exist yet ────────────────
+//
+// An interactive `claude` in a directory whose trust has never been accepted
+// blocks on "Is this a project you created or one you trust?" and starts
+// nothing at all. From a systemd unit that is a hang with nobody able to
+// answer the prompt. `/etc/nixos` is already trusted so the common case is
+// fine, but a row's `cwd` is any directory a session was once opened in and
+// carries no such guarantee.
 
 /** One `claude agents --json` entry, as the snapshot copies it out. */
 export type ClaudeAgent = {
@@ -95,7 +109,8 @@ export const NO_ROSTER: ClaudeRoster = {
  * - `alive` — a session process is running it now. Nothing to press.
  * - `background` — a `claude --bg` agent. Still running; `claude attach`
  *   genuinely returns to it.
- * - `resumable` — a transcript and no process. `--resume` forks it.
+ * - `resumable` — a transcript and no process. `--resume` picks it back up
+ *   where it stopped.
  * - `orphan` — the CLI reports an agent whose transcript is not in the
  *   scanned tree. Real, and not reachable from a directory walk.
  */
@@ -121,8 +136,12 @@ export type RosterEntry = {
   modifiedAt: number | null
   sizeBytes: number | null
   onDisk: boolean
-  /** Pressing resume here would fork a branch rather than return to it. */
-  resumeForks: boolean
+  /**
+   * There is a transcript here and nothing running it, so `--resume <id>`
+   * would continue this very session. False for a row already running (a
+   * resume of one starts a copy) and for a row with nothing on disk.
+   */
+  canResume: boolean
 }
 
 const shortId = (id: string): string => id.slice(0, 8)
@@ -134,8 +153,9 @@ const shortId = (id: string): string => id.slice(0, 8)
  * the CLI's interactive agents but is not the same list: a session started at
  * the console appears in both, and one whose file is stale appears only in
  * the first. Either saying a uuid is running is enough to keep it off the
- * resumable pile, because drawing a running session as resumable is the
- * mistake that costs a forked branch.
+ * resumable pile: a resume of a session that already has a process behind it
+ * starts a second copy of it, which is not what a row reading "resumable"
+ * promises.
  */
 export function sessionRows(
   roster: ClaudeRoster,
@@ -186,7 +206,7 @@ export function sessionRows(
       modifiedAt: t.modifiedAt,
       sizeBytes: t.sizeBytes,
       onDisk: true,
-      resumeForks: !running,
+      canResume: !running,
     }
   })
 
@@ -210,8 +230,8 @@ export function sessionRows(
       sizeBytes: null,
       onDisk: false,
       // Nothing on disk under the scanned tree, so there is no transcript for
-      // `--resume` to fork in the first place.
-      resumeForks: false,
+      // `--resume` to continue in the first place.
+      canResume: false,
     })
   }
 

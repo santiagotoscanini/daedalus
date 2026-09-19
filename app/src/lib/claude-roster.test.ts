@@ -21,9 +21,9 @@ import {
 //     than from a record inside the file.
 //   - a background agent whose project directory no longer exists, so the
 //     directory walk cannot see it and only `claude agents` can.
-//   - a dead ANCESTOR of a session that is running right now, which looks
-//     exactly as resumable as anything else and is the reason the board must
-//     say resume forks.
+//   - an older session of the same working directory as one running right
+//     now, which on disk looks exactly as resumable as anything else and
+//     is one: `--resume` continues whichever id it is handed.
 
 const transcript = (over: Partial<ClaudeTranscript> & { id: string }): ClaudeTranscript => ({
   project: '-etc-nixos',
@@ -53,7 +53,7 @@ const agent = (over: Partial<ClaudeAgent>): ClaudeAgent => ({
 const roster = (over: Partial<ClaudeRoster>): ClaudeRoster => ({ ...NO_ROSTER, ...over })
 
 describe('what a row IS', () => {
-  it('a transcript with an interactive agent behind it is alive, and does not fork', () => {
+  it('a transcript with an interactive agent behind it is alive, and offers no resume', () => {
     const rows = sessionRows(
       roster({
         agentsAvailable: true,
@@ -62,17 +62,24 @@ describe('what a row IS', () => {
       }),
     )
     expect(rows[0]?.state).toBe('alive')
-    expect(rows[0]?.resumeForks).toBe(false)
+    // A resume of a session that already has a process behind it starts a
+    // copy of it, so the row offers none.
+    expect(rows[0]?.canResume).toBe(false)
     expect(rows[0]?.lifecycle).toBe('busy')
     expect(rows[0]?.pid).toBe(91660)
   })
 
-  it('a transcript with nothing behind it is resumable, and resuming forks it', () => {
+  it('a transcript with nothing behind it is resumable, and a resume continues that same session', () => {
     const rows = sessionRows(
       roster({ agentsAvailable: true, transcripts: [transcript({ id: 'x' })] }),
     )
     expect(rows[0]?.state).toBe('resumable')
-    expect(rows[0]?.resumeForks).toBe(true)
+    expect(rows[0]?.canResume).toBe(true)
+    // `--resume` takes this id and keeps it: same session, same transcript,
+    // appended to. Measured on CLI 2.1.260, with and without
+    // `--remote-control`. Branching is `--fork-session`, which nothing here
+    // passes — so the id the button offers is the id that comes back.
+    expect(rows[0]?.id).toBe('x')
     expect(rows[0]?.shortId).toBeNull()
   })
 
@@ -97,7 +104,8 @@ describe('what a row IS', () => {
     expect(rows[0]?.lifecycle).toBe('blocked')
     // The short id is what `claude attach`/`stop` take — never the uuid.
     expect(rows[0]?.shortId).toBe('6913d790')
-    expect(rows[0]?.resumeForks).toBe(false)
+    // Still running, so it is attached to rather than resumed.
+    expect(rows[0]?.canResume).toBe(false)
   })
 
   it('an agent whose project directory is gone still gets a row', () => {
@@ -120,8 +128,8 @@ describe('what a row IS', () => {
     expect(rows[0]?.onDisk).toBe(false)
     expect(rows[0]?.state).toBe('background')
     expect(rows[0]?.cwd).toBe('/home/santiago/selfhost')
-    // Nothing on disk to fork, so the fork warning must not be shown.
-    expect(rows[0]?.resumeForks).toBe(false)
+    // No transcript under the scanned tree, so there is nothing to resume.
+    expect(rows[0]?.canResume).toBe(false)
   })
 
   it('an interactive agent with no transcript is marked as such rather than dropped', () => {
@@ -134,31 +142,32 @@ describe('what a row IS', () => {
 
   it('the live session roster alone is enough to keep a row off the resumable pile', () => {
     // A session in ~/.claude/sessions that `claude agents` did not report:
-    // either source saying it is running must win, because drawing a running
-    // session as resumable is what costs a forked branch.
+    // either source saying it is running must win, because a resume of a
+    // session already in progress starts a second copy of it.
     const rows = sessionRows(roster({ transcripts: [transcript({ id: 'live' })] }), [
       { transcriptId: 'live', alive: true },
     ])
     expect(rows[0]?.state).toBe('alive')
-    expect(rows[0]?.resumeForks).toBe(false)
+    expect(rows[0]?.canResume).toBe(false)
   })
 
-  it('a dead ancestor of a live session is resumable, like any other transcript', () => {
+  it('an older session of a directory someone is working in now is resumable like any other', () => {
     const rows = sessionRows(
       roster({
         agentsAvailable: true,
-        agents: [agent({ sessionId: 'child', pid: 91660 })],
+        agents: [agent({ sessionId: 'current', pid: 91660 })],
         transcripts: [
-          transcript({ id: 'child', modifiedAt: 2_000 }),
-          transcript({ id: 'ancestor', modifiedAt: 1_000 }),
+          transcript({ id: 'current', modifiedAt: 2_000 }),
+          transcript({ id: 'earlier', modifiedAt: 1_000 }),
         ],
       }),
     )
-    // Nothing on disk distinguishes an ancestor from any other frozen
-    // transcript — there is no parent link — so the board must not pretend.
-    expect(rows.map((r) => [r.id, r.state])).toEqual([
-      ['child', 'alive'],
-      ['ancestor', 'resumable'],
+    // Sharing a cwd with a live session is not a relationship the board can
+    // see or needs to: what makes a row resumable is a transcript with no
+    // process on it, and resuming one continues that transcript alone.
+    expect(rows.map((r) => [r.id, r.state, r.canResume])).toEqual([
+      ['current', 'alive', false],
+      ['earlier', 'resumable', true],
     ])
   })
 })

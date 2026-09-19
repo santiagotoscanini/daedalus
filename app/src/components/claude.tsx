@@ -941,16 +941,17 @@ function RosterBoard({ data }: { data: ClaudeData }) {
       </p>
 
       <p className={BOARD_FOOT}>
-        <b>Resume is not re-attach.</b> <span className={MONO}>claude --resume &lt;id&gt;</span> at
-        the console mints a NEW session id and a NEW transcript and freezes the one it read, with no
-        link recorded between them — so resuming a row here <b>forks a branch</b> rather than
-        returning to a conversation, and every dead ancestor of a session running right now sits in
-        this list looking just as resumable as anything else. A <b>background</b> row is the
-        exception and the only true re-attach on the box:{' '}
-        <span className={MONO}>claude attach &lt;short id&gt;</span> returns to a process that never
-        stopped. There is no end-of-session marker anywhere, so "finished cleanly" is not a thing
-        this board can know — a transcript with nothing running behind it is all it can honestly
-        say.
+        <b>Resume continues the session it names.</b>{' '}
+        <span className={MONO}>claude --resume &lt;id&gt;</span> keeps that session id and appends
+        to that same transcript — measured here on CLI 2.1.260, both at the console and with{' '}
+        <span className={MONO}>--remote-control</span>: the file grew in place, the id came back
+        unchanged, and the conversation picked up where it had stopped. Starting a branch instead is
+        the opt-in, <span className={MONO}>--fork-session</span>, and nothing on this page passes
+        it. A <b>background</b> row has its own two verbs, which take the short id rather than the
+        uuid: <span className={MONO}>claude attach &lt;short id&gt;</span> returns to a process that
+        never stopped, <span className={MONO}>claude stop &lt;short id&gt;</span> ends it. There is
+        no end-of-session marker anywhere, so "finished cleanly" is not a thing this board can know
+        — a transcript with nothing running behind it is all it can honestly say.
       </p>
 
       <p className={BOARD_FOOT}>
