@@ -230,6 +230,12 @@ export const factsShape = obj({
       ),
       transcriptTotal: optional(num, 0),
       emptyCount: optional(num, 0),
+      // The sessions this box started, as the instance names of the active
+      // `claude-session@` units. Optional like everything else here: a
+      // snapshot written before the Resume button existed knows nothing about
+      // them, and an empty list is the correct reading of that — no row then
+      // claims a kill it cannot perform.
+      managedIds: optional(arrayOf(str), []),
     }),
     NO_ROSTER,
   ),

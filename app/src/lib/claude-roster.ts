@@ -93,6 +93,17 @@ export type ClaudeRoster = {
   transcriptTotal: number
   /** Opened and never spoken to. Counted, not listed: nothing to resume. */
   emptyCount: number
+  /**
+   * Session uuids running as `claude-session@<uuid>.service` — the ones this
+   * box started, and the only live ones it can end.
+   *
+   * A third source, because neither of the two above can answer this: a
+   * session the Remote Control server spawned looks identical in
+   * `claude agents` and has no per-session kill at all. Without this the board
+   * would have to offer every live row the same button and be wrong about half
+   * of them.
+   */
+  managedIds: string[]
 }
 
 export const NO_ROSTER: ClaudeRoster = {
@@ -101,7 +112,25 @@ export const NO_ROSTER: ClaudeRoster = {
   transcripts: [],
   transcriptTotal: 0,
   emptyCount: 0,
+  managedIds: [],
 }
+
+/**
+ * A canonical lowercase session uuid — what `--resume` takes, and what a
+ * `claude-session@` instance name is made of.
+ *
+ * The same charset the host agent applies as its first layer
+ * (stacks/daedalus/host/claude-session.sh), restated here so a malformed
+ * selector never becomes a request file at all. This side is not the only
+ * guard and must not be the only guard; it is the one that keeps a mistyped
+ * id from ever reaching the bridge. All 49 transcripts and 44 sidecar
+ * directories on this box match it with zero exceptions.
+ */
+export const isSessionId = (v: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v)
+
+/** A background agent's SHORT id — what `claude attach` and `claude stop` take. */
+export const isAgentId = (v: string): boolean => /^[0-9a-f]{8}$/.test(v)
 
 /**
  * What a row IS, which is the one thing the board must not blur.
@@ -142,6 +171,49 @@ export type RosterEntry = {
    * resume of one starts a copy) and for a row with nothing on disk.
    */
   canResume: boolean
+  /**
+   * This row is running as `claude-session@<id>.service` — a session THIS box
+   * started, so `systemctl stop` ends it cleanly. False for every session the
+   * Remote Control server spawned, which has no per-session kill at all.
+   */
+  managed: boolean
+}
+
+/**
+ * Which verb, if any, a row can be offered — the one decision the board must
+ * not get wrong, because three of the four populations here die differently
+ * and the fourth does not die at all.
+ *
+ * - `resume`   a transcript with nothing behind it. `claude --resume <uuid>`
+ *              continues that very session: same id, same transcript.
+ * - `stop-unit` a session this box started, ended by `systemctl stop` — the
+ *              unit owns the cgroup, so there is no pid to match on.
+ * - `stop-agent` a `claude --bg` agent, ended by `claude stop <short id>`,
+ *              upstream's own verb, which keeps the conversation.
+ * - `none`     nothing honest to offer. `server` is a session the Remote
+ *              Control server spawned (it dies with its server, and the page
+ *              says so rather than drawing a button that lies); `orphan` is a
+ *              row with no transcript and no handle of any kind.
+ *
+ * `session` is the selector the host agent is handed, and it is NOT always the
+ * uuid: `claude stop` takes the short id.
+ */
+export type RowControl =
+  | { kind: 'resume'; session: string }
+  | { kind: 'stop-unit'; session: string }
+  | { kind: 'stop-agent'; session: string }
+  | { kind: 'none'; why: 'server' | 'orphan' }
+
+export function rowControl(row: RosterEntry): RowControl {
+  // Background first: its id is not the uuid, and `claude stop` is the only
+  // verb that ends one.
+  if (row.state === 'background' && row.shortId !== null) {
+    return { kind: 'stop-agent', session: row.shortId }
+  }
+  if (row.managed && row.id !== null) return { kind: 'stop-unit', session: row.id }
+  if (row.canResume && row.id !== null) return { kind: 'resume', session: row.id }
+  if (row.state === 'alive') return { kind: 'none', why: 'server' }
+  return { kind: 'none', why: 'orphan' }
 }
 
 const shortId = (id: string): string => id.slice(0, 8)
@@ -170,10 +242,16 @@ export function sessionRows(
     live.filter((s) => s.alive && s.transcriptId !== null).map((s) => s.transcriptId as string),
   )
 
+  // A third way to be running, and the earliest to know it: a session this box
+  // resumed has its unit up the moment the CLI execs, well before the session
+  // file exists or `claude agents` has it. Without this a Resume pressed twice
+  // inside a minute would look resumable the second time.
+  const managed = new Set(roster.managedIds)
+
   const rows: RosterEntry[] = roster.transcripts.map((t) => {
     const agent = byId.get(t.id) ?? null
     const background = agent !== null && agent.kind === 'background'
-    const running = background || agent !== null || liveIds.has(t.id)
+    const running = background || agent !== null || liveIds.has(t.id) || managed.has(t.id)
 
     const label =
       t.title ??
@@ -207,6 +285,7 @@ export function sessionRows(
       sizeBytes: t.sizeBytes,
       onDisk: true,
       canResume: !running,
+      managed: managed.has(t.id),
     }
   })
 
@@ -232,6 +311,9 @@ export function sessionRows(
       // Nothing on disk under the scanned tree, so there is no transcript for
       // `--resume` to continue in the first place.
       canResume: false,
+      // A row with no transcript is one our own units never started: the
+      // instance name IS the transcript uuid.
+      managed: a.sessionId !== null && managed.has(a.sessionId),
     })
   }
 

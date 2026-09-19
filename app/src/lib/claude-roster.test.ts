@@ -4,7 +4,11 @@ import {
   type ClaudeRoster,
   type ClaudeTranscript,
   countByState,
+  isAgentId,
+  isSessionId,
   NO_ROSTER,
+  type RosterEntry,
+  rowControl,
   sessionRows,
 } from './claude-roster'
 
@@ -295,5 +299,121 @@ describe('order', () => {
       }),
     )
     expect(rows.map((r) => r.id)).toEqual(['now', 'old', 'mid'])
+  })
+})
+
+// ── the verbs ─────────────────────────────────────────────────────────────
+//
+// Three populations die three different ways and a fourth does not die at all.
+// `rowControl` is where that is decided once, so the board cannot drift into
+// offering one button to all of them — which is the mistake that would kill
+// the wrong thing, or claim to kill something it cannot.
+
+describe('which verb a row is offered', () => {
+  const rowFor = (r: ClaudeRoster, id: string) => {
+    const row = sessionRows(r).find((x) => x.key === id)
+    if (row === undefined) throw new Error(`no row ${id}`)
+    return row
+  }
+
+  it('offers Resume to a transcript with nothing behind it, with the uuid as the selector', () => {
+    const row = rowFor(roster({ transcripts: [transcript({ id: 'abc' })] }), 'abc')
+    expect(row.state).toBe('resumable')
+    expect(rowControl(row)).toEqual({ kind: 'resume', session: 'abc' })
+  })
+
+  // `claude stop` takes the SHORT id. Handing it the uuid is the bug this
+  // asserts against: it would refuse, and the row would look broken.
+  it('offers Stop to a background agent, with the SHORT id as the selector', () => {
+    const row = rowFor(
+      roster({
+        agentsAvailable: true,
+        agents: [
+          agent({ id: 'dead', sessionId: 'deadbeef-1', kind: 'background', state: 'blocked' }),
+        ],
+        transcripts: [transcript({ id: 'deadbeef-1' })],
+      }),
+      'deadbeef-1',
+    )
+    expect(row.state).toBe('background')
+    expect(rowControl(row)).toEqual({ kind: 'stop-agent', session: 'dead' })
+  })
+
+  it('offers Stop to a session this box started, as its unit', () => {
+    const row = rowFor(
+      roster({
+        agentsAvailable: true,
+        agents: [agent({ sessionId: 'ours', pid: 42, status: 'busy' })],
+        transcripts: [transcript({ id: 'ours' })],
+        managedIds: ['ours'],
+      }),
+      'ours',
+    )
+    expect(row.state).toBe('alive')
+    expect(row.managed).toBe(true)
+    expect(rowControl(row)).toEqual({ kind: 'stop-unit', session: 'ours' })
+  })
+
+  // The honest gap. Nothing in the CLI or in systemd ends one of these on its
+  // own, so the row must say so rather than draw a button that lies.
+  it('offers nothing to a session the Remote Control server spawned', () => {
+    const row = rowFor(
+      roster({
+        agentsAvailable: true,
+        agents: [agent({ sessionId: 'theirs', pid: 7, status: 'busy' })],
+        transcripts: [transcript({ id: 'theirs' })],
+      }),
+      'theirs',
+    )
+    expect(row.managed).toBe(false)
+    expect(rowControl(row)).toEqual({ kind: 'none', why: 'server' })
+  })
+
+  it('offers nothing to a row with no transcript to resume and no unit to stop', () => {
+    const rows = sessionRows(
+      roster({ agentsAvailable: true, agents: [agent({ sessionId: 'gone', pid: 3 })] }),
+    )
+    expect(rows[0]?.state).toBe('orphan')
+    expect(rowControl(rows[0] as RosterEntry)).toEqual({ kind: 'none', why: 'orphan' })
+  })
+
+  // Our own unit is up the moment the CLI execs — before the session file
+  // exists and before `claude agents` has it. Without this a Resume pressed
+  // twice inside a minute would look resumable the second time, and the
+  // second press would put a copy on the same transcript.
+  it('treats a managed uuid as running even when no other source has caught up', () => {
+    const row = rowFor(
+      roster({ transcripts: [transcript({ id: 'fresh' })], managedIds: ['fresh'] }),
+      'fresh',
+    )
+    expect(row.state).toBe('alive')
+    expect(row.canResume).toBe(false)
+    expect(rowControl(row)).toEqual({ kind: 'stop-unit', session: 'fresh' })
+  })
+})
+
+describe('the selector charset, which is the first of the host agent three layers', () => {
+  it('accepts exactly the shape every transcript on this box has', () => {
+    expect(isSessionId('11111111-2222-4333-8444-555555555555')).toBe(true)
+    expect(isSessionId('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')).toBe(true)
+  })
+
+  it.each([
+    '../../etc/shadow',
+    '$(id)',
+    '11111111-2222-4333-8444-555555555555; rm -rf /',
+    '11111111-2222-4333-8444-555555555555.service',
+    '11111111-2222-4333-8444-55555555555',
+    'AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE',
+    '',
+  ])('refuses %s', (v) => {
+    expect(isSessionId(v)).toBe(false)
+  })
+
+  it('knows a background agent id from a session id', () => {
+    expect(isAgentId('deadbeef')).toBe(true)
+    expect(isAgentId('DEADBEEF')).toBe(false)
+    expect(isAgentId('deadbee')).toBe(false)
+    expect(isAgentId('11111111-2222-4333-8444-555555555555')).toBe(false)
   })
 })

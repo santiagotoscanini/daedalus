@@ -7,11 +7,14 @@ import { useEffect, useState } from 'react'
 // reason. claude-rc-request is under the same rule (it imports the bridge,
 // which reads node:fs), which is why its idle shape is restated below.
 import type { ClaudeRcStatus } from '../host/claude-rc-request'
+import type { ClaudeSessionStatus } from '../host/claude-session-request'
 // Pure and client-safe — the whole reason the roster's types and its join live
 // in lib/ rather than beside the loader. See the header of claude-roster.ts.
 import {
   countByState,
   type RosterEntry,
+  type RowControl,
+  rowControl,
   type SessionState,
   sessionRows,
 } from '../lib/claude-roster'
@@ -20,7 +23,13 @@ import type { ClaudeData, ClaudeFacts, ClaudeSession, RcEvent } from '../lib/das
 import type { VersionGap } from '../lib/dashboard/github'
 import type { ShotCounts, ShotRun } from '../lib/dashboard/shotter'
 import { bytes, DASH, duration, ms, num, since, text, until } from '../lib/format'
-import { fetchClaudeRcStatusFn, requestClaudeRestartFn } from '../server/claude'
+import {
+  fetchClaudeRcStatusFn,
+  fetchClaudeSessionStatusFn,
+  requestClaudeRestartFn,
+  resumeSessionFn,
+  stopSessionFn,
+} from '../server/claude'
 import { GHOST_BTN } from './apps/shared'
 import {
   BOARD_FOOT,
@@ -882,11 +891,49 @@ const STATE_LABEL: Record<SessionState, string> = {
 /** As many rows as read as a list rather than as a log. The rest are counted. */
 const ROSTER_ROWS = 24
 
+const SESSION_IDLE: ClaudeSessionStatus = {
+  id: null,
+  action: null,
+  session: null,
+  state: 'idle',
+  detail: '',
+  error: '',
+  startedAt: null,
+  finishedAt: null,
+}
+
+/* The per-row control area: a second line under the row itself, so the row
+   stays a row and the cost of a click is spelled out where the click is. */
+const CTRL = 'mt-[0.3rem] flex flex-wrap items-center gap-2'
+const CTRL_COST = 'mt-[0.3rem] text-[0.72rem] text-(--text-muted) leading-[1.5]'
+const CTRL_NOTE = 'text-[0.68rem] text-muted-foreground leading-[1.5]'
+const CTRL_STATE = 'mt-[0.3rem] text-[0.72rem] leading-[1.5]'
+
 function RosterBoard({ data }: { data: ClaudeData }) {
   const { roster } = data.facts
   const rows = sessionRows(roster, data.facts.sessions)
   const counts = countByState(rows)
   const shown = rows.slice(0, ROSTER_ROWS)
+
+  // ONE poller and ONE armed row for the whole board: there is one bridge
+  // file behind every button here, so two rows acting at once is not a state
+  // the host can be in, and arming a second row must disarm the first.
+  const [armed, setArmed] = useState<string | null>(null)
+  const { status, running, refusal, start } = usePolledStatus<ClaudeSessionStatus>({
+    initial: SESSION_IDLE,
+    fetch: () => fetchClaudeSessionStatusFn(),
+    claimTimeoutMs: 30_000,
+  })
+
+  useEffect(() => {
+    if (armed === null) return
+    const t = setTimeout(() => {
+      setArmed(null)
+    }, RC_ARM_MS)
+    return () => {
+      clearTimeout(t)
+    }
+  }, [armed])
 
   return (
     <Board
@@ -910,7 +957,27 @@ function RosterBoard({ data }: { data: ClaudeData }) {
       ) : (
         <ul className={LIST}>
           {shown.map((r) => (
-            <RosterRow key={r.key} row={r} />
+            <RosterRow
+              key={r.key}
+              row={r}
+              armed={armed === r.key}
+              busy={running}
+              status={status}
+              refusal={refusal}
+              onArm={() => {
+                setArmed(r.key)
+              }}
+              onCancel={() => {
+                setArmed(null)
+              }}
+              onConfirm={(control) => {
+                setArmed(null)
+                start(async () => {
+                  const fn = control.kind === 'resume' ? resumeSessionFn : stopSessionFn
+                  return { ok: true, value: (await fn({ data: { session: control.session } })).id }
+                })
+              }}
+            />
           ))}
         </ul>
       )}
@@ -947,11 +1014,27 @@ function RosterBoard({ data }: { data: ClaudeData }) {
         <span className={MONO}>--remote-control</span>: the file grew in place, the id came back
         unchanged, and the conversation picked up where it had stopped. Starting a branch instead is
         the opt-in, <span className={MONO}>--fork-session</span>, and nothing on this page passes
-        it. A <b>background</b> row has its own two verbs, which take the short id rather than the
-        uuid: <span className={MONO}>claude attach &lt;short id&gt;</span> returns to a process that
-        never stopped, <span className={MONO}>claude stop &lt;short id&gt;</span> ends it. There is
-        no end-of-session marker anywhere, so "finished cleanly" is not a thing this board can know
-        — a transcript with nothing running behind it is all it can honestly say.
+        it. A row that is already running offers no Resume for a different reason — a resume of a
+        live session starts a second copy on the same transcript, which the host refuses as well.
+        There is no end-of-session marker anywhere, so "finished cleanly" is not a thing this board
+        can know — a transcript with nothing running behind it is all it can honestly say.
+      </p>
+
+      <p className={BOARD_FOOT}>
+        <b>Three populations, three different verbs</b>, and the board does not pretend otherwise. A
+        session this box resumed runs as{' '}
+        <span className={MONO}>claude-session@&lt;id&gt;.service</span> (marked <b>ours</b>), so{' '}
+        <b>Stop</b> is <span className={MONO}>systemctl stop</span> — systemd SIGTERMs the unit's
+        cgroup, with no pid file to go stale and no recycled pid to hit by mistake. A{' '}
+        <b>background</b> agent is the CLI's own lifecycle: <b>Stop</b> there is{' '}
+        <span className={MONO}>claude stop &lt;short id&gt;</span>, which keeps the conversation,
+        and <span className={MONO}>claude attach &lt;short id&gt;</span> reopens it. A session the
+        Remote Control server spawned has <b>no per-session kill at all</b> — not in the CLI, not in
+        systemd — so those rows carry a sentence instead of a button; the only thing that ends one
+        is the server restart above, which ends all of them. Resume runs the session in{' '}
+        <span className={MONO}>/etc/nixos</span> and nowhere else: a directory whose workspace trust
+        has never been accepted stops the CLI on its trust prompt with nobody able to answer it, so
+        the host refuses one up front rather than leaving a unit started and useless.
       </p>
 
       <p className={BOARD_FOOT}>
@@ -965,30 +1048,140 @@ function RosterBoard({ data }: { data: ClaudeData }) {
   )
 }
 
-function RosterRow({ row }: { row: RosterEntry }) {
+/**
+ * One row, and — where there is an honest one — its verb.
+ *
+ * Three populations die three different ways and a fourth does not die at all,
+ * so this deliberately does not render one button four times. `rowControl`
+ * makes that decision (it is pure, and tested); this only draws it.
+ */
+function RosterRow({
+  row,
+  armed,
+  busy,
+  status,
+  refusal,
+  onArm,
+  onCancel,
+  onConfirm,
+}: {
+  row: RosterEntry
+  armed: boolean
+  busy: boolean
+  status: ClaudeSessionStatus
+  refusal: string | null
+  onArm: () => void
+  onCancel: () => void
+  onConfirm: (control: Extract<RowControl, { session: string }>) => void
+}) {
+  const control = rowControl(row)
+  // The board has one status file, so a row only speaks when the host is
+  // speaking about IT — otherwise every row would echo the same outcome.
+  const mine = control.kind !== 'none' && status.session === control.session
+
   return (
-    <li className={ROW} title={row.id ?? undefined}>
-      <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
-      <span className={ROW_MAIN}>{row.label}</span>
-      {/* An INTERACTIVE session's name is derived by the CLI (`nixos-ac`) and
-          names the session rather than the work, so it is marked as the weak
-          label it is. A background agent's name is the one it was launched
-          with — a real title — and marking that would be a lie. */}
-      {row.labelSource === 'agent' && row.state !== 'background' && (
-        <span className={cn(ROW_SIDE, NARROW_HIDE)}>cli name</span>
+    <li className={cn(ROW, 'flex-col items-stretch')} title={row.id ?? undefined}>
+      <div className="flex min-w-0 items-center gap-[0.45rem]">
+        <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
+        <span className={ROW_MAIN}>{row.label}</span>
+        {/* An INTERACTIVE session's name is derived by the CLI (`nixos-ac`) and
+            names the session rather than the work, so it is marked as the weak
+            label it is. A background agent's name is the one it was launched
+            with — a real title — and marking that would be a lie. */}
+        {row.labelSource === 'agent' && row.state !== 'background' && (
+          <span className={cn(ROW_SIDE, NARROW_HIDE)}>cli name</span>
+        )}
+        {/* A session this box started says so: it is the only live population
+            with a kill, and the row is where that difference is decided. */}
+        {row.managed && <span className={cn(ROW_SIDE, NARROW_HIDE)}>ours</span>}
+        {row.lifecycle !== null && <span className={ROW_SIDE}>{row.lifecycle}</span>}
+        <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>
+          {row.shortId ?? (row.id === null ? DASH : row.id.slice(0, 8))}
+        </span>
+        <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>
+          {text(row.cwd)}
+          {!row.cwdExact && '?'}
+        </span>
+        <span className={ROW_SIDE}>
+          {row.modifiedAt === null ? DASH : since((Date.now() - row.modifiedAt) / 1000)}
+        </span>
+        <span className={cn(ROW_SIDE, NARROW_HIDE)}>{bytes(row.sizeBytes)}</span>
+        {/* No button, and the reason in its place. A session the Remote
+            Control server spawned has no per-session kill anywhere — not in
+            the CLI, not in systemd — so the only honest thing here is a
+            sentence. The board foot points at the one lever that does end it. */}
+        {control.kind === 'none' && control.why === 'server' && (
+          <span className={cn(ROW_SIDE, NARROW_HIDE)}>ends with the server</span>
+        )}
+      </div>
+
+      {mine && status.state === 'running' && (
+        <p className={CTRL_STATE}>{status.detail || 'Working…'}</p>
       )}
-      {row.lifecycle !== null && <span className={ROW_SIDE}>{row.lifecycle}</span>}
-      <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>
-        {row.shortId ?? (row.id === null ? DASH : row.id.slice(0, 8))}
-      </span>
-      <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>
-        {text(row.cwd)}
-        {!row.cwdExact && '?'}
-      </span>
-      <span className={ROW_SIDE}>
-        {row.modifiedAt === null ? DASH : since((Date.now() - row.modifiedAt) / 1000)}
-      </span>
-      <span className={cn(ROW_SIDE, NARROW_HIDE)}>{bytes(row.sizeBytes)}</span>
+      {mine && status.state === 'done' && (
+        <p className={cn(CTRL_STATE, 'text-success')}>{status.detail || 'Done.'}</p>
+      )}
+      {mine && status.state === 'failed' && refusal === null && (
+        <p className={cn(CTRL_STATE, 'text-danger')}>{status.error}</p>
+      )}
+      {mine && refusal !== null && <p className={cn(CTRL_STATE, 'text-danger')}>{refusal}</p>}
+
+      {control.kind !== 'none' &&
+        !busy &&
+        (armed ? (
+          <>
+            <p className={CTRL_COST}>
+              {control.kind === 'resume' ? (
+                <>
+                  This CONTINUES the session — same id, same transcript, appended to. It comes back
+                  as a live session on claude.ai, running in{' '}
+                  <span className={MONO}>/etc/nixos</span> as <span className={MONO}>santiago</span>
+                  , with sudo available to it. Nothing is branched and nothing is overwritten.
+                </>
+              ) : control.kind === 'stop-unit' ? (
+                <>
+                  <span className={MONO}>systemctl stop</span> on this session's unit: systemd
+                  SIGTERMs its whole process group, including anything it is running right now. The
+                  transcript survives and it can be resumed again from this board.
+                </>
+              ) : (
+                <>
+                  <span className={MONO}>claude stop {control.session}</span> — upstream's own verb.
+                  The agent stops where it is; its conversation is kept, and{' '}
+                  <span className={MONO}>claude attach {control.session}</span> reopens it.
+                </>
+              )}
+            </p>
+            <div className={CTRL}>
+              <Button
+                type="button"
+                variant={control.kind === 'resume' ? 'default' : 'destructive'}
+                size="sm"
+                onClick={() => {
+                  onConfirm(control)
+                }}
+              >
+                {control.kind === 'resume' ? 'Confirm resume' : 'Confirm stop'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={GHOST_BTN}
+                onClick={onCancel}
+              >
+                Cancel
+              </Button>
+              <span className={CTRL_NOTE}>disarms on its own in {RC_ARM_MS / 1000}s</span>
+            </div>
+          </>
+        ) : (
+          <div className={CTRL}>
+            <Button type="button" variant="outline" size="sm" className={GHOST_BTN} onClick={onArm}>
+              {control.kind === 'resume' ? 'Resume' : 'Stop'}
+            </Button>
+          </div>
+        ))}
     </li>
   )
 }
