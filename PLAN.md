@@ -14,26 +14,30 @@ in `ARCHITECTURE.md` and `BUILDS.md` for the design as built, and in
 `~/.claude/plans/piped-gathering-meerkat.md` for the GitHub App + Railpack
 build-out (closed 2026-09-13).
 
-## Where things stand (2026-09-15)
+## Where things stand (2026-09-20)
 
-Phases 1–7 of the productization plan have landed: the UI foundation, the
-read-only then editable Settings, the repository split (private config
-`s2-server`, public engine `daedalus`), `site/` as the one directory the UI
-writes, nix reading `site.json` and `apps.json` as the source of the site
-constants and the app registry, the secrets vault (Cloudflare token, GitHub
-App key), and builds on the box through the box's own GitHub App.
+Phases 1–7 of the productization plan have landed, and most of 8: the UI
+foundation, the read-only then editable Settings, the repository split
+(private config `s2-server`, public engine `daedalus`), `site/` as the one
+directory the UI writes, nix reading `site.json` and `apps.json` as the
+source of the site constants and the app registry, the secrets vault
+(Cloudflare token, GitHub App key), builds on the box through the box's own
+GitHub App, and an `admins` check on every mutation that is built and tested
+but not yet armed. Since the 15th: scheduled tasks per app, the app secrets
+editor, the MCP server, the Claude session roster with resume, and a
+provenance stamp under `site/`.
 
 | Phase | What | State |
 |---|---|---|
-| 8 | Auth hardening | half: `actorOf(request)` exists (`core/auth.ts`); no `admins` check, no break-glass login |
+| 8 | Auth hardening | mostly: the `admins` check is on every mutation (32 sites) and tested, disarmed behind `auth.enforceAdmins`; no break-glass login |
 | 9 | Nix: enable surface, literals, state out of the tree | not started |
 | 10 | App module system and a real build | not started |
 | 11 | The engine becomes importable | not started |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
 Beside the phases, the **Features** section lists what the product is missing
-regardless of phase — previews, scheduled tasks, feature flags, secrets from
-the UI, and more — each with its mechanism.
+regardless of phase — previews, feature flags, the rest of the app secrets
+editor, the app contract as packages, and more — each with its mechanism.
 
 ---
 
@@ -158,8 +162,11 @@ first app, whose first push to main builds here.
 Why these phases, in one list — the blockers still standing between this box's
 dashboard and a product anyone can import:
 
-1. **No authorization**: anyone past the forward-auth gate can apply, reboot,
-   reveal secrets (→ Phase 8).
+1. **Authorization is built but not armed**: the `admins` check sits on
+   every mutating server function and route behind `auth.enforceAdmins`,
+   which is off, so anyone past the forward-auth gate can still apply,
+   reboot and reveal secrets; and there is no break-glass login for the day
+   the IdP is down (→ Phase 8).
 2. **No enable surface in nix**: `configuration.nix` auto-imports every file;
    `daedalus.nix` hard-references ~15 optional stacks at eval time — remove
    immich and the control plane fails to evaluate (→ Phase 9a, 9c).
@@ -182,19 +189,27 @@ dashboard and a product anyone can import:
 Order: 8 → 9 → 10 → 11 → 12. 9 and 10 are the long ones; 11's gate (an
 identical closure) is the hard one.
 
-### Phase 8 — Auth hardening (1–2 days, app only)
+### Phase 8 — Auth hardening (remainder: an hour for 1, a day for 2; app only)
 
-**Who may press Apply.** An `admins`-group check on every mutating server
-function and API route (`actorOf(request)` already exists in `core/auth.ts`
-and resolves the forward-auth headers; Pocket ID forwards groups through
-traefik headers — add the header to `daedalus.nix`'s `auth.headers`). A setup
-token plus a local break-glass login (argon2, TanStack `useSession`),
-implemented but dormant behind `site.json` `auth.localLogin` (default off
-here; the onboarding wizard turns it on for new installs). Tests for the
-`api.deploy.ts` token comparison and for authz.
+The `admins`-group check exists on every mutating server function and API
+route (32 sites, `core/authz.ts`), traefik forwards the IdP's groups as
+`X-Forwarded-Groups`, and the authz tests pass. It is deliberately disarmed:
+`auth.enforceAdmins` is a stored setting (Postgres, not `site.json`) that
+defaults to off, so the check runs and reports but does not refuse. Two
+things remain.
 
-Compatibility: the operator is in `admins`; nothing changes. Gate: a test user
-outside the group gets 403 on Apply.
+1. **Arm it, in this order.** First confirm that a live request through the
+   gate actually carries `admins` — Settings › Developer shows the groups
+   arriving — and only THEN turn `auth.enforceAdmins` on. Reversed, an absent
+   header reads as "not an admin" and locks the operator out of their own
+   control plane, from a change whose whole purpose is safety.
+2. **The break-glass local login.** A setup token plus a local login
+   (argon2, TanStack `useSession`), implemented but dormant behind `site.json`
+   `auth.localLogin` (default off here; the onboarding wizard turns it on for
+   new installs). Not started.
+
+Compatibility: the operator is in `admins`; arming changes nothing for them.
+Gate: a test user outside the group gets 403 on Apply.
 
 ### Phase 9 — Nix: enable surface, literals, state out of the tree (3 switches over 1–2 weeks)
 
@@ -377,42 +392,21 @@ priority; each can be done independently unless noted.
      `environment: plutus-<branch>`, `transient_environment: true`, and a
      PR comment with the link edited in place. The preview list lives on the
      app's page with sha, age, database size, and Destroy.
-   - **Pairs with feature flags (item 11):** a half-built feature can merge
+   - **Pairs with feature flags (item 8):** a half-built feature can merge
      to main behind a flag that is on in previews and off in production,
      which is what makes trunk-based work with one box and no staging.
 
-2. **Resumable Claude sessions.** Today, when the box reboots or the
-   `claude-remote-control` daemon restarts, any running Claude Code session
-   dies and the operator has to SSH in and run `claude --resume` by hand to
-   pick it up. Daedalus should own this:
-   - A **"Claude sessions"** board on the Claude page (Settings › Claude, or
-     a new top-level page) that lists recent sessions whose process is gone
-     — the ones `claude --resume` would show.
-   - A **"Resume"** button per session that starts a new
-     `claude-remote-control` process with `--resume <session-id>`, so the
-     operator can reopen a dead conversation from the UI instead of an SSH
-     terminal.
-   - Session metadata (start time, last activity, whether it ended cleanly
-     or was killed) read from `~/.claude/projects/` or wherever Claude Code
-     stores its session index.
-   - The board should auto-refresh and show which sessions are currently
-     alive vs resumable.
-   - Implementation: a new bridge verb (`claude-resume-request.json`) that
-     the host picks up and starts the process, or a direct host-side
-     systemd unit template `claude-session@<id>.service`. The container
-     cannot start processes on the host, so the bridge is the path.
-
-3. **Post-deploy checks for all apps.** Only anansi (26 probes) and voyra
+2. **Post-deploy checks for all apps.** Only anansi (26 probes) and voyra
    (15 probes) have post-deploy assertion drivers in
    `stacks/shotter/assets/checks/`. The remaining five apps (iris, hermes,
    plutus, chismed, argus) have no automated post-deploy verification
    beyond the deploy script's HTTP status check.
 
-4. **argus e2e suite.** Needs a seeded database; deliberately excluded from
+3. **argus e2e suite.** Needs a seeded database; deliberately excluded from
    the post-deploy checks because its e2e writes to the database and its
    other two checks compare a PR to a base branch.
 
-5. **Self-hosted Gitea with two-way GitHub mirroring.** A Gitea instance on
+4. **Self-hosted Gitea with two-way GitHub mirroring.** A Gitea instance on
    the box that mirrors every project repo to and from GitHub
    (https://docs.gitea.com/usage/repository/repo-mirror/). When GitHub is
    down the operator can still push, review, and merge — and Gitea runs CI
@@ -422,7 +416,7 @@ priority; each can be done independently unless noted.
    feature pointed at each GitHub repo, and Gitea's Actions runner for CI
    (reuses the box's existing BuildKit and Railpack tooling where possible).
 
-6. **Dev mode toggle for the engine.** Today `source.mode = "local"` is a
+5. **Dev mode toggle for the engine.** Today `source.mode = "local"` is a
    nix constant — switching between the dev server (bind-mount + `vite dev`,
    for working on the app) and the real production image requires editing
    `daedalus.nix` and rebuilding. Daedalus should expose this as a toggle
@@ -433,7 +427,7 @@ priority; each can be done independently unless noted.
    10b (the production build must exist before there is something to
    toggle to).
 
-7. **Windows companion agent for remote machines.** A lightweight agent
+6. **Windows companion agent for remote machines.** A lightweight agent
    installed on the gaming PC (the Lemonade model server) that reports
    hardware telemetry daedalus cannot see today: GPU utilization and
    temperature, CPU usage, RAM, BIOS/firmware version, disk health, and
@@ -456,7 +450,7 @@ priority; each can be done independently unless noted.
      own repo). Written in Go or Rust for a single static binary with no
      runtime dependency.
 
-8. **Git commit attribution from the signed-in user.** Today every
+7. **Git commit attribution from the signed-in user.** Today every
    `site/` commit is authored by "daedalus" regardless of who pressed
    Apply. The forward-auth headers carry the operator's email (and could
    carry a display name via `preferred_username`). Pass the identity
@@ -464,20 +458,7 @@ priority; each can be done independently unless noted.
    git commit, so GitHub shows "Santiago Toscanini authored and daedalus
    committed" instead of "daedalus committed".
 
-9. **Scheduled tasks per app (crons with history).** A cron for an app is
-   a nix edit and a rebuild today. Declare tasks on the app in daedalus —
-   `tasks: [{ id, schedule, command (argv), timeoutSec }]` in `apps.json` —
-   and `apps.nix` generates `app-<name>-task-<id>.{timer,service}` running
-   `podman exec app-<name> <argv>` as santiago, with a `monitoredJobs`
-   entry (a failed run mails, like every other job) and output in the
-   journal, hence Loki under the app's stack label. The app page gets a
-   Tasks tab: schedule, last run, duration, exit status, the captured
-   output read back from Loki, and **Run now** (a `task-run-request.json`
-   bridge verb that starts the unit). Edits go through Apply like any other
-   app setting. Never schedule on the hour (CLAUDE.md: myspeed's `:00`
-   blackout); the UI offsets a bare `hourly`/`daily` by a per-app minute.
-
-10. **Feature flags via a self-hosted service, wired per app.** Run
+8. **Feature flags via a self-hosted service, wired per app.** Run
     **Flipt** as a stack (single Go binary; its flags can be **declarative
     from a file or a git repo**, so the flag definitions live in the config
     repo like everything else; OpenFeature-compatible SDKs for Node; UI
@@ -495,59 +476,33 @@ priority; each can be done independently unless noted.
     needed). Simple, professional, and the missing half of trunk-based
     development with one box and no staging.
 
-11. **App variables and secrets, one editor, two kinds.** An app's
-    environment is two lists that already exist and should look like one:
-    - **Variables** — plain text, readable and editable in the UI, stored in
-      `apps.json` `env` (today's `registry` origin), committed in clear,
-      diffed in the Apply preview. `PORT`, feature toggles, public URLs,
-      model names.
-    - **Secrets** — write-only. Today they are `stacks/apps/<name>-env.sops`
-      — the file is the switch (`operator-secrets-lib.nix`), edited with
-      `sops` over SSH, shown as a read-only `secrets` group
-      (`env-groups.ts`). The vault path (encrypt in the container → bridge →
-      commit → rebuild) already does this for two secrets; generalise it,
-      with one rule the container's identity forces: the container has an
-      encrypt-only sops identity and no decryption key, so it can never
-      display a value or re-emit a file — it can only hand the host a new
-      value for one key.
+9. **App variables and secrets: convert, rotate, scope.** An app's
+   environment is two lists: **variables** — plain text in `apps.json`
+   `env`, committed in clear, diffed in the Apply preview — and
+   **secrets** — write-only, one sops file per app under `site/vault/apps/`,
+   set and removed one key at a time through the bridge with a host-side
+   merge and shown as "set <date> by <actor>" from git. The rule the
+   container's identity forces still governs every addition here: it has an
+   encrypt-only sops identity and no decryption key, so it can never
+   display a value or re-emit a file — it can only hand the host a new value
+   for one key. What the editor still lacks:
+   - **Convert to secret.** The value moves from `apps.json` into the sops
+     file in one Apply; the old plaintext remains in git history, and the
+     UI says so rather than pretending otherwise. **Convert to variable**
+     stays deliberately absent — a secret cannot be read back, only removed
+     and re-created as a variable by typing it.
+   - **Rotate the machine-generated ones.** `AUTH_SECRET` and the app's
+     database password are "delete the file + rebuild" today (CLAUDE.md,
+     Secrets); a Rotate button per app is one more bridge verb doing exactly
+     that, with a confirm. Like `secret-set`, the new verb joins the
+     `redact` fixtures and the secrets-grep drill before it ships.
+   - **The runtime/build-time flag and the preview scope.** Both kinds carry
+     a runtime/build-time flag, so a real build-time secret goes to the
+     build agent as a BuildKit secret rather than a placeholder, and a
+     preview-scope switch — the preview env group is the same list scoped
+     to previews. Both wait on item 1.
 
-    The kind is chosen when the variable is created and shown as a badge.
-    **Convert to secret** exists (the value moves from `apps.json` into the
-    sops file in one Apply; the old plaintext remains in git history, and
-    the UI says so). **Convert to variable** does not — a secret cannot be
-    read back, only removed and re-created as a variable by typing it.
-    Both kinds carry the same runtime/build-time flag and the same
-    preview-scope switch (item 1). The rest of this item is the secrets
-    half:
-    - **Move the files into `site/vault/apps/<name>-env.sops`.** `site/` is
-      the one directory daedalus writes and the bridge's `MANAGED` allowlist
-      is `site/`-only; `operator-secrets-lib.nix` reads the new directory,
-      still "the file is the switch". Also the right home once the engine
-      is importable and the config repo is tiny (Phase 11).
-    - **Set / remove one key at a time, host-side merge.** The container
-      age-encrypts the single value to the host's recipient and drops
-      `secret-set-request.json` `{ app, key, ciphertext }` (never plaintext
-      on the bridge, even briefly); the host decrypts in memory, runs
-      `sops --set` / `sops unset` on the app's file, commits
-      `secrets: <app> set KEY` (names only, never values), and the Apply's
-      rebuild restarts the app because its sops secret changed
-      (`restartUnits` — verify against the false-success trap in CLAUDE.md,
-      not assume). Git history is the audit trail: who set which key when,
-      through commit attribution (item 8).
-    - **UI:** the `secrets` group becomes editable per key — Add (name +
-      value, value field never echoed back), Replace, Remove — with "set
-      <date> by <actor>" from git, plus the runtime/build-time flag per
-      variable so a real build-time secret goes to the build agent as a
-      BuildKit secret rather than a placeholder. The preview env group
-      (item 1) is the same list scoped to previews.
-    - **Rotate the machine-generated ones too:** `AUTH_SECRET` and the
-      app's database password are "delete the file + rebuild" today
-      (CLAUDE.md, Secrets); a Rotate button per app is one more bridge verb
-      doing exactly that, with a confirm.
-    - Redaction already covers the bridge log and the build log; add the
-      new verb to the `redact` fixtures and the secrets-grep drill.
-
-12. **The app contract as packages, published to the box's own Verdaccio.**
+10. **The app contract as packages, published to the box's own Verdaccio.**
     daedalus defines a contract with its apps — which env names are
     injected, what `/api/healthz` answers, how migrations run at start, how
     auth works, where flags come from — and today every app re-implements
@@ -576,7 +531,7 @@ priority; each can be done independently unless noted.
     - **`@daedalus/health`** — the `/api/healthz` handler: DB ping, revision,
       uptime; the shape gatus and `deploy.sh` already expect.
     - **`@daedalus/flags`** — OpenFeature + the Flipt provider with the
-      evaluation context set from env; item 11 becomes one import per app.
+      evaluation context set from env; item 8 becomes one import per app.
     - **`@daedalus/log`** — structured stdout in the shape Alloy's
       level-inference expects (podman's journald priority is a lie), with the
       redaction rules; Loki levels become right for every app at once.
@@ -601,11 +556,11 @@ priority; each can be done independently unless noted.
     because Verdaccio is LAN/VPN-only and GitHub-hosted CI cannot reach it.
     **Not this:** a UI kit — the apps' designs are deliberately different.
 
-13. **Self-hosted GitHub Actions runners, managed from daedalus.** The old
+11. **Self-hosted GitHub Actions runners, managed from daedalus.** The old
     runner stack was deleted because it was the deploy path; runners are
     still worth having for everything else — the free plan gives a fixed
     number of minutes for private repos, and heavy CI (browser e2e, argus's
-    seeded-database suite from item 4, release builds) burns through it.
+    seeded-database suite from item 3, release builds) burns through it.
     Bring runners back as a daedalus feature with a firm policy: **runners
     run CI, never fleet images** — the box's build path stays the only way
     an image reaches zot.
@@ -632,7 +587,7 @@ priority; each can be done independently unless noted.
       `jobs_queued`, `job_minutes_total{repo}` — so Grafana and the
       existing alerting see them; runner logs through the journal to Loki.
     - **Later:** a Windows runner on the gaming PC through the companion
-      agent (item 7) for Windows builds; a `gpu` label for jobs that want
+      agent (item 6) for Windows builds; a `gpu` label for jobs that want
       the model server. macOS stays on GitHub (santree's signed releases).
 
 ---
@@ -658,6 +613,20 @@ priority; each can be done independently unless noted.
 
 3. **License for the engine.** No `LICENSE` file exists in the engine repo
    yet. MIT or Apache-2.0; default MIT. Needed before Phase 12's `v0.1.0`.
+
+## Owed to the operator
+
+Hand edits the UI cannot make for itself:
+
+1. **The MCP server's credentials.** It is built and reachable at `/mcp`,
+   and nothing calls it until three edits land: mint a write token in
+   Settings › Developer (it is shown once); add a `daedalus` entry to
+   `.claude/mcp.json.sops` in `/etc/nixos` carrying that token as a bearer
+   header; add `"daedalus"` to `enabledMcpjsonServers` in
+   `.claude/settings.json`. The last two live in the config repo, so the
+   usual `git add` and rebuild apply — `platform/claude.nix` renders the
+   `.mcp.json` symlink at activation.
+2. **Arming the admins gate** — Phase 8, item 1, in the order given there.
 
 ## Engine polish
 
@@ -700,9 +669,9 @@ lifecycle), `CONTRIBUTING.md` (tested from a fresh clone). Missing:
   diagrams live as code blocks in the repo; the site would need a build-time
   Mermaid→SVG pass or a client-side renderer).
 - **Bridge API reference.** The file-drop request shapes (apply, build,
-  cancel, site-write, secret-apply, workspace-clone, deploy-trigger,
-  image-update, export-publish, claude-resume) have no standalone doc beyond
-  the code and `apply.sh`'s subject cases.
+  cancel, site-write, secret-apply, secret-set, workspace-clone,
+  deploy-trigger, image-update, export-publish, task-run, claude-resume)
+  have no standalone doc beyond the code and `apply.sh`'s subject cases.
 - **Operational runbook** for the build pipeline beyond what BUILDS.md
   covers — what to do when a build hangs, how to force-rebuild, how to read
   the build log, how to cancel.
@@ -724,7 +693,8 @@ lifecycle), `CONTRIBUTING.md` (tested from a fresh clone). Missing:
   to CI if not).
 - Standing practice: closure diffs and the census after every nix phase;
   container truth, not unit state; `shot run` drivers with `events.json`
-  read before pictures; authz tests per mutation once Phase 8 lands.
+  read before pictures; an authz test beside every new mutation, and the
+  suite re-run the day the gate is armed.
 
 ## Registry and disk
 
@@ -765,7 +735,7 @@ Registrar API (beta); generated-secrets-as-sops (Clan-vars style) — later;
 And, decided after evaluating Coolify (2026-09-15): no second container
 engine, no control plane whose state lives outside git, no one-container-per-
 database model — the features worth having from that comparison are items 1,
-9, 10, 11 and 12 above.
+8 and 9 above.
 
 ## Risks
 
@@ -785,3 +755,15 @@ database model — the features worth having from that comparison are items 1,
 - Previews (feature 1) run branch code with a copy of production data on the
   same box: the preview env allowlist and the fork-approval gate are what
   keep that safe, and both must exist before previews are on by default.
+- `--init` is not a default in `mkRootlessContainer`. Found while diagnosing
+  why `mcp-yazio` died weekly: node as PID 1 never reaps orphaned
+  grandchildren, so every session leaked one pid until the container's 2048
+  ceiling. Fixed for yazio alone. `app-plutus` has the identical bug (35
+  chromium zombies, months from its ceiling), and any node-as-PID-1
+  container that spawns processes will. The general fix is one line touching
+  all 68 containers — left as the operator's call, not a drive-by.
+- The weekly `flake.lock` bump can move nixfmt and leave `/etc/nixos`
+  treefmt-dirty, which fails `nix flake check` — Phase 11's gate. It was
+  cleared on 2026-09-20 (`70a299b`, empty closure diff as proof), and will
+  recur; check after every autoupgrade. `nix fmt -- --ci` writes before it
+  fails; it is not a read-only check, so run it on a tree you mean to commit.
