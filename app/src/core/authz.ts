@@ -1,14 +1,18 @@
-import { readSetting, SETTING_KEYS } from '../lib/repo/settings'
+import { readSetting, SETTING_KEYS, writeSetting } from '../lib/repo/settings'
 import type { Result } from '../lib/result'
 import {
   type Actor,
+  ADMIN_GROUP,
   actorOf,
-  groupsOf,
+  type GroupsHeader,
+  type GroupsRead,
+  groupsHeaderOf,
   isAdmin,
   NOT_ADMIN_REASON,
   requireActor,
-  requireGroups,
+  requireGroupsHeader,
 } from './auth'
+import { type LocalIdentity, localIdentity, localIdentityOf } from './local-login'
 
 // Who may CHANGE this box, as opposed to who is signed in.
 //
@@ -50,6 +54,13 @@ import {
 export type Authorization = {
   /** The signed-in actor, or the refusal from the identity gate. */
   actor: Actor
+  /**
+   * How the groups header arrived — the fact the arming panel renders, since
+   * `groups: []` alone cannot tell "the proxy sent nothing" from "the proxy
+   * sent a list without admins". `local` is the break-glass session, which
+   * carries no header at all (core/local-login.ts).
+   */
+  header: GroupsHeader | 'local'
   /** The groups the session carries. `[]` when the header has not landed yet. */
   groups: string[]
   /** Whether those groups include the admin group. */
@@ -67,21 +78,80 @@ export async function enforcingAdmins(): Promise<boolean> {
   return on ?? false
 }
 
-const decide = async (actor: Actor, groups: string[]): Promise<Authorization> => ({
-  actor,
-  groups,
-  admin: isAdmin(groups),
-  enforced: await enforcingAdmins(),
-})
+/**
+ * Arm or disarm refusal — Settings › Developer › Authorization's switch.
+ *
+ * Arming is refused unless the decision being made FROM carries `admins`:
+ * the request that flips the switch is the proof that the header has landed,
+ * and turning refusal on from a request the check would refuse is the lockout
+ * this whole rollout exists to avoid. Nothing is written on a refusal.
+ * Disarming is always allowed — it is the way back out, and it can only widen.
+ *
+ * The write is a parameter so the refusal can be asserted without a database:
+ * the seam passes `writeSetting`.
+ */
+export async function setEnforcingAdmins(
+  on: boolean,
+  decision: Authorization,
+  write: (key: string, value: unknown) => Promise<void> = writeSetting,
+): Promise<Result<null>> {
+  if (on && !decision.admin) {
+    return {
+      ok: false,
+      reason: `This request does not carry the ${ADMIN_GROUP} group, so arming would refuse this very account. Nothing was changed.`,
+    }
+  }
+  await write(SETTING_KEYS.authEnforceAdmins, on)
+  return { ok: true, value: null }
+}
+
+/**
+ * The decision a break-glass local session yields (core/local-login.ts): the
+ * same shape the headers produce, with `admins` implied. Pure, so the claim
+ * that such a session passes an enforced `assertAdmin()` is one test.
+ */
+export function localAuthorization(identity: LocalIdentity, enforced: boolean): Authorization {
+  return {
+    actor: { ok: true, value: identity.actor },
+    header: 'local',
+    groups: [ADMIN_GROUP],
+    admin: true,
+    enforced,
+  }
+}
+
+/**
+ * The headers first, the local session second. The proxy's word wins when it
+ * has one; the session is only consulted when the request carries no
+ * forwarded identity, and it answers null without reading a cookie unless
+ * site.json turns the login on.
+ */
+const decide = async (
+  actor: Actor,
+  read: GroupsRead,
+  local: () => Promise<LocalIdentity | null>,
+): Promise<Authorization> => {
+  if (!actor.ok) {
+    const identity = await local()
+    if (identity !== null) return localAuthorization(identity, await enforcingAdmins())
+  }
+  return {
+    actor,
+    header: read.state,
+    groups: read.groups,
+    admin: isAdmin(read.groups),
+    enforced: await enforcingAdmins(),
+  }
+}
 
 /** The decision for the request this server function is running inside. */
 export async function authorize(): Promise<Authorization> {
-  return decide(requireActor(), requireGroups())
+  return decide(requireActor(), requireGroupsHeader(), () => localIdentity())
 }
 
 /** The decision for a request a route handler is holding. */
 export async function authorizeRequest(request: Request): Promise<Authorization> {
-  return decide(actorOf(request), groupsOf(request))
+  return decide(actorOf(request), groupsHeaderOf(request), () => localIdentityOf(request))
 }
 
 /**

@@ -1,19 +1,30 @@
 import { FileCodeIcon } from 'lucide-react'
 import type { BoxSettings } from '../../core/settings/types'
 import type { McpTokenRow } from '../../host/mcp/tokens'
+import type { AuthorizationView } from '../../server/settings'
 import { Chip } from '../viz'
+import { Authorization } from './authorization'
 import { McpTokens } from './mcp-tokens'
 import { Section, Value } from './shared'
 
 // How this instance runs, and the credentials that let a machine drive it.
 //
 // The first two sections are inert by design — they state what the flake
-// declared and change nothing. The third is not: MCP tokens are the one thing
-// on this tab an operator creates, and they live here rather than under
-// Integrations because the caller they authenticate is an agent working on
-// this box, not a service the box talks to.
+// declared and change nothing. The next two are not: Authorization is the
+// switch that arms the `admins` check, and MCP tokens are the one thing on
+// this tab an operator creates. Both live here rather than under Integrations
+// because their subject is who may drive this box, not a service the box
+// talks to.
 
-export function Developer({ settings, tokens }: { settings: BoxSettings; tokens: McpTokenRow[] }) {
+export function Developer({
+  settings,
+  tokens,
+  authorization,
+}: {
+  settings: BoxSettings
+  tokens: McpTokenRow[]
+  authorization: AuthorizationView
+}) {
   const d = settings.developer
   return (
     <div className="flex flex-col gap-6">
@@ -54,6 +65,8 @@ export function Developer({ settings, tokens }: { settings: BoxSettings; tokens:
           { k: 'State root (host)', v: <Value v={d.stateRoot} /> },
         ]}
       />
+
+      <Authorization view={authorization} />
 
       <McpTokens tokens={tokens} />
     </div>

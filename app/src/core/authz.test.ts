@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest'
-import { ADMIN_GROUP, groupsOf, isAdmin, NO_ACTOR_REASON, NOT_ADMIN_REASON } from './auth'
-import { type Authorization, allow, assertMachineActor } from './authz'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  ADMIN_GROUP,
+  describeGroups,
+  groupsOf,
+  isAdmin,
+  NO_ACTOR_REASON,
+  NOT_ADMIN_REASON,
+} from './auth'
+import { type Authorization, allow, assertMachineActor, setEnforcingAdmins } from './authz'
 
 // Two rules, asserted apart from the database that stores the flag.
 //
@@ -47,6 +54,20 @@ describe('reading the groups header', () => {
     }
   })
 
+  it('says how the header arrived, not just what it parsed to', () => {
+    // The arming panel renders this: `[]` alone cannot tell "the proxy sent
+    // nothing" from "the proxy sent a list without admins", and the two
+    // call for different fixes.
+    expect(describeGroups(undefined)).toEqual({ state: 'absent', groups: [] })
+    expect(describeGroups(null)).toEqual({ state: 'absent', groups: [] })
+    expect(describeGroups('')).toEqual({ state: 'blank', groups: [] })
+    expect(describeGroups('  ')).toEqual({ state: 'blank', groups: [] })
+    expect(describeGroups('[admins family]')).toEqual({ state: 'unparseable', groups: [] })
+    expect(describeGroups('{"g":1}')).toEqual({ state: 'unparseable', groups: [] })
+    expect(describeGroups('[]')).toEqual({ state: 'list', groups: [] })
+    expect(describeGroups('["family"]')).toEqual({ state: 'list', groups: ['family'] })
+  })
+
   it('does not treat a lookalike group as the admin group', () => {
     for (const g of ['admin', 'Admins', 'admins-readonly', 'superadmins']) {
       expect(isAdmin([g]), g).toBe(false)
@@ -58,6 +79,7 @@ describe('reading the groups header', () => {
 /** A decision, spelled out so each test names only what it is about. */
 const decision = (o: Partial<Authorization>): Authorization => ({
   actor: { ok: true, value: 'op@example.test' },
+  header: 'list',
   groups: [ADMIN_GROUP],
   admin: true,
   enforced: true,
@@ -139,5 +161,46 @@ describe('the machine door', () => {
         scope: 'write',
       }),
     ).toThrow(/unknown machine door/)
+  })
+})
+
+describe('the switch', () => {
+  // Settings › Developer › Authorization. The request that flips the switch
+  // is the proof that the header has landed: arming from one the check would
+  // refuse is the lockout the rollout order exists to prevent, so it is
+  // refused here — server-side, not in a disabled button — and NOTHING is
+  // written. Disarming is the way back out and must always work.
+
+  it('refuses to arm from a request that does not carry admins, and writes nothing', async () => {
+    for (const header of ['absent', 'blank', 'unparseable', 'list'] as const) {
+      const write = vi.fn(async () => {})
+      const r = await setEnforcingAdmins(
+        true,
+        decision({ header, groups: header === 'list' ? ['family'] : [], admin: false }),
+        write,
+      )
+      expect(r.ok, header).toBe(false)
+      if (!r.ok) expect(r.reason).toMatch(/refuse this very account/)
+      expect(write, header).not.toHaveBeenCalled()
+    }
+  })
+
+  it('arms from a request that carries admins', async () => {
+    const write = vi.fn(async () => {})
+    expect(await setEnforcingAdmins(true, decision({}), write)).toEqual({ ok: true, value: null })
+    expect(write).toHaveBeenCalledWith('auth.enforceAdmins', true)
+  })
+
+  it('disarms from any request at all', async () => {
+    for (const header of ['absent', 'blank', 'unparseable', 'list'] as const) {
+      const write = vi.fn(async () => {})
+      const r = await setEnforcingAdmins(
+        false,
+        decision({ header, groups: [], admin: false }),
+        write,
+      )
+      expect(r, header).toEqual({ ok: true, value: null })
+      expect(write).toHaveBeenCalledWith('auth.enforceAdmins', false)
+    }
   })
 })

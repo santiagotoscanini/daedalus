@@ -27,6 +27,7 @@ import type { GithubAppStatus, GithubCallbackNotice } from '../core/settings/typ
 import { fetchProfile } from '../server/profile'
 import { fetchApplyStatus } from '../server/registry'
 import {
+  fetchAuthorization,
   fetchBoxSettings,
   fetchGeneralLive,
   fetchGithubAppStatus,
@@ -129,8 +130,8 @@ export const Route = createFileRoute('/settings')({
   // only for the tab that shows them.
   loader: async ({ deps }) => {
     const general = !isTab(deps.tab) || deps.tab === 'general'
-    const [theme, settings, edit, applyStatus, timezones, githubApp, mcpTokens] = await Promise.all(
-      [
+    const [theme, settings, edit, applyStatus, timezones, githubApp, mcpTokens, authorization] =
+      await Promise.all([
         fetchTheme(),
         fetchBoxSettings(),
         fetchSiteEdit(),
@@ -141,8 +142,9 @@ export const Route = createFileRoute('/settings')({
         deps.tab === 'integrations' ? fetchGithubAppStatus() : Promise.resolve(null),
         // One indexed table read, and only for the tab that lists them.
         deps.tab === 'developer' ? fetchMcpTokens() : Promise.resolve([]),
-      ],
-    )
+        // The decision for this very request: two headers and one row.
+        deps.tab === 'developer' ? fetchAuthorization() : Promise.resolve(null),
+      ])
     return {
       theme,
       settings,
@@ -151,6 +153,7 @@ export const Route = createFileRoute('/settings')({
       timezones,
       githubApp,
       mcpTokens,
+      authorization,
       // The zone list and the NixOS release ask Cloudflare, endoflife.date and
       // GitHub, so they stream in behind the tab like the integration checks.
       live: general ? fetchGeneralLive() : null,
@@ -178,6 +181,7 @@ function SettingsPage() {
     live,
     githubApp,
     mcpTokens,
+    authorization,
   } = Route.useLoaderData()
   // The bar's vocabulary is the registry's — a list of named things and the
   // fields that changed — so the site document is one entry named `site`.
@@ -364,7 +368,9 @@ function SettingsPage() {
             }}
           />
         )}
-        {tab === 'developer' && <Developer settings={settings} tokens={mcpTokens} />}
+        {tab === 'developer' && authorization !== null && (
+          <Developer settings={settings} tokens={mcpTokens} authorization={authorization} />
+        )}
       </div>
 
       <ApplyBar changed={changed} initialStatus={applyStatus} />

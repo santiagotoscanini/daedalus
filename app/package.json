@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@node-rs/argon2": "2.2.1",
     "@tanstack/react-router": "^1.167.0",
     "@tanstack/react-start": "^1.167.0",
     "class-variance-authority": "^0.7.1",

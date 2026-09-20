@@ -78,14 +78,40 @@ export const NOT_ADMIN_REASON = `Only members of the ${ADMIN_GROUP} group can ch
  * every one of those degrades to "not an admin" rather than to an error page.
  */
 function parseGroups(header: string | null | undefined): string[] {
-  const raw = header?.trim() ?? ''
-  if (raw === '') return []
+  return describeGroups(header).groups
+}
+
+/**
+ * How the groups header arrived, for the panel that decides whether arming
+ * the check is safe. `groups` alone cannot say: an empty list is what every
+ * failure degrades to, and "the proxy sent nothing" and "the proxy sent a
+ * list that does not name admins" call for different fixes.
+ *
+ *   absent      — no header at all: the nix change has not landed, or the
+ *                 request came in under the gate (shotter dials the container
+ *                 directly) or on a bypassed path.
+ *   blank       — present and empty: the strip middleware ran and the plugin
+ *                 never re-set it, which is what a bypassed path looks like.
+ *   unparseable — present, not a JSON array of strings.
+ *   list        — a JSON array, possibly empty, possibly without `admins`.
+ */
+export type GroupsHeader = 'absent' | 'blank' | 'unparseable' | 'list'
+
+export type GroupsRead = { state: GroupsHeader; groups: string[] }
+
+export function describeGroups(header: string | null | undefined): GroupsRead {
+  if (header === null || header === undefined) return { state: 'absent', groups: [] }
+  const raw = header.trim()
+  if (raw === '') return { state: 'blank', groups: [] }
   try {
     const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((g): g is string => typeof g === 'string' && g.trim() !== '')
+    if (!Array.isArray(parsed)) return { state: 'unparseable', groups: [] }
+    return {
+      state: 'list',
+      groups: parsed.filter((g): g is string => typeof g === 'string' && g.trim() !== ''),
+    }
   } catch {
-    return []
+    return { state: 'unparseable', groups: [] }
   }
 }
 
@@ -97,6 +123,16 @@ export function groupsOf(request: Request): string[] {
 /** The groups on the request this server function is running inside. */
 export function requireGroups(): string[] {
   return parseGroups(getRequestHeader(AUTH_HEADERS.GROUPS))
+}
+
+/** The header's arrival state and its groups, over a held request. */
+export function groupsHeaderOf(request: Request): GroupsRead {
+  return describeGroups(request.headers.get(AUTH_HEADERS.GROUPS))
+}
+
+/** The same, over the request this server function is running inside. */
+export function requireGroupsHeader(): GroupsRead {
+  return describeGroups(getRequestHeader(AUTH_HEADERS.GROUPS))
 }
 
 /** Whether a group list carries the one that may change this box. */

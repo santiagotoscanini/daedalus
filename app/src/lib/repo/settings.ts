@@ -62,6 +62,18 @@ export const SETTING_KEYS = {
   /** Builds whose GitHub report failed, for "Retry report" (core/builds/report.ts). */
   buildsReportFailures: 'builds.reportFailures',
   /**
+   * The break-glass login's setup token, as a digest with an expiry
+   * (core/local-login.ts). Written by the app itself when `auth.localLogin`
+   * is on and no local admin exists yet; deleted the moment one is created.
+   */
+  authLocalSetupToken: 'auth.localSetupToken',
+  /**
+   * The secret the local session cookie is sealed with. Generated once, by
+   * the app, the first time the login is used; rotating it (delete the row)
+   * signs every local session out.
+   */
+  authLocalSessionSecret: 'auth.localSessionSecret',
+  /**
    * Whether a mutation refuses a caller outside the `admins` group (core/authz).
    *
    * Off by default, and deliberately not rebuild-relevant: the groups header it

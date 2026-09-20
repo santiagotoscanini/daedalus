@@ -20,6 +20,10 @@ export const Route = createFileRoute('/api/healthz')({
         // gatus calling this every minute is what starts the build scheduler
         // in a fresh process. Synchronous and idempotent; adds nothing to the answer.
         ensureScheduler()
+        // Same trick for the break-glass login's setup token: minted and printed
+        // once per process, and only while site.json turns the login on and no
+        // admin exists. Not awaited — a probe must not wait on it or fail with it.
+        void import('../core/local-login').then((m) => m.announceSetupTokenOnce()).catch(() => {})
         try {
           await sql`SELECT 1`
           return Response.json({ status: 'ok' }, { status: 200 })

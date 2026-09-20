@@ -50,6 +50,18 @@ const APP: SiteGithubApp = {
 const reRender = (bytes: string): string => renderSiteFile(decodeSiteDocument(JSON.parse(bytes)))
 
 describe('site.json round trip', () => {
+  it('carries the break-glass login switch, and leaves it out when it was never written', () => {
+    // The one field nix does not read: absent stays absent, so a file from
+    // before the switch re-renders to its own bytes; present, it survives
+    // the round trip the next write is.
+    expect(renderSiteFile(doc)).not.toContain('localLogin')
+    const on = renderSiteFile({ ...doc, auth: { localLogin: true } })
+    expect(on).toContain('"localLogin": true')
+    expect(decodeSiteDocument(JSON.parse(on)).auth).toEqual({ localLogin: true })
+    expect(reRender(on)).toBe(on)
+    expect(decodeSiteDocument(JSON.parse(renderSiteFile(doc))).auth).toBeUndefined()
+  })
+
   it('render → parse → decode → render is a fixed point', () => {
     const once = renderSiteFile(doc)
     const back = decodeSiteDocument(JSON.parse(once))

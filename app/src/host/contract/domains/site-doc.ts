@@ -44,6 +44,11 @@ const shape = obj({
   }),
   mail: obj({ sender: str, alertTo: str }),
   cloudflare: obj({ accountId: str, zoneId: str, tunnelId: str }),
+  // The break-glass login switch. Named here or the next write drops it —
+  // `obj` copies only the keys it knows. Absent stays absent (undefined, which
+  // JSON.stringify omits), so a file without the block re-renders to its own
+  // bytes; present, it round-trips as written.
+  auth: optional(obj({ localLogin: optional(bool, false) }), undefined),
   // The GitHub App's public half. Last, and it must stay last: `obj` copies
   // only the keys named here, so a key missing from this shape is dropped by
   // the next write, and the renderer puts this block after everything else.

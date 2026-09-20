@@ -250,3 +250,49 @@ export const revokeMcpTokenFn = createServerFn({ method: 'POST' })
     const done = await revokeMcpToken(data.id)
     return done ? { ok: true, value: null } : { ok: false, reason: 'No such token.' }
   })
+
+// ── Settings › Developer › Authorization ───────────────────────────────────
+//
+// The arming panel for core/authz.ts's `admins` check. The read is the
+// decision for THIS request, so the page shows what the proxy actually sent
+// rather than what the nix file says it should; the write is the switch, and
+// the refusal to arm from a request that does not carry `admins` is made in
+// core/authz.ts, not in a disabled button.
+
+/** The decision for the request that rendered the page, flattened for the client. */
+export type AuthorizationView = {
+  /** The forwarded email, or null when the request carried no identity. */
+  actor: string | null
+  header: 'absent' | 'blank' | 'unparseable' | 'list' | 'local'
+  groups: string[]
+  admin: boolean
+  enforced: boolean
+}
+
+export const fetchAuthorization = createServerFn().handler(async (): Promise<AuthorizationView> => {
+  const { authorize } = await import('../core/authz')
+  const d = await authorize()
+  return {
+    actor: d.actor.ok ? d.actor.value : null,
+    header: d.header,
+    groups: d.groups,
+    admin: d.admin,
+    enforced: d.enforced,
+  }
+})
+
+/**
+ * Arm or disarm refusal. Behind the same gate as every mutation, and then
+ * behind one more: arming is refused unless this very request carries
+ * `admins` (core/authz.ts setEnforcingAdmins). Disarming always works.
+ */
+export const setEnforceAdminsFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { on: boolean } => {
+    if (!isRecord(data) || typeof data.on !== 'boolean') throw new Error('expected on: boolean')
+    return { on: data.on }
+  })
+  .handler(async ({ data }): Promise<Result<null>> => {
+    const { assertAdmin, authorize, setEnforcingAdmins } = await import('../core/authz')
+    await assertAdmin()
+    return setEnforcingAdmins(data.on, await authorize())
+  })

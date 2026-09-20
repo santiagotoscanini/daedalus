@@ -65,6 +65,15 @@ export type SiteDocument = {
       it is carried from the committed document, and only the App-creation
       callback writes a new one. */
   github?: { app: SiteGithubApp | null }
+  /**
+   * The break-glass local login (core/local-login.ts). Absent means off, and
+   * off means the login route does not exist. Deliberately NOT in core/site's
+   * EDITABLE list: a password door into the control plane is turned on by
+   * the onboarding wizard on a fresh install, or by a hand edit and a commit
+   * — never from the UI the door leads into, where a compromised session
+   * could open it for itself. Nix does not read it today.
+   */
+  auth?: { localLogin: boolean }
 }
 
 /**

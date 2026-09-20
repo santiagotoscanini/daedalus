@@ -483,3 +483,25 @@ export const mcpTokens = pgTable(
   // on this column exactly once.
   (t) => [uniqueIndex('mcp_tokens_hash_idx').on(t.tokenHash)],
 )
+
+// The break-glass local admins (core/local-login.ts).
+//
+// Dormant by construction: nothing reads or writes this table unless
+// site.json's `auth.localLogin` is true, and on a box behind Pocket ID it is
+// absent. When it is on, one row is one operator who can sign in with a
+// password instead of a passkey — the way back into the control plane when
+// the IdP is down, and the first door on a fresh install before an IdP
+// exists. A local admin is implicitly in `admins`.
+//
+// `passwordHash` is argon2id (the PHC string, parameters included), which is
+// the one place in this schema a real password hash is warranted: unlike an
+// MCP token the value WAS chosen by a person, so there is a dictionary to slow
+// down. `username` is the actor every write is recorded under, namespaced as
+// `local:<username>` so a record says which door it came through.
+export const localAdmins = pgTable('local_admins', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  username: text('username').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+})
