@@ -23,7 +23,7 @@ import { defineBridge } from './bridge'
 // checks it again, as it must: this side is not the only guard and must never
 // be the only guard.
 //
-// ── one verb, two shapes of selector ──────────────────────────────────────
+// ── three verbs, two shapes of selector ───────────────────────────────────
 //
 // `resume` always takes the session uuid. `stop` takes whichever handle the
 // row actually dies by: the uuid for a session this box started (the host
@@ -33,11 +33,20 @@ import { defineBridge } from './bridge'
 // `claude attach` can reopen it). The host decides which by the shape it
 // reads plus what it finds running — never by a flag from here.
 //
+// `remove` is a background agent's short id and nothing else. It is the verb
+// for a RECORD with no process behind it: `claude stop` on one has no object,
+// and pressing it is what put a red "failed" on the board for an agent that
+// had been dead for weeks. `claude rm` is what the CLI's own help points at
+// for an already-exited session — and unlike `stop` it is destructive, since
+// it takes the record and its worktree with it, so `claude attach` has
+// nothing to reopen afterwards. The header of lib/claude-roster.ts carries
+// the pid rule that decides which row gets which.
+//
 // Like claude-rc-request.ts, the agent outlives its action, so `done` and
 // `failed` are both real terminal states and the ordinary status poll covers
 // the flow end to end.
 
-export type ClaudeSessionAction = 'resume' | 'stop'
+export type ClaudeSessionAction = 'resume' | 'stop' | 'remove'
 export type ClaudeSessionState = 'idle' | 'running' | 'done' | 'failed'
 
 export type ClaudeSessionStatus = {
@@ -63,7 +72,7 @@ export type ClaudeSessionStatus = {
  */
 const CLAUDE_SESSION_STATUS: Decoder<ClaudeSessionStatus> = obj({
   id: optional(nullable(str), null),
-  action: optional(nullable(literal('resume', 'stop')), null),
+  action: optional(nullable(literal('resume', 'stop', 'remove')), null),
   session: optional(nullable(str), null),
   state: optional(literal('idle', 'running', 'done', 'failed'), 'idle'),
   detail: optional(str, ''),
@@ -112,4 +121,23 @@ export async function requestClaudeSessionStop(input: {
     )
   }
   return bridge.request({ action: 'stop', session: input.session, actor: input.actor })
+}
+
+/**
+ * Delete a dormant background agent's record — `claude rm <short id>`.
+ *
+ * A background agent's id only, and deliberately not a uuid: `rm` is the CLI's
+ * own verb for its own job records, there is no session-uuid equivalent, and a
+ * uuid arriving here would mean the board had confused a transcript with a
+ * job. Throws — publishing nothing — rather than letting one through, for the
+ * reason the resume above throws.
+ */
+export async function requestClaudeSessionRemove(input: {
+  actor: string
+  session: string
+}): Promise<string> {
+  if (!isAgentId(input.session)) {
+    throw new Error('not an agent id: a remove takes an eight-digit background-agent id')
+  }
+  return bridge.request({ action: 'remove', session: input.session, actor: input.actor })
 }

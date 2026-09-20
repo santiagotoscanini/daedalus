@@ -13,6 +13,17 @@ import { defineBridge } from './bridge'
 // Unlike power, the agent (stacks/daedalus/host/claude-rc.sh) outlives its
 // action: `done` and `failed` are both real terminal states, and the
 // ordinary status poll covers the whole flow.
+//
+// ── what it costs, which the armed panel says and this explains ───────────
+//
+// Every connected session dies with the server, and none of them comes back:
+// Remote Control is a bridge for STARTING sessions, not for re-attaching to
+// one that lost its process, so the web side can only mint new ones and the
+// "restart" claude.ai offers on a dead session starts a fresh conversation.
+// What survives is on this box — the transcript is untouched and the row on
+// the roster board simply moves from `alive` to `resumable`, where
+// `claude --resume` continues it. The environment id is minted per start, so
+// the session link changes too.
 
 export type ClaudeRcAction = 'restart'
 export type ClaudeRcState = 'idle' | 'running' | 'done' | 'failed'

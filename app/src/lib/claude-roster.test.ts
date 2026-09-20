@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { NO_META } from './claude-meta'
 import {
   type ClaudeAgent,
   type ClaudeRoster,
@@ -6,6 +7,7 @@ import {
   countByState,
   isAgentId,
   isSessionId,
+  type LiveSession,
   NO_ROSTER,
   type RosterEntry,
   rowControl,
@@ -38,6 +40,10 @@ const transcript = (over: Partial<ClaudeTranscript> & { id: string }): ClaudeTra
   startedAt: 1_789_000_000_000,
   modifiedAt: 1_789_100_000_000,
   sizeBytes: 1024,
+  // The join does not read the scan, so every case here gets the block the
+  // host publishes when it has nothing. claude-meta.test.ts is where the
+  // populated shapes are exercised.
+  meta: NO_META,
   ...over,
 })
 
@@ -51,6 +57,22 @@ const agent = (over: Partial<ClaudeAgent>): ClaudeAgent => ({
   name: null,
   cwd: null,
   startedAt: null,
+  ...over,
+})
+
+/** A connected session, as ~/.claude/sessions + /proc report one. */
+const session = (over: Partial<LiveSession>): LiveSession => ({
+  transcriptId: null,
+  alive: true,
+  pid: 1234,
+  remoteId: null,
+  name: null,
+  status: null,
+  cwd: '/etc/nixos',
+  startedAt: 1_789_000_000_000,
+  lastActivityAt: 1_789_100_000_000,
+  cpuMs: null,
+  rssBytes: null,
   ...over,
 })
 
@@ -87,7 +109,7 @@ describe('what a row IS', () => {
     expect(rows[0]?.shortId).toBeNull()
   })
 
-  it('a background agent keeps its own lifecycle word and its short id', () => {
+  it('a background agent with a pid keeps its own lifecycle word and its short id', () => {
     const rows = sessionRows(
       roster({
         agentsAvailable: true,
@@ -96,7 +118,8 @@ describe('what a row IS', () => {
             id: '6913d790',
             sessionId: '6913d790-159e-4c03-81e2-93d6bd729bfa',
             kind: 'background',
-            state: 'blocked',
+            state: 'running',
+            pid: 4021,
             name: 'nextjs-to-tanstack-migration',
             cwd: '/etc/nixos',
           }),
@@ -105,7 +128,7 @@ describe('what a row IS', () => {
       }),
     )
     expect(rows[0]?.state).toBe('background')
-    expect(rows[0]?.lifecycle).toBe('blocked')
+    expect(rows[0]?.lifecycle).toBe('running')
     // The short id is what `claude attach`/`stop` take — never the uuid.
     expect(rows[0]?.shortId).toBe('6913d790')
     // Still running, so it is attached to rather than resumed.
@@ -121,7 +144,8 @@ describe('what a row IS', () => {
             id: '3ab35c23',
             sessionId: '3ab35c23-d56d-4f8d-a5f6-a4f56ec384ee',
             kind: 'background',
-            state: 'blocked',
+            state: 'running',
+            pid: 8813,
             name: 'Adversarial security assessment of s2-server',
             cwd: '/home/santiago/selfhost',
           }),
@@ -149,10 +173,41 @@ describe('what a row IS', () => {
     // either source saying it is running must win, because a resume of a
     // session already in progress starts a second copy of it.
     const rows = sessionRows(roster({ transcripts: [transcript({ id: 'live' })] }), [
-      { transcriptId: 'live', alive: true },
+      session({ transcriptId: 'live' }),
     ])
     expect(rows[0]?.state).toBe('alive')
     expect(rows[0]?.canResume).toBe(false)
+  })
+
+  it('carries the connected session onto the row it is writing', () => {
+    // The Sessions board used to draw these as a second list of the same
+    // population. They arrive on the row now, and nothing that was only on
+    // that board may be lost on the way.
+    const rows = sessionRows(roster({ transcripts: [transcript({ id: 'live' })] }), [
+      session({ transcriptId: 'live', remoteId: 'cse_abc', name: 'nixos-7a', rssBytes: 4_096 }),
+    ])
+    expect(rows[0]?.live?.remoteId).toBe('cse_abc')
+    expect(rows[0]?.live?.name).toBe('nixos-7a')
+    expect(rows[0]?.live?.rssBytes).toBe(4_096)
+  })
+
+  it('draws a connected session neither source knows about rather than dropping it', () => {
+    // No transcript in the scanned tree and no agent — a session opened
+    // outside ~/.claude/projects, or one running while `claude agents` is
+    // unavailable. The Sessions board drew every live session
+    // unconditionally, so folding it in here must not lose this one.
+    const rows = sessionRows(roster({}), [session({ transcriptId: 'elsewhere', pid: 77 })])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.state).toBe('alive')
+    expect(rows[0]?.onDisk).toBe(false)
+    expect(rows[0]?.canResume).toBe(false)
+    expect(rows[0]?.live?.pid).toBe(77)
+  })
+
+  it('does not draw a session file whose process is gone', () => {
+    // A stale file in ~/.claude/sessions is counted in the board's foot, not
+    // drawn as a row: there is no process left to describe.
+    expect(sessionRows(roster({}), [session({ transcriptId: 'dead', alive: false })])).toEqual([])
   })
 
   it('an older session of a directory someone is working in now is resumable like any other', () => {
@@ -281,7 +336,13 @@ describe('what the snapshot could not read', () => {
 
   it('renders nothing rather than throwing when the CLI did not answer', () => {
     expect(sessionRows(NO_ROSTER)).toEqual([])
-    expect(countByState([])).toEqual({ alive: 0, background: 0, resumable: 0, orphan: 0 })
+    expect(countByState([])).toEqual({
+      alive: 0,
+      background: 0,
+      dormant: 0,
+      resumable: 0,
+      orphan: 0,
+    })
   })
 })
 
@@ -324,12 +385,18 @@ describe('which verb a row is offered', () => {
 
   // `claude stop` takes the SHORT id. Handing it the uuid is the bug this
   // asserts against: it would refuse, and the row would look broken.
-  it('offers Stop to a background agent, with the SHORT id as the selector', () => {
+  it('offers Stop to a RUNNING background agent, with the SHORT id as the selector', () => {
     const row = rowFor(
       roster({
         agentsAvailable: true,
         agents: [
-          agent({ id: 'dead', sessionId: 'deadbeef-1', kind: 'background', state: 'blocked' }),
+          agent({
+            id: 'dead',
+            sessionId: 'deadbeef-1',
+            kind: 'background',
+            state: 'running',
+            pid: 2211,
+          }),
         ],
         transcripts: [transcript({ id: 'deadbeef-1' })],
       }),
@@ -381,6 +448,135 @@ describe('which verb a row is offered', () => {
   // exists and before `claude agents` has it. Without this a Resume pressed
   // twice inside a minute would look resumable the second time, and the
   // second press would put a copy on the same transcript.
+  // ── the pid, which is the whole of the dormant/running split ────────────
+  //
+  // This is the bug the board shipped with: a `claude --bg` RECORD outlives
+  // its process, so three agents whose processes died in a reboot weeks ago
+  // were drawn as running and offered a Stop that could not mean anything.
+  // `state: "blocked"` is the tell that ISN'T — it means waiting on a human —
+  // and `pid` is the one that is.
+
+  it('draws a background agent with no pid as dormant, not as running', () => {
+    // Exactly the shape all three of this box's records are in: blocked, a
+    // cliVersion from three releases ago, and no pid anywhere.
+    const row = rowFor(
+      roster({
+        agentsAvailable: true,
+        agents: [
+          agent({
+            id: '6913d790',
+            sessionId: '6913d790-159e-4c03-81e2-93d6bd729bfa',
+            kind: 'background',
+            state: 'blocked',
+            pid: null,
+            name: 'nextjs-to-tanstack-migration',
+            cwd: '/etc/nixos',
+          }),
+        ],
+        transcripts: [transcript({ id: '6913d790-159e-4c03-81e2-93d6bd729bfa' })],
+      }),
+      '6913d790-159e-4c03-81e2-93d6bd729bfa',
+    )
+    expect(row.state).toBe('dormant')
+    expect(row.pid).toBeNull()
+    // The CLI's own word is kept and shown — it is just not what decides.
+    expect(row.lifecycle).toBe('blocked')
+    // Remove, not Stop: `claude stop` on this has nothing to act on.
+    expect(rowControl(row)).toEqual({ kind: 'remove-agent', session: '6913d790' })
+  })
+
+  it('draws a dormant agent the same way when its transcript is not on disk', () => {
+    const rows = sessionRows(
+      roster({
+        agentsAvailable: true,
+        agents: [
+          agent({
+            id: '3ab35c23',
+            sessionId: '3ab35c23-d56d-4f8d-a5f6-a4f56ec384ee',
+            kind: 'background',
+            state: 'blocked',
+            name: 'Adversarial security assessment of s2-server',
+            cwd: '/home/santiago/selfhost',
+          }),
+        ],
+      }),
+    )
+    // Not `orphan`: the CLI still has a record with a verb on it, which is
+    // the whole difference between this and a row with no handle at all.
+    expect(rows[0]?.state).toBe('dormant')
+    expect(rows[0]?.onDisk).toBe(false)
+    expect(rowControl(rows[0] as RosterEntry)).toEqual({
+      kind: 'remove-agent',
+      session: '3ab35c23',
+    })
+  })
+
+  it('offers a dormant record no Resume — attach is the verb, and rm is the button', () => {
+    const row = rowFor(
+      roster({
+        agentsAvailable: true,
+        agents: [
+          agent({ id: 'e1875e75', sessionId: 'dorm', kind: 'background', state: 'blocked' }),
+        ],
+        transcripts: [transcript({ id: 'dorm' })],
+      }),
+      'dorm',
+    )
+    // There genuinely is no process behind it — and a resume would still be
+    // wrong: it would put a second, interactive front on a conversation the
+    // CLI is still holding as a background job.
+    expect(row.canResume).toBe(false)
+    expect(rowControl(row).kind).toBe('remove-agent')
+  })
+
+  it('counts dormant records apart from both running and resumable', () => {
+    const rows = sessionRows(
+      roster({
+        agentsAvailable: true,
+        agents: [
+          agent({ id: 'aaaaaaaa', sessionId: 'a', kind: 'background', state: 'blocked' }),
+          agent({ id: 'bbbbbbbb', sessionId: 'b', kind: 'background', state: 'running', pid: 12 }),
+          agent({ sessionId: 'c', pid: 13, status: 'busy' }),
+        ],
+        transcripts: [
+          transcript({ id: 'a' }),
+          transcript({ id: 'b' }),
+          transcript({ id: 'c' }),
+          transcript({ id: 'd' }),
+        ],
+      }),
+    )
+    expect(countByState(rows)).toEqual({
+      alive: 1,
+      background: 1,
+      dormant: 1,
+      resumable: 1,
+      orphan: 0,
+    })
+  })
+
+  it('sorts dormant records above the resumable tail, and below what is running', () => {
+    const rows = sessionRows(
+      roster({
+        agentsAvailable: true,
+        agents: [
+          agent({ id: 'aaaaaaaa', sessionId: 'dorm', kind: 'background', state: 'blocked' }),
+        ],
+        transcripts: [
+          // The newest transcript by a wide margin, and still below the
+          // dormant row: a record with a verb waiting on it must not be
+          // buried under fifty transcripts, which is how it hid for weeks.
+          transcript({ id: 'fresh', modifiedAt: 9_000 }),
+          transcript({ id: 'dorm', modifiedAt: 1 }),
+        ],
+      }),
+    )
+    expect(rows.map((r) => [r.id, r.state])).toEqual([
+      ['dorm', 'dormant'],
+      ['fresh', 'resumable'],
+    ])
+  })
+
   it('treats a managed uuid as running even when no other source has caught up', () => {
     const row = rowFor(
       roster({ transcripts: [transcript({ id: 'fresh' })], managedIds: ['fresh'] }),

@@ -30,6 +30,7 @@
 
 import { readSnapshot } from '../../host/contract/snapshot'
 import { lokiStreams } from '../../host/loki'
+import { NO_META } from '../claude-meta'
 import { type ClaudeRoster, NO_ROSTER } from '../claude-roster'
 import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '../contract/decode'
 import { type VersionGap, versionGap } from './github'
@@ -60,7 +61,15 @@ export type ClaudeSession = {
    * The later of two clocks: the session file's own `updatedAt` /
    * `statusUpdatedAt`, and the bridge debug log's mtime. The file used to be
    * written once at start, which left every session with no `cse_…` — every
-   * console and tmux-resumed one — reporting no activity at all.
+   * console and tmux-resumed one — reporting no activity at all. CLI 2.1.260
+   * keeps that file current as the session runs, so both populations have a
+   * reading now and the later of the two wins.
+   *
+   * On a live row this REPLACES the transcript's own mtime rather than
+   * sitting beside it (see the `time` group in lib/claude-meta.ts): it is the
+   * better clock, and two idle readings seconds apart on one line is noise.
+   * An idle reading of hours is ordinary — it is a session waiting, not a
+   * session broken.
    */
   lastActivityAt: number | null
   logBytes: number | null
@@ -224,6 +233,39 @@ export const factsShape = obj({
             startedAt: optional(nn, null),
             modifiedAt: optional(num, 0),
             sizeBytes: optional(num, 0),
+            // Every field optional and the block itself optional, for the
+            // same reason `roster` is: a snapshot written before the host
+            // scanned anything has no `meta` at all, and the correct reading
+            // of that is NOT KNOWN on every field — never zero. `NO_META` is
+            // exactly that shape, so the page draws a pre-scan row as a row
+            // with nothing extra to say rather than as a silent session.
+            meta: optional(
+              obj({
+                scanVersion: optional(num, 0),
+                exchanges: optional(nn, null),
+                replies: optional(nn, null),
+                thinking: optional(nn, null),
+                images: optional(nn, null),
+                attached: optional(nn, null),
+                subagents: optional(nn, null),
+                spanMs: optional(nn, null),
+                branch: optional(ns, null),
+                cliVersion: optional(ns, null),
+                lastPrompt: optional(ns, null),
+                cost: optional(
+                  nullable(
+                    obj({
+                      usd: optional(nn, null),
+                      linesAdded: optional(nn, null),
+                      linesRemoved: optional(nn, null),
+                      durationMs: optional(nn, null),
+                    }),
+                  ),
+                  null,
+                ),
+              }),
+              NO_META,
+            ),
           }),
         ),
         [],

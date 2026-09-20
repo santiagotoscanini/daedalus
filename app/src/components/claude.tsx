@@ -1,3 +1,4 @@
+import { ClockIcon, FolderGit2Icon, MessagesSquareIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 // Types ONLY. The module behind them reads the host snapshot through
@@ -8,8 +9,10 @@ import { useEffect, useState } from 'react'
 // which reads node:fs), which is why its idle shape is restated below.
 import type { ClaudeRcStatus } from '../host/claude-rc-request'
 import type { ClaudeSessionStatus } from '../host/claude-session-request'
-// Pure and client-safe — the whole reason the roster's types and its join live
-// in lib/ rather than beside the loader. See the header of claude-roster.ts.
+// Pure and client-safe — the whole reason the roster's types, its join and
+// the row's derived facts live in lib/ rather than beside the loader. See the
+// header of claude-roster.ts.
+import { type FactIcon, factGroups, promptLine } from '../lib/claude-meta'
 import {
   countByState,
   type RosterEntry,
@@ -23,9 +26,11 @@ import type { ClaudeData, ClaudeFacts, ClaudeSession, RcEvent } from '../lib/das
 import type { VersionGap } from '../lib/dashboard/github'
 import type { ShotCounts, ShotRun } from '../lib/dashboard/shotter'
 import { bytes, DASH, duration, ms, num, since, text, until } from '../lib/format'
+import { toneStyle } from '../lib/tone'
 import {
   fetchClaudeRcStatusFn,
   fetchClaudeSessionStatusFn,
+  removeSessionFn,
   requestClaudeRestartFn,
   resumeSessionFn,
   stopSessionFn,
@@ -214,7 +219,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         <Board
           title="Remote control"
           icon="panels"
-          span={4}
+          span={6}
           aside={
             <span className={BOARD_NOTE}>
               {facts.remote.spawnMode === null ? 'not announced' : facts.remote.spawnMode}
@@ -262,82 +267,10 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           <RestartServerControl live={live.length} />
         </Board>
 
-        <Board
-          title="Sessions"
-          icon="panels"
-          span={8}
-          aside={
-            <span className={BOARD_NOTE}>
-              {live.length === 0 ? 'none connected' : `${num(live.length)} connected`}
-            </span>
-          }
-        >
-          {live.length === 0 ? (
-            <p className={VIZ_EMPTY}>
-              Nothing is connected. The server is still listening, and a session appears here within
-              a minute of being started from claude.ai or the app.
-            </p>
-          ) : (
-            <ul className={LIST}>
-              {live.map((s) => (
-                <SessionRow key={s.pid} session={s} />
-              ))}
-            </ul>
-          )}
-          {facts.sessions.some((s) => !s.alive) && (
-            <p className={BOARD_FOOT}>
-              {num(facts.sessions.filter((s) => !s.alive).length)} session{' '}
-              {facts.sessions.filter((s) => !s.alive).length === 1 ? 'file' : 'files'} in{' '}
-              <span className={MONO}>~/.claude/sessions</span> have no process behind them. Not
-              shown above, and not an error either: a session that exits uncleanly leaves its file.
-              The count is only worth watching if it grows without bound.
-            </p>
-          )}
-          <p className={BOARD_FOOT}>
-            <b>Last seen</b> is the later of two clocks. The file in{' '}
-            <span className={MONO}>~/.claude/sessions</span> used to be written once at start, and
-            the only other clock was the bridge's debug log — which exists only for sessions started
-            from claude.ai, so anything started at the console or resumed in a tmux reported no
-            activity at all. CLI 2.1.260 keeps that file current as the session runs, so both
-            populations now have a reading and the later one wins. A session idle for hours is
-            normal. What a session does not survive is the server: Remote Control is a bridge for
-            STARTING sessions, not for re-attaching to ones that lost their process, so once the
-            server dies the web side can only mint new sessions — the "restart" button claude.ai
-            offers on a dead one starts fresh. The transcript survives on this box, and the roster
-            below is what it looks like afterwards.
-          </p>
-        </Board>
-
-        <RosterBoard data={data} />
-
-        <Board
-          title="Connection"
-          icon="logs"
-          span={6}
-          aside={<span className={BOARD_NOTE}>last 14 days</span>}
-        >
-          {data.events.length === 0 ? (
-            <p className={VIZ_EMPTY}>
-              Nothing in the window. Either the server has been up and connected throughout, or its
-              journal has been rotated past. These lines are read back out of Loki.
-            </p>
-          ) : (
-            <ul className={LIST}>
-              {data.events.slice(0, 14).map((e) => (
-                <EventRow key={`${String(e.at)}-${e.text}`} event={e} />
-              ))}
-            </ul>
-          )}
-          <p className={BOARD_FOOT}>
-            A <b>drop</b> is the server losing its link to Anthropic and backing off; it retries on
-            an escalating ladder and the sessions survive, so a burst of these followed by a
-            reconnect is the system working. Bursts landing at <span className={MONO}>:00</span> are
-            worth reading as the box rather than the network: myspeed runs a speedtest on the hour
-            and saturates the uplink for a minute or two, which is the same blackout that eats DNS
-            house-wide. A <b>token refresh</b> is routine bookkeeping on a long-lived session.
-          </p>
-        </Board>
-
+        {/* Sign-in comes up beside Remote control. The two are one subject —
+            what this server is, and whether it can still reach Anthropic —
+            and row 1 is where the page's standing facts belong. It takes the
+            8 the Sessions board vacated. */}
         <Board title="Sign-in" icon="▣" span={6}>
           {!facts.credentials.present ? (
             <p className={VIZ_EMPTY}>
@@ -361,10 +294,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
                         ? DASH
                         : until((facts.credentials.expiresAt - Date.now()) / 1000),
                   },
-                  {
-                    k: 'Refresh token',
-                    v: refreshIn === null ? DASH : until(refreshIn),
-                  },
+                  { k: 'Refresh token', v: refreshIn === null ? DASH : until(refreshIn) },
                   {
                     k: 'Scopes',
                     v: (
@@ -391,21 +321,58 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           )}
         </Board>
 
+        <Board
+          title="Connection"
+          icon="logs"
+          span={6}
+          aside={<span className={BOARD_NOTE}>last 14 days</span>}
+        >
+          {data.events.length === 0 ? (
+            <p className={VIZ_EMPTY}>
+              Nothing in the window. Either the server has been up and connected throughout, or its
+              journal has been rotated past. These lines are read back out of Loki.
+            </p>
+          ) : (
+            <ul className={LIST}>
+              {data.events.slice(0, 14).map((e) => (
+                <EventRow key={`${String(e.at)}-${e.text}`} event={e} />
+              ))}
+            </ul>
+          )}
+          <p className={BOARD_FOOT}>
+            A <b>drop</b> is the server losing its link to Anthropic and backing off; it retries and
+            the sessions survive, so a burst followed by a reconnect is the system working. Bursts
+            landing at <span className={MONO}>:00</span> are the box rather than the network —
+            myspeed's hourly speedtest saturates the uplink for a minute or two.
+          </p>
+        </Board>
+
+        {/* Beside Connection rather than across the page. The two answer the
+            same question from opposite ends — is this server talking to
+            Anthropic right now, and is it the build that should be — and a
+            version list is a column of short rows that never needed 12. */}
         <Changelog
           gap={data.gap}
-          span={12}
+          span={6}
           aside={<span className={BOARD_NOTE}>anthropics/claude-code</span>}
           foot={
             <p className={BOARD_FOOT}>
-              The store binary cannot update itself, so being behind here is not a thing that
-              resolves on its own. The path is <span className={MONO}>nix flake update</span>, or
-              the weekly <span className={MONO}>flake-autoupgrade.timer</span> that runs it. A
-              rebuild deliberately does NOT restart this unit onto the new build — it once killed
-              its own activation doing so — so after the bump the server runs the old binary until
-              the next reboot, or the restart control on this page. {verdict.note}
+              The store binary cannot update itself: the path is{' '}
+              <span className={MONO}>nix flake update</span>, or the weekly{' '}
+              <span className={MONO}>flake-autoupgrade.timer</span>. A rebuild deliberately does NOT
+              restart this unit onto the new build — it once killed its own activation doing so — so
+              the server keeps running the old binary until a reboot or the restart control above.{' '}
+              {verdict.note}
             </p>
           }
         />
+
+        {/* The reason to open this page, so it sits where the attention goes
+            rather than at the foot, where it landed only because it was added
+            last. It is also now the ONLY list of sessions here: the Sessions
+            board above it drew the live ones a second time, and those are its
+            `alive` rows. */}
+        <RosterBoard data={data} />
 
         <LogBoard
           source={{ unit: 'claude-remote-control.service' }}
@@ -835,48 +802,26 @@ function UnitState({ data }: { data: ClaudeData }) {
   )
 }
 
-/**
- * One connected session.
- *
- * Named by the CLI's own short label rather than by its id, because that is
- * what claude.ai shows and matching them up is the whole reason to look. The
- * `cse_…` id is beside it for the case where the labels collide, which they
- * do — they are derived from the directory.
- */
-function SessionRow({ session }: { session: ClaudeSession }) {
-  const idle = session.lastActivityAt === null ? null : (Date.now() - session.lastActivityAt) / 1000
-
-  return (
-    <li className={ROW} title={session.transcriptId ?? undefined}>
-      {/* The session's own word first, when it has one: `busy` is the CLI
-          saying it is mid-turn, which no clock can infer. Falling back to
-          "touched in the last minute", the honest reading of active for a
-          session being driven from a phone. */}
-      <Chip tone={working(session) ? 'ok' : 'muted'}>{working(session) ? 'working' : 'idle'}</Chip>
-      <span className={ROW_MAIN}>{session.name ?? `pid ${String(session.pid)}`}</span>
-      {/* `item-min` on the four that a phone drops. What survives is the
-          answer to "which session is this and is anything happening in it";
-          the id, the directory and the two resource figures are the answer
-          to a question you would be at a desk to ask. */}
-      <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{text(session.remoteId)}</span>
-      <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{text(session.cwd)}</span>
-      <span className={ROW_SIDE}>
-        {session.startedAt === null ? DASH : duration((Date.now() - session.startedAt) / 1000)} old
-      </span>
-      <span className={ROW_SIDE}>last seen {idle === null ? DASH : since(idle)}</span>
-      <span className={cn(ROW_SIDE, NARROW_HIDE)}>{bytes(session.rssBytes)}</span>
-      <span className={cn(ROW_SIDE, NARROW_HIDE)}>{ms(session.cpuMs)} cpu</span>
-    </li>
-  )
-}
-
 /* ── the roster ───────────────────────────────────────────────────────────
-   The board above is what is CONNECTED. This one is everything this box could
-   still be asked about, joined from two sources that disagree on purpose. */
+
+   Everything this box could still be asked about, joined from two sources
+   that disagree on purpose — and, since the Sessions board was folded into
+   it, the only list of connected sessions on the page as well. That board
+   drew the live sessions and this one drew the same sessions again as its
+   `alive` rows; one population in two lists meant holding both to answer
+   "what is running". What was only on that board — the `cse_…` id, the CLI's
+   own name, RSS, CPU, and the session's own activity clock — is on the row it
+   describes now. The `StatStrip` above is not a duplicate of either and
+   stays: `N of 32` is a fact about the server, not about a session. */
 
 const STATE_TONE: Record<SessionState, Tone> = {
   alive: 'ok',
   background: 'info',
+  // Not `info`, and not `warn` either: a dormant record is neither running nor
+  // broken. It is a leftover, and it should read as quietly as the resumable
+  // tail rather than borrowing the colour of the two live populations — which
+  // is exactly what it was doing while it shared `background`'s chip.
+  dormant: 'muted',
   orphan: 'warn',
   resumable: 'muted',
 }
@@ -884,6 +829,7 @@ const STATE_TONE: Record<SessionState, Tone> = {
 const STATE_LABEL: Record<SessionState, string> = {
   alive: 'alive',
   background: 'background',
+  dormant: 'dormant',
   orphan: 'no transcript',
   resumable: 'resumable',
 }
@@ -902,8 +848,73 @@ const SESSION_IDLE: ClaudeSessionStatus = {
   finishedAt: null,
 }
 
-/* The per-row control area: a second line under the row itself, so the row
-   stays a row and the cost of a click is spelled out where the click is. */
+/* The verb at the right edge OF the row, not under it.
+
+   It used to be a second line of its own, which made every row two lines tall
+   and turned fifty of them into a ragged column with a button floating under
+   each one. The rest of this page lays a row out as chip · name · facts, with
+   anything actionable at the right edge (the queue on System › Updates is the
+   same shape), and this board reads as part of that page only if it does the
+   same. `shrink-0` because the two truncating side slots to its left will
+   otherwise give away the button's width before their own. */
+const ROW_BTN = 'ml-auto h-auto shrink-0 px-[0.55rem] py-[0.2rem] text-[0.7rem]'
+
+/* ── the enriched row ─────────────────────────────────────────────────────
+
+   Three lines: what it is, what was last said to it, and what is in it. The
+   grouping is the design — a directory and a branch are one fact, a turn
+   count and a file size are one fact, a span and an idle time are one story —
+   and it lives in lib/claude-meta.ts so it can be tested without a DOM. */
+
+/* The last prompt. One line, clipped, and in the muted ink the board uses for
+   anything that is not a measurement, so it reads as context under the title
+   rather than as a second title. */
+const PROMPT = 'mt-[0.22rem] truncate text-[0.72rem] leading-[1.45] text-(--text-muted)'
+
+/* The metadata line. Wraps rather than scrolls — a row here is already a
+   block, and a horizontal scrollbar inside one would be the third scroll axis
+   on the page. The gap is wide enough that the groups read as groups without
+   a separator glyph between them. */
+const META =
+  'mt-[0.2rem] flex min-w-0 flex-wrap items-center gap-x-[0.7rem] gap-y-[0.1rem] text-[0.68rem] text-muted-foreground tabular-nums'
+const META_ITEM = 'inline-flex min-w-0 max-w-full items-center gap-[0.28rem]'
+const META_ICON = 'shrink-0 opacity-65'
+
+/* The four states have to stay apart, and three lines per row is exactly the
+   pressure that would blur them — a page of equally tall blocks reads as one
+   population. The chip still carries the verdict; this is a second, quieter
+   index down the left edge, so a running session can be found by colour from
+   the top of a list of twenty-four.
+
+   Every row carries the border and the padding, so the text edge never moves;
+   the two quiet populations simply make theirs transparent. That is the whole
+   reason this is not a conditional wrapper. */
+const ROW_ACCENT = 'border-l-2 pl-[0.5rem]'
+const STATE_ACCENT: Record<SessionState, string> = {
+  alive: 'border-l-(--tone)',
+  background: 'border-l-(--tone)',
+  orphan: 'border-l-(--tone)',
+  // A leftover and a dead conversation on disk are not states worth a stripe.
+  // They are the resting mass of this board, and the two above have to be
+  // findable against them.
+  dormant: 'border-l-transparent',
+  resumable: 'border-l-transparent',
+}
+
+/** The three groups that get a picture instead of a word. */
+const FACT_ICONS: Record<FactIcon, typeof ClockIcon> = {
+  where: FolderGit2Icon,
+  size: MessagesSquareIcon,
+  time: ClockIcon,
+}
+
+function FactIconFor({ name }: { name: FactIcon }) {
+  const Icon = FACT_ICONS[name]
+  return <Icon className={META_ICON} size={12} aria-hidden="true" />
+}
+
+/* What DOES belong under the row: the armed state. It carries a sentence
+   about what the click costs, which is the one thing worth a second line. */
 const CTRL = 'mt-[0.3rem] flex flex-wrap items-center gap-2'
 const CTRL_COST = 'mt-[0.3rem] text-[0.72rem] text-(--text-muted) leading-[1.5]'
 const CTRL_NOTE = 'text-[0.68rem] text-muted-foreground leading-[1.5]'
@@ -912,6 +923,10 @@ const CTRL_STATE = 'mt-[0.3rem] text-[0.72rem] leading-[1.5]'
 function RosterBoard({ data }: { data: ClaudeData }) {
   const { roster } = data.facts
   const rows = sessionRows(roster, data.facts.sessions)
+  // Session files with no process behind them. Carried over from the Sessions
+  // board's foot: they are not rows — there is nothing running to draw — and
+  // they are not an error either, so a count is the whole of what to say.
+  const stale = data.facts.sessions.filter((s) => !s.alive).length
   const counts = countByState(rows)
   const shown = rows.slice(0, ROSTER_ROWS)
 
@@ -942,17 +957,38 @@ function RosterBoard({ data }: { data: ClaudeData }) {
       span={12}
       aside={
         <span className={BOARD_NOTE}>
+          {/* `dormant` counted apart from both, because it is the population
+              that was being read as the wrong one: a background RECORD with no
+              process behind it is not running, and it is not resumable either
+              — the CLI still owns that conversation. */}
+          {/* Only the populations that exist. Four counts with zeroes in
+              two of them is a legend, not a reading — and the board's whole
+              argument is that these four are different things, which is
+              easiest to see when only the present ones are named. */}
           {rows.length === 0
-            ? 'nothing on disk'
-            : `${num(counts.alive + counts.background)} running · ${num(counts.resumable)} resumable`}
+            ? 'nothing connected, nothing on disk'
+            : (
+                [
+                  [counts.alive, 'connected'],
+                  [counts.background, 'background'],
+                  [counts.dormant, 'dormant'],
+                  [counts.orphan, 'no transcript'],
+                  [counts.resumable, 'resumable'],
+                ] as const
+              )
+                .filter(([k]) => k > 0)
+                .map(([k, word]) => `${num(k)} ${word}`)
+                .join(' · ')}
         </span>
       }
     >
       {rows.length === 0 ? (
         <p className={VIZ_EMPTY}>
-          No transcripts and no agents. Either this snapshot predates the roster — the boards above
-          still read correctly without it — or nobody has ever run{' '}
-          <span className={MONO}>claude</span> as this user.
+          No sessions, no transcripts and no agents. Nothing is connected — the server is still
+          listening, and a session appears here within a minute of being started from claude.ai or
+          the app — and there is nothing on disk to resume either. Failing that, this snapshot
+          predates the roster (the boards above still read correctly without it), or nobody has ever
+          run <span className={MONO}>claude</span> as this user.
         </p>
       ) : (
         <ul className={LIST}>
@@ -973,7 +1009,12 @@ function RosterBoard({ data }: { data: ClaudeData }) {
               onConfirm={(control) => {
                 setArmed(null)
                 start(async () => {
-                  const fn = control.kind === 'resume' ? resumeSessionFn : stopSessionFn
+                  const fn =
+                    control.kind === 'resume'
+                      ? resumeSessionFn
+                      : control.kind === 'remove-agent'
+                        ? removeSessionFn
+                        : stopSessionFn
                   return { ok: true, value: (await fn({ data: { session: control.session } })).id }
                 })
               }}
@@ -997,52 +1038,38 @@ function RosterBoard({ data }: { data: ClaudeData }) {
         </p>
       )}
 
-      <p className={BOARD_FOOT}>
-        Two sources, and which one said a thing is part of the answer.{' '}
-        <span className={MONO}>claude agents</span> is authoritative for what is <b>running</b> — it
-        is the only thing that knows about background agents, including ones whose project directory
-        is gone (drawn <b>no transcript</b>). The <span className={MONO}>.jsonl</span> files under{' '}
-        <span className={MONO}>~/.claude/projects</span> are authoritative for what is{' '}
-        <b>resumable</b> and for nothing else: a transcript records that a conversation happened,
-        never that anything is still behind it.
-      </p>
+      {stale > 0 && (
+        <p className={BOARD_FOOT}>
+          {num(stale)} session {stale === 1 ? 'file' : 'files'} in{' '}
+          <span className={MONO}>~/.claude/sessions</span> with no process behind{' '}
+          {stale === 1 ? 'it' : 'them'} — left by a session that exited uncleanly. Not an error;
+          worth watching only if it grows.
+        </p>
+      )}
 
+      {/* ONE paragraph, deliberately. This foot carried ten, and nine of them
+          explained things the board now says by itself: the populations and
+          their verbs are the chips and the buttons, a dormant row prints `no
+          process`, an armed row states what the press costs, and a fact the
+          CLI never recorded is simply absent from the metadata line. That
+          reasoning was not deleted, only moved to where the behaviour is —
+          lib/claude-roster.ts (two sources, the pid rule, the four verbs, the
+          trust guard), lib/claude-meta.ts (how the counts and the prompt are
+          derived, why a zero never prints, what the file mode pays for),
+          lib/dashboard/claude.ts (the two clocks behind "last seen"),
+          host/claude-session-request.ts (the selector and its guards),
+          host/claude-rc-request.ts (what a restart does to a session).
+          What stays here is the one thing a reader would otherwise get
+          WRONG, and the one limit on what the board is able to claim. */}
       <p className={BOARD_FOOT}>
         <b>Resume continues the session it names.</b>{' '}
-        <span className={MONO}>claude --resume &lt;id&gt;</span> keeps that session id and appends
-        to that same transcript — measured here on CLI 2.1.260, both at the console and with{' '}
-        <span className={MONO}>--remote-control</span>: the file grew in place, the id came back
-        unchanged, and the conversation picked up where it had stopped. Starting a branch instead is
-        the opt-in, <span className={MONO}>--fork-session</span>, and nothing on this page passes
-        it. A row that is already running offers no Resume for a different reason — a resume of a
-        live session starts a second copy on the same transcript, which the host refuses as well.
-        There is no end-of-session marker anywhere, so "finished cleanly" is not a thing this board
-        can know — a transcript with nothing running behind it is all it can honestly say.
-      </p>
-
-      <p className={BOARD_FOOT}>
-        <b>Three populations, three different verbs</b>, and the board does not pretend otherwise. A
-        session this box resumed runs as{' '}
-        <span className={MONO}>claude-session@&lt;id&gt;.service</span> (marked <b>ours</b>), so{' '}
-        <b>Stop</b> is <span className={MONO}>systemctl stop</span> — systemd SIGTERMs the unit's
-        cgroup, with no pid file to go stale and no recycled pid to hit by mistake. A{' '}
-        <b>background</b> agent is the CLI's own lifecycle: <b>Stop</b> there is{' '}
-        <span className={MONO}>claude stop &lt;short id&gt;</span>, which keeps the conversation,
-        and <span className={MONO}>claude attach &lt;short id&gt;</span> reopens it. A session the
-        Remote Control server spawned has <b>no per-session kill at all</b> — not in the CLI, not in
-        systemd — so those rows carry a sentence instead of a button; the only thing that ends one
-        is the server restart above, which ends all of them. Resume runs the session in{' '}
-        <span className={MONO}>/etc/nixos</span> and nowhere else: a directory whose workspace trust
-        has never been accepted stops the CLI on its trust prompt with nobody able to answer it, so
-        the host refuses one up front rather than leaving a unit started and useless.
-      </p>
-
-      <p className={BOARD_FOOT}>
-        Titles are labels, never content. What is copied out of the transcript tree is an{' '}
-        <span className={MONO}>ai-title</span>, a title the operator typed, or the short name the
-        CLI derives — and nothing else. Those files hold pasted keys, tokens and the output of{' '}
-        <span className={MONO}>sops -d</span>; this page is served out of a world-readable snapshot,
-        so a row falls back to its id rather than borrowing a line of the conversation.
+        <span className={MONO}>claude --resume &lt;id&gt;</span> keeps that id and appends to that
+        same transcript — measured here on CLI 2.1.260, at the console and under{' '}
+        <span className={MONO}>--remote-control</span>. Branching is the opt-in,{' '}
+        <span className={MONO}>--fork-session</span>, and nothing on this page passes it. Nothing
+        writes an end-of-session marker either, so a transcript with no process behind it is all
+        this board can honestly say: <b>resumable</b> means there is something to pick up, not that
+        it finished.
       </p>
     </Board>
   )
@@ -1051,9 +1078,9 @@ function RosterBoard({ data }: { data: ClaudeData }) {
 /**
  * One row, and — where there is an honest one — its verb.
  *
- * Three populations die three different ways and a fourth does not die at all,
- * so this deliberately does not render one button four times. `rowControl`
- * makes that decision (it is pure, and tested); this only draws it.
+ * Four populations end four different ways and a fifth does not end at all, so
+ * this deliberately does not render one button five times. `rowControl` makes
+ * that decision (it is pure, and tested); this only draws it.
  */
 function RosterRow({
   row,
@@ -1078,34 +1105,78 @@ function RosterRow({
   // The board has one status file, so a row only speaks when the host is
   // speaking about IT — otherwise every row would echo the same outcome.
   const mine = control.kind !== 'none' && status.session === control.session
+  const prompt = promptLine(row.meta)
+  // A row with no title falls back to its own short id for a label, and the
+  // id slot then printed the same eight characters a second time, on the same
+  // line. One of them is enough: the slot is for the case where the NAME does
+  // not identify the row, which is exactly the case where they differ.
+  const idCandidate = row.shortId ?? (row.id === null ? null : row.id.slice(0, 8))
+  const shownId = idCandidate === row.label ? null : (idCandidate ?? DASH)
+  const groups = factGroups(
+    {
+      cwd: row.cwd,
+      cwdExact: row.cwdExact,
+      sizeBytes: row.sizeBytes,
+      modifiedAt: row.modifiedAt,
+      meta: row.meta,
+      live: row.live,
+    },
+    Date.now(),
+  )
+  // `busy` is the CLI saying it is mid-turn, which no clock can infer. The
+  // fallback is "touched within the last minute", which is what the Sessions
+  // board called `working` and the honest reading of active for a session
+  // being driven from a phone. Only ever shown for a row with a process.
+  const lifecycle = row.lifecycle ?? (row.live !== null && working(row.live) ? 'working' : null)
+  // The name claude.ai shows. When it IS the label there is nothing to add;
+  // when a title outranks it, this is the only place it survives, and the
+  // board's whole job is matching a row here to a session over there.
+  const cliName = row.live?.name != null && row.live.name !== row.label ? row.live.name : null
 
   return (
-    <li className={cn(ROW, 'flex-col items-stretch')} title={row.id ?? undefined}>
+    <li
+      className={cn(ROW, 'flex-col items-stretch', ROW_ACCENT, STATE_ACCENT[row.state])}
+      title={row.id ?? undefined}
+      style={toneStyle(STATE_TONE[row.state])}
+    >
       <div className="flex min-w-0 items-center gap-[0.45rem]">
         <Chip tone={STATE_TONE[row.state]}>{STATE_LABEL[row.state]}</Chip>
         <span className={ROW_MAIN}>{row.label}</span>
         {/* An INTERACTIVE session's name is derived by the CLI (`nixos-ac`) and
             names the session rather than the work, so it is marked as the weak
             label it is. A background agent's name is the one it was launched
-            with — a real title — and marking that would be a lie. */}
-        {row.labelSource === 'agent' && row.state !== 'background' && (
+            with — a real title — and marking that would be a lie. That holds
+            whether or not its process is still there, so `dormant` is exempt
+            for exactly the reason `background` is. */}
+        {row.labelSource === 'agent' && row.state !== 'background' && row.state !== 'dormant' && (
           <span className={cn(ROW_SIDE, NARROW_HIDE)}>cli name</span>
         )}
         {/* A session this box started says so: it is the only live population
             with a kill, and the row is where that difference is decided. */}
         {row.managed && <span className={cn(ROW_SIDE, NARROW_HIDE)}>ours</span>}
-        {row.lifecycle !== null && <span className={ROW_SIDE}>{row.lifecycle}</span>}
-        <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>
-          {row.shortId ?? (row.id === null ? DASH : row.id.slice(0, 8))}
-        </span>
-        <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>
-          {text(row.cwd)}
-          {!row.cwdExact && '?'}
-        </span>
-        <span className={ROW_SIDE}>
-          {row.modifiedAt === null ? DASH : since((Date.now() - row.modifiedAt) / 1000)}
-        </span>
-        <span className={cn(ROW_SIDE, NARROW_HIDE)}>{bytes(row.sizeBytes)}</span>
+        {lifecycle !== null && <span className={ROW_SIDE}>{lifecycle}</span>}
+        {/* Spelled out beside the lifecycle word, because that word is what
+            misleads: `blocked` is an agent waiting on a human, and reads as a
+            live thing pausing. The missing pid is the fact underneath it. */}
+        {row.state === 'dormant' && <span className={ROW_SIDE}>no process</span>}
+        {/* The id stays on the top line and only there: it is what the CLI
+            verbs take, so it belongs beside the name it labels rather than
+            down among the measurements. The directory, the size and the last
+            write all moved to the metadata line below, each into the group it
+            actually belongs to — they were four separate readings of three
+            questions. */}
+        {cliName !== null && (
+          <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{cliName}</span>
+        )}
+        {/* The id claude.ai shows, which is NOT the transcript uuid beside
+            it. It came off the Sessions board, and it is the thing you match
+            a row here against a session over there by. */}
+        {row.live?.remoteId != null && (
+          <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{row.live.remoteId}</span>
+        )}
+        {shownId !== null && (
+          <span className={cn(ROW_SIDE, NARROW_HIDE, MONO_FACE)}>{shownId}</span>
+        )}
         {/* No button, and the reason in its place. A session the Remote
             Control server spawned has no per-session kill anywhere — not in
             the CLI, not in systemd — so the only honest thing here is a
@@ -1113,7 +1184,56 @@ function RosterRow({
         {control.kind === 'none' && control.why === 'server' && (
           <span className={cn(ROW_SIDE, NARROW_HIDE)}>ends with the server</span>
         )}
+
+        {/* The verb, on the row. It is hidden while armed because Confirm and
+            Cancel take its place below — two buttons for one row at once is
+            the ambiguity the two-step exists to avoid. */}
+        {control.kind !== 'none' && !busy && !armed && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn(GHOST_BTN, ROW_BTN)}
+            onClick={onArm}
+          >
+            {control.kind === 'resume'
+              ? 'Resume'
+              : control.kind === 'remove-agent'
+                ? 'Remove'
+                : 'Stop'}
+          </Button>
+        )}
       </div>
+
+      {/* The one line of conversation on this page, and it gets a line of its
+          own because it is the only thing here that is not a measurement.
+          Quiet ink and a smaller size: it is context for the title above it,
+          not a heading of its own. Redacted twice — host-side before it was
+          written to a 0600 file, and again by `promptLine` on the way here. */}
+      {prompt !== null && (
+        <p className={PROMPT} title={prompt}>
+          {prompt}
+        </p>
+      )}
+
+      {/* One line, grouped. Each span answers one question; the three that
+          always have an answer carry an icon in place of the word they would
+          otherwise need, and the rest keep their words. See
+          lib/claude-meta.ts for why a zero never reaches this line. */}
+      {groups.length > 0 && (
+        <div className={META}>
+          {groups.map((g) => (
+            <span
+              key={g.key}
+              className={cn(META_ITEM, g.secondary && NARROW_HIDE)}
+              title={g.detail ?? undefined}
+            >
+              {g.icon !== null && <FactIconFor name={g.icon} />}
+              <span className="truncate">{g.text}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {mine && status.state === 'running' && (
         <p className={CTRL_STATE}>{status.detail || 'Working…'}</p>
@@ -1126,62 +1246,67 @@ function RosterRow({
       )}
       {mine && refusal !== null && <p className={cn(CTRL_STATE, 'text-danger')}>{refusal}</p>}
 
-      {control.kind !== 'none' &&
-        !busy &&
-        (armed ? (
-          <>
-            <p className={CTRL_COST}>
-              {control.kind === 'resume' ? (
-                <>
-                  This CONTINUES the session — same id, same transcript, appended to. It comes back
-                  as a live session on claude.ai, running in{' '}
-                  <span className={MONO}>/etc/nixos</span> as <span className={MONO}>santiago</span>
-                  , with sudo available to it. Nothing is branched and nothing is overwritten.
-                </>
-              ) : control.kind === 'stop-unit' ? (
-                <>
-                  <span className={MONO}>systemctl stop</span> on this session's unit: systemd
-                  SIGTERMs its whole process group, including anything it is running right now. The
-                  transcript survives and it can be resumed again from this board.
-                </>
-              ) : (
-                <>
-                  <span className={MONO}>claude stop {control.session}</span> — upstream's own verb.
-                  The agent stops where it is; its conversation is kept, and{' '}
-                  <span className={MONO}>claude attach {control.session}</span> reopens it.
-                </>
-              )}
-            </p>
-            <div className={CTRL}>
-              <Button
-                type="button"
-                variant={control.kind === 'resume' ? 'default' : 'destructive'}
-                size="sm"
-                onClick={() => {
-                  onConfirm(control)
-                }}
-              >
-                {control.kind === 'resume' ? 'Confirm resume' : 'Confirm stop'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={GHOST_BTN}
-                onClick={onCancel}
-              >
-                Cancel
-              </Button>
-              <span className={CTRL_NOTE}>disarms on its own in {RC_ARM_MS / 1000}s</span>
-            </div>
-          </>
-        ) : (
+      {control.kind !== 'none' && !busy && armed && (
+        <>
+          <p className={CTRL_COST}>
+            {control.kind === 'resume' ? (
+              <>
+                This CONTINUES the session — same id, same transcript, appended to. It comes back as
+                a live session on claude.ai, running in <span className={MONO}>/etc/nixos</span> as{' '}
+                <span className={MONO}>santiago</span>, with sudo available to it. Nothing is
+                branched and nothing is overwritten.
+              </>
+            ) : control.kind === 'stop-unit' ? (
+              <>
+                <span className={MONO}>systemctl stop</span> on this session's unit: systemd
+                SIGTERMs its whole process group, including anything it is running right now. The
+                transcript survives and it can be resumed again from this board.
+              </>
+            ) : control.kind === 'remove-agent' ? (
+              <>
+                <span className={MONO}>claude rm {control.session}</span> — the verb for a record,
+                which is all this row is. Nothing is being stopped: there is no process behind it,
+                and <span className={MONO}>claude stop</span> would have nothing to act on. This
+                DELETES the background session and its worktree, so{' '}
+                <span className={MONO}>claude attach {control.session}</span> has nothing to reopen
+                afterwards — leave it alone if the conversation is still wanted.
+              </>
+            ) : (
+              <>
+                <span className={MONO}>claude stop {control.session}</span> — upstream's own verb.
+                The agent stops where it is; its conversation is kept, and{' '}
+                <span className={MONO}>claude attach {control.session}</span> reopens it.
+              </>
+            )}
+          </p>
           <div className={CTRL}>
-            <Button type="button" variant="outline" size="sm" className={GHOST_BTN} onClick={onArm}>
-              {control.kind === 'resume' ? 'Resume' : 'Stop'}
+            <Button
+              type="button"
+              variant={control.kind === 'resume' ? 'default' : 'destructive'}
+              size="sm"
+              onClick={() => {
+                onConfirm(control)
+              }}
+            >
+              {control.kind === 'resume'
+                ? 'Confirm resume'
+                : control.kind === 'remove-agent'
+                  ? 'Confirm remove'
+                  : 'Confirm stop'}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={GHOST_BTN}
+              onClick={onCancel}
+            >
+              Cancel
+            </Button>
+            <span className={CTRL_NOTE}>disarms on its own in {RC_ARM_MS / 1000}s</span>
           </div>
-        ))}
+        </>
+      )}
     </li>
   )
 }
@@ -1218,7 +1343,7 @@ function EventRow({ event }: { event: RcEvent }) {
    value from it here is what takes the page down. */
 
 /** Mid-turn now, by the session's own word or by its clock. */
-function working(session: ClaudeSession): boolean {
+function working(session: Pick<ClaudeSession, 'status' | 'lastActivityAt'>): boolean {
   if (session.status === 'busy') return true
   return session.lastActivityAt !== null && Date.now() - session.lastActivityAt < 60_000
 }

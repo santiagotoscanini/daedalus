@@ -99,6 +99,26 @@ export const stopSessionFn = createServerFn({ method: 'POST' })
     return { id: await requestClaudeSessionStop({ actor, session: data.session }) }
   })
 
+/**
+ * Delete a dormant background agent's record — `claude rm <short id>`.
+ *
+ * The verb for a row with no process behind it, where Stop has no object:
+ * `claude stop` on a record whose process died weeks ago cannot succeed, and
+ * offering it is what put a red failure on the board for an agent that had
+ * never moved. This one is the destructive half of the pair — `stop` keeps the
+ * conversation for `claude attach`, `rm` takes the record and its worktree —
+ * so the host refuses anything but an eight-digit id the CLI actually reports.
+ */
+export const removeSessionFn = createServerFn({ method: 'POST' })
+  .validator(sessionSelector)
+  .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { requestClaudeSessionRemove } = await import('../host/claude-session-request')
+    const actor = actorLabel()
+    return { id: await requestClaudeSessionRemove({ actor, session: data.session }) }
+  })
+
 export const fetchClaudeSessionStatusFn = createServerFn().handler(async () => {
   const { readClaudeSessionStatus } = await import('../host/claude-session-request')
   return readClaudeSessionStatus()
