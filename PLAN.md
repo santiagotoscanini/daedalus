@@ -317,11 +317,22 @@ What 9b still leaves for Phase 11, after the asset pass (config `b1f4498`,
   container gets the bind mount and the env var. Proof before the first
   release: a `shot` walk of the built image against a throwaway Postgres.
 
-  **The known blocker** (operator decision 1 below): TanStack Start's build
-  output (Nitro is its internal server layer) emitted a fetch handler with no
-  `.listen()`, and server-function ids differed between dev (path-derived)
-  and build (sha256). Prove the built handler on a current TanStack Start
-  first; the id issue may be fixed upstream.
+  **The blocker is cleared** (engine `e31b110`, 2026-09-21). On TanStack Start
+  1.168 / vite 8 the build emits a fetch handler by design; `app/server.mjs`
+  serves it with srvx (the adapter the framework's own preview uses), runs
+  the drizzle migrator before the port opens, serves `dist/client` with
+  immutable caching, and carries the same unhandled-rejection guard as dev.
+  Server-function ids are `sha256(file--fn)` in a build and path-derived in
+  dev; they never match across modes and need not — the client and server
+  of ONE build agree (80 of 80, asserted by `scripts/check-build.mjs`, which
+  `pnpm build` runs). Built: 690 ms to healthy and 203 MB; dev: 4 s and
+  1.5 GB. What remains, in order: **site identity at run time** (it was
+  inlined through `import.meta.env.VITE_*`, so a CI image would be right for
+  no box), the Dockerfile and the `DAEDALUS_DEV=1` entrypoint, then CI to
+  ghcr. Two things to check behind traefik: the framework's CSRF middleware
+  wants `Sec-Fetch-Site: same-origin` or a matching `Origin`, and a tab left
+  open across a deploy that MOVES a file calls ids that no longer exist
+  until it reloads.
 
 Compatibility: 10a is a refactor with tests (module registry tests, the
 existing suite, fixture-driven loader tests that survive a null upstream);
@@ -641,17 +652,9 @@ priority; each can be done independently unless noted.
 
 ## Operator decisions still open
 
-1. **Production runtime for the engine.** The engine runs in dev mode
-   (`source.mode = "local"`, Vite dev server). A production build was
-   attempted but TanStack Start's build output (which uses Nitro internally
-   as its server layer) emitted a fetch handler with zero `.listen()` calls,
-   and server-function IDs changed between dev and build (path-derived vs
-   sha256 — moving a file broke every call). Proposal: prove the built
-   handler against a throwaway Postgres on a current TanStack Start version
-   (the ID issue may be fixed upstream). **Why it matters:** dev mode is fine
-   for one user, but HMR noise, no tree-shaking, slower cold starts.
-   Unrelated to the other seven apps — they each have their own `start.mjs`
-   and build fine through Railpack. This is Phase 10b's gate.
+1. ~~Production runtime for the engine~~ — decided by evidence on 2026-09-21:
+   the built server works (Phase 10b). This box stays in dev mode through
+   the flag; everyone else gets the image.
 
 2. **`~/.claude/projects` transcript pruning.** These transcripts can contain
    secrets a session read. The claude-rc journal keeps its own copy ≤1 month
@@ -789,7 +792,9 @@ database model — the features worth having from that comparison are items 1,
 ## Risks
 
 - TanStack Start is still "RC" by its own docs; pin exact versions. Its build
-  output is Phase 10b's known blocker (decision 1).
+  is stricter than its dev server: a client file that reaches
+  `@tanstack/react-start/server` through any import is refused at build and
+  never in dev, so `pnpm build` belongs in the check every change runs.
 - Two-commit Apply (site commit + lock commit, from Phase 11): a crash
   between them leaves the lock behind the site; `apply.sh` reconciles on the
   next run and Settings shows "site ahead of lock".
