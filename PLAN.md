@@ -16,8 +16,8 @@ build-out (closed 2026-09-13).
 
 ## Where things stand (2026-09-21)
 
-Phases 1–8 of the productization plan have landed, and two of Phase 9's three
-switches: the UI foundation, the read-only then editable Settings, the
+Phases 1–9 of the productization plan have landed, and the first half of 10:
+the UI foundation, the read-only then editable Settings, the
 repository split (private config `s2-server`, public engine `daedalus`),
 `site/` as the one directory the UI writes, nix reading `site.json` and
 `apps.json` as the source of the site constants and the app registry, the
@@ -32,7 +32,7 @@ no longer reaching into other stacks at eval time (9c, `046b3ff`).
 | Phase | What | State |
 |---|---|---|
 | 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
-| 9 | Nix: enable surface, literals, state out of the tree | 9a and 9c landed 2026-09-20; 9b remains, plus 9c's engine-side half |
+| 9 | Nix: enable surface, literals, state out of the tree | landed 2026-09-20/21; residue (asset literals, missing options) listed in the section |
 | 10 | App module system and a real build | 10a landed 2026-09-21 (`a6a87ce`); 10b (the build) not started |
 | 11 | The engine becomes importable | not started |
 | 12 | Onboarding, `init`, catalog, release | not started |
@@ -173,10 +173,10 @@ dashboard and a product anyone can import:
    switches are structural non-flippers (documented in the config repo's
    `module-system` rule); `traefik` and `litellm` among them is the gap that
    matters for a stranger's box, and is a Phase 11 design question.
-3. **~210 site literals** across platform and stacks; machine-generated
-   plaintext lives inside the repo tree, gitignored but on disk under
-   `/etc/nixos` (→ Phase 9b). Blocks Phase 11: the platform cannot move
-   into a public engine carrying this box's domain and owner in its text.
+3. ~~~210 site literals and in-tree machine state~~ — landed as 9b on
+   2026-09-21. What is left is literals inside ASSETS and a handful of
+   facts with no option yet (Phase 9's section lists them); those, not the
+   nix text, are what now stands between the platform and a public engine.
 4. **No build**: `vite dev` in production against a bind mount; `vite build`
    never exercised; migrations are manual (→ Phase 10b).
 5. **65% of the app is stack-specific dashboards** behind static registries
@@ -220,34 +220,54 @@ Compatibility: the operator is in `admins`; arming changes nothing for them.
 Gate: a test user outside the group gets 403 on Apply — run the suite the
 day it is armed.
 
-### Phase 9 — Nix: enable surface, literals, state out of the tree (one switch left)
+### Phase 9 — Nix: enable surface, literals, state out of the tree (landed; residue listed)
 
-9a and 9c landed on 2026-09-20 (config `43388f0`, `046b3ff`), each with a
-closure diff as proof: 43 `fleet.modules.<id>.enable` switches over an
-explicit import list, byte-identical toplevel with the rev pinned; then
-`fleet.dashboard.<id> = { env, envFiles, volumes }` (declared in
-`platform/export.nix`) replacing every cross-stack read in `daedalus.nix`,
-with `fleet.modules.immich.enable = false` proven to evaluate and build a
-closure with zero immich containers. 31 of 43 switches flip; the twelve
-that do not are structural and listed in the config repo's `module-system`
-rule.
+All three switches have landed. 9a and 9c on 2026-09-20 (config `43388f0`,
+`046b3ff`): 43 `fleet.modules.<id>.enable` switches over an explicit import
+list, then `fleet.dashboard.<id>` replacing every cross-stack read in
+`daedalus.nix`, with immich-off proven to build. 31 of 43 switches flip; the
+twelve that do not are structural and listed in the config repo's
+`module-system` rule. 9b on 2026-09-21 (config `5022748`..`78e7a68`):
 
-- **9b Literals + state.** ~210 occurrences → `fleet.operator.*`,
-  `fleet.baseDomain`, `fleet.github.owner`, `registry.${baseDomain}`;
-  `fleet.stateRoot` writable; machine-generated state moves to
-  `${fleet.stateRoot}/daedalus/state/` (the bootstrap oneshots migrate the
-  files once, idempotently); runbook paths become docs URLs. ⚠ touches
-  `stacks/app-db` → pg restart → restart pocket-id and verify `id.<domain>`
-  per the cascade runbook. Alone, off-hours, on a day the autoupgrade did
-  not run.
-- **9c, the engine's half.** The stacks still hand the control plane
-  fourteen `*_VERSION` env vars (now through `fleet.dashboard.<id>.env`
-  rather than a grep, so the box no longer depends on them being there).
-  The app should read those versions from `/export/images.json`
-  (`imageTag()`) and the env vars then go; app-only, no rebuild.
+- **Literals.** `platform/operator.nix` declares who runs the box and where
+  the checkout lives (`fleet.operator.*`, `fleet.config.repo`); the host
+  defines them. About 190 literals across 50 files now read an option —
+  the domain, own-hostnames through `fleet.webApps.<n>.hostname`, the user,
+  uid, home, runtime dir, the hostname, the GitHub owner. Gate: the toplevel
+  derivation byte-identical with the revision pinned, per slice and merged.
+- **State.** The pg cluster and per-app credentials, every `AUTH_SECRET` and
+  the builder's registry password moved from `stacks/*/secrets` in the
+  checkout to `fleet.machineState` under the snapshotted state tree.
+  `platform/machine-state.nix` migrates once (copy, compare, delete; refuses
+  when two copies differ) and every bootstrap REQUIRES it, because each
+  mints a fresh secret when it finds none. pg itself did not restart; its
+  24 tenants did, Pocket ID came back, 67 containers before and after.
+- **9c's engine half.** Four image versions read from `/export/images.json`
+  (`pinnedVersion`, engine `3974248`) and their env bindings are deleted
+  from the config. The other `*_VERSION` names are not image tags (a game
+  binary, npm packages inside a local image, native NixOS services) and
+  stay env reads, each for a stated reason.
 
-Compatibility: defaults keep every module on; the closure was identical
-after 9a and 9c except the intended env renames.
+What 9b did NOT reach, and Phase 11 will trip over:
+
+- **Literals inside assets.** Host scripts and config files the modules
+  render still spell the user, uid, home and hostname: `stacks/daedalus/host/
+  {env-snapshot,image-snapshot,image-freshness,system-snapshot,apply,
+  image-update}.sh`, `stacks/apps/assets/deploy.sh`, `stacks/app-db/assets/
+  {bootstrap.sh,traefik-tcp.yml}`, `stacks/pocket-id/assets/client-secrets.sh`,
+  `stacks/litellm/assets/{virtual-keys.sh,config.yaml}`, `stacks/registry/
+  assets/config.json`, `stacks/verdaccio/assets/config.yaml`,
+  `platform/autoupgrade/assets/autoupgrade.sh`, the two shot check drivers,
+  and `"s2-server"` in seven Grafana dashboards. The fix is the one the
+  scripts already use for some values: pass them as environment from nix.
+- **No option exists yet for:** the pool mountpoints (`/s2/...`, in eight
+  stacks), the GPU box (`192.168.0.120`, `gaming-pc.local`), the LAN subnet
+  (fail2ban), the ACME contact address, the operator's git identity
+  (`platform/git`), `github.expectedOwnerId`, the rebuild lock's name.
+- **Files that are host data, not engine:** `platform/zfs.nix` and
+  `platform/backup.nix` name this box's pools and per-person datasets;
+  `platform/claude.nix` reaches `../.claude/`. They need a split before the
+  move, not a substitution.
 
 ### Phase 10 — App module system and build (1–2 weeks, app only)
 
