@@ -391,45 +391,89 @@ Compatibility: 10a is a refactor with tests (module registry tests, the
 existing suite, fixture-driven loader tests that survive a null upstream);
 10b is gated by `vite build` producing a working server.
 
-### Phase 11 — The engine becomes importable (2–3 days for the move; then one stack at a time)
+### Phase 11 — The engine becomes importable (the move has landed; then one stack at a time)
 
-One mechanical big-bang with a hard gate, then a gradual migration. First:
-`platform/` + `stacks/daedalus/{daedalus.nix,host,assets}` move into the
-engine as `nix/`; the engine exports `nixosModules.default`; `/etc/nixos`
-imports it as a `git+file:` input pinned in `flake.lock`. Gate: the closure is
-IDENTICAL. Then the stacks migrate ONE BY ONE into `nix/modules/<id>` behind
-`fleet.modules.<id>.enable`, each its own small rebuild that leaves the box
-working. From the big-bang on, an engine-side nix change costs one `nix flake
-update daedalus` in the config; the `/rebuild` skill does it when the engine's
-HEAD moved.
+**Landed 2026-09-21 — the big-bang move, with an IDENTICAL closure.**
+`platform/**` and `stacks/daedalus/**` left the operator's configuration and
+are this repo's `nix/platform/**` and `nix/stacks/daedalus/**` (engine
+`3aae896`; `c703ee3` for the upgrade's named inputs). The root `flake.nix`
+takes no inputs and exports `nixosModules.{platform,daedalus,default}` and
+`lib.path`. The configuration (its `d829416`) takes the engine as the input
+`daedalus` — `git+file://<the local clone>?ref=engine-nix`, pinned by rev in
+its `flake.lock` — and sets `specialArgs.enginePath = "${daedalus}/nix"`. The
+gate held: the system store path was the same before and after. The prep that
+made that possible is in the configuration's history (no relative path crosses
+into the engine; credentials, pools, data roots and the `.mcp.json` ciphertext
+became host-handed options; the gluetun pins became `fleet.gluetun.*`; the
+weekly upgrade moves only `fleet.autoupgrade.inputs`, never the engine). Docs
+for the tree: `nix/README.md`; the authoring rule: `.claude/rules/nix-engine.md`.
 
-1. Reshape the engine with `git mv` into `nix/`, `app/`, `host/`, `website/`,
-   `docs/`; `flake.nix` exports `nixosModules.default`, `lib`,
-   `templates.config`; `nix flake check` passes with no site present (Phase
-   9's gating makes this possible).
-2. `/etc/nixos` shrinks to the CONFIG shape: `flake.nix` (input `daedalus` by
-   tag, nixpkgs following daedalus), `configuration.nix` importing
-   `daedalus.nixosModules.default` with `fleet.site.source = ./site`,
-   `hardware-configuration.nix`, `host.nix` (hostname, hostId, static IP, zfs
-   pools, the hand-managed CNAME notes), `.claude/`, `HARDWARE.md`,
-   `lemonade.md`, `AUTH.md`, `FUTURE.md`. Everything else comes from the
-   engine input. `site/` does not move. `fleet.imagePins` (site override map,
-   engine defaults via `mkDefault`) replaces `image-update.sh`'s `.nix`
-   rewriting.
-3. `developer.engineOverride` in `site.json` makes the agents pass
-   `--override-input daedalus git+file:///home/santiago/projects/daedalus` +
-   `--no-write-lock-file` so engine work is testable before a tag.
-4. CLAUDE.md Rule 1, the skills (`/rebuild`, `/add-stack`,
-   `/update-images`), `.claude/settings.json` allow list and `bash-guard.sh`
-   are rewritten for the two-piece loop (`site/` via the UI, everything else
-   in `/etc/nixos` by hand, engine work in `~/projects/daedalus`).
-5. `nix flake check` and the schema fixtures join the engine's `ci.yml` (the
-   engine's CI runs on GitHub-hosted runners, never the box's own, so it
-   answers while the box is down).
+From here an engine-side nix change costs a commit on `engine-nix` plus one
+`nix flake update daedalus` in the configuration; its `/rebuild` skill detects
+a moved engine.
 
-Gate (the only hard one): `nixos-rebuild build --flake /etc/nixos` with the
-engine pinned to its first tag produces a closure identical to the running
-system; the engine's `nix flake check` is green; an Apply still writes only
+**Design notes — decisions the move made, so they are not re-litigated.**
+
+- **Import ORDER is why the reference box does not import
+  `nixosModules.default`.** List-typed options (`prometheusScrapes`, firewall
+  ports, `assertions`) concatenate in module order, so the order of the import
+  list is part of the closure. Before the move, the daedalus stack sat in its
+  alphabetical slot AMONG the stacks; `nixosModules.default` would import it as
+  a block, ahead of or behind all of them, and reorder those lists — a
+  different closure, which the identical-closure gate forbids. So the box still
+  names every engine module one by one, as `(enginePath + "/platform/…")` and
+  `(enginePath + "/stacks/daedalus/…")`, in the old positions.
+  `nixosModules.default` is the interface for everyone else; the box adopts it
+  in a deliberate, separately-gated rebuild once the stacks have moved and
+  there is nothing left to interleave with.
+- **The engine takes no inputs.** The host picks nixpkgs, imports sops-nix,
+  and hands `nixpkgs-unstable` in as a `specialArg`. (The earlier plan's "nixpkgs
+  following daedalus" is dropped.)
+- **`enginePath` is a `specialArg`, not `_module.args`** — host stacks import
+  the by-path libraries at module-import time, before a config exists.
+- **A local `git+file` input reads commits, and only a named update moves
+  it.** An unattended job is the wrong thing to discover what was committed
+  in a clone.
+- **No oci-container digest pin under `nix/`** until `fleet.imagePins` exists:
+  the update agent rewrites a `.nix` file in place and cannot write into a
+  flake input. (`build-agent.nix`'s node image and `railpack.nix`'s frontend
+  are not oci-containers; bumped by hand.)
+
+**What remains of Phase 11.**
+
+1. **Publish the branch.** `engine-nix` is LOCAL-ONLY, awaiting the operator's
+   review of what a public `nix/` tree says. Until then it exists on one
+   machine's pools and nowhere else — the configuration's recovery runbook
+   says so plainly. Then: **merge `engine-nix` into `main`**, retarget the
+   configuration's `?ref=`, and decide tag-pinning (`github:` input by tag)
+   versus the local clone; the worktree arrangement ends with the merge.
+2. **Stacks, ONE BY ONE, into `nix/modules/<id>`** behind
+   `fleet.modules.<id>.enable`, each its own small rebuild that leaves the box
+   working. First the ones the control plane's module already reads
+   (`fleet.apps`, `fleet.litellmKeys`, `fleet.logStacks` are declared by host
+   stacks today, so `nixosModules.default` does not evaluate alone). The
+   configuration shrinks toward `flake.nix`, `configuration.nix`,
+   `hardware-configuration.nix`, `host/`, `site/`, `.claude/` and its docs.
+3. **`fleet.imagePins`** — a site override map, engine defaults via
+   `mkDefault` — replaces `image-update.sh`'s `.nix` rewriting, and is what
+   lets a migrated stack bring its pin with it.
+4. **`developer.engineOverride`** in `site.json` makes the agents pass
+   `--override-input daedalus <clone>` + `--no-write-lock-file`, so engine
+   work is testable through an Apply before a commit is pinned.
+5. **`nix flake check` + the schema fixtures in the engine's `ci.yml`**
+   (GitHub-hosted runners, never the box's own, so it answers while the box is
+   down): the modules evaluate against a fixture site with no real one
+   present, plus a formatter check — this tree has none today, and the
+   configuration's `nix fmt` does not reach a flake input.
+6. **An "Update daedalus" button**: the engine's own upgrade path — resolve,
+   build, switch, verify, revert — the way System › Updates moves an image.
+7. `templates.config` and the remaining reshape (`host/`, `docs/` at the
+   root) ride along with step 2; the box-only constant
+   `fleet.github.expectedOwnerId` becomes a host value.
+
+Gate for what remains, unchanged in spirit: every step is a
+`nixos-rebuild build` whose closure difference is exactly the step's stated
+intent; the engine's `nix flake check` is green; an Apply still writes only
 under `site/`.
 
 ### Phase 12 — Onboarding, init, catalog, release (1–2 weeks)
