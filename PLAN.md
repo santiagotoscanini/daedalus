@@ -248,22 +248,21 @@ twelve that do not are structural and listed in the config repo's
   binary, npm packages inside a local image, native NixOS services) and
   stay env reads, each for a stated reason.
 
-What 9b did NOT reach, and Phase 11 will trip over:
+What 9b still leaves for Phase 11, after the asset pass (config `b1f4498`,
+`HEAD`):
 
-- **Literals inside assets.** Host scripts and config files the modules
-  render still spell the user, uid, home and hostname: `stacks/daedalus/host/
-  {env-snapshot,image-snapshot,image-freshness,system-snapshot,apply,
-  image-update}.sh`, `stacks/apps/assets/deploy.sh`, `stacks/app-db/assets/
-  {bootstrap.sh,traefik-tcp.yml}`, `stacks/pocket-id/assets/client-secrets.sh`,
-  `stacks/litellm/assets/{virtual-keys.sh,config.yaml}`, `stacks/registry/
-  assets/config.json`, `stacks/verdaccio/assets/config.yaml`,
-  `platform/autoupgrade/assets/autoupgrade.sh`, the two shot check drivers,
-  and `"s2-server"` in seven Grafana dashboards. The fix is the one the
-  scripts already use for some values: pass them as environment from nix.
+- ~~Literals inside assets~~ — done 2026-09-21. Scripts take the operator,
+  hostname and checkout from their wrappers; static configs are templated
+  where nix reads them; the nine dashboards share one substitution step.
+  Every rendered config came out byte-identical. Two facts got options
+  because they had none: `fleet.operator.email` and `fleet.gpuHost`/
+  `gpuHostIp`; the commit identity became `fleet.operator.git{Name,Email}`.
+  A sweep of `platform/` and `stacks/` for this box's names now returns a
+  docstring, a private-range constant and the engine's own upstream URL.
 - **No option exists yet for:** the pool mountpoints (`/s2/...`, in eight
-  stacks), the GPU box (`192.168.0.120`, `gaming-pc.local`), the LAN subnet
-  (fail2ban), the ACME contact address, the operator's git identity
-  (`platform/git`), `github.expectedOwnerId`, the rebuild lock's name.
+  stacks), the LAN subnet (fail2ban, in the host file), the ACME contact's
+  local part, `github.expectedOwnerId` (a deliberate security constant the
+  host must define), the rebuild lock's name.
 - **Files that are host data, not engine:** `platform/zfs.nix` and
   `platform/backup.nix` name this box's pools and per-person datasets;
   `platform/claude.nix` reaches `../.claude/`. They need a split before the
