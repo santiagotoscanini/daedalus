@@ -4,7 +4,8 @@
 #   - `_module.args` helpers: mkRootlessContainer (oci-containers
 #     decorator applying per-host defaults: podman.user=<the operator>,
 #     autoStart=true, TZ), hostUid, mkDotenvSecret, mkSecretRender,
-#     mkLocalImage. ALL _module.args live in this one module — a module
+#     mkLocalImage, pinnedImage (a catalog module's host-defined image,
+#     fleet.images). ALL _module.args live in this one module — a module
 #     that defines _module.args cannot itself consume a custom arg
 #     (evaluating the args option recurses through the module call).
 #     The gluetun family is a by-path library (platform/lib/gluetun-lib.nix)
@@ -317,6 +318,33 @@ in
       '';
     };
 
+    images = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      description = ''
+        CONTAINER name → the full image reference an engine module runs it
+        from, `<registry>/<repo>:<tag>@sha256:<digest>`. DEFINED BY THE HOST,
+        for every container of every engine module it switches on; read by the
+        module through the `pinnedImage` module argument, which fails
+        evaluation naming the missing key.
+
+        Pins are host data because the control plane's image-update agent
+        rewrites a digest literal in place in the host's configuration
+        checkout and cannot write into a flake input. Keyed by container —
+        not by module — because that is the key the whole update machinery
+        already uses (`fleet.imagePins`, `fleet.imageUpdates`, the update
+        request), and because a module with five containers then needs no
+        five option declarations. Keep them in ONE file of the host's
+        (`host/images.nix`): the agent requires a digest to appear in exactly
+        one `.nix` file, which a single home guarantees.
+      '';
+      example = lib.literalExpression ''
+        {
+          stirling-pdf = "docker.io/stirlingtools/stirling-pdf:2.14.3@sha256:<digest>";
+        }
+      '';
+    };
+
     bridgeSubnets = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -424,6 +452,17 @@ in
 
     # See the let-binding's doc; state-paths below uses the same mapping.
     _module.args.hostUid = hostUid;
+
+    # The host-defined image of an engine module's container (fleet.images).
+    # `upstream` is the repository the module was written against — the
+    # mechanism half of a pin, named only so the error can say what to pin.
+    _module.args.pinnedImage =
+      name: upstream:
+      cfg.images.${name} or (throw ''
+        fleet.images.${name} is not defined. An engine module runs the container
+        "${name}" and the host pins its image — in your configuration:
+          fleet.images.${name} = "${upstream}:<tag>@sha256:<digest>";
+      '');
 
     # Standard operator-managed dotenv secret: age-encrypted file at
     # the stack root, decrypted to /run/secrets/<name> owned by

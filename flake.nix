@@ -93,6 +93,13 @@
         "daedalus.nix"
         "railpack.nix"
       ];
+
+      # The catalog: one stack per directory, `modules/<id>/<id>.nix`, each
+      # behind `fleet.modules.<id>.enable` — default OFF, so importing them all
+      # costs a host nothing.
+      catalogModules = [
+        "stirling-pdf"
+      ];
     in
     {
       # `nix/` as a path, for a host that still keeps stacks of its own and
@@ -141,10 +148,16 @@
           imports = map (m: root + "/stacks/daedalus/${m}") daedalusModules;
         };
 
+        # The catalog of stacks, all switched off until the host says otherwise.
+        catalog = {
+          imports = map (m: root + "/modules/${m}/${m}.nix") catalogModules;
+        };
+
         default = {
           imports = [
             self.nixosModules.platform
             self.nixosModules.daedalus
+            self.nixosModules.catalog
           ];
         };
       };

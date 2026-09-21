@@ -26,6 +26,14 @@
     # `nix/modules/apps` exists: the check then proves the container too.
     modules.apps.enable = false;
 
+    # One catalog module, ON — proof that a stranger can enable a migrated
+    # stack with nothing but its switch and its image pin. It writes
+    # `fleet.webApps` and `fleet.ssoClients`; this host runs no reverse proxy
+    # and no identity provider, so both entries are declarations nothing acts
+    # on, and evaluation must not care.
+    modules.stirling-pdf.enable = true;
+    images.stirling-pdf = "docker.io/stirlingtools/stirling-pdf:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+
     operator = {
       user = "alice";
       uid = 1000;
