@@ -35,7 +35,11 @@ THIS repo's `app/` at /app, running the Vite dev server against it.
   against zero.
 - `app/package.json` → `sudo systemctl restart podman-app-daedalus`
   (re-runs `pnpm install --frozen-lockfile`; Verdaccio is a hard
-  startup dependency, minutes on a cold cache).
+  startup dependency, minutes on a cold cache). **`dependencies` holds
+  only what the built server resolves at run time** (`srvx`, `postgres`,
+  `drizzle-orm`, `@node-rs/argon2`) — the image installs `--prod`, and
+  `check-build` fails on a mismatch either way. Everything the build
+  bundles, React included, is a devDependency: `pnpm add -D`.
 - `stacks/daedalus/assets/**` in the s2-server repo (the runtime image
   context) → `nixos-rebuild` there (context hash → new image tag →
   restart).
