@@ -3,7 +3,7 @@ import { actorLabelOf } from '../core/auth'
 // Type-only, so it is erased rather than pulling the bridge's node:fs into a
 // bundle — the value import below stays dynamic like every other server reach.
 import type { ImageTarget } from '../host/image-update'
-import { isRecord } from '../lib/is-record'
+import { httpResult, readJsonObject, refusalResponse } from '../lib/http-result'
 
 // Move a container's image pin without the UI, and read back where it got to.
 //
@@ -40,23 +40,18 @@ export const Route = createFileRoute('/api/image-update')({
         const { assertAdminOf } = await import('../core/authz')
         await assertAdminOf(request)
         const { runImageUpdate } = await import('../host/update-flow')
+        const { flowResult } = await import('../host/flow')
 
-        // `null` is valid JSON: the parse succeeds, the catch never fires, and
-        // a cast to a record would leave every read below to throw outside the
-        // try — a 500 where this 400 is meant.
-        let body: Record<string, unknown>
-        try {
-          const parsed: unknown = await request.json()
-          if (!isRecord(parsed)) {
-            return Response.json(
-              { status: 'refused', reason: 'body must be a JSON object' },
-              { status: 400 },
-            )
-          }
-          body = parsed
-        } catch {
-          return Response.json({ status: 'refused', reason: 'body is not JSON' }, { status: 400 })
+        const badInput = (reason: string) =>
+          refusalResponse('bad-input', { code: 'refused', reason })
+
+        const read = await readJsonObject(request)
+        if (!read.ok) {
+          return badInput(
+            read.reason === 'not-json' ? 'body is not JSON' : 'body must be a JSON object',
+          )
         }
+        const body = read.value
 
         // Both shapes, one parser. `targets` wins when present so a caller
         // sending both cannot mean two different things at once.
@@ -64,10 +59,7 @@ export const Route = createFileRoute('/api/image-update')({
           body.targets === undefined ? [{ container: body.container, toTag: body.toTag }] : []
 
         if (body.targets !== undefined && !Array.isArray(body.targets)) {
-          return Response.json(
-            { status: 'refused', reason: 'targets must be an array when present' },
-            { status: 400 },
-          )
+          return badInput('targets must be an array when present')
         }
 
         const list = (Array.isArray(body.targets) ? body.targets : raw) as {
@@ -78,16 +70,10 @@ export const Route = createFileRoute('/api/image-update')({
         const targets: ImageTarget[] = []
         for (const t of list) {
           if (typeof t?.container !== 'string') {
-            return Response.json(
-              { status: 'refused', reason: 'container must be a string' },
-              { status: 400 },
-            )
+            return badInput('container must be a string')
           }
           if (t.toTag !== undefined && typeof t.toTag !== 'string') {
-            return Response.json(
-              { status: 'refused', reason: 'toTag must be a string when present' },
-              { status: 400 },
-            )
+            return badInput('toTag must be a string when present')
           }
           targets.push({
             container: t.container,
@@ -100,20 +86,28 @@ export const Route = createFileRoute('/api/image-update')({
           actor: actorLabelOf(request, 'api'),
         })
 
-        if (!outcome.ok) {
-          return Response.json({ status: outcome.code, reason: outcome.reason }, { status: 409 })
-        }
+        const result = flowResult(outcome)
+        // 409 for the flow's `refused` too (no container named, one named
+        // twice), though the same word from the body checks above is a 400:
+        // that is the status this route has always answered, and callers
+        // branch on it.
+        if (!result.ok) return httpResult(result, { kind: () => 'conflict' })
+
         // The pre-batch response shape, for a one-container request only.
         // Reporting the first of six as "the" container would be worse than
         // omitting it.
-        const only = outcome.targets.length === 1 ? outcome.targets[0] : undefined
+        const only = result.value.targets.length === 1 ? result.value.targets[0] : undefined
 
-        return Response.json({
-          status: 'queued',
-          id: outcome.id,
-          targets: outcome.targets,
-          ...(only === undefined ? {} : { container: only.container, toTag: only.toTag }),
-        })
+        return httpResult(
+          {
+            ok: true,
+            value: {
+              ...result.value,
+              ...(only === undefined ? {} : { container: only.container, toTag: only.toTag }),
+            },
+          },
+          { kind: () => 'conflict' },
+        )
       },
     },
   },
