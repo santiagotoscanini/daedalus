@@ -8,12 +8,16 @@ paths:
 
 This tree is the OS half of daedalus: `nix/platform/**` (the base every
 stack rides on — container runtime and its helpers, the publish layer,
-site constants, secrets, ZFS, backup, mail, git, the weekly upgrade) and
+site constants, secrets, ZFS, backup, mail, git, the weekly upgrade),
 `nix/stacks/daedalus/**` (the control plane's own module, `self.json`, the
-host agents in `host/*.sh`, the runtime image context in `assets/`).
-`flake.nix` exports it as `nixosModules.{platform,daedalus,default}` and
-`lib.path`, and takes **no inputs** — the host picks the nixpkgs it is
-evaluated against and imports sops-nix beside it.
+host agents in `host/*.sh`, the runtime image context in `assets/`),
+`nix/modules/<id>/**` (the catalog: stacks that have migrated here, each
+behind a switch that defaults OFF — §7) and `nix/tests/minimal-host/` (a
+stranger's smallest host, evaluated by `nix flake check`).
+`flake.nix` exports it as `nixosModules.{platform,daedalus,catalog,default}`
+and `lib.path`. Its MODULES take nothing from the flake's inputs — the host
+picks the nixpkgs they are evaluated against and imports sops-nix beside
+them; the inputs serve `nix fmt` and the checks only.
 
 A real machine runs on this tree. It is imported into the operator's own
 configuration flake as an input pinned by rev, so nothing here reaches a
@@ -21,7 +25,7 @@ box until that lock is moved on purpose — but once it is, a mistake here
 is a mistake in someone's bootloader, firewall or backups.
 
 Stack authoring (the `fleet.*` option reference, the stack template, the
-enable-switch rules, rootless uid mapping) is NOT duplicated here: the
+enable-switch rules, rootless uid mapping) is NOT duplicated here: most
 stacks still live in the operator's private configuration, and so does
 their reference (`.claude/rules/module-system.md` in that repo). What
 follows is what is particular to editing the ENGINE.
@@ -83,12 +87,15 @@ Defined directly in the host's configuration:
 - `fleet.operator.gitName`, `fleet.operator.gitEmail` — author of the commits the box makes (weekly lock bump, Apply).
 - `fleet.config.repo` — where the configuration checkout lives on disk (run-time path).
 - `fleet.github.owner` — the GitHub account the app repos live under.
+- `fleet.github.expectedOwnerId` — that account's numeric id; the one copy the control plane cannot rewrite.
 - `fleet.data` — `attrsOf str`, name → absolute path of each bulk-data root outside `stateRoot` (`{ }` is a valid answer if no enabled stack reads a name).
 - `fleet.mail.smtpHost` — the SMTP relay.
 - `fleet.mail.passwordSopsFile` — sops ciphertext (binary) of the relay password.
 - `fleet.git.sshKeySopsFile` — sops ciphertext (binary) of the SSH key the box pushes to its forge with.
 - `fleet.daedalus.serviceKeysSopsFile` — sops dotenv of the read-only API keys the control plane reads other services with.
 - `fleet.gluetun.image`, `fleet.gluetun.exporterImage` — digest-pinned images for `mkGluetunInstance`; forced only when a host builds a tunnel (see §4).
+- `fleet.images.<container>` — the digest-pinned image of every container of every catalog module the host switches on (§4, §7). `pinnedImage` throws naming the missing key.
+- `fleet.modules.apps.enable = false` — TEMPORARY, and not a host fact: the apps stack (what turns `fleet.apps.<n>`, the control plane's own entry included, into a container) has not migrated, so a host with only the engine has nothing behind that switch. Goes away with `nix/modules/apps`.
 - `fleet.site.source` — has a `null` default, but null fails evaluation on purpose: the host sets `./site`.
 
 Defined FROM the host's `site/site.json` by `platform/site.nix` (the
@@ -139,7 +146,8 @@ time, before `_module.args` exist). That makes a library's argument list
 and return shape a public interface: changing one breaks stacks this repo
 cannot see. Add, don't rename.
 
-`flake.nix`'s two module lists are explicit and alphabetical. A new
+`flake.nix`'s module lists (`platformModules`, `daedalusModules`,
+`catalogModules`) are explicit and alphabetical. A new
 platform module is a new line there AND a line in the host's own import
 list (see §6) — a tracked file named in neither is silently absent.
 
@@ -150,9 +158,13 @@ IN PLACE in the `.nix` file that holds it, inside the operator's
 configuration checkout. It cannot write into a read-only flake input, so
 a pin under `nix/` would never move and its Updates row would fail. An
 engine module that needs a pinned image declares an option with no
-default and an `example` (`fleet.gluetun.image`) and the host defines the
-literal. (`fleet.imagePins`, an override map with engine defaults, is
-planned — PLAN.md Phase 11 — and is what will lift this rule.)
+default and an `example` (`fleet.gluetun.image`, for a library) or — every catalog
+module — reads `pinnedImage "<container>" "<upstream repo>"`, which
+resolves `fleet.images.<container>` and fails evaluation naming the key
+when the host has not defined it. The host keeps all of them in one file
+(§7). The name `fleet.imagePins` is taken: it is the read-only PARSED
+view of every pin (`platform/export.nix`) that the Updates page and the
+agent read; `fleet.images` is the host-written input.
 
 Two pins here are NOT `virtualisation.oci-containers` images and are
 bumped by hand, as ordinary engine commits: `nodeImage` in
@@ -223,8 +235,9 @@ this tree has.)
   evaluate with every host stack switched off, and with stacks it has
   never heard of.
 - **`nixpkgs-unstable` is a `specialArg` two modules ask for**
-  (`platform/claude-code`, `stacks/daedalus/builder.nix`). The flake takes
-  no inputs, so the host must hand it in; say so in `nix/README.md` if you
+  (`platform/claude-code`, `stacks/daedalus/builder.nix`). The modules take
+  nothing from this flake's inputs, so the host must hand it in (the
+  `nixpkgs-unstable` input here feeds only `checks.minimal-host`); say so in `nix/README.md` if you
   add a third.
 - **Every container unit is `Type=oneshot` + `RemainAfterExit`** (rootless
   podman cannot do notify). A green unit proves nothing about the
@@ -243,3 +256,101 @@ this tree has.)
   lock bump, units that carry such a path restart even when the commit
   only touched a README. Batch doc-only commits with a real change, or
   accept the restarts; don't be surprised by them.
+
+## 7. Migrating a stack — `nix/modules/<id>`
+
+A stack leaves the operator's configuration for this tree one at a time.
+`modules/stirling-pdf` is the template; read it beside this list. The
+gate for every move is §5's: the reference host's `system` derivation is
+IDENTICAL before and after, and `nix flake check` — which evaluates
+`nix/tests/minimal-host` — stays green.
+
+**Where it goes.** `nix/modules/<id>/<id>.nix`, assets in
+`nix/modules/<id>/assets/`, one line in `flake.nix`'s `catalogModules`.
+The switch `fleet.modules.<id>.enable` moves with it and **defaults to
+`false` here** (it defaulted to `true` in the host): `nixosModules.default`
+imports the whole catalog, and a stranger must not get forty services for
+importing the engine. The host turns it on in its own `host/modules.nix`.
+History does not cross repositories: copy the file, `git rm` it there.
+
+**Same slot.** The host imports the moved file through `enginePath` in
+the SAME position of its import list the local file had — list-typed
+options concatenate in import order (§6). A new options-only file
+(`platform/registries.nix`, `platform/apps-options.nix`) can go anywhere:
+declarations contribute no list elements.
+
+**The image pin stays with the host.** §4. The module writes
+`image = pinnedImage "<container>" "<registry>/<repo>";` and the host
+defines `fleet.images.<container>` — the full literal
+`repo:tag@sha256:digest` — in ONE file, `host/images.nix`. Why one map
+keyed by container rather than an option per module: the key is the one
+the update machinery already uses end to end (`fleet.imagePins`,
+`fleet.imageUpdates`, the update request's `container`); a module with
+five containers needs no five declarations; and the agent
+(`stacks/daedalus/host/image-update.sh`) finds a pin by `grep -F` on its
+digest across the host's `.nix` files and refuses a digest present in
+two files — a single home makes that structurally true. A shared
+version variable (two containers on one release) is a `let` in that
+file. `fleet.imageUpdates.<container>` policy (lockstep, ceremony,
+updatable) is mechanism knowledge about the image and moves WITH the
+module.
+
+**Policy is the host's, mechanism is the module's.** Mechanism: which
+upstream image, ports, mounts and their uids, env that makes the app work
+behind the gate, the health path, bridge memberships, which registries it
+writes. Policy: who may log in, under what name it is published, whether
+it is reachable off-LAN, resource caps, schedules, retention, anything
+that names a person, a group or a place. A policy value the module author
+anticipates becomes an option under `fleet.modules.<id>` whose default is
+the NARROWEST answer (`authGroups = [ "admins" ]`, `exposeRemotely =
+false`) — never the reference household's. Policy nobody anticipated
+needs no option: the registries merge, so a host may define
+`fleet.webApps.<id>.<field>` directly, inside
+`lib.mkIf config.fleet.modules.<id>.enable` (a bare definition with the
+module off creates a half-declared entry). The hostname label needs
+nothing: `fleet.webApps.<n>.hostname` defaults to `<n>.<baseDomain>`.
+
+**Secrets.** A stack's operator-managed `env.sops` is host data, like the
+platform's four: it stays in the host at `host/sops/<id>-env.sops` and
+reaches the module through `fleet.modules.<id>.envSopsFile` (`path`, no
+default — forced only when the switch is on, so a host that leaves the
+module off owes nothing). The module calls `mkDotenvSecret` on it. Keep
+the basename on the first move: it is part of the store path sops-nix
+builds its manifest from, so a rename is a (harmless) closure change —
+do it separately from the move, never in the same gate. Machine-generated
+state needs no convention: it is born under `fleet.machineState`.
+
+**Assets that another stack looked up by name move with their owner.**
+The template's case: the identity provider's stack found each client's
+logo as `assets/logos/<client>.png` in ITS directory. The migrated module
+carries its own (`assets/<id>.png`, same basename — a single file's store
+path is its name and content, so the move is closure-neutral) and sets
+`fleet.ssoClients.<id>.logo`; the host's directory stays as
+`fleet.sso.logoDir` for the stacks it still keeps.
+
+**Registries: the declaration comes first.** A module can only write a
+registry this tree declares. If its owner is still a host stack, move the
+`options` declaration — ungated, unchanged — into
+`platform/registries.nix` (or a file of its own when it is large:
+`platform/apps-options.nix`), and leave the `config` half where it is. A
+let-bound constant the declaration shared with its implementation becomes
+a read-only option both read (`fleet.sso.renderDir`), not a second copy.
+Never stub a registry in `tests/minimal-host`.
+
+**`mkIf` on another stack's container goes one level up.**
+`containers.<x>.volumes = lib.mkIf cond […]` still creates `<x>` — an
+`attrsOf submodule` entry exists as soon as any attribute path reaches
+it — and a container with no image fails evaluation. Write
+`containers = lib.mkIf cond { <x>.volumes = […]; }`.
+
+**Scrub.** §1 applies to every comment, description and example that
+comes across — a person, a domain, a hostname, a LAN address, a pool, the
+household's group names, the names of the operator's own apps. `#`
+comments and descriptions are closure-neutral; text inside a script is
+not (§1).
+
+**Prove a stranger can enable it.** Add the module to
+`nix/tests/minimal-host/host.nix` with its switch ON and a placeholder
+`fleet.images.<container>`. That host runs no reverse proxy and no
+identity provider, so this also proves the module evaluates when the
+registries it writes have no implementation behind them.

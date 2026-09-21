@@ -450,7 +450,8 @@ configuration; its `/rebuild` skill detects a moved engine.
 - **A local `git+file` input reads commits, and only a named update moves
   it.** An unattended job is the wrong thing to discover what was committed
   in a clone.
-- **No oci-container digest pin under `nix/`** until `fleet.imagePins` exists:
+- **No oci-container digest pin under `nix/`** — a catalog module reads the
+  host-defined `fleet.images.<container>`:
   the update agent rewrites a `.nix` file in place and cannot write into a
   flake input. (`build-agent.nix`'s node image and `railpack.nix`'s frontend
   are not oci-containers; bumped by hand.)
@@ -458,16 +459,24 @@ configuration; its `/rebuild` skill detects a moved engine.
 **What remains of Phase 11.**
 
 1. **Stacks, ONE BY ONE, into `nix/modules/<id>`** behind
-   `fleet.modules.<id>.enable`, each its own small rebuild that leaves the box
-   working. First the ones the control plane's module already reads
-   (`fleet.apps`, `fleet.litellmKeys`, `fleet.logStacks` are declared by host
-   stacks today, so `nixosModules.default` does not evaluate alone — making
-   it evaluate on its own is this step's finish line). The
+   `fleet.modules.<id>.enable` (default OFF here), each its own small rebuild
+   that leaves the box working. `nixosModules.default` now EVALUATES alone
+   (`checks.minimal-host`): the `fleet.apps` and `fleet.ssoClients`
+   declarations moved to `platform/{apps-options,registries}.nix`, and
+   `stirling-pdf` moved as the template (conventions: `nix-engine.md` §7).
+   It turned out the control plane READS no host-declared registry — it only
+   writes `fleet.apps.daedalus`, and everything in that entry is forced by
+   the apps stack's implementation alone. So the finish line moved: the
+   minimal host sets `fleet.modules.apps.enable = false`, and deleting that
+   line — apps, then app-db, traefik, pocket-id, registry — is what is left
+   before a stranger's box has a control plane to log in to. The
    configuration shrinks toward `flake.nix`, `configuration.nix`,
    `hardware-configuration.nix`, `host/`, `site/`, `.claude/` and its docs.
-2. **`fleet.imagePins`** — a site override map, engine defaults via
-   `mkDefault` — replaces `image-update.sh`'s `.nix` rewriting, and is what
-   lets a migrated stack bring its pin with it.
+2. **Engine-default pins.** `fleet.images.<container>` exists (host-defined,
+   one file, rewritten in place by `image-update.sh` as before — the name
+   `fleet.imagePins` was already the parsed read-only view). What remains is
+   the other half: a site override map with engine defaults via `mkDefault`,
+   which is what would let a migrated stack bring its pin with it.
 3. **`developer.engineOverride`** in `site.json` makes the agents pass
    `--override-input daedalus <clone>` + `--no-write-lock-file`, so engine
    work is testable through an Apply before a commit is pinned.
@@ -475,8 +484,8 @@ configuration; its `/rebuild` skill detects a moved engine.
    `nix flake check` half of this landed (`a2292b8`: nixfmt, statix, deadnix,
    every exported `nixosModule` checked to be a module; GitHub-hosted runners,
    never the box's own, so it answers while the box is down). What remains is
-   the evaluation: the modules against a fixture site with no real one
-   present, which waits on step 1.
+   the per-schema-version fixtures; the evaluation against a fixture site
+   with no real one present landed as `checks.minimal-host`.
 5. **An "Update daedalus" button**: the engine's own upgrade path — resolve,
    build, switch, verify, revert — the way System › Updates moves an image.
 6. **Tag-pinning**: decide a `github:` input by tag versus the local clone.
