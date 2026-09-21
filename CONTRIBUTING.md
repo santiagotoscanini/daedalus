@@ -122,3 +122,47 @@ module is not in this repository yet (`PLAN.md`, Phase 11). The pages
 render and the write paths are not exercisable locally. Changes to them are
 best reviewed as code plus a test; `pnpm test` covers the bridge, build and
 contract logic without a host.
+
+## Building and running the built server
+
+The box runs `vite dev`; this is the other way to run the same app, and what
+a released image will do (`PLAN.md`, Phase 10b).
+
+```
+cd app
+pnpm build          # vite build, then scripts/check-build.mjs
+DATABASE_URL=postgres://postgres:x@localhost:5432/postgres pnpm start
+```
+
+`pnpm build` writes `dist/client` (hashed browser assets plus everything
+from `public/`) and `dist/server/server.js`. That second file is a fetch
+handler — `export default { fetch }` — and listens on nothing, by design of
+TanStack Start; `server.mjs` is the listener. In order, it registers the
+unhandled-rejection guard, applies `drizzle/` with drizzle's migrator (the
+same ledger `pnpm db:migrate` writes, so a database migrated by hand is
+picked up where it stands, and a failed migration exits non-zero before a
+port opens), then serves `dist/client` and hands everything else to the
+handler. `PORT` (3000) and `HOST` (0.0.0.0) are the only settings of its
+own. `/assets/*` is `immutable` for a year; the `public/` files keep their
+names between builds and get an hour.
+
+`check-build.mjs` fails the build on the two things `vite build` exits 0
+over: a Node module stubbed into a browser chunk (`__vite-browser-external`
+— the page renders, then throws on a click), and a server-function id in a
+client chunk that the server manifest does not list. Ids are path-derived in
+dev and `sha256(file--function)` in a build, so the two modes never share
+one, and moving a file changes its id in both — a tab opened before a
+deploy that moved a file gets a failed call until it reloads.
+
+A build bundles every dependency into `dist/server` except
+`@node-rs/argon2` (a native addon). Running it therefore needs only
+`srvx`, `drizzle-orm`, `postgres` and `@node-rs/argon2` installed — 12 MB —
+not the 189 MB dev install.
+
+Two things are decided at build time and are not yet right for an image
+built somewhere other than the box it runs on: the four `VITE_*` identity
+values in `src/lib/site.ts` are inlined by Vite into both bundles (an
+unset one bakes in `localhost` / `unknown-owner`), and forward-auth headers
+are still the only identity, so without a proxy in front every write
+refuses. Server functions also require a same-origin request: a `curl`
+needs `-H 'Sec-Fetch-Site: same-origin'` or it gets a bare 403.
