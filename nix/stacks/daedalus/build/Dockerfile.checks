@@ -1,0 +1,76 @@
+# The checks target for Dockerfile-strategy builds (host/build.sh, step 4).
+#
+# Owned by daedalus, never by the app repository: the repo's own Dockerfile
+# says how to BUILD the app, this says how to CHECK it, and a repo cannot
+# weaken the second by editing the first. It is solved on the same BuildKit
+# daemon with `--opt target=checks` and no `--output`, so a failing check stops
+# the build before anything is published and nothing here is ever exported.
+#
+# No `# syntax=` line: dockerfile.v0 is built into buildkitd, and the daemon's
+# allowedRepositories would refuse most frontends anyway.
+#
+# Build args, all passed by build.sh (none has a default on purpose — a
+# missing one fails loudly instead of silently resolving somewhere else):
+#   NODE_IMAGE    node:24-slim pinned by digest (build-agent.nix)
+#   APP           the app's name, only to key the cache mount per app
+#   REGISTRY_URL  the box's Verdaccio, for corepack's pnpm download
+#   CHECKS        the contract's script names, space-separated
+#
+# The v1 contract is pnpm-only (every hosted app is); build.sh does not run
+# this target for a repo without pnpm-lock.yaml and records "no checks".
+# Single-package repos only: the deps stage copies the root manifests, so a
+# pnpm workspace with packages/* fails its frozen install here.
+
+ARG NODE_IMAGE
+
+# ───── deps: the lockfile's dependencies, with network ────────────────────
+FROM ${NODE_IMAGE} AS deps
+ARG APP
+ARG REGISTRY_URL
+WORKDIR /app
+
+# corepack only installs shims; the pnpm binary is fetched on the first `pnpm`
+# call and corepack reads none of pnpm's config — without its own registry
+# variable it goes straight to npmjs and skips the proxy (see iris's
+# Dockerfile). The dependency registry itself is the repo's choice, read by
+# pnpm from pnpm-workspace.yaml as in every other build of that repo.
+ENV CI=true \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    COREPACK_NPM_REGISTRY=${REGISTRY_URL}
+RUN corepack enable
+
+# The bracket globs make the optional files optional: a wildcard source that
+# matches nothing copies nothing, where a plain name would fail the build.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yam[l] .npmr[c] ./
+
+# One store per app. Cache-mount ids are global to the BuildKit daemon, so the
+# id starts with `<app>-` — the same namespace build.sh enforces on every
+# repo Dockerfile and Railpack plan — and an app whose own build uses a mount
+# by another app's name is refused before it runs. `locked` because two
+# builds of the same app must not write one store.
+RUN --mount=type=cache,id=${APP}-daedalus-pnpm-store,target=/pnpm-store,sharing=locked \
+    pnpm install --frozen-lockfile --store-dir=/pnpm-store
+
+# ───── checks: the repo's scripts, without network ───────────────────────
+FROM deps AS checks
+COPY . .
+ARG CHECKS
+
+# --network=none: a check is code from the repository, and once dependencies
+# are installed it has no business reaching anything.
+#
+# The app's build placeholders (dummy values, never real secrets) arrive as ONE
+# optional secret file of `export NAME='value'` lines, written by build.sh —
+# the Railpack path mounts every plan secret into its checks step the same way.
+# A secret, not build args: build args are recorded in the build history.
+#
+# `check failed: <name>` is the line build.sh reads back to report which
+# script failed, so it must stay exactly this shape.
+RUN --network=none \
+    --mount=type=secret,id=daedalus-check-env,target=/run/daedalus/check.env,required=false \
+    set -eu; \
+    if [ -f /run/daedalus/check.env ]; then . /run/daedalus/check.env; fi; \
+    for s in $CHECKS; do \
+      echo "==> check: $s"; \
+      if ! pnpm run "$s"; then echo "check failed: $s"; exit 1; fi; \
+    done
