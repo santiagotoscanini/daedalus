@@ -1,7 +1,8 @@
 import { rollUp } from '../../lib/activity-lines'
 import { cn } from '../../lib/cn'
 import { ms, when } from '../../lib/format'
-import { OWNER } from '../../lib/site'
+import { appRepo } from '../../lib/site'
+import { useSite } from '../../lib/site-context'
 import { toneStyle } from '../../lib/tone'
 import type { AppTabData } from '../../server/registry'
 import { Badge } from '../ui/badge'
@@ -26,6 +27,7 @@ export function Deployments({
   app: AppRecord
   td: Extract<AppTabData, { kind: 'deployments' }>
 }) {
+  const repo = appRepo(useSite(), app.name)
   return (
     <>
       {/* Three items of very different widths — a repo link, a sentence, a
@@ -41,8 +43,8 @@ export function Deployments({
           </>
         ) : (
           <>
-            <a href={`https://github.com/${OWNER}/${app.name}`} target="_blank" rel="noreferrer">
-              ⎇ {OWNER}/{app.name}
+            <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
+              ⎇ {repo}
             </a>
             <span className="text-(--text-muted)">
               {app.buildOnBox ? 'builds run on this box' : 'box builds are off for this app'}

@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GITHUB_APP_EVENTS, GITHUB_APP_PERMISSIONS } from '../../lib/github-app'
+import { siteFrom } from '../../lib/site'
 import { NO_ACTOR_REASON } from '../auth'
 import type { Ctx } from '../ctx'
 import type { SiteDocument, SiteGithubApp } from '../site/file'
@@ -40,7 +41,6 @@ vi.mock('../../lib/repo/settings', () => ({
     githubAppPendingApply: 'github.app.pendingApply',
   },
 }))
-vi.mock('../../lib/site', () => ({ OWNER: 'octo', BASE_DOMAIN: 'fallback.test' }))
 vi.mock('../github-app', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../github-app')>()),
   installationState: async () => h.installation,
@@ -166,6 +166,7 @@ function fakeCtx(
     },
     http: { getJson: async () => null },
     loki: { latest: async () => null, entries: async () => [] },
+    site: siteFrom({ owner: 'octo', baseDomain: 'fallback.test' }),
   } as unknown as Ctx
   return { ctx, store }
 }

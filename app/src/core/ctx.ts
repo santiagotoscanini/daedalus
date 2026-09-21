@@ -4,8 +4,10 @@ import { type ConfigName, env, type SecretName } from '../host/env'
 import { type Hosts, makeHosts } from '../host/hosts'
 import { key } from '../host/keys'
 import { lokiEntries, lokiLatest } from '../host/loki'
+import { readSite } from '../host/site'
 import { bool, type Decoder, recordOf } from '../lib/contract/decode'
 import { getJson } from '../lib/http'
+import type { Site } from '../lib/site'
 
 // The capability set a reader is handed instead of reaching for process.env.
 //
@@ -62,6 +64,8 @@ export type Ctx = {
   gateway: Gateway | null
   /** Where a published service lives, and how a container reaches the host. */
   hosts: Hosts
+  /** The box's identity — domain, owner, registry, Grafana — as this process's env binds it. */
+  site: Site
   /** The box's nix modules. `enabled` answers true for anything the export does not deny. */
   modules: { enabled: (nixModule: string) => boolean }
 }
@@ -93,6 +97,7 @@ export async function makeCtx(): Promise<Ctx> {
     http: { getJson },
     loki: { latest: lokiLatest, entries: lokiEntries },
     hosts,
+    site: readSite(),
     modules: {
       enabled: (id) => (modules.available ? (modules.data[id] ?? true) : true),
     },

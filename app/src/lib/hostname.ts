@@ -13,11 +13,10 @@
 // that is a revert. Rejecting it at the edit is the difference between a red
 // input box and a failed deploy.
 
-// Re-exported from site.ts (nix-bound env) so the validators and their many
-// importers keep one import path.
-import { BASE_DOMAIN } from './site'
-
-export { BASE_DOMAIN }
+// The domain is the box's, known only at run time, so the two functions that
+// need it take the `Site`: `ctx.site` / `readSite()` on the server,
+// `useSite()` in a component.
+import type { Site } from './site'
 
 /** One label: letters, digits, inner hyphens. Mirrors `hostnameRe` in apps.nix. */
 const LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
@@ -109,7 +108,12 @@ export function appNameError(name: string, taken: readonly string[] = []): strin
  *        mid-Apply, after the commit.
  * @returns an operator-facing reason, or null when the hostname is usable.
  */
-export function hostnameError(value: string, taken: readonly string[] = []): string | null {
+export function hostnameError(
+  site: Site,
+  value: string,
+  taken: readonly string[] = [],
+): string | null {
+  const domain = site.baseDomain
   const h = value.trim().toLowerCase()
   if (h === '') return null // empty means "use the default"
 
@@ -117,14 +121,14 @@ export function hostnameError(value: string, taken: readonly string[] = []): str
     return `${h} is already published by something else on this box. Two traefik routers on one host is a build failure, not a race.`
   }
 
-  if (!h.endsWith(`.${BASE_DOMAIN}`)) {
-    return `must end in .${BASE_DOMAIN}, the only domain with a wildcard cert, a tunnel and DNS on this box.`
+  if (!h.endsWith(`.${domain}`)) {
+    return `must end in .${domain}, the only domain with a wildcard cert, a tunnel and DNS on this box.`
   }
 
-  const label = h.slice(0, -(BASE_DOMAIN.length + 1))
-  if (label === '') return `needs a name in front of .${BASE_DOMAIN}.`
+  const label = h.slice(0, -(domain.length + 1))
+  if (label === '') return `needs a name in front of .${domain}.`
   if (label.includes('.')) {
-    return `only one level under ${BASE_DOMAIN}. The wildcard cert matches a single label, so "${h}" would serve the wrong certificate.`
+    return `only one level under ${domain}. The wildcard cert matches a single label, so "${h}" would serve the wrong certificate.`
   }
   if (!LABEL.test(label)) {
     return 'may use lowercase letters, digits and inner hyphens only.'
@@ -138,6 +142,6 @@ export function hostnameError(value: string, taken: readonly string[] = []): str
 }
 
 /** What Nix will publish: the override, or the derived default. */
-export function effectiveHostname(name: string, hostname: string | null): string {
-  return hostname ?? `${name}.${BASE_DOMAIN}`
+export function effectiveHostname(site: Site, name: string, hostname: string | null): string {
+  return hostname ?? `${name}.${site.baseDomain}`
 }

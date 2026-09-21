@@ -24,11 +24,15 @@
 // `reportEnvOnce()` is the whole-table pass, run once per process from
 // /api/healthz — the first thing gatus and the deploy unit ask a new process.
 //
-// Two groups are listed and not read here. The VITE_* names are replaced
-// statically by Vite and read through `import.meta.env` (lib/site.ts), because
-// the client bundle renders them; APP_HOSTNAME_ALIASES and APP_EXTRA_HOSTS are
-// read by vite.config.ts before any of `src` exists. The DASH_* credentials
-// are rows too, read through host/keys.ts, whose names are typed from here.
+// Two groups are listed and not read here. APP_HOSTNAME_ALIASES and
+// APP_EXTRA_HOSTS are read by vite.config.ts before any of `src` exists. The
+// DASH_* credentials are rows too, read through host/keys.ts, whose names are
+// typed from here.
+//
+// No row is read through `import.meta.env`. Vite inlines that into both
+// bundles at build time, and an image is built once for every box: the box's
+// identity (BASE_DOMAIN and its three siblings) is read at run time by
+// host/site.ts, and reaches the browser in the root loader's data.
 //
 // Never import this from a client component: `process` does not exist in the
 // browser, and half these rows are credentials.
@@ -57,12 +61,13 @@ type Spec = {
   /** The nix binding in the config repository, or why there is none. */
   source: string
   /** Who reads it, when it is not `env.get`. */
-  reader?: 'import.meta.env' | 'vite.config.ts' | 'host/keys.ts'
+  reader?: 'host/site.ts' | 'vite.config.ts' | 'host/keys.ts'
 }
 
 const DAEDALUS = 'stacks/daedalus/daedalus.nix'
 const APPS = 'stacks/apps/apps.nix (every fleet app)'
 const SERVICE_KEYS = `${DAEDALUS} daedalus-dashboard-keys, from service-keys.sops`
+const LEGACY = 'a config that predates the rename; bind the bare name instead'
 const UNBOUND = 'unbound — an override for tests and a bare checkout'
 
 const dash = (about: string, source = SERVICE_KEYS) =>
@@ -116,29 +121,56 @@ export const SCHEMA = {
     about: 'The box’s timezone, until site.json names one.',
     source: 'platform/podman.nix (every container)',
   },
-  VITE_BASE_DOMAIN: {
+  // The box's identity — read through host/site.ts, and only there.
+  BASE_DOMAIN: {
     kind: 'string',
     about: 'The domain every published host is one label under.',
     source: DAEDALUS,
-    reader: 'import.meta.env',
+    reader: 'host/site.ts',
   },
-  VITE_GITHUB_OWNER: {
+  GITHUB_OWNER: {
     kind: 'string',
     about: 'The GitHub account the fleet’s repositories live under.',
     source: DAEDALUS,
-    reader: 'import.meta.env',
+    reader: 'host/site.ts',
   },
-  VITE_REGISTRY_HOST: {
+  REGISTRY_HOST: {
     kind: 'string',
     about: 'The image registry’s hostname, for image references.',
     source: 'stacks/registry fleet.dashboard.registry.env',
-    reader: 'import.meta.env',
+    reader: 'host/site.ts',
   },
-  VITE_GRAFANA_URL: {
+  GRAFANA_URL: {
     kind: 'url',
     about: 'Grafana, for the log and dashboard links.',
     source: 'stacks/monitoring fleet.dashboard.monitoring.env',
-    reader: 'import.meta.env',
+    reader: 'host/site.ts',
+  },
+  // The same four under the names they had while Vite inlined them. Read
+  // second, so a config that has not renamed its bindings keeps working.
+  VITE_BASE_DOMAIN: {
+    kind: 'string',
+    about: 'BASE_DOMAIN, as it was bound.',
+    source: LEGACY,
+    reader: 'host/site.ts',
+  },
+  VITE_GITHUB_OWNER: {
+    kind: 'string',
+    about: 'GITHUB_OWNER, as it was bound.',
+    source: LEGACY,
+    reader: 'host/site.ts',
+  },
+  VITE_REGISTRY_HOST: {
+    kind: 'string',
+    about: 'REGISTRY_HOST, as it was bound.',
+    source: LEGACY,
+    reader: 'host/site.ts',
+  },
+  VITE_GRAFANA_URL: {
+    kind: 'url',
+    about: 'GRAFANA_URL, as it was bound.',
+    source: LEGACY,
+    reader: 'host/site.ts',
   },
 
   // ── where the host's read-only mounts are ────────────────────────────────
@@ -275,7 +307,7 @@ export const SCHEMA = {
   },
   REGISTRY_URL: {
     kind: 'url',
-    about: 'The image registry’s API. https://<VITE_REGISTRY_HOST> when unset.',
+    about: 'The image registry’s API. https://<REGISTRY_HOST> when unset.',
     source: 'stacks/registry fleet.dashboard.registry.env',
   },
   PIHOLE_URL: {

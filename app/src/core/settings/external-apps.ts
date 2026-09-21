@@ -1,4 +1,4 @@
-import { DEFAULT_EXTERNAL_APPS, type ExternalApp, isExternalAppList } from '../../lib/external-apps'
+import { defaultExternalApps, type ExternalApp, isExternalAppList } from '../../lib/external-apps'
 import { SETTING_KEYS } from '../../lib/repo/settings'
 import type { Ctx } from '../ctx'
 
@@ -13,12 +13,13 @@ import type { Ctx } from '../ctx'
 export async function listExternalApps(ctx: Ctx): Promise<ExternalApp[]> {
   try {
     return (
-      (await ctx.store.read(SETTING_KEYS.externalApps, isExternalAppList)) ?? DEFAULT_EXTERNAL_APPS
+      (await ctx.store.read(SETTING_KEYS.externalApps, isExternalAppList)) ??
+      defaultExternalApps(ctx.site)
     )
   } catch {
     // The app list must render with the database down; the seed is the
     // answer the box gave before the store existed.
-    return DEFAULT_EXTERNAL_APPS
+    return defaultExternalApps(ctx.site)
   }
 }
 

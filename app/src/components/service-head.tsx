@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import type { VersionGap } from '../lib/dashboard/github'
 import type { ImageFreshness, RunningVersion } from '../lib/dashboard/images'
 import { DASH } from '../lib/format'
-import { BASE_DOMAIN } from '../lib/site'
+import { useSite } from '../lib/site-context'
 import type { Tone } from '../lib/tone'
 import { InfoHint } from './hint'
 import { Button } from './ui/button'
@@ -279,12 +279,13 @@ export const SOURCE_NOTE: Record<RunningVersion['source'], string> = {
  * grows links that 404.
  */
 export function Open({ name, host }: { name: string; host: string }) {
+  const site = useSite()
   return (
     // The default variant on purpose: the one thing you came to press is the
     // primary action, and `Button` carries the argument for why that is the
     // foreground colour rather than the brand.
     <Button asChild size="sm">
-      <a href={`https://${host}.${BASE_DOMAIN}`} target="_blank" rel="noreferrer">
+      <a href={`https://${host}.${site.baseDomain}`} target="_blank" rel="noreferrer">
         Open {name} ↗
       </a>
     </Button>

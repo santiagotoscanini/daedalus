@@ -16,6 +16,7 @@ import {
 import { cn } from '../../../lib/cn'
 import { compact, DASH, ms, num, since } from '../../../lib/format'
 import { stripBaseDomain } from '../../../lib/site'
+import { useSite } from '../../../lib/site-context'
 import type { NetworkData } from '../data'
 import { ACTION, AXIS, EMPTY, FOOT, LIVE, MAIN, MONO, N, NOTE, ROW, SUB } from './shared'
 
@@ -87,6 +88,7 @@ const PROTECTION: Record<
  * built out of it, including the routers it refused.
  */
 export function TraefikView({ data: d }: { data: Proxy }) {
+  const site = useSite()
   const { traffic, counts } = d
   const busy = traffic.rpm !== null && traffic.rpm > 0
   const groups = (['app', 'gate', 'client'] as const)
@@ -172,7 +174,7 @@ export function TraefikView({ data: d }: { data: Proxy }) {
               <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-2 gap-y-[0.22rem] p-0">
                 {g.rows.map((r) => (
                   <li key={r.host} className={ROW} title={r.via ?? undefined}>
-                    <span className={cn(MAIN, MONO)}>{stripBaseDomain(r.host)}</span>
+                    <span className={cn(MAIN, MONO)}>{stripBaseDomain(site, r.host)}</span>
                     {/* The chip is the whole point of the row: off-LAN means
                         the internet can ask, and the protection column beside
                         it says what answers. */}

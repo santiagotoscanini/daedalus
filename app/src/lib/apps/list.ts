@@ -24,7 +24,8 @@ export async function loadAppList() {
   // together rather than one behind the other.
   const [records, entries] = await Promise.all([listApps(), manifestEntries()])
   const manifest = new Map(entries.map((m) => [m.name, m]))
-  const EXTERNAL_APPS = await listExternalApps(await makeCtx())
+  const ctx = await makeCtx()
+  const EXTERNAL_APPS = await listExternalApps(ctx)
   const [statuses, applyStatus, icons, externalIcons, workspaces, workspaceStatus] =
     await Promise.all([
       // Degrades per-app rather than rejecting, so a prometheus outage costs
@@ -38,7 +39,7 @@ export async function loadAppList() {
           async (r) =>
             (await appIcon(
               r.name,
-              effectiveHostname(r.name, r.hostname),
+              effectiveHostname(ctx.site, r.name, r.hostname),
               stageExposed(r.stage),
             )) !== null,
         ),
@@ -68,7 +69,7 @@ export async function loadAppList() {
       sourceMode: r.sourceMode,
       description: r.description,
       hasIcon: icons[i] ?? false,
-      hostname: effectiveHostname(r.name, r.hostname),
+      hostname: effectiveHostname(ctx.site, r.name, r.hostname),
       authMode: r.authMode,
       postgres: r.postgres,
       drift: driftOf(r, manifest.get(r.name)),

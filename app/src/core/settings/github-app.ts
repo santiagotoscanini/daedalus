@@ -12,7 +12,6 @@ import {
 import { getJsonResult } from '../../lib/http'
 import { isRecord } from '../../lib/is-record'
 import type { Result } from '../../lib/result'
-import { BASE_DOMAIN, OWNER } from '../../lib/site'
 import { actorOf, actorOrNull, NO_ACTOR_REASON } from '../auth'
 import type { Ctx } from '../ctx'
 import { GITHUB_API, GITHUB_API_VERSION, installationState } from '../github-app'
@@ -224,7 +223,8 @@ export function grantError(raw: unknown): string | null {
 
 type Owner = { id: number; login: string; type: string }
 
-async function fetchOwner(): Promise<Result<Owner>> {
+async function fetchOwner(ctx: Ctx): Promise<Result<Owner>> {
+  const OWNER = ctx.site.owner
   const res = await getJsonResult<{ id?: unknown; login?: unknown; type?: unknown }>(
     `${GITHUB_API}/users/${encodeURIComponent(OWNER)}`,
     { headers: GITHUB_HEADERS },
@@ -297,7 +297,7 @@ export async function startAppCreation(
     )
   }
 
-  const owner = await fetchOwner()
+  const owner = await fetchOwner(ctx)
   if (!owner.ok) return refuse(owner.reason)
 
   const state = randomBytes(32).toString('base64url')
@@ -771,8 +771,8 @@ export async function githubAppStatus(ctx: Ctx): Promise<GithubAppStatus> {
   return {
     enabled: enabled(ctx),
     state,
-    owner: OWNER,
-    defaultName: defaultAppName(site.ok ? site.value.doc.identity.baseDomain : BASE_DOMAIN),
+    owner: ctx.site.owner,
+    defaultName: defaultAppName(site.ok ? site.value.doc.identity.baseDomain : ctx.site.baseDomain),
     nameMax: APP_NAME_MAX,
     // Where an orphaned App is deleted. A user's list; site.json does not say
     // whether the owner is an organization, whose list lives elsewhere.

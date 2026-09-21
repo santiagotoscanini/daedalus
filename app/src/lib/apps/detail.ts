@@ -5,11 +5,12 @@ import { lastDeploy, pullFailing, readDeployStatus } from '../../host/deploy'
 import { env } from '../../host/env'
 import { appStatuses } from '../../host/metrics'
 import { hostnamesTakenBy, manifestEntries, operatorSecretApps } from '../../host/nix-manifest'
+import { readSite } from '../../host/site'
 import { readWorkspaceRequestStatus, readWorkspaces, workspaceFor } from '../../host/workspaces'
 import { deployShot as readDeployShot } from '../dashboard/shotter'
 import { effectiveHostname } from '../hostname'
 import { driftOf, getApp } from '../repo/apps'
-import { defaultImage, OWNER } from '../site'
+import { appRepo, defaultImage } from '../site'
 import { stageExposed } from '../stage'
 
 // The app detail page's frame: the record, whether it has drifted from nix,
@@ -29,11 +30,14 @@ export async function loadAppDetail(data: { name: string }) {
 
   const manifest = entries.find((m) => m.name === name)
 
-  // Every app repo lives under OWNER, keyed by the app's name — the same
+  const box = readSite()
+  const hostname = effectiveHostname(box, record.name, record.hostname)
+
+  // Every app repo lives under the box's owner, keyed by the app's name — the same
   // assumption the build service and the create flow make. True for the
   // local-mode entry too: daedalus's repo is the flake repo, which carries
   // its name.
-  const repo = `${OWNER}/${record.name}`
+  const repo = appRepo(box, record.name)
 
   const [
     statuses,
@@ -55,12 +59,8 @@ export async function loadAppDetail(data: { name: string }) {
     readDeployStatus(),
     // So the hostname field can reject a collision as it is typed rather
     // than during the rebuild it would otherwise fail.
-    hostnamesTakenBy(effectiveHostname(record.name, record.hostname)),
-    appIcon(
-      record.name,
-      effectiveHostname(record.name, record.hostname),
-      stageExposed(record.stage),
-    ).then((icon) => icon !== null),
+    hostnamesTakenBy(hostname),
+    appIcon(record.name, hostname, stageExposed(record.stage)).then((icon) => icon !== null),
     readWorkspaces(),
     readWorkspaceRequestStatus(),
     readDeployShot(name),
@@ -97,9 +97,9 @@ export async function loadAppDetail(data: { name: string }) {
       sourceMode: record.sourceMode,
       deployEnable: record.deployEnable,
       image: record.image,
-      effectiveImage: record.image ?? defaultImage(record.name),
+      effectiveImage: record.image ?? defaultImage(box, record.name),
       hostname: record.hostname,
-      effectiveHostname: effectiveHostname(record.name, record.hostname),
+      effectiveHostname: hostname,
       description: record.description,
       hasIcon,
       postgres: record.postgres,

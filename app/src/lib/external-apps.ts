@@ -10,7 +10,7 @@
 // apply here for the same reason: the nix side has never heard of these
 // hosts.
 
-import { OWNER } from './site'
+import type { Site } from './site'
 
 /**
  * The hosting platforms, in the order their sections render. The UI keys its
@@ -53,7 +53,7 @@ export type ExternalApp = {
   repo: string | null
 }
 
-export const DEFAULT_EXTERNAL_APPS: ExternalApp[] = [
+export const defaultExternalApps = (site: Site): ExternalApp[] => [
   {
     id: 'santree',
     name: 'santree',
@@ -80,7 +80,7 @@ export const DEFAULT_EXTERNAL_APPS: ExternalApp[] = [
     // ~/projects is a second checkout beside the live /etc/nixos one — fine
     // for working on the landing page, but system changes belong in the
     // live checkout, which is the one a rebuild reads.
-    repo: `${OWNER}/daedalus`,
+    repo: `${site.owner}/daedalus`,
   },
   {
     id: 'portfolio',
@@ -88,7 +88,7 @@ export const DEFAULT_EXTERNAL_APPS: ExternalApp[] = [
     host: 'toscanini.me',
     platform: 'Vercel',
     description: 'Personal portfolio.',
-    repo: `${OWNER}/personal-portfolio`,
+    repo: `${site.owner}/personal-portfolio`,
   },
 ]
 

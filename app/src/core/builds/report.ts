@@ -822,7 +822,7 @@ async function followDeployment(
         // the deployment URL empty rather than pointing GitHub at a hostname
         // nothing answers on.
         environmentUrl: stageExposed(app.stage)
-          ? `https://${effectiveHostname(app.name, app.hostname)}`
+          ? `https://${effectiveHostname(ctx.site, app.name, app.hostname)}`
           : null,
       }
     } else {

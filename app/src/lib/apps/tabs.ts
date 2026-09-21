@@ -14,6 +14,7 @@ import {
 } from '../../host/metrics'
 import { operatorSecretApps } from '../../host/nix-manifest'
 import { commitUrl } from '../../host/registry'
+import { readSite } from '../../host/site'
 import { readTaskRunStatus, type TaskRunStatus } from '../../host/task-run'
 import type { AccessWindow } from '../access-window'
 import type { ActivityRow } from '../activity-lines'
@@ -196,9 +197,10 @@ export async function loadAppTab(data: {
       // queries would all be a round trip to confirm zero.
       const access =
         record.stage === 'live'
-          ? await appAccess(effectiveHostname(record.name, record.hostname), accessWindow).catch(
-              () => noAccess(accessWindow),
-            )
+          ? await appAccess(
+              effectiveHostname(readSite(), record.name, record.hostname),
+              accessWindow,
+            ).catch(() => noAccess(accessWindow))
           : noAccess(accessWindow)
       return { kind: 'access', access }
     }

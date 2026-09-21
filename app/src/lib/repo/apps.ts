@@ -8,8 +8,9 @@ import {
   manifestEntries,
 } from '../../host/nix-manifest'
 import { appEnvVars, apps, appTasks } from '../../host/schema'
+import { readSite } from '../../host/site'
 import { REGISTRY_SCHEMA_VERSION } from '../contract/version'
-import { appNameError, BASE_DOMAIN, effectiveHostname, hostnameError } from '../hostname'
+import { appNameError, effectiveHostname, hostnameError } from '../hostname'
 import { APP_STAGES, isAppStage, stageExposed } from '../stage'
 import { taskCommandError, taskIdError, taskScheduleError, taskTimeoutError } from '../tasks'
 
@@ -138,9 +139,9 @@ export type NewApp = {
   storage: boolean
   litellm: boolean
   prometheus: boolean
-  /** null = registry.toscanini.me/<name>:latest, the platform default. */
+  /** null = <registry host>/<name>:latest, the platform default. */
   image: string | null
-  /** null = <name>.toscanini.me. */
+  /** null = <name>.<base domain>. */
   hostname: string | null
 }
 
@@ -218,8 +219,10 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
   if (nameErr) throw new Error(`name ${nameErr}`)
 
   const hostname = input.hostname?.trim().toLowerCase() || null
+  const site = readSite()
   const hostErr = hostnameError(
-    hostname ?? effectiveHostname(name, null),
+    site,
+    hostname ?? effectiveHostname(site, name, null),
     await hostnamesTakenBy(''),
   )
   if (hostErr) throw new Error(`hostname ${hostErr}`)
@@ -461,8 +464,9 @@ export async function updateApp(name: string, patch: AppPatch): Promise<void> {
   // `nixos-rebuild` during an Apply, after the commit, which costs a revert.
   if (typeof clean.hostname === 'string') {
     const { hostnamesTakenBy } = await import('../../host/nix-manifest')
-    const own = record.hostname ?? `${name}.${BASE_DOMAIN}`
-    const err = hostnameError(clean.hostname, await hostnamesTakenBy(own))
+    const site = readSite()
+    const own = effectiveHostname(site, name, record.hostname)
+    const err = hostnameError(site, clean.hostname, await hostnamesTakenBy(own))
     if (err) throw new Error(`hostname ${err}`)
     clean.hostname = clean.hostname.trim().toLowerCase() || null
   }

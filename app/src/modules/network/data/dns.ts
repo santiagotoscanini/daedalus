@@ -4,8 +4,8 @@ import { key } from '../../../host/keys'
 import { lanHosts, webAppHosts } from '../../../host/nix-manifest'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { localDay } from '../../../lib/format'
-import { BASE_DOMAIN } from '../../../lib/hostname'
 import { getJson } from '../../../lib/http'
+import { stripBaseDomain } from '../../../lib/site'
 import { lanIp, piholeAdmin, type TraefikRouter } from './shared'
 
 // ── DNS: the resolver, and the name it resolves ────────────────────────
@@ -235,7 +235,7 @@ export async function loadDns(ctx: Ctx): Promise<DnsData> {
       const elsewhere = h.ip !== box
       return {
         fqdn: h.host,
-        short: h.host.replace(new RegExp(`\\.${BASE_DOMAIN}$`), ''),
+        short: stripBaseDomain(ctx.site, h.host),
         ip: h.ip,
         elsewhere,
         served: served === null || elsewhere ? null : served.has(h.host),
@@ -439,7 +439,7 @@ type CfRecord = {
 const MANAGED = 'Managed by fleet.cloudflareRoutes'
 
 async function loadZone(ctx: Ctx): Promise<ZoneData> {
-  const domain = BASE_DOMAIN
+  const domain = ctx.site.baseDomain
   const zoneId = ctx.env('CF_ZONE_ID') ?? ''
   const auth = { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } }
 
