@@ -1,11 +1,19 @@
-import type { MonitoringData } from '../../lib/dashboard/categories/monitoring'
-import { bytes, compact, DASH, ms, num, pct, since, until } from '../../lib/format'
-import { BASE_DOMAIN } from '../../lib/site'
-import { LogBoard, type LogNeighbour } from '../logs'
-import { Changelog } from '../release-notes'
-import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
-import { EMPTY, FOOT, MONO, NOTE, SUB } from '../tokens'
-import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../viz'
+import { LogBoard, type LogNeighbour } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import {
+  compareOf,
+  Open,
+  ServiceHead,
+  SOURCE_NOTE,
+  verdictOf,
+} from '../../../components/service-head'
+import { EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
+import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../../components/viz'
+import { bytes, compact, DASH, ms, num, pct, since, until } from '../../../lib/format'
+import { defineViews } from '../../../lib/modules/tabs'
+import { BASE_DOMAIN } from '../../../lib/site'
+import type { MonitoringData, Tabs } from '../data'
+import { manifest } from '../manifest'
 
 // The Monitoring pages — a tab per watcher.
 //
@@ -39,20 +47,13 @@ const MAIN = 'min-w-0 flex-auto truncate text-foreground'
 const SIDE = 'max-w-[60%] min-w-0 flex-[0_1_auto] truncate text-[0.68rem] tabular-nums text-(--dim)'
 const NUM = 'min-w-[1.4rem] text-right tabular-nums text-foreground'
 
-export function MonitoringView({ data }: { data: MonitoringData }) {
-  switch (data.tab) {
-    case 'alerts':
-      return <AlertsView d={data} />
-    case 'probes':
-      return <ProbesView d={data} />
-    case 'metrics':
-      return <MetricsView d={data} />
-    case 'logs':
-      return <LogsView d={data} />
-    case 'jobs':
-      return <JobsView d={data} />
-  }
-}
+export const views = defineViews<typeof manifest, Tabs>(manifest, {
+  alerts: AlertsView,
+  probes: ProbesView,
+  metrics: MetricsView,
+  logs: LogsView,
+  jobs: JobsView,
+})
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
@@ -67,7 +68,7 @@ const SEVERITY: Record<string, 'bad' | 'warn' | 'info'> = {
 
 type Alerts = Extract<MonitoringData, { tab: 'alerts' }>
 
-function AlertsView({ d }: { d: Alerts }) {
+function AlertsView({ data: d }: { data: Alerts }) {
   // Present tense only when it is true in the present: a failure NEWER than
   // the newest success means the relay may be broken right now; failures the
   // relay has since recovered from are history, worth listing but not a
@@ -264,7 +265,7 @@ function AlertsView({ d }: { d: Alerts }) {
 
 type Probes = Extract<MonitoringData, { tab: 'probes' }>
 
-function ProbesView({ d }: { d: Probes }) {
+function ProbesView({ data: d }: { data: Probes }) {
   return (
     <>
       <ServiceHead
@@ -405,7 +406,7 @@ const SCRAPE_NEIGHBOURS: readonly LogNeighbour[] = [
   },
 ]
 
-function MetricsView({ d }: { d: Metrics }) {
+function MetricsView({ data: d }: { data: Metrics }) {
   return (
     <>
       <ServiceHead
@@ -524,7 +525,7 @@ function MetricsView({ d }: { d: Metrics }) {
 
 type Logs = Extract<MonitoringData, { tab: 'logs' }>
 
-function LogsView({ d }: { d: Logs }) {
+function LogsView({ data: d }: { data: Logs }) {
   return (
     <>
       <ServiceHead
@@ -604,7 +605,7 @@ function LogsView({ d }: { d: Logs }) {
         </Board>
 
         {/* The one board on this tab that does not read Loki — see the `ship`
-            note in categories/monitoring: when shipping stops, everything
+            note in ../data/index.ts: when shipping stops, everything
             above goes quiet with it, and this is what still talks. */}
         <Board
           title="Shipping"
@@ -725,7 +726,7 @@ function LogsView({ d }: { d: Logs }) {
 
 type Jobs = Extract<MonitoringData, { tab: 'jobs' }>
 
-function JobsView({ d }: { d: Jobs }) {
+function JobsView({ data: d }: { data: Jobs }) {
   return (
     <>
       <ServiceHead

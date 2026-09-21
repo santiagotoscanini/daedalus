@@ -15,7 +15,6 @@ import type { CategoryName } from './nav'
 
 import type { AiData } from './categories/ai'
 import type { MediaData } from './categories/media'
-import type { MonitoringData } from './categories/monitoring'
 import type { NetworkData } from './categories/network'
 import type { SystemData } from './categories/system'
 
@@ -24,7 +23,6 @@ export type CategoryDataMap = {
   media: MediaData
   network: NetworkData
   system: SystemData
-  monitoring: MonitoringData
 }
 
 /** What one boards request answers: the category it is for, and its data. */

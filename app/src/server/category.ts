@@ -239,7 +239,6 @@ const LOADERS: { [K in CategoryName]: () => Promise<Loader<K>> } = {
   media: async () => (await import('../lib/dashboard/categories/media')).loadMedia,
   network: async () => (await import('../lib/dashboard/categories/network')).loadNetwork,
   system: async () => (await import('../lib/dashboard/categories/system')).loadSystem,
-  monitoring: async () => (await import('../lib/dashboard/categories/monitoring')).loadMonitoring,
 }
 
 async function loadCategory(

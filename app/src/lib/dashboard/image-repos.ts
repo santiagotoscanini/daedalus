@@ -1,3 +1,4 @@
+import { ARR_TAG, TWO_OR_THREE } from '../release-tags'
 import type { GapOptions } from './github'
 import { imageLabels } from './images'
 
@@ -43,11 +44,6 @@ export type ReleaseSource = {
    */
   branch?: string
 }
-
-/** The *arr build number is the fourth segment, and it is the one that moves. */
-const ARR_TAG = /^v?(\d+\.\d+\.\d+\.\d+)$/
-/** Two segments or three — for projects that ship both `4.3` and `4.3.1`. */
-const TWO_OR_THREE = /^v?(\d+\.\d+(?:\.\d+)?)$/
 
 /**
  * Container → where its release notes live.
@@ -116,12 +112,6 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   myspeed: { repo: 'gnmyt/myspeed' },
 
   // ── the watchers ───────────────────────────────────────────────────────
-  grafana: { repo: 'grafana/grafana', opts: { sameMajor: true } },
-  prometheus: { repo: 'prometheus/prometheus' },
-  loki: { repo: 'grafana/loki' },
-  alloy: { repo: 'grafana/alloy' },
-  gatus: { repo: 'TwiN/gatus' },
-  healthchecks: { repo: 'healthchecks/healthchecks', opts: { tag: TWO_OR_THREE } },
   'node-exporter': { repo: 'prometheus/node_exporter' },
   'app-db-exporter': { repo: 'prometheus-community/postgres_exporter' },
   'intel-gpu-exporter': { repo: 'clambin/intel-gpu-exporter' },
