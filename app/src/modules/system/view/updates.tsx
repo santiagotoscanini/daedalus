@@ -1,24 +1,20 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
+import { GHOST_BTN } from '../../../components/apps/shared'
+import { UpdateControl, UpdateProgress } from '../../../components/image-update'
+import { Changelog } from '../../../components/release-notes'
+import { usePolledStatus } from '../../../components/status'
+import { Button } from '../../../components/ui/button'
+import { Board, BoardGrid, Chip, type Tone } from '../../../components/viz'
 import type { ImageUpdateStatus } from '../../../host/image-update'
 import { cn } from '../../../lib/cn'
-import type {
-  UpdateRow,
-  UpdatesData,
-  UpdateVerdict,
-} from '../../../lib/dashboard/categories/system/updates'
 import { DASH } from '../../../lib/format'
 import {
   fetchImageUpdateStatus,
   fetchUpdateNotes,
   requestImageUpdateFn,
 } from '../../../server/updates'
-import { GHOST_BTN } from '../../apps/shared'
-import { UpdateControl, UpdateProgress } from '../../image-update'
-import { Changelog } from '../../release-notes'
-import { usePolledStatus } from '../../status'
-import { Button } from '../../ui/button'
-import { Board, BoardGrid, Chip, type Tone } from '../../viz'
+import type { UpdateRow, UpdatesData, UpdateVerdict } from '../data/updates'
 import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './shared'
 
 // Every pinned image on the box, and what it would take to move it.

@@ -10,10 +10,10 @@ import { cn } from '../lib/cn'
 import { bytes, DASH, num } from '../lib/format'
 import { BASE_DOMAIN, REGISTRY_HOST } from '../lib/site'
 import { GHOST_BTN } from './apps/shared'
-import { BOARD_FOOT, BOARD_SUB, VIZ_EMPTY } from './category/system/shared'
 import { LogBoard, type LogNeighbour } from './logs'
 import { Changelog } from './release-notes'
 import { compareOf, ServiceHead, verdictOf } from './service-head'
+import { EMPTY, FOOT, SUB } from './tokens'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { BarList, Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
@@ -117,7 +117,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
       <BoardGrid>
         <Board title="Storage by repository" icon="rows" span={8}>
           <BarList items={d.byRepo} tone="info" empty="nothing stored" />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             A <code>cache/&lt;app&gt;</code> repository is the pull-through copy of an upstream base
             image, not something built here, which is why they usually outweigh the apps themselves.
             Counted separately above for the same reason.
@@ -132,25 +132,25 @@ export function ImagesView({ d }: { d: ImagesData }) {
               </Badge>
             ))}
             {d.repositories.length === 0 && (
-              <p className={VIZ_EMPTY}>
+              <p className={EMPTY}>
                 {d.reachable ? 'nothing published yet' : 'could not read the catalogue'}
               </p>
             )}
           </div>
-          <h4 className={BOARD_SUB}>Cached from upstream</h4>
+          <h4 className={SUB}>Cached from upstream</h4>
           <div className={REPOS}>
             {d.cachedRepos.map((r) => (
               <Badge key={r} variant="outline" className={cn(REPO, REPO_MUTED)}>
                 {r}
               </Badge>
             ))}
-            {d.cachedRepos.length === 0 && <p className={VIZ_EMPTY}>none</p>}
+            {d.cachedRepos.length === 0 && <p className={EMPTY}>none</p>}
           </div>
         </Board>
 
         <Board title="Pulls since zot started" icon="↓" span={8}>
           <BarList items={d.pulls} empty="no pulls recorded" />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             Each app’s deploy timer pulls by tag every two minutes and restarts only when the digest
             actually moved, so these climb steadily on a box where nothing is being deployed. A flat
             counter is the thing worth noticing, not a large one.
@@ -168,7 +168,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
               { k: 'pushed by', v: 'the box’s build service' },
             ]}
           />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             Anonymous read is deliberate: it is what lets every deploy work with no credential at
             all, so a token expiry can never stop one. Writing still needs the htpasswd.
           </p>
@@ -285,7 +285,7 @@ export function PackagesView({ d }: { d: PackagesData }) {
               },
             ]}
           />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             A pull-through cache first: a package counts as cached the moment its manifest is
             resolved, which is why that number leads the tarball count: resolving a dependency tree
             records a manifest even when no tarball is ever fetched. Publishing here is opt-in and
@@ -307,7 +307,7 @@ export function PackagesView({ d }: { d: PackagesData }) {
               },
             ]}
           />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             The request figures above come from traefik, not from verdaccio: it publishes no
             prometheus endpoint at all (upstream issue #1815, open since 2020), which is also why
             its Grafana dashboard is built out of proxy metrics.

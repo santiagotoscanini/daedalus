@@ -1,8 +1,8 @@
+import { LogBoard } from '../../../components/logs'
+import { BarList, Board, BoardGrid, Facts, Measures } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { DASH, num, pct } from '../../../lib/format'
-import { LogBoard } from '../../logs'
-import { BarList, Board, BoardGrid, Facts, Measures } from '../../viz'
+import type { SystemData } from '../data'
 import {
   BOARD_FOOT,
   BOARD_NOTE,

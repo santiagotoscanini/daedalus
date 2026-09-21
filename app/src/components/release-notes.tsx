@@ -14,7 +14,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '../lib/cn'
 import type { CommitGap, VersionGap } from '../lib/dashboard/github'
-import { BOARD_FOOT, BOARD_NOTE, MONO, MONO_FACE, VIZ_EMPTY } from './category/system/shared'
+import { EMPTY, FOOT, MONO, MONO_FACE, NOTE } from './tokens'
 import { Board } from './viz'
 
 /* A release is a disclosure, and the Updates page's container rows borrow this
@@ -67,7 +67,7 @@ export function ReleaseNotes({
   empty?: string
   running?: string | null
 }) {
-  if (releases.length === 0) return <p className={VIZ_EMPTY}>{empty}</p>
+  if (releases.length === 0) return <p className={EMPTY}>{empty}</p>
 
   return (
     <div className="flex flex-col gap-[0.35rem]">
@@ -87,7 +87,7 @@ export function ReleaseNotes({
           </summary>
           <div className={REL_BODY}>
             {rel.sections.length === 0 ? (
-              <p className={VIZ_EMPTY}>this release shipped no written notes</p>
+              <p className={EMPTY}>this release shipped no written notes</p>
             ) : (
               rel.sections.map((s) => (
                 <section key={s.name}>
@@ -170,7 +170,7 @@ export function Changelog({
       title={title ?? (behind === 0 ? 'Release notes' : `${String(behind)} ${unit}`)}
       icon="logs"
       span={span}
-      aside={aside ?? <span className={BOARD_NOTE}>github</span>}
+      aside={aside ?? <span className={NOTE}>github</span>}
     >
       {gap !== null ? (
         <>
@@ -182,7 +182,7 @@ export function Changelog({
           />
         </>
       ) : build === null || build.behind.length === 0 ? (
-        <p className={VIZ_EMPTY}>
+        <p className={EMPTY}>
           {build?.note ?? 'Nothing new on the branch since this image was built.'}
         </p>
       ) : (
@@ -206,7 +206,7 @@ export function Changelog({
         </ul>
       )}
       {foot ?? (
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           {gap !== null
             ? behind === 0
               ? 'What the running version shipped. Parsed from the project’s own GitHub releases and shortened; open one for the detail.'

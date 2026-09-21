@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import type { CategoryDataMap, CategoryPayload } from '../../lib/dashboard/category-data'
 import type { CategoryName } from '../../lib/dashboard/nav'
 import { NetworkView } from './network'
-import { SystemView } from './system'
 
 // The client half of the category registry — see lib/dashboard/category-data
 // for the contract and server/category.ts for the loaders.
@@ -16,7 +15,6 @@ import { SystemView } from './system'
 
 const VIEWS: { [K in CategoryName]: (props: { data: CategoryDataMap[K] }) => ReactNode } = {
   network: NetworkView,
-  system: SystemView,
 }
 
 export function CategoryBoards({ payload }: { payload: CategoryPayload }) {

@@ -36,21 +36,11 @@ import {
   stopSessionFn,
 } from '../server/claude'
 import { GHOST_BTN } from './apps/shared'
-import {
-  BOARD_FOOT,
-  BOARD_NOTE,
-  LIST,
-  MONO,
-  MONO_FACE,
-  ROW,
-  ROW_MAIN,
-  ROW_SIDE,
-  VIZ_EMPTY,
-} from './category/system/shared'
 import { LogBoard } from './logs'
 import { Changelog } from './release-notes'
 import { ServiceHead } from './service-head'
 import { usePolledStatus } from './status'
+import { EMPTY, FOOT, LIST, MONO, MONO_FACE, NOTE, ROW, ROW_MAIN, ROW_SIDE } from './tokens'
 import { Button } from './ui/button'
 import { Board, BoardGrid, Chip, Facts, Stat, StatStrip, type Tone } from './viz'
 
@@ -163,12 +153,12 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           the snapshot has stopped the whole page is a photograph, and a
           reader who has been told that can discount all of it at once. */}
       {!data.available ? (
-        <p className={VIZ_EMPTY}>
+        <p className={EMPTY}>
           The host snapshot has never been written, so nothing below is a reading.{' '}
           <span className={MONO}>daedalus-claude-snapshot.service</span> is what produces it.
         </p>
       ) : data.stale ? (
-        <p className={VIZ_EMPTY}>
+        <p className={EMPTY}>
           The snapshot is <b>{since((data.ageMs ?? 0) / 1000)}</b> and its timer promises one a
           minute, so the sessions and the unit state below are a photograph rather than a reading.
         </p>
@@ -221,7 +211,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           icon="panels"
           span={6}
           aside={
-            <span className={BOARD_NOTE}>
+            <span className={NOTE}>
               {facts.remote.spawnMode === null ? 'not announced' : facts.remote.spawnMode}
             </span>
           }
@@ -255,7 +245,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
               },
             ]}
           />
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             The environment id is what a phone connects to, and it is minted per server start — the
             link in the header carries it, so a restart changes the link and the old one stops
             resolving. Spawn mode <span className={MONO}>same-dir</span> means a session started
@@ -273,7 +263,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
             8 the Sessions board vacated. */}
         <Board title="Sign-in" icon="▣" span={6}>
           {!facts.credentials.present ? (
-            <p className={VIZ_EMPTY}>
+            <p className={EMPTY}>
               No credentials file. Nobody has run <span className={MONO}>/login</span> on this box,
               which means Remote Control cannot connect at all.
             </p>
@@ -307,7 +297,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
                   },
                 ]}
               />
-              <p className={BOARD_FOOT}>
+              <p className={FOOT}>
                 Two clocks, and only the second is a date to act on. The access token is refreshed
                 automatically about once an hour and its expiry is never the problem. The{' '}
                 <b>refresh</b> token running out is: Remote Control stops connecting, with no other
@@ -325,10 +315,10 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           title="Connection"
           icon="logs"
           span={6}
-          aside={<span className={BOARD_NOTE}>last 14 days</span>}
+          aside={<span className={NOTE}>last 14 days</span>}
         >
           {data.events.length === 0 ? (
-            <p className={VIZ_EMPTY}>
+            <p className={EMPTY}>
               Nothing in the window. Either the server has been up and connected throughout, or its
               journal has been rotated past. These lines are read back out of Loki.
             </p>
@@ -339,7 +329,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
               ))}
             </ul>
           )}
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             A <b>drop</b> is the server losing its link to Anthropic and backing off; it retries and
             the sessions survive, so a burst followed by a reconnect is the system working. Bursts
             landing at <span className={MONO}>:00</span> are the box rather than the network —
@@ -354,9 +344,9 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
         <Changelog
           gap={data.gap}
           span={6}
-          aside={<span className={BOARD_NOTE}>anthropics/claude-code</span>}
+          aside={<span className={NOTE}>anthropics/claude-code</span>}
           foot={
-            <p className={BOARD_FOOT}>
+            <p className={FOOT}>
               The store binary cannot update itself: the path is{' '}
               <span className={MONO}>nix flake update</span>, or the weekly{' '}
               <span className={MONO}>flake-autoupgrade.timer</span>. A rebuild deliberately does NOT
@@ -378,7 +368,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
           source={{ unit: 'claude-remote-control.service' }}
           title="Remote Control logs"
           foot={
-            <p className={BOARD_FOOT}>
+            <p className={FOOT}>
               The unit's whole journal, which is mostly not events: every remote session writes its
               full stream-json transcript to this same stdout, so a search here is searching
               transcripts as well as the server's own lines. The Connection board above is the
@@ -571,7 +561,7 @@ export function ShotterView({ data }: { data: ClaudeData }) {
       />
 
       {!sh.available && (
-        <p className={VIZ_EMPTY}>
+        <p className={EMPTY}>
           The <span className={MONO}>/shotter</span> mount is not answering — either the rebuild
           that binds it has not landed, or the stack is gone. Nothing below is a reading.
         </p>
@@ -617,13 +607,11 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           icon="panels"
           span={4}
           aside={
-            latest === null ? undefined : (
-              <span className={cn(BOARD_NOTE, MONO_FACE)}>{latest.id}</span>
-            )
+            latest === null ? undefined : <span className={cn(NOTE, MONO_FACE)}>{latest.id}</span>
           }
         >
           {latest === null ? (
-            <p className={VIZ_EMPTY}>
+            <p className={EMPTY}>
               No run directories yet. <span className={MONO}>shot quick &lt;url&gt;</span> makes the
               first one.
             </p>
@@ -646,7 +634,7 @@ export function ShotterView({ data }: { data: ClaudeData }) {
               {latest.log.length > 0 && <pre className={SHOT_LOG}>{latest.log.join('\n')}</pre>}
             </>
           )}
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             The newest run&rsquo;s viewport slices — consecutive crops of one long page, each
             linking to its full-size self — and the runner&rsquo;s own log under them. The full
             evidence (every slice, <span className={MONO}>events.json</span>,{' '}
@@ -660,13 +648,13 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           icon="logs"
           span={8}
           aside={
-            <span className={BOARD_NOTE}>
+            <span className={NOTE}>
               {sh.runs.length === 0 ? 'none yet' : `last ${num(sh.runs.length)}, newest first`}
             </span>
           }
         >
           {sh.runs.length === 0 ? (
-            <p className={VIZ_EMPTY}>
+            <p className={EMPTY}>
               Nothing in the ledger. <span className={MONO}>shot quick &lt;url&gt;</span> writes the
               first line.
             </p>
@@ -677,7 +665,7 @@ export function ShotterView({ data }: { data: ClaudeData }) {
               ))}
             </ul>
           )}
-          <p className={BOARD_FOOT}>
+          <p className={FOOT}>
             The append-only ledger, one line per <span className={MONO}>shot</span> invocation. The
             verdict chip reads the run&rsquo;s event counters, not its screenshots — events outrank
             pixels, because a page can render beautifully over a broken deploy. <b>fail</b> is the
@@ -689,9 +677,9 @@ export function ShotterView({ data }: { data: ClaudeData }) {
         <Changelog
           gap={data.shotterGap}
           span={12}
-          aside={<span className={BOARD_NOTE}>microsoft/playwright</span>}
+          aside={<span className={NOTE}>microsoft/playwright</span>}
           foot={
-            <p className={BOARD_FOOT}>
+            <p className={FOOT}>
               The one dependency under <span className={MONO}>shot</span> — Chromium arrives inside
               Playwright&rsquo;s image, so this is the whole upgrade story. Moving is a paired edit
               in <span className={MONO}>stacks/shotter/shotter.nix</span>:{' '}
@@ -706,7 +694,7 @@ export function ShotterView({ data }: { data: ClaudeData }) {
           source={{ unit: 'shotter-image.service' }}
           title="Image build logs"
           foot={
-            <p className={BOARD_FOOT}>
+            <p className={FOOT}>
               The rebuild-time image build — layer cache makes the no-change case near-silent, so
               lines here mean the Playwright pin moved or a fresh box paid the base pull. The runs
               themselves do NOT log here: each run&rsquo;s log lives in its own run directory,
@@ -956,7 +944,7 @@ function RosterBoard({ data }: { data: ClaudeData }) {
       icon="panels"
       span={12}
       aside={
-        <span className={BOARD_NOTE}>
+        <span className={NOTE}>
           {/* `dormant` counted apart from both, because it is the population
               that was being read as the wrong one: a background RECORD with no
               process behind it is not running, and it is not resumable either
@@ -983,7 +971,7 @@ function RosterBoard({ data }: { data: ClaudeData }) {
       }
     >
       {rows.length === 0 ? (
-        <p className={VIZ_EMPTY}>
+        <p className={EMPTY}>
           No sessions, no transcripts and no agents. Nothing is connected — the server is still
           listening, and a session appears here within a minute of being started from claude.ai or
           the app — and there is nothing on disk to resume either. Failing that, this snapshot
@@ -1024,7 +1012,7 @@ function RosterBoard({ data }: { data: ClaudeData }) {
       )}
 
       {rows.length > shown.length && (
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           {num(rows.length - shown.length)} older transcript
           {rows.length - shown.length === 1 ? '' : 's'} not listed, of {num(roster.transcriptTotal)}{' '}
           on disk.
@@ -1039,7 +1027,7 @@ function RosterBoard({ data }: { data: ClaudeData }) {
       )}
 
       {stale > 0 && (
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           {num(stale)} session {stale === 1 ? 'file' : 'files'} in{' '}
           <span className={MONO}>~/.claude/sessions</span> with no process behind{' '}
           {stale === 1 ? 'it' : 'them'} — left by a session that exited uncleanly. Not an error;
@@ -1061,7 +1049,7 @@ function RosterBoard({ data }: { data: ClaudeData }) {
           host/claude-rc-request.ts (what a restart does to a session).
           What stays here is the one thing a reader would otherwise get
           WRONG, and the one limit on what the board is able to claim. */}
-      <p className={BOARD_FOOT}>
+      <p className={FOOT}>
         <b>Resume continues the session it names.</b>{' '}
         <span className={MONO}>claude --resume &lt;id&gt;</span> keeps that id and appends to that
         same transcript — measured here on CLI 2.1.260, at the console and under{' '}

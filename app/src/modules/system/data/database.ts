@@ -1,6 +1,6 @@
-import { promScalar, promScalars, promVector } from '../../../../host/prom'
-import type { VersionGap } from '../../github'
-import { postgresGap } from '../../postgres'
+import { promScalar, promScalars, promVector } from '../../../host/prom'
+import type { VersionGap } from '../../../lib/dashboard/github'
+import { postgresGap } from '../../../lib/dashboard/postgres'
 
 /* ── Database ─────────────────────────────────────────────────────────── */
 

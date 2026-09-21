@@ -1,10 +1,10 @@
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { compareOf, ServiceHead, verdictOf } from '../../../components/service-head'
+import { Board, BoardGrid, Chip, Facts, Measures } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { bytes, DASH, duration, num, pct } from '../../../lib/format'
-import { LogBoard } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { compareOf, ServiceHead, verdictOf } from '../../service-head'
-import { Board, BoardGrid, Chip, Facts, Measures } from '../../viz'
+import type { SystemData } from '../data'
 import { BOARD_FOOT, BOARD_NOTE, LIST, MONO, ROW, ROW_MAIN, ROW_N, ROW_SIDE } from './shared'
 
 /* ── Database ─────────────────────────────────────────────────────────── */

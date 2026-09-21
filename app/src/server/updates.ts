@@ -34,7 +34,7 @@ const containerName = (v: unknown, what: string): string => {
  * The notes for one container, on demand.
  *
  * Separate from the table's own loader on purpose — see the note in
- * lib/dashboard/categories/system/updates.ts about not spending the GitHub
+ * modules/system/data/updates.ts about not spending the GitHub
  * budget on sixty-four containers nobody expanded.
  */
 export const fetchUpdateNotes = createServerFn()
@@ -43,7 +43,7 @@ export const fetchUpdateNotes = createServerFn()
     return { container: containerName(data.container, 'container') }
   })
   .handler(async ({ data }) => {
-    const { loadUpdateNotes } = await import('../lib/dashboard/categories/system/updates')
+    const { loadUpdateNotes } = await import('../modules/system/data/updates')
     return loadUpdateNotes(data.container)
   })
 

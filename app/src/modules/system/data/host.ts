@@ -1,5 +1,5 @@
-import { promScalar, promScalars, promSeries, promVector } from '../../../../host/prom'
-import { hostFacts } from '../../host-facts'
+import { promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
+import { hostFacts } from '../../../lib/dashboard/host-facts'
 
 /* ── Host ─────────────────────────────────────────────────────────────── */
 

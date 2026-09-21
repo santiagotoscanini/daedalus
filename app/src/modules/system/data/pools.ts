@@ -1,4 +1,4 @@
-import { type DatasetFacts, hostFacts, type ZpoolFacts } from '../../host-facts'
+import { type DatasetFacts, hostFacts, type ZpoolFacts } from '../../../lib/dashboard/host-facts'
 
 /* ── Pools ────────────────────────────────────────────────────────────── */
 

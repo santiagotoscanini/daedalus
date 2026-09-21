@@ -1,9 +1,9 @@
+import { InfoHint } from '../../../components/hint'
+import { LogBoard } from '../../../components/logs'
+import { Board, BoardGrid, Chip, Facts, Measures } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { bytes, DASH, num, pct } from '../../../lib/format'
-import { InfoHint } from '../../hint'
-import { LogBoard } from '../../logs'
-import { Board, BoardGrid, Chip, Facts, Measures } from '../../viz'
+import type { SystemData } from '../data'
 import {
   BOARD_FOOT,
   BOARD_NOTE,

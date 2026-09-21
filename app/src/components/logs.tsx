@@ -34,9 +34,9 @@ import { cn } from '../lib/cn'
 import { type ResolvedScheme, useScheme } from '../lib/scheme'
 import { GRAFANA_URL } from '../lib/site'
 import { GHOST_BTN } from './apps/shared'
-import { BOARD_FOOT } from './category/system/shared'
 import { Segmented } from './controls'
 import { Bar } from './skeleton'
+import { FOOT } from './tokens'
 import { Button } from './ui/button'
 import { Board } from './viz'
 
@@ -394,7 +394,7 @@ export function LogBoard({
           summary={`${n.label} — ${n.role}`}
           source={n.source}
           title={n.title ?? `${n.label} logs`}
-          foot={<p className={BOARD_FOOT}>{n.note}</p>}
+          foot={<p className={FOOT}>{n.note}</p>}
         />
       ))}
     </Board>
@@ -444,7 +444,7 @@ export function GrafanaLogs({
         settle={SETTLE.get(from) ?? 1_200}
       />
       {foot ?? (
-        <p className={BOARD_FOOT}>
+        <p className={FOOT}>
           Rendered by Grafana from <code>{value(source)}</code>, newest first. The default is seven
           days because most services here are quiet between restarts, and a short window shows
           nothing for a service that is perfectly healthy. If the frame shows a login screen, open

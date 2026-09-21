@@ -92,7 +92,6 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
 
   // ── the watchers ───────────────────────────────────────────────────────
   'node-exporter': { repo: 'prometheus/node_exporter' },
-  'app-db-exporter': { repo: 'prometheus-community/postgres_exporter' },
   'intel-gpu-exporter': { repo: 'clambin/intel-gpu-exporter' },
 
   // ── apps, games ────────────────────────────────────────────────────────
