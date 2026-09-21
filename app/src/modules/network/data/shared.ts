@@ -1,6 +1,7 @@
-import { key } from '../../../../host/keys'
-import { webAppHosts } from '../../../../host/nix-manifest'
-import { getJson, type JsonResult } from '../../../http'
+import type { Ctx } from '../../../core/ctx'
+import { key } from '../../../host/keys'
+import { webAppHosts } from '../../../host/nix-manifest'
+import { getJson, type JsonResult } from '../../../lib/http'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
@@ -16,7 +17,7 @@ export const DAYS = 14
  * the aggregate counts, which would put the whole list one unauthenticated GET
  * away from anything on the LAN. Dialled directly there is nothing to widen.
  */
-export const PIHOLE = () => process.env.PIHOLE_URL ?? 'http://host.containers.internal:8080'
+export const PIHOLE = (ctx: Ctx) => ctx.env('PIHOLE_URL') ?? 'http://host.containers.internal:8080'
 
 /**
  * Pi-hole v6 hands out a session id even with no password set (`api.pwhash`
@@ -98,4 +99,4 @@ export async function piholeAdmin(): Promise<string | null> {
  * Bound from `fleet.lanIp`, the same option that generates those entries, so
  * the two cannot drift apart into a page where every row looks interesting.
  */
-export const LAN_IP = process.env.LAN_IP ?? ''
+export const lanIp = (ctx: Ctx) => ctx.env('LAN_IP') ?? ''

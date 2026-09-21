@@ -235,7 +235,6 @@ type Loader<K extends CategoryName> = (tab: string, hosts: Hosts) => Promise<Cat
  * load exactly one.
  */
 const LOADERS: { [K in CategoryName]: () => Promise<Loader<K>> } = {
-  network: async () => (await import('../lib/dashboard/categories/network')).loadNetwork,
 }
 
 async function loadCategory(

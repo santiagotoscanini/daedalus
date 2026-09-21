@@ -1,9 +1,9 @@
+import { LogBoard } from '../../../components/logs'
+import { LinkRow, ServiceHead } from '../../../components/service-head'
+import { Board, BoardGrid, Chip, Facts } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { NetworkData } from '../../../lib/dashboard/categories/network'
 import { DASH, num, since } from '../../../lib/format'
-import { LogBoard } from '../../logs'
-import { LinkRow, ServiceHead } from '../../service-head'
-import { Board, BoardGrid, Chip, Facts } from '../../viz'
+import type { NetworkData } from '../data'
 import { ACTION, EMPTY, FOOT, MONO, MORE, NOTE, SUB } from './shared'
 
 /** A device that has asked for a name today is a device that is switched on. */

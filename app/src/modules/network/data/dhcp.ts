@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
-import { type NetworkFacts, networkFacts } from '../../../../host/contract/domains/network'
-import { getJson } from '../../../http'
+import type { Ctx } from '../../../core/ctx'
+import { type NetworkFacts, networkFacts } from '../../../host/contract/domains/network'
+import { getJson } from '../../../lib/http'
 import { PIHOLE, piholeAdmin, piholeSid } from './shared'
 
 /**
@@ -61,8 +62,8 @@ type FtlDevice = {
  * single busiest "device" by two orders of magnitude, and leaving it in makes
  * every real device's share round to zero.
  */
-async function loadDevices(reservations: Dhcp['reservations']): Promise<Device[]> {
-  const base = PIHOLE()
+async function loadDevices(ctx: Ctx, reservations: Dhcp['reservations']): Promise<Device[]> {
+  const base = PIHOLE(ctx)
   const sid = await piholeSid(base)
   const body = await getJson<{ devices?: FtlDevice[] }>(
     `${base}/api/network/devices?max_devices=200&max_addresses=4`,
@@ -177,9 +178,9 @@ export type DhcpData = {
  * Null when the file cannot be read: the mount or render broke, which is a
  * different fact from "no reservations declared".
  */
-async function loadReservationLines(): Promise<string[] | null> {
+async function loadReservationLines(ctx: Ctx): Promise<string[] | null> {
   try {
-    const raw = await readFile(process.env.DHCP_HOSTS_PATH ?? '/dhcp/hosts', 'utf8')
+    const raw = await readFile(ctx.env('DHCP_HOSTS_PATH') ?? '/dhcp/hosts', 'utf8')
     return raw
       .split('\n')
       .map((l) => l.trim())
@@ -189,8 +190,8 @@ async function loadReservationLines(): Promise<string[] | null> {
   }
 }
 
-export async function loadDhcp(): Promise<DhcpData> {
-  const base = PIHOLE()
+export async function loadDhcp(ctx: Ctx): Promise<DhcpData> {
+  const base = PIHOLE(ctx)
   const [sid, admin] = await Promise.all([piholeSid(base), piholeAdmin()])
   const metrics = await getJson<{
     metrics?: { dhcp?: { offer?: number; ack?: number; decline?: number; nak?: number } }
@@ -198,13 +199,13 @@ export async function loadDhcp(): Promise<DhcpData> {
 
   const dhcp = dhcpConfig(
     (await networkFacts()).dhcp,
-    await loadReservationLines(),
+    await loadReservationLines(ctx),
     metrics?.metrics?.dhcp,
   )
   return {
     dhcp,
-    devices: await loadDevices(dhcp.reservations),
-    version: process.env.PIHOLE_VERSION || null,
+    devices: await loadDevices(ctx, dhcp.reservations),
+    version: ctx.env('PIHOLE_VERSION') ?? null,
     admin,
   }
 }

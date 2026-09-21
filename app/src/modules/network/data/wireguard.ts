@@ -1,12 +1,12 @@
-import { publishingFacts } from '../../../../host/contract/domains/publishing'
-import type { Hosts } from '../../../../host/hosts'
-import { key } from '../../../../host/keys'
-import { lokiEntries, lokiScalar } from '../../../../host/loki'
-import { webAppHosts } from '../../../../host/nix-manifest'
-import { promPoints, promScalar, promScalars, promVector } from '../../../../host/prom'
-import { localDay, since } from '../../../format'
-import { getJson, getJsonResult, type JsonResult } from '../../../http'
-import { type VersionGap, versionGap } from '../../github'
+import type { Ctx } from '../../../core/ctx'
+import { publishingFacts } from '../../../host/contract/domains/publishing'
+import { key } from '../../../host/keys'
+import { lokiEntries, lokiScalar } from '../../../host/loki'
+import { webAppHosts } from '../../../host/nix-manifest'
+import { promPoints, promScalar, promScalars, promVector } from '../../../host/prom'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { localDay, since } from '../../../lib/format'
+import { getJson, getJsonResult, type JsonResult } from '../../../lib/http'
 import { CF_TUNNEL_READ, type CfTunnel, cfReadError, DAYS } from './shared'
 
 /**
@@ -193,18 +193,17 @@ function summariseTunnel(t: CfTunnel | undefined, requestsPerHour: number | null
  * same bytes. `getJson`'s coalescer cannot help: it only shares plain GETs,
  * and this one carries an Authorization header.
  */
-export async function loadInbound(hosts: Hosts): Promise<InboundData> {
-  void hosts
+export async function loadInbound(ctx: Ctx): Promise<InboundData> {
   // Started, not awaited. Cloudflare's API is the slowest upstream this page
   // has — a second per call from here — so awaiting it before the fan-out put
   // that second in front of everything else instead of alongside it. The
   // PROMISE is handed to both consumers; each awaits it inside its own
   // Promise.all, so the one request overlaps every other query on the page.
-  const cf = cfTunnel()
+  const cf = cfTunnel(ctx)
   const [wireguard, tunnel, ddns] = await Promise.all([
-    loadWireguard(),
-    loadCfTunnel(cf),
-    loadDdns(cf),
+    loadWireguard(ctx),
+    loadCfTunnel(ctx, cf),
+    loadDdns(ctx, cf),
   ])
   return { wireguard, tunnel, ddns }
 }
@@ -216,17 +215,17 @@ type CfTunnelRead = JsonResult<{ result?: CfTunnel }>
  * Kept as a result rather than a body so both boards reading it can say WHY
  * it is empty.
  */
-async function cfTunnel(): Promise<CfTunnelRead> {
+async function cfTunnel(ctx: Ctx): Promise<CfTunnelRead> {
   return getJsonResult<{ result?: CfTunnel }>(
-    `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
-      process.env.CF_TUNNEL_ID ?? ''
+    `https://api.cloudflare.com/client/v4/accounts/${ctx.env('CF_ACCOUNT_ID') ?? ''}/cfd_tunnel/${
+      ctx.env('CF_TUNNEL_ID') ?? ''
     }`,
     { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
   )
 }
 
-async function loadWireguard(): Promise<WireguardData> {
-  const version = process.env.WG_EASY_VERSION || null
+async function loadWireguard(ctx: Ctx): Promise<WireguardData> {
+  const version = ctx.env('WG_EASY_VERSION') ?? null
 
   const [counts, peers, peak, hosts] = await Promise.all([
     promScalars({
@@ -305,9 +304,9 @@ type VectorLike = { metric: Record<string, string>; value: [number, string] }
  * how many requests it forwarded, how many failed, and the QUIC round trip to
  * the edge. Neither can answer the other's half.
  */
-async function loadCfTunnel(cfP: Promise<CfTunnelRead>): Promise<TunnelData> {
-  const account = process.env.CF_ACCOUNT_ID ?? ''
-  const id = process.env.CF_TUNNEL_ID ?? ''
+async function loadCfTunnel(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<TunnelData> {
+  const account = ctx.env('CF_ACCOUNT_ID') ?? ''
+  const id = ctx.env('CF_TUNNEL_ID') ?? ''
   const auth = { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } }
 
   const [cfRead, config, rph, errors, inFlight, rtt, daily] = await Promise.all([
@@ -383,10 +382,10 @@ async function resolvePublic(name: string): Promise<{ ip: string | null; ttl: nu
   return { ip: a?.data ?? null, ttl: a?.TTL ?? null }
 }
 
-async function loadDdns(cfP: Promise<CfTunnelRead>): Promise<DdnsData> {
-  const host = process.env.DDNS_HOST ?? ''
-  const version = process.env.DDCLIENT_VERSION || null
-  const interval = /^(\d+)s?$/.exec(process.env.DDNS_INTERVAL ?? '')?.[1]
+async function loadDdns(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<DdnsData> {
+  const host = ctx.env('DDNS_HOST') ?? ''
+  const version = ctx.env('DDCLIENT_VERSION') ?? null
+  const interval = /^(\d+)s?$/.exec(ctx.env('DDNS_INTERVAL') ?? '')?.[1]
 
   const needs = (await publishingFacts()).directIngress
 

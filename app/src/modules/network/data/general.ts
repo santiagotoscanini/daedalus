@@ -1,8 +1,9 @@
-import { key } from '../../../../host/keys'
-import { webAppHosts } from '../../../../host/nix-manifest'
-import { promScalar, promScalars, promSeries, promVector } from '../../../../host/prom'
-import { getJson, getJsonResult, getText } from '../../../http'
-import { CF_TUNNEL_READ, type CfTunnel, cfReadError, LAN_IP, PIHOLE, piholeSid } from './shared'
+import type { Ctx } from '../../../core/ctx'
+import { key } from '../../../host/keys'
+import { webAppHosts } from '../../../host/nix-manifest'
+import { promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
+import { getJson, getJsonResult, getText } from '../../../lib/http'
+import { CF_TUNNEL_READ, type CfTunnel, cfReadError, lanIp, PIHOLE, piholeSid } from './shared'
 
 /**
  * The house network — a different subject from every tab beside it, which are
@@ -90,7 +91,7 @@ type Hop = {
 const NIC = 'node_network_%s_bytes_total{device!="lo"}'
 const nic = (dir: 'receive' | 'transmit') => NIC.replace('%s', dir)
 
-export async function loadGeneral(): Promise<GeneralData> {
+export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
   const [
     speed,
     speedHistory,
@@ -135,9 +136,9 @@ export async function loadGeneral(): Promise<GeneralData> {
     // less than the prometheus query that would half-answer it.
     getJson<{ http?: { routers?: { total?: number } } }>('http://traefik:8080/api/overview'),
     promSeries('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
-    loadAsked(),
+    loadAsked(ctx),
     loadServiceTraffic(),
-    loadRouter(),
+    loadRouter(ctx),
     webAppHosts(),
     // Cloudflare's own view of the tunnel, for exactly one field. cloudflared
     // never learns the WAN address it is dialling out from, and neither does
@@ -145,8 +146,8 @@ export async function loadGeneral(): Promise<GeneralData> {
     // connection arrived from, so this is the only vantage point on the box
     // that can answer "what is our public IP" truthfully.
     getJsonResult<{ result?: CfTunnel }>(
-      `https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID ?? ''}/cfd_tunnel/${
-        process.env.CF_TUNNEL_ID ?? ''
+      `https://api.cloudflare.com/client/v4/accounts/${ctx.env('CF_ACCOUNT_ID') ?? ''}/cfd_tunnel/${
+        ctx.env('CF_TUNNEL_ID') ?? ''
       }`,
       { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
     ),
@@ -177,11 +178,11 @@ export async function loadGeneral(): Promise<GeneralData> {
     hops,
     router: {
       ...router,
-      gateway: process.env.GATEWAY_IP ?? DASH_IP,
-      lan: LAN_IP,
+      gateway: ctx.env('GATEWAY_IP') ?? DASH_IP,
+      lan: lanIp(ctx),
       wan: tunnel.ok ? (tunnel.value.result?.connections?.[0]?.origin_ip ?? null) : null,
       wanError: cfReadError(tunnel, CF_TUNNEL_READ),
-      adminUrl: process.env.ROUTER_ADMIN_URL ?? '',
+      adminUrl: ctx.env('ROUTER_ADMIN_URL') ?? '',
     },
     proxy: { rpm, routers: overview?.http?.routers?.total ?? null, spark: rpmSpark },
     services,
@@ -212,18 +213,18 @@ const DASH_IP = '—'
  */
 const ROUTER_STAMP = /name="version"\s+content="([^"_]+?)_([^"_]+)_([^"]+)"/
 
-async function loadRouter(): Promise<{
+async function loadRouter(ctx: Ctx): Promise<{
   model: string | null
   hardware: string | null
   firmware: string | null
   built: string | null
   product: string
 }> {
-  const product = process.env.ROUTER_PRODUCT ?? ''
+  const product = ctx.env('ROUTER_PRODUCT') ?? ''
   const blank = { model: null, hardware: null, firmware: null, built: null, product }
 
-  const url = process.env.ROUTER_URL
-  if (url === undefined || url === '') return blank
+  const url = ctx.env('ROUTER_URL')
+  if (url === undefined) return blank
 
   const html = await getText(`${url}/webpages/onboarding.html`)
   const m = html === null ? null : ROUTER_STAMP.exec(html)
@@ -304,8 +305,8 @@ async function loadServiceTraffic(): Promise<GeneralData['services']> {
 }
 
 /** What the house looked up, and how much of it came from this box. */
-async function loadAsked(): Promise<GeneralData['dns']> {
-  const base = PIHOLE()
+async function loadAsked(ctx: Ctx): Promise<GeneralData['dns']> {
+  const base = PIHOLE(ctx)
   const sid = await piholeSid(base)
   const h = sid === null ? {} : { headers: { sid } }
 

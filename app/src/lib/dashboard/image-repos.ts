@@ -79,16 +79,9 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   'nextcloud-redis': { repo: 'redis/redis', opts: { notesWhenUnknown: true } },
 
   // ── the edge ───────────────────────────────────────────────────────────
-  traefik: { repo: 'traefik/traefik' },
-  cloudflared: { repo: 'cloudflare/cloudflared' },
-  'wg-easy': { repo: 'wg-easy/wg-easy' },
-  // Master, not the release line — see `branch` above.
-  gluetun: { repo: 'qdm12/gluetun', branch: 'master' },
-  'gluetun-argus': { repo: 'qdm12/gluetun', branch: 'master' },
-  'gluetun-exporter': { repo: 'thecfu/gluetun-exporter', opts: { notesWhenUnknown: true } },
-  'gluetun-argus-exporter': { repo: 'thecfu/gluetun-exporter', opts: { notesWhenUnknown: true } },
+  // Only searxng is left here: it fronts LiteLLM's web search, not a route in
+  // or out, so it waits for the AI module to claim it.
   searxng: { repo: 'searxng/searxng', branch: 'master' },
-  myspeed: { repo: 'gnmyt/myspeed' },
 
   // ── the watchers ───────────────────────────────────────────────────────
   'node-exporter': { repo: 'prometheus/node_exporter' },

@@ -1,5 +1,4 @@
-import type { Hosts } from '../../../../host/hosts'
-// The Network category: everything between a packet and this box.
+// The Network module's data half: everything between a packet and this box.
 //
 // Ordered the way traffic actually arrives — the WAN link, then the two ways
 // in (Cloudflare tunnel from outside, WireGuard for us), then the proxy that
@@ -11,6 +10,8 @@ import type { Hosts } from '../../../../host/hosts'
 // already exports its last test, and wg-easy v2 requires TOTP on /api/session
 // so a credential login cannot work unattended at all.
 
+import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
+import { manifest } from '../manifest'
 import { type DhcpData, loadDhcp } from './dhcp'
 import { type DnsData, loadDns } from './dns'
 import { type GeneralData, loadGeneral } from './general'
@@ -18,29 +19,23 @@ import { loadOutbound, type OutboundData } from './outbound'
 import { loadProxy, type TraefikData } from './proxy'
 import { type InboundData, loadInbound } from './wireguard'
 
-export type NetworkData =
-  | ({ tab: 'general' } & GeneralData)
-  | ({ tab: 'wireguard' } & InboundData)
-  | ({ tab: 'proxy' } & TraefikData)
-  | ({ tab: 'outbound' } & OutboundData)
-  | ({ tab: 'dns' } & DnsData)
-  | ({ tab: 'dhcp' } & DhcpData)
-
-export async function loadNetwork(tab: string, hosts: Hosts): Promise<NetworkData> {
-  switch (tab) {
-    case 'wireguard':
-      return { tab: 'wireguard', ...(await loadInbound(hosts)) }
-    case 'proxy':
-      return { tab: 'proxy', ...(await loadProxy(hosts)) }
-    case 'outbound':
-      return { tab: 'outbound', ...(await loadOutbound(hosts)) }
-    case 'dns':
-      return { tab: 'dns', ...(await loadDns(hosts)) }
-    case 'dhcp':
-      return { tab: 'dhcp', ...(await loadDhcp()) }
-    default:
-      return { tab: 'general', ...(await loadGeneral()) }
-  }
+export type Tabs = {
+  general: GeneralData
+  wireguard: InboundData
+  proxy: TraefikData
+  dns: DnsData
+  dhcp: DhcpData
+  outbound: OutboundData
 }
+export type NetworkData = TabPayload<typeof manifest, Tabs>
+
+export const load = defineLoader<typeof manifest, Tabs>(manifest, {
+  general: loadGeneral,
+  wireguard: loadInbound,
+  proxy: loadProxy,
+  dns: loadDns,
+  dhcp: loadDhcp,
+  outbound: loadOutbound,
+})
 
 export type { Protection } from './proxy'

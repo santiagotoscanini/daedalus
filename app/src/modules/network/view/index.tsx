@@ -1,4 +1,6 @@
-import type { NetworkData } from '../../../lib/dashboard/categories/network'
+import { defineViews } from '../../../lib/modules/tabs'
+import type { Tabs } from '../data'
+import { manifest } from '../manifest'
 import { DhcpView } from './dhcp'
 import { DnsView } from './dns'
 import { GeneralView } from './general'
@@ -6,7 +8,7 @@ import { OutboundView } from './outbound'
 import { TraefikView } from './proxy'
 import { InboundView } from './wireguard'
 
-// The Network category, split by DIRECTION.
+// The Network module, split by DIRECTION.
 //
 // General is the box's own plumbing — the WAN link, the proxy that terminates
 // everything, the resolver every device depends on, and the certificates. The
@@ -17,22 +19,11 @@ import { InboundView } from './wireguard'
 // page the words "VPN", "WireGuard" and "tunnel" each meant two things a
 // scroll apart.
 
-export function NetworkView({ data }: { data: NetworkData }) {
-  switch (data.tab) {
-    case 'wireguard':
-      return <InboundView data={data} />
-    case 'proxy':
-      return <TraefikView d={data} />
-    case 'outbound':
-      return <OutboundView data={data} />
-    case 'dns':
-      return <DnsView data={data} />
-    case 'dhcp':
-      return <DhcpView data={data} />
-    // Named, not `default`: a default would go on quietly rendering General
-    // for a seventh tab nobody wrote a case for, which is the one outcome
-    // worth failing on.
-    case 'general':
-      return <GeneralView data={data} />
-  }
-}
+export const views = defineViews<typeof manifest, Tabs>(manifest, {
+  general: GeneralView,
+  wireguard: InboundView,
+  proxy: TraefikView,
+  dns: DnsView,
+  dhcp: DhcpView,
+  outbound: OutboundView,
+})

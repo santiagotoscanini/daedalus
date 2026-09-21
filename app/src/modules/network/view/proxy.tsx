@@ -1,11 +1,7 @@
-import { cn } from '../../../lib/cn'
-import type { NetworkData } from '../../../lib/dashboard/categories/network'
-import { compact, DASH, ms, num, since } from '../../../lib/format'
-import { stripBaseDomain } from '../../../lib/site'
-import { LogBoard } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
-import type { Tone } from '../../viz'
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
+import type { Tone } from '../../../components/viz'
 import {
   BarList,
   Board,
@@ -16,7 +12,11 @@ import {
   Measures,
   Progress,
   Pulse,
-} from '../../viz'
+} from '../../../components/viz'
+import { cn } from '../../../lib/cn'
+import { compact, DASH, ms, num, since } from '../../../lib/format'
+import { stripBaseDomain } from '../../../lib/site'
+import type { NetworkData } from '../data'
 import { ACTION, AXIS, EMPTY, FOOT, LIVE, MAIN, MONO, N, NOTE, ROW, SUB } from './shared'
 
 function codeTone(code: string): 'ok' | 'info' | 'warn' | 'bad' {
@@ -86,7 +86,7 @@ const PROTECTION: Record<
  * nowhere else — nix declares the intent, and this is what traefik actually
  * built out of it, including the routers it refused.
  */
-export function TraefikView({ d }: { d: Proxy }) {
+export function TraefikView({ data: d }: { data: Proxy }) {
   const { traffic, counts } = d
   const busy = traffic.rpm !== null && traffic.rpm > 0
   const groups = (['app', 'gate', 'client'] as const)

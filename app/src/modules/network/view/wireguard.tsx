@@ -1,14 +1,14 @@
 import { useState } from 'react'
+import { Segmented } from '../../../components/controls'
+import { LogBoard } from '../../../components/logs'
+import { useNow } from '../../../components/poll'
+import { Changelog } from '../../../components/release-notes'
+import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
+import { Board, BoardGrid, Chip, Columns, Measures, Pulse } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { NetworkData } from '../../../lib/dashboard/categories/network'
 import { bytes, DASH, localDay, ms, num, since, until } from '../../../lib/format'
 import { BASE_DOMAIN, stripBaseDomain } from '../../../lib/site'
-import { Segmented } from '../../controls'
-import { LogBoard } from '../../logs'
-import { useNow } from '../../poll'
-import { Changelog } from '../../release-notes'
-import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
-import { Board, BoardGrid, Chip, Columns, Measures, Pulse } from '../../viz'
+import type { NetworkData } from '../data'
 import {
   ACTION,
   AXIS,
