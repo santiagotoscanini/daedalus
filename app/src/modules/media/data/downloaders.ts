@@ -270,8 +270,8 @@ async function qbtCookie(base: string, ctx: Ctx): Promise<string | null> {
         redirect: 'manual',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: base },
         body: new URLSearchParams({
-          username: ctx.env('DASH_QBT_USER') ?? '',
-          password: ctx.env('DASH_QBT_PASS') ?? '',
+          username: ctx.secret('QBT_USER'),
+          password: ctx.secret('QBT_PASS'),
         }),
       })
       if (!res.ok) return null

@@ -1,10 +1,10 @@
-import type { Ctx } from '../../../core/ctx'
-import { env } from '../../../host/env'
+import type { Ctx, Gateway } from '../../../core/ctx'
 import { lokiLatest } from '../../../host/loki'
 import { promBars, promScalar } from '../../../host/prom'
 import {
   type CommitGap,
   commitsSince,
+  EMPTY_GAP,
   type VersionGap,
   versionGap,
 } from '../../../lib/dashboard/github'
@@ -47,6 +47,12 @@ type Caller = Volume & {
 }
 
 export type LitellmData = {
+  /**
+   * False on a box with no gateway bound (LITELLM_BASE_URL and
+   * LITELLM_API_KEY). Everything below is then empty, and the view says so
+   * instead of drawing a quiet fortnight.
+   */
+  configured: boolean
   version: string | null
   gap: VersionGap
   /** Whether the digest pin still matches the moving `main-stable` tag. */
@@ -157,7 +163,9 @@ const PAGE_SIZE = 1000
 const RANGE = `${String(DAYS)}d`
 
 export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
-  const auth = { headers: { Authorization: `Bearer ${env.litellmApiKey}` } }
+  const gateway = ctx.gateway
+  if (gateway === null) return notConfigured()
+  const auth = { headers: { Authorization: `Bearer ${gateway.apiKey}` } }
 
   // Every day in the window, oldest first — the chart's x axis, independent of
   // which of them the ledger happens to have a row for. The box's days, not
@@ -173,7 +181,7 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
   const [activity, keys, version, freshness, inFlight, latSum, latCount, toolLatency, overhead] =
     await Promise.all([
       getJson<DailyActivity>(
-        `${env.litellmBaseUrl}/user/daily/activity?start_date=${from}&end_date=${today}` +
+        `${gateway.baseUrl}/user/daily/activity?start_date=${from}&end_date=${today}` +
           `&page_size=${String(PAGE_SIZE)}`,
         auth,
       ),
@@ -187,10 +195,10 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
       // half-read key list would mark live keys as revoked, and a wrong
       // accusation is worse here than no annotation.
       getJson<{ keys?: { token?: string }[]; total_pages?: number }>(
-        `${env.litellmBaseUrl}/key/list?return_full_object=true&size=100`,
+        `${gateway.baseUrl}/key/list?return_full_object=true&size=100`,
         auth,
       ),
-      litellmVersion(auth),
+      litellmVersion(gateway, auth),
       // The pin is a digest on the moving `main-stable`, so alongside "how
       // many releases behind" there is a second, sharper question only the
       // registry can answer: has the channel moved on from the pin at all.
@@ -288,6 +296,7 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
   })
 
   return {
+    configured: true,
     version,
     gap: await versionGap('BerriAI/litellm', version),
     freshness,
@@ -315,6 +324,32 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
       .map(([name, calls]) => ({ name, calls }))
       .sort((a, b) => b.calls - a.calls),
     neighbours: await loadNeighbours(ctx),
+  }
+}
+
+/**
+ * The tab on a box with no gateway. No request is made, to the gateway or on
+ * its behalf: the neighbours are the gateway's, and a release gap for a
+ * service that is not installed is noise.
+ */
+function notConfigured(): LitellmData {
+  return {
+    configured: false,
+    version: null,
+    gap: EMPTY_GAP,
+    freshness: null,
+    daily: [],
+    today: null,
+    window: { requests: 0, failed: 0, tokens: 0, days: 0 },
+    partial: false,
+    inFlight: null,
+    overheadMs: null,
+    endpoints: [],
+    callers: [],
+    rejected: { keys: 0, requests: 0, last: null, live: 0 },
+    mcp: [],
+    mcpServers: [],
+    neighbours: [],
   }
 }
 
@@ -594,9 +629,9 @@ function callerName(hash: string, b: Bucket): string {
  * is the first object in it. So this reads ONE chunk off the response body and
  * hangs up: ~65 KB instead of 1.2 MB, and no JSON parse of the rest.
  */
-async function litellmVersion(init: RequestInit): Promise<string | null> {
+async function litellmVersion(gateway: Gateway, init: RequestInit): Promise<string | null> {
   try {
-    const res = await fetch(`${env.litellmBaseUrl}/openapi.json`, {
+    const res = await fetch(`${gateway.baseUrl}/openapi.json`, {
       ...init,
       signal: AbortSignal.timeout(4_000),
     })

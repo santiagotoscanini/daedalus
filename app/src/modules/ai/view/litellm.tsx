@@ -23,12 +23,31 @@ import {
   REJECTED,
 } from './shared'
 
+/**
+ * The tab on a box with no gateway bound. Said once, in place of a page of
+ * zeroes and dashes that would read as a quiet fortnight.
+ */
+function NotConfigured() {
+  return (
+    <BoardGrid>
+      <Board title="LiteLLM" span={12} aside={<Chip tone="muted">not configured</Chip>}>
+        <p className={EMPTY}>
+          No gateway is bound to this box: <span className={MONO}>LITELLM_BASE_URL</span> and{' '}
+          <span className={MONO}>LITELLM_API_KEY</span> are both unset. Bind them and this tab
+          reports who asked for what.
+        </p>
+      </Board>
+    </BoardGrid>
+  )
+}
+
 // `ReleaseBoard` is gone: it was `Changelog` with one of its two shapes, and
 // the neighbour panels below needed the other.
 
 // ── LiteLLM ────────────────────────────────────────────────────────────────
 
 export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }> }) {
+  if (!data.configured) return <NotConfigured />
   const { gap, daily, window: total } = data
   const busy = data.inFlight !== null && data.inFlight > 0
   const firstDate = daily[0]?.date ?? ''
