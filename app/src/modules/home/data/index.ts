@@ -1,4 +1,4 @@
-import type { Hosts } from '../../../host/hosts'
+import type { Ctx } from '../../../core/ctx'
 // The Home category: the household's own things — a tab per subject.
 //
 // It was one page of eight tiles, and the two biggest data stores on this box
@@ -20,44 +20,40 @@ import type { Hosts } from '../../../host/hosts'
 // It had one, back when it was the second half of the proxy's page and the
 // argument was that an IdP is not networking. That argument was about traefik.
 // Beside the rest of the household it is plainly one of these: the list of
-// people, and of what each of them can open. Its loader lives in ../idp
-// because the proxy's routing table still borrows the client list.
+// people, and of what each of them can open. Its loader stays behind in
+// lib/dashboard/categories/idp because the proxy's routing table still
+// borrows the client list.
 
 import { key } from '../../../host/keys'
 import { promScalars } from '../../../host/prom'
-import { localDay } from '../../format'
-import { getJson } from '../../http'
-import { type VersionGap, versionGap } from '../github'
-import { imageVersion, type RunningVersion } from '../images'
-import { type IdpData, idpClients, loadIdp } from './idp'
+import { type IdpData, idpClients, loadIdp } from '../../../lib/dashboard/categories/idp'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
+import { localDay } from '../../../lib/format'
+import { getJson } from '../../../lib/http'
+import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
+import { manifest } from '../manifest'
 
-export type HomeData =
-  | ({ tab: 'house' } & HouseData)
-  | ({ tab: 'photos' } & PhotosData)
-  | ({ tab: 'files' } & FilesData)
-  | ({ tab: 'pantry' } & PantryData)
-  | ({ tab: 'signin' } & IdpData)
-  | ({ tab: 'finance' } & FinanceData)
-  | ({ tab: 'tools' } & ToolsData)
-
-export async function loadHome(tab: string, hosts: Hosts): Promise<HomeData> {
-  switch (tab) {
-    case 'photos':
-      return { tab: 'photos', ...(await loadPhotos(hosts)) }
-    case 'files':
-      return { tab: 'files', ...(await loadFiles(hosts)) }
-    case 'pantry':
-      return { tab: 'pantry', ...(await loadPantry(hosts)) }
-    case 'signin':
-      return { tab: 'signin', ...(await loadIdp(hosts, idpClients(hosts))) }
-    case 'finance':
-      return { tab: 'finance', ...(await loadFinance()) }
-    case 'tools':
-      return { tab: 'tools', ...(await loadTools(hosts)) }
-    default:
-      return { tab: 'house', ...(await loadHouse(hosts)) }
-  }
+export type Tabs = {
+  house: HouseData
+  photos: PhotosData
+  files: FilesData
+  pantry: PantryData
+  signin: IdpData
+  finance: FinanceData
+  tools: ToolsData
 }
+export type HomeData = TabPayload<typeof manifest, Tabs>
+
+export const load = defineLoader<typeof manifest, Tabs>(manifest, {
+  house: loadHouse,
+  photos: loadPhotos,
+  files: loadFiles,
+  pantry: loadPantry,
+  signin: (ctx) => loadIdp(ctx.hosts, idpClients(ctx.hosts)),
+  finance: loadFinance,
+  tools: loadTools,
+})
 
 /* ── House: Home Assistant ────────────────────────────────────────────── */
 
@@ -110,11 +106,11 @@ type HouseData = {
 
 type HassState = { entity_id: string; state: string; attributes?: Record<string, unknown> }
 
-async function loadHouse(hosts: Hosts): Promise<HouseData> {
+async function loadHouse(ctx: Ctx): Promise<HouseData> {
   const h = { headers: { Authorization: `Bearer ${key('HASS_API_KEY')}` } }
 
   const [states, config] = await Promise.all([
-    getJson<HassState[]>(`${hosts.hc}:8123/api/states`, h),
+    getJson<HassState[]>(`${ctx.hosts.hc}:8123/api/states`, h),
     getJson<{
       version?: string
       location_name?: string
@@ -122,7 +118,7 @@ async function loadHouse(hosts: Hosts): Promise<HouseData> {
       time_zone?: string
       state?: string
       components?: string[]
-    }>(`${hosts.hc}:8123/api/config`, h),
+    }>(`${ctx.hosts.hc}:8123/api/config`, h),
   ])
 
   const version = config?.version ?? null
@@ -238,9 +234,9 @@ type ImmichUser = {
   quotaSizeInBytes?: number | null
 }
 
-async function loadPhotos(hosts: Hosts): Promise<PhotosData> {
+async function loadPhotos(ctx: Ctx): Promise<PhotosData> {
   const h = { headers: { 'x-api-key': key('IMMICH_API_KEY') } }
-  const base = hosts.base('immich')
+  const base = ctx.hosts.base('immich')
 
   const [stats, ver, disk] = await Promise.all([
     getJson<{
@@ -326,7 +322,7 @@ type FilesData = {
   cache: string | null
 }
 
-async function loadFiles(hosts: Hosts): Promise<FilesData> {
+async function loadFiles(ctx: Ctx): Promise<FilesData> {
   const body = await getJson<{
     ocs?: {
       data?: {
@@ -366,7 +362,7 @@ async function loadFiles(hosts: Hosts): Promise<FilesData> {
         }
       }
     }
-  }>(`${hosts.base('nextcloud')}/ocs/v2.php/apps/serverinfo/api/v1/info?format=json`, {
+  }>(`${ctx.hosts.base('nextcloud')}/ocs/v2.php/apps/serverinfo/api/v1/info?format=json`, {
     headers: { 'NC-Token': key('NEXTCLOUD_KEY'), 'OCS-APIRequest': 'true' },
   })
 
@@ -434,9 +430,9 @@ type PantryData = {
   tasks: { total: number | null; overdue: number | null }
 }
 
-async function loadPantry(hosts: Hosts): Promise<PantryData> {
+async function loadPantry(ctx: Ctx): Promise<PantryData> {
   const h = { headers: { 'GROCY-API-KEY': key('GROCY_API_KEY') } }
-  const base = hosts.base('grocy')
+  const base = ctx.hosts.base('grocy')
   // The box's day, not UTC's: grocy states due dates in local time, and past
   // 21:00 here a UTC 'today' is tomorrow — which marks a whole day's chores
   // and tasks overdue that are not.
@@ -508,9 +504,9 @@ type ToolsData = {
   status: string | null
 }
 
-async function loadTools(hosts: Hosts): Promise<ToolsData> {
+async function loadTools(ctx: Ctx): Promise<ToolsData> {
   const body = await getJson<{ version?: string; status?: string }>(
-    `${hosts.base('stirling-pdf')}/api/v1/info/status`,
+    `${ctx.hosts.base('stirling-pdf')}/api/v1/info/status`,
   )
   const version = body?.version ?? null
   return {

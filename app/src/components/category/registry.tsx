@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import type { CategoryDataMap, CategoryPayload } from '../../lib/dashboard/category-data'
 import type { CategoryName } from '../../lib/dashboard/nav'
 import { AiView } from './ai'
-import { HomeView } from './home'
 import { MediaView } from './media'
 import { MonitoringView } from './monitoring'
 import { NetworkView } from './network'
@@ -21,7 +20,6 @@ import { SystemView } from './system'
 const VIEWS: { [K in CategoryName]: (props: { data: CategoryDataMap[K] }) => ReactNode } = {
   ai: AiView,
   media: MediaView,
-  home: HomeView,
   network: NetworkView,
   system: SystemView,
   monitoring: MonitoringView,

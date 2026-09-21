@@ -17,7 +17,7 @@
  * five were Grafana, Loki, Prometheus, Gatus and Healthchecks — which is the
  * Monitoring tab row exactly.
  */
-export type CategoryName = 'ai' | 'media' | 'home' | 'network' | 'system' | 'monitoring'
+export type CategoryName = 'ai' | 'media' | 'network' | 'system' | 'monitoring'
 
 export type CategorySpec = {
   id: CategoryName
@@ -219,64 +219,6 @@ export const CATEGORIES: CategorySpec[] = [
         label: 'Cleanup',
         probe: 'cleanuparr',
         boardSpans: [8, 4, 12],
-      },
-    ],
-  },
-  {
-    id: 'home',
-    label: 'Home',
-    lede: 'What the house shares, and what one person keeps here.',
-    // Shaped to the House tab, which opens by default.
-    boardSpans: [8, 4, 4, 8],
-    // No tile directory. It held eight tiles, and the two biggest data stores
-    // on this box got four numbers and a link each — no version, no verdict on
-    // whether that version is current, and no log. Every one of them is a tab
-    // now, carrying the same name, dot and link.
-    // The rule divides WHOSE data it is. To its left, what the whole house
-    // shares: the automation, the photo library, the file sync, the pantry,
-    // and the directory of who can open any of them. To its right, what one
-    // person keeps here. It is the only axis on which Wealthfolio and
-    // Nextcloud differ — every other reading of "home" puts them together.
-    //
-    // Sign-in sits last on the shared side rather than first: it is the
-    // household's list of people, but it is the answer to a question you ask
-    // about the others, not one you open the category to see.
-    tabs: [
-      {
-        id: 'house',
-        label: 'House',
-        probe: 'home-assistant',
-        boardSpans: [8, 4, 4, 8],
-      },
-      { id: 'photos', label: 'Photos', probe: 'immich', boardSpans: [8, 4, 4, 8] },
-      {
-        id: 'files',
-        label: 'Files',
-        probe: 'nextcloud',
-        boardSpans: [8, 4, 4, 4],
-      },
-      { id: 'pantry', label: 'Pantry', probe: 'grocy', boardSpans: [8, 4, 12] },
-      // Pocket ID, which had a category of its own until now — see the note in
-      // components/category/idp.tsx for why it stopped deserving one.
-      {
-        id: 'signin',
-        label: 'Sign-in',
-        probe: 'pocket-id',
-        boardSpans: [6, 6, 3, 9],
-      },
-      // Past the rule: one person's, not the household's.
-      {
-        id: 'finance',
-        label: 'Finance',
-        probe: 'wealthfolio',
-        boardSpans: [12, 12, 12],
-        dividerBefore: true,
-      },
-      {
-        id: 'tools',
-        label: 'Tools',
-        probe: 'stirling-pdf',
-        boardSpans: [12, 12, 12],
       },
     ],
   },

@@ -99,14 +99,8 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   scraparr: { repo: 'thecfu/scraparr' },
 
   // ── the household ──────────────────────────────────────────────────────
-  immich: { repo: 'immich-app/immich' },
-  'immich-machine-learning': { repo: 'immich-app/immich' },
   'immich-redis': { repo: 'valkey-io/valkey' },
   'immich-postgres': { repo: 'immich-app/base-images', opts: { notesWhenUnknown: true } },
-  grocy: { repo: 'grocy/grocy' },
-  wealthfolio: { repo: 'afadil/wealthfolio' },
-  'stirling-pdf': { repo: 'Stirling-Tools/Stirling-PDF' },
-  'pocket-id': { repo: 'pocket-id/pocket-id' },
   'nextcloud-redis': { repo: 'redis/redis', opts: { notesWhenUnknown: true } },
 
   // ── the edge ───────────────────────────────────────────────────────────
