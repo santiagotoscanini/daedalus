@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
+import { env } from '../host/env'
 
 // Serves an app's post-deploy screenshot (written by shot-deploy-<name> on
 // the host, read off the /shotter mount). Sibling of api.shot-run with one
@@ -17,9 +18,7 @@ export const Route = createFileRoute('/api/deploy-shot/$name')({
         const miss = new Response(null, { status: 404 })
         if (!APP_NAME.test(params.name)) return miss
         try {
-          const body = await readFile(
-            join(process.env.SHOTTER_DIR ?? '/shotter', 'deploys', `${params.name}.png`),
-          )
+          const body = await readFile(join(env.get('SHOTTER_DIR'), 'deploys', `${params.name}.png`))
           return new Response(new Uint8Array(body), {
             headers: {
               'content-type': 'image/png',

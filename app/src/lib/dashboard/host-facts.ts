@@ -12,6 +12,7 @@
 // facts which move in hours is strictly better than that.
 
 import { readSnapshot } from '../../host/contract/snapshot'
+import { env } from '../../host/env'
 import { swrValue } from '../cache'
 import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '../contract/decode'
 
@@ -339,7 +340,7 @@ const TTL_MS = 60_000
 // would blank three tabs at once. A decode error still surfaces in the log.
 const cached = swrValue({ ttlMs: TTL_MS, retryMs: TTL_MS }, async () => {
   const result = await readSnapshot({
-    path: process.env.HOST_FACTS_PATH ?? '/system/system.json',
+    path: env.get('HOST_FACTS_PATH'),
     decoder: hostFactsShape,
     fallback: NO_FACTS,
     // Written every 10 minutes; twice that plus slack means the timer stopped.

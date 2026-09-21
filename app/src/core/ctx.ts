@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { readSnapshot, type SnapshotResult } from '../host/contract/snapshot'
+import { type ConfigName, env, type SecretName } from '../host/env'
 import { type Hosts, makeHosts } from '../host/hosts'
 import { key } from '../host/keys'
 import { lokiEntries, lokiLatest } from '../host/loki'
@@ -25,11 +26,16 @@ import { getJson } from '../lib/http'
  */
 const MODULES_EXPORT = 'modules.json'
 
+export type Gateway = { baseUrl: string; apiKey: string }
+
 export type Ctx = {
-  /** Non-secret configuration bound by the NixOS module. Undefined when unset or empty. */
-  env: (name: string) => string | undefined
-  /** A service credential rendered by nix (the DASH_* set). '' when absent. */
-  secret: (name: string) => string
+  /**
+   * Non-secret configuration bound by the NixOS module, by a name host/env.ts
+   * declares. Undefined when unset, empty, or not the shape its row asks for.
+   */
+  env: (name: ConfigName) => string | undefined
+  /** A service credential rendered by nix (the DASH_* set), by its row's name less the prefix. '' when absent. */
+  secret: (name: SecretName) => string
   /** Where an export domain lives: `exportPath('site.json')`. */
   exportPath: (file: string) => string
   /** A published export domain or host snapshot, decoded, with its staleness. */
@@ -49,15 +55,26 @@ export type Ctx = {
   }
   http: { getJson: typeof getJson }
   loki: { latest: typeof lokiLatest; entries: typeof lokiEntries }
+  /**
+   * The LLM gateway, or null on a box without one. Both halves or neither: a
+   * base URL with no key is a tab of 401s read as zeroes.
+   */
+  gateway: Gateway | null
   /** Where a published service lives, and how a container reaches the host. */
   hosts: Hosts
   /** The box's nix modules. `enabled` answers true for anything the export does not deny. */
   modules: { enabled: (nixModule: string) => boolean }
 }
 
+/** LiteLLM as the environment binds it: LITELLM_BASE_URL and LITELLM_API_KEY, both optional. */
+export const gatewayOf = (
+  baseUrl: string | undefined,
+  apiKey: string | undefined,
+): Gateway | null => (baseUrl === undefined || apiKey === undefined ? null : { baseUrl, apiKey })
+
 export async function makeCtx(): Promise<Ctx> {
   const { readSetting, writeSetting, deleteSetting } = await import('../lib/repo/settings')
-  const exportDir = process.env.EXPORT_DIR ?? '/export'
+  const exportDir = env.get('EXPORT_DIR')
   const [hosts, modules] = await Promise.all([
     makeHosts(),
     readSnapshot({
@@ -67,11 +84,9 @@ export async function makeCtx(): Promise<Ctx> {
     }),
   ])
   return {
-    env: (name) => {
-      const v = process.env[name]
-      return v === undefined || v === '' ? undefined : v
-    },
+    env: (name) => env.text(name),
     secret: key,
+    gateway: gatewayOf(env.get('LITELLM_BASE_URL'), env.get('LITELLM_API_KEY')),
     exportPath: (file) => join(exportDir, file),
     snapshot: readSnapshot,
     store: { read: readSetting, write: writeSetting, delete: deleteSetting },

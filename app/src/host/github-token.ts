@@ -11,6 +11,7 @@ import {
 } from '../lib/contract/decode'
 import { redactSecrets } from '../lib/redact'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
+import { env } from './env'
 
 // The GitHub App installation token, as the host's minter publishes it
 // (daedalus-github-token, every 30 minutes and on request) into a read-only
@@ -100,10 +101,7 @@ export const githubInstallationDecoder: Decoder<GithubInstallation> = withoutVal
   }),
 )
 
-const processEnv: EnvReader = (name) => {
-  const v = process.env[name]
-  return v === undefined || v === '' ? undefined : v
-}
+const processEnv: EnvReader = (name) => env.text(name)
 
 export async function readGithubInstallation(
   env: EnvReader = processEnv,

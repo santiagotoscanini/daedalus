@@ -33,6 +33,7 @@
 
 import { imagePins, imageTagMap } from '../../host/contract/domains/images'
 import { readSnapshot } from '../../host/contract/snapshot'
+import { env } from '../../host/env'
 import { swrValue } from '../cache'
 import { arrayOf, bool, nullable, obj, optional, recordOf, str } from '../contract/decode'
 
@@ -84,7 +85,7 @@ const TTL_MS = 60_000
 // (lib/cache.ts), not to report every service as unknown.
 const cached = swrValue({ ttlMs: TTL_MS, retryMs: TTL_MS }, async () => {
   const result = await readSnapshot({
-    path: process.env.IMAGE_LABELS_PATH ?? '/images/labels.json',
+    path: env.get('IMAGE_LABELS_PATH'),
     decoder: labelsShape,
     fallback: {},
   })
@@ -312,7 +313,7 @@ const FRESHNESS_MAX_AGE_MS = 3 * 86_400_000
 
 const cachedFreshness = swrValue({ ttlMs: TTL_MS, retryMs: TTL_MS }, async () => {
   const result = await readSnapshot({
-    path: process.env.IMAGE_FRESHNESS_PATH ?? '/images/freshness.json',
+    path: env.get('IMAGE_FRESHNESS_PATH'),
     decoder: freshnessShape,
     fallback: {},
     acceptVersions: [1],

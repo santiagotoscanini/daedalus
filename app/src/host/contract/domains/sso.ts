@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { arrayOf, obj, optional, str } from '../../../lib/contract/decode'
+import { env } from '../../env'
 import { readSnapshot } from '../snapshot'
 
 // /export/sso.json — the OIDC clients nix DECLARES (fleet.ssoClients, in
@@ -23,7 +24,7 @@ export async function declaredSsoClients(): Promise<{
   clients: DeclaredSsoClient[]
 }> {
   const r = await readSnapshot({
-    path: join(process.env.EXPORT_DIR ?? '/export', 'sso.json'),
+    path: join(env.get('EXPORT_DIR'), 'sso.json'),
     decoder: shape,
     fallback: { clients: [] },
     acceptVersions: [1],

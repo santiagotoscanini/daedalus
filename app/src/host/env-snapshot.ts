@@ -9,6 +9,7 @@ import {
   PLATFORM_KEYS,
 } from '../lib/env-groups'
 import { readSnapshot } from './contract/snapshot'
+import { env } from './env'
 
 // Deliberately NOT re-exporting GROUP_LABELS and friends. A convenience
 // re-export here would let a component import them from this module, which
@@ -24,7 +25,7 @@ import { readSnapshot } from './contract/snapshot'
 // in, and every --env-file value are already combined. Reconstructing it here
 // would mean reimplementing stacks/apps and then drifting from it.
 
-const ENV_DIR = process.env.ENV_SNAPSHOT_DIR ?? '/env-snapshot'
+const ENV_DIR = env.get('ENV_SNAPSHOT_DIR')
 
 export type EnvSnapshot = {
   vars: EnvVar[]

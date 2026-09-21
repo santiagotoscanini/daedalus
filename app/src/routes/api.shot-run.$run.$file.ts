@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
+import { env } from '../host/env'
 
 // Serves one screenshot out of a shotter run directory, for the thumbnails
 // on the Claude page. Proxied through here rather than pointed at directly
@@ -23,9 +24,7 @@ export const Route = createFileRoute('/api/shot-run/$run/$file')({
         const miss = new Response(null, { status: 404 })
         if (!RUN_ID.test(params.run) || !SHOT_FILE.test(params.file)) return miss
         try {
-          const body = await readFile(
-            join(process.env.SHOTTER_DIR ?? '/shotter', 'runs', params.run, params.file),
-          )
+          const body = await readFile(join(env.get('SHOTTER_DIR'), 'runs', params.run, params.file))
           return new Response(new Uint8Array(body), {
             headers: {
               'content-type': 'image/png',

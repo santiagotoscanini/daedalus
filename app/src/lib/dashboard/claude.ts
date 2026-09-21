@@ -29,6 +29,7 @@
 // pasted a log into a session.
 
 import { readSnapshot } from '../../host/contract/snapshot'
+import { env } from '../../host/env'
 import { lokiStreams } from '../../host/loki'
 import { NO_META } from '../claude-meta'
 import { type ClaudeRoster, NO_ROSTER } from '../claude-roster'
@@ -363,7 +364,7 @@ export type ClaudeData = {
 
 export async function loadClaude(): Promise<ClaudeData> {
   const snapshot = await readSnapshot({
-    path: process.env.CLAUDE_FACTS_PATH ?? '/claude/claude.json',
+    path: env.get('CLAUDE_FACTS_PATH'),
     decoder: factsShape,
     fallback: NO_FACTS,
     acceptVersions: [1],

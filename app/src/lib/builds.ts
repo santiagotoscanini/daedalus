@@ -1,3 +1,4 @@
+import type { ConfigName } from '../host/env'
 import {
   arrayOf,
   bool,
@@ -584,7 +585,7 @@ export function buildCancelRequest(id: string, at: Date): BuildCancelRequest {
 
 // ── logs ────────────────────────────────────────────────────────────────────
 
-export type EnvReader = (name: string) => string | undefined
+export type EnvReader = (name: ConfigName) => string | undefined
 
 export const DEFAULT_BUILD_LOGS_PATH = '/builds'
 

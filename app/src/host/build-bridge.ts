@@ -20,6 +20,7 @@ import {
 import { redactSecrets } from '../lib/redact'
 import { writeAtomic } from './bridge'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
+import { env } from './env'
 
 // The file half of the `build` verb (lib/builds.ts is the contract). Server-only.
 //
@@ -28,10 +29,7 @@ import { readSnapshot, type SnapshotResult } from './contract/snapshot'
 //   /apply/build-status.json          written by host/build.sh, heartbeated while running
 //   /builds/<id>.log                  the host's already-redacted log, mounted read-only
 
-const processEnv: EnvReader = (name) => {
-  const v = process.env[name]
-  return v === undefined || v === '' ? undefined : v
-}
+const processEnv: EnvReader = (name) => env.text(name)
 
 const applyDir = (env: EnvReader): string => env('APPLY_DIR') ?? '/apply'
 

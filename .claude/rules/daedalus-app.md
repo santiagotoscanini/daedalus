@@ -82,7 +82,9 @@ the remote is still the copy that survives a disk. Commit often.
   `host/modules.ts` (loaders, lazy) and `components/modules/boards.tsx`
   (views, eager). A new module = a new directory; nothing else changes.
 - **Loaders reach the machine only through `Ctx`** (`core/ctx.ts`:
-  env, secret, snapshot, store, http, loki, hosts, modules). No
+  env, secret, gateway, snapshot, store, http, loki, hosts, modules).
+  `ctx.env` and `ctx.secret` take only names `host/env.ts` declares;
+  `ctx.gateway` is LiteLLM, or null on a box without one. No
   `process.env` under `src/modules/` — the boundary test refuses it.
   `ctx.modules.enabled(id)` reads `/export/modules.json`
   (`fleet.modules.<id>.enable`, once the box publishes it; every module
@@ -198,7 +200,11 @@ the remote is still the copy that survives a disk. Commit often.
   snapshot script in the s2-server repo's `stacks/daedalus/host/` and
   its nix wiring.
 - Config values come from env vars bound in `daedalus.nix` (in the
-  s2-server repo's `stacks/daedalus/`; `src/host/env.ts` is the schema)
+  s2-server repo's `stacks/daedalus/`; `src/host/env.ts` is the schema: one
+  row per variable, read with `env.get('NAME')`, and a name that is not
+  a row does not compile. A new variable is a new row first. Only
+  DATABASE_URL is required; the rest read as undefined, or their row's
+  fallback, when unset or malformed)
   — never hardcode hostnames, IPs, versions, or tokens in TypeScript;
   the nix side already knows them and binds them so they can't drift.
 - Secrets (service API keys) arrive via rendered env files

@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type Decoder, decode } from '../lib/contract/decode'
 import { errorText } from '../lib/redact'
+import { env } from './env'
 
 // The file-drop bridge: how this container asks the host to do privileged
 // things without holding any privilege itself.
@@ -58,7 +59,7 @@ export function defineBridge<S extends BridgeStatus>(opts: {
 } {
   // Read per call rather than at module load so tests can point a bridge at a
   // temp directory; in the container the value never changes.
-  const dir = (): string => process.env.APPLY_DIR ?? '/apply'
+  const dir = (): string => env.get('APPLY_DIR')
   const idle = decode(opts.status, {})
 
   return {

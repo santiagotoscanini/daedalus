@@ -9,6 +9,7 @@ import {
   recordOf,
   str,
 } from '../../../lib/contract/decode'
+import { env } from '../../env'
 import { readSnapshot, type SnapshotResult } from '../snapshot'
 
 // /repo/repo.json — the configuration repository as the host sees it, and
@@ -168,7 +169,7 @@ const MAX_AGE_MS = 15 * 60_000
 
 export async function repoFacts(): Promise<SnapshotResult<RepoFacts>> {
   return readSnapshot({
-    path: process.env.REPO_FACTS_PATH ?? '/repo/repo.json',
+    path: env.get('REPO_FACTS_PATH'),
     decoder: shape,
     fallback: NO_REPO,
     // v2 carried a `site` of a different shape (the retired separate-repo

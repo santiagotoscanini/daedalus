@@ -11,6 +11,7 @@ import {
 } from '../lib/contract/decode'
 import { defineBridge } from './bridge'
 import { readSnapshot, type SnapshotResult } from './contract/snapshot'
+import { env } from './env'
 
 // Project workspaces: the working clones under ~/projects on the host, where
 // a Claude Code session works on a project directly from this box.
@@ -78,7 +79,7 @@ const EMPTY: WorkspacesData = { root: '', workspaces: [] }
 
 export async function readWorkspaces(): Promise<SnapshotResult<WorkspacesData>> {
   return readSnapshot({
-    path: process.env.WORKSPACES_PATH ?? '/workspaces/workspaces.json',
+    path: env.get('WORKSPACES_PATH'),
     decoder,
     fallback: EMPTY,
     acceptVersions: [1],

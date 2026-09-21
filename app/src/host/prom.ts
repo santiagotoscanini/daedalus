@@ -1,10 +1,11 @@
 import { getJson } from '../lib/http'
+import { env } from './env'
 
 // The Prometheus client — every PromQL read in the app goes through these.
 // Reached over the `monitoring` bridge stacks/daedalus/daedalus.nix adds to
 // this container; null/[] on failure per the rule in lib/http.ts.
 
-export const PROM = () => process.env.PROMETHEUS_URL ?? 'http://prometheus:9090'
+export const PROM = () => env.get('PROMETHEUS_URL')
 
 export type VectorResult = { metric: Record<string, string>; value: [number, string] }
 export type MatrixResult = { metric: Record<string, string>; values: [number, string][] }

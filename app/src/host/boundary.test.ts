@@ -219,7 +219,16 @@ describe('the host boundary', () => {
     // A module loader is handed a Ctx and reaches the box through it. A
     // `process.env` read in one is a configuration path the Ctx does not
     // know about, which is exactly what the capability set exists to prevent.
-    const offenders = files.filter((f) => isModule(f) && parsed.get(f)?.usesProcessEnv)
+    //
+    // `host/env.ts` is where every other `process.env` read in the app now
+    // goes, so importing it is the same reach by another name — the LiteLLM
+    // loader did exactly that until the gateway became a capability.
+    const offenders = files.filter(
+      (f) =>
+        isModule(f) &&
+        (parsed.get(f)?.usesProcessEnv === true ||
+          (edges.get(f) ?? []).includes('src/host/env.ts')),
+    )
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 

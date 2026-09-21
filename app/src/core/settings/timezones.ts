@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { env } from '../../host/env'
 import { parseZoneTab } from '../../lib/timezones'
 
 // The zones the timezone picker offers, and the save refuses anything else.
@@ -10,10 +11,7 @@ import { parseZoneTab } from '../../lib/timezones'
 // every practical purpose, and a picker that lists nothing is worse.
 
 export async function readTimezones(): Promise<string[]> {
-  const sources = [
-    join(process.env.EXPORT_DIR ?? '/export', 'zone.tab'),
-    '/usr/share/zoneinfo/zone.tab',
-  ]
+  const sources = [join(env.get('EXPORT_DIR'), 'zone.tab'), '/usr/share/zoneinfo/zone.tab']
   for (const path of sources) {
     try {
       return parseZoneTab(await readFile(path, 'utf8'))

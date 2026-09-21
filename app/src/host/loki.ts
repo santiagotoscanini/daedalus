@@ -1,4 +1,5 @@
 import { getJson } from '../lib/http'
+import { env } from './env'
 import type { MatrixResult, VectorResult } from './prom'
 
 // The Loki client — every LogQL read in the app goes through these.
@@ -19,7 +20,7 @@ import type { MatrixResult, VectorResult } from './prom'
 // measured. Every helper here hard-defaults to it so nobody puts Loki on the
 // ladder by accident.
 
-export const LOKI = () => process.env.LOKI_URL ?? 'http://loki:3100'
+export const LOKI = () => env.get('LOKI_URL')
 
 export const LOKI_ATTEMPT_MS = [10_000]
 

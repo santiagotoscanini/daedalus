@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { env } from '../env'
 
 // The two design documents, served as MCP resources.
 //
@@ -52,7 +53,7 @@ export const MCP_DOCS: readonly McpDoc[] = [
   },
 ] as const
 
-const docsDir = (): string => process.env.ENGINE_DOCS_DIR ?? DEFAULT_DIR
+const docsDir = (): string => env.get('ENGINE_DOCS_DIR') ?? DEFAULT_DIR
 
 /**
  * A document's text, or an explanation of why it is not here.

@@ -18,7 +18,7 @@ const globalForDb = globalThis as unknown as {
 
 const sql =
   globalForDb.daedalusSql ??
-  postgres(env.databaseUrl, {
+  postgres(env.get('DATABASE_URL'), {
     // Small ceiling on purpose: this is a single-operator control plane sharing
     // a cluster, not something that should be able to starve its neighbours.
     max: 5,

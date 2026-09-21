@@ -58,8 +58,10 @@ pnpm dev           # http://localhost:3000
 `DATABASE_URL` is the only variable you must set. `src/host/db.ts` reads it
 at module scope, so without it every route — `/api/healthz` included —
 answers 500 with `DATABASE_URL is not set`. The dev server does not exit;
-it serves 500s until you give it one. The two other `required()` entries in
-`src/host/env.ts` have no callers today, so nothing asks for them.
+it serves 500s until you give it one. Every other row of the schema in
+`src/host/env.ts` is optional: unset, the page that wants it says so (the
+LiteLLM tab reads "not configured"), and a malformed one is warned about
+once and read as unset.
 
 `/` redirects to `/apps`, and `/apps` is the one page that fails out of the
 box: its loader throws `NIX_MANIFEST_PATH / NIX_REGISTRY_PATH are not set`

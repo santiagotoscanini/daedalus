@@ -14,6 +14,7 @@ import {
 } from '../../../lib/contract/decode'
 import { errorText } from '../../../lib/redact'
 import type { Result } from '../../../lib/result'
+import { env } from '../../env'
 
 // /site/site.json — the committed document, read from the site directory
 // mounted read-only into the container. Since Phase 5 this is THE source of
@@ -94,7 +95,7 @@ export type CommittedSite = Result<{ doc: SiteDocument; bytes: string }, string 
 
 /** The committed site.json, or the reason there is none. */
 export async function readCommittedSite(): Promise<CommittedSite> {
-  const path = join(process.env.SITE_PATH ?? '/site', 'site.json')
+  const path = join(env.get('SITE_PATH'), 'site.json')
   let bytes: string
   try {
     bytes = await readFile(path, 'utf8')

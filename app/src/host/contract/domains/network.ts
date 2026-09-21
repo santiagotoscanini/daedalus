@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { arrayOf, bool, obj, optional, str } from '../../../lib/contract/decode'
+import { env } from '../../env'
 import { readSnapshot, type SnapshotResult } from '../snapshot'
 
 // /export/network.json — the resolver facts, contributed by the pihole stack
@@ -46,7 +47,7 @@ const EMPTY: NetworkFacts = {
 /** The export with its staleness, for a page that states where it read from. */
 export async function networkSnapshot(): Promise<SnapshotResult<NetworkFacts>> {
   return readSnapshot({
-    path: join(process.env.EXPORT_DIR ?? '/export', 'network.json'),
+    path: join(env.get('EXPORT_DIR'), 'network.json'),
     decoder: shape,
     fallback: EMPTY,
     acceptVersions: [1],
