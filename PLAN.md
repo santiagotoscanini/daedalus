@@ -736,8 +736,9 @@ lifecycle), `CONTRIBUTING.md` (tested from a fresh clone). Missing:
 
 - A `just census` target: `podman ps` census, `systemctl --failed`, every
   `healthPath` curl, and a `diff-closures` helper.
-- A nightly `git bundle` of the config repo into `${fleet.stateRoot}`
-  (`/etc/nixos` is not snapshotted; the GitHub remote is the only other copy).
+- ~~A nightly `git bundle` of the config repo~~ — `platform/config-bundle.nix`
+  (config `42a5dae`): a verified `--all` bundle into the snapshotted state
+  tree at 03:47.
 - Contract tests: `apps.json`/`site.json` fixtures per schema version parse
   in nix (`nix eval`) and in the app (vitest); migrations fixture-driven.
 - The no-secret-in-logs test: no vault value or bridge secret appears in
@@ -816,6 +817,9 @@ database model — the features worth having from that comparison are items 1,
   chromium zombies, months from its ceiling), and any node-as-PID-1
   container that spawns processes will. The general fix is one line touching
   all 68 containers — left as the operator's call, not a drive-by.
+  Update 2026-09-21: the apps platform got it (`stacks/apps`, config
+  `42a5dae`) — eight containers we build, all node as PID 1. The default for
+  the other sixty is still the operator's call.
 - The weekly `flake.lock` bump can move nixfmt and leave `/etc/nixos`
   treefmt-dirty, which fails `nix flake check` — Phase 11's gate. It was
   cleared on 2026-09-20 (`70a299b`, empty closure diff as proof), and will
