@@ -30,7 +30,8 @@ import type { Result } from '../lib/result'
 // authorises the call — a fetch straight from the page would work just as well
 // from any other tab on the LAN, gate or no gate.
 
-const BASE = () => process.env.LEMONADE_URL ?? ''
+const base = async (): Promise<string | undefined> =>
+  (await import('../host/env')).env.get('LEMONADE_URL')
 
 /**
  * What Lemonade said, either way. It was `{ ok: boolean; message: string }`,
@@ -127,7 +128,9 @@ export const switchLemonadeModel = createServerFn({ method: 'POST' })
  */
 async function call(path: string, body: Record<string, unknown>): Promise<ModelActionResult> {
   try {
-    const res = await fetch(`${BASE()}${path}`, {
+    const at = await base()
+    if (at === undefined) return { ok: false, reason: 'Lemonade is not configured on this box' }
+    const res = await fetch(`${at}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

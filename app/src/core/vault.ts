@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
+import { env } from '../host/env'
 import { appSecretFile } from '../lib/apps/secret-keys'
 import { errorText } from '../lib/redact'
 import type { Result } from '../lib/result'
@@ -51,7 +52,7 @@ function encrypt(
   input: string,
   secrets: string[],
 ): Promise<string> {
-  const site = process.env.SITE_PATH ?? '/site'
+  const site = env.get('SITE_PATH')
   return new Promise((resolve, reject) => {
     const child = spawn(
       '/usr/local/bin/sops',

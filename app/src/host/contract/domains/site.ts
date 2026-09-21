@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { arrayOf, nullable, num, obj, optional, str } from '../../../lib/contract/decode'
+import { env } from '../../env'
 import { readSnapshot, type SnapshotResult } from '../snapshot'
 
 // /export/site.json — the box's identity. The client-visible half already
@@ -126,7 +127,7 @@ export const NO_SITE: SiteIdentity = {
 export async function siteIdentity(): Promise<
   SnapshotResult<SiteIdentity> & { revision: string | null }
 > {
-  const path = join(process.env.EXPORT_DIR ?? '/export', 'site.json')
+  const path = join(env.get('EXPORT_DIR'), 'site.json')
   const r = await readSnapshot({ path, decoder: shape, fallback: NO_SITE, acceptVersions: [1] })
   return { ...r, revision: await exportRevision(path) }
 }

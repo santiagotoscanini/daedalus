@@ -7,6 +7,7 @@ import {
   type SecretKeyHistory,
 } from '../lib/apps/secret-keys'
 import { isAppName } from '../lib/hostname'
+import { env } from './env'
 
 // WHICH keys an app's operator-secrets file holds, and when each was last
 // written. Never a value.
@@ -22,7 +23,7 @@ import { isAppName } from '../lib/hostname'
 // before this field existed; both render as "no date", never as a guess.
 
 /** The site directory, read-only in this container. Mirrors core/vault.ts. */
-const SITE = (): string => process.env.SITE_PATH ?? '/site'
+const SITE = (): string => env.get('SITE_PATH')
 
 /**
  * The key names in `<app>-env.sops`, or [] when the app has no such file.

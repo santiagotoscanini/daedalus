@@ -6,6 +6,7 @@ import { repoFacts } from '../../host/contract/domains/repo'
 import { siteIdentity } from '../../host/contract/domains/site'
 import { decodeSiteDocument, readCommittedSite } from '../../host/contract/domains/site-doc'
 import type { SnapshotResult } from '../../host/contract/snapshot'
+import { env } from '../../host/env'
 import { requestSiteWrite, type SiteFileName } from '../../host/site-request'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
 import type { Result } from '../../lib/result'
@@ -384,7 +385,7 @@ const nonEmpty = (v: string | null | undefined): string | null =>
  */
 async function engineVersion(): Promise<string | null> {
   try {
-    const path = process.env.ENGINE_PACKAGE_JSON ?? join(process.cwd(), 'package.json')
+    const path = env.get('ENGINE_PACKAGE_JSON') ?? join(process.cwd(), 'package.json')
     const parsed: unknown = JSON.parse(await readFile(path, 'utf8'))
     const version = (parsed as { version?: unknown }).version
     return typeof version === 'string' ? nonEmpty(version) : null

@@ -1,3 +1,4 @@
+import { env } from '../../../host/env'
 import type { Hosts } from '../../../host/hosts'
 // Pocket ID: who can sign in to this house, and to what.
 //
@@ -262,7 +263,7 @@ export async function loadIdp(hosts: Hosts, clientsP: Promise<PocketClient[]>): 
   const base = hosts.base('pocket-id')
   const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
   const windowStart = Date.now() - DAYS * 86400_000
-  const version = process.env.POCKET_ID_VERSION || null
+  const version = env.get('POCKET_ID_VERSION') ?? null
 
   const [clients, users, groups, log, config, gap, declared] = await Promise.all([
     clientsP,

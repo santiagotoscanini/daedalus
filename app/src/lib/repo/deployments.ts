@@ -2,13 +2,14 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { desc, eq } from 'drizzle-orm'
 import { db } from '../../host/db'
+import { env } from '../../host/env'
 import { imageInfo } from '../../host/registry'
 import { deployments } from '../../host/schema'
 import { decode, num, obj, optional, str } from '../contract/decode'
 
 // Ingests deploy.sh's journal into Postgres, and reads it back for the UI.
 
-const DEPLOY_STATE = process.env.DEPLOY_STATE_DIR ?? '/deploy-state'
+const DEPLOY_STATE = env.get('DEPLOY_STATE_DIR')
 
 const journalLine = obj({
   startedAt: str,

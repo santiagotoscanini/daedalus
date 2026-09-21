@@ -18,6 +18,7 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { env } from '../../host/env'
 import { bool, decode, nullable, num, obj, optional, str } from '../contract/decode'
 
 export type ShotCounts = {
@@ -93,7 +94,7 @@ const statsShape = obj({
 const RUNS_SHOWN = 20
 const LOG_LINES = 30
 
-const shotterDir = () => process.env.SHOTTER_DIR ?? '/shotter'
+const shotterDir = () => env.get('SHOTTER_DIR')
 
 /**
  * The Playwright pin, bound as an env var by the same module that mounts
@@ -101,7 +102,7 @@ const shotterDir = () => process.env.SHOTTER_DIR ?? '/shotter'
  * TypeScript never restates it. This IS the running version: the image tag
  * embeds it and the npm package inside is required to match.
  */
-export const playwrightInstalled = () => process.env.SHOTTER_PLAYWRIGHT_VERSION ?? null
+export const playwrightInstalled = () => env.get('SHOTTER_PLAYWRIGHT_VERSION') ?? null
 
 function isoMs(s: string | null): number | null {
   if (s === null) return null

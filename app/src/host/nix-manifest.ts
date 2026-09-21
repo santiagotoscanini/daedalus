@@ -19,6 +19,7 @@ import { APP_STAGES, type AppStage } from '../lib/stage'
 // import from host/, and the default a form fills in has to be the default the
 // decoder applies.
 import { DEFAULT_TASK_TIMEOUT_SEC } from '../lib/tasks'
+import { env } from './env'
 
 // What Nix last built, as handed to this container by stacks/daedalus/daedalus.nix.
 //
@@ -199,8 +200,8 @@ let cachedManaged: NixManifest['nixManaged'] | null = null
 let cachedSecretApps: string[] | null = null
 
 export async function readNixManifest(): Promise<NixManifest> {
-  const managedPath = process.env.NIX_MANIFEST_PATH
-  const registryPath = process.env.NIX_REGISTRY_PATH
+  const managedPath = env.get('NIX_MANIFEST_PATH')
+  const registryPath = env.get('NIX_REGISTRY_PATH')
   if (!managedPath || !registryPath) {
     throw new Error(
       'NIX_MANIFEST_PATH / NIX_REGISTRY_PATH are not set. Both are injected by ' +

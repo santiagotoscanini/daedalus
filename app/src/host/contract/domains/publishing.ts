@@ -10,6 +10,7 @@ import {
   recordOf,
   str,
 } from '../../../lib/contract/decode'
+import { env } from '../../env'
 import { readSnapshot } from '../snapshot'
 
 // /export/publishing.json — the publish registry as platform/publishing.nix
@@ -90,7 +91,7 @@ const EMPTY: PublishingFacts = { webApps: {}, takenHostnames: [], directIngress:
 
 export async function publishingFacts(): Promise<PublishingFacts> {
   const r = await readSnapshot({
-    path: join(process.env.EXPORT_DIR ?? '/export', 'publishing.json'),
+    path: join(env.get('EXPORT_DIR'), 'publishing.json'),
     decoder: shape,
     fallback: EMPTY,
     acceptVersions: [1],

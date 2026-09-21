@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { arrayOf, bool, nullable, obj, optional, str } from '../../../lib/contract/decode'
+import { env } from '../../env'
 import { readSnapshot } from '../snapshot'
 
 // /export/jobs.json — every scheduled job declared worth noticing, and HOW it
@@ -18,7 +19,7 @@ const shape = obj({
 
 export async function monitoredJobsList(): Promise<MonitoredJob[]> {
   const r = await readSnapshot({
-    path: join(process.env.EXPORT_DIR ?? '/export', 'jobs.json'),
+    path: join(env.get('EXPORT_DIR'), 'jobs.json'),
     decoder: shape,
     fallback: { monitoredJobs: [] },
     acceptVersions: [1],

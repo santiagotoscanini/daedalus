@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { actorLabelOf } from '../core/auth'
+import { env } from '../host/env'
 import { safeEqual } from '../host/github-app-crypto'
 import { isRecord } from '../lib/is-record'
 
@@ -180,7 +181,7 @@ function asString(v: unknown): string | null {
 
 /** Null when the caller is authorised; otherwise the response to send back. */
 function authFailure(request: Request): Response | null {
-  const expected = process.env.DEPLOY_HOOK_TOKEN
+  const expected = env.get('DEPLOY_HOOK_TOKEN')
   if (!expected) {
     return Response.json(
       { status: 'error', error: 'deploy hook is not configured' },

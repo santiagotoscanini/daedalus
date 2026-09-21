@@ -6,8 +6,9 @@
 // `isolated` and deliberately not on registry-net, where the registry lives.
 
 import { REGISTRY_HOST } from '../lib/site'
+import { env } from './env'
 
-const REGISTRY = () => process.env.REGISTRY_URL ?? `https://${REGISTRY_HOST}`
+const REGISTRY = () => env.get('REGISTRY_URL') ?? `https://${REGISTRY_HOST}`
 
 const MANIFEST_ACCEPT = [
   'application/vnd.oci.image.manifest.v1+json',

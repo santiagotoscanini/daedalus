@@ -2,6 +2,7 @@ import { appIcon } from '../../host/app-icon'
 import { readApplyStatus } from '../../host/apply'
 import { siteIdentity } from '../../host/contract/domains/site'
 import { lastDeploy, pullFailing, readDeployStatus } from '../../host/deploy'
+import { env } from '../../host/env'
 import { appStatuses } from '../../host/metrics'
 import { hostnamesTakenBy, manifestEntries, operatorSecretApps } from '../../host/nix-manifest'
 import { readWorkspaceRequestStatus, readWorkspaces, workspaceFor } from '../../host/workspaces'
@@ -73,7 +74,7 @@ export async function loadAppDetail(data: { name: string }) {
     workspace: workspaceFor(repo, workspaces.data),
     // From the snapshot when it has published, from the env binding before
     // the first publish — same value, different freshness.
-    workspaceRoot: workspaces.data.root || (process.env.WORKSPACE_ROOT ?? ''),
+    workspaceRoot: workspaces.data.root || (env.get('WORKSPACE_ROOT') ?? ''),
     // Where an app's data dir lives on the host, for the one panel that
     // names it (what a removal leaves behind). From the export, so the
     // path is the nix fact rather than a string typed into a component.

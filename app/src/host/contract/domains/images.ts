@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { arrayOf, bool, nullable, obj, optional, recordOf, str } from '../../../lib/contract/decode'
+import { env } from '../../env'
 import { readSnapshot } from '../snapshot'
 
 // /export/images.json — every container's image, from the two ends the flake
@@ -46,7 +47,7 @@ const shape = obj({
 
 async function domain(): Promise<{ tags: Record<string, string>; pins: Record<string, ImagePin> }> {
   const r = await readSnapshot({
-    path: join(process.env.EXPORT_DIR ?? '/export', 'images.json'),
+    path: join(env.get('EXPORT_DIR'), 'images.json'),
     decoder: shape,
     fallback: { tags: {}, pins: {} },
     acceptVersions: [1, 2],

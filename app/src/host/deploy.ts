@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { type Decoder, literal, nullable, num, obj, optional, str } from '../lib/contract/decode'
 import { defineBridge } from './bridge'
 import { readSnapshot } from './contract/snapshot'
+import { env } from './env'
 
 // Redeploy: pull the app's image and restart it if the digest moved.
 //
@@ -17,7 +18,7 @@ import { readSnapshot } from './contract/snapshot'
 // whereas the timer's Persistent=true catches up on boot. Push removes
 // latency, the timer keeps the system self-healing.
 
-const DEPLOY_STATE = process.env.DEPLOY_STATE_DIR ?? '/deploy-state'
+const DEPLOY_STATE = env.get('DEPLOY_STATE_DIR')
 
 export type DeployState = 'idle' | 'running' | 'done' | 'failed'
 
