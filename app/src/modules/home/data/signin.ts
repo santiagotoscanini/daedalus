@@ -1,12 +1,11 @@
-import type { Hosts } from '../../../host/hosts'
-// Pocket ID: who can sign in to this house, and to what.
+import type { Ctx } from '../../../core/ctx'
+// Home's Sign-in tab: who can sign in to this house, and to what.
 //
-// A shared library rather than a category of its own, because two pages need
-// it and neither owns it. Home's Sign-in tab is the subject — the IdP is the
-// account every person here signs in with, and its audit log is the only place
-// on the box that records a human being doing something. The proxy's page
-// borrows the client list to say which of its routes are gated, which is one
-// column on a table about routing.
+// The IdP is the account every person here signs in with, and its audit log is
+// the only place on the box that records a human being doing something. The
+// Pocket ID calls themselves are core/identity/pocket-id — the proxy's page
+// borrows the client list from there too, and a module must not import
+// another module's data. What is here is this tab's reading of them.
 //
 // It WAS a category, back when it was the second half of the proxy's page and
 // the argument was that neither half belonged to the other. That argument was
@@ -14,11 +13,19 @@ import type { Hosts } from '../../../host/hosts'
 // files, the pantry — this is plainly one of the household's own things: it is
 // the list of people, and of what each of them can open.
 
+import {
+  clientHost,
+  forwardAuthClient,
+  idpAuditLog,
+  idpClients,
+  idpGroups,
+  idpSettings,
+  idpUsers,
+  STATIC_KEY_USER_ID,
+} from '../../../core/identity/pocket-id'
 import { declaredSsoClients } from '../../../host/contract/domains/sso'
-import { key } from '../../../host/keys'
-import { localDay, since } from '../../format'
-import { getJson } from '../../http'
-import { type VersionGap, versionGap } from '../github'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { localDay, since } from '../../../lib/format'
 
 /** How far back the activity columns go. A column per day, as on the AI tabs. */
 const DAYS = 14
@@ -158,94 +165,6 @@ export type IdpData = {
     unsynced: { id: string; name: string }[]
   }
 }
-export type PocketClient = {
-  id?: string
-  name?: string
-  launchURL?: string
-  callbackURLs?: string[]
-  isGroupRestricted?: boolean
-}
-
-export async function idpClients(hosts: Hosts): Promise<PocketClient[]> {
-  const base = hosts.base('pocket-id')
-  const body = await getJson<{ data?: PocketClient[] }>(
-    // 100 against a box that has 33: one page, and a second page would be a
-    // second round trip to discover there was nothing on it.
-    `${base}/api/oidc/clients?pagination[limit]=100`,
-    { headers: { 'X-API-KEY': key('POCKETID_KEY') } },
-  )
-  return body?.data ?? []
-}
-
-/**
- * Is this the registration the traefik forward-auth middleware signs in with.
- *
- * Matched on the callback, because that is the one thing the generator fixes:
- * `platform`'s publish layer emits exactly `https://<host>/oidc/callback` for
- * every `webApps.auth = "oidc"` entry, and an app's own login never uses that
- * path — it round-trips through whatever its framework mounts. Pocket ID's API
- * exposes no flag for this, so the URL is the tell.
- */
-export function forwardAuthClient(c: PocketClient, host: string): boolean {
-  const urls = c.callbackURLs ?? []
-  return urls.length === 1 && urls[0] === `https://${host}/oidc/callback`
-}
-
-/** The hostname a client is for, from whichever URL it published. */
-export function clientHost(c: PocketClient): string | null {
-  const url = c.launchURL ?? c.callbackURLs?.[0] ?? ''
-  try {
-    return new URL(url).hostname
-  } catch {
-    // A native app's callback is a custom scheme (`app.immich:///oauth-callback`)
-    // with no hostname at all. Not a fault — it just cannot name a route.
-    return null
-  }
-}
-
-type AuditEvent = {
-  id?: string
-  createdAt?: string
-  event?: string
-  username?: string
-  device?: string
-  city?: string
-  country?: string
-  data?: { clientName?: string }
-}
-
-/**
- * The audit log, back as far as the window.
- *
- * Paged because Pocket ID caps a page at a hundred and this box logs a couple
- * of hundred a fortnight. Bounded at six pages rather than "until the window
- * is covered": an instance that suddenly logs thousands a day should slow this
- * page down by nothing, and a truncated count that says so is better than a
- * complete one that arrives late.
- */
-async function auditLog(
-  base: string,
-  sinceMs: number,
-): Promise<{ events: AuditEvent[]; truncated: boolean }> {
-  const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
-  const events: AuditEvent[] = []
-
-  for (let page = 1; page <= 6; page++) {
-    const body = await getJson<{ data?: AuditEvent[]; pagination?: { totalPages?: number } }>(
-      `${base}/api/audit-logs/all?pagination[limit]=100&pagination[page]=${String(page)}` +
-        `&sort[column]=createdAt&sort[direction]=desc`,
-      h,
-    )
-    const rows = body?.data ?? []
-    events.push(...rows)
-    if (rows.length === 0) return { events, truncated: false }
-    if (page >= (body?.pagination?.totalPages ?? page)) return { events, truncated: false }
-    // The page we just read reaches past the window, so nothing older matters.
-    const oldest = Date.parse(rows[rows.length - 1]?.createdAt ?? '')
-    if (Number.isFinite(oldest) && oldest < sinceMs) return { events, truncated: false }
-  }
-  return { events, truncated: true }
-}
 
 /**
  * Pocket ID: every account, every registered application, and who used what.
@@ -258,21 +177,16 @@ async function auditLog(
  * nobody has ever authorised is a redirect URI still trusted for an app that
  * may not exist.
  */
-export async function loadIdp(hosts: Hosts, clientsP: Promise<PocketClient[]>): Promise<IdpData> {
-  const base = hosts.base('pocket-id')
-  const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
+export async function loadIdp(ctx: Ctx): Promise<IdpData> {
   const windowStart = Date.now() - DAYS * 86400_000
-  const version = process.env.POCKET_ID_VERSION || null
+  const version = ctx.env('POCKET_ID_VERSION') ?? null
 
-  const [clients, users, groups, log, config, gap, declared] = await Promise.all([
-    clientsP,
-    getJson<{ data?: PocketUser[] }>(`${base}/api/users?pagination[limit]=100`, h),
-    getJson<{ data?: { name?: string; friendlyName?: string; userCount?: number }[] }>(
-      `${base}/api/user-groups?pagination[limit]=100`,
-      h,
-    ),
-    auditLog(base, windowStart),
-    getJson<{ key?: string; value?: string }[]>(`${base}/api/application-configuration`, h),
+  const [clients, users, groups, log, settings, gap, declared] = await Promise.all([
+    idpClients(ctx),
+    idpUsers(ctx),
+    idpGroups(ctx),
+    idpAuditLog(ctx, windowStart),
+    idpSettings(ctx),
     versionGap('pocket-id/pocket-id', version),
     declaredSsoClients(),
   ])
@@ -341,10 +255,8 @@ export async function loadIdp(hosts: Hosts, clientsP: Promise<PocketClient[]>): 
     if (byDay.has(day)) byDay.set(day, (byDay.get(day) ?? 0) + 1)
   }
 
-  // Pocket ID gives the static-API-key principal the all-zero UUID, which is
-  // the only thing distinguishing it from a person — its username is generated
-  // and its display name is whatever the release happened to call it.
-  const people = (users?.data ?? []).filter((u) => u.id !== '00000000-0000-0000-0000-000000000000')
+  // People, so not the principal behind the static API key.
+  const people = users.filter((u) => u.id !== STATIC_KEY_USER_ID)
 
   // The diff is only meaningful once BOTH sides answered: an empty export
   // would read every live client as an orphan, and an empty live list would
@@ -403,7 +315,7 @@ export async function loadIdp(hosts: Hosts, clientsP: Promise<PocketClient[]>): 
       })
       .sort((a, b) => b.sortAt - a.sortAt || a.name.localeCompare(b.name))
       .map(({ sortAt: _sortAt, ...c }) => c),
-    users: (users?.data ?? [])
+    users: users
       .map((u) => {
         const hit = signIns.get(u.username ?? '')
         return {
@@ -411,7 +323,7 @@ export async function loadIdp(hosts: Hosts, clientsP: Promise<PocketClient[]>): 
           displayName: u.displayName ?? u.username ?? '?',
           admin: u.isAdmin === true,
           disabled: u.disabled === true,
-          service: u.id === '00000000-0000-0000-0000-000000000000',
+          service: u.id === STATIC_KEY_USER_ID,
           groups: (u.userGroups ?? []).map((g) => g.friendlyName ?? g.name ?? '?'),
           signIns: hit?.n ?? 0,
           lastSignInAgo: hit === undefined ? null : since((Date.now() - hit.last) / 1000),
@@ -422,7 +334,7 @@ export async function loadIdp(hosts: Hosts, clientsP: Promise<PocketClient[]>): 
       })
       .sort((a, b) => b.sortAt - a.sortAt)
       .map(({ sortAt: _sortAt, ...u }) => u),
-    groups: (groups?.data ?? []).map((g) => ({
+    groups: groups.map((g) => ({
       name: g.friendlyName ?? g.name ?? '?',
       members: g.userCount ?? 0,
     })),
@@ -443,17 +355,8 @@ export async function loadIdp(hosts: Hosts, clientsP: Promise<PocketClient[]>): 
       consents: recent.filter((e) => e.event === 'NEW_CLIENT_AUTHORIZATION').length,
       people: people.length,
     },
-    signups: (config ?? []).find((c) => c.key === 'allowUserSignups')?.value ?? null,
+    signups: settings.get('allowUserSignups') ?? null,
     truncated: log.truncated,
     nix,
   }
-}
-
-type PocketUser = {
-  id?: string
-  username?: string
-  displayName?: string
-  isAdmin?: boolean
-  disabled?: boolean
-  userGroups?: { name?: string; friendlyName?: string }[]
 }

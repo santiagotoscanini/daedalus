@@ -1,6 +1,6 @@
 import type { Ctx } from '../../../core/ctx'
+import { clientHost, idpClients, type PocketClient } from '../../../core/identity/pocket-id'
 import { promBars, promPoints, promScalar, promScalars, promVector } from '../../../host/prom'
-import { clientHost, idpClients, type PocketClient } from '../../../lib/dashboard/categories/idp'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { localDay } from '../../../lib/format'
 import { getJson } from '../../../lib/http'
@@ -97,7 +97,7 @@ export type TraefikData = {
  * unprotected one does not. One request, for one column.
  */
 export async function loadProxy(ctx: Ctx): Promise<TraefikData> {
-  return loadTraefik(idpClients(ctx.hosts))
+  return loadTraefik(idpClients(ctx))
 }
 
 /**

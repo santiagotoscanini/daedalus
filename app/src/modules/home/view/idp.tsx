@@ -21,8 +21,8 @@ import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-hea
 import { EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Columns, Measures } from '../../../components/viz'
-import type { IdpData } from '../../../lib/dashboard/categories/idp'
 import { DASH, num } from '../../../lib/format'
+import type { IdpData } from '../data/signin'
 
 /** How many registrations the list shows before it is asked for the rest. */
 const APPS_SHOWN = 5

@@ -20,19 +20,19 @@ import type { Ctx } from '../../../core/ctx'
 // It had one, back when it was the second half of the proxy's page and the
 // argument was that an IdP is not networking. That argument was about traefik.
 // Beside the rest of the household it is plainly one of these: the list of
-// people, and of what each of them can open. Its loader stays behind in
-// lib/dashboard/categories/idp because the proxy's routing table still
-// borrows the client list.
+// people, and of what each of them can open. Its loader is ./signin; the Pocket
+// ID reads under it are core/identity/pocket-id, because the proxy's routing
+// table borrows the client list and a module must not import another's data.
 
 import { key } from '../../../host/keys'
 import { promScalars } from '../../../host/prom'
-import { type IdpData, idpClients, loadIdp } from '../../../lib/dashboard/categories/idp'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
 import { localDay } from '../../../lib/format'
 import { getJson } from '../../../lib/http'
 import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
 import { manifest } from '../manifest'
+import { type IdpData, loadIdp } from './signin'
 
 export type Tabs = {
   house: HouseData
@@ -50,7 +50,7 @@ export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   photos: loadPhotos,
   files: loadFiles,
   pantry: loadPantry,
-  signin: (ctx) => loadIdp(ctx.hosts, idpClients(ctx.hosts)),
+  signin: loadIdp,
   finance: loadFinance,
   tools: loadTools,
 })

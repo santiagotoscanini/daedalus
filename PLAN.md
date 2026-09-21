@@ -263,9 +263,9 @@ after 9a and 9c except the intended env renames.
   registry, nav table and type map are gone. Left for later, each small:
   - ~~`/export/modules.json` from nix~~ — published since config `666e9d6`
     (2026-09-21); the rail now follows the box's switches.
-  - `lib/dashboard/categories/idp.ts` stays where it was: Home's Sign-in
-    and Network's Proxy both read it, and a module must not import another
-    module's data. It wants to become a core identity reader.
+  - ~~`lib/dashboard/categories/idp.ts` as a core identity reader~~ — it is
+    `core/identity/pocket-id.ts`, read through `Ctx` by Home's Sign-in
+    (`modules/home/data/signin.ts`) and Network's Proxy.
   - `defineFlow` extracted from `apply-flow.ts`/`update-flow.ts`; typed
     HTTP results; `env.ts` as the single validated schema with LiteLLM
     optional — none started.

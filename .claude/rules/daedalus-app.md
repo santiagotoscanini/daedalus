@@ -89,9 +89,12 @@ the remote is still the copy that survives a disk. Commit often.
   counts as enabled until then) and `lib/modules/active.ts` derives
   the rail from it: a tab is offered while any of its `nix` modules is
   enabled, a module while it has a tab left.
-- `lib/dashboard/categories/idp.ts` is the one category-era file left
-  in place: Home's Sign-in tab and Network's Proxy tab both read it,
-  and a module must not import another module's data.
+- `core/identity/pocket-id.ts` is the Pocket ID reader two modules share
+  (clients, accounts, groups, settings, the audit log): Home's Sign-in tab
+  (`modules/home/data/signin.ts` is its loader) and Network's Proxy tab both
+  read it, because a module must not import another module's data. Its
+  functions take the `Ctx` — host, key and http come from it. The last of
+  `lib/dashboard/categories/` went with it.
 - **`src/lib/` versus `src/host/` — the split the path names**:
   a module goes in `src/host/` if it needs the machine (a `node:`
   builtin, the database, or `process.env`) or statically imports
