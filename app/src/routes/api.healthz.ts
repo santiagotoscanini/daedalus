@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { ensureScheduler } from '../core/builds/scheduler'
 import { sql } from '../host/db'
+import { reportEnvOnce } from '../host/env'
 
 // Liveness + readiness. This one path carries three jobs, all declared in
 // stacks/daedalus/daedalus.nix as `auth.healthPath = "/api/healthz"`:
@@ -20,6 +21,10 @@ export const Route = createFileRoute('/api/healthz')({
         // gatus calling this every minute is what starts the build scheduler
         // in a fresh process. Synchronous and idempotent; adds nothing to the answer.
         ensureScheduler()
+        // And the environment's startup report: malformed optional variables
+        // warned about once, a required one that is missing thrown — a 500 here
+        // is what fails the deploy unit's health check and gatus alike.
+        reportEnvOnce()
         // Same trick for the break-glass login's setup token: minted and printed
         // once per process, and only while site.json turns the login on and no
         // admin exists. Not awaited — a probe must not wait on it or fail with it.
