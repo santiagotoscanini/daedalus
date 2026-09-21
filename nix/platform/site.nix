@@ -23,7 +23,7 @@
 # LAN address and interface, the gateway, the WAN host, the DHCP scope, the DNS
 # upstreams, the mail identities, the timezone and the Cloudflare zone,
 # account and tunnel ids. They are defined HERE from the document and nowhere
-# else — configuration.nix and stacks/cloudflared no longer carry them — so
+# else — the host config and the tunnel stack no longer carry them — so
 # editing one in the UI is a commit to site/ and a rebuild, and nothing can
 # drift. The parts of site.json that are NOT yet sourced (hostname, owner,
 # operator) stay asserted equal to the configuration, as belt and braces,
@@ -198,9 +198,7 @@ in
     # installation. The assertion below holds site.json's copy to it.
     github.expectedOwnerId = lib.mkOption {
       type = lib.types.ints.positive;
-      readOnly = true;
-      default = 29045597;
-      description = "Numeric GitHub account id that must own the daedalus GitHub App and the repositories it builds.";
+      description = "Numeric GitHub account id that must own the daedalus GitHub App and the repositories it builds. The HOST defines it, in nix: the one copy the control plane cannot rewrite.";
     };
 
     # The control plane's own address, as a label under the domain. Sourced
@@ -320,7 +318,7 @@ in
       (same "operator.user" siteDoc.identity.operator.user cfg.operator.user)
       {
         assertion = cfg.github.app == null || cfg.github.app.ownerId == cfg.github.expectedOwnerId;
-        message = "site.json github.app.ownerId (${toString cfg.github.app.ownerId}) is not fleet.github.expectedOwnerId (${toString cfg.github.expectedOwnerId}): the GitHub App must belong to the account this box trusts. If the account really changed, change the constant in platform/site.nix deliberately.";
+        message = "site.json github.app.ownerId (${toString cfg.github.app.ownerId}) is not fleet.github.expectedOwnerId (${toString cfg.github.expectedOwnerId}): the GitHub App must belong to the account this box trusts. If the account really changed, change fleet.github.expectedOwnerId in the host config deliberately.";
       }
     ];
   };

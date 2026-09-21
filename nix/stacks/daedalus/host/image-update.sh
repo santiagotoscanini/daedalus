@@ -511,7 +511,7 @@ if [ -n "$bad" ]; then
 fi
 
 # --- push -----------------------------------------------------------------
-# Best-effort: /etc/nixos lives on rpool/root, which has no snapshots and is
+# Best-effort: the configuration checkout usually sits on a root dataset, which has no snapshots and is
 # not in the syncoid mirror, so the remote is the only backup — but a network
 # blip must not turn a successful rebuild into a reported failure.
 write_status running pushing ""

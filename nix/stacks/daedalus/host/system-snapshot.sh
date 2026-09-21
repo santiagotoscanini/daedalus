@@ -175,7 +175,7 @@ pools_json() {
 # ── datasets ──────────────────────────────────────────────────────────────
 #
 # `usedbysnapshots` is the number CLAUDE.md tells you to go and check by hand
-# after a week of normal operation, because rpool/selfhost is 16K recordsize
+# after a week of normal operation, because the state dataset is 16K recordsize
 # under heavy database churn and its snapshot deltas are bigger than intuition
 # says. It is a ZFS property, so no filesystem exporter can reach it.
 datasets_json() {
@@ -202,20 +202,18 @@ datasets_json() {
 
 # ── replication ───────────────────────────────────────────────────────────
 #
-# The pairing is derived from the target's name, not declared here: syncoid
-# replicates <source pool>/X to <backup root>/X, so every child of the backup root
-# names its own source. That keeps this from being a second copy of
-# platform/backup.nix that can disagree with it.
+# The pairs are the ones the host declares (fleet.backup.replications), handed
+# in as REPLICATION_PAIRS — one "source<TAB>target" per line. Not re-derived
+# from dataset names: that needed to know the source pool, and a panel that
+# guesses the pairing can watch a tree the backup stopped using.
 #
 # The lag is the point. syncoid exits 0 on a run that replicated nothing, and
 # the replica is a MIRROR rather than an archive — it prunes whatever the
 # source pruned — so "the target has snapshots" is not evidence of anything.
 # Comparing the newest snapshot on each side is.
 replication_json() {
-  local root="$BACKUP_ROOT"
-  "$ZFS" list -H -o name -r "$root" 2>/dev/null | "$GREP" -v "^$root\$" | while read -r target; do
-    child=${target#"$root"/}
-    source="rpool/$child"
+  printf '%s\n' "$REPLICATION_PAIRS" | while IFS=$'\t' read -r source target; do
+    [ -n "$source" ] || continue
 
     newest() {
       "$ZFS" list -Hp -t snapshot -o name,creation -s creation "$1" 2>/dev/null | tail -1 || true

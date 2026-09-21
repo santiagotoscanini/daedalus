@@ -313,7 +313,7 @@ fi
 # --- push -----------------------------------------------------------------
 # Only when this apply committed. site_commit already pushed the site commit
 # if the branch has an upstream; this is the belt to that brace — best-effort,
-# because /etc/nixos lives on rpool/root (no snapshots, not mirrored) so the
+# because the configuration checkout usually sits on a root dataset (no snapshots, not mirrored) so the
 # remote is the only backup, but a network blip must not turn a successful
 # rebuild into a reported failure.
 write_status running pushing ""

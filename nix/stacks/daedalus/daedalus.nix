@@ -838,13 +838,12 @@ let
       OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
       OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
       SETPRIV=${pkgs.util-linux}/bin/setpriv
-      # Derived from the replications the host declares (fleet.backup), so the
-      # replication panel can never watch a tree the backup stopped using.
-      BACKUP_ROOT=${
+      # The replications the host declares (fleet.backup), one "source<TAB>target"
+      # per line, so the panel watches exactly what the backup does.
+      REPLICATION_PAIRS=${
         lib.escapeShellArg (
-          lib.head (
-            (lib.unique (map (c: builtins.dirOf c.target) (lib.attrValues config.services.syncoid.commands)))
-            ++ [ "" ]
+          lib.concatStringsSep "\n" (
+            lib.mapAttrsToList (source: r: "${source}\t${r.target}") config.fleet.backup.replications
           )
         )
       }
