@@ -69,3 +69,16 @@ export const MONO = `${MONO_FACE} text-[0.86em]`
 /** The two dates under a column chart, and what is being counted. */
 export const AXIS =
   'm-0 -mt-[0.35rem] flex justify-between gap-[0.6rem] text-[0.66rem] text-muted-foreground tabular-nums'
+
+/* A flat list of named things: rows of a table, not a stack of pills. The
+   hairline is on every row and removed from the first, which is what `li + li`
+   used to say. Grew up on the System tabs and is read by the Claude page too,
+   so it lives with the rest of the vocabulary rather than inside a module. */
+export const LIST = 'flex flex-col'
+export const ROW =
+  'flex min-w-0 items-center gap-[0.45rem] border-(--border-soft) border-t px-[0.1rem] py-[0.34rem] text-[0.77rem] first:border-t-0'
+/** The name takes the slack, so the detail is pushed right without a spacer. */
+export const ROW_MAIN = 'min-w-0 flex-auto truncate text-foreground'
+export const ROW_SIDE =
+  'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-muted-foreground tabular-nums'
+export const ROW_N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'

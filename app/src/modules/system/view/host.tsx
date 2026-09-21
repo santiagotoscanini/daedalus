@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import { GHOST_BTN } from '../../../components/apps/shared'
+import { LogBoard } from '../../../components/logs'
+import { Button } from '../../../components/ui/button'
+import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { SystemData } from '../../../lib/dashboard/categories/system'
 import { DASH, duration, num, pct } from '../../../lib/format'
 import { errorText } from '../../../lib/redact'
 import { fetchPowerRequestStatus, requestRebootFn } from '../../../server/host'
-import { GHOST_BTN } from '../../apps/shared'
-import { LogBoard } from '../../logs'
-import { Button } from '../../ui/button'
-import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../viz'
+import type { SystemData } from '../data'
 import {
   BOARD_FOOT,
   BOARD_NOTE,

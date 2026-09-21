@@ -1,4 +1,4 @@
-// The System category: the machine itself, a tab per layer.
+// The System module's data half: the machine itself, a tab per layer.
 //
 // It was one page trying to be six. Host vitals, container memory, pool
 // capacity, log volume and probe counts all shared a scroll, which meant none
@@ -14,7 +14,7 @@
 // Disks, Pools and Backups are the opposite: SMART, self-test history, scrub
 // state, `usedbysnapshots` and replication lag have NO prometheus collector on
 // this box, and three of them need root and a raw device. Those come from the
-// host snapshot — see ../host-facts and the script it documents.
+// host snapshot — see lib/dashboard/host-facts and the script it documents.
 //
 // ── a note on container memory, because it looks alarming and is not ──────
 //
@@ -24,6 +24,8 @@
 // cap is genuinely too tight is container_oom_kills_total moving, which is why
 // that counter is on the page and "percent of limit" is not.
 
+import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
+import { manifest } from '../manifest'
 import { type BackupsData, loadBackups } from './backups'
 import { type BuildData, loadBuild } from './build'
 import { type DatabaseData, loadDatabase } from './database'
@@ -33,35 +35,29 @@ import { loadMemory, type MemoryData } from './memory'
 import { loadPools, type PoolsData } from './pools'
 import { loadUpdates, type UpdatesData } from './updates'
 
-export type SystemData =
-  | ({ tab: 'host' } & HostData)
-  | ({ tab: 'memory' } & MemoryData)
-  | ({ tab: 'disks' } & DisksData)
-  | ({ tab: 'pools' } & PoolsData)
-  | ({ tab: 'build' } & BuildData)
-  | ({ tab: 'database' } & DatabaseData)
-  | ({ tab: 'updates' } & UpdatesData)
-  | ({ tab: 'backups' } & BackupsData)
-
-export async function loadSystem(tab: string): Promise<SystemData> {
-  switch (tab) {
-    case 'memory':
-      return { tab: 'memory', ...(await loadMemory()) }
-    case 'updates':
-      return { tab: 'updates', ...(await loadUpdates()) }
-    case 'build':
-      return { tab: 'build', ...(await loadBuild()) }
-    case 'disks':
-      return { tab: 'disks', ...(await loadDisks()) }
-    case 'pools':
-      return { tab: 'pools', ...(await loadPools()) }
-    case 'database':
-      return { tab: 'database', ...(await loadDatabase()) }
-    case 'backups':
-      return { tab: 'backups', ...(await loadBackups()) }
-    default:
-      return { tab: 'host', ...(await loadHost()) }
-  }
+export type Tabs = {
+  host: HostData
+  memory: MemoryData
+  disks: DisksData
+  pools: PoolsData
+  build: BuildData
+  database: DatabaseData
+  updates: UpdatesData
+  backups: BackupsData
 }
+export type SystemData = TabPayload<typeof manifest, Tabs>
 
-export type { HostFacts } from '../../host-facts'
+// No tab here reads the env: every number is prometheus's or the host
+// snapshot's, so the loaders take nothing from the Ctx they are handed.
+export const load = defineLoader<typeof manifest, Tabs>(manifest, {
+  host: loadHost,
+  memory: loadMemory,
+  disks: loadDisks,
+  pools: loadPools,
+  build: loadBuild,
+  database: loadDatabase,
+  updates: loadUpdates,
+  backups: loadBackups,
+})
+
+export type { HostFacts } from '../../../lib/dashboard/host-facts'

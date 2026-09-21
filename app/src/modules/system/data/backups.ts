@@ -1,4 +1,4 @@
-import { hostFacts, type ReplicationPair } from '../../host-facts'
+import { hostFacts, type ReplicationPair } from '../../../lib/dashboard/host-facts'
 
 /* ── Backups ──────────────────────────────────────────────────────────── */
 

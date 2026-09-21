@@ -1,13 +1,19 @@
-import { imagePins } from '../../../../host/contract/domains/images'
-import { type ImageUpdateStatus, readImageUpdateStatus } from '../../../../host/image-update'
-import { type CommitGap, commitsSince, EMPTY_GAP, type VersionGap, versionGap } from '../../github'
-import { releaseSourceFor } from '../../image-repos'
+import { imagePins } from '../../../host/contract/domains/images'
+import { type ImageUpdateStatus, readImageUpdateStatus } from '../../../host/image-update'
+import {
+  type CommitGap,
+  commitsSince,
+  EMPTY_GAP,
+  type VersionGap,
+  versionGap,
+} from '../../../lib/dashboard/github'
+import { releaseSourceFor } from '../../../lib/dashboard/image-repos'
 import {
   type ImageFreshness,
   imageFreshness,
   imageVersion,
   type RunningVersion,
-} from '../../images'
+} from '../../../lib/dashboard/images'
 
 // Every digest-pinned container on the box, and whether it is behind.
 //

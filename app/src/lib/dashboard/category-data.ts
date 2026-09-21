@@ -18,14 +18,12 @@ import type { HomeData } from './categories/home'
 import type { MediaData } from './categories/media'
 import type { MonitoringData } from './categories/monitoring'
 import type { NetworkData } from './categories/network'
-import type { SystemData } from './categories/system'
 
 export type CategoryDataMap = {
   ai: AiData
   media: MediaData
   home: HomeData
   network: NetworkData
-  system: SystemData
   monitoring: MonitoringData
 }
 

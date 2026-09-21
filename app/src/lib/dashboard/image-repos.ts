@@ -129,7 +129,6 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   gatus: { repo: 'TwiN/gatus' },
   healthchecks: { repo: 'healthchecks/healthchecks', opts: { tag: TWO_OR_THREE } },
   'node-exporter': { repo: 'prometheus/node_exporter' },
-  'app-db-exporter': { repo: 'prometheus-community/postgres_exporter' },
   'intel-gpu-exporter': { repo: 'clambin/intel-gpu-exporter' },
 
   // ── AI, apps, games ────────────────────────────────────────────────────

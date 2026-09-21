@@ -1,5 +1,5 @@
+import type { LogNeighbour } from '../../../components/logs'
 import { DASH } from '../../../lib/format'
-import type { LogNeighbour } from '../../logs'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
@@ -8,26 +8,21 @@ import type { LogNeighbour } from '../../logs'
    only while styles.css was being retired. These eight tabs call four of them
    by their own longer names, which is why this is an aliased re-export rather
    than an import in each tab. */
+/* The row vocabulary moved out to tokens.ts the day the Claude page needed
+   it; the tabs keep reading it from here. */
 export {
   EMPTY as VIZ_EMPTY,
   FOOT as BOARD_FOOT,
+  LIST,
   MONO,
   MONO_FACE,
   NOTE as BOARD_NOTE,
+  ROW,
+  ROW_MAIN,
+  ROW_N,
+  ROW_SIDE,
   SUB as BOARD_SUB,
-} from '../../tokens'
-
-/* A flat list of named things: rows of a table, not a stack of pills. The
-   hairline is on every row and removed from the first, which is what `li + li`
-   used to say. */
-export const LIST = 'flex flex-col'
-export const ROW =
-  'flex min-w-0 items-center gap-[0.45rem] border-(--border-soft) border-t px-[0.1rem] py-[0.34rem] text-[0.77rem] first:border-t-0'
-/** The name takes the slack, so the detail is pushed right without a spacer. */
-export const ROW_MAIN = 'min-w-0 flex-auto truncate text-foreground'
-export const ROW_SIDE =
-  'min-w-0 max-w-[60%] flex-initial truncate text-[0.68rem] text-muted-foreground tabular-nums'
-export const ROW_N = 'min-w-[1.4rem] text-right text-foreground tabular-nums'
+} from '../../../components/tokens'
 
 /**
  * The host reader behind Disks, Pools and Backups.

@@ -1,5 +1,5 @@
-import { promScalar, promVector } from '../../../../host/prom'
-import { hostFacts, type SmartDisk } from '../../host-facts'
+import { promScalar, promVector } from '../../../host/prom'
+import { hostFacts, type SmartDisk } from '../../../lib/dashboard/host-facts'
 
 /* ── Disks ────────────────────────────────────────────────────────────── */
 

@@ -7,7 +7,6 @@ import { HomeView } from './home'
 import { MediaView } from './media'
 import { MonitoringView } from './monitoring'
 import { NetworkView } from './network'
-import { SystemView } from './system'
 
 // The client half of the category registry — see lib/dashboard/category-data
 // for the contract and server/category.ts for the loaders.
@@ -23,7 +22,6 @@ const VIEWS: { [K in CategoryName]: (props: { data: CategoryDataMap[K] }) => Rea
   media: MediaView,
   home: HomeView,
   network: NetworkView,
-  system: SystemView,
   monitoring: MonitoringView,
 }
 
