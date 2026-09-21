@@ -266,9 +266,13 @@ after 9a and 9c except the intended env renames.
   - ~~`lib/dashboard/categories/idp.ts` as a core identity reader~~ — it is
     `core/identity/pocket-id.ts`, read through `Ctx` by Home's Sign-in
     (`modules/home/data/signin.ts`) and Network's Proxy.
-  - `defineFlow` extracted from `apply-flow.ts`/`update-flow.ts`; typed
-    HTTP results; `env.ts` as the single validated schema with LiteLLM
-    optional — none started.
+  - ~~`defineFlow` extracted from `apply-flow.ts`/`update-flow.ts`~~ — it is
+    `host/flow.ts`: the gate and the skeleton both flows were.
+  - ~~Typed HTTP results~~ — `lib/http-result.ts`; the two scriptable doors
+    (apply, image-update) answer through it.
+  - ~~`env.ts` as the single validated schema with LiteLLM optional~~ —
+    `host/env.ts`: only DATABASE_URL is required, `Ctx.env`/`Ctx.secret` are
+    typed against its rows, and LiteLLM is `ctx.gateway`, null without one.
   - The data files still call `host/prom`, `host/loki` and `host/keys`
     directly rather than through `Ctx`; the capability set covers env,
     hosts, secrets, snapshots and the store, and those three clients are
