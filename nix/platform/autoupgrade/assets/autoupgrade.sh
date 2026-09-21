@@ -6,6 +6,7 @@
 #   GITHUB_SSH_KEY   — decrypted deploy key (platform/git, fleet.git.sshKeySopsFile)
 #   FLAKE            — the configuration checkout (fleet.config.repo)
 #   HOSTNAME         — the nixosConfigurations attribute to build (networking.hostName)
+#   UPGRADE_INPUTS   — which inputs to move, space-separated; empty = all
 #   OPERATOR_USER, OPERATOR_GROUP, OPERATOR_HOME
 #                    — who owns that checkout, and so who every git call runs as
 #
@@ -55,7 +56,10 @@ fi
 # with, the build failed, and HEAD sat unbuildable until a person noticed —
 # every rebuild on the box, daedalus's Apply included, would have failed on a
 # lock nobody chose. A lock is only worth committing once it has built.
-as_operator /run/current-system/sw/bin/nix flake update
+# UPGRADE_INPUTS unquoted on purpose: a space-separated list of input names
+# (fleet.autoupgrade.inputs), empty meaning every input.
+# shellcheck disable=SC2086
+as_operator /run/current-system/sw/bin/nix flake update $UPGRADE_INPUTS
 
 if as_operator git diff --quiet -- flake.lock; then
   echo "flake-autoupgrade: inputs unchanged; nothing to do"

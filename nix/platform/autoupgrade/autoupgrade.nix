@@ -42,6 +42,7 @@ let
       OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
       OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
       OPERATOR_HOME=${lib.escapeShellArg config.fleet.operator.home}
+      UPGRADE_INPUTS=${lib.escapeShellArg (lib.concatStringsSep " " config.fleet.autoupgrade.inputs)}
 
       ${builtins.readFile ./assets/autoupgrade.sh}
     '';
@@ -64,6 +65,23 @@ in
   # That cannot be enforced on an interactive shell — a lock nobody is obliged
   # to take is advisory by nature — but both automated paths respect it, and
   # those are the ones that fire unattended.
+  options.fleet.autoupgrade.inputs = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    example = [
+      "nixpkgs"
+      "sops-nix"
+    ];
+    description = ''
+      The flake inputs the weekly upgrade moves. Empty means all of them.
+
+      Name them on a box whose flake pins the ENGINE as an input: that one
+      should move only when someone decides it should. A local-clone input
+      follows whatever is committed in the clone, and an unattended job is
+      the wrong thing to find out what that was.
+    '';
+  };
+
   options.fleet.rebuildLock = lib.mkOption {
     type = lib.types.str;
     default = "/run/lock/fleet-rebuild.lock";
