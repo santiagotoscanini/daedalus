@@ -33,7 +33,7 @@ no longer reaching into other stacks at eval time (9c, `046b3ff`).
 |---|---|---|
 | 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
 | 9 | Nix: enable surface, literals, state out of the tree | landed 2026-09-20/21; residue (asset literals, missing options) listed in the section |
-| 10 | App module system and a real build | 10a landed 2026-09-21 (`a6a87ce`); 10b (the build) not started |
+| 10 | App module system and a real build | 10a landed; 10b: the built server WORKS (`e31b110`, 2026-09-21) — runtime site identity, the Dockerfile and CI remain |
 | 11 | The engine becomes importable | not started |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
