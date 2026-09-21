@@ -1,12 +1,12 @@
-import { lokiLatest, lokiScalar } from '../../../../host/loki'
-import { type VersionGap, versionGap } from '../../github'
+import { lokiLatest, lokiScalar } from '../../../host/loki'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import {
   type ImageFreshness,
   imageFreshness,
   imageTag,
   imageVersion,
   type RunningVersion,
-} from '../../images'
+} from '../../../lib/dashboard/images'
 import { CLEANUP_DAYS } from './shared'
 
 /* ── Cleanup ──────────────────────────────────────────────────────────── */

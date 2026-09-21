@@ -1,11 +1,17 @@
 import { useState } from 'react'
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import {
+  compareOf,
+  Open,
+  ServiceHead,
+  SOURCE_NOTE,
+  verdictOf,
+} from '../../../components/service-head'
+import { Board, BoardGrid, Chip, Facts, Measures, Progress, Pulse } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { MediaData } from '../../../lib/dashboard/categories/media'
 import { bytes, DASH, flag, num, rate, since, until } from '../../../lib/format'
-import { LogBoard } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../../service-head'
-import { Board, BoardGrid, Chip, Facts, Measures, Progress, Pulse } from '../../viz'
+import type { MediaData } from '../data'
 import {
   EMPTY,
   FEED,

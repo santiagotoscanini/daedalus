@@ -1,8 +1,8 @@
-import type { Hosts } from '../../../../host/hosts'
-import { promScalars } from '../../../../host/prom'
-import { ATTEMPT_MS, getJson, getText } from '../../../http'
-import { type VersionGap, versionGap } from '../../github'
-import { imageTag, imageVersion, type RunningVersion } from '../../images'
+import type { Ctx } from '../../../core/ctx'
+import { promScalars } from '../../../host/prom'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { imageTag, imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
+import { ATTEMPT_MS, getJson, getText } from '../../../lib/http'
 
 /* ── Downloads ────────────────────────────────────────────────────────── */
 
@@ -106,7 +106,8 @@ export type DownloadsData = {
   vpn: { up: boolean | null; country: string | null; port: number | null }
 }
 
-export async function loadDownloads(hosts: Hosts): Promise<DownloadsData> {
+export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
+  const { hosts } = ctx
   const qbtBase = `${hosts.hc}:8090`
   const nzbBase = `${hosts.hc}:6789`
 
@@ -122,7 +123,7 @@ export async function loadDownloads(hosts: Hosts): Promise<DownloadsData> {
     shelfmarkStatus,
     shelfmark,
   ] = await Promise.all([
-    loadQbt(qbtBase),
+    loadQbt(qbtBase, ctx),
     getJson<{ result?: string }>(`${nzbBase}/jsonrpc/version`),
     getJson<{
       result?: {
@@ -258,7 +259,7 @@ export async function loadDownloads(hosts: Hosts): Promise<DownloadsData> {
  * rather than in lib/http.ts because qBittorrent is this tab's upstream and
  * nobody else's.
  */
-async function qbtCookie(base: string): Promise<string | null> {
+async function qbtCookie(base: string, ctx: Ctx): Promise<string | null> {
   // Hand-rolled rather than getJson: the value is in a response HEADER, and
   // the body is empty (204). Same retry, same reason.
   for (const ms of ATTEMPT_MS) {
@@ -269,8 +270,8 @@ async function qbtCookie(base: string): Promise<string | null> {
         redirect: 'manual',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: base },
         body: new URLSearchParams({
-          username: process.env.DASH_QBT_USER ?? '',
-          password: process.env.DASH_QBT_PASS ?? '',
+          username: ctx.env('DASH_QBT_USER') ?? '',
+          password: ctx.env('DASH_QBT_PASS') ?? '',
         }),
       })
       if (!res.ok) return null
@@ -289,7 +290,7 @@ async function qbtCookie(base: string): Promise<string | null> {
  * expensive call on this page — a password check against a service inside
  * gluetun's netns. Four readings want it; they get one session between them.
  */
-async function loadQbt(base: string): Promise<Omit<DownloadsData['qbt'], 'gap'>> {
+async function loadQbt(base: string, ctx: Ctx): Promise<Omit<DownloadsData['qbt'], 'gap'>> {
   const empty = {
     version: null,
     reachable: false,
@@ -303,7 +304,7 @@ async function loadQbt(base: string): Promise<Omit<DownloadsData['qbt'], 'gap'>>
     counts: { leeching: 0, seeding: 0, stalled: 0, errored: 0 },
   }
 
-  const cookie = await qbtCookie(base)
+  const cookie = await qbtCookie(base, ctx)
   if (cookie === null) return empty
   const h = { headers: { Cookie: cookie } }
 

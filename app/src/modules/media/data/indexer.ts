@@ -1,7 +1,7 @@
-import type { Hosts } from '../../../../host/hosts'
-import { key } from '../../../../host/keys'
-import { getJson } from '../../../http'
-import { type VersionGap, versionGap } from '../../github'
+import type { Hosts } from '../../../host/hosts'
+import { key } from '../../../host/keys'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { getJson } from '../../../lib/http'
 import { ARR_TAG } from './shared'
 import type { ArrData } from './wanted'
 

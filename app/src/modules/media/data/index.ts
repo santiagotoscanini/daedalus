@@ -1,6 +1,5 @@
-import type { Hosts } from '../../../../host/hosts'
-// The Media category: a tab per JOB, in the order a file travels, and a switch
-// inside the page for the services that share one.
+// The Media module's data half: a tab per JOB, in the order a file travels,
+// and a switch inside the page for the services that share one.
 //
 // This replaced a two-tab page (a pipeline diagram, then a directory of eleven
 // tiles) and the reason is what a tile could never hold. Every service here is
@@ -28,6 +27,8 @@ import type { Hosts } from '../../../../host/hosts'
 // wrong: scraparr's copy of a queue depth is up to a minute old, which is a
 // minute of watching a stalled import that already cleared.
 
+import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
+import { manifest } from '../manifest'
 import { type CalibreData, loadCalibre } from './calibre'
 import { type CleanupData, loadCleanup } from './cleanup'
 import { type DownloadsData, loadDownloads } from './downloaders'
@@ -64,48 +65,42 @@ import {
  * its log. flaresolverr, subgen and scraparr have no reachable API at all, so
  * they stay folded under the log of the tab they serve.
  */
-export type MediaData =
-  | ({ tab: 'jellyfin' } & JellyfinData)
-  | ({ tab: 'calibre' } & CalibreData)
-  | {
-      tab: 'wanted'
-      seerr: SeerrData
-      sonarr: ArrData
-      radarr: ArrData
-      recyclarr: RecyclarrData
-      bazarr: BazarrData
-    }
-  | ({ tab: 'indexer' } & ProwlarrData)
-  | ({ tab: 'downloaders' } & DownloadsData)
-  | ({ tab: 'cleanup' } & CleanupData)
-
-export async function loadMedia(tab: string, hosts: Hosts): Promise<MediaData> {
-  switch (tab) {
-    case 'calibre':
-      return { tab: 'calibre', ...(await loadCalibre(hosts)) }
-    case 'wanted': {
-      // All five, because all five are on the page — the switch chooses what
-      // is SHOWN, not what is fetched. Fetching on selection would put a
-      // spinner behind a button that is meant to feel like a toggle.
-      const [seerr, sonarr, radarr, recyclarr, bazarr] = await Promise.all([
-        loadSeerr(hosts),
-        loadArr('sonarr', hosts),
-        loadArr('radarr', hosts),
-        loadRecyclarr(),
-        loadBazarr(hosts),
-      ])
-      return { tab: 'wanted', seerr, sonarr, radarr, recyclarr, bazarr }
-    }
-    case 'indexer':
-      return { tab: 'indexer', ...(await loadProwlarr(hosts)) }
-    case 'downloaders':
-      return { tab: 'downloaders', ...(await loadDownloads(hosts)) }
-    case 'cleanup':
-      return { tab: 'cleanup', ...(await loadCleanup()) }
-    default:
-      return { tab: 'jellyfin', ...(await loadJellyfin(hosts)) }
+export type Tabs = {
+  jellyfin: JellyfinData
+  calibre: CalibreData
+  wanted: {
+    seerr: SeerrData
+    sonarr: ArrData
+    radarr: ArrData
+    recyclarr: RecyclarrData
+    bazarr: BazarrData
   }
+  indexer: ProwlarrData
+  downloaders: DownloadsData
+  cleanup: CleanupData
 }
+export type MediaData = TabPayload<typeof manifest, Tabs>
+
+export const load = defineLoader<typeof manifest, Tabs>(manifest, {
+  jellyfin: (ctx) => loadJellyfin(ctx.hosts),
+  calibre: (ctx) => loadCalibre(ctx.hosts),
+  wanted: async (ctx) => {
+    // All five, because all five are on the page — the switch chooses what
+    // is SHOWN, not what is fetched. Fetching on selection would put a
+    // spinner behind a button that is meant to feel like a toggle.
+    const [seerr, sonarr, radarr, recyclarr, bazarr] = await Promise.all([
+      loadSeerr(ctx.hosts),
+      loadArr('sonarr', ctx.hosts),
+      loadArr('radarr', ctx.hosts),
+      loadRecyclarr(),
+      loadBazarr(ctx.hosts),
+    ])
+    return { seerr, sonarr, radarr, recyclarr, bazarr }
+  },
+  indexer: (ctx) => loadProwlarr(ctx.hosts),
+  downloaders: loadDownloads,
+  cleanup: () => loadCleanup(),
+})
 
 export type {
   ArrData,

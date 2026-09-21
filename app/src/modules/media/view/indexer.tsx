@@ -1,9 +1,9 @@
-import type { MediaData } from '../../../lib/dashboard/categories/media'
+import { LogBoard, type LogNeighbour } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
+import { Board, BoardGrid, RankRow } from '../../../components/viz'
 import { num } from '../../../lib/format'
-import { LogBoard, type LogNeighbour } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { compareOf, Open, ServiceHead, verdictOf } from '../../service-head'
-import { Board, BoardGrid, RankRow } from '../../viz'
+import type { MediaData } from '../data'
 import { EMPTY, FOOT, HealthChecks, LIST, MONO, NOTE } from './shared'
 
 /* ── Indexer: Prowlarr ────────────────────────────────────────────────── */

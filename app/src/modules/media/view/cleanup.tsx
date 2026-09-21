@@ -1,8 +1,6 @@
 import { useState } from 'react'
-import type { MediaData } from '../../../lib/dashboard/categories/media'
-import { num } from '../../../lib/format'
-import { LogBoard } from '../../logs'
-import { Changelog } from '../../release-notes'
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
 import {
   compareOf,
   freshnessRow,
@@ -10,8 +8,10 @@ import {
   ServiceHead,
   SOURCE_NOTE,
   verdictOf,
-} from '../../service-head'
-import { Board, BoardGrid, Chip, Measures } from '../../viz'
+} from '../../../components/service-head'
+import { Board, BoardGrid, Chip, Measures } from '../../../components/viz'
+import { num } from '../../../lib/format'
+import type { MediaData } from '../data'
 import { EMPTY, FOOT, MONO, NOTE, PROV, PROVS, ServiceBar, tone, VERSION_SNAPSHOT } from './shared'
 
 /* ── Cleanup: Cleanuparr, Janitorr ────────────────────────────────────── */

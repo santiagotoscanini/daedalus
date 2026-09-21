@@ -1,9 +1,9 @@
+import { Segmented } from '../../../components/controls'
+import type { LogNeighbour } from '../../../components/logs'
+import { EMPTY } from '../../../components/tokens'
+import type { Tone } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH } from '../../../lib/format'
-import { Segmented } from '../../controls'
-import type { LogNeighbour } from '../../logs'
-import { EMPTY } from '../../tokens'
-import type { Tone } from '../../viz'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
@@ -15,7 +15,7 @@ import type { Tone } from '../../viz'
    same handful of strings on every category page, and was restated per file
    only while styles.css was being retired. Re-exported here so a tab still
    imports its own page's shared file. */
-export { EMPTY, FOOT, MONO, NOTE, SUB } from '../../tokens'
+export { EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
 
 /** A bare vertical list — no marker, no padding, no default margins. */
 export const LIST = 'm-0 flex list-none flex-col p-0'

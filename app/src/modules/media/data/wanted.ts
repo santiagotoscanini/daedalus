@@ -1,10 +1,10 @@
-import type { Hosts } from '../../../../host/hosts'
-import { key } from '../../../../host/keys'
-import { lokiEntries, lokiLatest, lokiScalar } from '../../../../host/loki'
-import { localDay } from '../../../format'
-import { getJson, pool } from '../../../http'
-import { type VersionGap, versionGap } from '../../github'
-import { imageVersion, type RunningVersion } from '../../images'
+import type { Hosts } from '../../../host/hosts'
+import { key } from '../../../host/keys'
+import { lokiEntries, lokiLatest, lokiScalar } from '../../../host/loki'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
+import { localDay } from '../../../lib/format'
+import { getJson, pool } from '../../../lib/http'
 import { ARR_TAG, CLEANUP_DAYS, daysSince } from './shared'
 
 /* ── Seerr ────────────────────────────────────────────────────────────── */
