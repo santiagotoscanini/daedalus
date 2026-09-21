@@ -251,15 +251,30 @@ after 9a and 9c except the intended env renames.
 
 ### Phase 10 — App module system and build (1–2 weeks, app only)
 
-- **10a Registry.** Manifest type, `import.meta.glob` registry, splat route,
-  per-tab records, nav derived from active modules (active = nix module
-  enabled in `site.json` and required exports present). Move each category
-  into `src/modules/<id>/` with verbatim moves and index files preserving
-  export surfaces; `idp` folds into a core `identity` module;
-  `image-repos.ts` splits into per-module `releases.ts`. `Ctx` capabilities
-  (`src/core/ctx.ts` exists); `defineFlow` extracted from
-  `apply-flow.ts`/`update-flow.ts`; typed HTTP results; `env.ts` becomes the
-  single validated schema with LiteLLM optional.
+- **10a Registry — landed 2026-09-21 (engine `a6a87ce`).** Every category
+  page is a directory under `src/modules/<id>/` found by
+  `import.meta.glob`: a manifest, a data half whose loaders are a record
+  keyed by the manifest's tab ids and receive a `Ctx` (no `process.env`
+  under `src/modules/`, enforced by the boundary test), a view half with
+  the matching record, and the release sources of the containers it
+  fronts. Each tab names the nix modules it fronts; the rail is derived
+  from `/export/modules.json` through `lib/modules/active.ts` and offers
+  everything until the box publishes that file. The old three-record
+  registry, nav table and type map are gone. Left for later, each small:
+  - **`/export/modules.json` from nix** — one nix change publishing
+    `fleet.modules.<id>.enable` into the export; until then the rail cannot
+    react to a disabled stack. Goes with the next config switch.
+  - `lib/dashboard/categories/idp.ts` stays where it was: Home's Sign-in
+    and Network's Proxy both read it, and a module must not import another
+    module's data. It wants to become a core identity reader.
+  - `defineFlow` extracted from `apply-flow.ts`/`update-flow.ts`; typed
+    HTTP results; `env.ts` as the single validated schema with LiteLLM
+    optional — none started.
+  - The data files still call `host/prom`, `host/loki` and `host/keys`
+    directly rather than through `Ctx`; the capability set covers env,
+    hosts, secrets, snapshots and the store, and those three clients are
+    the remaining seam to fold in before a module can be tested against a
+    fake `Ctx` alone.
 - **10b Build — one image, runtime dev flag.** One Dockerfile, one image, one
   `docker run`. A multi-stage build: the `build` stage runs `vite build`
   (`ssr.noExternal: true`, srvx entry with the rejection guard, a build check
