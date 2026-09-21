@@ -33,7 +33,7 @@ no longer reaching into other stacks at eval time (9c, `046b3ff`).
 |---|---|---|
 | 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
 | 9 | Nix: enable surface, literals, state out of the tree | 9a and 9c landed 2026-09-20; 9b remains, plus 9c's engine-side half |
-| 10 | App module system and a real build | not started |
+| 10 | App module system and a real build | 10a landed 2026-09-21 (`a6a87ce`); 10b (the build) not started |
 | 11 | The engine becomes importable | not started |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
