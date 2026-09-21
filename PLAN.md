@@ -643,8 +643,10 @@ priority; each can be done independently unless noted.
 
 Hand edits the UI cannot make for itself:
 
-1. **The MCP server's credentials.** It is built and reachable at `/mcp`,
-   and nothing calls it until three edits land: mint a write token in
+1. **The MCP server's credentials — opt-in, not owed.** Decided 2026-09-21: the
+   server is built and reachable at `/mcp`, and nothing calls it until the
+   operator wants a Claude session driving daedalus through it. Then three
+   edits: mint a write token in
    Settings › Developer (it is shown once); add a `daedalus` entry to
    `.claude/mcp.json.sops` in `/etc/nixos` carrying that token as a bearer
    header; add `"daedalus"` to `enabledMcpjsonServers` in
