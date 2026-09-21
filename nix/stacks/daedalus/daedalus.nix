@@ -1180,6 +1180,18 @@ in
     description = "The box's own control plane, and the builder that turns a push into an image.";
   };
 
+  options.fleet.daedalus.routerProduct = lib.mkOption {
+    type = lib.types.str;
+    default = "";
+    example = "Example AX3000";
+    description = ''
+      The product name printed on the LAN router, for the Network page. The one
+      router fact the page cannot read off the device itself: its login page's
+      build stamp carries model, hardware revision, firmware and build date,
+      but not the retail name. Empty shows none.
+    '';
+  };
+
   options.fleet.daedalus.serviceKeysSopsFile = lib.mkOption {
     type = lib.types.path;
     example = lib.literalExpression "./sops/service-keys.sops";
@@ -1467,7 +1479,7 @@ in
             # build date — so all four of those are read off the device and a
             # firmware bump reaches the tab with nothing edited here. What the stamp
             # does not carry is the name printed on the box, which is this.
-            ROUTER_PRODUCT = "AXE5400 Tri-Band Wi-Fi 6E";
+            ROUTER_PRODUCT = config.fleet.daedalus.routerProduct;
             # Two URLs for one device, and the split is the point rather than an
             # oversight. The read is a machine fetching an unauthenticated login
             # page: the router's TLS is a self-signed certificate, so HTTPS there
