@@ -8,7 +8,7 @@ import {
   type VersionGap,
   versionGap,
 } from '../../../lib/dashboard/github'
-import { type ImageFreshness, imageFreshness } from '../../../lib/dashboard/images'
+import { type ImageFreshness, imageFreshness, pinnedVersion } from '../../../lib/dashboard/images'
 import { localDay } from '../../../lib/format'
 import { getJson } from '../../../lib/http'
 import { DAYS } from './shared'
@@ -345,7 +345,7 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
  *                      question that has an answer.
  */
 async function loadNeighbours(ctx: Ctx): Promise<Neighbour[]> {
-  const grocy = ctx.env('MCP_GROCY_VERSION') || null
+  const grocy = await pinnedVersion('mcp-grocy', ctx.env('MCP_GROCY_VERSION'))
   const yazio = ctx.env('YAZIO_MCP_VERSION') || null
   const supergateway = ctx.env('SUPERGATEWAY_VERSION') || null
   const pgvectorRev = ctx.env('PGVECTOR_REV') || null

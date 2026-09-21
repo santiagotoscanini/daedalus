@@ -5,6 +5,7 @@ import { lokiEntries, lokiScalar } from '../../../host/loki'
 import { webAppHosts } from '../../../host/nix-manifest'
 import { promPoints, promScalar, promScalars, promVector } from '../../../host/prom'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { pinnedVersion } from '../../../lib/dashboard/images'
 import { localDay, since } from '../../../lib/format'
 import { getJson, getJsonResult, type JsonResult } from '../../../lib/http'
 import { CF_TUNNEL_READ, type CfTunnel, cfReadError, DAYS } from './shared'
@@ -225,7 +226,7 @@ async function cfTunnel(ctx: Ctx): Promise<CfTunnelRead> {
 }
 
 async function loadWireguard(ctx: Ctx): Promise<WireguardData> {
-  const version = ctx.env('WG_EASY_VERSION') ?? null
+  const version = await pinnedVersion('wg-easy', ctx.env('WG_EASY_VERSION'))
 
   const [counts, peers, peak, hosts] = await Promise.all([
     promScalars({

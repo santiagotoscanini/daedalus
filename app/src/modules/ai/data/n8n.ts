@@ -1,6 +1,7 @@
 import type { Ctx } from '../../../core/ctx'
 import { key } from '../../../host/keys'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { pinnedVersion } from '../../../lib/dashboard/images'
 import { DASH, localDay, since } from '../../../lib/format'
 import { getJson } from '../../../lib/http'
 import { DAYS } from './shared'
@@ -153,13 +154,9 @@ const RUNNING = new Set(['running', 'new', 'waiting'])
 export async function loadN8n(ctx: Ctx): Promise<N8nData> {
   const base = ctx.hosts.base('n8n')
   const auth = { headers: { 'X-N8N-API-KEY': key('N8N_API_KEY') } }
-  // Pinned in the flake and passed in as an env var. n8n's public API has no
-  // version endpoint and /rest/settings does not carry one either, so the tag
-  // the image is pinned to IS the running version — same reasoning as the
-  // Factorio server's. Empty rather than absent when the nix side could not
-  // parse a tag out of the pin, which is a real answer ("unknown") and not the
-  // same as zero — hence `||`, which `??` would let through.
-  const version = ctx.env('N8N_VERSION') || null
+  // n8n's public API has no version endpoint and /rest/settings does not carry
+  // one either, so the tag the image is pinned to IS the running version.
+  const version = await pinnedVersion('n8n', ctx.env('N8N_VERSION'))
 
   const [execs, flows] = await Promise.all([
     listExecutions(base, auth),

@@ -25,6 +25,7 @@ import {
 } from '../../../core/identity/pocket-id'
 import { declaredSsoClients } from '../../../host/contract/domains/sso'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { pinnedVersion } from '../../../lib/dashboard/images'
 import { localDay, since } from '../../../lib/format'
 
 /** How far back the activity columns go. A column per day, as on the AI tabs. */
@@ -179,7 +180,7 @@ export type IdpData = {
  */
 export async function loadIdp(ctx: Ctx): Promise<IdpData> {
   const windowStart = Date.now() - DAYS * 86400_000
-  const version = ctx.env('POCKET_ID_VERSION') ?? null
+  const version = await pinnedVersion('pocket-id', ctx.env('POCKET_ID_VERSION'))
 
   const [clients, users, groups, log, settings, gap, declared] = await Promise.all([
     idpClients(ctx),
