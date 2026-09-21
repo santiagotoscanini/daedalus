@@ -1,4 +1,4 @@
-import type { Hosts } from '../../../host/hosts'
+import type { Ctx } from '../../../core/ctx'
 // The Monitoring category: the machinery that watches everything else.
 //
 // Its own page rather than a corner of System because it answers a different
@@ -41,40 +41,31 @@ import { siteMail } from '../../../host/contract/domains/site'
 import { key } from '../../../host/keys'
 import { LOKI, lokiScalar, lokiSeries, lokiStreamsOrNull, lokiVector } from '../../../host/loki'
 import { PROM, promBars, promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
-import { swrValue } from '../../cache'
-import { basicAuth, getJson } from '../../http'
-import { type VersionGap, versionGap } from '../github'
-import { hostFacts, type JobRun } from '../host-facts'
-import { imageVersion, type RunningVersion } from '../images'
+import { swrValue } from '../../../lib/cache'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { hostFacts, type JobRun } from '../../../lib/dashboard/host-facts'
+import { imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
+import { basicAuth, getJson } from '../../../lib/http'
+import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
+import { TWO_OR_THREE } from '../../../lib/release-tags'
+import { manifest } from '../manifest'
 
-/**
- * healthchecks numbers its releases with two segments — `v4.2`, `v4.1.1` — so
- * the default three-segment pattern matches none of them and would report a
- * project with 60 published releases as having none at all.
- */
-const TWO_OR_THREE = /^v?(\d+\.\d+(?:\.\d+)?)$/
-
-export type MonitoringData =
-  | ({ tab: 'alerts' } & AlertsData)
-  | ({ tab: 'probes' } & ProbesData)
-  | ({ tab: 'metrics' } & MetricsData)
-  | ({ tab: 'logs' } & LogsData)
-  | ({ tab: 'jobs' } & JobsData)
-
-export async function loadMonitoring(tab: string, hosts: Hosts): Promise<MonitoringData> {
-  switch (tab) {
-    case 'probes':
-      return { tab: 'probes', ...(await loadProbes()) }
-    case 'metrics':
-      return { tab: 'metrics', ...(await loadMetrics()) }
-    case 'logs':
-      return { tab: 'logs', ...(await loadLogs()) }
-    case 'jobs':
-      return { tab: 'jobs', ...(await loadJobs(hosts)) }
-    default:
-      return { tab: 'alerts', ...(await loadAlerts()) }
-  }
+export type Tabs = {
+  alerts: AlertsData
+  probes: ProbesData
+  metrics: MetricsData
+  logs: LogsData
+  jobs: JobsData
 }
+export type MonitoringData = TabPayload<typeof manifest, Tabs>
+
+export const load = defineLoader<typeof manifest, Tabs>(manifest, {
+  alerts: loadAlerts,
+  probes: loadProbes,
+  metrics: loadMetrics,
+  logs: loadLogs,
+  jobs: loadJobs,
+})
 
 /* ── Alerts ───────────────────────────────────────────────────────────── */
 
@@ -639,15 +630,18 @@ type HcCheck = {
   n_pings?: number
 }
 
-async function loadJobs(hosts: Hosts): Promise<JobsData> {
+async function loadJobs(ctx: Ctx): Promise<JobsData> {
   const { monitoredJobs } = await import('../../../host/nix-manifest')
   const running = await imageVersion('healthchecks')
 
   const [body, registry, gap, facts] = await Promise.all([
-    getJson<{ checks?: HcCheck[] }>(`${hosts.base('healthchecks')}/api/v1/checks/`, {
+    getJson<{ checks?: HcCheck[] }>(`${ctx.hosts.base('healthchecks')}/api/v1/checks/`, {
       headers: { 'X-Api-Key': key('HEALTHCHECKS_API_KEY') },
     }),
     monitoredJobs(),
+    // healthchecks numbers its releases with two segments — `v4.2`, `v4.1.1`
+    // — so the default three-segment pattern matches none of them and would
+    // report a project with 60 published releases as having none at all.
     versionGap('healthchecks/healthchecks', running.version, { tag: TWO_OR_THREE }),
     hostFacts(),
   ])

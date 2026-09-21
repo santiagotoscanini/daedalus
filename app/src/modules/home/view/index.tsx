@@ -1,10 +1,28 @@
-import type { HomeData } from '../../lib/dashboard/categories/home'
-import { bytes, DASH, num, pct } from '../../lib/format'
-import { LogBoard } from '../logs'
-import { Changelog } from '../release-notes'
-import { compareOf, Open, ServiceHead, SOURCE_NOTE, verdictOf } from '../service-head'
-import { EMPTY, FOOT, FOOT_BASE, MONO, NOTE, SUB } from '../tokens'
-import { BarList, Board, BoardGrid, Chip, Facts, Measures, Progress, Pulse, Ring } from '../viz'
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import {
+  compareOf,
+  Open,
+  ServiceHead,
+  SOURCE_NOTE,
+  verdictOf,
+} from '../../../components/service-head'
+import { EMPTY, FOOT, FOOT_BASE, MONO, NOTE, SUB } from '../../../components/tokens'
+import {
+  BarList,
+  Board,
+  BoardGrid,
+  Chip,
+  Facts,
+  Measures,
+  Progress,
+  Pulse,
+  Ring,
+} from '../../../components/viz'
+import { bytes, DASH, num, pct } from '../../../lib/format'
+import { defineViews } from '../../../lib/modules/tabs'
+import type { HomeData, Tabs } from '../data'
+import { manifest } from '../manifest'
 import { IdpView } from './idp'
 
 // The Home pages — a tab per household subject.
@@ -43,30 +61,21 @@ const PERSON =
 const TEMP =
   'flex max-w-[11rem] min-w-0 flex-col items-start rounded-[8px] bg-(--panel-2) px-[0.6rem] py-[0.35rem] [&>strong]:text-[1.05rem] [&>strong]:font-semibold [&>strong]:tabular-nums [&>em]:max-w-full [&>em]:truncate [&>em]:text-[0.67rem] [&>em]:not-italic [&>em]:text-(--dim)'
 
-export function HomeView({ data }: { data: HomeData }) {
-  switch (data.tab) {
-    case 'house':
-      return <HouseView d={data} />
-    case 'photos':
-      return <PhotosView d={data} />
-    case 'files':
-      return <FilesView d={data} />
-    case 'pantry':
-      return <PantryView d={data} />
-    case 'signin':
-      return <IdpView d={data} />
-    case 'finance':
-      return <FinanceView d={data} />
-    case 'tools':
-      return <ToolsView d={data} />
-  }
-}
+export const views = defineViews<typeof manifest, Tabs>(manifest, {
+  house: HouseView,
+  photos: PhotosView,
+  files: FilesView,
+  pantry: PantryView,
+  signin: IdpView,
+  finance: FinanceView,
+  tools: ToolsView,
+})
 
 /* ── House: Home Assistant ────────────────────────────────────────────── */
 
 type House = Extract<HomeData, { tab: 'house' }>
 
-function HouseView({ d }: { d: House }) {
+function HouseView({ data: d }: { data: House }) {
   const homeCount = d.people.filter((p) => p.home).length
 
   return (
@@ -207,7 +216,7 @@ function HouseView({ d }: { d: House }) {
 
 type Photos = Extract<HomeData, { tab: 'photos' }>
 
-function PhotosView({ d }: { d: Photos }) {
+function PhotosView({ data: d }: { data: Photos }) {
   const total = (d.photos ?? 0) + (d.videos ?? 0)
 
   return (
@@ -329,7 +338,7 @@ function PhotosView({ d }: { d: Photos }) {
 
 type Files = Extract<HomeData, { tab: 'files' }>
 
-function FilesView({ d }: { d: Files }) {
+function FilesView({ data: d }: { data: Files }) {
   const openLinks = d.shares.linkNoPassword ?? 0
 
   return (
@@ -458,7 +467,7 @@ function FilesView({ d }: { d: Files }) {
 
 type Pantry = Extract<HomeData, { tab: 'pantry' }>
 
-function PantryView({ d }: { d: Pantry }) {
+function PantryView({ data: d }: { data: Pantry }) {
   const alarm = (d.overdue ?? 0) + (d.expired ?? 0)
 
   return (
@@ -553,7 +562,7 @@ function PantryView({ d }: { d: Pantry }) {
 
 type Finance = Extract<HomeData, { tab: 'finance' }>
 
-function FinanceView({ d }: { d: Finance }) {
+function FinanceView({ data: d }: { data: Finance }) {
   return (
     <>
       <ServiceHead
@@ -629,7 +638,7 @@ function FinanceView({ d }: { d: Finance }) {
 
 type Tools = Extract<HomeData, { tab: 'tools' }>
 
-function ToolsView({ d }: { d: Tools }) {
+function ToolsView({ data: d }: { data: Tools }) {
   return (
     <>
       <ServiceHead

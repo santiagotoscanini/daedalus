@@ -13,16 +13,12 @@ import type { CategoryName } from './nav'
 // loader in LOADERS and a view in VIEWS — and the compiler refuses to build
 // until all four agree. The switches this replaced enforced none of that.
 
-import type { HomeData } from './categories/home'
-import type { MonitoringData } from './categories/monitoring'
 import type { NetworkData } from './categories/network'
 import type { SystemData } from './categories/system'
 
 export type CategoryDataMap = {
-  home: HomeData
   network: NetworkData
   system: SystemData
-  monitoring: MonitoringData
 }
 
 /** What one boards request answers: the category it is for, and its data. */

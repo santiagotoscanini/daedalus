@@ -2,8 +2,6 @@ import type React from 'react'
 import type { ReactNode } from 'react'
 import type { CategoryDataMap, CategoryPayload } from '../../lib/dashboard/category-data'
 import type { CategoryName } from '../../lib/dashboard/nav'
-import { HomeView } from './home'
-import { MonitoringView } from './monitoring'
 import { NetworkView } from './network'
 import { SystemView } from './system'
 
@@ -17,10 +15,8 @@ import { SystemView } from './system'
 // browser chunks.
 
 const VIEWS: { [K in CategoryName]: (props: { data: CategoryDataMap[K] }) => ReactNode } = {
-  home: HomeView,
   network: NetworkView,
   system: SystemView,
-  monitoring: MonitoringView,
 }
 
 export function CategoryBoards({ payload }: { payload: CategoryPayload }) {

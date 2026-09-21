@@ -1,7 +1,7 @@
 // Home › Sign-in: Pocket ID.
 //
-// Its own file rather than a section of home.tsx because it is the longest of
-// that category's tabs by a wide margin — the audit log carries a list of
+// Its own file rather than a section of index.tsx because it is the longest
+// of this module's tabs by a wide margin — the audit log carries a list of
 // registrations, a list of people, a list of devices and a drill-down behind
 // every row — and folding it in would bury seven short tabs under one long
 // one.
@@ -15,14 +15,14 @@
 // routing.
 
 import { useState } from 'react'
-import type { IdpData } from '../../lib/dashboard/categories/idp'
-import { DASH, num } from '../../lib/format'
-import { GrafanaLogs, LogDetails } from '../logs'
-import { Changelog } from '../release-notes'
-import { LinkRow, ServiceHead, verdictOf } from '../service-head'
-import { EMPTY, FOOT, MONO, NOTE, SUB } from '../tokens'
-import { Button } from '../ui/button'
-import { Board, BoardGrid, Chip, Columns, Measures } from '../viz'
+import { GrafanaLogs, LogDetails } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
+import { EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
+import { Button } from '../../../components/ui/button'
+import { Board, BoardGrid, Chip, Columns, Measures } from '../../../components/viz'
+import type { IdpData } from '../../../lib/dashboard/categories/idp'
+import { DASH, num } from '../../../lib/format'
 
 /** How many registrations the list shows before it is asked for the rest. */
 const APPS_SHOWN = 5
@@ -80,7 +80,7 @@ const COUNT = 'text-right text-[0.79rem] whitespace-nowrap tabular-nums text-for
  * tell you which human that was — and it is also the only way to find out
  * which of the registered applications anybody actually uses.
  */
-export function IdpView({ d }: { d: IdpData }) {
+export function IdpView({ data: d }: { data: IdpData }) {
   const { window: w } = d
   const shared = d.clients.filter((c) => c.sharesHost)
   const idle = d.clients.filter((c) => c.used === 0).length

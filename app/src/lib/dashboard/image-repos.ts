@@ -1,3 +1,4 @@
+import { ARR_TAG, TWO_OR_THREE } from '../release-tags'
 import type { GapOptions } from './github'
 import { imageLabels } from './images'
 
@@ -73,14 +74,8 @@ const MODULE_SOURCES: Record<string, ReleaseSource> = Object.assign(
 
 export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   // ── the household ──────────────────────────────────────────────────────
-  immich: { repo: 'immich-app/immich' },
-  'immich-machine-learning': { repo: 'immich-app/immich' },
   'immich-redis': { repo: 'valkey-io/valkey' },
   'immich-postgres': { repo: 'immich-app/base-images', opts: { notesWhenUnknown: true } },
-  grocy: { repo: 'grocy/grocy' },
-  wealthfolio: { repo: 'afadil/wealthfolio' },
-  'stirling-pdf': { repo: 'Stirling-Tools/Stirling-PDF' },
-  'pocket-id': { repo: 'pocket-id/pocket-id' },
   'nextcloud-redis': { repo: 'redis/redis', opts: { notesWhenUnknown: true } },
 
   // ── the edge ───────────────────────────────────────────────────────────
@@ -96,12 +91,6 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   myspeed: { repo: 'gnmyt/myspeed' },
 
   // ── the watchers ───────────────────────────────────────────────────────
-  grafana: { repo: 'grafana/grafana', opts: { sameMajor: true } },
-  prometheus: { repo: 'prometheus/prometheus' },
-  loki: { repo: 'grafana/loki' },
-  alloy: { repo: 'grafana/alloy' },
-  gatus: { repo: 'TwiN/gatus' },
-  healthchecks: { repo: 'healthchecks/healthchecks', opts: { tag: TWO_OR_THREE } },
   'node-exporter': { repo: 'prometheus/node_exporter' },
   'app-db-exporter': { repo: 'prometheus-community/postgres_exporter' },
   'intel-gpu-exporter': { repo: 'clambin/intel-gpu-exporter' },
