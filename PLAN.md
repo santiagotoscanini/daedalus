@@ -261,9 +261,8 @@ after 9a and 9c except the intended env renames.
   from `/export/modules.json` through `lib/modules/active.ts` and offers
   everything until the box publishes that file. The old three-record
   registry, nav table and type map are gone. Left for later, each small:
-  - **`/export/modules.json` from nix** — one nix change publishing
-    `fleet.modules.<id>.enable` into the export; until then the rail cannot
-    react to a disabled stack. Goes with the next config switch.
+  - ~~`/export/modules.json` from nix~~ — published since config `666e9d6`
+    (2026-09-21); the rail now follows the box's switches.
   - `lib/dashboard/categories/idp.ts` stays where it was: Home's Sign-in
     and Network's Proxy both read it, and a module must not import another
     module's data. It wants to become a core identity reader.
@@ -800,7 +799,6 @@ database model — the features worth having from that comparison are items 1,
   `nixos-rebuild` on the box would have failed until someone noticed. Fixed
   in `platform/sops.nix` by overriding the package's Go inputs to the 1.26
   toolchain stable ships (config `7cb0aa2`; drop at 26.05). The script's
-  order is the real defect: `nix flake update` should build first and commit
-  only a lock that builds, restoring the old lock otherwise. Small config
-  change, not yet made. The engine's own autoupgrade (Phase 11, "Update
+  order was the real defect, fixed in config `666e9d6`: it now updates, builds,
+  and only then commits and stages, restoring the old lock on a failed build. The engine's own autoupgrade (Phase 11, "Update
   daedalus") must be written build-first from the start.
