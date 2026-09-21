@@ -65,29 +65,42 @@ the remote is still the copy that survives a disk. Commit often.
   profile-picture, and the two image servers — `shot-run` for a
   shotter run's frames and `deploy-shot` for an app's post-deploy
   screenshot.
-- **The mirrored category convention**:
-  `src/lib/dashboard/categories/<name>` (data/query layer) ↔
-  `src/components/category/<name>` (render layer), one pair per
-  category (ai, gaming, home, media, monitoring, network, system —
-  idp sits under `categories/` too). A big category is a DIRECTORY:
-  one file per tab id from nav.ts, the data union + tab dispatcher in
-  `index.ts`, the view dispatch in `index.tsx`, cross-tab helpers in
-  `shared.ts(x)` (leaf modules — never in the index, cycle risk). A
-  small category stays a single file pair. The split rule: >3 tabs
-  and >~1,000 lines → directory.
-- **The category registry**: `lib/dashboard/category-data.ts`
-  (CategoryDataMap + CategoryPayload, TYPE-only), `server/category.ts`
-  LOADERS (dynamic-import thunks), `components/category/registry.tsx`
-  VIEWS (static components). `src/lib/dashboard/nav.ts` declares
-  categories/tabs. A new category = nav entry + all three records;
-  the compiler enforces agreement.
+- **The dashboard modules — `src/modules/<id>/`**: one directory per
+  category page (ai, gaming, home, media, monitoring, network, system),
+  found by `import.meta.glob`, never listed. Each holds `manifest.ts`
+  (pure data: label, lede, rail `order`, the tabs with their probes,
+  spans and the `nix` module ids each tab fronts), `releases.ts` (the
+  release sources of the containers it fronts, merged into
+  `lib/dashboard/image-repos.ts`), `data/` (server-only: `index.ts`
+  exports `load = defineLoader(manifest, { <tab>: (ctx) => … })` and
+  a `Tabs` map; one file per tab; `shared.ts` for cross-tab helpers)
+  and `view/` (client: `index.tsx` exports `views = defineViews(manifest,
+  { <tab>: Component })`; one file per tab). The two records are keyed
+  by the manifest's tab ids, so a tab without its loader or view is a
+  compile error. The contract is `lib/modules/{manifest,tabs}.ts`; the
+  registries are `lib/modules/registry.ts` (manifests, client-safe),
+  `host/modules.ts` (loaders, lazy) and `components/modules/boards.tsx`
+  (views, eager). A new module = a new directory; nothing else changes.
+- **Loaders reach the machine only through `Ctx`** (`core/ctx.ts`:
+  env, secret, snapshot, store, http, loki, hosts, modules). No
+  `process.env` under `src/modules/` — the boundary test refuses it.
+  `ctx.modules.enabled(id)` reads `/export/modules.json`
+  (`fleet.modules.<id>.enable`, once the box publishes it; every module
+  counts as enabled until then) and `lib/modules/active.ts` derives
+  the rail from it: a tab is offered while any of its `nix` modules is
+  enabled, a module while it has a tab left.
+- `lib/dashboard/categories/idp.ts` is the one category-era file left
+  in place: Home's Sign-in tab and Network's Proxy tab both read it,
+  and a module must not import another module's data.
 - **`src/lib/` versus `src/host/` — the split the path names**:
   a module goes in `src/host/` if it needs the machine (a `node:`
   builtin, the database, or `process.env`) or statically imports
   something that does; `src/lib/`'s top level is pure and a component
   may import values from it. `lib/repo/**` (drizzle), `lib/dashboard/**`
-  (the category data layer) and `lib/apps/**` are server-only too and
-  stay in `lib/` because their own names already say so. **New rule for
+  (the cross-module readers: images, github, host facts) and
+  `lib/apps/**` are server-only too and stay in `lib/` because their
+  own names already say so; `src/modules/*/data/**` is a server region
+  by the same rule, and `src/modules/*/view/**` is client code. **New rule for
   a new file: if it reaches for the host, it goes under `src/host/`** —
   `src/host/boundary.test.ts` walks the real import graph and fails
   otherwise, naming the file and the edge.

@@ -1,41 +1,31 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
 
-import { CategoryBoards } from '../components/category/registry'
 import { StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
-import { hasModuleViews, ModuleBoards, type ModulePayload } from '../components/modules/boards'
+import { ModuleBoards } from '../components/modules/boards'
 import { PageHead } from '../components/page'
 import { BoardsSkeleton, ServiceHeadSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
-import { CATEGORIES, type CategoryName, resolveTab } from '../lib/dashboard/nav'
 import { isDotted, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
 import { moduleById } from '../lib/modules/registry'
-import {
-  type CategoryPayload,
-  fetchCategoryBoards,
-  fetchTabStatus,
-  type TabStatus,
-} from '../server/category'
 import { fetchModuleBoards } from '../server/modules'
+import { fetchTabStatus, type TabStatus } from '../server/tab-status'
 
-// One page per category, and a tab per subject inside it.
+// One page per module, and a tab per subject inside it.
 //
 // The split is by *subject*, not by service: someone opening Media wants to
 // know what is playing and what is downloading, and does not care that those
 // two facts come from six containers.
 //
-// There was a directory of per-service cards under every page until the last
-// of it went with Monitoring. It made sense while a category was one long page
-// and the cards were how you reached a service at all — but every service has
-// its own tab now, so a card was three of that page's numbers and its link,
-// one scroll below the page itself.
+// The URL segment is still `/c/<id>` — the modules were categories before
+// they were directories, and every bookmark and rail link says `c`.
 //
 // ── nothing here blocks the navigation ────────────────────────────────────
 //
 // The loader returns UNAWAITED promises. That is the whole design: the page
-// frame — title, lede, sub-tabs — comes from the static CATEGORIES table and
-// is on screen the instant you click, while the boards stream in behind their
-// own skeleton.
+// frame — title, lede, sub-tabs — comes from the module's manifest and is on
+// screen the instant you click, while the boards stream in behind their own
+// skeleton.
 //
 // The router still caches a resolved loader result for `defaultStaleTime`, so
 // coming back to a page you just left renders complete, with no skeleton
@@ -50,34 +40,22 @@ export const Route = createFileRoute('/c/$category')({
   }),
   loaderDeps: ({ search }) => ({ tab: search.tab }),
   loader: ({ params, deps }) => {
-    // A module (src/modules/<id>) first; a category still on the old registry
-    // second. The second lookup goes when the last category has moved.
-    const module = moduleById(params.category)
-    const spec: PageSpec | undefined = module ?? CATEGORIES.find((c) => c.id === params.category)
-    // An unknown category is a 404, not an empty page: the rail cannot produce
+    const spec = moduleById(params.category)
+    // An unknown module is a 404, not an empty page: the rail cannot produce
     // one, so anything else got here by hand-editing the URL.
     if (spec === undefined) throw notFound()
 
-    const category = params.category
-    const tab =
-      module !== undefined
-        ? resolveTabOf(module, deps.tab)
-        : resolveTab(category as CategoryName, deps.tab)
-
-    const boards: Promise<CategoryPayload | ModulePayload> =
-      module !== undefined
-        ? fetchModuleBoards({ data: { module: module.id, tab } })
-        : fetchCategoryBoards({ data: { category: category as CategoryName, tab } })
+    const tab = resolveTabOf(spec, deps.tab)
 
     return {
       spec,
       tab,
-      boards,
+      boards: fetchModuleBoards({ data: { module: spec.id, tab } }),
       // Only where a tab actually wears a dot. All three ways of declaring one
-      // count; testing `probe` alone would skip the request for a category
-      // whose tabs each hold several services, and then draw grey dots over
-      // health it had chosen not to fetch.
-      tabStatus: spec.tabs.some(isDotted) ? fetchTabStatus({ data: { category } }) : null,
+      // count; testing `probe` alone would skip the request for a module whose
+      // tabs each hold several services, and then draw grey dots over health
+      // it had chosen not to fetch.
+      tabStatus: spec.tabs.some(isDotted) ? fetchTabStatus({ data: { module: spec.id } }) : null,
     }
   },
   component: CategoryPage,
@@ -86,7 +64,7 @@ export const Route = createFileRoute('/c/$category')({
 function CategoryPage() {
   const { spec, tab, boards, tabStatus } = Route.useLoaderData()
   const { category } = Route.useParams()
-  // Switching category or tab clears a caught failure; staying put does not,
+  // Switching module or tab clears a caught failure; staying put does not,
   // so a section that failed stays failed until its loader is re-run.
   const sectionKey = `${category}/${tab}`
 
@@ -103,7 +81,7 @@ function CategoryPage() {
           // reserved slot, grey until it is known, so nothing moves.
           //
           // Guarded, like the boards below: this is the single render path for
-          // every category and every tab, and it fans out over a dozen
+          // every module and every tab, and it fans out over a dozen
           // upstreams. An unguarded rejection here throws past the Suspense
           // fallback and blanks the whole dashboard — one dead upstream must
           // cost its own row of dots, not the page.
@@ -121,15 +99,7 @@ function CategoryPage() {
         promise={boards}
         fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
       >
-        {(payload) =>
-          // Which registry answered. The cast on each side carries what the
-          // loader already decided; both go with the old registry.
-          hasModuleViews(payload.kind) ? (
-            <ModuleBoards payload={payload as ModulePayload} />
-          ) : (
-            <CategoryBoards payload={payload as CategoryPayload} />
-          )
-        }
+        {(payload) => <ModuleBoards payload={payload} />}
       </GuardedAwait>
     </>
   )
@@ -138,10 +108,10 @@ function CategoryPage() {
 /**
  * The sub-tab row, optionally wearing each tab's status.
  *
- * `status === null` covers both "this category has no probes" and "they have
+ * `status === null` covers both "this module has no probes" and "they have
  * not landed yet". The dot is drawn in the second case and not the first,
  * which is why the caller decides rather than this component: a grey dot is a
- * claim ("nothing is probing this"), and a category that never had one should
+ * claim ("nothing is probing this"), and a module that never had one should
  * not appear to be making it.
  */
 function TabNav({
@@ -155,7 +125,7 @@ function TabNav({
   tab: string
   status: TabStatus | null
 }) {
-  // `probes` counts as much as `probe`. A category whose tabs all hold several
+  // `probes` counts as much as `probe`. A module whose tabs all hold several
   // services would otherwise render no dots at all — the tab knows its health
   // and silently declines to show it.
   const dotted = spec.tabs.some(isDotted)
@@ -194,14 +164,14 @@ function TabNav({
 /**
  * The service header and the grid, sized to the page that is arriving.
  *
- * Sized per TAB where a tab says so: the category's own spans describe its
+ * Sized per TAB where a tab says so: the module's own spans describe its
  * default tab, and a sibling laid out differently would reflow on arrival.
  *
  * The header is the same argument one level up. Almost every tab opens with
  * one, and without a placeholder for it the boards render at the top of the
  * page and are then pushed down by its height the instant the loader resolves.
  * `head: false` is the honest opt-out for the tabs whose subject is not a
- * service — see `CategorySpec.tabs[].head`.
+ * service — see `TabSpec.head`.
  */
 function BoardsPlaceholder({ spec, tab }: { spec: PageSpec; tab: string }) {
   const t = spec.tabs.find((x) => x.id === tab)

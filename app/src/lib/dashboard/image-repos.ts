@@ -1,4 +1,3 @@
-import { ARR_TAG, TWO_OR_THREE } from '../release-tags'
 import type { GapOptions } from './github'
 import { imageLabels } from './images'
 
@@ -89,7 +88,6 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
 
   // ── apps, games ────────────────────────────────────────────────────────
   zot: { repo: 'project-zot/zot' },
-  minecraft: { repo: 'itzg/docker-minecraft-server', opts: { notesWhenUnknown: true } },
 
   // Deliberately absent, and each for a reason rather than an oversight:
   //   factorio      — ofsm wraps the game; the version that matters is

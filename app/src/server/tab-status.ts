@@ -1,53 +1,14 @@
 import { createServerFn } from '@tanstack/react-start'
-import type { Hosts } from '../host/hosts'
-
-import type { CategoryDataMap, CategoryPayload } from '../lib/dashboard/category-data'
-import { CATEGORIES, type CategoryName, isCategoryName, resolveTab } from '../lib/dashboard/nav'
 import { isRecord } from '../lib/is-record'
-import type { PageSpec } from '../lib/modules/manifest'
 import { isModuleId, moduleById } from '../lib/modules/registry'
 
-// The loaders behind every category page.
+// The dots on a module page's sub-tab row.
 //
-// Server-side only, and necessarily so: every per-service API key in
-// /run/daedalus-dashboard/env is read here and none of it may cross to the
-// browser. What the client receives is numbers that have already been read,
-// summed and formatted.
-//
-// One category and one sub-tab per request. The alternative — load everything
-// and let the client pick — would mean ~90 upstream calls to render a page
-// showing a fifth of them, on a box where several of those upstreams are
-// services that charge real seconds for a cold connection.
-//
-// ── two entry points, not one ─────────────────────────────────────────────
-//
-// The boards and the sub-tab dots are separate server functions. The dots are
-// one prometheus query and land almost immediately; the boards fan out across
-// a dozen services and do not. Hanging the dots off the boards payload would
-// hold the whole tab row hostage to the slowest upstream on the page, in order
-// to draw a circle. The page's own frame — title, lede, tab labels — waits for
-// neither: it comes from the static CATEGORIES table on the client.
-//
-// There used to be a third, for a directory of per-service cards under every
-// page. It is gone: every service on this box has a tab now, so the cards were
-// restating three of a page's own numbers one scroll below it.
-
-export type { CategoryPayload }
-
-export const fetchCategoryBoards = createServerFn()
-  // The category is a real check because `LOADERS[category]` below is indexed
-  // with it. The tab is only checked for being a string: `resolveTab` answers
-  // the category's first tab for one it does not recognise, which is the
-  // behaviour a stale link depends on.
-  .validator((data: unknown): { category: CategoryName; tab: string } => {
-    if (!isRecord(data) || !isCategoryName(data.category)) throw new Error('expected a category')
-    if (typeof data.tab !== 'string') throw new Error('expected a tab')
-    return { category: data.category, tab: data.tab }
-  })
-  .handler(async ({ data }): Promise<CategoryPayload> => {
-    const { makeHosts } = await import('../host/hosts')
-    return loadCategory(data.category, resolveTab(data.category, data.tab), await makeHosts())
-  })
+// Its own server function rather than a field on the boards payload, because
+// the tab row is the one part of a module page that renders before anything
+// is fetched: the boards fan out across a dozen services and the dots are one
+// prometheus query. Hanging the dots off the boards would hold the whole row
+// hostage to the slowest upstream on the page, in order to draw a circle.
 
 /** Tab id → is its subject answering. `null` = nothing probes it. */
 export type TabStatus = Record<string, boolean | null>
@@ -77,34 +38,20 @@ export type TabStatus = Record<string, boolean | null>
  */
 const PROBE_WINDOW = '3m'
 
-/**
- * The dots on the sub-tab row.
- *
- * Its own entry point rather than a field on the boards payload, because the
- * tab row is the one part of a category page that renders before anything is
- * fetched — see the note at the top of this file. Hanging the dots off the
- * boards would hold the whole row hostage to the slowest upstream on the
- * page, to draw a circle. This is one Prometheus query and lands first.
- */
 export const fetchTabStatus = createServerFn()
-  .validator((data: unknown): { category: string } => {
-    if (!isRecord(data) || !(isModuleId(data.category) || isCategoryName(data.category))) {
-      throw new Error('expected a category')
-    }
-    return { category: data.category }
+  .validator((data: unknown): { module: string } => {
+    if (!isRecord(data) || !isModuleId(data.module)) throw new Error('expected a module')
+    return { module: data.module }
   })
   .handler(async ({ data }): Promise<TabStatus> => {
-    // A module's manifest or a category's spec — the tab row is the same
-    // shape either way, and this is the one server function both share.
-    const spec: PageSpec | undefined =
-      moduleById(data.category) ?? CATEGORIES.find((c) => c.id === data.category)
+    const spec = moduleById(data.module)
     if (spec === undefined) return {}
 
     const { promVector } = await import('../host/prom')
     const [probes, egress, uplink, logs] = await Promise.all([
       promVector(`max_over_time(gatus_results_endpoint_success[${PROBE_WINDOW}])`),
       // Only when a tab actually asks for it — this is two more prometheus
-      // queries and every category pays for this handler.
+      // queries and every module pays for this handler.
       spec.tabs.some((t) => t.health === 'vpn-egress') ? vpnEgressHealth() : Promise.resolve(null),
       spec.tabs.some((t) => t.health === 'uplink') ? uplinkHealth() : Promise.resolve(null),
       spec.tabs.some((t) => t.health === 'log-pipeline')
@@ -223,28 +170,4 @@ async function logPipelineHealth(): Promise<boolean | null> {
   ])
   if (worst === null || seen === null || seen < 2) return null
   return worst === 1
-}
-
-type Loader<K extends CategoryName> = (tab: string, hosts: Hosts) => Promise<CategoryDataMap[K]>
-
-/**
- * One dynamic-import thunk per category — the server half of the registry
- * whose types live in lib/dashboard/category-data.ts and whose views live in
- * components/category/registry.tsx. Dynamic imports, because each category's
- * data module drags its whole upstream graph with it and one request should
- * load exactly one.
- */
-const LOADERS: { [K in CategoryName]: () => Promise<Loader<K>> } = {
-}
-
-async function loadCategory(
-  category: CategoryName,
-  tab: string,
-  hosts: Hosts,
-): Promise<CategoryPayload> {
-  const load = await LOADERS[category]()
-  // TS cannot correlate an indexed record lookup with the union member the
-  // same key selects, so this one cast carries what the record's mapped type
-  // already proved: LOADERS[k] returns exactly CategoryDataMap[k].
-  return { kind: category, data: await load(tab, hosts) } as CategoryPayload
 }

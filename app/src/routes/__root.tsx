@@ -14,12 +14,10 @@ import { ErrorPanel } from '../components/error'
 import { NavIcon, type NavIconName } from '../components/nav-icon'
 import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
-import { CATEGORIES } from '../lib/dashboard/nav'
 import { useHydrated } from '../lib/hydrated'
-import type { PageSpec } from '../lib/modules/manifest'
-import { isModuleId, MODULES } from '../lib/modules/registry'
 import { useResolvedScheme } from '../lib/scheme'
 import { presetById, type ThemeChoice, themeCss } from '../lib/theme'
+import { fetchActiveModules } from '../server/modules'
 import { fetchAccount } from '../server/profile'
 import { fetchTheme } from '../server/settings'
 import { APP_TABS } from './apps.$name'
@@ -99,13 +97,6 @@ const NAV_ITEM = [
 
 const NAV_ITEM_ACTIVE = 'bg-(--panel-2) font-[550] text-foreground [&>svg]:opacity-100'
 
-/**
- * The rail's rows: the modules in their declared order, then whatever is
- * still on the old category registry. The second half empties as categories
- * move under src/modules, and goes with the registry.
- */
-const rail: readonly PageSpec[] = [...MODULES, ...CATEGORIES.filter((c) => !isModuleId(c.id))]
-
 /** The label, which the collapsed rail hides in favour of the tooltip. */
 const NAV_LABEL = 'min-w-0 overflow-hidden text-ellipsis nav-collapsed:hidden'
 
@@ -138,7 +129,16 @@ export const Route = createRootRoute({
   // The signed-in account is the opposite case: it asks Pocket ID, so it is
   // handed over as a promise and streams in behind the page — the rail's
   // account button draws a placeholder until then, and no page waits on it.
-  loader: async () => ({ theme: await fetchTheme(), account: fetchAccount() }),
+  //
+  // The rail's rows are the third: which modules the box still runs is a
+  // server-side answer (it reads the box's export), and a rail that streamed
+  // in would shift every row under the cursor. Awaited, like the theme — it
+  // is one small file read, and the shell cannot draw without it.
+  loader: async () => ({
+    theme: await fetchTheme(),
+    account: fetchAccount(),
+    modules: await fetchActiveModules(),
+  }),
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
@@ -236,6 +236,7 @@ function Shell({
   theme: ThemeChoice
   account: Promise<Account | null>
 }) {
+  const rail = Route.useLoaderData({ select: (d) => d.modules })
   const [collapsed, setCollapsed] = useState(false)
   const [open, setOpen] = useState(false)
   const openButton = useRef<HTMLButtonElement>(null)
