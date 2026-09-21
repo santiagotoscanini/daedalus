@@ -1,0 +1,15 @@
+# The image is built from app/ and the entrypoint; nothing else is context.
+*
+!app
+!docker-entrypoint.sh
+
+# A checkout that also runs the dev server holds its install, its store and a
+# previous build under app/. The image makes its own.
+app/node_modules
+app/.pnpm-store
+app/.corepack
+app/.vite
+app/.tanstack
+app/.output
+app/dist
+app/src/routeTree.gen.ts
