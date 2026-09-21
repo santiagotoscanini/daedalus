@@ -259,14 +259,28 @@ What 9b still leaves for Phase 11, after the asset pass (config `b1f4498`,
   `gpuHostIp`; the commit identity became `fleet.operator.git{Name,Email}`.
   A sweep of `platform/` and `stacks/` for this box's names now returns a
   docstring, a private-range constant and the engine's own upstream URL.
-- **No option exists yet for:** the pool mountpoints (`/s2/...`, in eight
-  stacks), the LAN subnet (fail2ban, in the host file), the ACME contact's
-  local part, `github.expectedOwnerId` (a deliberate security constant the
-  host must define), the rebuild lock's name.
-- **Files that are host data, not engine:** `platform/zfs.nix` and
-  `platform/backup.nix` name this box's pools and per-person datasets;
-  `platform/claude.nix` reaches `../.claude/`. They need a split before the
-  move, not a substitution.
+- ~~No option for the pool mountpoints, the rebuild lock's name~~ and
+  ~~files that are host data~~ — done 2026-09-21 (config `7f8fd9b`..`e65824d`).
+  `host/` holds this box's data: the dataset table and ARC cap
+  (`fleet.zfs.*`), which dataset replicates where (`fleet.backup.replications`),
+  the bulk-data roots (`fleet.data.<name>`, read by nine stacks) and the
+  Claude MCP ciphertext (`fleet.claude.mcpSopsFile`). `platform/` keeps the
+  mechanisms. Identical derivation throughout.
+- **Still naming the box**, each needing a change that is allowed to differ:
+  Grafana's `System/{storage,home-server,network}.json` hardcode
+  `device=~"s2-pool.*"`/`"rpool.*"` in PromQL (wants a dashboard variable);
+  `stacks/daedalus/host/system-snapshot.sh` spells `rpool/$child` (should come
+  from the replication table through the wrapper); two app-level usernames
+  (`calibre-web`'s `Remote-User`, LiteLLM's `PROXY_ADMIN_ID`) are a person's
+  handles with no option; the LAN subnet in fail2ban (host file, fine) and
+  `github.expectedOwnerId` (a security constant the host must define).
+- **Design notes the split produced, for the move itself:** option
+  DESCRIPTIONS do not enter the closure but comments inside shell heredocs
+  do; `fleet.data` names are an informal contract (`tv`, `books`, `photos`,
+  `minecraft` are read by stacks, and `books` by three of them); the dataset
+  table and `fleet.data` spell each mount twice; `builder.nix` silently
+  requires a dataset mounted at its root; `host/` files are ordinary modules
+  the engine's example config must show being imported.
 
 ### Phase 10 — App module system and build (1–2 weeks, app only)
 
