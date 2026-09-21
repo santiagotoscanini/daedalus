@@ -1,4 +1,6 @@
-import type { MediaData } from '../../../lib/dashboard/categories/media'
+import { defineViews } from '../../../lib/modules/tabs'
+import type { Tabs } from '../data'
+import { manifest } from '../manifest'
 import { CalibreView } from './calibre'
 import { CleanupView } from './cleanup'
 import { DownloadersView } from './downloaders'
@@ -24,19 +26,11 @@ import { WantedView } from './wanted'
 // riding the button that selects each option, which is the only place that dot
 // can be read without first selecting the thing it belongs to.
 
-export function MediaView({ data }: { data: MediaData }) {
-  switch (data.tab) {
-    case 'jellyfin':
-      return <JellyfinView d={data} />
-    case 'calibre':
-      return <CalibreView d={data} />
-    case 'wanted':
-      return <WantedView d={data} />
-    case 'indexer':
-      return <ProwlarrView d={data} />
-    case 'downloaders':
-      return <DownloadersView d={data} />
-    case 'cleanup':
-      return <CleanupView d={data} />
-  }
-}
+export const views = defineViews<typeof manifest, Tabs>(manifest, {
+  jellyfin: ({ data }) => <JellyfinView d={data} />,
+  calibre: ({ data }) => <CalibreView d={data} />,
+  wanted: ({ data }) => <WantedView d={data} />,
+  indexer: ({ data }) => <ProwlarrView d={data} />,
+  downloaders: ({ data }) => <DownloadersView d={data} />,
+  cleanup: ({ data }) => <CleanupView d={data} />,
+})

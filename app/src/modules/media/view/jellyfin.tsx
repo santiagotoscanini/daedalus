@@ -1,10 +1,19 @@
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
+import {
+  Board,
+  BoardGrid,
+  Chip,
+  Facts,
+  Progress,
+  Pulse,
+  Ring,
+  Trend,
+} from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { MediaData } from '../../../lib/dashboard/categories/media'
 import { bytes, num } from '../../../lib/format'
-import { LogBoard } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { compareOf, Open, ServiceHead, verdictOf } from '../../service-head'
-import { Board, BoardGrid, Chip, Facts, Progress, Pulse, Ring, Trend } from '../../viz'
+import type { MediaData } from '../data'
 import { ago, EMPTY, FOOT, LIST, MONO, NOTE } from './shared'
 
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */

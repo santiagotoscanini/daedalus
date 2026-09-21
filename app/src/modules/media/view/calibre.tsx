@@ -1,9 +1,9 @@
-import type { MediaData } from '../../../lib/dashboard/categories/media'
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { compareOf, Open, ServiceHead, verdictOf } from '../../../components/service-head'
+import { Board, BoardGrid, Facts, Measures } from '../../../components/viz'
 import { bytes, num } from '../../../lib/format'
-import { LogBoard } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { compareOf, Open, ServiceHead, verdictOf } from '../../service-head'
-import { Board, BoardGrid, Facts, Measures } from '../../viz'
+import type { MediaData } from '../data'
 import { FOOT, MONO } from './shared'
 
 /* ── Calibre ──────────────────────────────────────────────────────────── */

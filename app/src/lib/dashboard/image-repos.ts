@@ -1,4 +1,3 @@
-import { ARR_TAG, TWO_OR_THREE } from '../release-tags'
 import type { GapOptions } from './github'
 import { imageLabels } from './images'
 
@@ -73,27 +72,6 @@ const MODULE_SOURCES: Record<string, ReleaseSource> = Object.assign(
 )
 
 export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
-  // ── the media chain ────────────────────────────────────────────────────
-  radarr: { repo: 'Radarr/Radarr', opts: { tag: ARR_TAG } },
-  sonarr: { repo: 'Sonarr/Sonarr', opts: { tag: ARR_TAG } },
-  prowlarr: { repo: 'Prowlarr/Prowlarr', opts: { tag: ARR_TAG } },
-  bazarr: { repo: 'morpheus65535/bazarr' },
-  seerr: { repo: 'seerr-team/seerr' },
-  recyclarr: { repo: 'recyclarr/recyclarr', opts: { notesWhenUnknown: true } },
-  jellyfin: { repo: 'jellyfin/jellyfin', opts: { tag: TWO_OR_THREE } },
-  'calibre-web': { repo: 'crocodilestick/Calibre-Web-Automated' },
-  qbittorrent: { repo: 'qbittorrent/qBittorrent', opts: { tag: /^release-(\d+\.\d+\.\d+)$/ } },
-  nzbget: { repo: 'nzbgetcom/nzbget', opts: { tag: TWO_OR_THREE } },
-  metube: { repo: 'alexta69/metube', opts: { tag: /^(\d{4}\.\d{2}\.\d{2})$/ } },
-  shelfmark: { repo: 'calibrain/shelfmark', opts: { notesWhenUnknown: true } },
-  cleanuparr: { repo: 'Cleanuparr/Cleanuparr' },
-  janitorr: { repo: 'Schaka/janitorr', opts: { notesWhenUnknown: true } },
-  // No curated entry on this box until now, and no label either — both are
-  // sidecars of the chain above rather than services anyone opens.
-  flaresolverr: { repo: 'FlareSolverr/FlareSolverr' },
-  subgen: { repo: 'McCloudS/subgen', opts: { notesWhenUnknown: true } },
-  scraparr: { repo: 'thecfu/scraparr' },
-
   // ── the household ──────────────────────────────────────────────────────
   immich: { repo: 'immich-app/immich' },
   'immich-machine-learning': { repo: 'immich-app/immich' },

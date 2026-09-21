@@ -1,8 +1,8 @@
-import type { Hosts } from '../../../../host/hosts'
-import { key } from '../../../../host/keys'
-import { promScalars, promSeries } from '../../../../host/prom'
-import { getJson } from '../../../http'
-import { type VersionGap, versionGap } from '../../github'
+import type { Hosts } from '../../../host/hosts'
+import { key } from '../../../host/keys'
+import { promScalars, promSeries } from '../../../host/prom'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { getJson } from '../../../lib/http'
 import { daysSince } from './shared'
 
 /* ── Jellyfin ─────────────────────────────────────────────────────────── */
