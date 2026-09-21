@@ -82,7 +82,7 @@ the remote is still the copy that survives a disk. Commit often.
   `host/modules.ts` (loaders, lazy) and `components/modules/boards.tsx`
   (views, eager). A new module = a new directory; nothing else changes.
 - **Loaders reach the machine only through `Ctx`** (`core/ctx.ts`:
-  env, secret, gateway, snapshot, store, http, loki, hosts, modules).
+  env, secret, gateway, snapshot, store, http, loki, hosts, site, modules).
   `ctx.env` and `ctx.secret` take only names `host/env.ts` declares;
   `ctx.gateway` is LiteLLM, or null on a box without one. No
   `process.env` under `src/modules/` — the boundary test refuses it.
@@ -207,6 +207,26 @@ the remote is still the copy that survives a disk. Commit often.
   fallback, when unset or malformed)
   — never hardcode hostnames, IPs, versions, or tokens in TypeScript;
   the nix side already knows them and binds them so they can't drift.
+- **Configuration is a run-time fact, never `import.meta.env`.** Vite
+  inlines `import.meta.env.VITE_*` into BOTH bundles at build time, and an
+  image is built once for every box — the boundary test refuses the read
+  anywhere in `src`, and `pnpm build` (`scripts/build.mjs`) binds a canary
+  to each identity variable and fails if one turns up in `dist/`. The
+  box's identity — base domain, GitHub owner, registry host, Grafana URL —
+  is a `Site` value (`lib/site.ts`: the type, `siteFrom` with the
+  placeholder-shaped fallbacks, and pure helpers that TAKE the site:
+  `defaultImage(site, name)`, `appRepo`, `stripBaseDomain`,
+  `registryHostPattern`; `lib/hostname.ts`'s `hostnameError` and
+  `effectiveHostname` take it first too). There is ONE reader,
+  `host/site.ts` `readSite()`, over the env rows `BASE_DOMAIN`,
+  `GITHUB_OWNER`, `REGISTRY_HOST`, `GRAFANA_URL` — each falling back to its
+  old `VITE_` spelling, and deliberately not to `/export/site.json` or
+  `/site` (the file header says why). A module loader reads `ctx.site`;
+  other server code calls `readSite()` at the entry point and passes the
+  value down; a component calls `useSite()` (`lib/site-context.tsx`),
+  which the root route fills from its awaited loader (`fetchSite`), so the
+  value is in the server's HTML and hydration matches. No module-level
+  constant may hold any of it.
 - Secrets (service API keys) arrive via rendered env files
   (`DASH_*`). The app only ever GETs with them.
 - Writes to the box go through the file-drop bridges — one request file

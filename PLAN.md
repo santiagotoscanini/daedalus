@@ -302,8 +302,14 @@ What 9b still leaves for Phase 11, after the asset pass (config `b1f4498`,
   (`ssr.noExternal: true`, srvx entry with the rejection guard, a build check
   that fails on `__vite-browser-external`, npmjs registry in CI); the final
   stage ships only the bundled output, `drizzle/` (migrations at start via
-  the `drizzle-orm` migrator), and production dependencies. Site identity
-  comes from `/site` at runtime. CI on GitHub-hosted runners → ghcr by
+  the `drizzle-orm` migrator), and production dependencies. ~~Site identity
+  comes from `/site` at runtime~~ — landed, from the container env rather
+  than `/site`: `host/site.ts` reads `BASE_DOMAIN`, `GITHUB_OWNER`,
+  `REGISTRY_HOST`, `GRAFANA_URL` per request (the `VITE_` spellings second,
+  until the config renames its bindings), the root loader hands the browser
+  the same value, and `pnpm build` fails if a canary bound to any of them
+  turns up in `dist/`. `/site/site.json` was the wrong generation — it is
+  what was last saved, not what is serving. CI on GitHub-hosted runners → ghcr by
   digest.
 
   **The dev flag:** `DAEDALUS_DEV=1` makes the entrypoint run `pnpm install

@@ -130,7 +130,7 @@ a released image will do (`PLAN.md`, Phase 10b).
 
 ```
 cd app
-pnpm build          # vite build, then scripts/check-build.mjs
+pnpm build          # scripts/build.mjs: vite build, then scripts/check-build.mjs
 DATABASE_URL=postgres://postgres:x@localhost:5432/postgres pnpm start
 ```
 
@@ -146,10 +146,15 @@ handler. `PORT` (3000) and `HOST` (0.0.0.0) are the only settings of its
 own. `/assets/*` is `immutable` for a year; the `public/` files keep their
 names between builds and get an hour.
 
-`check-build.mjs` fails the build on the two things `vite build` exits 0
+`check-build.mjs` fails the build on three things `vite build` exits 0
 over: a Node module stubbed into a browser chunk (`__vite-browser-external`
-— the page renders, then throws on a click), and a server-function id in a
-client chunk that the server manifest does not list. Ids are path-derived in
+— the page renders, then throws on a click), a server-function id in a
+client chunk that the server manifest does not list, and the box's identity
+inlined into either bundle. For the third, `scripts/build.mjs` binds a
+canary to `BASE_DOMAIN`, `GITHUB_OWNER`, `REGISTRY_HOST`, `GRAFANA_URL` and
+their old `VITE_` spellings before Vite runs, and no canary may appear
+anywhere in `dist/`; a bare `vite build && node scripts/check-build.mjs`
+says that check was skipped. Ids are path-derived in
 dev and `sha256(file--function)` in a build, so the two modes never share
 one, and moving a file changes its id in both — a tab opened before a
 deploy that moved a file gets a failed call until it reloads.
@@ -159,10 +164,12 @@ A build bundles every dependency into `dist/server` except
 `srvx`, `drizzle-orm`, `postgres` and `@node-rs/argon2` installed — 12 MB —
 not the 189 MB dev install.
 
-Two things are decided at build time and are not yet right for an image
-built somewhere other than the box it runs on: the four `VITE_*` identity
-values in `src/lib/site.ts` are inlined by Vite into both bundles (an
-unset one bakes in `localhost` / `unknown-owner`), and forward-auth headers
-are still the only identity, so without a proxy in front every write
-refuses. Server functions also require a same-origin request: a `curl`
+The box's identity is not decided at build time: `src/host/site.ts` reads
+`BASE_DOMAIN`, `GITHUB_OWNER`, `REGISTRY_HOST` and `GRAFANA_URL` from the
+container env per request, and the browser gets the same value in the root
+loader's data (`useSite()`). Unset, they read `localhost` /
+`unknown-owner` — at run time, on that box, not baked into the image. One
+thing is still not right for an image run somewhere without the box's proxy:
+forward-auth headers are the only identity, so without a proxy in front
+every write refuses. Server functions also require a same-origin request: a `curl`
 needs `-H 'Sec-Fetch-Site: same-origin'` or it gets a bare 403.
