@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && node scripts/check-build.mjs",
+    "build": "node scripts/build.mjs",
     "start": "node server.mjs",
     "preview": "vite preview",
     "generate-routes": "tsr generate",
