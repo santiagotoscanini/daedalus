@@ -5,21 +5,23 @@ import { defineConfig, type Plugin } from 'vite'
 
 // daedalus runs `vite dev` in production — deliberately. It is an internal
 // control plane for one operator, so the value of editing a file and seeing the
-// browser update beats the value of a built bundle. There is therefore NO Nitro
-// adapter here: Nitro only exists to emit `.output/` for `vite build`, and
-// including it in dev adds a Vite environment that breaks server-function id
-// resolution ("Invalid server function ID" at call time, not at startup).
+// browser update beats the value of a built bundle. There is NO Nitro adapter
+// here: including it in dev adds a Vite environment that breaks
+// server-function id resolution ("Invalid server function ID" at call time, not
+// at startup).
 //
 // The container bind-mounts this repository's `app/` at /app, so the files Vite
 // watches ARE the files in the clone. Editing one is the whole deploy;
 // `nixos-rebuild` is only needed for the .nix module or the Containerfile,
 // which live in the machine's private configuration.
 //
-// The consequence of having no adapter, for anyone costing out a switch to a
-// built runtime: `vite build` emits `dist/server/server.js` as a *fetch
-// handler* — zero `.listen()` calls — so there is nothing to `node`. Serving it
-// means bringing Nitro back, which is the change the paragraph above says broke
-// server functions. The build itself is fast (~800ms); the adapter is the work.
+// A built runtime exists beside it and needs no adapter either: `vite build`
+// emits `dist/server/server.js` as a *fetch handler* — zero `.listen()` calls —
+// and `server.mjs` is the listener (srvx, the same adapter `vite preview` uses,
+// plus the static files, migrations and the rejection guard). Server-function
+// ids differ between the two — path-derived in dev, sha256 in a build — and
+// that is fine: a build derives both sides from sha256(file--function), and
+// `scripts/check-build.mjs` fails the build if they ever disagree.
 
 // Injected by the apps platform (stacks/apps/apps.nix sets APP_HOSTNAME from
 // the webApp's hostname). Read rather than restated so the vhost has one source
@@ -66,7 +68,7 @@ function keepServingOnRejection(): Plugin {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   resolve: { tsconfigPaths: true },
 
   ssr: {
@@ -78,7 +80,14 @@ export default defineConfig({
     // server-rendered HTML that looks perfect over a page that never becomes
     // interactive. Bundling it for SSR is what makes both sides share the
     // one React.
-    noExternal: ['lucide-react'],
+    //
+    // A build bundles EVERY dependency into `dist/server`, so the runtime
+    // image carries no React, router, radix or zod — only what cannot be
+    // bundled (argon2 is a native addon) and what `server.mjs` imports itself.
+    // Build-only: in dev it would push all of node_modules through the SSR
+    // transform for nothing.
+    noExternal: command === 'build' ? true : ['lucide-react'],
+    external: command === 'build' ? ['@node-rs/argon2'] : [],
   },
 
   server: {
@@ -131,4 +140,4 @@ export default defineConfig({
   // with no opinion about the others, and the guard transforms nothing, so
   // both are free to sit first.
   plugins: [keepServingOnRejection(), tailwindcss(), tanstackStart(), viteReact()],
-})
+}))

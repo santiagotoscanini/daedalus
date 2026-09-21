@@ -1,7 +1,7 @@
 import { useRouter } from '@tanstack/react-router'
 import { ShieldCheckIcon } from 'lucide-react'
 import { useEffect, useState, useTransition } from 'react'
-import { ADMIN_GROUP } from '../../core/auth'
+import { ADMIN_GROUP } from '../../core/auth-names'
 import { cn } from '../../lib/cn'
 import { errorText } from '../../lib/redact'
 import { type AuthorizationView, setEnforceAdminsFn } from '../../server/settings'

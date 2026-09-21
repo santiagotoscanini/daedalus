@@ -1,5 +1,6 @@
 import { getRequestHeader } from '@tanstack/react-start/server'
 import type { Result } from '../lib/result'
+import { ADMIN_GROUP } from './auth-names'
 
 // Who is making this request.
 //
@@ -50,16 +51,8 @@ export const AUTH_HEADERS = {
 
 const HEADER: string = AUTH_HEADERS.EMAIL
 
-/**
- * The Pocket ID group that may change this box.
- *
- * The real gate is one layer earlier — the derived Pocket ID client allows
- * `authGroups`, default [ "admins" ], so someone outside it never gets a
- * session and never reaches us. What this module adds is a second check at
- * the thing that actually writes, so a widened client (an app shared with
- * "family", say) cannot silently become a licence to press Apply.
- */
-export const ADMIN_GROUP = 'admins'
+// Defined in a module with no server import, so a component can name the group.
+export { ADMIN_GROUP }
 
 /** The sentence a mutation answers with when the caller is signed in but not an admin. */
 export const NOT_ADMIN_REASON = `Only members of the ${ADMIN_GROUP} group can change this box, so nothing was done.`
