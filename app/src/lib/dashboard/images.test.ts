@@ -194,3 +194,61 @@ describe('the config version sharpens the pin, never contradicts it', () => {
     expect((await mod.imageVersion('subject')).source).toBe('config')
   })
 })
+
+// ── the pin, in place of a per-service env var ────────────────────────────
+//
+// The config repo used to hand each page its version (`N8N_VERSION`, …),
+// derived in nix from the pin by stripping a `v` and the digest. The cases are
+// the four tags that binding carried on this box, and each expected value is
+// what the env var said — the page must not change by a character.
+
+const pinned = async (
+  tags: Record<string, string> | null,
+  container: string,
+  envValue: string | undefined,
+): Promise<string | null> => {
+  if (tags !== null) {
+    await writeFile(
+      join(dir, 'images.json'),
+      JSON.stringify({
+        daedalusExport: 1,
+        domain: 'images',
+        schemaVersion: 2,
+        source: 'nix',
+        generatedAt: new Date().toISOString(),
+        data: { tags, pins: {} },
+      }),
+    )
+  }
+  vi.resetModules()
+  const mod = await import('./images')
+  return mod.pinnedVersion(container, envValue)
+}
+
+describe('a version that is the image tag is read from the export', () => {
+  it.each([
+    ['n8n', '2.38.2', '2.38.2'],
+    ['pocket-id', 'v2.14.0', '2.14.0'],
+    ['wg-easy', '15.4.0', '15.4.0'],
+    ['mcp-grocy', 'v2.7.0', '2.7.0'],
+  ])('%s pinned to %s reads %s, with no env var set', async (container, tag, shown) => {
+    expect(await pinned({ [container]: tag }, container, undefined)).toBe(shown)
+  })
+
+  it('the tag wins over an env var the config side forgot to delete', async () => {
+    expect(await pinned({ n8n: '2.38.2' }, 'n8n', '2.30.0')).toBe('2.38.2')
+  })
+
+  it('a box that publishes no export still shows what the env var says', async () => {
+    expect(await pinned(null, 'n8n', '2.38.2')).toBe('2.38.2')
+  })
+
+  it('a channel tag is not a version, so the env var answers', async () => {
+    expect(await pinned({ n8n: 'latest' }, 'n8n', '2.38.2')).toBe('2.38.2')
+  })
+
+  it('an empty env var is unknown, not an empty string', async () => {
+    expect(await pinned(null, 'n8n', '')).toBeNull()
+    expect(await pinned({}, 'n8n', undefined)).toBeNull()
+  })
+})

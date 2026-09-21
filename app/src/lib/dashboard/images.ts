@@ -126,6 +126,27 @@ export async function imageTag(container: string): Promise<string | null> {
 }
 
 /**
+ * `imageTag`, for a page that used to be handed the version as an env var.
+ *
+ * The config repo computed `N8N_VERSION`, `POCKET_ID_VERSION` and their kin
+ * from the very pin `/export/images.json` publishes, so the tag is the same
+ * fact without the per-service binding. `envValue` is that old binding, and it
+ * answers only when the tag cannot: a box that has not published the export
+ * yet, or one whose tag is a channel name. It is never preferred, because once
+ * the config side stops setting it a stale one is the likelier failure.
+ *
+ * Only for a version that IS the image's tag. A game server's version, a
+ * package inside a locally built image, a native NixOS service: none of those
+ * is in the tag map, and they stay env reads at their call sites.
+ */
+export async function pinnedVersion(
+  container: string,
+  envValue: string | null | undefined,
+): Promise<string | null> {
+  return (await imageTag(container)) ?? (envValue || null)
+}
+
+/**
  * What a container is running, and how confidently we know it.
  *
  * `source` is not decoration — it is the difference between a number the page

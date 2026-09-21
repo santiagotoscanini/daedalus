@@ -19,6 +19,7 @@ import { key } from '../../../host/keys'
 import { localDay, since } from '../../format'
 import { getJson } from '../../http'
 import { type VersionGap, versionGap } from '../github'
+import { pinnedVersion } from '../images'
 
 /** How far back the activity columns go. A column per day, as on the AI tabs. */
 const DAYS = 14
@@ -262,7 +263,7 @@ export async function loadIdp(hosts: Hosts, clientsP: Promise<PocketClient[]>): 
   const base = hosts.base('pocket-id')
   const h = { headers: { 'X-API-KEY': key('POCKETID_KEY') } }
   const windowStart = Date.now() - DAYS * 86400_000
-  const version = process.env.POCKET_ID_VERSION || null
+  const version = await pinnedVersion('pocket-id', process.env.POCKET_ID_VERSION)
 
   const [clients, users, groups, log, config, gap, declared] = await Promise.all([
     clientsP,
