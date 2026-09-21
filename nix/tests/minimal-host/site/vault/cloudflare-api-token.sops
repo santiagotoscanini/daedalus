@@ -1,0 +1,1 @@
+PLACEHOLDER - not ciphertext. sops-nix only takes this file's PATH at evaluation; nothing decrypts it, because the check never builds or activates the system.

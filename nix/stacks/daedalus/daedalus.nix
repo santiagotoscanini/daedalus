@@ -59,6 +59,10 @@ let
   # and `sops.secrets."litellm-env"` and fail eval the moment one was gone.
   dashboard = lib.attrValues config.fleet.dashboard;
 
+  # The apps stack is what turns `fleet.apps.daedalus` into the `app-daedalus`
+  # container. Whatever this module defines UNDER that container is gated on it.
+  appsOn = config.fleet.modules.apps.enable;
+
   # Which containers ride each VPN tunnel, derived rather than declared: a
   # netns tenant says so in its own `--network=container:<owner>` flag, and
   # that flag is the thing that actually puts it behind the tunnel. A
@@ -1198,7 +1202,13 @@ in
     # prometheus and loki. That is a deliberate trade for real status instead of
     # invented status — the isolation that matters (nothing on traefik-net can
     # reach daedalus) is unaffected, since this only adds outbound reach.
-    fleet.bridgeMemberships."app-daedalus" = [ "monitoring" ];
+    #
+    # Gated on the apps stack's switch, like every definition under another
+    # stack's declaration: `fleet.apps.daedalus` is only a declaration, and the
+    # `app-daedalus` container exists when the apps stack materializes it. With
+    # that stack off (or not on this host yet) a membership for a container
+    # nobody creates would fail evaluation on its missing image.
+    fleet.bridgeMemberships."app-daedalus" = lib.mkIf appsOn [ "monitoring" ];
 
     # Two labels under baseDomain are not an app's to take, and they fail in
     # opposite ways.
@@ -1530,87 +1540,92 @@ in
     # Same list-merge idiom stacks/litellm uses to add its token mount to
     # prometheus: the stack that OWNS the file contributes the mount, rather
     # than the apps platform learning about daedalus.
-    virtualisation.oci-containers.containers.app-daedalus.volumes = [
-      "${nixManifest}:/registry/manifest.json:ro"
-      # The fleet.export domains (platform/export.nix): versioned, stamped JSON
-      # per domain at a STABLE path — the publisher re-runs on change, the
-      # container just reads new bytes. This is the successor to both the
-      # manifest above and the per-fact env blobs; readers flip domain by
-      # domain, then the old channels are deleted.
-      "/run/daedalus-export:/export:ro"
-      "${applyDir}:/apply"
-      # Last deploy result per app, written by app-<name>-deploy.service
-      # (`<digest> ok|failed`). Read-only, and the DIRECTORY rather than the
-      # files, so a rewritten state file is picked up without pinning an inode.
-      "/var/lib/app-deploy:/deploy-state:ro"
-      # The DIRECTORY, not the files: the snapshot rewrites each one, and a
-      # single-file bind would pin the old inode.
-      "${envDir}:/env-snapshot:ro"
-      # Running image labels, published by daedalus-image-snapshot. The
-      # DIRECTORY, not the file, for the same reason as above: the snapshot is
-      # replaced by rename and a single-file bind would pin the old inode.
-      "${imageDir}:/images:ro"
-      # SMART, pools, snapshots, replication and generations, published by
-      # daedalus-system-snapshot. Read-only, and no secret in it — the closest
-      # thing is a drive serial, which is printed on the drive.
-      "${systemDir}:/system:ro"
-      # Remote Control's state, its live sessions and the credential clock,
-      # published by daedalus-claude-snapshot. Read-only, and the credential
-      # block in it is four non-secret fields copied out by name — the tokens
-      # beside them in ~/.claude/.credentials.json never enter this file.
-      #
-      # The directory is 0700 and the file 0600, operator-owned: the one
-      # snapshot here that carries a line of session content (the last prompt,
-      # redacted host-side) is not readable by the build user or by anything
-      # else on the box. This mount still works because the container runs as
-      # container uid 0 = the operator on the host.
-      "${claudeDir}:/claude:ro"
-      # The configuration repository's state, published by
-      # daedalus-repo-snapshot. Facts about the repo, never the repo: the tree
-      # holds machine-generated plaintext under gitignored secrets/ dirs.
-      "${repoDir}:/repo:ro"
-      # site/ — the one directory daedalus writes — read-only here: the app
-      # reads the committed site.json to edit against; the writes go through
-      # the bridge as ever.
-      "${config.fleet.site.path}:/site:ro"
-      # The static sops (see `sopsStatic`): encrypt-only here — the container
-      # holds no age identity, so it can write a secret it can never read back.
-      "${sopsStatic}/bin/sops:/usr/local/bin/sops:ro"
-      # The project workspaces snapshot — live git facts for every clone under
-      # ~/projects plus each one's last sync outcome. The DIRECTORY, not the
-      # file, like every snapshot here: it is replaced by rename and a
-      # single-file bind would pin the old inode.
-      "${workspacesDir}:/workspaces:ro"
-      # The ENGINE repository — the public one the dev server already runs from,
-      # read-only, so the MCP server can hand an agent the two design documents
-      # at its repo root (ARCHITECTURE.md, BUILDS.md) before it acts. /app is a
-      # bind of that clone's app/ subdirectory, so nothing above it is reachable
-      # without this.
-      #
-      # The DIRECTORY, never the two files: git replaces a file on every pull and
-      # a single-file bind would pin the old inode — the same rule every snapshot
-      # mount here follows. Widening the mount does NOT widen what is served: the
-      # app reads a hard allowlist of two names (host/mcp/docs.ts), there is no
-      # path parameter, and this is the public engine repo, not this one.
-      "${engineRoot}:/engine:ro"
-    ]
-    # The GitHub App's two read-only mounts, only once the App exists: a bind of
-    # a missing source fails the whole container start. The DIRECTORIES, never
-    # the files — both are replaced by rename or re-render.
-    ++ lib.optionals haveGithubApp [
-      # The webhook secret, alone (daedalus-github-render). Never the key.
-      "${githubRenderDir}:/github:ro"
-      # installation.json, from daedalus-github-token.
-      "${githubTokenDir}:/github-token:ro"
-      # The box builds' logs (daedalus-build, build-agent.nix): root-written,
-      # already redacted, on the root filesystem so this mount never waits for the
-      # builder's dataset. The directory, not a file — logs come and go.
-      "${config.fleet.builder.logDir}:/builds:ro"
-    ]
-    # What the stacks mount into the control plane (fleet.dashboard.<id>.volumes):
-    # pi-hole's rendered DHCP reservations at /dhcp, shotter's run archive at
-    # /shotter. Each is the owner's contribution, absent with the owner.
-    ++ lib.concatMap (d: d.volumes) dashboard;
+    # Gated on the apps switch for the reason on bridgeMemberships above — and at
+    # the `containers` level: a `mkIf false` one level down would still create
+    # an `app-daedalus` entry with no image.
+    virtualisation.oci-containers.containers = lib.mkIf appsOn {
+      app-daedalus.volumes = [
+        "${nixManifest}:/registry/manifest.json:ro"
+        # The fleet.export domains (platform/export.nix): versioned, stamped JSON
+        # per domain at a STABLE path — the publisher re-runs on change, the
+        # container just reads new bytes. This is the successor to both the
+        # manifest above and the per-fact env blobs; readers flip domain by
+        # domain, then the old channels are deleted.
+        "/run/daedalus-export:/export:ro"
+        "${applyDir}:/apply"
+        # Last deploy result per app, written by app-<name>-deploy.service
+        # (`<digest> ok|failed`). Read-only, and the DIRECTORY rather than the
+        # files, so a rewritten state file is picked up without pinning an inode.
+        "/var/lib/app-deploy:/deploy-state:ro"
+        # The DIRECTORY, not the files: the snapshot rewrites each one, and a
+        # single-file bind would pin the old inode.
+        "${envDir}:/env-snapshot:ro"
+        # Running image labels, published by daedalus-image-snapshot. The
+        # DIRECTORY, not the file, for the same reason as above: the snapshot is
+        # replaced by rename and a single-file bind would pin the old inode.
+        "${imageDir}:/images:ro"
+        # SMART, pools, snapshots, replication and generations, published by
+        # daedalus-system-snapshot. Read-only, and no secret in it — the closest
+        # thing is a drive serial, which is printed on the drive.
+        "${systemDir}:/system:ro"
+        # Remote Control's state, its live sessions and the credential clock,
+        # published by daedalus-claude-snapshot. Read-only, and the credential
+        # block in it is four non-secret fields copied out by name — the tokens
+        # beside them in ~/.claude/.credentials.json never enter this file.
+        #
+        # The directory is 0700 and the file 0600, operator-owned: the one
+        # snapshot here that carries a line of session content (the last prompt,
+        # redacted host-side) is not readable by the build user or by anything
+        # else on the box. This mount still works because the container runs as
+        # container uid 0 = the operator on the host.
+        "${claudeDir}:/claude:ro"
+        # The configuration repository's state, published by
+        # daedalus-repo-snapshot. Facts about the repo, never the repo: the tree
+        # holds machine-generated plaintext under gitignored secrets/ dirs.
+        "${repoDir}:/repo:ro"
+        # site/ — the one directory daedalus writes — read-only here: the app
+        # reads the committed site.json to edit against; the writes go through
+        # the bridge as ever.
+        "${config.fleet.site.path}:/site:ro"
+        # The static sops (see `sopsStatic`): encrypt-only here — the container
+        # holds no age identity, so it can write a secret it can never read back.
+        "${sopsStatic}/bin/sops:/usr/local/bin/sops:ro"
+        # The project workspaces snapshot — live git facts for every clone under
+        # ~/projects plus each one's last sync outcome. The DIRECTORY, not the
+        # file, like every snapshot here: it is replaced by rename and a
+        # single-file bind would pin the old inode.
+        "${workspacesDir}:/workspaces:ro"
+        # The ENGINE repository — the public one the dev server already runs from,
+        # read-only, so the MCP server can hand an agent the two design documents
+        # at its repo root (ARCHITECTURE.md, BUILDS.md) before it acts. /app is a
+        # bind of that clone's app/ subdirectory, so nothing above it is reachable
+        # without this.
+        #
+        # The DIRECTORY, never the two files: git replaces a file on every pull and
+        # a single-file bind would pin the old inode — the same rule every snapshot
+        # mount here follows. Widening the mount does NOT widen what is served: the
+        # app reads a hard allowlist of two names (host/mcp/docs.ts), there is no
+        # path parameter, and this is the public engine repo, not this one.
+        "${engineRoot}:/engine:ro"
+      ]
+      # The GitHub App's two read-only mounts, only once the App exists: a bind of
+      # a missing source fails the whole container start. The DIRECTORIES, never
+      # the files — both are replaced by rename or re-render.
+      ++ lib.optionals haveGithubApp [
+        # The webhook secret, alone (daedalus-github-render). Never the key.
+        "${githubRenderDir}:/github:ro"
+        # installation.json, from daedalus-github-token.
+        "${githubTokenDir}:/github-token:ro"
+        # The box builds' logs (daedalus-build, build-agent.nix): root-written,
+        # already redacted, on the root filesystem so this mount never waits for the
+        # builder's dataset. The directory, not a file — logs come and go.
+        "${config.fleet.builder.logDir}:/builds:ro"
+      ]
+      # What the stacks mount into the control plane (fleet.dashboard.<id>.volumes):
+      # pi-hole's rendered DHCP reservations at /dhcp, shotter's run archive at
+      # /shotter. Each is the owner's contribution, absent with the owner.
+      ++ lib.concatMap (d: d.volumes) dashboard;
+    };
 
     # Refresh the published environments. A timer rather than an on-demand
     # request/response through the bind mount: a container's env only changes
