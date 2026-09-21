@@ -17,11 +17,14 @@ The root `flake.nix` exports:
 - `lib.path` — this directory as a path, for a host that keeps stacks of
   its own and needs the libraries.
 
-It takes **no inputs**, on purpose. The engine is modules and libraries;
+Its **modules take nothing from the flake's inputs**, on purpose. The
+engine is modules and libraries;
 the host chooses the nixpkgs they are evaluated against, imports sops-nix
 beside them, and hands in `nixpkgs-unstable` where a module asks for it.
-An engine that pinned its own nixpkgs would be a second opinion about the
-system it is a guest in.
+An engine that evaluated against its own nixpkgs would be a second opinion
+about the system it is a guest in. The two inputs `flake.nix` does declare
+(`nixpkgs`, `treefmt-nix`) exist for this repo's own `nix fmt` and
+`nix flake check`; a host makes both follow its own.
 
 The design rule throughout: **the engine declares, the host defines.**
 Nothing in this tree names a user, a domain, an address or a pool. Every
@@ -44,7 +47,19 @@ Your configuration is a flake of your own. The engine is one input.
     };
     # Pin it. The lock's rev is which engine your box runs; move it with
     # `nix flake update daedalus`, never on a timer.
-    daedalus.url = "github:santiagotoscanini/daedalus";
+    daedalus = {
+      url = "github:santiagotoscanini/daedalus";
+      # The engine's own inputs serve only ITS `nix fmt` / `nix flake check`;
+      # the modules take nothing from them. Following yours keeps them out
+      # of your lock. (No treefmt-nix of your own? Drop that line and accept
+      # one extra lock node — it is never built.)
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.treefmt-nix.follows = "treefmt-nix";
+    };
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -200,10 +215,12 @@ Read this before believing the example above.
   PLAN.md Phase 11 for why the order matters).
 - **ZFS is assumed.** `platform/zfs.nix` enables ZFS support
   unconditionally; there is no switch for a box without it.
-- **No formatter check.** No treefmt/`nix fmt` is wired for this tree, and
-  a host's own `nix fmt` does not reach a flake input. `nixfmt` by hand.
-- **No `nix flake check` in CI.** Nothing evaluates these modules on a
-  push; a fixture site and the schema checks are planned.
+- **CI does not evaluate a system.** `nix fmt` and `nix flake check`
+  exist (nixfmt, statix, deadnix, plus nix's own check that every
+  exported `nixosModule` is a module) and the `nix` job in
+  `.github/workflows/ci.yml` runs them on every push — but nothing
+  evaluates these modules against a host yet; a fixture site and the
+  schema checks are planned.
 - **`fleet.imagePins`** — an override map with engine defaults — does not
   exist. Until it does, **no oci-container digest pin lives in this
   tree**: the control plane's updater rewrites a pin in place in the

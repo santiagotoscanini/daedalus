@@ -27,14 +27,17 @@ for the operator to arm it, and a break-glass login built dormant. Since the
 15th: scheduled tasks per app, the app secrets editor, the MCP server, the
 Claude session roster with resume, a provenance stamp under `site/`, an
 enable switch on all 43 stacks (9a, config `43388f0`) and the control plane
-no longer reaching into other stacks at eval time (9c, `046b3ff`).
+no longer reaching into other stacks at eval time (9c, `046b3ff`). On the
+21st the NixOS side moved in: `nix/platform/**` and `nix/stacks/daedalus/**`
+live here, on `main` — the repo's only branch — and the operator's
+configuration takes them as a flake input (Phase 11, first half).
 
 | Phase | What | State |
 |---|---|---|
 | 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
 | 9 | Nix: enable surface, literals, state out of the tree | landed 2026-09-20/21; residue (asset literals, missing options) listed in the section |
 | 10 | App module system and a real build | 10a landed; 10b: the built server, run-time identity and the one image are in (2026-09-21) — the nix switch to it, `sops` in the image and the first tag remain |
-| 11 | The engine becomes importable | not started |
+| 11 | The engine becomes importable | the move landed with an identical closure and is published on `main` (2026-09-21; one branch), with its own `nix fmt` / `nix flake check` and CI job — the stacks, one by one, `fleet.imagePins`, `developer.engineOverride`, the "Update daedalus" button, schema fixtures in CI and a `nixosModules.default` that evaluates alone remain |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
 Beside the phases, the **Features** section lists what the product is missing
@@ -397,9 +400,10 @@ existing suite, fixture-driven loader tests that survive a null upstream);
 `platform/**` and `stacks/daedalus/**` left the operator's configuration and
 are this repo's `nix/platform/**` and `nix/stacks/daedalus/**` (engine
 `3aae896`; `c703ee3` for the upgrade's named inputs). The root `flake.nix`
-takes no inputs and exports `nixosModules.{platform,daedalus,default}` and
+exports `nixosModules.{platform,daedalus,default}` and
 `lib.path`. The configuration (its `d829416`) takes the engine as the input
-`daedalus` — `git+file://<the local clone>?ref=engine-nix`, pinned by rev in
+`daedalus` — `git+file://<the local clone>?ref=main` (`?ref=engine-nix` until
+the branch was published, below), pinned by rev in
 its `flake.lock` — and sets `specialArgs.enginePath = "${daedalus}/nix"`. The
 gate held: the system store path was the same before and after. The prep that
 made that possible is in the configuration's history (no relative path crosses
@@ -408,9 +412,19 @@ became host-handed options; the gluetun pins became `fleet.gluetun.*`; the
 weekly upgrade moves only `fleet.autoupgrade.inputs`, never the engine). Docs
 for the tree: `nix/README.md`; the authoring rule: `.claude/rules/nix-engine.md`.
 
-From here an engine-side nix change costs a commit on `engine-nix` plus one
-`nix flake update daedalus` in the configuration; its `/rebuild` skill detects
-a moved engine.
+**Published 2026-09-21 — one branch.** The move was made on a local-only
+branch, `engine-nix`, in a worktree of its own, pending the operator's review
+of what a public `nix/` tree says. Reviewed and approved the same day:
+fast-forwarded into `main`, pushed, the branch and the worktree deleted, the
+configuration's input retargeted to `?ref=main`. **This repo has exactly one
+branch, `main`, always.** `nix/`, `flake.nix`, `flake.lock` and `statix.toml`
+sit at the root beside `app/`; a fresh clone now contains every rev a host's
+lock can name, which closed the "platform layer exists on one machine only"
+gap in the configuration's recovery runbook.
+
+From here an engine-side nix change costs `nix fmt` + `nix flake check`, a
+commit on `main` and a push, plus one `nix flake update daedalus` in the
+configuration; its `/rebuild` skill detects a moved engine.
 
 **Design notes — decisions the move made, so they are not re-litigated.**
 
@@ -426,8 +440,10 @@ a moved engine.
   `nixosModules.default` is the interface for everyone else; the box adopts it
   in a deliberate, separately-gated rebuild once the stacks have moved and
   there is nothing left to interleave with.
-- **The engine takes no inputs.** The host picks nixpkgs, imports sops-nix,
-  and hands `nixpkgs-unstable` in as a `specialArg`. (The earlier plan's "nixpkgs
+- **The engine's modules take nothing from its inputs.** The host picks nixpkgs, imports sops-nix,
+  and hands `nixpkgs-unstable` in as a `specialArg`. The flake's two inputs
+  (`nixpkgs`, `treefmt-nix`) serve only its own `nix fmt` / `nix flake check`,
+  and a host makes both `follows` its own so its lock gains nothing. (The earlier plan's "nixpkgs
   following daedalus" is dropped.)
 - **`enginePath` is a `specialArg`, not `_module.args`** — host stacks import
   the by-path libraries at module-import time, before a config exists.
@@ -441,35 +457,38 @@ a moved engine.
 
 **What remains of Phase 11.**
 
-1. **Publish the branch.** `engine-nix` is LOCAL-ONLY, awaiting the operator's
-   review of what a public `nix/` tree says. Until then it exists on one
-   machine's pools and nowhere else — the configuration's recovery runbook
-   says so plainly. Then: **merge `engine-nix` into `main`**, retarget the
-   configuration's `?ref=`, and decide tag-pinning (`github:` input by tag)
-   versus the local clone; the worktree arrangement ends with the merge.
-2. **Stacks, ONE BY ONE, into `nix/modules/<id>`** behind
+1. **Stacks, ONE BY ONE, into `nix/modules/<id>`** behind
    `fleet.modules.<id>.enable`, each its own small rebuild that leaves the box
    working. First the ones the control plane's module already reads
    (`fleet.apps`, `fleet.litellmKeys`, `fleet.logStacks` are declared by host
-   stacks today, so `nixosModules.default` does not evaluate alone). The
+   stacks today, so `nixosModules.default` does not evaluate alone — making
+   it evaluate on its own is this step's finish line). The
    configuration shrinks toward `flake.nix`, `configuration.nix`,
    `hardware-configuration.nix`, `host/`, `site/`, `.claude/` and its docs.
-3. **`fleet.imagePins`** — a site override map, engine defaults via
+2. **`fleet.imagePins`** — a site override map, engine defaults via
    `mkDefault` — replaces `image-update.sh`'s `.nix` rewriting, and is what
    lets a migrated stack bring its pin with it.
-4. **`developer.engineOverride`** in `site.json` makes the agents pass
+3. **`developer.engineOverride`** in `site.json` makes the agents pass
    `--override-input daedalus <clone>` + `--no-write-lock-file`, so engine
    work is testable through an Apply before a commit is pinned.
-5. **`nix flake check` + the schema fixtures in the engine's `ci.yml`**
-   (GitHub-hosted runners, never the box's own, so it answers while the box is
-   down): the modules evaluate against a fixture site with no real one
-   present, plus a formatter check — this tree has none today, and the
-   configuration's `nix fmt` does not reach a flake input.
-6. **An "Update daedalus" button**: the engine's own upgrade path — resolve,
+4. **The schema fixtures in the engine's `ci.yml`.** The formatter and
+   `nix flake check` half of this landed (`a2292b8`: nixfmt, statix, deadnix,
+   every exported `nixosModule` checked to be a module; GitHub-hosted runners,
+   never the box's own, so it answers while the box is down). What remains is
+   the evaluation: the modules against a fixture site with no real one
+   present, which waits on step 1.
+5. **An "Update daedalus" button**: the engine's own upgrade path — resolve,
    build, switch, verify, revert — the way System › Updates moves an image.
+6. **Tag-pinning**: decide a `github:` input by tag versus the local clone.
+   The reference box uses the clone because its `app/` is a runtime
+   dependency anyway.
 7. `templates.config` and the remaining reshape (`host/`, `docs/` at the
-   root) ride along with step 2; the box-only constant
-   `fleet.github.expectedOwnerId` becomes a host value.
+   root) ride along with step 1.
+
+Done since the move, so not re-listed: the branch is published (above); the
+last box-only constants left (`b32123f` — `fleet.github.expectedOwnerId` has
+no default here and the host defines it; the replication panel reads the
+host's `fleet.backup.replications` pairs).
 
 Gate for what remains, unchanged in spirit: every step is a
 `nixos-rebuild build` whose closure difference is exactly the step's stated

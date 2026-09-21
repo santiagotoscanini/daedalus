@@ -27,14 +27,16 @@
 # as nixpkgs catches up, and the file becomes dead weight rather than a
 # silent freeze. Deleting it then is a cleanup, never a fix.
 #
-# To move the pin (or to re-pin after nixpkgs has passed it):
+# To move the pin (or to re-pin after nixpkgs has passed it) — in a checkout
+# of THIS repo (`<engine>`), where the file lives beside this module:
 #
 #   V=$(curl -fsSL https://downloads.claude.ai/claude-code-releases/latest)
 #   curl -fsSL "https://downloads.claude.ai/claude-code-releases/$V/manifest.json" \
-#     -o /etc/nixos/platform/claude-code/manifest.json
-#   git -C /etc/nixos add platform/claude-code/manifest.json
+#     -o <engine>/nix/platform/claude-code/manifest.json
+#   git -C <engine> add nix/platform/claude-code/manifest.json
 #
-# then rebuild. Nothing else needs editing — the version is read from the file.
+# then commit + push, `nix flake update daedalus` in the host's configuration,
+# and rebuild. Nothing else needs editing — the version is read from the file.
 #
 # What a rebuild does NOT do is put the new binary in front of anyone already
 # running the old one. A switch installs it into the operator's profile (new

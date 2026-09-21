@@ -18,18 +18,21 @@ path-scoped rules load as you touch files.
   results reach GitHub as a check run plus a Deployment. The app repos carry
   no workflow files; a `railpack.json` is the normal build path, and a repo's
   own Dockerfile is still a supported strategy.
-- **On branch `engine-nix` only — also is:** the NixOS side. `nix/platform/**`
+- **Also is:** the NixOS side. `nix/platform/**`
   (the OS-level base) and `nix/stacks/daedalus/**` (`daedalus.nix`, the
   builder, the host agents `host/*.sh` — apply, deploy, build, image and
   site bridges, the snapshot scripts — and the runtime image context
   `assets/`), exported by the root `flake.nix` as
   `nixosModules.{platform,daedalus,default}`. The operator's private
-  configuration takes it as a flake input pinned by rev. The branch is
-  LOCAL-ONLY until the operator has reviewed it — **never push it** — and
-  lives in its own worktree; on `main` (the clone the running app
-  bind-mounts) there is no `nix/`, and nix work never happens there.
+  configuration takes it as a flake input pinned by rev. It lives on
+  `main` with everything else — this repo has exactly ONE branch, always
+  — at the root beside `app/`. On the operator's box this clone is
+  bind-mounted into the running app: a save under `app/` is a live
+  deploy, the dev server does not watch `nix/`, so nix work here is safe
+  as long as it stays out of `app/`.
   Anything that changes how the container is built, what env it gets, or
-  what host fact reaches it is a `nix/` change: commit on `engine-nix`,
+  what host fact reaches it is a `nix/` change: `nix fmt` + `nix flake
+  check`, commit on `main`, push,
   then `nix flake update daedalus` + a rebuild in the configuration.
   Read `nix/README.md`, and `.claude/rules/nix-engine.md` loads on
   `nix/**`. It is NOT yet a module a stranger can import and evaluate —
@@ -53,7 +56,7 @@ it. What a change needs:
   which runs it. `app/src/routeTree.gen.ts` is generated and
   gitignored; never edit it.
 - schema changes → `pnpm db:generate` / `pnpm db:migrate`.
-- anything under `nix/` (branch `engine-nix`) → commit there, then
+- anything under `nix/` → `nix fmt` + `nix flake check`, commit on `main`, push, then
   `nix flake update daedalus` and a rebuild in the configuration repo.
 
 No node/pnpm on the host: everything runs inside the container.
@@ -96,8 +99,8 @@ bridges, the escalating-retry ladder) and the style rule.
 `.claude/rules/daedalus-ui.md` (loads on `app/src/components/**`,
 `app/src/routes/**`, `app/src/*.css`) is how to write a component:
 the three stylesheets, the cascade layer order, the colour-literal ban.
-`.claude/rules/nix-engine.md` (loads on `nix/**` and `flake.nix`, branch
-`engine-nix`) is the law for the NixOS side: no box identity, the engine
+`.claude/rules/nix-engine.md` (loads on `nix/**` and `flake.nix`)
+is the law for the NixOS side: no box identity, the engine
 declares and the host defines, no container pins, the two-repo dev loop.
 They are THE style and architecture guides; this file only points at
 them. When they disagree with code you find, the rule wins and the code

@@ -26,9 +26,9 @@ stacks still live in the operator's private configuration, and so does
 their reference (`.claude/rules/module-system.md` in that repo). What
 follows is what is particular to editing the ENGINE.
 
-## 1. Public-bound: no box identity, anywhere
+## 1. Public: no box identity, anywhere
 
-This tree is written to be published. It never spells a user, a domain, a
+This tree is published — a public repo. It never spells a user, a domain, a
 hostname, a LAN address, a pool or dataset name, a person, an e-mail, a
 GitHub account, or the path of one operator's checkout — not in code, not
 in a comment, not in an option `description` or `example`, not in a shell
@@ -161,27 +161,31 @@ Railpack release hashes) in `stacks/daedalus/railpack.nix`.
 
 ## 5. The dev loop
 
-The branch that carries `nix/` is `engine-nix`, checked out as its own
-git worktree next to the main clone. **Never do nix work in the main
-clone**: it is on `main`, it is bind-mounted into the running control
-plane, and a save under its `app/` is a live deploy. **Do not push
-`engine-nix`** until the operator says it is published — it is awaiting
-their review.
+This repo has exactly ONE branch, `main`, always — `nix/`, `flake.nix`,
+`flake.lock` and `statix.toml` sit at its root beside `app/`, and it is
+published. Never create another branch or a second worktree for nix work.
+On the operator's box the clone is also bind-mounted into the running
+control plane, where a save under `app/` is a live deploy; the dev server
+does not watch `nix/`, so nix work in the same checkout is safe — but
+**never touch `app/**` while doing it**, and stage by path
+(`git add nix flake.nix flake.lock`), never `git add -A`.
 
 1. Edit here. `git add` new files — a flake sees only TRACKED files, in
    this repo exactly as in the host's.
 2. Iterate without committing, from the host's configuration checkout:
-   `sudo nixos-rebuild build --flake <config> --override-input daedalus path:<this worktree>`.
+   `sudo nixos-rebuild build --flake <config> --override-input daedalus path:<this clone>`.
    `build` only — never `test`/`switch` an override; the generation would
    run an engine state no commit holds. A `path:` input copies the
    directory as it stands, untracked files included, so a green override
    is not proof the commit is complete.
-3. `git commit` here, on `engine-nix`.
+3. `nix fmt` + `nix flake check`, `git commit` on `main`, then
+   `git push origin main`. Pushing is the normal step: a host's lock
+   should only ever name a rev that a fresh clone contains.
 4. In the host's configuration: `nix flake update daedalus`,
    `git add flake.lock`, then its usual `nixos-rebuild test` → verify →
-   `switch` → commit + push (of the CONFIG repo only). The host's input is
-   `git+file://<main clone>?ref=engine-nix`: it reads COMMITS of that
-   branch, so an uncommitted edit builds nothing.
+   `switch` → commit + push. The host's input is
+   `git+file://<this clone>?ref=main`: it reads COMMITS of `main`, so an
+   uncommitted edit builds nothing.
 5. The host's weekly upgrade names the inputs it moves
    (`fleet.autoupgrade.inputs`) and the engine is not one of them. An
    engine change reaches a box only by step 4.
@@ -191,10 +195,13 @@ The gate for a refactor that should change nothing: the host's
 after. For everything else, say in the commit what changes in the closure
 and why.
 
-Owed, so do it by hand: there is no formatter check on this tree and no
-`nix flake check` in CI (the host's `nix fmt` does not reach a flake
-input). Run `nixfmt` on the files you touch; keep statix/deadnix-clean
-(`no-lambda-pattern-names`, `no-lambda-arg`).
+Before every commit: `nix fmt` and `nix flake check` at the repo root
+(nixfmt, statix, deadnix — the settings the host's configuration uses;
+`statix.toml` is beside `flake.nix`). `git add` first — a flake sees
+tracked files only. The `nix` job in `.github/workflows/ci.yml` runs the
+same two commands, so a push that skips them goes red. (The host's
+`nix fmt` does not reach a flake input; this is the only formatter gate
+this tree has.)
 
 ## 6. Things that bite
 

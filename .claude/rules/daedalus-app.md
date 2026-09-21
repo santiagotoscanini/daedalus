@@ -8,7 +8,7 @@ paths:
 TanStack Start + React 19 + Vite 8, drizzle-orm on the shared pg
 cluster, pnpm 11, node ≥ 24, TS 6. This is the box's admin UI; it runs
 as a `source.mode = "local"` app — the NixOS module that runs it is this
-repo's `nix/stacks/daedalus/daedalus.nix` (branch `engine-nix`, imported
+repo's `nix/stacks/daedalus/daedalus.nix` (imported
 by the operator's configuration as a flake input) and bind-mounts
 THIS repo's `app/` at /app, running the Vite dev server against it.
 
@@ -41,8 +41,8 @@ THIS repo's `app/` at /app, running the Vite dev server against it.
   `drizzle-orm`, `@node-rs/argon2`) — the image installs `--prod`, and
   `check-build` fails on a mismatch either way. Everything the build
   bundles, React included, is a devDependency: `pnpm add -D`.
-- `nix/stacks/daedalus/assets/**` (the runtime image context; branch
-  `engine-nix`) → commit there, `nix flake update daedalus` +
+- `nix/stacks/daedalus/assets/**` (the runtime image context) →
+  commit + push on `main`, `nix flake update daedalus` +
   `nixos-rebuild` in the configuration repo (context hash → new image
   tag → restart).
 - `nix/stacks/daedalus/daedalus.nix` → the same two-step.
@@ -202,10 +202,10 @@ the remote is still the copy that survives a disk. Commit often.
   only writable mount**, apart from /app, which is this clone itself.
   Never reach around them (no SSH-ing the host, no reading host paths
   directly) — if a page needs a new host fact, extend the matching
-  snapshot script in `nix/stacks/daedalus/host/` (branch `engine-nix`)
+  snapshot script in `nix/stacks/daedalus/host/`
   and its nix wiring.
 - Config values come from env vars bound in `daedalus.nix` (in
-  `nix/stacks/daedalus/`, branch `engine-nix`; `src/host/env.ts` is the schema: one
+  `nix/stacks/daedalus/`; `src/host/env.ts` is the schema: one
   row per variable, read with `env.get('NAME')`, and a name that is not
   a row does not compile. A new variable is a new row first. Only
   DATABASE_URL is required; the rest read as undefined, or their row's
