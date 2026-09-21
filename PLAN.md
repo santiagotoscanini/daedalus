@@ -14,23 +14,25 @@ in `ARCHITECTURE.md` and `BUILDS.md` for the design as built, and in
 `~/.claude/plans/piped-gathering-meerkat.md` for the GitHub App + Railpack
 build-out (closed 2026-09-13).
 
-## Where things stand (2026-09-20)
+## Where things stand (2026-09-21)
 
-Phases 1–7 of the productization plan have landed, and most of 8: the UI
-foundation, the read-only then editable Settings, the repository split
-(private config `s2-server`, public engine `daedalus`), `site/` as the one
-directory the UI writes, nix reading `site.json` and `apps.json` as the
-source of the site constants and the app registry, the secrets vault
-(Cloudflare token, GitHub App key), builds on the box through the box's own
-GitHub App, and an `admins` check on every mutation that is built and tested
-but not yet armed. Since the 15th: scheduled tasks per app, the app secrets
-editor, the MCP server, the Claude session roster with resume, and a
-provenance stamp under `site/`.
+Phases 1–8 of the productization plan have landed, and two of Phase 9's three
+switches: the UI foundation, the read-only then editable Settings, the
+repository split (private config `s2-server`, public engine `daedalus`),
+`site/` as the one directory the UI writes, nix reading `site.json` and
+`apps.json` as the source of the site constants and the app registry, the
+secrets vault (Cloudflare token, GitHub App key), builds on the box through
+the box's own GitHub App, an `admins` check on every mutation that waits only
+for the operator to arm it, and a break-glass login built dormant. Since the
+15th: scheduled tasks per app, the app secrets editor, the MCP server, the
+Claude session roster with resume, a provenance stamp under `site/`, an
+enable switch on all 43 stacks (9a, config `43388f0`) and the control plane
+no longer reaching into other stacks at eval time (9c, `046b3ff`).
 
 | Phase | What | State |
 |---|---|---|
-| 8 | Auth hardening | mostly: the `admins` check is on every mutation (32 sites) and tested, disarmed behind `auth.enforceAdmins`; no break-glass login |
-| 9 | Nix: enable surface, literals, state out of the tree | not started |
+| 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
+| 9 | Nix: enable surface, literals, state out of the tree | 9a and 9c landed 2026-09-20; 9b remains, plus 9c's engine-side half |
 | 10 | App module system and a real build | not started |
 | 11 | The engine becomes importable | not started |
 | 12 | Onboarding, `init`, catalog, release | not started |
@@ -164,15 +166,17 @@ dashboard and a product anyone can import:
 
 1. **Authorization is built but not armed**: the `admins` check sits on
    every mutating server function and route behind `auth.enforceAdmins`,
-   which is off, so anyone past the forward-auth gate can still apply,
-   reboot and reveal secrets; and there is no break-glass login for the day
-   the IdP is down (→ Phase 8).
-2. **No enable surface in nix**: `configuration.nix` auto-imports every file;
-   `daedalus.nix` hard-references ~15 optional stacks at eval time — remove
-   immich and the control plane fails to evaluate (→ Phase 9a, 9c).
+   which is off until the operator flips it from Settings › Developer, so
+   anyone past the forward-auth gate can still apply, reboot and reveal
+   secrets (→ "Owed to the operator"). The break-glass login exists, dormant.
+2. ~~No enable surface in nix~~ — landed as 9a and 9c on 2026-09-20. Twelve
+   switches are structural non-flippers (documented in the config repo's
+   `module-system` rule); `traefik` and `litellm` among them is the gap that
+   matters for a stranger's box, and is a Phase 11 design question.
 3. **~210 site literals** across platform and stacks; machine-generated
    plaintext lives inside the repo tree, gitignored but on disk under
-   `/etc/nixos` (→ Phase 9b).
+   `/etc/nixos` (→ Phase 9b). Blocks Phase 11: the platform cannot move
+   into a public engine carrying this box's domain and owner in its text.
 4. **No build**: `vite dev` in production against a bind mount; `vite build`
    never exercised; migrations are manual (→ Phase 10b).
 5. **65% of the app is stack-specific dashboards** behind static registries
@@ -189,55 +193,61 @@ dashboard and a product anyone can import:
 Order: 8 → 9 → 10 → 11 → 12. 9 and 10 are the long ones; 11's gate (an
 identical closure) is the hard one.
 
-### Phase 8 — Auth hardening (remainder: an hour for 1, a day for 2; app only)
+### Phase 8 — Auth hardening (built; one hand edit remains)
 
 The `admins`-group check exists on every mutating server function and API
 route (32 sites, `core/authz.ts`), traefik forwards the IdP's groups as
-`X-Forwarded-Groups`, and the authz tests pass. It is deliberately disarmed:
-`auth.enforceAdmins` is a stored setting (Postgres, not `site.json`) that
-defaults to off, so the check runs and reports but does not refuse. Two
-things remain.
+`X-Forwarded-Groups` (live since the 2026-09-20 reboot), and the authz tests
+pass. It is deliberately disarmed: `auth.enforceAdmins` is a stored setting
+(Postgres, not `site.json`) that defaults to off, so the check runs and
+reports but does not refuse.
 
 1. **Arm it, in this order.** First confirm that a live request through the
-   gate actually carries `admins` — Settings › Developer shows the groups
-   arriving — and only THEN turn `auth.enforceAdmins` on. Reversed, an absent
-   header reads as "not an admin" and locks the operator out of their own
-   control plane, from a change whose whole purpose is safety.
-2. **The break-glass local login.** A setup token plus a local login
-   (argon2, TanStack `useSession`), implemented but dormant behind `site.json`
-   `auth.localLogin` (default off here; the onboarding wizard turns it on for
-   new installs). Not started.
+   gate actually carries `admins` — Settings › Developer › Authorization
+   shows the groups arriving and refuses server-side to arm from a request
+   that does not name `admins` — and only THEN turn `auth.enforceAdmins`
+   on. Reversed, an absent header reads as "not an admin" and locks the
+   operator out of their own control plane. Operator's hand; nothing for
+   the engine to do.
+2. **The break-glass local login** — a setup token plus a local login
+   (argon2id via `@node-rs/argon2`, sealed session cookie), built and
+   dormant behind `site.json` `auth.localLogin` (absent = the route 404s;
+   not editable from Settings on purpose; the onboarding wizard turns it on
+   for new installs). Untested against a real IdP outage; Phase 12's
+   rehearsal is where that happens.
 
 Compatibility: the operator is in `admins`; arming changes nothing for them.
-Gate: a test user outside the group gets 403 on Apply.
+Gate: a test user outside the group gets 403 on Apply — run the suite the
+day it is armed.
 
-### Phase 9 — Nix: enable surface, literals, state out of the tree (3 switches over 1–2 weeks)
+### Phase 9 — Nix: enable surface, literals, state out of the tree (one switch left)
 
-Each switch is its own day with a closure diff; none changes behaviour.
+9a and 9c landed on 2026-09-20 (config `43388f0`, `046b3ff`), each with a
+closure diff as proof: 43 `fleet.modules.<id>.enable` switches over an
+explicit import list, byte-identical toplevel with the rev pinned; then
+`fleet.dashboard.<id> = { env, envFiles, volumes }` (declared in
+`platform/export.nix`) replacing every cross-stack read in `daedalus.nix`,
+with `fleet.modules.immich.enable = false` proven to evaluate and build a
+closure with zero immich containers. 31 of 43 switches flip; the twelve
+that do not are structural and listed in the config repo's `module-system`
+rule.
 
-- **9a Gating.** `fleet.modules.<id>.enable` declared per module (never an
-  `attrsOf submodule` from JSON), each stack's `config` wrapped in `mkIf`
-  (47 files; 40 flat attrsets, 7 already `mkMerge`), explicit import list
-  replacing `nixFilesIn`, all defaults `true` so the closure is identical.
-  `fleet.config.repo` (the `/etc/nixos` checkout) threads into autoupgrade,
-  git, claude.nix and the apply agent's lock bump.
 - **9b Literals + state.** ~210 occurrences → `fleet.operator.*`,
   `fleet.baseDomain`, `fleet.github.owner`, `registry.${baseDomain}`;
   `fleet.stateRoot` writable; machine-generated state moves to
   `${fleet.stateRoot}/daedalus/state/` (the bootstrap oneshots migrate the
   files once, idempotently); runbook paths become docs URLs. ⚠ touches
   `stacks/app-db` → pg restart → restart pocket-id and verify `id.<domain>`
-  per the cascade runbook. Alone, off-hours.
-- **9c Inversion.** `fleet.dashboard.<id>` contributions replace
-  `daedalus.nix`'s cross-stack reads; the 14 `*_VERSION` env vars are
-  replaced by `/export/images.json` tags; the cross-stack sops greps are gone
-  (Cloudflare and GitHub already moved; Pocket ID's `STATIC_API_KEY` is
-  contributed by pocket-id). Proof: `fleet.modules.immich.enable = false` in
-  a `nixos-rebuild build` (not switch) must evaluate and produce a closure
-  without immich.
+  per the cascade runbook. Alone, off-hours, on a day the autoupgrade did
+  not run.
+- **9c, the engine's half.** The stacks still hand the control plane
+  fourteen `*_VERSION` env vars (now through `fleet.dashboard.<id>.env`
+  rather than a grep, so the box no longer depends on them being there).
+  The app should read those versions from `/export/images.json`
+  (`imageTag()`) and the env vars then go; app-only, no rebuild.
 
-Compatibility: defaults keep every module on; the closure is identical after
-9a and 9c except the intended env renames.
+Compatibility: defaults keep every module on; the closure was identical
+after 9a and 9c except the intended env renames.
 
 ### Phase 10 — App module system and build (1–2 weeks, app only)
 
@@ -767,3 +777,13 @@ database model — the features worth having from that comparison are items 1,
   cleared on 2026-09-20 (`70a299b`, empty closure diff as proof), and will
   recur; check after every autoupgrade. `nix fmt -- --ci` writes before it
   fails; it is not a read-only check, so run it on a tree you mean to commit.
+- **The autoupgrade commits the lock BEFORE it builds.** On 2026-09-21 it
+  pulled a sops-nix whose `go.mod` had moved to Go 1.26, failed to build it
+  against 25.11's Go 1.25, and exited with HEAD unbuildable — every
+  `nixos-rebuild` on the box would have failed until someone noticed. Fixed
+  in `platform/sops.nix` by overriding the package's Go inputs to the 1.26
+  toolchain stable ships (config `7cb0aa2`; drop at 26.05). The script's
+  order is the real defect: `nix flake update` should build first and commit
+  only a lock that builds, restoring the old lock otherwise. Small config
+  change, not yet made. The engine's own autoupgrade (Phase 11, "Update
+  daedalus") must be written build-first from the start.
