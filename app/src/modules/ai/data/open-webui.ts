@@ -1,8 +1,8 @@
-import type { Hosts } from '../../../../host/hosts'
-import { key } from '../../../../host/keys'
-import { getJson } from '../../../http'
-import { type VersionGap, versionGap } from '../../github'
-import { type ImageFreshness, imageFreshness } from '../../images'
+import type { Ctx } from '../../../core/ctx'
+import { key } from '../../../host/keys'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { type ImageFreshness, imageFreshness } from '../../../lib/dashboard/images'
+import { getJson } from '../../../lib/http'
 
 /**
  * One thing the chat window can reach.
@@ -60,8 +60,8 @@ export type OpenWebUiData = {
  * which is the point: a panel nobody reads still costs two requests on every
  * page load.
  */
-export async function loadOpenWebUi(hosts: Hosts): Promise<OpenWebUiData> {
-  const base = hosts.base('open-webui')
+export async function loadOpenWebUi(ctx: Ctx): Promise<OpenWebUiData> {
+  const base = ctx.hosts.base('open-webui')
   const auth = { headers: { Authorization: `Bearer ${key('OPENWEBUI_KEY')}` } }
 
   const [usage, ver, models, knowledge, tools, freshness] = await Promise.all([

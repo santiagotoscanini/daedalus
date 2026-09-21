@@ -1,10 +1,16 @@
-import { env } from '../../../../host/env'
-import { lokiLatest } from '../../../../host/loki'
-import { promBars, promScalar } from '../../../../host/prom'
-import { localDay } from '../../../format'
-import { getJson } from '../../../http'
-import { type CommitGap, commitsSince, type VersionGap, versionGap } from '../../github'
-import { type ImageFreshness, imageFreshness } from '../../images'
+import type { Ctx } from '../../../core/ctx'
+import { env } from '../../../host/env'
+import { lokiLatest } from '../../../host/loki'
+import { promBars, promScalar } from '../../../host/prom'
+import {
+  type CommitGap,
+  commitsSince,
+  type VersionGap,
+  versionGap,
+} from '../../../lib/dashboard/github'
+import { type ImageFreshness, imageFreshness } from '../../../lib/dashboard/images'
+import { localDay } from '../../../lib/format'
+import { getJson } from '../../../lib/http'
 import { DAYS } from './shared'
 
 /** Requests, failures and tokens over some period. The gateway's one shape. */
@@ -150,7 +156,7 @@ const PAGE_SIZE = 1000
 /** The window every figure on the tab is measured over, as a PromQL range. */
 const RANGE = `${String(DAYS)}d`
 
-export async function loadLitellm(): Promise<LitellmData> {
+export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
   const auth = { headers: { Authorization: `Bearer ${env.litellmApiKey}` } }
 
   // Every day in the window, oldest first — the chart's x axis, independent of
@@ -308,7 +314,7 @@ export async function loadLitellm(): Promise<LitellmData> {
     ]
       .map(([name, calls]) => ({ name, calls }))
       .sort((a, b) => b.calls - a.calls),
-    neighbours: await loadNeighbours(),
+    neighbours: await loadNeighbours(ctx),
   }
 }
 
@@ -338,11 +344,11 @@ export async function loadLitellm(): Promise<LitellmData> {
  *                      COMMIT and builds it, so commits-since is the only
  *                      question that has an answer.
  */
-async function loadNeighbours(): Promise<Neighbour[]> {
-  const grocy = process.env.MCP_GROCY_VERSION || null
-  const yazio = process.env.YAZIO_MCP_VERSION || null
-  const supergateway = process.env.SUPERGATEWAY_VERSION || null
-  const pgvectorRev = process.env.PGVECTOR_REV || null
+async function loadNeighbours(ctx: Ctx): Promise<Neighbour[]> {
+  const grocy = ctx.env('MCP_GROCY_VERSION') || null
+  const yazio = ctx.env('YAZIO_MCP_VERSION') || null
+  const supergateway = ctx.env('SUPERGATEWAY_VERSION') || null
+  const pgvectorRev = ctx.env('PGVECTOR_REV') || null
 
   const [searxBanner, grocyGap, yazioGap, supergatewayGap, pgvectorBuild] = await Promise.all([
     lokiLatest('{container="searxng"} |~ "^SearXNG [0-9]"'),

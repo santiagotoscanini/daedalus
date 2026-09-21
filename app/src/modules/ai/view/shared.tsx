@@ -1,5 +1,5 @@
+import { type CompareRow, latestRow } from '../../../components/service-head'
 import type { VersionGap } from '../../../lib/dashboard/github'
-import { type CompareRow, latestRow } from '../../service-head'
 
 /**
  * The working, paired with the PIN rather than with the running version.
@@ -21,7 +21,7 @@ export function comparePinned(gap: VersionGap, note: string): CompareRow[] {
    only while styles.css was being retired. Re-exported here so a tab still
    imports its own page's shared file. Below is what is genuinely the AI
    pages'. */
-export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE } from '../../tokens'
+export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE } from '../../../components/tokens'
 
 /** A ranking: `RankRow`s, stacked. */
 export const RANKS = 'm-0 flex list-none flex-col gap-[0.1rem] p-0'

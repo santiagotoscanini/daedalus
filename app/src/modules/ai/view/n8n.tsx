@@ -1,10 +1,10 @@
-import type { AiData } from '../../../lib/dashboard/categories/ai'
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
+import { Button } from '../../../components/ui/button'
+import { Board, BoardGrid, Columns, Measures, Pulse, RankRow } from '../../../components/viz'
 import { DASH, ms, num, pct, until } from '../../../lib/format'
-import { LogBoard } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
-import { Button } from '../../ui/button'
-import { Board, BoardGrid, Columns, Measures, Pulse, RankRow } from '../../viz'
+import type { AiData } from '../data'
 import { AXIS, comparePinned, EMPTY, FOOT, LIVE, NOTE, RANKS, REJECTED } from './shared'
 
 // ── n8n ────────────────────────────────────────────────────────────────────

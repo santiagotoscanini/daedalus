@@ -1,5 +1,4 @@
-import type { Hosts } from '../../../../host/hosts'
-// The AI category, one tab per service.
+// The AI module's data half, one tab per service.
 //
 // The stack is a chain — a caller speaks the OpenAI API to LiteLLM, LiteLLM
 // forwards to Lemonade on the gaming PC, Lemonade holds the weights — and the
@@ -28,29 +27,27 @@ import type { Hosts } from '../../../../host/hosts'
 //             as "over the last N days" comes from the gateway's own ledger or
 //             from a range query, never from a counter read once.
 
+import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
+import { manifest } from '../manifest'
 import { type LemonadeData, loadLemonade } from './lemonade'
 import { type LitellmData, loadLitellm } from './litellm'
 import { loadN8n, type N8nData } from './n8n'
 import { loadOpenWebUi, type OpenWebUiData } from './open-webui'
 
-export type AiData =
-  | ({ tab: 'lemonade' } & LemonadeData)
-  | ({ tab: 'litellm' } & LitellmData)
-  | ({ tab: 'open-webui' } & OpenWebUiData)
-  | ({ tab: 'n8n' } & N8nData)
-
-export async function loadAi(tab: string, hosts: Hosts): Promise<AiData> {
-  switch (tab) {
-    case 'litellm':
-      return { tab: 'litellm', ...(await loadLitellm()) }
-    case 'open-webui':
-      return { tab: 'open-webui', ...(await loadOpenWebUi(hosts)) }
-    case 'n8n':
-      return { tab: 'n8n', ...(await loadN8n(hosts)) }
-    default:
-      return { tab: 'lemonade', ...(await loadLemonade()) }
-  }
+export type Tabs = {
+  lemonade: LemonadeData
+  litellm: LitellmData
+  'open-webui': OpenWebUiData
+  n8n: N8nData
 }
+export type AiData = TabPayload<typeof manifest, Tabs>
+
+export const load = defineLoader<typeof manifest, Tabs>(manifest, {
+  lemonade: loadLemonade,
+  litellm: loadLitellm,
+  'open-webui': loadOpenWebUi,
+  n8n: loadN8n,
+})
 
 export type { CatalogModel, ModelCategory } from './lemonade'
 export type { Neighbour } from './litellm'

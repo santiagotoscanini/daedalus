@@ -1,7 +1,8 @@
-import { promVector } from '../../../../host/prom'
-import { DASH } from '../../../format'
-import { getJson } from '../../../http'
-import { type VersionGap, versionGap } from '../../github'
+import type { Ctx } from '../../../core/ctx'
+import { promVector } from '../../../host/prom'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { DASH } from '../../../lib/format'
+import { getJson } from '../../../lib/http'
 
 /**
  * One installed model, resident or not.
@@ -117,8 +118,8 @@ type SystemInfo = {
   >
 }
 
-export async function loadLemonade(): Promise<LemonadeData> {
-  const base = process.env.LEMONADE_URL ?? ''
+export async function loadLemonade(ctx: Ctx): Promise<LemonadeData> {
+  const base = ctx.env('LEMONADE_URL') ?? ''
 
   const [health, stats, info, live, downloads, catalog, perModel] = await Promise.all([
     getJson<Health>(`${base}/api/v1/health`),

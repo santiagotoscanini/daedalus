@@ -1,3 +1,4 @@
+import { ARR_TAG, TWO_OR_THREE } from '../release-tags'
 import type { GapOptions } from './github'
 import { imageLabels } from './images'
 
@@ -43,11 +44,6 @@ export type ReleaseSource = {
    */
   branch?: string
 }
-
-/** The *arr build number is the fourth segment, and it is the one that moves. */
-const ARR_TAG = /^v?(\d+\.\d+\.\d+\.\d+)$/
-/** Two segments or three — for projects that ship both `4.3` and `4.3.1`. */
-const TWO_OR_THREE = /^v?(\d+\.\d+(?:\.\d+)?)$/
 
 /**
  * Container → where its release notes live.
@@ -132,11 +128,7 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   'app-db-exporter': { repo: 'prometheus-community/postgres_exporter' },
   'intel-gpu-exporter': { repo: 'clambin/intel-gpu-exporter' },
 
-  // ── AI, apps, games ────────────────────────────────────────────────────
-  litellm: { repo: 'BerriAI/litellm' },
-  'open-webui': { repo: 'open-webui/open-webui' },
-  n8n: { repo: 'n8n-io/n8n', opts: { tag: /^n8n@(\d+\.\d+\.\d+)$/, sameMajor: true } },
-  'mcp-grocy': { repo: 'miguelangel-nubla/mcp-grocy' },
+  // ── apps, games ────────────────────────────────────────────────────────
   zot: { repo: 'project-zot/zot' },
   minecraft: { repo: 'itzg/docker-minecraft-server', opts: { notesWhenUnknown: true } },
 
@@ -144,16 +136,6 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   //   factorio      — ofsm wraps the game; the version that matters is
   //                   Factorio's own, which the Gaming tab reads from the
   //                   wiki changelog because there is no GitHub release for it.
-  //   lemonade-logs — a stdlib-only bridge.py bind-mounted into an unmodified
-  //                   `python:3.13-alpine`. The code in it is ours and is not
-  //                   in the image; what ages is CPython and the Alpine
-  //                   packages under it. Pointing this at `python/cpython`
-  //                   was tried and reverted: that repo publishes ZERO GitHub
-  //                   Releases (only tags — CPython's notes live on
-  //                   python.org), so the panel rendered an empty board,
-  //                   which is a worse answer than none. The version delta is
-  //                   carried on the row itself instead — see `remoteVersion`
-  //                   in lib/dashboard/images.ts.
   //   minecraft-monitor — same shape, and its base states no version at all.
 }
 

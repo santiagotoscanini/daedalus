@@ -1,11 +1,11 @@
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
+import { Button } from '../../../components/ui/button'
+import { Board, BoardGrid, Chip, Measures, Pulse } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { AiData } from '../../../lib/dashboard/categories/ai'
 import { num } from '../../../lib/format'
-import { LogBoard } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../service-head'
-import { Button } from '../../ui/button'
-import { Board, BoardGrid, Chip, Measures, Pulse } from '../../viz'
+import type { AiData } from '../data'
 import { comparePinned, EMPTY, FOOT, ITEM, ITEM_MAIN, ITEM_SIDE, ITEMS, LIVE } from './shared'
 
 // ── Open WebUI ─────────────────────────────────────────────────────────────

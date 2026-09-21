@@ -1,11 +1,11 @@
+import { GrafanaLogs } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
+import { Button } from '../../../components/ui/button'
+import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { AiData } from '../../../lib/dashboard/categories/ai'
 import { compact, DASH, ms, num, pct } from '../../../lib/format'
-import { GrafanaLogs } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { freshnessRow, LinkRow, ServiceHead, verdictOf } from '../../service-head'
-import { Button } from '../../ui/button'
-import { Board, BoardGrid, Chip, Columns, Measures, Pulse, RankRow } from '../../viz'
+import type { AiData } from '../data'
 import {
   AXIS,
   comparePinned,

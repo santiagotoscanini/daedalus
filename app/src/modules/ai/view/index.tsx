@@ -1,4 +1,6 @@
-import type { AiData } from '../../../lib/dashboard/categories/ai'
+import { defineViews } from '../../../lib/modules/tabs'
+import type { Tabs } from '../data'
+import { manifest } from '../manifest'
 import { LemonadeView } from './lemonade'
 import { LitellmView } from './litellm'
 import { N8nView } from './n8n'
@@ -23,15 +25,9 @@ import { OpenWebUiView } from './open-webui'
 // that is zero almost always and means nothing when it is not. These were the
 // last pages drawing that band anywhere, so the band itself went with them.
 
-export function AiView({ data }: { data: AiData }) {
-  switch (data.tab) {
-    case 'lemonade':
-      return <LemonadeView data={data} />
-    case 'litellm':
-      return <LitellmView data={data} />
-    case 'open-webui':
-      return <OpenWebUiView data={data} />
-    case 'n8n':
-      return <N8nView data={data} />
-  }
-}
+export const views = defineViews<typeof manifest, Tabs>(manifest, {
+  lemonade: LemonadeView,
+  litellm: LitellmView,
+  'open-webui': OpenWebUiView,
+  n8n: N8nView,
+})
