@@ -1,4 +1,4 @@
-import type { Tone } from '../../viz'
+import type { Tone } from '../../../components/viz'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
@@ -18,7 +18,7 @@ export function tone(ok: boolean | null): Tone | null {
    same handful of strings on every category page, and was restated per file
    only while styles.css was being retired. Re-exported here so a tab still
    imports its own page's shared file. Below is what is genuinely Network's. */
-export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE, SUB } from '../../tokens'
+export { AXIS, EMPTY, FOOT, LIVE, MONO, NOTE, SUB } from '../../../components/tokens'
 
 /* Rows of a table, not a stack of pills: a hairline between rows says what a
    filled capsule per fact said, at a fraction of the ink. */

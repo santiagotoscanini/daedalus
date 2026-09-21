@@ -266,9 +266,9 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
   )
 
   read('dns.records', {}, async () => {
-    const { makeHosts } = await import('../hosts')
-    const { loadDns } = await import('../../lib/dashboard/categories/network/dns')
-    return loadDns(await makeHosts())
+    const { makeCtx } = await import('../../core/ctx')
+    const { loadDns } = await import('../../modules/network/data/dns')
+    return loadDns(await makeCtx())
   })
 
   read('site.get', {}, async () => {

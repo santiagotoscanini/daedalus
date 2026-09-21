@@ -1,13 +1,22 @@
 import { useState } from 'react'
+import { Segmented } from '../../../components/controls'
+import { LogBoard } from '../../../components/logs'
+import { Changelog } from '../../../components/release-notes'
+import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-head'
+import type { Tone } from '../../../components/viz'
+import {
+  BarList,
+  Board,
+  BoardGrid,
+  Chip,
+  Columns,
+  Facts,
+  Measures,
+  Progress,
+} from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { NetworkData } from '../../../lib/dashboard/categories/network'
 import { bytes, compact, DASH, ms, num, pct, since, until } from '../../../lib/format'
-import { Segmented } from '../../controls'
-import { LogBoard } from '../../logs'
-import { Changelog } from '../../release-notes'
-import { LinkRow, ServiceHead, verdictOf } from '../../service-head'
-import type { Tone } from '../../viz'
-import { BarList, Board, BoardGrid, Chip, Columns, Facts, Measures, Progress } from '../../viz'
+import type { NetworkData } from '../data'
 import {
   ACTION,
   EMPTY,

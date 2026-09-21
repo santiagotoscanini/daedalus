@@ -1,12 +1,12 @@
-import { networkFacts } from '../../../../host/contract/domains/network'
-import type { Hosts } from '../../../../host/hosts'
-import { key } from '../../../../host/keys'
-import { lanHosts, webAppHosts } from '../../../../host/nix-manifest'
-import { localDay } from '../../../format'
-import { BASE_DOMAIN } from '../../../hostname'
-import { getJson } from '../../../http'
-import { type VersionGap, versionGap } from '../../github'
-import { LAN_IP, piholeAdmin, type TraefikRouter } from './shared'
+import type { Ctx } from '../../../core/ctx'
+import { networkFacts } from '../../../host/contract/domains/network'
+import { key } from '../../../host/keys'
+import { lanHosts, webAppHosts } from '../../../host/nix-manifest'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { localDay } from '../../../lib/format'
+import { BASE_DOMAIN } from '../../../lib/hostname'
+import { getJson } from '../../../lib/http'
+import { lanIp, piholeAdmin, type TraefikRouter } from './shared'
 
 // ── DNS: the resolver, and the name it resolves ────────────────────────
 //
@@ -215,23 +215,24 @@ export type DnsData = {
   admin: string | null
 }
 
-export async function loadDns(hosts: Hosts): Promise<DnsData> {
+export async function loadDns(ctx: Ctx): Promise<DnsData> {
   const [resolver, zone, lanNames, served, admin] = await Promise.all([
-    loadResolver(hosts.base('pihole')),
-    loadZone(),
+    loadResolver(ctx, ctx.hosts.base('pihole')),
+    loadZone(ctx),
     lanHosts(),
     servedHosts(),
     piholeAdmin(),
   ])
 
   const published = new Set(zone.names.map((n) => n.fqdn))
+  const box = lanIp(ctx)
 
   return {
     resolver,
     zone,
     admin,
     lan: lanNames.map((h) => {
-      const elsewhere = h.ip !== LAN_IP
+      const elsewhere = h.ip !== box
       return {
         fqdn: h.host,
         short: h.host.replace(new RegExp(`\\.${BASE_DOMAIN}$`), ''),
@@ -253,8 +254,8 @@ type FtlUpstream = {
   statistics?: { response?: number }
 }
 
-async function loadResolver(base: string): Promise<ResolverData> {
-  const version = process.env.PIHOLE_VERSION || null
+async function loadResolver(ctx: Ctx, base: string): Promise<ResolverData> {
+  const version = ctx.env('PIHOLE_VERSION') ?? null
 
   const declared = (await networkFacts()).dnsUpstreams
 
@@ -437,9 +438,9 @@ type CfRecord = {
  */
 const MANAGED = 'Managed by fleet.cloudflareRoutes'
 
-async function loadZone(): Promise<ZoneData> {
+async function loadZone(ctx: Ctx): Promise<ZoneData> {
   const domain = BASE_DOMAIN
-  const zoneId = process.env.CF_ZONE_ID ?? ''
+  const zoneId = ctx.env('CF_ZONE_ID') ?? ''
   const auth = { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } }
 
   const [registration, zone, recordsBody, lan, published, served] = await Promise.all([
@@ -555,7 +556,7 @@ async function loadZone(): Promise<ZoneData> {
         served === null
           ? []
           : lan
-              .filter((h) => h.ip === LAN_IP && !served.has(h.host))
+              .filter((h) => h.ip === lanIp(ctx) && !served.has(h.host))
               .map((h) => h.host)
               .sort(),
       // A tunnel CNAME with no webApp behind it. The reconciler sweeps records

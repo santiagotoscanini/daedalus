@@ -1,8 +1,17 @@
+import { LogBoard, type LogNeighbour } from '../../../components/logs'
+import {
+  BarList,
+  Board,
+  BoardGrid,
+  Chip,
+  Facts,
+  Measures,
+  Pulse,
+  Trend,
+} from '../../../components/viz'
 import { cn } from '../../../lib/cn'
-import type { NetworkData } from '../../../lib/dashboard/categories/network'
 import { bytes, compact, DASH, num, pct } from '../../../lib/format'
-import { LogBoard, type LogNeighbour } from '../../logs'
-import { BarList, Board, BoardGrid, Chip, Facts, Measures, Pulse, Trend } from '../../viz'
+import type { NetworkData } from '../data'
 import { ACTION, EMPTY, FOOT, MONO, MORE, NOTE, SUB } from './shared'
 
 type General = Extract<NetworkData, { tab: 'general' }>

@@ -1,9 +1,9 @@
-import type { Hosts } from '../../../../host/hosts'
-import { promBars, promPoints, promScalar, promScalars, promVector } from '../../../../host/prom'
-import { localDay } from '../../../format'
-import { getJson } from '../../../http'
-import { type VersionGap, versionGap } from '../../github'
-import { clientHost, idpClients, type PocketClient } from '../idp'
+import type { Ctx } from '../../../core/ctx'
+import { promBars, promPoints, promScalar, promScalars, promVector } from '../../../host/prom'
+import { clientHost, idpClients, type PocketClient } from '../../../lib/dashboard/categories/idp'
+import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
+import { localDay } from '../../../lib/format'
+import { getJson } from '../../../lib/http'
 import { DAYS, type TraefikRouter } from './shared'
 
 // ── The proxy ────────────────────────────────────────
@@ -96,8 +96,8 @@ export type TraefikData = {
  * from an open door — an app doing its own OIDC has a registration, and an
  * unprotected one does not. One request, for one column.
  */
-export async function loadProxy(hosts: Hosts): Promise<TraefikData> {
-  return loadTraefik(idpClients(hosts))
+export async function loadProxy(ctx: Ctx): Promise<TraefikData> {
+  return loadTraefik(idpClients(ctx.hosts))
 }
 
 /**

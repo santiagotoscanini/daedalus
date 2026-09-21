@@ -1,3 +1,4 @@
+import { ARR_TAG, TWO_OR_THREE } from '../release-tags'
 import type { GapOptions } from './github'
 import { imageLabels } from './images'
 
@@ -43,11 +44,6 @@ export type ReleaseSource = {
    */
   branch?: string
 }
-
-/** The *arr build number is the fourth segment, and it is the one that moves. */
-const ARR_TAG = /^v?(\d+\.\d+\.\d+\.\d+)$/
-/** Two segments or three — for projects that ship both `4.3` and `4.3.1`. */
-const TWO_OR_THREE = /^v?(\d+\.\d+(?:\.\d+)?)$/
 
 /**
  * Container → where its release notes live.
@@ -110,16 +106,9 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   'nextcloud-redis': { repo: 'redis/redis', opts: { notesWhenUnknown: true } },
 
   // ── the edge ───────────────────────────────────────────────────────────
-  traefik: { repo: 'traefik/traefik' },
-  cloudflared: { repo: 'cloudflare/cloudflared' },
-  'wg-easy': { repo: 'wg-easy/wg-easy' },
-  // Master, not the release line — see `branch` above.
-  gluetun: { repo: 'qdm12/gluetun', branch: 'master' },
-  'gluetun-argus': { repo: 'qdm12/gluetun', branch: 'master' },
-  'gluetun-exporter': { repo: 'thecfu/gluetun-exporter', opts: { notesWhenUnknown: true } },
-  'gluetun-argus-exporter': { repo: 'thecfu/gluetun-exporter', opts: { notesWhenUnknown: true } },
+  // Only searxng is left here: it fronts LiteLLM's web search, not a route in
+  // or out, so it waits for the AI module to claim it.
   searxng: { repo: 'searxng/searxng', branch: 'master' },
-  myspeed: { repo: 'gnmyt/myspeed' },
 
   // ── the watchers ───────────────────────────────────────────────────────
   grafana: { repo: 'grafana/grafana', opts: { sameMajor: true } },
