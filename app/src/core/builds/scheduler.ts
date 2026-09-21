@@ -59,7 +59,7 @@ export const ACTIVE_TICK_MS = 3_000
 export const IDLE_TICK_MS = 30_000
 /** A tick or sweep still running after this is presumed hung; the next one takes over. */
 export const TICK_TIMEOUT_MS = 5 * 60_000
-/** A written request the host has not answered blocks another this long (host/apply-flow.ts). */
+/** A written request the host has not answered blocks another this long (host/flow.ts's, restated). */
 export const PICKUP_MS = 120_000
 export const FIRST_SWEEP_MS = 60_000
 export const SWEEP_EVERY_MS = 60 * 60_000
