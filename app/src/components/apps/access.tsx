@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { ACCESS_WINDOWS, type AccessWindow, WINDOW_SPEC } from '../../lib/access-window'
 import { cn } from '../../lib/cn'
 import { useScheme } from '../../lib/scheme'
-import { GRAFANA_URL } from '../../lib/site'
+import { useSite } from '../../lib/site-context'
 import { type Tone, toneStyle } from '../../lib/tone'
 import type { AppTabData } from '../../server/registry'
 import { Alert, AlertDescription } from '../ui/alert'
@@ -39,6 +39,7 @@ export function Access({
   access: AccessData
   range: AccessWindow
 }) {
+  const { grafanaUrl } = useSite()
   if (stage !== 'live') {
     return (
       <BoardGrid>
@@ -244,7 +245,7 @@ export function Access({
               aside={
                 <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
                   <a
-                    href={`${GRAFANA_URL}/d/s2-security/security?from=now-${range}&to=now`}
+                    href={`${grafanaUrl}/d/s2-security/security?from=now-${range}&to=now`}
                     target="_blank"
                     rel="noreferrer"
                     className="hover:no-underline"
@@ -331,8 +332,9 @@ export function Access({
  */
 function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }) {
   const scheme = useScheme()
+  const { grafanaUrl } = useSite()
   const src =
-    `${GRAFANA_URL}/d-solo/s2-app-access/app-access` +
+    `${grafanaUrl}/d-solo/s2-app-access/app-access` +
     `?panelId=1&var-host=${encodeURIComponent(hostname)}` +
     `&from=now-${range}&to=now&theme=${scheme}` +
     // The dashboard's basemap is a variable for exactly this: Esri ships its
@@ -347,7 +349,7 @@ function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }
       aside={
         <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
           <a
-            href={`${GRAFANA_URL}/d/s2-app-access/app-access?var-host=${encodeURIComponent(hostname)}&from=now-${range}&to=now`}
+            href={`${grafanaUrl}/d/s2-app-access/app-access?var-host=${encodeURIComponent(hostname)}&from=now-${range}&to=now`}
             target="_blank"
             rel="noreferrer"
             className="hover:no-underline"
@@ -370,7 +372,7 @@ function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }
       />
       <p className={BOARD_FOOT}>
         Rendered by Grafana. A blank map means this browser has no Grafana session yet. Open it{' '}
-        <a href={GRAFANA_URL} target="_blank" rel="noreferrer">
+        <a href={grafanaUrl} target="_blank" rel="noreferrer">
           once
         </a>{' '}
         and it will fill in.

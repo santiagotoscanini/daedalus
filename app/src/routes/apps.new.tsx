@@ -14,10 +14,11 @@ import { Input } from '../components/ui/input'
 import { Board, BoardGrid } from '../components/viz'
 import type { Repo } from '../host/github-repos'
 import { cn } from '../lib/cn'
-import { appNameError, BASE_DOMAIN, hostnameError } from '../lib/hostname'
+import { appNameError, hostnameError } from '../lib/hostname'
 import { readiness } from '../lib/readiness'
 import { errorText } from '../lib/redact'
-import { defaultImage, OWNER } from '../lib/site'
+import { defaultImage } from '../lib/site'
+import { useSite } from '../lib/site-context'
 import { createAppFn, fetchAppPreflight, fetchNewAppOptions } from '../server/registry'
 
 // Adding an app.
@@ -72,6 +73,7 @@ const WARN_BANNER = 'mb-[1.35rem] text-foreground'
 const MUTED_BANNER = 'mb-[1.35rem] text-(--text-muted)'
 
 function NewAppPage() {
+  const site = useSite()
   const { options } = Route.useLoaderData()
 
   return (
@@ -83,9 +85,9 @@ function NewAppPage() {
         <span aria-hidden="true">›</span> new
       </Crumbs>
       <PageHead title="Add an app">
-        One repository under <code>github.com/{OWNER}</code> — one the box’s GitHub App is installed
-        on — becomes one entry in the registry. The container, hostname, TLS, DNS, probe, builds and
-        deploy timer are all derived from it.
+        One repository under <code>github.com/{site.owner}</code> — one the box’s GitHub App is
+        installed on — becomes one entry in the registry. The container, hostname, TLS, DNS, probe,
+        builds and deploy timer are all derived from it.
       </PageHead>
 
       <GuardedAwait resetKey="options" promise={options} fallback={<NewAppSkeleton />}>
@@ -96,6 +98,7 @@ function NewAppPage() {
 }
 
 function Wizard({ options }: { options: Options }) {
+  const site = useSite()
   const router = useRouter()
 
   const [repo, setRepo] = useState<Repo | null>(null)
@@ -125,7 +128,7 @@ function Wizard({ options }: { options: Options }) {
   const name = repo?.name ?? ''
 
   const nameErr = repo ? appNameError(name, options.taken) : null
-  const hostErr = hostnameError(hostname)
+  const hostErr = hostnameError(site, hostname)
 
   // Re-check whenever the thing being checked changes. The result is about a
   // (name, image) pair, so keeping a stale one on screen after the image
@@ -290,7 +293,7 @@ function Wizard({ options }: { options: Options }) {
                     <>
                       The repository name, verbatim. It becomes <code>app-{name}</code>,{' '}
                       <code>
-                        {name}.{BASE_DOMAIN}
+                        {name}.{site.baseDomain}
                       </code>
                       , the postgres role, and the repo its builds come from.
                     </>
@@ -363,12 +366,12 @@ function Wizard({ options }: { options: Options }) {
                 <WizardField
                   label="Hostname"
                   value={hostname}
-                  placeholder={`${name}.${BASE_DOMAIN}`}
-                  validate={(v) => hostnameError(v)}
+                  placeholder={`${name}.${site.baseDomain}`}
+                  validate={(v) => hostnameError(site, v)}
                   hint={
                     <>
-                      Empty uses the default. One level under <code>{BASE_DOMAIN}</code>, since the
-                      wildcard certificate matches exactly one label.
+                      Empty uses the default. One level under <code>{site.baseDomain}</code>, since
+                      the wildcard certificate matches exactly one label.
                     </>
                   }
                   onChange={setHostname}
@@ -376,7 +379,7 @@ function Wizard({ options }: { options: Options }) {
                 <WizardField
                   label="Image override"
                   value={image}
-                  placeholder={defaultImage(name)}
+                  placeholder={defaultImage(site, name)}
                   hint="Empty uses the box's own registry, which is where its builds publish to. Set this for a fork, another registry, or a pinned digest."
                   onChange={setImage}
                 />

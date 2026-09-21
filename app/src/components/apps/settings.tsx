@@ -1,8 +1,9 @@
 import { useRouter } from '@tanstack/react-router'
 import { type ReactNode, useId, useState } from 'react'
-import { BASE_DOMAIN, hostnameError } from '../../lib/hostname'
+import { hostnameError } from '../../lib/hostname'
 import { errorText } from '../../lib/redact'
 import { defaultImage } from '../../lib/site'
+import { useSite } from '../../lib/site-context'
 import { stageExposed } from '../../lib/stage'
 import { deleteAppFn } from '../../server/registry'
 import { Segmented, Slider, Toggle } from '../controls'
@@ -28,6 +29,7 @@ export function Settings({
   /** `fleet.stateRoot` on the host, from the site export. */
   stateRoot: string
 }) {
+  const site = useSite()
   return (
     <BoardGrid>
       <Board title="Platform" icon="◱" span={4}>
@@ -92,13 +94,13 @@ export function Settings({
         <TextField
           label="Hostname"
           value={app.hostname ?? ''}
-          placeholder={`${app.name}.${BASE_DOMAIN}`}
+          placeholder={`${app.name}.${site.baseDomain}`}
           disabled={readOnly}
-          validate={(v) => hostnameError(v, takenHostnames)}
+          validate={(v) => hostnameError(site, v, takenHostnames)}
           hint={
             <>
-              Empty uses the default. Must be one level under <code>{BASE_DOMAIN}</code>, the only
-              domain here with a wildcard certificate, a Cloudflare tunnel and DNS.
+              Empty uses the default. Must be one level under <code>{site.baseDomain}</code>, the
+              only domain here with a wildcard certificate, a Cloudflare tunnel and DNS.
             </>
           }
           onSave={(v) => {
@@ -129,7 +131,7 @@ export function Settings({
         <TextField
           label="Image override"
           value={app.image ?? ''}
-          placeholder={defaultImage(app.name)}
+          placeholder={defaultImage(site, app.name)}
           disabled={readOnly || app.sourceMode === 'local'}
           onSave={(v) => {
             patch({ image: v.trim() === '' ? null : v.trim() })

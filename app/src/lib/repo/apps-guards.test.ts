@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { BASE_DOMAIN } from '../hostname'
 
 // The checks on the way INTO the registry, as opposed to apps.test.ts's pure
 // half on the way out.
@@ -26,6 +25,11 @@ import { BASE_DOMAIN } from '../hostname'
 // this to touch the box's own registry.
 
 type Row = Record<string, unknown>
+
+// The repo reads the box's domain at use (host/site.ts), so a stubbed env is
+// the whole fixture.
+const BASE_DOMAIN = 'box.test'
+vi.stubEnv('BASE_DOMAIN', BASE_DOMAIN)
 
 const h = vi.hoisted(() => ({
   /** listApps — the names already in the registry. */

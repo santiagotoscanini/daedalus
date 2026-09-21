@@ -17,8 +17,8 @@ import { Link, useRouter } from '@tanstack/react-router'
 import { Fragment, type KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
 import type { Repo } from '../../host/github-repos'
 import { cn } from '../../lib/cn'
-import { BASE_DOMAIN } from '../../lib/hostname'
 import { defaultImage } from '../../lib/site'
+import { useSite } from '../../lib/site-context'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -391,10 +391,11 @@ function Derivation({
   image: string
   postgres: boolean
 }) {
+  const site = useSite()
   const rows = [
     { label: 'container', value: `app-${name}` },
-    { label: 'hostname', value: hostname.trim() || `${name}.${BASE_DOMAIN}` },
-    { label: 'image', value: image.trim() || defaultImage(name) },
+    { label: 'hostname', value: hostname.trim() || `${name}.${site.baseDomain}` },
+    { label: 'image', value: image.trim() || defaultImage(site, name) },
   ]
   if (postgres) rows.push({ label: 'postgres', value: name })
 

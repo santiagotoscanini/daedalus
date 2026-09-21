@@ -23,7 +23,8 @@ import { Button } from '../components/ui/button'
 import { type AccessWindow, DEFAULT_WINDOW, isAccessWindow } from '../lib/access-window'
 import { cn } from '../lib/cn'
 import { isAppName } from '../lib/hostname'
-import { OWNER } from '../lib/site'
+import { appRepo } from '../lib/site'
+import { useSite } from '../lib/site-context'
 import { type Tone, toneStyle } from '../lib/tone'
 import { fetchApp, fetchAppTab, saveApp } from '../server/registry'
 
@@ -122,6 +123,7 @@ type Tab = (typeof TABS)[number]
 type AppSearch = { tab: Tab; range?: AccessWindow }
 
 function AppDetail() {
+  const site = useSite()
   const {
     app,
     drift,
@@ -356,8 +358,12 @@ function AppDetail() {
             {app.sourceMode === 'local' ? (
               <span className="text-(--text-muted)">⎇ stacks/{app.name}/app</span>
             ) : (
-              <a href={`https://github.com/${OWNER}/${app.name}`} target="_blank" rel="noreferrer">
-                ⎇ {OWNER}/{app.name}
+              <a
+                href={`https://github.com/${appRepo(site, app.name)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                ⎇ {appRepo(site, app.name)}
               </a>
             )}
           </p>

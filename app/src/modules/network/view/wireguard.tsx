@@ -7,7 +7,8 @@ import { LinkRow, ServiceHead, verdictOf } from '../../../components/service-hea
 import { Board, BoardGrid, Chip, Columns, Measures, Pulse } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { bytes, DASH, localDay, ms, num, since, until } from '../../../lib/format'
-import { BASE_DOMAIN, stripBaseDomain } from '../../../lib/site'
+import { stripBaseDomain } from '../../../lib/site'
+import { useSite } from '../../../lib/site-context'
 import type { NetworkData } from '../data'
 import {
   ACTION,
@@ -285,6 +286,7 @@ function WireguardView({ data }: { data: Inbound['wireguard'] }) {
  * one whose wrong answer is a service exposed by accident.
  */
 function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
+  const site = useSite()
   const healthy = t.status === 'healthy'
 
   return (
@@ -404,7 +406,7 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
             <ul className={ROWS}>
               {t.published.map((p) => (
                 <li key={p.hostname} className={ROW}>
-                  <span className={MAIN}>{stripBaseDomain(p.hostname)}</span>
+                  <span className={MAIN}>{stripBaseDomain(site, p.hostname)}</span>
                   <span className={cn(MONO, SIDE)}>{p.service.replace(/^https?:\/\//, '')}</span>
                 </li>
               ))}
@@ -447,6 +449,7 @@ function CfTunnelView({ t }: { t: Inbound['tunnel'] }) {
  * first symptom is somebody unable to join a Factorio game.
  */
 function DdnsView({ d }: { d: Inbound['ddns'] }) {
+  const site = useSite()
   const known = d.resolved !== null && d.actual !== null
   const match = known && d.resolved === d.actual
 
@@ -531,8 +534,8 @@ function DdnsView({ d }: { d: Inbound['ddns'] }) {
               <>One of the two could not be read, so this check is not currently making a claim. </>
             )}
             Asked of <code>1.1.1.1</code> over HTTPS rather than this box’s resolver, deliberately:
-            pi-hole short-circuits <code>*.{BASE_DOMAIN}</code> to the LAN address, which is right
-            and would make this check answer itself.
+            pi-hole short-circuits <code>*.{site.baseDomain}</code> to the LAN address, which is
+            right and would make this check answer itself.
           </p>
 
           {/* The failure that has no other symptom. Counted from the log

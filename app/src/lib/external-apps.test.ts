@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_EXTERNAL_APPS, isExternalAppList } from './external-apps'
+import { defaultExternalApps, isExternalAppList } from './external-apps'
+import { siteFrom } from './site'
+
+const DEFAULT_EXTERNAL_APPS = defaultExternalApps(siteFrom({ owner: 'octo' }))
 
 // The guard is what stands between a hand-written `apps.external` row and a
 // component: a row it accepts renders, a row it rejects degrades to the seed.
@@ -7,6 +10,10 @@ import { DEFAULT_EXTERNAL_APPS, isExternalAppList } from './external-apps'
 describe('isExternalAppList', () => {
   it('accepts the seed', () => {
     expect(isExternalAppList(DEFAULT_EXTERNAL_APPS)).toBe(true)
+  })
+
+  it('spells the seed’s own repos from the box’s owner', () => {
+    expect(DEFAULT_EXTERNAL_APPS.map((e) => e.repo)).toContain('octo/daedalus')
   })
 
   it('accepts an empty list', () => {

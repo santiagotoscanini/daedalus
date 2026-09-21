@@ -92,12 +92,13 @@ export const fetchBuildApp = createServerFn()
   .handler(async ({ data }): Promise<BuildPageApp | null> => {
     const { getApp } = await import('../lib/repo/apps')
     const { effectiveHostname } = await import('../lib/hostname')
+    const { readSite } = await import('../host/site')
     const r = await getApp(data.app)
     if (!r) return null
     return {
       name: r.name,
       stage: r.stage,
-      effectiveHostname: effectiveHostname(r.name, r.hostname),
+      effectiveHostname: effectiveHostname(readSite(), r.name, r.hostname),
       postgres: r.postgres,
       egressContainer: r.egressContainer,
       buildOnBox: r.buildOnBox,

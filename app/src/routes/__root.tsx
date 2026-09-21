@@ -16,10 +16,12 @@ import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
 import { useHydrated } from '../lib/hydrated'
 import { useResolvedScheme } from '../lib/scheme'
+import { SiteProvider } from '../lib/site-context'
 import { presetById, type ThemeChoice, themeCss } from '../lib/theme'
 import { fetchActiveModules } from '../server/modules'
 import { fetchAccount } from '../server/profile'
 import { fetchTheme } from '../server/settings'
+import { fetchSite } from '../server/site'
 import { APP_TABS } from './apps.$name'
 
 /**
@@ -134,10 +136,17 @@ export const Route = createRootRoute({
   // server-side answer (it reads the box's export), and a rail that streamed
   // in would shift every row under the cursor. Awaited, like the theme — it
   // is one small file read, and the shell cannot draw without it.
+  //
+  // The box's identity is the fourth, and awaited for a different reason: it
+  // is what every hostname and repo link on the page is spelled from, and it
+  // is a run-time fact of the box, never of the build. Awaited, it is in the
+  // server's HTML and in the dehydrated data, so the browser's first render
+  // spells them the same way. It costs an env read.
   loader: async () => ({
     theme: await fetchTheme(),
     account: fetchAccount(),
     modules: await fetchActiveModules(),
+    site: await fetchSite(),
   }),
   head: () => ({
     meta: [
@@ -182,6 +191,7 @@ export const Route = createRootRoute({
 function RootDocument({ children }: { children: ReactNode }) {
   const theme = Route.useLoaderData({ select: (d) => d.theme })
   const account = Route.useLoaderData({ select: (d) => d.account })
+  const site = Route.useLoaderData({ select: (d) => d.site })
   const preset = presetById(theme.presetId)
   const scheme = useResolvedScheme(theme.scheme)
   const css = themeCss(preset)
@@ -208,9 +218,11 @@ function RootDocument({ children }: { children: ReactNode }) {
       </head>
       <body>
         <RouteProgress />
-        <Shell theme={theme} account={account}>
-          {children}
-        </Shell>
+        <SiteProvider site={site}>
+          <Shell theme={theme} account={account}>
+            {children}
+          </Shell>
+        </SiteProvider>
         <Scripts />
       </body>
     </html>

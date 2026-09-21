@@ -3,6 +3,7 @@ import { getRequestHeader } from '@tanstack/react-start/server'
 import { actorLabel } from '../core/auth'
 import type { SiteEdit, SiteField, SiteState } from '../core/site'
 import type { SiteRequestStatus } from '../host/site-request'
+import type { Site } from '../lib/site'
 
 // Server functions behind Settings › Site: the directory's state against what
 // this box would write, the commit switch, and the one action that writes.
@@ -12,6 +13,15 @@ import type { SiteRequestStatus } from '../host/site-request'
 //
 // Value imports are dynamic — the core modules reach for node:fs and the
 // database, and nothing here may be pulled into a client bundle.
+
+/**
+ * The box's identity, for the browser. The root loader awaits it, so it is in
+ * the server-rendered HTML and `useSite()` never renders a placeholder first.
+ */
+export const fetchSite = createServerFn().handler(async (): Promise<Site> => {
+  const { readSite } = await import('../host/site')
+  return readSite()
+})
 
 export const fetchSiteState = createServerFn().handler(async (): Promise<SiteState> => {
   const { makeCtx } = await import('../core/ctx')

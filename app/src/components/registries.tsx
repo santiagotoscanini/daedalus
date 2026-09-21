@@ -8,7 +8,7 @@
 import type { ImagesData, PackagesData } from '../lib/apps/registries'
 import { cn } from '../lib/cn'
 import { bytes, DASH, num } from '../lib/format'
-import { BASE_DOMAIN, REGISTRY_HOST } from '../lib/site'
+import { useSite } from '../lib/site-context'
 import { GHOST_BTN } from './apps/shared'
 import { LogBoard, type LogNeighbour } from './logs'
 import { Changelog } from './release-notes'
@@ -55,6 +55,7 @@ const ZOT_NEIGHBOURS: readonly LogNeighbour[] = [
 ]
 
 export function ImagesView({ d }: { d: ImagesData }) {
+  const site = useSite()
   const total = d.repositories.length + d.cachedRepos.length || 0
 
   return (
@@ -161,7 +162,7 @@ export function ImagesView({ d }: { d: ImagesData }) {
           <Facts
             list
             rows={[
-              { k: 'hostname', v: <code>{REGISTRY_HOST}</code> },
+              { k: 'hostname', v: <code>{site.registryHost}</code> },
               { k: 'read', v: 'anonymous' },
               { k: 'push', v: 'htpasswd, from sops' },
               { k: 'pulled by', v: 'app deploy timers' },
@@ -206,6 +207,7 @@ const VERDACCIO_NEIGHBOURS: readonly LogNeighbour[] = [
 ]
 
 export function PackagesView({ d }: { d: PackagesData }) {
+  const site = useSite()
   return (
     <>
       <ServiceHead
@@ -297,7 +299,7 @@ export function PackagesView({ d }: { d: PackagesData }) {
           <Facts
             list
             rows={[
-              { k: 'hostname', v: <code>verdaccio.{BASE_DOMAIN}</code> },
+              { k: 'hostname', v: <code>verdaccio.{site.baseDomain}</code> },
               { k: 'exposure', v: 'LAN only' },
               { k: 'login', v: 'Pocket ID (OIDC)' },
               { k: 'upstream', v: <code>registry.npmjs.org</code> },

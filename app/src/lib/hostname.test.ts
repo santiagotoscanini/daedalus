@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   appName,
   appNameError,
-  BASE_DOMAIN,
   effectiveHostname,
   hostnameError,
   isAppName,
   RESERVED_LABELS,
 } from './hostname'
+import { siteFrom } from './site'
+
+const BASE_DOMAIN = 'box.test'
+const SITE = siteFrom({ baseDomain: BASE_DOMAIN })
 
 describe('isAppName', () => {
   it('takes every name on this box', () => {
@@ -79,47 +82,47 @@ describe('appNameError', () => {
 
 describe('hostnameError', () => {
   it('treats empty as "use the default"', () => {
-    expect(hostnameError('')).toBeNull()
-    expect(hostnameError('   ')).toBeNull()
+    expect(hostnameError(SITE, '')).toBeNull()
+    expect(hostnameError(SITE, '   ')).toBeNull()
   })
 
   it('accepts one label under the base domain', () => {
-    expect(hostnameError(`films.${BASE_DOMAIN}`)).toBeNull()
+    expect(hostnameError(SITE, `films.${BASE_DOMAIN}`)).toBeNull()
   })
 
   it('rejects a taken hostname', () => {
     const h = `films.${BASE_DOMAIN}`
-    expect(hostnameError(h, [h])).toContain('already published')
+    expect(hostnameError(SITE, h, [h])).toContain('already published')
   })
 
   it('rejects foreign domains', () => {
-    expect(hostnameError('films.example.com')).toContain(`must end in .${BASE_DOMAIN}`)
+    expect(hostnameError(SITE, 'films.example.com')).toContain(`must end in .${BASE_DOMAIN}`)
   })
 
   it('rejects the bare domain — it does not end in .<domain>', () => {
-    expect(hostnameError(BASE_DOMAIN)).toContain(`must end in .${BASE_DOMAIN}`)
+    expect(hostnameError(SITE, BASE_DOMAIN)).toContain(`must end in .${BASE_DOMAIN}`)
   })
 
   it('rejects an empty label in front of the domain', () => {
-    expect(hostnameError(`.${BASE_DOMAIN}`)).toContain('needs a name in front')
+    expect(hostnameError(SITE, `.${BASE_DOMAIN}`)).toContain('needs a name in front')
   })
 
   it('rejects a second level — the wildcard cert matches one label', () => {
-    expect(hostnameError(`a.b.${BASE_DOMAIN}`)).toContain('only one level')
+    expect(hostnameError(SITE, `a.b.${BASE_DOMAIN}`)).toContain('only one level')
   })
 
   it('rejects bad label characters', () => {
-    expect(hostnameError(`a_b.${BASE_DOMAIN}`)).toContain('lowercase letters')
+    expect(hostnameError(SITE, `a_b.${BASE_DOMAIN}`)).toContain('lowercase letters')
   })
 })
 
 describe('effectiveHostname', () => {
   it('prefers the override', () => {
-    expect(effectiveHostname('anansi', `films.${BASE_DOMAIN}`)).toBe(`films.${BASE_DOMAIN}`)
+    expect(effectiveHostname(SITE, 'anansi', `films.${BASE_DOMAIN}`)).toBe(`films.${BASE_DOMAIN}`)
   })
 
   it('derives the default from the name', () => {
-    expect(effectiveHostname('anansi', null)).toBe(`anansi.${BASE_DOMAIN}`)
+    expect(effectiveHostname(SITE, 'anansi', null)).toBe(`anansi.${BASE_DOMAIN}`)
   })
 })
 
@@ -130,7 +133,7 @@ describe('effectiveHostname', () => {
 describe('reserved labels', () => {
   for (const label of Object.keys(RESERVED_LABELS)) {
     it(`refuses ${label} as a hostname`, () => {
-      expect(hostnameError(`${label}.${BASE_DOMAIN}`)).toContain(label)
+      expect(hostnameError(SITE, `${label}.${BASE_DOMAIN}`)).toContain(label)
     })
 
     it(`refuses ${label} as an app name, because the name derives the hostname`, () => {
@@ -139,7 +142,7 @@ describe('reserved labels', () => {
   }
 
   it('still allows a name that merely contains a reserved label', () => {
-    expect(hostnameError(`daedalus-app.${BASE_DOMAIN}`)).toBeNull()
+    expect(hostnameError(SITE, `daedalus-app.${BASE_DOMAIN}`)).toBeNull()
     expect(appNameError('daedalus-app')).toBeNull()
   })
 })

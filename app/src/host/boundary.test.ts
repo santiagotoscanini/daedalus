@@ -99,7 +99,7 @@ const stripComments = (src: string) =>
 const FROM = /(?:^|\n)\s*(import|export)(\s+type\b)?([^;=]*?)(?<![.\w])from\s*['"]([^'"]+)['"]/g
 const SIDE_EFFECT = /(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g
 
-type Module = { statics: string[]; usesProcessEnv: boolean }
+type Module = { statics: string[]; usesProcessEnv: boolean; inlinesEnv: boolean }
 
 const parsed = new Map<string, Module>()
 for (const f of files) {
@@ -107,7 +107,11 @@ for (const f of files) {
   const statics: string[] = []
   for (const m of src.matchAll(FROM)) if (!m[2]) statics.push(m[4] as string)
   for (const m of src.matchAll(SIDE_EFFECT)) statics.push(m[1] as string)
-  parsed.set(f, { statics, usesProcessEnv: /process\.env/.test(src) })
+  parsed.set(f, {
+    statics,
+    usesProcessEnv: /process\.env/.test(src),
+    inlinesEnv: /import\.meta\.env\.VITE_/.test(src),
+  })
 }
 
 /** Extensionless relative imports, resolved the way Vite's resolver does. */
@@ -229,6 +233,17 @@ describe('the host boundary', () => {
         (parsed.get(f)?.usesProcessEnv === true ||
           (edges.get(f) ?? []).includes('src/host/env.ts')),
     )
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
+  it('keeps configuration out of import.meta.env', () => {
+    // Vite replaces `import.meta.env.VITE_*` with a literal in BOTH bundles,
+    // at build time, and an image is built once for every box: whatever is
+    // read that way is the build machine's value forever. The box's identity
+    // went this way once (lib/site.ts). Configuration is `host/env.ts` on the
+    // server and the root loader's data in the browser; `scripts/build.mjs`
+    // asserts the same thing about `dist/`.
+    const offenders = files.filter((f) => parsed.get(f)?.inlinesEnv === true)
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 

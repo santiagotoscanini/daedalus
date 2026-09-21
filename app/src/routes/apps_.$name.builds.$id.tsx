@@ -28,7 +28,8 @@ import { isActiveBuildState } from '../lib/builds'
 import { bytes, DASH, ms, pct } from '../lib/format'
 import { isAppName } from '../lib/hostname'
 import { errorText } from '../lib/redact'
-import { OWNER, REGISTRY_HOST } from '../lib/site'
+import { appRepo } from '../lib/site'
+import { useSite } from '../lib/site-context'
 import { stageExposed } from '../lib/stage'
 import type { Tone } from '../lib/tone'
 import {
@@ -145,6 +146,7 @@ function BuildDetail({
   initial: BuildView
   commit: Promise<BuildCommit | null> | null
 }) {
+  const site = useSite()
   const [build, setBuild] = useState(initial)
   useEffect(() => {
     setBuild(initial)
@@ -171,7 +173,7 @@ function BuildDetail({
     if (el !== null && follow.current) el.scrollTop = el.scrollHeight
   }, [build.log.text])
 
-  const repo = `${OWNER}/${name}`
+  const repo = appRepo(site, name)
   const commitUrl = `https://github.com/${repo}/commit/${build.sha}`
   const took = open && now === null ? null : buildDurationMs(build, now ?? 0)
   const waited = buildQueuedMs(build)
@@ -335,7 +337,11 @@ function BuildDetail({
                 },
                 {
                   k: 'image',
-                  v: <code title={build.imageRef ?? undefined}>{`${REGISTRY_HOST}/${name}`}</code>,
+                  v: (
+                    <code
+                      title={build.imageRef ?? undefined}
+                    >{`${site.registryHost}/${name}`}</code>
+                  ),
                 },
                 tagsRow(build),
                 // Not "size": it is the manifest's compressed layers plus its

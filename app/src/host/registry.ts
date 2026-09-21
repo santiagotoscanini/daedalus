@@ -5,10 +5,10 @@
 // Reached over traefik (https://registry.toscanini.me) because daedalus is
 // `isolated` and deliberately not on registry-net, where the registry lives.
 
-import { REGISTRY_HOST } from '../lib/site'
 import { env } from './env'
+import { readSite } from './site'
 
-const REGISTRY = () => env.get('REGISTRY_URL') ?? `https://${REGISTRY_HOST}`
+const REGISTRY = () => env.get('REGISTRY_URL') ?? `https://${readSite().registryHost}`
 
 const MANIFEST_ACCEPT = [
   'application/vnd.oci.image.manifest.v1+json',

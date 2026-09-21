@@ -10,7 +10,8 @@ import {
 } from '../../lib/build-settings'
 import { type BuildPublish, type BuildStrategy, RAILPACK_KNOB_NAMES } from '../../lib/builds'
 import { errorText } from '../../lib/redact'
-import { OWNER } from '../../lib/site'
+import { appRepo } from '../../lib/site'
+import { useSite } from '../../lib/site-context'
 import { type BuildSettingsResult, setBuildSettingsFn } from '../../server/builds'
 import { Segmented, Toggle } from '../controls'
 import { Button } from '../ui/button'
@@ -25,6 +26,7 @@ import { type AppRecord, BOARD_FOOT, GHOST_BTN } from './shared'
 const FIELD_LABEL = 'text-[0.76rem] text-(--dim)'
 
 export function BuildSettings({ app }: { app: AppRecord }) {
+  const repo = appRepo(useSite(), app.name)
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -118,12 +120,8 @@ export function BuildSettings({ app }: { app: AppRecord }) {
                     <span className="text-(--text-muted)">not linked yet</span>
                   ) : (
                     <span>
-                      <a
-                        href={`https://github.com/${OWNER}/${app.name}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {OWNER}/{app.name}
+                      <a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">
+                        {repo}
                       </a>{' '}
                       <span className="font-mono text-[0.76rem] text-(--dim)">
                         #{app.githubRepoId}

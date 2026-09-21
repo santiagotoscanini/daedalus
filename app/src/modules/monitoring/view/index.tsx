@@ -11,7 +11,7 @@ import { EMPTY, FOOT, MONO, NOTE, SUB } from '../../../components/tokens'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../../../components/viz'
 import { bytes, compact, DASH, ms, num, pct, since, until } from '../../../lib/format'
 import { defineViews } from '../../../lib/modules/tabs'
-import { BASE_DOMAIN } from '../../../lib/site'
+import { useSite } from '../../../lib/site-context'
 import type { MonitoringData, Tabs } from '../data'
 import { manifest } from '../manifest'
 
@@ -266,6 +266,7 @@ function AlertsView({ data: d }: { data: Alerts }) {
 type Probes = Extract<MonitoringData, { tab: 'probes' }>
 
 function ProbesView({ data: d }: { data: Probes }) {
+  const site = useSite()
   return (
     <>
       <ServiceHead
@@ -343,8 +344,8 @@ function ProbesView({ data: d }: { data: Probes }) {
             ]}
           />
           <p className={FOOT}>
-            One entrypoint-level wildcard covers <span className={MONO}>*.{BASE_DOMAIN}</span>, so
-            this is one certificate for every hostname on the box. Renewal is DNS-01 through
+            One entrypoint-level wildcard covers <span className={MONO}>*.{site.baseDomain}</span>,
+            so this is one certificate for every hostname on the box. Renewal is DNS-01 through
             Cloudflare and automatic. A number falling below thirty means lego is failing, and the
             store is a single file that is in no backup.
           </p>

@@ -32,15 +32,14 @@ import { type ReactNode, useEffect, useState } from 'react'
 
 import { cn } from '../lib/cn'
 import { type ResolvedScheme, useScheme } from '../lib/scheme'
-import { GRAFANA_URL } from '../lib/site'
+import type { Site } from '../lib/site'
+import { useSite } from '../lib/site-context'
 import { GHOST_BTN } from './apps/shared'
 import { Segmented } from './controls'
 import { Bar } from './skeleton'
 import { FOOT } from './tokens'
 import { Button } from './ui/button'
 import { Board } from './viz'
-
-const GRAFANA = GRAFANA_URL
 
 /* An embedded Grafana panel. Sized rather than aspect-ratioed: a log view
    wants a fixed number of visible lines, not a shape.
@@ -121,21 +120,22 @@ const SUBLOG_SUMMARY = cn(
  * the first-load cover below sufficient rather than a band-aid.
  */
 export function grafanaLogsEmbed(
+  site: Site,
   source: LogSource,
   from = 'now-7d',
   theme: ResolvedScheme = 'dark',
 ): string {
   return (
-    `${GRAFANA}/d-solo/container-logs/container-logs` +
+    `${site.grafanaUrl}/d-solo/container-logs/container-logs` +
     `?panelId=1&var-selector=${encodeURIComponent(`${label(source)}="${value(source)}"`)}` +
     `&from=${from}&to=now&theme=${theme}`
   )
 }
 
 /** The full Drilldown, for when you need search and live tail. */
-export function grafanaLogsFull(source: LogSource, from = 'now-7d'): string {
+export function grafanaLogsFull(site: Site, source: LogSource, from = 'now-7d'): string {
   return (
-    `${GRAFANA}/a/grafana-lokiexplore-app/explore` +
+    `${site.grafanaUrl}/a/grafana-lokiexplore-app/explore` +
     `?from=${from}&to=now&var-ds=loki-default` +
     `&var-filters=${encodeURIComponent(`${label(source)}|=|${value(source)}`)}`
   )
@@ -411,6 +411,7 @@ export function GrafanaLogs({
   title: string
   foot?: ReactNode
 }) {
+  const site = useSite()
   // Seven days for the reason in grafanaLogsEmbed: most services here are
   // quiet between restarts, and a short default shows nothing for a healthy
   // one.
@@ -427,7 +428,7 @@ export function GrafanaLogs({
           options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
         />
         <Button asChild variant="outline" size="sm" className={GHOST_BTN}>
-          <a href={grafanaLogsFull(source, from)} target="_blank" rel="noreferrer">
+          <a href={grafanaLogsFull(site, source, from)} target="_blank" rel="noreferrer">
             ↗ Search
           </a>
         </Button>
@@ -439,7 +440,7 @@ export function GrafanaLogs({
           first load does rather than Grafana's boot in the raw. */}
       <LogFrame
         key={`${from}-${scheme}`}
-        src={grafanaLogsEmbed(source, from, scheme)}
+        src={grafanaLogsEmbed(site, source, from, scheme)}
         title={title}
         settle={SETTLE.get(from) ?? 1_200}
       />

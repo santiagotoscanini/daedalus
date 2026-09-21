@@ -3,10 +3,11 @@ import { repoFileExists } from '../../core/github-app'
 import { listRepos } from '../../host/github-repos'
 import { manifestEntries } from '../../host/nix-manifest'
 import { imageInfo } from '../../host/registry'
+import { readSite } from '../../host/site'
 import { swrCache } from '../cache'
 import type { RepoBuild } from '../readiness'
 import { listApps } from '../repo/apps'
-import { defaultImage, OWNER, REGISTRY_HOST_PATTERN } from '../site'
+import { appRepo, defaultImage, registryHostPattern } from '../site'
 
 // The reads behind the create form: what it can be pointed at, whether the
 // image it would produce exists yet, and what the repository says about how it
@@ -56,10 +57,10 @@ const REPO_BUILD = swrCache({ ttlMs: 15_000 })
  */
 async function repoBuild(name: string): Promise<RepoBuild> {
   return REPO_BUILD.get(name, async () => {
-    // `OWNER/<app name>` — the same assumption the build service, the detail
+    // `<owner>/<app name>` — the same assumption the build service, the detail
     // page and the default image all make: an app is its repository's name.
-    const fullName = `${OWNER}/${name}`
     const ctx = await makeCtx()
+    const fullName = appRepo(ctx.site, name)
     const railpack = await repoFileExists(ctx, fullName, 'railpack.json')
     if (railpack === 'present') return 'railpack'
     if (railpack === 'unknown') return 'unknown'
@@ -80,7 +81,8 @@ async function repoBuild(name: string): Promise<RepoBuild> {
  * come first.
  */
 export async function appPreflight(data: { name: string; image: string | null }) {
-  const effectiveImage = data.image?.trim() || defaultImage(data.name)
+  const site = readSite()
+  const effectiveImage = data.image?.trim() || defaultImage(site, data.name)
 
   // Only images on the box's own zot can be verified from here — an override
   // pointing at GHCR or docker.io is reported as unverified rather than
@@ -88,7 +90,7 @@ export async function appPreflight(data: { name: string; image: string | null })
   // `<repo>` then an optional `:tag` or `@digest`; the leading separator is
   // dropped either way, since the manifest endpoint takes both as a bare
   // reference.
-  const local = new RegExp(`^${REGISTRY_HOST_PATTERN}/(?<repo>[^:@]+)(?<ref>[:@].+)?$`).exec(
+  const local = new RegExp(`^${registryHostPattern(site)}/(?<repo>[^:@]+)(?<ref>[:@].+)?$`).exec(
     effectiveImage,
   )
   // Two independent upstreams — the box's own zot and GitHub — so they are

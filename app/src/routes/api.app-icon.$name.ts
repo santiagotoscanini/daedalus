@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { makeCtx } from '../core/ctx'
 import { findExternalApp } from '../core/settings/external-apps'
 import { appIcon, type ResolvedIcon, siteIcon } from '../host/app-icon'
+import { readSite } from '../host/site'
 import { effectiveHostname } from '../lib/hostname'
 import { getApp } from '../lib/repo/apps'
 import { stageExposed } from '../lib/stage'
@@ -35,7 +36,7 @@ export const Route = createFileRoute('/api/app-icon/$name')({
         const icon: ResolvedIcon | null = record
           ? await appIcon(
               record.name,
-              effectiveHostname(record.name, record.hostname),
+              effectiveHostname(readSite(), record.name, record.hostname),
               stageExposed(record.stage),
             )
           : external && (await siteIcon(external.id, external.host))
