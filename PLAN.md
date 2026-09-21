@@ -33,7 +33,7 @@ no longer reaching into other stacks at eval time (9c, `046b3ff`).
 |---|---|---|
 | 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
 | 9 | Nix: enable surface, literals, state out of the tree | landed 2026-09-20/21; residue (asset literals, missing options) listed in the section |
-| 10 | App module system and a real build | 10a landed; 10b: the built server WORKS (`e31b110`, 2026-09-21) — runtime site identity, the Dockerfile and CI remain |
+| 10 | App module system and a real build | 10a landed; 10b: the built server, run-time identity and the one image are in (2026-09-21) — the nix switch to it, `sops` in the image and the first tag remain |
 | 11 | The engine becomes importable | not started |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
@@ -332,13 +332,46 @@ What 9b still leaves for Phase 11, after the asset pass (config `b1f4498`,
   dev; they never match across modes and need not — the client and server
   of ONE build agree (80 of 80, asserted by `scripts/check-build.mjs`, which
   `pnpm build` runs). Built: 690 ms to healthy and 203 MB; dev: 4 s and
-  1.5 GB. What remains, in order: **site identity at run time** (it was
-  inlined through `import.meta.env.VITE_*`, so a CI image would be right for
-  no box), the Dockerfile and the `DAEDALUS_DEV=1` entrypoint, then CI to
-  ghcr. Two things to check behind traefik: the framework's CSRF middleware
+  1.5 GB. Two things to check behind traefik: the framework's CSRF middleware
   wants `Sec-Fetch-Site: same-origin` or a matching `Origin`, and a tab left
   open across a deploy that MOVES a file calls ids that no longer exist
   until it reloads.
+
+  **The image landed** (branch `w-image`, 2026-09-21). `Dockerfile` at the
+  root, digest-pinned `node:24-slim`, `NPM_REGISTRY` a build arg defaulting
+  to npmjs (the box passes Verdaccio); `docker-entrypoint.sh` picks the mode
+  at start. 257 MB — 22 MB over the base — and ~30 s to build cold. The run
+  stage's `node_modules` is `pnpm install --prod`, which is why
+  `package.json`'s `dependencies` is now only the four packages the server
+  resolves at run time and everything the build bundles moved to
+  `devDependencies`; `check-build` enforces both directions. The dev branch
+  costs the image 113 kB of corepack shims: pnpm and the toolchain come from
+  the mounted tree (baking pnpm in measured +37 MB). Proven with podman
+  against a throwaway `postgres:16-alpine`: migrations at start, healthz,
+  `/apps` and `/settings` carrying a `BASE_DOMAIN`/`GITHUB_OWNER` given at
+  `podman run` — and a different pair on the next run of the same image —
+  a server function called by its built id, `podman stop` in 0.2 s; then the
+  same image with `DAEDALUS_DEV=1` and a tree at `/app` serving through Vite.
+  `.github/workflows/image.yml` publishes to ghcr on a `v*` tag only and has
+  never run.
+
+  What remains of 10b, in order:
+  1. **The nix side.** `source.mode` becomes a boolean that adds the bind
+     mount and `DAEDALUS_DEV=1`; the container runs this image instead of
+     `stacks/daedalus/assets/Containerfile`. Dev mode under rootless podman
+     needs `--user 0:0` (the image's user is `node`, and uid 1000 owns
+     nothing in the clone), and `COREPACK_HOME`/the store keep their places
+     under `/app`. The config still binds the `VITE_` spellings.
+  2. **`sops` in the image.** The end state carries an encrypt-only static
+     `sops`; today the box bind-mounts one at `/usr/local/bin/sops`. Not
+     added in this pass.
+  3. **The `shot` walk** of the built image, authenticated pages included —
+     the proof above is HTTP-level, and forward-auth headers are the only
+     identity, so without a proxy in front every write refuses.
+  4. **The first tag.** Publishing the first public image is the operator's
+     decision: bump `app/package.json`, tag `v<version>`, push the tag. The
+     ghcr package is private until its visibility is changed by hand. amd64
+     only — the run stage holds the build platform's argon2 binary.
 
 Compatibility: 10a is a refactor with tests (module registry tests, the
 existing suite, fixture-driven loader tests that survive a null upstream);

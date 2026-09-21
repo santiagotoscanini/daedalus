@@ -162,7 +162,14 @@ deploy that moved a file gets a failed call until it reloads.
 A build bundles every dependency into `dist/server` except
 `@node-rs/argon2` (a native addon). Running it therefore needs only
 `srvx`, `drizzle-orm`, `postgres` and `@node-rs/argon2` installed — 12 MB —
-not the 189 MB dev install.
+not the 189 MB dev install. **That is what `dependencies` in `package.json`
+means here**: the packages the server resolves at run time, which
+`pnpm install --prod` gives the image. React, the router, radix, zod and the
+rest are `devDependencies` because the build consumes them. `check-build`
+holds both directions — a run-time import missing from `dependencies` fails
+the build, and so does a `dependencies` entry nothing resolves. A new
+package goes in with `pnpm add -D` unless `server.mjs` imports it or
+`vite.config.ts` externalises it.
 
 The box's identity is not decided at build time: `src/host/site.ts` reads
 `BASE_DOMAIN`, `GITHUB_OWNER`, `REGISTRY_HOST` and `GRAFANA_URL` from the
@@ -173,3 +180,71 @@ thing is still not right for an image run somewhere without the box's proxy:
 forward-auth headers are the only identity, so without a proxy in front
 every write refuses. Server functions also require a same-origin request: a `curl`
 needs `-H 'Sec-Fetch-Site: same-origin'` or it gets a bare 403.
+
+## The image
+
+One `Dockerfile` at the repository root, one image, and
+`docker-entrypoint.sh` decides at start which of two things it is.
+
+```
+# from the repository root; npmjs is the default registry, as in CI
+podman build -t daedalus .
+
+# on the author's box: through Verdaccio, which the build container reaches
+# by the host gateway (pi-hole rate-limits a cold npmjs install)
+podman build -t daedalus \
+  --add-host=verdaccio.toscanini.me:host-gateway \
+  --build-arg NPM_REGISTRY=https://verdaccio.toscanini.me/ .
+```
+
+The `build` stage installs with `--frozen-lockfile`, runs `pnpm build` (the
+canaries and `check-build` included), then reinstalls with `--prod` from the
+store the first install filled. The final stage is `node:24-slim` plus
+`dist/`, `drizzle/`, `server.mjs`, `package.json` (the engine's version is
+read from it) and that 12 MB `node_modules`: 257 MB, 22 MB over the base.
+About 30 s cold against npmjs, 40 s through Verdaccio. The registry switch
+costs nothing in safety — the lockfile holds integrity hashes and no tarball
+URLs, and `minimumReleaseAge` and `allowBuilds` are read from
+`pnpm-workspace.yaml` whichever registry answers (the cooldown needs each
+package's publish time, which npmjs serves and Verdaccio proxies).
+
+**Production** — the default. Nothing is mounted; identity arrives as env:
+
+```
+podman run -d --init --name daedalus --network <net> \
+  -e DATABASE_URL=postgres://… \
+  -e BASE_DOMAIN=example.test -e GITHUB_OWNER=someone \
+  daedalus
+```
+
+Migrations apply before the port opens; a missing `DATABASE_URL` or a failed
+migration exits 1. It runs as `node` (uid 1000). `--init` because node as
+PID 1 reaps nothing — `server.mjs` handles SIGTERM itself, so `podman stop`
+takes 0.2 s with or without it.
+
+**Dev** — the same image, `DAEDALUS_DEV=1` and a source tree at `/app`:
+
+```
+podman run -d --init --name daedalus-dev --user 0:0 --network <net> \
+  -e DAEDALUS_DEV=1 -e DATABASE_URL=postgres://… \
+  -v "$PWD/app":/app daedalus
+```
+
+The entrypoint runs `pnpm install --frozen-lockfile` and then `pnpm dev`
+in the mount. The image carries corepack's shims (113 kB) and no pnpm and no
+dev dependency: the pnpm version is the mounted `package.json`'s to name and
+is fetched once into `/app/.corepack`; Vite and everything else come from
+the mount's own install. Baking pnpm in would cost 37 MB and pin the wrong
+thing. `--user 0:0` under rootless podman, where container root IS the host
+user and uid 1000 owns nothing in your checkout — the entrypoint says so
+instead of letting pnpm fail. With rootful docker, leave it off if your uid
+is 1000. `NPM_REGISTRY` overrides the registry `pnpm-workspace.yaml` names;
+`PNPM_STORE_DIR` moves the store (default `/app/.pnpm-store`, beside
+`node_modules` so pnpm can hardlink). With the flag set and nothing at
+`/app`, it warns and serves the bundle. Dev mode runs no migrations —
+`pnpm db:migrate`, as before.
+
+`.github/workflows/image.yml` publishes `ghcr.io/<owner>/daedalus:<version>`
+and `:sha-<short sha>` when a `v*` tag is pushed, and only then; the tag
+must match `app/package.json`'s version. On a pull request that touches the
+image files it builds and pushes nothing.
