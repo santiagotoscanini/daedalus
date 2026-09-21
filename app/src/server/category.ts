@@ -4,6 +4,8 @@ import type { Hosts } from '../host/hosts'
 import type { CategoryDataMap, CategoryPayload } from '../lib/dashboard/category-data'
 import { CATEGORIES, type CategoryName, isCategoryName, resolveTab } from '../lib/dashboard/nav'
 import { isRecord } from '../lib/is-record'
+import type { PageSpec } from '../lib/modules/manifest'
+import { isModuleId, moduleById } from '../lib/modules/registry'
 
 // The loaders behind every category page.
 //
@@ -85,14 +87,17 @@ const PROBE_WINDOW = '3m'
  * page, to draw a circle. This is one Prometheus query and lands first.
  */
 export const fetchTabStatus = createServerFn()
-  .validator((data: unknown): { category: CategoryName } => {
-    if (!isRecord(data) || !isCategoryName(data.category)) throw new Error('expected a category')
+  .validator((data: unknown): { category: string } => {
+    if (!isRecord(data) || !(isModuleId(data.category) || isCategoryName(data.category))) {
+      throw new Error('expected a category')
+    }
     return { category: data.category }
   })
   .handler(async ({ data }): Promise<TabStatus> => {
-    // Kept even though the validator has already proved this: `find` is what
-    // narrows the spec for everything below it.
-    const spec = CATEGORIES.find((c) => c.id === data.category)
+    // A module's manifest or a category's spec — the tab row is the same
+    // shape either way, and this is the one server function both share.
+    const spec: PageSpec | undefined =
+      moduleById(data.category) ?? CATEGORIES.find((c) => c.id === data.category)
     if (spec === undefined) return {}
 
     const { promVector } = await import('../host/prom')
@@ -113,7 +118,7 @@ export const fetchTabStatus = createServerFn()
     const health = new Map(probes.map((p) => [p.metric.name ?? '', p.value[1] === '1']))
 
     /** All green, or null the moment one of them cannot be read. */
-    const all = (names: string[]): boolean | null => {
+    const all = (names: readonly string[]): boolean | null => {
       const seen = names.map((n) => health.get(n) ?? null)
       return seen.includes(null) ? null : seen.every(Boolean)
     }
@@ -236,7 +241,6 @@ const LOADERS: { [K in CategoryName]: () => Promise<Loader<K>> } = {
   network: async () => (await import('../lib/dashboard/categories/network')).loadNetwork,
   system: async () => (await import('../lib/dashboard/categories/system')).loadSystem,
   monitoring: async () => (await import('../lib/dashboard/categories/monitoring')).loadMonitoring,
-  gaming: async () => (await import('../lib/dashboard/categories/gaming')).loadGaming,
 }
 
 async function loadCategory(

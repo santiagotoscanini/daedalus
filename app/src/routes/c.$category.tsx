@@ -3,11 +3,20 @@ import { createFileRoute, notFound } from '@tanstack/react-router'
 import { CategoryBoards } from '../components/category/registry'
 import { StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
+import { hasModuleViews, ModuleBoards, type ModulePayload } from '../components/modules/boards'
 import { PageHead } from '../components/page'
 import { BoardsSkeleton, ServiceHeadSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
-import { CATEGORIES, type CategoryName, type CategorySpec, resolveTab } from '../lib/dashboard/nav'
-import { fetchCategoryBoards, fetchTabStatus, type TabStatus } from '../server/category'
+import { CATEGORIES, type CategoryName, resolveTab } from '../lib/dashboard/nav'
+import { isDotted, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
+import { moduleById } from '../lib/modules/registry'
+import {
+  type CategoryPayload,
+  fetchCategoryBoards,
+  fetchTabStatus,
+  type TabStatus,
+} from '../server/category'
+import { fetchModuleBoards } from '../server/modules'
 
 // One page per category, and a tab per subject inside it.
 //
@@ -41,27 +50,34 @@ export const Route = createFileRoute('/c/$category')({
   }),
   loaderDeps: ({ search }) => ({ tab: search.tab }),
   loader: ({ params, deps }) => {
-    const spec = CATEGORIES.find((c) => c.id === params.category)
+    // A module (src/modules/<id>) first; a category still on the old registry
+    // second. The second lookup goes when the last category has moved.
+    const module = moduleById(params.category)
+    const spec: PageSpec | undefined = module ?? CATEGORIES.find((c) => c.id === params.category)
     // An unknown category is a 404, not an empty page: the rail cannot produce
     // one, so anything else got here by hand-editing the URL.
     if (spec === undefined) throw notFound()
 
-    const category = params.category as CategoryName
-    const tab = resolveTab(category, deps.tab)
+    const category = params.category
+    const tab =
+      module !== undefined
+        ? resolveTabOf(module, deps.tab)
+        : resolveTab(category as CategoryName, deps.tab)
+
+    const boards: Promise<CategoryPayload | ModulePayload> =
+      module !== undefined
+        ? fetchModuleBoards({ data: { module: module.id, tab } })
+        : fetchCategoryBoards({ data: { category: category as CategoryName, tab } })
 
     return {
       spec,
       tab,
-      boards: fetchCategoryBoards({ data: { category, tab } }),
-      // Only where a tab actually wears a dot — see CategorySpec.tabs. All
-      // three ways of declaring one count; testing `probe` alone would skip
-      // the request for a category whose tabs each hold several services, and
-      // then draw grey dots over health it had chosen not to fetch.
-      tabStatus: spec.tabs.some(
-        (t) => t.probe !== undefined || t.probes !== undefined || t.health !== undefined,
-      )
-        ? fetchTabStatus({ data: { category } })
-        : null,
+      boards,
+      // Only where a tab actually wears a dot. All three ways of declaring one
+      // count; testing `probe` alone would skip the request for a category
+      // whose tabs each hold several services, and then draw grey dots over
+      // health it had chosen not to fetch.
+      tabStatus: spec.tabs.some(isDotted) ? fetchTabStatus({ data: { category } }) : null,
     }
   },
   component: CategoryPage,
@@ -105,7 +121,15 @@ function CategoryPage() {
         promise={boards}
         fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
       >
-        {(payload) => <CategoryBoards payload={payload} />}
+        {(payload) =>
+          // Which registry answered. The cast on each side carries what the
+          // loader already decided; both go with the old registry.
+          hasModuleViews(payload.kind) ? (
+            <ModuleBoards payload={payload as ModulePayload} />
+          ) : (
+            <CategoryBoards payload={payload as CategoryPayload} />
+          )
+        }
       </GuardedAwait>
     </>
   )
@@ -126,7 +150,7 @@ function TabNav({
   tab,
   status,
 }: {
-  spec: CategorySpec
+  spec: PageSpec
   category: string
   tab: string
   status: TabStatus | null
@@ -134,9 +158,7 @@ function TabNav({
   // `probes` counts as much as `probe`. A category whose tabs all hold several
   // services would otherwise render no dots at all — the tab knows its health
   // and silently declines to show it.
-  const dotted = spec.tabs.some(
-    (t) => t.probe !== undefined || t.probes !== undefined || t.health !== undefined,
-  )
+  const dotted = spec.tabs.some(isDotted)
 
   return (
     <TabBar
@@ -151,7 +173,7 @@ function TabNav({
               state={up === null ? 'unknown' : up ? 'running' : 'attention'}
               label={up === null ? 'status unknown' : up ? 'up' : 'not answering'}
               title={
-                t.probe === undefined && t.probes === undefined && t.health === undefined
+                !isDotted(t)
                   ? 'nothing probes this yet'
                   : up === null
                     ? 'no reading from gatus'
@@ -181,7 +203,7 @@ function TabNav({
  * `head: false` is the honest opt-out for the tabs whose subject is not a
  * service — see `CategorySpec.tabs[].head`.
  */
-function BoardsPlaceholder({ spec, tab }: { spec: CategorySpec; tab: string }) {
+function BoardsPlaceholder({ spec, tab }: { spec: PageSpec; tab: string }) {
   const t = spec.tabs.find((x) => x.id === tab)
 
   return (

@@ -55,6 +55,9 @@ const SERVER_REGIONS = [
   (f: string) => f.startsWith('src/lib/dashboard/'),
   (f: string) => f.startsWith('src/lib/apps/'),
   (f: string) => /^src\/routes\/api\./.test(f),
+  // A module's data half. Its manifest and releases are pure by contract and
+  // its view half is client code — see below.
+  (f: string) => /^src\/modules\/[^/]+\/data\//.test(f),
 ]
 
 const isServerRegion = (f: string) => SERVER_REGIONS.some((p) => p(f))
@@ -64,7 +67,13 @@ const isSeam = (f: string) => f.startsWith('src/server/')
 
 /** Client code: shipped to the browser, must reach nothing on this list. */
 const isClient = (f: string) =>
-  f.startsWith('src/components/') || (f.startsWith('src/routes/') && !/^src\/routes\/api\./.test(f))
+  f.startsWith('src/components/') ||
+  (f.startsWith('src/routes/') && !/^src\/routes\/api\./.test(f)) ||
+  /^src\/modules\/[^/]+\/view\//.test(f) ||
+  /^src\/modules\/[^/]+\/(manifest|releases)\.ts$/.test(f)
+
+/** A dashboard module's files, which reach the machine only through their `Ctx`. */
+const isModule = (f: string) => f.startsWith('src/modules/')
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -203,6 +212,14 @@ describe('the host boundary', () => {
     const offenders = files
       .filter(isSeam)
       .flatMap((f) => (edges.get(f) ?? []).filter((d) => reason.has(d)).map((d) => `${f} → ${d}`))
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
+  it('keeps process.env out of the dashboard modules', () => {
+    // A module loader is handed a Ctx and reaches the box through it. A
+    // `process.env` read in one is a configuration path the Ctx does not
+    // know about, which is exactly what the capability set exists to prevent.
+    const offenders = files.filter((f) => isModule(f) && parsed.get(f)?.usesProcessEnv)
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 

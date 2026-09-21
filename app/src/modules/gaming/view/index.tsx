@@ -1,10 +1,12 @@
-import type { GamingData } from '../../lib/dashboard/categories/gaming'
-import { LogBoard } from '../logs'
-import { Changelog, ReleaseNotes, UpgradeChain } from '../release-notes'
-import { ServiceHead } from '../service-head'
-import { EMPTY, FOOT, MONO, NOTE } from '../tokens'
-import { Button } from '../ui/button'
-import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../viz'
+import { LogBoard } from '../../../components/logs'
+import { Changelog, ReleaseNotes, UpgradeChain } from '../../../components/release-notes'
+import { ServiceHead } from '../../../components/service-head'
+import { EMPTY, FOOT, MONO, NOTE } from '../../../components/tokens'
+import { Button } from '../../../components/ui/button'
+import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from '../../../components/viz'
+import { defineViews } from '../../../lib/modules/tabs'
+import type { GamingData, Tabs } from '../data'
+import { manifest } from '../manifest'
 
 // The Gaming page. Two servers, and the shape held.
 //
@@ -31,10 +33,10 @@ const NEWS_ROW =
 const NEWS_TITLE = 'truncate text-[0.8rem] text-foreground no-underline hover:underline'
 const NEWS_DATE = 'text-[0.72rem] whitespace-nowrap tabular-nums text-(--dim)'
 
-export function GamingView({ data }: { data: GamingData }) {
-  if (data.tab === 'minecraft') return <MinecraftView data={data} />
-  return <FactorioView data={data} />
-}
+export const views = defineViews<typeof manifest, Tabs>(manifest, {
+  factorio: FactorioView,
+  minecraft: MinecraftView,
+})
 
 /**
  * Paper, and the only tab here whose numbers are live.

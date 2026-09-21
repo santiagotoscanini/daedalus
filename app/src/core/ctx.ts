@@ -1,22 +1,29 @@
 import { join } from 'node:path'
 import { readSnapshot, type SnapshotResult } from '../host/contract/snapshot'
+import { type Hosts, makeHosts } from '../host/hosts'
 import { key } from '../host/keys'
 import { lokiEntries, lokiLatest } from '../host/loki'
-import type { Decoder } from '../lib/contract/decode'
+import { bool, type Decoder, recordOf } from '../lib/contract/decode'
 import { getJson } from '../lib/http'
 
 // The capability set a reader is handed instead of reaching for process.env.
 //
-// Today one consumer, core/settings. From the module system on (plan, Phase
-// 10) every module loader receives one of these and nothing else: no
-// `process.env` in a loader, no direct database import, no ad-hoc file read.
-// The shape is decided now, while there is one consumer to get it right
-// against, so that code lands in its final home rather than being moved
-// there later.
+// Every module loader (src/modules/*/data) receives one of these and nothing
+// else: no `process.env` in a loader, no direct database import, no ad-hoc
+// file read — host/boundary.test.ts refuses a `process.env` anywhere under
+// src/modules. core/settings reads through one too.
 //
 // Everything here is server-only — the snapshot reader touches the
 // filesystem and the store is Postgres — so this module must only ever be
 // imported dynamically from a server function, like lib/repo/*.
+
+/**
+ * Which nix modules the box runs, as `/export/modules.json` publishes them:
+ * `fleet.modules.<id>.enable`, one boolean per id. Until the box publishes
+ * the file, every module counts as enabled — a missing export must not empty
+ * the rail — and so does an id the file does not mention.
+ */
+const MODULES_EXPORT = 'modules.json'
 
 export type Ctx = {
   /** Non-secret configuration bound by the NixOS module. Undefined when unset or empty. */
@@ -42,11 +49,23 @@ export type Ctx = {
   }
   http: { getJson: typeof getJson }
   loki: { latest: typeof lokiLatest; entries: typeof lokiEntries }
+  /** Where a published service lives, and how a container reaches the host. */
+  hosts: Hosts
+  /** The box's nix modules. `enabled` answers true for anything the export does not deny. */
+  modules: { enabled: (nixModule: string) => boolean }
 }
 
 export async function makeCtx(): Promise<Ctx> {
   const { readSetting, writeSetting, deleteSetting } = await import('../lib/repo/settings')
   const exportDir = process.env.EXPORT_DIR ?? '/export'
+  const [hosts, modules] = await Promise.all([
+    makeHosts(),
+    readSnapshot({
+      path: join(exportDir, MODULES_EXPORT),
+      decoder: recordOf(bool),
+      fallback: {} as Record<string, boolean>,
+    }),
+  ])
   return {
     env: (name) => {
       const v = process.env[name]
@@ -58,5 +77,9 @@ export async function makeCtx(): Promise<Ctx> {
     store: { read: readSetting, write: writeSetting, delete: deleteSetting },
     http: { getJson },
     loki: { latest: lokiLatest, entries: lokiEntries },
+    hosts,
+    modules: {
+      enabled: (id) => (modules.available ? (modules.data[id] ?? true) : true),
+    },
   }
 }

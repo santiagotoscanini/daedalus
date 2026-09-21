@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import type { CategoryDataMap, CategoryPayload } from '../../lib/dashboard/category-data'
 import type { CategoryName } from '../../lib/dashboard/nav'
 import { AiView } from './ai'
-import { GamingView } from './gaming'
 import { HomeView } from './home'
 import { MediaView } from './media'
 import { MonitoringView } from './monitoring'
@@ -26,7 +25,6 @@ const VIEWS: { [K in CategoryName]: (props: { data: CategoryDataMap[K] }) => Rea
   network: NetworkView,
   system: SystemView,
   monitoring: MonitoringView,
-  gaming: GamingView,
 }
 
 export function CategoryBoards({ payload }: { payload: CategoryPayload }) {

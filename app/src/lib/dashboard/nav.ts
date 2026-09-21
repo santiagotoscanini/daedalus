@@ -17,7 +17,7 @@
  * five were Grafana, Loki, Prometheus, Gatus and Healthchecks — which is the
  * Monitoring tab row exactly.
  */
-export type CategoryName = 'ai' | 'media' | 'home' | 'gaming' | 'network' | 'system' | 'monitoring'
+export type CategoryName = 'ai' | 'media' | 'home' | 'network' | 'system' | 'monitoring'
 
 export type CategorySpec = {
   id: CategoryName
@@ -278,26 +278,6 @@ export const CATEGORIES: CategorySpec[] = [
         probe: 'stirling-pdf',
         boardSpans: [12, 12, 12],
       },
-    ],
-  },
-  {
-    id: 'gaming',
-    label: 'Gaming',
-    lede: 'The game servers: which build each one runs, and whether the people on the sofa can still join.',
-    boardSpans: [6, 6, 12],
-    tabs: [
-      // ofsm answering is the closest thing to a PROBE this server has: the
-      // game itself speaks UDP straight to a forwarded port and nothing on
-      // this box can ask it a question. Whether the game process is actually
-      // up is answered on the page instead, from its own log — the manager's
-      // UI keeps answering this dot while the game inside it is shut down.
-      { id: 'factorio', label: 'Factorio', probe: 'factorio-admin' },
-      // Still no probe, but for the opposite reason to Factorio's: a probe is
-      // a webApp answering HTTP, and Minecraft publishes no HTTP at all. It
-      // answers the question better than a dot could anyway — the page reads
-      // the game's own status ping, which is the game replying rather than a
-      // container existing.
-      { id: 'minecraft', label: 'Minecraft' },
     ],
   },
   {

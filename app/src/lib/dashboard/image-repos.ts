@@ -60,6 +60,22 @@ const TWO_OR_THREE = /^v?(\d+\.\d+(?:\.\d+)?)$/
  * options that tab passes — deliberately, so the Updates row and the service
  * page cannot disagree about what "3 behind" means.
  */
+/**
+ * The modules' own entries: each `src/modules/<id>/releases.ts` names the
+ * containers that module fronts. Found, not listed, like the manifests. What
+ * stays in the table below is the containers no tab owns — exporters,
+ * sidecars, janitors — until a module claims them.
+ */
+const MODULE_SOURCES: Record<string, ReleaseSource> = Object.assign(
+  {},
+  ...Object.values(
+    import.meta.glob<Record<string, ReleaseSource>>('../../modules/*/releases.ts', {
+      eager: true,
+      import: 'releases',
+    }),
+  ),
+)
+
 export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
   // ── the media chain ────────────────────────────────────────────────────
   radarr: { repo: 'Radarr/Radarr', opts: { tag: ARR_TAG } },
@@ -150,7 +166,7 @@ export const RELEASE_SOURCES: Record<string, ReleaseSource> = {
  * exactly what the curated table exists to override.
  */
 export async function releaseSourceFor(container: string): Promise<ReleaseSource | null> {
-  const curated = RELEASE_SOURCES[container]
+  const curated = MODULE_SOURCES[container] ?? RELEASE_SOURCES[container]
   if (curated !== undefined) return curated
 
   const { source } = await imageLabels(container)

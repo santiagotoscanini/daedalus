@@ -1,5 +1,4 @@
-import type { Hosts } from '../../../host/hosts'
-// The Gaming category — two game servers, asked the same three questions.
+// The Gaming module's data half — two game servers, asked the same three questions.
 //
 // Its own page rather than a corner of Home because the questions are its
 // own: which version is running, can the clients on the sofa still join it,
@@ -33,19 +32,21 @@ import type { Hosts } from '../../../host/hosts'
 //                                 and Friday Facts, which is the closest thing
 //                                 to a changelog that is machine-readable
 
+import type { Ctx } from '../../../core/ctx'
 import { lokiEntries } from '../../../host/loki'
 import { promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
-import { getJson } from '../../http'
-import { decodeEntities } from '../../plain-text'
-import type { Commit, CommitGap } from '../github'
+import type { Commit, CommitGap } from '../../../lib/dashboard/github'
+import { getJson } from '../../../lib/http'
+import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
+import { decodeEntities } from '../../../lib/plain-text'
+import { manifest } from '../manifest'
 
 /**
  * One shape per sub-tab. A union rather than optional fields, so the
  * Minecraft tab cannot accidentally read a Factorio number that is not there.
  */
-export type GamingData =
-  | ({ tab: 'factorio' } & FactorioData)
-  | ({ tab: 'minecraft' } & MinecraftData)
+export type Tabs = { factorio: FactorioData; minecraft: MinecraftData }
+export type GamingData = TabPayload<typeof manifest, Tabs>
 
 type FactorioData = {
   factorio: {
@@ -138,15 +139,15 @@ const PORT = 34197
  * See platform/ddclient. Read from the env rather than retyped here, because
  * a second copy of a hostname is a second copy that goes stale.
  */
-const wanHost = () => process.env.WAN_HOST ?? ''
+const wanHost = (ctx: Ctx) => ctx.env('WAN_HOST') ?? ''
 
-export async function loadGaming(tab: string, hosts: Hosts): Promise<GamingData> {
-  if (tab === 'minecraft') return { tab: 'minecraft', ...(await loadMinecraft()) }
-  return { tab: 'factorio', ...(await loadFactorio(hosts)) }
-}
+export const load = defineLoader<typeof manifest, Tabs>(manifest, {
+  factorio: loadFactorio,
+  minecraft: loadMinecraft,
+})
 
-async function loadFactorio(hosts: Hosts): Promise<FactorioData> {
-  const installed = process.env.FACTORIO_VERSION ?? null
+async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
+  const installed = ctx.env('FACTORIO_VERSION') ?? null
 
   const [releases, graph, feed, containerUp, gameLog] = await Promise.all([
     getJson<{ stable?: { headless?: string }; experimental?: { headless?: string } }>(
@@ -180,9 +181,9 @@ async function loadFactorio(hosts: Hosts): Promise<FactorioData> {
       // tracks this house's WAN address AND is short-circuited to the LAN
       // address by pi-hole, so this one string is what every player types,
       // wherever they are sitting.
-      connect: `${wanHost()}:${String(PORT)}`,
+      connect: `${wanHost(ctx)}:${String(PORT)}`,
       port: PORT,
-      adminUrl: hosts.base('factorio-admin'),
+      adminUrl: ctx.hosts.base('factorio-admin'),
     },
     live: {
       containerUp: containerUp === null ? null : containerUp >= 1,
@@ -476,9 +477,9 @@ const PAPER_API = 'https://fill.papermc.io/v3/projects/paper'
 const PAPER_REPO = 'https://github.com/PaperMC/Paper/commit'
 const MC_PORT = 25565
 
-async function loadMinecraft(): Promise<MinecraftData> {
-  const version = process.env.MINECRAFT_VERSION ?? null
-  const build = process.env.MINECRAFT_PAPER_BUILD ?? null
+async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
+  const version = ctx.env('MINECRAFT_VERSION') ?? null
+  const build = ctx.env('MINECRAFT_PAPER_BUILD') ?? null
 
   const [live, online, reported, latestVersion, builds, events] = await Promise.all([
     promScalars({
@@ -509,7 +510,7 @@ async function loadMinecraft(): Promise<MinecraftData> {
       maxPlayers: live.maxPlayers,
       ping: live.ping,
       online,
-      connect: `${wanHost()}:${String(MC_PORT)}`,
+      connect: `${wanHost(ctx)}:${String(MC_PORT)}`,
     },
     builds,
     events,

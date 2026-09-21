@@ -11,11 +11,13 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import appCss from '../app.css?url'
 import { AccountMenu } from '../components/account-menu'
 import { ErrorPanel } from '../components/error'
-import { NavIcon } from '../components/nav-icon'
+import { NavIcon, type NavIconName } from '../components/nav-icon'
 import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
 import { CATEGORIES } from '../lib/dashboard/nav'
 import { useHydrated } from '../lib/hydrated'
+import type { PageSpec } from '../lib/modules/manifest'
+import { isModuleId, MODULES } from '../lib/modules/registry'
 import { useResolvedScheme } from '../lib/scheme'
 import { presetById, type ThemeChoice, themeCss } from '../lib/theme'
 import { fetchAccount } from '../server/profile'
@@ -96,6 +98,13 @@ const NAV_ITEM = [
 ].join(' ')
 
 const NAV_ITEM_ACTIVE = 'bg-(--panel-2) font-[550] text-foreground [&>svg]:opacity-100'
+
+/**
+ * The rail's rows: the modules in their declared order, then whatever is
+ * still on the old category registry. The second half empties as categories
+ * move under src/modules, and goes with the registry.
+ */
+const rail: readonly PageSpec[] = [...MODULES, ...CATEGORIES.filter((c) => !isModuleId(c.id))]
 
 /** The label, which the collapsed rail hides in favour of the tooltip. */
 const NAV_LABEL = 'min-w-0 overflow-hidden text-ellipsis nav-collapsed:hidden'
@@ -448,7 +457,7 @@ function Shell({
 
             <span className={NAV_DIVIDER} aria-hidden="true" />
 
-            {CATEGORIES.map((c) => (
+            {rail.map((c) => (
               <Link
                 key={c.id}
                 to="/c/$category"
@@ -467,7 +476,7 @@ function Shell({
                 {/* The icon is keyed by the category id. It was a glyph on the
                     spec until it turned out to be the id spelled a second
                     way — see components/nav-icon.tsx. */}
-                <NavIcon name={c.id} />
+                <NavIcon name={c.id as NavIconName} />
                 <span className={NAV_LABEL}>{c.label}</span>
               </Link>
             ))}

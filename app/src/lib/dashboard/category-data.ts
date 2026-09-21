@@ -14,7 +14,6 @@ import type { CategoryName } from './nav'
 // until all four agree. The switches this replaced enforced none of that.
 
 import type { AiData } from './categories/ai'
-import type { GamingData } from './categories/gaming'
 import type { HomeData } from './categories/home'
 import type { MediaData } from './categories/media'
 import type { MonitoringData } from './categories/monitoring'
@@ -28,7 +27,6 @@ export type CategoryDataMap = {
   network: NetworkData
   system: SystemData
   monitoring: MonitoringData
-  gaming: GamingData
 }
 
 /** What one boards request answers: the category it is for, and its data. */

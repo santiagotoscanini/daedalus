@@ -414,5 +414,5 @@ export async function loadClaude(): Promise<ClaudeData> {
 // Views import TYPES only (`import type { … }`, erased under
 // verbatimModuleSyntax) and reach the data through a server function. Every
 // other data module here follows the same rule — see the top of
-// components/category/gaming.tsx for the shape. Anything derived from this
+// modules/gaming/view for the shape. Anything derived from this
 // payload that a view wants lives beside the view, not here.

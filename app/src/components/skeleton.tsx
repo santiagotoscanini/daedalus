@@ -94,7 +94,7 @@ export function ServiceHeadSkeleton() {
  * layout of the page being loaded — all five category pages open with a wide
  * board next to a narrow one, and a uniform grid of six would visibly reflow.
  */
-export function BoardsSkeleton({ spans = [8, 4, 6, 6] }: { spans?: number[] }) {
+export function BoardsSkeleton({ spans = [8, 4, 6, 6] }: { spans?: readonly number[] }) {
   return (
     <div className={BOARD_GRID}>
       {spans.map((span, i) => (
