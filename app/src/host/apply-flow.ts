@@ -1,3 +1,5 @@
+import { defineFlow, defineGate, type FlowOutcome } from './flow'
+
 // The one apply implementation.
 //
 // Both doors — the Apply button (server/registry.ts) and the scriptable
@@ -9,82 +11,29 @@
 // (core/settings/cloudflare-token.ts, core/settings/github-app.ts). It shares
 // the lock, the busy checks and the pickup window, and differs in one rule: it
 // is always its own Apply.
+//
+// The lock, the pickup window and the order of the steps are host/flow.ts's,
+// shared with host/update-flow.ts. What is here is what an Apply IS: what it
+// carries, and when there is nothing to carry.
 
 /**
- * lib/result.ts's shape with a `code` on the failure — the one thing the
- * scriptable door (routes/api.registry.apply.ts) maps to an HTTP status, and
- * the reason this is not a plain `Result`.
+ * `noop` is runApply's and `pending` is runSecretApply's; one union because
+ * the doors that render a refusal do not care which flow it came from. The
+ * `code` is the one thing the scriptable door (routes/api.registry.apply.ts)
+ * maps to an HTTP status.
  */
-export type ApplyOutcome =
-  | { ok: true; id: string; changed: { name: string; fields: string[] }[] }
-  | { ok: false; code: 'busy' | 'noop' | 'pending'; reason: string }
+export type ApplyOutcome = FlowOutcome<
+  { changed: { name: string; fields: string[] }[] },
+  'noop' | 'pending'
+>
 
-/**
- * How long a published request may sit unclaimed before a new apply is
- * allowed to overwrite it. The path unit normally reacts within a second or
- * two; a request still foreign to status.json after two minutes means the
- * host agent is not coming for it, and refusing forever would wedge the
- * button until a container restart.
- */
-const PICKUP_MS = 120_000
-
-/**
- * The last request this process published and has not yet seen the host
- * acknowledge in status.json. This is what closes the window the status file
- * cannot: between requestApply returning and apply.sh writing `running`, the
- * file still shows the PREVIOUS run's terminal state, so a second apply
- * racing through the file check alone would replace apps.json under a rebuild
- * that is about to read it.
- *
- * Process-local on purpose: this container is the only writer into /apply,
- * and a single node process serves both doors.
- */
-let pending: { id: string; at: number } | null = null
-
-/** Serialises appliers: the check-then-write below must not interleave. */
-let chain: Promise<unknown> = Promise.resolve()
-
-function serialised(work: () => Promise<ApplyOutcome>): Promise<ApplyOutcome> {
-  const outcome = chain.then(work)
-  chain = outcome.catch(() => undefined)
-  return outcome
-}
-
-export function runApply(actor: string): Promise<ApplyOutcome> {
-  return serialised(() => locked(actor))
-}
-
-/** Why a new apply may not start now, or null when it may. */
-async function refuseBusy(): Promise<ApplyOutcome | null> {
-  const { readApplyStatus } = await import('./apply')
-
-  // Refuse while one is in flight. The host script holds fleet.rebuildLock, so
-  // a second apply could not corrupt anything — it would simply queue behind
-  // it and then write a registry snapshot taken BEFORE the first one landed.
-  // Rejecting here is both faster feedback and the correct answer.
-  const inFlight = await readApplyStatus()
-  if (inFlight.state === 'running') {
-    return { ok: false, code: 'busy', reason: `an apply is already running (${inFlight.phase})` }
-  }
-
-  if (pending !== null) {
-    if (inFlight.id === pending.id) {
-      // The host has caught up: status now speaks for our request, and the
-      // `running` check above is the guard again.
-      pending = null
-    } else if (Date.now() - pending.at < PICKUP_MS) {
-      return {
-        ok: false,
-        code: 'busy',
-        reason: 'the previous apply request has not been picked up by the host yet',
-      }
-    } else {
-      pending = null
-    }
-  }
-  return null
-}
-
+// ONE gate for both flows below: they publish to the same request file, so a
+// secret's Apply and a registry Apply must refuse each other.
+const gate = defineGate({
+  noun: 'apply',
+  readStatus: async () => (await import('./apply')).readApplyStatus(),
+  running: (inFlight) => `an apply is already running (${inFlight.phase})`,
+})
 /** What an Apply would carry right now: app drift and site-document edits. */
 async function currentChanges() {
   const { listApps, driftOf } = await import('../lib/repo/apps')
@@ -122,39 +71,44 @@ async function commitSwitch(): Promise<boolean> {
   )
 }
 
-async function locked(actor: string): Promise<ApplyOutcome> {
-  const { toRegistryExport } = await import('../lib/repo/apps')
-  const { requestApply, summarise } = await import('./apply')
-  const { renderRegistryFile } = await import('../lib/registry-file')
-  const { renderSiteStampFile } = await import('../core/site')
+const apply = defineFlow<string, { changed: { name: string; fields: string[] }[] }, 'noop'>(gate, {
+  prepare: async (actor) => {
+    const { toRegistryExport } = await import('../lib/repo/apps')
+    const { requestApply, summarise } = await import('./apply')
+    const { renderRegistryFile } = await import('../lib/registry-file')
+    const { renderSiteStampFile } = await import('../core/site')
 
-  const blocked = await refuseBusy()
-  if (blocked !== null) return blocked
+    const { records, site, changed } = await currentChanges()
+    if (changed.length === 0) {
+      return { ok: false, code: 'noop', reason: 'nothing to apply' }
+    }
 
-  const { records, site, changed } = await currentChanges()
-  if (changed.length === 0) {
-    return { ok: false, code: 'noop', reason: 'nothing to apply' }
-  }
+    return {
+      ok: true,
+      value: { changed },
+      publish: async () =>
+        requestApply({
+          // Finished files, not data structures: the host agent writes these
+          // bytes verbatim and never parses either. apps.json always — its
+          // render is idempotent and the agent reports no-change; site.json
+          // only when its desired document differs from the committed one;
+          // daedalus.json always, because the point of the stamp is that every
+          // write into the directory says which engine made it.
+          files: {
+            'apps.json': renderRegistryFile(toRegistryExport(records)),
+            ...(site.changes.length > 0 ? { 'site.json': site.render.after } : {}),
+            'daedalus.json': await renderSiteStampFile('apply', actor),
+          },
+          summary: summarise(changed),
+          actor,
+          commit: await commitSwitch(),
+        }),
+    }
+  },
+})
 
-  const id = await requestApply({
-    // Finished files, not data structures: the host agent writes these bytes
-    // verbatim and never parses either. apps.json always — its render is
-    // idempotent and the agent reports no-change; site.json only when its
-    // desired document differs from the committed one; daedalus.json always,
-    // because the point of the stamp is that every write into the directory
-    // says which engine made it.
-    files: {
-      'apps.json': renderRegistryFile(toRegistryExport(records)),
-      ...(site.changes.length > 0 ? { 'site.json': site.render.after } : {}),
-      'daedalus.json': await renderSiteStampFile('apply', actor),
-    },
-    summary: summarise(changed),
-    actor,
-    commit: await commitSwitch(),
-  })
-  pending = { id, at: Date.now() }
-
-  return { ok: true, id, changed }
+export function runApply(actor: string): Promise<ApplyOutcome> {
+  return apply(actor)
 }
 
 export type VaultFile = import('../lib/vault').VaultFile
@@ -170,11 +124,53 @@ const pendingReason = (other: { name: string }[]) =>
  * nobody can use. runSecretApply asks again at the moment it writes.
  */
 export async function secretApplyBlocker(): Promise<string | null> {
-  const blocked = await refuseBusy()
-  if (blocked !== null && !blocked.ok) return blocked.reason
+  const blocked = await gate.blocked()
+  if (blocked !== null) return blocked.reason
   const { changed } = await currentChanges()
   return changed.length > 0 ? pendingReason(changed) : null
 }
+
+type SecretApply = {
+  actor: string
+  secret: { file: VaultFile; name: string; ciphertext: string }
+  extraFiles?: Pick<import('./apply').ApplyFiles, 'site.json'>
+}
+
+const secretApply = defineFlow<
+  SecretApply,
+  { changed: { name: string; fields: string[] }[] },
+  'pending'
+>(gate, {
+  prepare: async ({ actor, secret, extraFiles }) => {
+    const { requestApply } = await import('./apply')
+    const { renderSiteStampFile } = await import('../core/site')
+
+    const { changed: other } = await currentChanges()
+    if (other.length > 0) {
+      return { ok: false, code: 'pending', reason: pendingReason(other) }
+    }
+
+    return {
+      ok: true,
+      value: { changed: [{ name: 'vault', fields: [secret.name] }] },
+      publish: async () =>
+        requestApply({
+          // The stamp rides this door too — every write into the directory
+          // records what wrote it. It never changes the commit's subject: the
+          // agent leaves it out of that decision, so this stays
+          // `vault: replace …`.
+          files: {
+            ...extraFiles,
+            [secret.file]: secret.ciphertext,
+            'daedalus.json': await renderSiteStampFile('apply', actor),
+          },
+          summary: `replace ${secret.name}`,
+          actor,
+          commit: await commitSwitch(),
+        }),
+    }
+  },
+})
 
 /**
  * Replace one vault secret. Always its own Apply: refused while anything else
@@ -191,33 +187,10 @@ export function runSecretApply(
   secret: { file: VaultFile; name: string; ciphertext: string },
   opts?: { extraFiles?: Pick<import('./apply').ApplyFiles, 'site.json'> },
 ): Promise<ApplyOutcome> {
-  return serialised(async () => {
-    const { requestApply } = await import('./apply')
-    const { renderSiteStampFile } = await import('../core/site')
-
-    const blocked = await refuseBusy()
-    if (blocked !== null) return blocked
-
-    const { changed: other } = await currentChanges()
-    if (other.length > 0) {
-      return { ok: false, code: 'pending', reason: pendingReason(other) }
-    }
-
-    const id = await requestApply({
-      // The stamp rides this door too — every write into the directory records
-      // what wrote it. It never changes the commit's subject: the agent leaves
-      // it out of that decision, so this stays `vault: replace …`.
-      files: {
-        ...opts?.extraFiles,
-        [secret.file]: secret.ciphertext,
-        'daedalus.json': await renderSiteStampFile('apply', actor),
-      },
-      summary: `replace ${secret.name}`,
-      actor,
-      commit: await commitSwitch(),
-    })
-    pending = { id, at: Date.now() }
-    return { ok: true, id, changed: [{ name: 'vault', fields: [secret.name] }] }
+  return secretApply({
+    actor,
+    secret,
+    ...(opts?.extraFiles === undefined ? {} : { extraFiles: opts.extraFiles }),
   })
 }
 
@@ -241,10 +214,10 @@ export async function applyPreview(): Promise<{
   /** Why a new Apply would be refused right now, or null. */
   blocked: string | null
 }> {
-  const [{ changed, site }, blocker] = await Promise.all([currentChanges(), refuseBusy()])
+  const [{ changed, site }, blocker] = await Promise.all([currentChanges(), gate.blocked()])
   return {
     changed,
     site: [...site.changes],
-    blocked: blocker !== null && !blocker.ok ? blocker.reason : null,
+    blocked: blocker?.reason ?? null,
   }
 }

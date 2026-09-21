@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { actorLabelOf } from '../core/auth'
+import { httpResult } from '../lib/http-result'
 
 // Trigger an apply without the UI, and read back where it got to.
 //
@@ -23,11 +24,11 @@ export const Route = createFileRoute('/api/registry/apply')({
         const { assertAdminOf } = await import('../core/authz')
         await assertAdminOf(request)
         const { runApply } = await import('../host/apply-flow')
+        const { flowResult } = await import('../host/flow')
         const outcome = await runApply(actorLabelOf(request, 'api'))
-        if (!outcome.ok) {
-          return Response.json({ status: outcome.code, reason: outcome.reason }, { status: 409 })
-        }
-        return Response.json({ status: 'queued', id: outcome.id, changed: outcome.changed })
+        // Every refusal an Apply has — busy, nothing to apply — is about the
+        // state of the box, never about the request, which has no body.
+        return httpResult(flowResult(outcome), { kind: () => 'conflict' })
       },
     },
   },

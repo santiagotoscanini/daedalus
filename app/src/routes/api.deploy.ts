@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { actorLabelOf } from '../core/auth'
 import { safeEqual } from '../host/github-app-crypto'
+import { readJsonObject } from '../lib/http-result'
 import { isRecord } from '../lib/is-record'
 
 // "A new image landed — redeploy this app."
@@ -40,22 +41,15 @@ export const Route = createFileRoute('/api/deploy')({
         const { requestDeploy } = await import('../host/deploy')
         const { getApp } = await import('../lib/repo/apps')
 
-        // `null` is valid JSON: the parse succeeds, the catch never fires, and
-        // a cast to a record would leave every read below to throw outside the
-        // try — a 500 where this 400 is meant.
-        let body: Record<string, unknown>
-        try {
-          const parsed: unknown = await request.json()
-          if (!isRecord(parsed)) {
-            return Response.json(
-              { status: 'error', error: 'body must be a JSON object' },
-              { status: 400 },
-            )
-          }
-          body = parsed
-        } catch {
-          return Response.json({ status: 'error', error: 'body must be JSON' }, { status: 400 })
+        // The body's wording is zot's contract, not lib/http-result's dialect:
+        // only the read is shared.
+        const read = await readJsonObject(request)
+        if (!read.ok) {
+          const error =
+            read.reason === 'not-json' ? 'body must be JSON' : 'body must be a JSON object'
+          return Response.json({ status: 'error', error }, { status: 400 })
         }
+        const body = read.value
 
         // zot speaks CloudEvents in BINARY mode: the attributes are HTTP
         // headers (ce-type, ce-id, ce-source…) and the body is the bare data
