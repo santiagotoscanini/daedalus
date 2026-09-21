@@ -10,7 +10,7 @@ import {
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import appCss from '../app.css?url'
 import { AccountMenu } from '../components/account-menu'
-import { ErrorPanel } from '../components/error'
+import { ErrorPanel, NotFoundPanel } from '../components/error'
 import { NavIcon, type NavIconName } from '../components/nav-icon'
 import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
@@ -185,6 +185,7 @@ export const Route = createRootRoute({
   // Inside the shell (this route's children render there), so an uncaught
   // loader or render error keeps the rail and its way back to every other page.
   errorComponent: ErrorPanel,
+  notFoundComponent: NotFoundPanel,
   shellComponent: RootDocument,
 })
 

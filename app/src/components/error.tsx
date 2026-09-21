@@ -55,6 +55,31 @@ export function ErrorPanel({ error, reset }: ErrorComponentProps) {
   )
 }
 
+/**
+ * Nothing lives at this address.
+ *
+ * Its own component rather than the router's default, for two reasons. The
+ * default is a bare `<p>Not Found</p>` outside the shell's typography, and the
+ * router warns on the server for every request that reaches it — which on this
+ * box is every browser asking for `/favicon.ico`, so the warning was most of
+ * what the log said. Not an error: there is nothing to retry and nothing to
+ * report, so it offers the one useful thing, the way back.
+ */
+export function NotFoundPanel() {
+  return (
+    <>
+      <PageHead title="Nothing here">
+        No page lives at this address. It may have been renamed, or the link was typed by hand.
+      </PageHead>
+      <p>
+        <Button asChild>
+          <a href="/apps">Back to Apps</a>
+        </Button>
+      </p>
+    </>
+  )
+}
+
 export function AwaitError({ error, reset }: ErrorComponentProps) {
   const retry = useRetry(reset)
   return (
