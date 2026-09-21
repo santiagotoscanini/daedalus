@@ -1,15 +1,50 @@
 {
   description = "daedalus — a control plane you import into your own NixOS config";
 
-  # No inputs, on purpose. The engine is modules and libraries; the HOST picks
-  # the nixpkgs they are evaluated against, imports sops-nix beside them, and
-  # hands in `nixpkgs-unstable` where a module asks for it (specialArgs). An
-  # engine that pinned its own nixpkgs would be a second opinion about the
+  # The MODULES take nothing from these inputs. The host picks the nixpkgs they
+  # are evaluated against, imports sops-nix beside them, and hands in
+  # `nixpkgs-unstable` where a module asks for it (specialArgs): an engine that
+  # evaluated against its own nixpkgs would be a second opinion about the
   # system it is a guest in.
+  #
+  # The inputs exist for the repo's own tooling — `nix fmt` and `nix flake
+  # check` — and a host should make both follow its own
+  # (`inputs.daedalus.inputs.nixpkgs.follows = "nixpkgs"`), so importing the
+  # engine adds nothing to its lock file.
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
   outputs =
-    { self }:
+    {
+      self,
+      nixpkgs,
+      treefmt-nix,
+    }:
     let
       root = ./nix;
+
+      # One system today: the formatter and its check are developer tooling,
+      # and the engine's only box is x86_64. The modules are system-agnostic.
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+
+      # The same three tools, with the same settings, the operator's config
+      # held these files to before they moved here.
+      treefmtEval = treefmt-nix.lib.evalModule pkgs {
+        projectRootFile = "flake.nix";
+        programs.nixfmt.enable = true;
+        programs.statix.enable = true;
+        programs.deadnix = {
+          enable = true;
+          no-lambda-pattern-names = true;
+          no-lambda-arg = true;
+        };
+      };
 
       platformModules = [
         "autoupgrade/autoupgrade.nix"
@@ -52,6 +87,10 @@
       # import a library at module-import time, where `_module.args` cannot
       # reach.
       lib.path = root;
+
+      formatter.${system} = treefmtEval.config.build.wrapper;
+
+      checks.${system}.formatting = treefmtEval.config.build.check self;
 
       nixosModules = {
         # The OS-level base every stack rides on: the container runtime and its

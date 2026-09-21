@@ -108,6 +108,21 @@ jobs:
             exit 1
           fi
 
+  nix:
+    name: Nix (format, lint, module shape)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      # nixfmt, statix and deadnix over every .nix file, plus nix's own check
+      # that each exported nixosModule is a module. It does NOT evaluate a
+      # system: the modules read registries that some stacks still declare in
+      # the operator's private config, so there is no system here to build yet.
+      - run: nix flake check --print-build-logs
+
   workflows:
     name: Workflows (actionlint, zizmor)
     runs-on: ubuntu-latest
