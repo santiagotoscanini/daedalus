@@ -1420,6 +1420,12 @@ in
         map (d: d.env) dashboard
         ++ [
           (lib.optionalAttrs haveGithubApp { BUILD_LOGS_PATH = "/builds"; })
+          # The model server on the GPU box (platform/gpu-host.nix) — off-box, so
+          # it cannot come from webAppHosts, and absent on a host without one:
+          # the AI → Lemonade tab reads the variable's absence as "no server".
+          (lib.optionalAttrs (config.fleet.gpuHost != null) {
+            LEMONADE_URL = "http://${config.fleet.gpuHost}:13305";
+          })
           {
             # Reached over the `monitoring` bridge added above.
             PROMETHEUS_URL = "http://prometheus:9090";
@@ -1467,9 +1473,6 @@ in
             # account and tunnel ids beside it are the tunnel's business and arrive
             # from stacks/cloudflared through fleet.dashboard while it runs.
             CF_ZONE_ID = config.fleet.cloudflare.zoneId;
-            # Off-box, so it cannot come from webAppHosts. One binding here rather
-            # than a literal per Lemonade tile.
-            LEMONADE_URL = "http://${config.fleet.gpuHost}:13305";
             # The default route, which is the router. Bound from the one option that
             # already says where this box sends everything it cannot deliver itself,
             # so there is no second copy of the address to drift.

@@ -70,6 +70,7 @@
         "ddclient/ddclient.nix"
         "export.nix"
         "git/git.nix"
+        "gpu-host.nix"
         "gpu.nix"
         "hc-ping/hc-ping.nix"
         "machine-state.nix"
