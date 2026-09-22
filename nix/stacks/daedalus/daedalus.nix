@@ -1941,6 +1941,25 @@ in
     };
 
     fleet.statePaths.${applyDir} = { };
+    # The approved nodes as prometheus targets: the control plane writes
+    # `nodes/targets.json` under the apply bridge (app/src/host/node-targets.ts)
+    # whenever a machine is approved, revoked, forgotten or moves address,
+    # and prometheus discovers them from the file — a node joins the fleet's
+    # metrics at approval, with no rebuild. The directory is pre-created so
+    # the read-only mount has something to bind on a fresh box.
+    fleet.statePaths."${applyDir}/nodes" = { };
+    fleet.prometheusFileSd.nodes = "${applyDir}/nodes";
+    fleet.prometheusScrapes = [
+      {
+        job_name = "nodes";
+        file_sd_configs = [
+          {
+            files = [ "/etc/prometheus/sd/nodes/*.json" ];
+            refresh_interval = "1m";
+          }
+        ];
+      }
+    ];
     # Rollback state (see prevDir). statePaths rather than a use-time mkdir
     # alone: it is the fleet's one convention for pre-creating these (tmpfiles
     # skips /home), it exists before the first Apply on a fresh restore, and

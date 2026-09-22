@@ -546,7 +546,12 @@ in
       volumes = [
         "${prometheusDir}:/etc/prometheus:ro"
         "${config.fleet.stateRoot}/monitoring/prometheus/data:/prometheus"
-      ];
+      ]
+      # File-based discovery directories (fleet.prometheusFileSd): read-only,
+      # one mount per name, re-read by prometheus when their files change.
+      ++ lib.mapAttrsToList (
+        name: dir: "${dir}:/etc/prometheus/sd/${name}:ro"
+      ) config.fleet.prometheusFileSd;
 
       extraOptions = [
         # Image's default `nobody` (UID 65534) → host 100533, owner of
