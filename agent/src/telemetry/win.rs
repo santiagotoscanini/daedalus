@@ -232,26 +232,14 @@ fn cpu_usage(prev: CpuTimes, cur: CpuTimes) -> Option<f64> {
     Some(pct.clamp(0.0, 100.0))
 }
 
-/// Swap totals from `GlobalMemoryStatusEx`'s commit figures. The page
-/// file is the commit limit beyond physical memory; "used" is the commit
-/// charge beyond what is physically in use, which is a proxy — commit and
-/// physical use are different books, so a negative difference is clamped
-/// to 0 — and both are None when the limit is below physical memory,
-/// which cannot describe a real page file.
-fn swap_from(
-    total_phys: u64,
-    avail_phys: u64,
-    total_pagefile: u64,
-    avail_pagefile: u64,
-) -> (Option<u64>, Option<u64>) {
-    if total_pagefile < total_phys || avail_pagefile > total_pagefile {
-        return (None, None);
-    }
-    let swap_total = total_pagefile - total_phys;
-    let phys_used = total_phys.saturating_sub(avail_phys);
-    let committed = total_pagefile - avail_pagefile;
-    let swap_used = committed.saturating_sub(phys_used).min(swap_total);
-    (Some(swap_total), Some(swap_used))
+/// The page file's size from `GlobalMemoryStatusEx`'s commit limit: the
+/// limit beyond physical memory. How much of it is IN USE is not derivable
+/// from these figures — commit charge is a promise, not a page-file
+/// occupancy, and the difference read as "full" on a real machine — so
+/// only the total is reported. None when the limit is below physical
+/// memory, which cannot describe a real page file.
+fn swap_from(total_phys: u64, total_pagefile: u64) -> Option<u64> {
+    (total_pagefile >= total_phys).then(|| total_pagefile - total_phys)
 }
 
 /// Bytes per second from two counter readings, or None when the counter
@@ -408,6 +396,8 @@ pub struct Collector {
     /// How many GPUs the last `read_static` found; `gpu_usage` is indexed
     /// like that list.
     gpu_count: usize,
+    /// Which GPU the machine-wide counters are attributed to.
+    gpu_main: usize,
 }
 
 impl Collect for Collector {
@@ -418,6 +408,15 @@ impl Collect for Collector {
         let cpu = read_cpu(&mut errors);
         let gpus = read_gpus(&mut errors);
         self.gpu_count = gpus.len();
+        // The counters carry a LUID per instance while the registry keys do
+        // not, so the machine's totals go on the GPU with the most memory —
+        // the discrete card on a machine that has one, the only one otherwise.
+        self.gpu_main = gpus
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, g)| g.vram_total_bytes.unwrap_or(0))
+            .map(|(i, _)| i)
+            .unwrap_or(0);
         Static {
             machine,
             os,
@@ -516,11 +515,11 @@ impl Collector {
         // not, so the machine's total goes on the first GPU and the rest
         // stay unsampled.
         match Pdh::sum(pdh.usage) {
-            Ok(v) => out[0].usage_pct = Some(v.clamp(0.0, 100.0)),
+            Ok(v) => out[self.gpu_main].usage_pct = Some(v.clamp(0.0, 100.0)),
             Err(rc) => errors.push(format!("GPU usage counter not read: PDH {rc:#010x}")),
         }
         match Pdh::sum(pdh.vram) {
-            Ok(v) if v >= 0.0 => out[0].vram_used_bytes = Some(v as u64),
+            Ok(v) if v >= 0.0 => out[self.gpu_main].vram_used_bytes = Some(v as u64),
             Ok(_) => {}
             Err(rc) => errors.push(format!("GPU memory counter not read: PDH {rc:#010x}")),
         }
@@ -544,6 +543,11 @@ impl Collector {
                 .filter(|r| r.OperStatus == IfOperStatusUp)
                 .filter(|r| r.Type == IF_TYPE_ETHERNET_CSMACD || r.Type == IF_TYPE_IEEE80211)
                 .filter(|r| r.PhysicalAddressLength > 0)
+                // The filter drivers stacked on an adapter (WFP, QoS…) are
+                // listed as interfaces of their own with the same counters.
+                // The SDK's bitfield: HardwareInterface is bit 0, FilterInterface
+                // bit 1 (the crate exposes the byte, not the fields).
+                .filter(|r| r.InterfaceAndOperStatusFlags._bitfield & 0x02 == 0)
                 .map(|r| {
                     let name = from_wide(&r.Alias)
                         .or_else(|| from_wide(&r.Description))
@@ -735,12 +739,8 @@ fn read_memory(errors: &mut Vec<String>) -> Memory {
         errors.push(format!("GlobalMemoryStatusEx failed: {e}"));
         return Memory::default();
     }
-    let (swap_total_bytes, swap_used_bytes) = swap_from(
-        m.ullTotalPhys,
-        m.ullAvailPhys,
-        m.ullTotalPageFile,
-        m.ullAvailPageFile,
-    );
+    let swap_total_bytes = swap_from(m.ullTotalPhys, m.ullTotalPageFile);
+    let swap_used_bytes = None;
     Memory {
         total_bytes: Some(m.ullTotalPhys),
         used_bytes: Some(m.ullTotalPhys.saturating_sub(m.ullAvailPhys)),
@@ -948,18 +948,11 @@ mod tests {
     }
 
     #[test]
-    fn swap_from_commit_figures() {
-        // 16 GiB physical, 12 GiB free, 24 GiB commit limit, 15 GiB free commit.
+    fn swap_from_commit_limit() {
         let g = 1u64 << 30;
-        let (total, used) = swap_from(16 * g, 12 * g, 24 * g, 15 * g);
-        assert_eq!(total, Some(8 * g));
-        assert_eq!(used, Some(5 * g));
-        // Commit below physical use: nothing paged out.
-        assert_eq!(swap_from(16 * g, 4 * g, 24 * g, 20 * g).1, Some(0));
-        // No page file at all.
-        assert_eq!(swap_from(16 * g, 4 * g, 16 * g, 8 * g), (Some(0), Some(0)));
-        // A limit below physical memory describes nothing.
-        assert_eq!(swap_from(16 * g, 4 * g, 8 * g, 4 * g), (None, None));
+        assert_eq!(swap_from(16 * g, 24 * g), Some(8 * g));
+        assert_eq!(swap_from(16 * g, 16 * g), Some(0));
+        assert_eq!(swap_from(16 * g, 8 * g), None);
     }
 
     #[test]

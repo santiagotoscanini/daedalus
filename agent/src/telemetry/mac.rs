@@ -56,44 +56,95 @@ pub struct Collector {
 
 /// A command's whole stdout, or `None` when it fails, prints nothing usable,
 /// or is still running at the deadline (then it is killed).
-fn output(mut cmd: Command, deadline: Duration) -> Option<String> {
+/// Why a command gave nothing, for the error line.
+#[derive(Debug, PartialEq)]
+enum Failed {
+    /// It could not be started at all.
+    Spawn(String),
+    /// It did not finish within the deadline and was killed.
+    Timeout,
+    /// It finished with a non-zero status; the first line of stderr, if any.
+    Exit(i32, String),
+}
+
+impl std::fmt::Display for Failed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Failed::Spawn(e) => write!(f, "not started: {e}"),
+            Failed::Timeout => write!(f, "no answer in time"),
+            Failed::Exit(code, line) if line.is_empty() => write!(f, "exit {code}"),
+            Failed::Exit(code, line) => write!(f, "exit {code}: {line}"),
+        }
+    }
+}
+
+fn output_or(mut cmd: Command, deadline: Duration) -> Result<String, Failed> {
     let started = Instant::now();
     let mut child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
-        .ok()?;
-    let mut out = child.stdout.take()?;
+        .map_err(|e| Failed::Spawn(e.to_string()))?;
+    let mut out = child
+        .stdout
+        .take()
+        .ok_or_else(|| Failed::Spawn("no stdout".into()))?;
+    let mut err = child.stderr.take();
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         let mut s = String::new();
         let _ = out.read_to_string(&mut s);
         let _ = tx.send(s);
     });
+    let (etx, erx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut s = String::new();
+        if let Some(e) = err.as_mut() {
+            let _ = e.read_to_string(&mut s);
+        }
+        let _ = etx.send(s);
+    });
     let text = match rx.recv_timeout(deadline) {
         Ok(t) => t,
         Err(_) => {
             let _ = child.kill();
             let _ = child.wait();
-            return None;
+            return Err(Failed::Timeout);
         }
     };
     // stdout is closed; the process is exiting. Give it the rest of the
     // deadline rather than a blocking wait.
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => return status.success().then_some(text),
+            Ok(Some(status)) => {
+                if status.success() {
+                    return Ok(text);
+                }
+                let stderr = erx
+                    .recv_timeout(Duration::from_millis(200))
+                    .unwrap_or_default();
+                let first = stderr
+                    .lines()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("")
+                    .trim();
+                return Err(Failed::Exit(status.code().unwrap_or(-1), first.to_string()));
+            }
             Ok(None) if started.elapsed() < deadline => {
                 std::thread::sleep(Duration::from_millis(20));
             }
             _ => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return None;
+                return Err(Failed::Timeout);
             }
         }
     }
+}
+
+fn output(cmd: Command, deadline: Duration) -> Option<String> {
+    output_or(cmd, deadline).ok()
 }
 
 fn run_for(cmd: &str, args: &[&str], deadline: Duration) -> Option<String> {
@@ -744,12 +795,10 @@ impl Collect for Collector {
         } else {
             "smc,thermal,cpu_power,gpu_power"
         };
-        match run_for(
-            "powermetrics",
-            &["--samplers", samplers, "-n", "1", "-i", "500"],
-            POWERMETRICS,
-        ) {
-            Some(t) => {
+        let mut pm = Command::new("powermetrics");
+        pm.args(["--samplers", samplers, "-n", "1", "-i", "500"]);
+        match output_or(pm, POWERMETRICS) {
+            Ok(t) => {
                 let p = parse_powermetrics(&t);
                 s.cpu_temperature_c = p.cpu_die_c;
                 gpu.temperature_c = p.gpu_die_c;
@@ -774,7 +823,9 @@ impl Collect for Collector {
                     });
                 }
             }
-            None => s.errors.push("powermetrics failed (it needs root)".into()),
+            Err(e) => s
+                .errors
+                .push(format!("powermetrics failed ({e}); it needs root")),
         }
         s.gpu_usage.push(gpu);
 
