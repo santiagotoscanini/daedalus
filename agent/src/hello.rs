@@ -176,7 +176,8 @@ fn send(
         pubkey: &pubkey,
         sig: &sig,
     };
-    let resp = ureq::post(&format!("{url}/api/nodes/hello"))
+    let resp = crate::http::agent()
+        .post(&format!("{url}/api/nodes/hello"))
         .set(
             "User-Agent",
             concat!("daedalus-agent/", env!("CARGO_PKG_VERSION")),
