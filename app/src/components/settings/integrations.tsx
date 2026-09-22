@@ -6,7 +6,7 @@ import { since, when } from '../../lib/format'
 import { mailAddressError } from '../../lib/site-fields'
 import { Identified, ReplaceToken, Token } from './cloudflare'
 import { Github, GithubApp, type GithubAppProps } from './github-app'
-import { ExtLink, Mono, Pending, Section, Unset, Value } from './shared'
+import { ExtLink, Mono, Pending, Section, Stack, Unset, Value } from './shared'
 import { SiteText, SiteUnwritten } from './site-fields'
 
 // The Integrations tab's frame: four sections of facts, in the order a
@@ -164,14 +164,14 @@ export function Integrations({
               ) : status.mail.lastSentAt === null ? (
                 <Unset label="nothing in the last 30 days" />
               ) : (
-                <span className="inline-flex flex-col items-end gap-[0.1rem]">
+                <Stack>
                   <Mono>{when(status.mail.lastSentAt)}</Mono>
                   {status.mail.lastRecipient !== null && (
                     <span className="text-[0.78rem] text-(--text-muted)">
                       to {status.mail.lastRecipient}
                     </span>
                   )}
-                </span>
+                </Stack>
               ),
           },
         ]}

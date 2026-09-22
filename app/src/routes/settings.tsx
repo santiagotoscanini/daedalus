@@ -2,17 +2,17 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import {
   CodeIcon,
   FolderGit2Icon,
+  GlobeIcon,
   NetworkIcon,
   PaletteIcon,
   PlugIcon,
   SlidersHorizontalIcon,
-  UserIcon,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState, useTransition } from 'react'
 
 import { ApplyBar } from '../components/apply-bar'
 import { GuardedAwait } from '../components/error'
-import { PageHead } from '../components/page'
+import { Measure, PageHead } from '../components/page'
 import { usePoll } from '../components/poll'
 import { Appearance } from '../components/settings/appearance'
 import { Developer } from '../components/settings/developer'
@@ -20,23 +20,21 @@ import { ExternalApps } from '../components/settings/external-apps'
 import { General } from '../components/settings/general'
 import { Integrations } from '../components/settings/integrations'
 import { Network } from '../components/settings/network'
-import { ProfileTab } from '../components/settings/profile'
 import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
 import { TabBar } from '../components/tabs'
 import type { GithubAppStatus, GithubCallbackNotice } from '../core/settings/types'
-import { fetchProfile } from '../server/profile'
 import { fetchApplyStatus } from '../server/registry'
 import {
   fetchAuthorization,
   fetchBoxSettings,
   fetchExternalApps,
-  fetchGeneralLive,
   fetchGithubAppStatus,
   fetchIntegrationStatus,
   fetchMcpTokens,
   fetchTheme,
   fetchTimezones,
+  fetchZones,
   githubInstallLandedFn,
 } from '../server/settings'
 import { fetchSiteEdit, fetchSiteState } from '../server/site'
@@ -47,18 +45,30 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // the /export domains, the host snapshots — and says where it read it from.
 // Nothing here is guessed. The rows nix sources from site/site.json are
 // editable (core/site EDITABLE — the domain, the addresses, DHCP, the DNS
-// upstreams, the two mail addresses, the timezone); an edit is a stored draft against the
-// committed file, shown as `pending` beside the row, and the Apply bar at the
-// foot is what writes the file and rebuilds. Everything else is read-only.
+// upstreams, the two mail addresses, the timezone); an edit is a stored draft
+// against the committed file, shown as `pending` beside the row, and the
+// Apply bar at the foot is what writes the file and rebuilds. Everything else
+// is read-only.
 //
 // The dividing line every section on this page has to respect: a setting the
 // NixOS side consumes belongs in the site repository, where changing it is a
-// commit and a rebuild. A setting it does not — the theme, and every UI
-// preference after it — belongs in Postgres, where changing it is an UPDATE
-// and nothing rebuilds. Appearance is deliberately the second kind, which is
-// why it can save on click with no Apply bar. Profile is a third kind: it is
-// state inside Pocket ID, written through Pocket ID's API, and also saves at
-// once.
+// commit and a rebuild. A setting it does not — the theme, the off-box
+// projects, and every UI preference after them — belongs in Postgres, where
+// changing it is an UPDATE and nothing rebuilds. Appearance and Projects are
+// deliberately the second kind, which is why they save on click with no
+// Apply bar.
+//
+// Two things that look like settings are not on this page, on purpose. The
+// person — the Pocket ID account — is /profile, reached from the account
+// menu: everything here is about the machine, and a person filed among its
+// network and integrations read as one more property of it. And what the
+// box RUNS — the NixOS release, its support window, the channel — is on
+// System › Updates beside the engine's pin, with the other things that move.
+//
+// The tabs are the seven subjects a box has, in the order a first visit
+// reads them: what it is called, how it is reached, what it talks to, where
+// its configuration lives, what else it lists, how it looks, and how it is
+// driven.
 
 /** A tab's label with its icon: drawn quieter than the word, which carries the meaning. */
 function TabLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
@@ -77,7 +87,7 @@ const TABS = [
   { id: 'network', label: <TabLabel icon={<NetworkIcon />}>Network</TabLabel> },
   { id: 'integrations', label: <TabLabel icon={<PlugIcon />}>Integrations</TabLabel> },
   { id: 'repository', label: <TabLabel icon={<FolderGit2Icon />}>Site</TabLabel> },
-  { id: 'profile', label: <TabLabel icon={<UserIcon />}>Profile</TabLabel> },
+  { id: 'projects', label: <TabLabel icon={<GlobeIcon />}>Projects</TabLabel> },
   { id: 'appearance', label: <TabLabel icon={<PaletteIcon />}>Appearance</TabLabel> },
   { id: 'developer', label: <TabLabel icon={<CodeIcon />}>Developer</TabLabel> },
 ] as const
@@ -149,8 +159,8 @@ export const Route = createFileRoute('/settings')({
       fetchApplyStatus(),
       // A file read, so awaited like the facts; only General has the picker.
       general ? fetchTimezones() : Promise.resolve<string[]>([]),
-      // One row, and only General has the editor.
-      general ? fetchExternalApps() : Promise.resolve([]),
+      // One row, and only Projects has the editor.
+      deps.tab === 'projects' ? fetchExternalApps() : Promise.resolve([]),
       // Two file reads and a row, no upstream: awaited, for the tab that shows it.
       deps.tab === 'integrations' ? fetchGithubAppStatus() : Promise.resolve(null),
       // One indexed table read, and only for the tab that lists them.
@@ -168,12 +178,10 @@ export const Route = createFileRoute('/settings')({
       githubApp,
       mcpTokens,
       authorization,
-      // The zone list and the NixOS release ask Cloudflare, endoflife.date and
-      // GitHub, so they stream in behind the tab like the integration checks.
-      live: general ? fetchGeneralLive() : null,
+      // The zone list asks Cloudflare, so it streams in behind the tab like the
+      // integration checks.
+      zones: general ? fetchZones() : null,
       integrations: deps.tab === 'integrations' ? fetchIntegrationStatus() : null,
-      // Asks Pocket ID, so it streams in the same way.
-      profile: deps.tab === 'profile' ? fetchProfile() : null,
       // Deferred for the same reason: it renders site.json to hash it, for the
       // one tab that shows the answer.
       site: deps.tab === 'repository' ? fetchSiteState() : null,
@@ -187,12 +195,11 @@ function SettingsPage() {
     theme,
     settings,
     integrations,
-    profile,
     site,
     edit,
     applyStatus,
     timezones,
-    live,
+    zones,
     externalApps,
     githubApp,
     mcpTokens,
@@ -281,11 +288,10 @@ function SettingsPage() {
   const [choice, setChoice] = useState(theme)
 
   return (
-    <>
+    <Measure>
       <PageHead title="Settings">
         How this box is configured, and how it looks. What nix builds from is edited here and
-        applied as a rebuild; Profile saves to your Pocket ID account and Appearance to this control
-        plane, both at once.
+        applied as a rebuild; Projects and Appearance save to this control plane at once.
       </PageHead>
 
       <TabBar
@@ -294,26 +300,25 @@ function SettingsPage() {
         linkTo={(id) => ({ to: '/settings', search: { tab: id } })}
       />
 
-      <div className="mt-6 flex max-w-4xl flex-col gap-6 pb-24">
+      <div className="flex flex-col gap-6 pb-24">
         {/* One place for the bytes an Apply would write, whichever tab the
             edit was made on — the tabs show fields, this shows the file. */}
         <SiteDiff edit={edit} />
 
         {tab === 'general' &&
-          (live === null ? (
-            <General settings={settings} edit={edit} timezones={timezones} live={null} />
+          (zones === null ? (
+            <General settings={settings} edit={edit} timezones={timezones} zones={null} />
           ) : (
             <GuardedAwait
               resetKey={tab}
-              promise={live}
+              promise={zones}
               fallback={
-                <General settings={settings} edit={edit} timezones={timezones} live={null} />
+                <General settings={settings} edit={edit} timezones={timezones} zones={null} />
               }
             >
-              {(l) => <General settings={settings} edit={edit} timezones={timezones} live={l} />}
+              {(z) => <General settings={settings} edit={edit} timezones={timezones} zones={z} />}
             </GuardedAwait>
           ))}
-        {tab === 'general' && <ExternalApps rows={externalApps} />}
         {tab === 'network' && <Network settings={settings} edit={edit} />}
         {tab === 'integrations' &&
           (integrations === null ? (
@@ -358,18 +363,7 @@ function SettingsPage() {
               {(state) => <Repository settings={settings} site={state} />}
             </GuardedAwait>
           ))}
-        {tab === 'profile' &&
-          (profile === null ? (
-            <ProfileTab operator={settings.general.operator} profile={null} />
-          ) : (
-            <GuardedAwait
-              resetKey={tab}
-              promise={profile}
-              fallback={<ProfileTab operator={settings.general.operator} profile={null} />}
-            >
-              {(p) => <ProfileTab operator={settings.general.operator} profile={p} />}
-            </GuardedAwait>
-          ))}
+        {tab === 'projects' && <ExternalApps rows={externalApps} />}
         {tab === 'appearance' && (
           <Appearance
             value={choice}
@@ -395,6 +389,6 @@ function SettingsPage() {
       </div>
 
       <ApplyBar changed={changed} initialStatus={applyStatus} />
-    </>
+    </Measure>
   )
 }

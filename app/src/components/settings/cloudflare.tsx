@@ -7,7 +7,7 @@ import { replaceCloudflareTokenFn } from '../../server/settings'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Chip } from '../viz'
-import { Bad, ERROR_NOTE, Mono, NOTE, Pending, Unset } from './shared'
+import { ASIDE, Bad, ERROR_NOTE, Mono, NOTE, Pending, Stack, Unset } from './shared'
 
 // The Cloudflare half of Settings › Integrations: the cells that say what the
 // box is configured with and whether the token can still read it, and the one
@@ -30,7 +30,7 @@ export function Identified({
 }) {
   if (id === '') return <Unset />
   return (
-    <span className="inline-flex flex-col items-end gap-[0.1rem]">
+    <Stack>
       {live === undefined ? (
         <Pending />
       ) : live === null ? (
@@ -46,8 +46,8 @@ export function Identified({
           <Mono>{live.name}</Mono>
         </span>
       )}
-      <span className="text-[0.72rem] text-(--dim)">{id}</span>
-    </span>
+      <span className={ASIDE}>{id}</span>
+    </Stack>
   )
 }
 

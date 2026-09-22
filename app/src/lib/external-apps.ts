@@ -5,7 +5,7 @@
 // registry row or nix manifest entry to derive them from, and nix never
 // consumes the list — which makes it a preference, not site configuration.
 // It lives in the settings store under `apps.external` (core/settings/
-// external-apps.ts reads and writes it; Settings › General is the editor),
+// external-apps.ts reads and writes it; Settings › Projects is the editor),
 // and it is the operator's data: this file carries no rows, only the shape
 // and the rules a new row is held to. An image is built once and runs on
 // every box, so a row written here would be one box's projects on all of

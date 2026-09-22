@@ -5,12 +5,12 @@ import { cn } from '../../lib/cn'
 import { since, when } from '../../lib/format'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Skeleton } from '../ui/skeleton'
-import { Chip, Facts } from '../viz'
+import { Chip } from '../viz'
 
-// What the read-only settings tabs are built from: a card of labelled rows,
-// a value that says "not set" when it is not set, and a line stating where
-// the section's facts came from and how old they are. The tabs differ in
-// what they show, not in how.
+// What the settings tabs are built from: a card of labelled rows, a value
+// that says "not set" when it is not set, and a line stating where the
+// section's facts came from and how old they are. The tabs differ in what
+// they show, not in how.
 
 /* Settings keeps its own two of the board vocabulary rather than taking
    components/tokens.ts's, and the difference is deliberate: these are read as
@@ -22,6 +22,56 @@ export const MONO = 'font-mono text-[0.8rem] [overflow-wrap:anywhere]'
 
 /** The sentence under a section: what the rows above it mean, or what to do. */
 export const NOTE = 'm-0 text-[0.78rem] text-(--text-muted)'
+
+/** The quieter line under a value: when it was read, what it was, what it needs. */
+export const ASIDE = 'text-[0.72rem] text-(--dim)'
+
+/**
+ * A section's rows: the label in a column of its own, the value beside it.
+ *
+ * A form, not a table. The value is left-aligned against the label column so
+ * every value in a card — and every input — sits on the same vertical axis,
+ * which is what lets the eye run down a settings page. Right-aligned values
+ * (the board vocabulary's `Facts`) put a short value at the far edge of a wide
+ * card with the whole width between it and its label, and a picker at the
+ * far right reads as a table cell rather than as a field. Below phone width
+ * the label sits above its value instead.
+ */
+export function Rows({ rows }: { rows: { k: string; v: ReactNode }[] }) {
+  return (
+    <dl className="m-0">
+      {rows.map((r) => (
+        <div
+          key={r.k}
+          className={cn(
+            'grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] items-baseline gap-x-6',
+            'border-t border-(--border-soft) py-[0.55rem] first:border-t-0 first:pt-0 last:pb-0',
+            'max-[40rem]:grid-cols-1 max-[40rem]:gap-y-1',
+          )}
+        >
+          <dt className="text-(--dim) text-[0.82rem]">{r.k}</dt>
+          <dd className="m-0 min-w-0 text-[0.84rem] [font-weight:450]">{r.v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+/** A value and the quieter lines under it — a commit and its date, a status and its reason. */
+export function Stack({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <span className={cn('inline-flex max-w-full flex-col items-start gap-[0.1rem]', className)}>
+      {children}
+    </span>
+  )
+}
+
+/** One line of a value: a chip and a word, a value and its unit — wrapping when the row is narrow. */
+export function Line({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <span className={cn('inline-flex flex-wrap items-center gap-2', className)}>{children}</span>
+  )
+}
 
 export function Section({
   title,
@@ -69,7 +119,7 @@ export function Section({
         {description !== undefined && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {rows !== undefined && <Facts rows={rows} list />}
+        {rows !== undefined && <Rows rows={rows} />}
         {children}
       </CardContent>
     </Card>
@@ -111,7 +161,7 @@ export function ExtLink({ href, children }: { href: string; children?: ReactNode
 /** A commit, the way git log would say it at a glance. */
 export function Commit({ rev, subject, at }: { rev: string; subject?: string; at?: string }) {
   return (
-    <span className="inline-flex max-w-full flex-col items-end gap-[0.1rem] text-right">
+    <Stack>
       <Mono>{rev.slice(0, 10)}</Mono>
       {subject !== undefined && subject !== '' && (
         <span className="text-[0.78rem] text-(--text-muted) [overflow-wrap:anywhere]">
@@ -121,7 +171,7 @@ export function Commit({ rev, subject, at }: { rev: string; subject?: string; at
       {at !== undefined && at !== '' && (
         <span className="text-[0.72rem] text-(--dim)">{when(at)}</span>
       )}
-    </span>
+    </Stack>
   )
 }
 

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { GHOST_BTN } from '../../../components/apps/shared'
 import { EngineCard } from '../../../components/engine-update'
 import { UpdateControl, UpdateProgress } from '../../../components/image-update'
+import { NixosCard } from '../../../components/nixos-card'
 import { Changelog } from '../../../components/release-notes'
 import { usePolledStatus } from '../../../components/status'
 import { Button } from '../../../components/ui/button'
@@ -132,8 +133,10 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
   return (
     <BoardGrid>
       {/* The engine first: the one pin here that is not a container, and the
-          one whose update restarts the page reporting it. */}
+          one whose update restarts the page reporting it. Then the release the
+          whole generation stands on. */}
       <EngineCard e={d.engine} />
+      <NixosCard facts={d.nixos.facts} version={d.nixos.version} />
       <QueuePanel
         queue={queue}
         initialStatus={d.status}

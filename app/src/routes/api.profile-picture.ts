@@ -3,7 +3,7 @@ import { AUTH_HEADERS } from '../core/auth'
 import { makeCtx } from '../core/ctx'
 import { profilePicture } from '../core/settings/profile'
 
-// The signed-in person's Pocket ID picture, for Settings › Profile.
+// The signed-in person’s Pocket ID picture, for the Profile page and the rail.
 //
 // Proxied rather than an <img> pointed at the IdP: the account is resolved from
 // this request's forward-auth headers (core/settings/profile.ts), so the page

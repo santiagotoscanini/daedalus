@@ -53,12 +53,12 @@ export const manifest = {
     // No head, like its neighbours: sixty-five containers have no one
     // version and no one thing to open.
     //
-    // Three full-width boards: the engine's own pin, then the two image
-    // lists (behind, and on the newest tag).
+    // Four full-width boards: the engine's own pin, the NixOS release, then
+    // the two image lists (behind, and on the newest tag).
     {
       id: 'updates',
       label: 'Updates',
-      boardSpans: [12, 12, 12],
+      boardSpans: [12, 12, 12, 12],
       head: false,
     },
     {

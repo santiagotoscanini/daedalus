@@ -1398,7 +1398,7 @@ in
         # above guarantees, and why the platform asserts the two go together.
         headers = {
           "X-Forwarded-Email" = "{{ .claims.email }}";
-          # Pocket ID's user id. Settings › Profile finds the signed-in account
+          # Pocket ID's user id. The Profile page finds the signed-in account
           # by it, because unlike the email it survives the person editing it.
           "X-Forwarded-User" = "{{ .claims.sub }}";
           # Which Pocket ID groups the session carries, as a JSON array —

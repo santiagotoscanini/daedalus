@@ -119,3 +119,18 @@ export const requestEngineUpdateFn = createServerFn({ method: 'POST' }).handler(
   const { runEngineUpdate } = await import('../host/engine-flow')
   return runEngineUpdate({ actor: actorLabel() })
 })
+
+/**
+ * Where the NixOS release stands — the live half of the NixOS card.
+ *
+ * On demand rather than in the tab's loader, for the loader's own reason
+ * (modules/system/data/updates.ts, "it costs no network"): this asks
+ * endoflife.date and GitHub, cached hourly in core/settings/nixos, and the
+ * card's facts render from the export before the answer lands.
+ */
+export const fetchNixosRelease = createServerFn().handler(async () => {
+  const { nixosRelease } = await import('../core/settings/nixos')
+  const { siteIdentity } = await import('../host/contract/domains/site')
+  const site = await siteIdentity()
+  return nixosRelease(site.data.nixos)
+})

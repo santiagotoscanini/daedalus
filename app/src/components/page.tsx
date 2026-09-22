@@ -56,3 +56,18 @@ export function Crumbs({ className, ...props }: ComponentProps<'p'>) {
     />
   )
 }
+
+/**
+ * One measure for a page of forms.
+ *
+ * The category pages fill the main column, because a grid of boards is
+ * read across. Settings and Profile are read DOWN — a stack of cards with a
+ * label column and a value column — and a form stretched to a wide window
+ * puts its values a screen's width from their labels. So those two pages
+ * share this: a 60rem column centred in the main area, holding the title,
+ * the tab row and the cards alike, so the header is never wider than what it
+ * heads.
+ */
+export function Measure({ className, ...props }: ComponentProps<'div'>) {
+  return <div className={cn('mx-auto w-full max-w-[60rem]', className)} {...props} />
+}

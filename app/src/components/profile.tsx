@@ -1,30 +1,33 @@
 import { useRouter } from '@tanstack/react-router'
 import { ExternalLinkIcon, KeyRoundIcon, LogOutIcon } from 'lucide-react'
 import { useId, useRef, useState, useTransition } from 'react'
-import type { BoxSettings, Profile, ProfilePatch, ProfileRead } from '../../core/settings/types'
-import { cn } from '../../lib/cn'
+import type { OperatorAccount, Profile, ProfilePatch, ProfileRead } from '../core/settings/types'
+import { cn } from '../lib/cn'
 import {
   lengthError,
   type PictureType,
   pictureFileError,
   usernameError,
-} from '../../lib/profile-fields'
-import { errorText } from '../../lib/redact'
-import { mailAddressError } from '../../lib/site-fields'
-import { resetProfilePictureFn, saveProfileFn, uploadProfilePictureFn } from '../../server/profile'
-import { Button, buttonVariants } from '../ui/button'
-import { Card, CardContent } from '../ui/card'
-import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
-import { Input } from '../ui/input'
-import { Chip } from '../viz'
-import { Mono, NOTE, Pending, Section, Unset } from './shared'
+} from '../lib/profile-fields'
+import { errorText } from '../lib/redact'
+import { mailAddressError } from '../lib/site-fields'
+import { resetProfilePictureFn, saveProfileFn, uploadProfilePictureFn } from '../server/profile'
+import { ASIDE, Mono, NOTE, Pending, Section, Stack, Unset } from './settings/shared'
+import { Button, buttonVariants } from './ui/button'
+import { Card, CardContent } from './ui/card'
+import { Field, FieldDescription, FieldError, FieldLabel } from './ui/field'
+import { Input } from './ui/input'
+import { Chip } from './viz'
 
-// Settings › Profile — the person, where every other tab is the box.
+// The Profile page — the person, where Settings is the box.
 //
-// Laid out as a person's page rather than as the box's fact rows: the picture
-// and the name first, large and together, then a plain form. The label-left,
-// value-right rows the other tabs use put a portrait at the far right edge of
-// the card, which reads as a table cell, not as someone.
+// Its own page, reached from the account menu at the foot of the rail, rather
+// than a tab of Settings: everything on Settings is about this machine, and
+// a person filed fourth among its network and integrations read as one more
+// property of the box. Laid out as a person's page: the picture and the name
+// first, large and together, then a plain form. The label-and-value rows the
+// settings cards use would put a portrait in a value cell, which reads as a
+// table cell, not as someone.
 //
 // Pocket ID is the source (core/settings/profile.ts): these read and write the
 // IdP account the signed-in person uses everywhere, so a save is an API call
@@ -34,12 +37,12 @@ import { Mono, NOTE, Pending, Section, Unset } from './shared'
 const INPUT = cn(
   'h-9 w-full rounded-[8px] bg-(--panel-2) px-3 md:text-[0.86rem] dark:bg-(--panel-2)',
 )
-const ASIDE = 'text-[0.74rem] text-(--dim)'
-export function ProfileTab({
+
+export function ProfilePage({
   operator,
   profile,
 }: {
-  operator: BoxSettings['general']['operator']
+  operator: OperatorAccount
   /** Null while Pocket ID is being asked. */
   profile: ProfileRead | null
 }) {
@@ -69,10 +72,10 @@ export function ProfileTab({
               operator.user === '' ? (
                 <Unset />
               ) : (
-                <span className="inline-flex flex-col items-end gap-[0.1rem]">
+                <Stack>
                   <Mono>{operator.user}</Mono>
                   {operator.group !== '' && <span className={ASIDE}>group {operator.group}</span>}
-                </span>
+                </Stack>
               ),
           },
         ]}

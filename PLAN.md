@@ -896,7 +896,7 @@ Hand edits the UI cannot make for itself:
 3. ~~**Re-enter the off-box projects**~~ — done 2026-09-22: the four rows
    (santree, santree-cli, the daedalus landing page, the portfolio) that
    lived only in the engine's source as a seed are settings now
-   (Settings › General › Off-box projects), entered by hand on the
+   (Settings › Projects), entered by hand on the
    reference host.
 4. **The first tag** (Phase 10b, item 4) and **the license** (open
    decision 3) — one act, when the operator chooses: bump

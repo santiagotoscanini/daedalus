@@ -8,7 +8,7 @@ import {
   leaseTimeError,
   upstreamsError,
 } from '../../lib/site-fields'
-import { Section, SourceNote, Value } from './shared'
+import { Line, Section, SourceNote, Value } from './shared'
 import { SiteList, SiteSwitch, SiteText, SiteUnwritten } from './site-fields'
 
 /** Optional address: empty is null in the document, anything else is a quad. */
@@ -107,7 +107,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
           {
             k: 'Range',
             v: (
-              <span className="inline-flex flex-wrap items-center justify-end gap-2">
+              <Line>
                 <SiteText
                   edit={edit}
                   field="network.dhcp.start"
@@ -123,7 +123,7 @@ export function Network({ settings, edit }: { settings: BoxSettings; edit: SiteE
                   validate={ipv4Error}
                   className="w-[9.5rem]"
                 />
-              </span>
+              </Line>
             ),
           },
           {

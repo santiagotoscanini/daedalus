@@ -3,7 +3,6 @@ import { networkSnapshot } from '../../host/contract/domains/network'
 import { repoFacts } from '../../host/contract/domains/repo'
 import { type SiteIdentity, siteIdentity } from '../../host/contract/domains/site'
 import type { SnapshotResult } from '../../host/contract/snapshot'
-import { manifestEntries } from '../../host/nix-manifest'
 import type { Ctx } from '../ctx'
 import type { BoxSettings, SourceMeta } from './types'
 
@@ -40,18 +39,17 @@ function controlPlaneOf(
 }
 
 export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
-  const [site, network, repo, applyStatus, entries] = await Promise.all([
+  const [site, network, repo, applyStatus] = await Promise.all([
     siteIdentity(),
     networkSnapshot(),
     repoFacts(),
     readApplyStatus(),
-    // The manifest is the one source that says how THIS app is run; an
-    // unreadable manifest costs the dev-mode indicator, not the page.
-    manifestEntries().catch(() => []),
   ])
   const s = site.data
-  const self = entries.find((e) => e.name === (ctx.env('APP_NAME') ?? 'daedalus'))
-  const devServer = self?.sourceMode === 'local'
+  // The one fact about how THIS app is run: fleet.daedalus.dev sets it on the
+  // container (nix/stacks/daedalus/daedalus.nix), and the entrypoint reads the
+  // same variable to decide between the bundle and the dev server.
+  const devServer = ctx.env('DAEDALUS_DEV') === '1'
 
   return {
     general: {
@@ -64,7 +62,6 @@ export async function readBoxSettings(ctx: Ctx): Promise<BoxSettings> {
       timezone: s.timezone || (ctx.env('TZ') ?? ''),
       operator: { user: s.operator.user, group: s.operator.group, email: s.mail.alertTo },
       owner: s.owner,
-      engine: { revision: site.revision, nixosVersion: s.nixosVersion, nixos: s.nixos },
     },
     network: {
       lanIp: s.lanIp || (ctx.env('LAN_IP') ?? ''),

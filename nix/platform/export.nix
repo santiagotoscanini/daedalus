@@ -305,7 +305,7 @@ in
           hostname = config.networking.hostName;
           timezone = config.time.timeZone;
           nixosVersion = config.system.nixos.version;
-          # What Settings › General says about the release. The channel is
+          # What System › Updates says about the release. The channel is
           # `nixos-<release>`; `revision` is the nixpkgs commit the flake
           # locked; `kernel` is this generation's, which a switch without a
           # reboot can leave ahead of the one running.

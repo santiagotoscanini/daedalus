@@ -3,12 +3,12 @@ import { actorLabel, actorOrNull, requireActor } from '../core/auth'
 import type { TokenReplaceOutcome } from '../core/settings/cloudflare-token'
 import type {
   BoxSettings,
-  GeneralLive,
   GithubAppApply,
   GithubAppDiscard,
   GithubAppStart,
   GithubAppStatus,
   IntegrationStatus,
+  ZoneList,
 } from '../core/settings/types'
 import type { McpTokenRow } from '../host/mcp/tokens'
 import { type ExternalApp, type ExternalAppInput, isPlatform } from '../lib/external-apps'
@@ -41,18 +41,14 @@ export const fetchIntegrationStatus = createServerFn().handler(
 )
 
 /**
- * General's deferred half: the zones the Cloudflare API token can see (the
- * domain picker) and where the NixOS release stands. Both ask services off the
- * box, so the tab renders its facts first and these stream in behind it.
+ * General's deferred half: the zones the Cloudflare API token can see, for
+ * the domain picker. It asks Cloudflare, so the tab renders its facts first
+ * and this streams in behind them.
  */
-export const fetchGeneralLive = createServerFn().handler(async (): Promise<GeneralLive> => {
+export const fetchZones = createServerFn().handler(async (): Promise<ZoneList> => {
   const { makeCtx } = await import('../core/ctx')
   const { listZones } = await import('../core/settings/zones')
-  const { nixosRelease } = await import('../core/settings/nixos')
-  const { siteIdentity } = await import('../host/contract/domains/site')
-  const [ctx, site] = await Promise.all([makeCtx(), siteIdentity()])
-  const [zones, nixos] = await Promise.all([listZones(ctx), nixosRelease(site.data.nixos)])
-  return { zones, nixos }
+  return listZones(await makeCtx())
 })
 
 /**
@@ -207,7 +203,7 @@ export const saveTheme = createServerFn({ method: 'POST' })
     return data
   })
 
-// ── Settings › General › Off-box projects ──────────────────────────────────
+// ── Settings › Projects ─────────────────────────────────────────────────────
 //
 // The second editable preference, and the same kind as the theme: a row in
 // Postgres, saved on click, nothing rebuilds. core/settings/external-apps.ts

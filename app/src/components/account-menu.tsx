@@ -30,8 +30,8 @@ import {
 } from './ui/dropdown-menu'
 
 // The foot of the rail: who is signed in, and the few things that are about
-// that person rather than about the box — their profile, the settings, the
-// theme, their passkeys, signing out. Settings moved in here from a row of its
+// that person rather than about the box — their profile (a page of its own,
+// /profile), the settings, the theme, their passkeys, signing out. Settings moved in here from a row of its
 // own: it is reached far less often than it was taking up room, and the corner
 // of a control plane is where people look for themselves.
 //
@@ -49,7 +49,7 @@ const SCHEMES: { value: Scheme; label: string; icon: ReactNode }[] = [
 type Props = {
   account: Promise<Account | null>
   theme: ThemeChoice
-  /** The settings pages are open: the button lights like a rail row would. */
+  /** Settings or Profile is open: the button lights like a rail row would. */
   active: boolean
   /** The rail's own row, label and active looks (routes/__root.tsx). */
   triggerClassName: string
@@ -139,7 +139,7 @@ function Menu({
 
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
-            <Link to="/settings" search={{ tab: 'profile' }}>
+            <Link to="/profile">
               <UserIcon />
               Profile
             </Link>

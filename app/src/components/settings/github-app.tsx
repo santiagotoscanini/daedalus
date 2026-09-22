@@ -20,9 +20,10 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { Chip, Facts } from '../viz'
+import { Chip } from '../viz'
 import { PasteKey } from './github-paste-key'
 import {
+  ASIDE,
   Bad,
   ERROR_NOTE,
   ExtLink,
@@ -30,6 +31,8 @@ import {
   Mono,
   NOTE,
   Pending,
+  Rows,
+  Stack,
   Unset,
   WAITING_FOR_HOST,
 } from './shared'
@@ -64,7 +67,7 @@ export function Github({
       ? null
       : `${String(rateLimit.remaining)} of ${String(rateLimit.limit)} requests left this hour`
   return (
-    <span className="inline-flex flex-col items-end gap-[0.1rem]">
+    <Stack>
       <span className="inline-flex items-center gap-2">
         <Chip tone="ok">{kind}</Chip>
         {login !== null && <Mono>{login}</Mono>}
@@ -76,8 +79,8 @@ export function Github({
             ? 'no scopes'
             : scopes.join(', ')}
       </span>
-      {budget !== null && <span className="text-[0.72rem] text-(--dim)">{budget}</span>}
-    </span>
+      {budget !== null && <span className={ASIDE}>{budget}</span>}
+    </Stack>
   )
 }
 
@@ -372,7 +375,7 @@ function AppFacts({ app, identity }: { app: GithubAppStatus; identity: SiteGithu
 
   return (
     <div className="flex flex-col gap-3">
-      <Facts rows={rows} list />
+      <Rows rows={rows} />
       {app.state === 'created' && app.installUrl !== undefined && (
         <div className="flex flex-col gap-2">
           <div>
@@ -422,7 +425,7 @@ function TokenFreshness({ installation: i }: { installation: Installation }) {
   if (!i.hasToken || !Number.isFinite(expires)) return <Chip tone="bad">no token</Chip>
   const left = (expires - Date.now()) / 1000
   return (
-    <span className="inline-flex flex-col items-end gap-[0.1rem]">
+    <Stack>
       <span className="inline-flex items-center gap-2">
         <Chip tone={left <= 0 ? 'bad' : i.stale ? 'warn' : 'ok'}>
           {left <= 0 ? 'expired' : i.stale ? 'stale' : 'fresh'}
@@ -431,10 +434,8 @@ function TokenFreshness({ installation: i }: { installation: Installation }) {
           <span className="text-[0.78rem] text-(--text-muted)">expires in {until(left)}</span>
         )}
       </span>
-      {i.mintedAt !== '' && (
-        <span className="text-[0.72rem] text-(--dim)">minted {when(i.mintedAt)}</span>
-      )}
-    </span>
+      {i.mintedAt !== '' && <span className={ASIDE}>minted {when(i.mintedAt)}</span>}
+    </Stack>
   )
 }
 

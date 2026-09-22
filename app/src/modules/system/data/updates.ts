@@ -1,5 +1,6 @@
 import { imagePins } from '../../../host/contract/domains/images'
 import { type EngineLock, repoFacts } from '../../../host/contract/domains/repo'
+import { type NixosFacts, siteIdentity } from '../../../host/contract/domains/site'
 import { readCommittedSite } from '../../../host/contract/domains/site-doc'
 import { type EngineUpdateStatus, readEngineUpdateStatus } from '../../../host/engine-update'
 import { type ImageUpdateStatus, readImageUpdateStatus } from '../../../host/image-update'
@@ -89,6 +90,12 @@ export type UpdatesData = {
   status: ImageUpdateStatus
   /** The engine's own pin — the card above the table. */
   engine: EngineFacts
+  /**
+   * The NixOS release this generation was built with, from the site export;
+   * `facts` is null before the export carries the release in detail, and
+   * `version` is the one string every export has.
+   */
+  nixos: { facts: NixosFacts | null; version: string | null }
 }
 
 function verdictOf(f: ImageFreshness | null): UpdateVerdict {
@@ -181,10 +188,11 @@ export async function loadEngine(): Promise<EngineFacts> {
 }
 
 export async function loadUpdates(): Promise<UpdatesData> {
-  const [pins, status, engine] = await Promise.all([
+  const [pins, status, engine, site] = await Promise.all([
     imagePins(),
     readImageUpdateStatus(),
     loadEngine(),
+    siteIdentity(),
   ])
 
   const rows = await Promise.all(
@@ -230,6 +238,7 @@ export async function loadUpdates(): Promise<UpdatesData> {
     probeMissing: checked.length === 0,
     status,
     engine,
+    nixos: { facts: site.data.nixos, version: site.data.nixosVersion },
   }
 }
 

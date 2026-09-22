@@ -523,12 +523,12 @@ function Shell({
           </Link>
           {/* The person, last: who is signed in, and behind it Profile,
               Settings, the theme, passkeys and signing out
-              (components/account-menu.tsx). Settings lives in there now; the
-              button lights while a settings page is open, as its row did. */}
+              (components/account-menu.tsx). Both pages are reached from in
+              there; the button lights while either is open, as a row would. */}
           <AccountMenu
             account={account}
             theme={theme}
-            active={path.startsWith('/settings')}
+            active={path.startsWith('/settings') || path.startsWith('/profile')}
             triggerClassName={NAV_ITEM}
             activeClassName={NAV_ITEM_ACTIVE}
             labelClassName={NAV_LABEL}

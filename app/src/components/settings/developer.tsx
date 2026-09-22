@@ -7,7 +7,7 @@ import type { AuthorizationView } from '../../server/settings'
 import { Chip } from '../viz'
 import { Authorization } from './authorization'
 import { McpTokens } from './mcp-tokens'
-import { Mono, NOTE, Section, Value } from './shared'
+import { ASIDE, Line, Mono, NOTE, Section, Value } from './shared'
 import { SiteText, SiteUnwritten } from './site-fields'
 
 // How this instance runs, and the credentials that let a machine drive it.
@@ -44,19 +44,20 @@ export function Developer({
           {
             k: 'Mode',
             v: d.devServer ? (
-              <span className="inline-flex items-center gap-2">
-                <Chip tone="info">dev server</Chip>
-                <span className="text-[0.78rem] text-(--text-muted)">
-                  source.mode = local — Vite over a bind mount; saving a file is the deploy
+              <Line>
+                <Chip tone="info">dev mode</Chip>
+                <span className={ASIDE}>
+                  fleet.daedalus.dev — Vite over the bind-mounted checkout; saving a file is the
+                  deploy
                 </span>
-              </span>
+              </Line>
             ) : (
-              <span className="inline-flex items-center gap-2">
+              <Line>
                 <Chip tone="ok">image</Chip>
-                <span className="text-[0.78rem] text-(--text-muted)">
-                  a built image, redeployed on a digest change
+                <span className={ASIDE}>
+                  the published image (fleet.daedalus.image), redeployed on a digest change
                 </span>
-              </span>
+              </Line>
             ),
           },
           { k: 'Node', v: <Value v={d.node} /> },

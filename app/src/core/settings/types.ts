@@ -1,6 +1,5 @@
 import type { ApplyStatus } from '../../host/apply'
 import type { RepoFacts } from '../../host/contract/domains/repo'
-import type { NixosFacts } from '../../host/contract/domains/site'
 import type { GithubInstallation, GithubTokenKind } from '../../host/github-token'
 import type { NixosCycle, NixosNotes, Support } from '../../lib/nixos'
 import type { Result } from '../../lib/result'
@@ -17,6 +16,9 @@ export type SourceMeta = {
   error: string | null
 }
 
+/** The Linux account every container runs as — nix's, stated by the site export. */
+export type OperatorAccount = { user: string; group: string }
+
 export type BoxSettings = {
   general: {
     hostname: string
@@ -25,15 +27,8 @@ export type BoxSettings = {
     /** The control plane's hostname label, and the one a rename left answering beside it. */
     controlPlane: { label: string; previousLabel: string | null }
     timezone: string
-    operator: { user: string; group: string; email: string }
+    operator: OperatorAccount & { email: string }
     owner: string
-    engine: {
-      /** The commit the running generation was built from; null = built from a tree git did not describe. */
-      revision: string | null
-      nixosVersion: string | null
-      /** The release in detail; null before the export carries it. */
-      nixos: NixosFacts | null
-    }
   }
   network: {
     lanIp: string
@@ -162,7 +157,7 @@ export type CloudflareZone = { id: string; name: string; status: string }
 /** What the domain picker offers, or why it cannot offer anything. */
 export type ZoneList = Result<CloudflareZone[]>
 
-/** The live half of the Engine card: support, the channel, the notes. */
+/** Where the NixOS release stands — the live half of the NixOS card on System › Updates. */
 export type NixosRelease = {
   checkedAt: string
   /** The running release as endoflife.date lists it; null when it did not answer. */
@@ -184,9 +179,6 @@ export type NixosRelease = {
   /** What could not be asked, as a sentence; null when everything answered. */
   note: string | null
 }
-
-/** Settings › General's deferred half. */
-export type GeneralLive = { zones: ZoneList; nixos: NixosRelease }
 
 /** Where the box's GitHub App stands (core/settings/github-app.ts). */
 export type GithubAppState =

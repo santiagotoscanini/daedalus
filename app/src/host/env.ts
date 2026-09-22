@@ -372,6 +372,12 @@ export const SCHEMA = {
     about: 'The host accepts the GitHub App’s vault file, so creating one is offered.',
     source: DAEDALUS,
   },
+  DAEDALUS_DEV: {
+    kind: 'flag',
+    about:
+      'This instance is the dev server over a bind-mounted checkout (fleet.daedalus.dev), not the built bundle.',
+    source: DAEDALUS,
+  },
 
   // ── pinned versions, each from the stack that pins it ────────────────────
   DDCLIENT_VERSION: { kind: 'string', about: 'ddclient’s package version.', source: DAEDALUS },

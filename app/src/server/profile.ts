@@ -1,10 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeader } from '@tanstack/react-start/server'
 import { AUTH_HEADERS } from '../core/auth'
-import type { Account, ProfilePatch, ProfileRead } from '../core/settings/types'
+import type { Account, OperatorAccount, ProfilePatch, ProfileRead } from '../core/settings/types'
 import { PICTURE_TYPES, type PictureType } from '../lib/profile-fields'
 
-// Server functions behind Settings › Profile — see core/settings/profile.ts.
+// Server functions behind the Profile page — see core/settings/profile.ts.
 // Each resolves the account from the forward-auth headers of the request
 // making it; none takes an account id from the page.
 //
@@ -99,4 +99,14 @@ export const resetProfilePictureFn = createServerFn({ method: 'POST' }).handler(
   const { resetPicture } = await import('../core/settings/profile')
   await resetPicture(await makeCtx(), who())
   return { ok: true as const }
+})
+
+/**
+ * The Linux account the box runs as, for the Profile page's one card about
+ * this machine. A file read, awaited like a fact.
+ */
+export const fetchOperator = createServerFn().handler(async (): Promise<OperatorAccount> => {
+  const { siteIdentity } = await import('../host/contract/domains/site')
+  const s = (await siteIdentity()).data
+  return { user: s.operator.user, group: s.operator.group }
 })

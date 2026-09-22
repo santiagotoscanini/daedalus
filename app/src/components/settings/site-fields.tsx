@@ -27,7 +27,7 @@ import {
 import { Switch } from '../ui/switch'
 import { Textarea } from '../ui/textarea'
 import { Chip } from '../viz'
-import { Mono } from './shared'
+import { ASIDE, Mono } from './shared'
 
 // The editable rows of the settings tabs — the fields nix sources from
 // site.json, and nothing else.
@@ -41,7 +41,7 @@ import { Mono } from './shared'
 // are changing FROM. Setting a field back to its committed value is how an
 // edit is undone: the data layer drops the draft when nothing differs.
 //
-// The controls live inside a `Facts` row's value cell, so the label is the
+// The controls live inside a `Rows` row's value cell, so the label is the
 // row's `dt` and the input carries it as `aria-label`; the `Field` wrapper
 // groups the control with its error the way the form rows elsewhere do.
 
@@ -50,7 +50,6 @@ const INPUT = cn(
   'font-mono md:text-[0.8rem] dark:bg-(--panel-2)',
 )
 
-const ASIDE = 'text-[0.72rem] text-(--dim)'
 const AFFIX = 'font-mono text-[0.8rem] text-(--dim)'
 
 function useSiteSave() {
@@ -110,16 +109,16 @@ function Control({
   children: ReactNode
 }) {
   return (
-    <Field invalid={error !== null} className="w-auto items-end gap-1">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {saving && <span className={ASIDE}>saving…</span>}
-        <Provenance edit={edit} field={field} />
+    <Field invalid={error !== null} className="w-auto items-start gap-1">
+      {/* The control first, then what is known about the value beside it: the
+          eye lands on the field, and the pending chip reads as a remark on it. */}
+      <div className="flex flex-wrap items-center gap-2">
         {children}
+        <Provenance edit={edit} field={field} />
+        {saving && <span className={ASIDE}>saving…</span>}
       </div>
       {error !== null && (
-        <FieldError className="max-w-[24rem] text-right text-[0.74rem] leading-[1.45]">
-          {error}
-        </FieldError>
+        <FieldError className="max-w-[24rem] text-[0.74rem] leading-[1.45]">{error}</FieldError>
       )}
     </Field>
   )
