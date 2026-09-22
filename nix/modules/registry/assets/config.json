@@ -10,12 +10,7 @@
       "dryRun": false,
       "delay": "24h",
       "policies": [
-        {
-          "repositories": ["ipcrawl", "cache/ipcrawl", "spike"],
-          "deleteReferrers": true,
-          "deleteUntagged": true,
-          "keepTags": []
-        },
+        @RETIRE_POLICY@
         {
           "repositories": ["cache/**"],
           "deleteReferrers": true,

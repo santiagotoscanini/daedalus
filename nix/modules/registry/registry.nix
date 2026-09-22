@@ -64,13 +64,8 @@
 # is why a catch-all `pushedWithin` rule can only ever ADD retention, and why
 # the old 2160h catch-all quietly defeated the two rules above it.
 #
-#   The orphan list, first because zot takes the first matching policy — these
-#   are repositories for things that are no longer on the box (`ipcrawl`, and
-#   `spike` from the builder's commissioning). `keepTags: []` expires every tag
-#   and the next GC reclaims the blobs. Deleting the directories by hand would
-#   have been wrong: `dedupe` is on, so a blob another repo shares may physically
-#   live under the one being removed. Let zot do it — it owns that bookkeeping.
-#   This block goes away once the store is empty; it is a reclaim, not a rule.
+#   First, when the host names any: its `retireRepositories` (an option; the
+#   description there says why zot, not `rm -rf`, empties a repository).
 #
 #   cache/** — BuildKit's registry cache export (build.sh's
 #   `--export-cache ref=<registry>/cache/<app>:buildkit`). Exactly one tag
@@ -144,6 +139,25 @@ let
   # guardedly so the assertion below, not an attribute error, is what a host
   # without the apps platform sees.
   controlPlane = config.fleet.webApps.daedalus or null;
+
+  # The host's retirements as zot's FIRST retention policy (it applies the
+  # first policy a repository matches — the header explains the order), or
+  # nothing. The trailing comma is the template's: its own policies follow.
+  retirePolicy =
+    if cfg.retireRepositories == [ ] then
+      ""
+    else
+      builtins.toJSON {
+        repositories = cfg.retireRepositories;
+        deleteReferrers = true;
+        deleteUntagged = true;
+        keepTags = [ ];
+      }
+      + ",";
+
+  configTemplate = builtins.replaceStrings [ "@RETIRE_POLICY@" ] [ retirePolicy ] (
+    builtins.readFile ./assets/config.json
+  );
 in
 {
   options.fleet.modules.registry = {
@@ -151,6 +165,24 @@ in
       type = lib.types.bool;
       default = false;
       description = "zot, the box's own OCI registry.";
+    };
+
+    retireRepositories = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [
+        "old-app"
+        "cache/old-app"
+      ];
+      description = ''
+        Repositories to empty: every tag expires at the next retention pass
+        and the following GC reclaims the blobs. For the images of apps that
+        left the box — deleting their directories by hand would be wrong,
+        because `dedupe` is on and a blob another repository shares may
+        physically live under the one being removed; zot owns that
+        bookkeeping. Remove an entry once its store is empty: this is a
+        reclaim, not a rule.
+      '';
     };
 
     envSopsFile = lib.mkOption {
@@ -281,7 +313,7 @@ in
             ''}
           } | install -m 0400 -o ${config.fleet.operator.user} -g ${config.fleet.operator.group} /dev/stdin /run/registry/htpasswd
         '';
-        content = builtins.readFile ./assets/config.json;
+        content = configTemplate;
       })
       {
         # A render that changes on a rebuild is RESTARTED rather than stopped and
