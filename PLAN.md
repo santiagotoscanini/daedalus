@@ -698,60 +698,94 @@ priority; each can be done independently unless noted.
    10b (the production build must exist before there is something to
    toggle to).
 
-6. **Windows agent for the GPU box.** A Rust service on the gaming PC (the
-   Lemonade model server), designed 2026-09-22 around the one problem the
-   box has today: the machine goes to sleep after a few days and takes
-   every AI workload with it. Phase one is two jobs, and small on purpose.
-   - **Keep awake, unconditionally.** A Windows service running as SYSTEM
-     that creates a power request (`PowerCreateRequest` +
-     `PowerSetRequest(PowerRequestSystemRequired)`) at start and holds it
-     for its lifetime — visible in `powercfg /requests` with a reason
-     string. On every start it also converges the power plan
-     (`standby-timeout-ac 0`, `hibernate-timeout-ac 0`, hibernate off) as
-     a second line of defence. No idle policy, no display hold, no
-     listening port. Starts at boot before login, restarts on failure.
-     Sleep-on-purpose from the UI is a later exception, not the rule. A
-     power request does NOT stop a Windows Update restart; if
-     `Get-WinEvent` (Kernel-Power 42/41/109) shows that is what has been
-     happening, the fix is the update policy, and the agent only reports.
-   - **Prove it is awake.** A heartbeat every minute over an outbound
-     WebSocket to `/api/agent/ws` on the box — an auth-bypass path with
-     its own bearer token, the deploy hook's pattern — carrying version,
-     uptime and the hold state. daedalus shows "held awake by agent vX
-     since …"; five missed heartbeats raise the alert nothing raises
-     today: the machine slept or the service died. That is phase one's
-     whole telemetry.
-   - **Update itself.** The agent version is a pin in `site.json` beside
-     the image pins, moved from System › Updates with its changelog like
-     everything else. The agent reads the pin on each heartbeat, downloads
-     the release asset from GitHub, verifies an ed25519 signature against
-     a key compiled into the binary, renames the running exe aside, moves
-     the new one in and restarts the service. A failed verification or an
-     unreachable daedalus leaves the current version running; rollback is
-     moving the pin back. Ships in phase one because it is the one thing
-     that cannot be added later without a walk to the machine.
-   - **Install once.** One PowerShell line shown in the UI, carrying a
-     fifteen-minute enrollment token: installs the service, writes the
-     box's address to ProgramData, exchanges the token for a long-lived
-     agent token stored DPAPI-encrypted, reports hostname and MAC, starts.
-   - **Repo and release.** `agent/` in this monorepo (its protocol is
-     coupled to daedalus's API), tag `agent-v*`, a workflow on a Windows
-     runner building the MSVC target and publishing the asset plus its
-     signature. Crates: `windows`, `windows-service`, `tokio`,
-     `tokio-tungstenite`, `serde`, `ed25519-dalek`.
-   - **Later phases, in order.** (2) Telemetry: a `/metrics` listener
-     firewalled to the box, read by Prometheus alongside Lemonade's own
-     `/metrics` (live and unscraped today) — GPU load and VRAM from
-     Windows performance counters first, AMD temps and power via ADLX
-     after; nix generalizes `fleet.gpuHost{,Ip}` into
-     `fleet.remoteMachines.<name>` (host, ip, mac, ports) that litellm,
-     gatus, lemonade-logs and the dashboards read; a `System › Machines`
-     tab. (3) Power buttons: hold with a duration, release, restart, shut
-     down, and wake by magic packet from the box — with the sleep-aware
-     alert (`up == 0` unless daedalus expects it asleep). (4) Lemonade
-     supervision and updates through a session helper launched into the
-     logged-on desktop with the user's token, because the tray app runs
-     there today and whether ROCm works from session 0 is untested.
+6. **Nodes: the agent for the other machines.** One Rust binary that
+   turns the box from one machine into the control plane of the machines
+   on its network — Windows and macOS first — designed 2026-09-22. The
+   problem it starts from is concrete (the gaming PC, Lemonade's host,
+   goes to sleep after a few days) and phase one is only that; the shape
+   is the general one from the first commit.
+   - **One agent, one codebase, two targets.** `agent/` in this
+     monorepo: a core that knows no OS (discovery, enrollment, the
+     session, command dispatch, self-update, service supervision) and a
+     platform layer behind a trait — a Windows service via
+     `windows-service`, a macOS LaunchDaemon. Power is a
+     `PowerRequestSystemRequired` on Windows and an IOKit assertion on
+     macOS (what `caffeinate` does); restart and shutdown are the OS
+     calls; wake is a magic packet from the box, which is why the agent
+     reports its MAC. Crates: `windows`, `windows-service`, `core-foundation`/
+     `io-kit-sys`, `tokio`, `tokio-tungstenite`, `serde`, `ed25519-dalek`.
+     Release assets per target (windows-x86_64, macos-aarch64) from one
+     workflow, tag `agent-v*`, each asset with an ed25519 signature.
+   - **Findable without typing.** The box runs the LAN's DNS and DHCP, so
+     it announces itself where every machine already looks: an SRV
+     record `_daedalus._tcp` under the search domain DHCP hands out,
+     published by nix through pi-hole (`platform/publishing.nix` grows
+     `fleet.dnsSrv`, or the pihole module renders it). The agent resolves
+     it and connects over TLS to the control plane's address — the
+     wildcard certificate the box already holds. mDNS is the fallback
+     for a machine whose DNS is not the box's; a URL in the agent's
+     config file is the last resort.
+   - **Joining is an approval, not a secret.** At install the agent
+     generates an ed25519 keypair and sends a signed hello: hostname,
+     platform, CPU, GPU, MAC, agent version. The control plane shows
+     "GAMING-PC wants to join — Windows 11, RX 7900 XTX" with Approve.
+     Approval writes the node into `site/nodes.json` beside `apps.json`
+     — identity, public key, capabilities, policy — and applies, so the
+     set of nodes survives a rebuild and a lost box the way the app
+     registry does. Live state (heartbeats, last seen, held-awake since)
+     is Postgres. Every later session is the agent proving it holds the
+     key; nothing long-lived worth stealing sits on the node.
+   - **The channel is outbound only.** A WebSocket from node to box on an
+     auth-bypass path with its own verification (the deploy hook's
+     pattern). Heartbeats up, commands down, results back. Every command
+     is an admin action under the armed gate, journaled with its actor.
+   - **Power.** Hold awake (a reason, a duration or indefinitely — the
+     gaming PC's default), release, sleep, restart, shut down; wake from
+     the box. Policy per node in nodes.json: "always awake", or "awake
+     while a provider is loaded".
+   - **Declared services, not arbitrary processes.** A node's entry lists
+     what the agent supervises — name, executable, arguments, restart
+     policy — and it keeps them running like a very small systemd.
+     "Start a process" from the UI means one of those. No shell: it is
+     the one verb that turns a stolen node key into a stolen machine.
+   - **Providers are services the box knows how to use.** Lemonade on
+     Windows (AMD or NVIDIA); Ollama on Apple Silicon, headless — the
+     standalone binary under `ollama serve`, not the menu-bar app (LM
+     Studio's MLX engine later if Ollama disappoints). A provider is a
+     declared service plus three things the box does with it: install
+     and update it, ask it which models it has, and register those in
+     LiteLLM so the AI tab shows them. That step is the feature: a
+     machine joins the network and its GPU appears in the gateway.
+   - **Telemetry, later, by pull.** A `/metrics` listener per node,
+     firewalled to the box, scraped beside the provider's own metrics
+     (Lemonade's is live and unscraped today). GPU load and VRAM from
+     Windows performance counters and IOKit first, vendor libraries
+     (ADLX, NVML) after. `fleet.gpuHost{,Ip}` generalizes into
+     `fleet.nodes`, read from nodes.json, that litellm, gatus,
+     lemonade-logs and the dashboards consume.
+   - **Updates are a pin per node** in nodes.json, moved from System ›
+     Updates with a changelog like the images and the engine. The agent
+     converges: download the asset, verify the signature against a key
+     compiled in, swap the binary, restart. Refuses on a bad signature;
+     keeps running when the box is unreachable; rollback is the pin. On
+     macOS a file the agent downloads carries no quarantine attribute,
+     so Gatekeeper is not involved; the first install is
+     `curl | sudo sh` from the box's LAN-only address.
+   - **A power request does not stop a Windows Update restart.** If the
+     gaming PC's Kernel-Power events (42/41/109) show that is what has
+     been happening, the fix is the update policy; the agent reports it.
+   - **Phases.** (1) Core and Windows, keep-awake first: the trait, the
+     service, the indefinite power hold with the power plan converged as
+     a second line, the heartbeat and the missed-heartbeat alert,
+     self-update from a pin, a one-line install with a one-time token.
+     The gaming PC stops sleeping. (2) Discovery and approval, and macOS:
+     the SRV record, the hello, Approve, nodes.json, the LaunchDaemon
+     target, a Machines page. (3) Power commands and declared services.
+     (4) Providers: Lemonade and Ollama, models into LiteLLM on join.
+     (5) Telemetry, dashboards, sleep-aware alerts.
+   - **Open before phase two:** Ollama or LM Studio on the Mac; and
+     whether a join is an Apply (nodes.json + rebuild — the honest
+     version, one rebuild per join; recommended) or a Postgres row alone.
 
 7. **Git commit attribution from the signed-in user.** Today every
    `site/` commit is authored by "daedalus" regardless of who pressed
