@@ -109,6 +109,8 @@
         "apps/apps.nix"
         "apps/declarations.nix"
         "cloudflared/cloudflared.nix"
+        "gatus/gatus.nix"
+        "healthchecks/healthchecks.nix"
         "logging/logging.nix"
         "monitoring/monitoring.nix"
         "pihole/pihole.nix"

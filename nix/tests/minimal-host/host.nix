@@ -65,6 +65,18 @@
       credentialsSopsFile = ./sops/cloudflared/credentials.json.sops;
     };
     images.cloudflared = "docker.io/cloudflare/cloudflared:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    # The two monitors, ON: gatus probes every published hostname and admits
+    # one subject; healthchecks receives the platform's dead-man pings.
+    modules.gatus = {
+      enable = true;
+      allowedSubjects = [ "00000000-0000-0000-0000-000000000000" ];
+    };
+    images.gatus = "docker.io/twinproduction/gatus:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    modules.healthchecks = {
+      enable = true;
+      envSopsFile = ./sops/healthchecks/env.sops;
+    };
+    images.healthchecks = "docker.io/healthchecks/healthchecks:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     # The LAN resolver, ON, with no reservations file: every published
     # hostname gets a local record; no DHCP inventory, no render for it.
     modules.pihole.enable = true;
