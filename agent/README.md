@@ -10,7 +10,13 @@ The box's presence on a machine it does not run. Phase one (see
   the box can see the agent is there before any channel exists between
   them;
 - **updates itself** to the newest `agent-v*` release of this repository,
-  verifying every asset against the ed25519 key compiled into it.
+  verifying every asset against the ed25519 key compiled into it;
+- **shows itself in the tray**: a second, windowless program in the desktop
+  session (`daedalus-agent-tray.exe`, started at every logon) draws the
+  daedalus mark beside the clock — ember when the hold is on, an amber dot
+  when an update is pending or the hold failed, grey when the service does
+  not answer — with the state in its tooltip and menu, and three actions:
+  open the status page, check for updates now, open the logs folder.
 
 Nothing else yet: no commands, no telemetry beyond the page, no inbound
 port but the page's. What the agent will do next arrives as a release the
@@ -23,14 +29,15 @@ From an administrator PowerShell on the machine:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-irm https://github.com/santiagotoscanini/daedalus/releases/download/agent-v0.1.0/install.ps1 | iex
+irm https://github.com/santiagotoscanini/daedalus/releases/download/agent-v0.2.0/install.ps1 | iex
 ```
 
-The script downloads the release, places the binary under
+The script downloads the release, places both binaries under
 `C:\Program Files\daedalus-agent\`, registers the `daedalus-agent` service
-(LocalSystem, automatic start, restart on failure), opens TCP 7787 to the
-local subnet, writes `C:\ProgramData\daedalus-agent\config.toml` if there is
-none, and starts it. Re-running it later replaces the binary and keeps the
+(LocalSystem, automatic start, restart on failure), registers the tray under
+the machine's Run key and starts it as the desktop user, opens TCP 7787 to
+the local subnet, writes `C:\ProgramData\daedalus-agent\config.toml` if
+there is none, and starts the service. Re-running it later replaces the binary and keeps the
 config. `daedalus-agent uninstall` removes the service and the firewall
 rule; the data directory stays.
 
@@ -52,7 +59,8 @@ daedalus-agent version
 ## On the machine
 
 ```
-C:\Program Files\daedalus-agent\daedalus-agent.exe   the binary (.old / .new around an update)
+C:\Program Files\daedalus-agent\daedalus-agent.exe        the service (.old / .new around an update)
+C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at logon
 C:\ProgramData\daedalus-agent\config.toml            port, release repo, check interval, auto_update, log level
 C:\ProgramData\daedalus-agent\state.json             last update check and result
 C:\ProgramData\daedalus-agent\logs\agent.log.*       daily-rotated log
@@ -63,11 +71,12 @@ C:\ProgramData\daedalus-agent\logs\agent.log.*       daily-rotated log
 Every ten minutes (config `update_check_secs`) the agent lists the
 repository's releases, keeps the `agent-v<semver>` ones that are neither
 drafts nor prereleases, and takes the highest above its own version. It
-downloads that release's `daedalus-agent-x86_64-pc-windows-msvc.exe` and
-`.sig`, checks the raw ed25519 signature against `RELEASE_PUBLIC_KEY_HEX`
-in `src/update.rs`, renames the running binary to `.old`, moves the new one
-into place and exits with code 3. The service's recovery action starts it
-again on the new binary; the next clean start deletes `.old`. A release
+downloads that release's two executables and their `.sig`s, checks each raw
+ed25519 signature against `RELEASE_PUBLIC_KEY_HEX` in `src/update.rs`,
+renames the running binaries to `.old`, moves the new ones into place and
+exits with code 3. The service's recovery action starts it again on the new
+binary; the tray notices the page now reports a version other than its own
+and relaunches itself; the next clean start deletes the `.old` files. A release
 without a valid signature is reported on the status page and never
 installed.
 

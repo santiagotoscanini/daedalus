@@ -22,7 +22,7 @@ use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 use windows_service::{define_windows_service, service_dispatcher};
 
 use crate::config::{self, Config};
-use crate::{DISPLAY_NAME, SERVICE_NAME};
+use crate::{DISPLAY_NAME, SERVICE_NAME, TRAY_EXE};
 
 define_windows_service!(ffi_service_main, service_main);
 
@@ -172,6 +172,15 @@ pub fn install(cfg: &Config) -> Result<()> {
         service.start::<&str>(&[]).context("starting the service")?;
         println!("service started");
     }
+
+    let tray = exe.with_file_name(TRAY_EXE);
+    if tray.exists() {
+        tray_register(&tray)?;
+        tray_start(&tray);
+        println!("tray registered for every logon and started");
+    } else {
+        println!("no {TRAY_EXE} beside the service; the tray is not registered");
+    }
     println!("status page: http://<this machine>:{}/status", cfg.port);
     Ok(())
 }
@@ -203,6 +212,7 @@ pub fn uninstall() -> Result<()> {
     }
     service.delete().context("deleting the service")?;
     println!("service {SERVICE_NAME} removed");
+    tray_unregister();
     firewall_remove()?;
     println!("data left in {}", config::data_dir().display());
     Ok(())
@@ -250,4 +260,49 @@ fn firewall_remove() -> Result<()> {
         .output()
         .context("running netsh")?;
     Ok(())
+}
+
+// ── the tray ───────────────────────────────────────────────────────────────
+//
+// Registered for every user under HKLM's Run key, so it appears at each
+// logon; started right away through Explorer, which launches it as the
+// desktop's user rather than as the administrator running `install`.
+
+const RUN_KEY: &str = r"HKLM\Software\Microsoft\Windows\CurrentVersion\Run";
+const RUN_VALUE: &str = "daedalus-agent-tray";
+
+fn tray_register(tray: &std::path::Path) -> Result<()> {
+    let out = std::process::Command::new("reg")
+        .args([
+            "add",
+            RUN_KEY,
+            "/v",
+            RUN_VALUE,
+            "/t",
+            "REG_SZ",
+            "/d",
+            &format!("\"{}\"", tray.display()),
+            "/f",
+        ])
+        .output()
+        .context("running reg")?;
+    if !out.status.success() {
+        bail!("reg add: {}", String::from_utf8_lossy(&out.stderr).trim());
+    }
+    Ok(())
+}
+
+fn tray_unregister() {
+    let _ = std::process::Command::new("reg")
+        .args(["delete", RUN_KEY, "/v", RUN_VALUE, "/f"])
+        .output();
+    let _ = std::process::Command::new("taskkill")
+        .args(["/IM", TRAY_EXE, "/F"])
+        .output();
+}
+
+fn tray_start(tray: &std::path::Path) {
+    // Explorer starts what it is handed at the desktop's integrity level,
+    // which is how an elevated installer launches an unelevated tray.
+    let _ = std::process::Command::new("explorer.exe").arg(tray).spawn();
 }

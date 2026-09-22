@@ -38,6 +38,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   ASSET: daedalus-agent-x86_64-pc-windows-msvc.exe
+  TRAY_ASSET: daedalus-agent-tray-x86_64-pc-windows-msvc.exe
 
 jobs:
   check:
@@ -100,6 +101,7 @@ jobs:
         run: |
           mkdir -p dist
           cp "target/x86_64-pc-windows-msvc/release/daedalus-agent.exe" "dist/$ASSET"
+          cp "target/x86_64-pc-windows-msvc/release/daedalus-agent-tray.exe" "dist/$TRAY_ASSET"
           cp install.ps1 dist/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -129,10 +131,12 @@ jobs:
           set -euo pipefail
           umask 077
           printf '%s\n' "$AGENT_SIGNING_KEY" > key.pem
-          openssl pkeyutl -sign -inkey key.pem -rawin -in "dist/$ASSET" -out "dist/$ASSET.sig"
+          for a in "$ASSET" "$TRAY_ASSET"; do
+            openssl pkeyutl -sign -inkey key.pem -rawin -in "dist/$a" -out "dist/$a.sig"
+            [ "$(stat -c %s "dist/$a.sig")" = 64 ] || { echo "$a: signature is not 64 bytes"; exit 1; }
+          done
           rm -f key.pem
-          [ "$(stat -c %s "dist/$ASSET.sig")" = 64 ] || { echo "signature is not 64 bytes"; exit 1; }
-          (cd dist && sha256sum "$ASSET" "$ASSET.sig" install.ps1 > SHA256SUMS)
+          (cd dist && sha256sum "$ASSET" "$ASSET.sig" "$TRAY_ASSET" "$TRAY_ASSET.sig" install.ps1 > SHA256SUMS)
           cat dist/SHA256SUMS
       # The agent's compiled-in public key must accept what was just signed,
       # or every installed agent would refuse this release. Checked here with
@@ -142,7 +146,9 @@ jobs:
           set -euo pipefail
           hex="$(grep -A1 'RELEASE_PUBLIC_KEY_HEX' agent/src/update.rs | grep -o '"[0-9a-f]\{64\}"' | tr -d '"')"
           printf '302a300506032b6570032100%s' "$hex" | xxd -r -p > pub.der
-          openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in "dist/$ASSET" -sigfile "dist/$ASSET.sig"
+          for a in "$ASSET" "$TRAY_ASSET"; do
+            openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in "dist/$a" -sigfile "dist/$a.sig"
+          done
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -151,5 +157,5 @@ jobs:
           set -euo pipefail
           gh release create "$REF_NAME" \
             --title "daedalus-agent ${REF_NAME#agent-v}" \
-            --notes "Windows x86_64. Installed agents pick this up on their next check; new machines: run install.ps1 from an administrator PowerShell." \
-            "dist/$ASSET" "dist/$ASSET.sig" dist/install.ps1 dist/SHA256SUMS
+            --notes "Windows x86_64: the service and the tray. Installed agents pick this up on their next check; new machines: run install.ps1 from an administrator PowerShell." \
+            "dist/$ASSET" "dist/$ASSET.sig" "dist/$TRAY_ASSET" "dist/$TRAY_ASSET.sig" dist/install.ps1 dist/SHA256SUMS

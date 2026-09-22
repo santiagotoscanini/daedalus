@@ -41,21 +41,41 @@ use crate::status::Shared;
 pub const RELEASE_PUBLIC_KEY_HEX: &str =
     "27dc531d10284f3de682907886cbef2f1c380b7cd8fecd91f93691ce6f1aa62f";
 
-/// The asset this build installs. The workflow names them by Rust target.
+/// What a release carries for this target, and what each asset becomes on
+/// disk: the service binary and the tray, named by Rust target in the
+/// release and by their plain names beside this executable. Both must be
+/// present and signed, or the release is skipped — a service without its
+/// tray, or the reverse, is a half-installed version.
 #[cfg(all(windows, target_arch = "x86_64"))]
-pub const ASSET_NAME: &str = "daedalus-agent-x86_64-pc-windows-msvc.exe";
+pub const ASSETS: &[(&str, &str)] = &[
+    (
+        "daedalus-agent-x86_64-pc-windows-msvc.exe",
+        "daedalus-agent.exe",
+    ),
+    (
+        "daedalus-agent-tray-x86_64-pc-windows-msvc.exe",
+        "daedalus-agent-tray.exe",
+    ),
+];
 #[cfg(not(all(windows, target_arch = "x86_64")))]
-pub const ASSET_NAME: &str = "daedalus-agent-unsupported";
+pub const ASSETS: &[(&str, &str)] = &[("daedalus-agent-unsupported", "daedalus-agent")];
 
 const TAG_PREFIX: &str = "agent-v";
 const USER_AGENT: &str = concat!("daedalus-agent/", env!("CARGO_PKG_VERSION"));
+
+/// One asset of a release: where it is and what it is called here.
+#[derive(Debug, Clone)]
+pub struct Asset {
+    pub local_name: &'static str,
+    pub url: String,
+    pub sig_url: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct Release {
     pub tag: String,
     pub version: semver::Version,
-    pub asset_url: String,
-    pub sig_url: String,
+    pub assets: Vec<Asset>,
 }
 
 #[derive(Deserialize)]
@@ -74,6 +94,26 @@ struct ApiAsset {
 
 fn running_version() -> semver::Version {
     semver::Version::parse(crate::VERSION).expect("Cargo.toml version is semver")
+}
+
+/// The assets this target needs from one API release, or None when any is
+/// missing or unsigned.
+fn assets_of(r: &ApiRelease) -> Option<Vec<Asset>> {
+    ASSETS
+        .iter()
+        .map(|(remote, local)| {
+            let url = r.assets.iter().find(|a| a.name == *remote)?;
+            let sig = r
+                .assets
+                .iter()
+                .find(|a| a.name == format!("{remote}.sig"))?;
+            Some(Asset {
+                local_name: local,
+                url: url.browser_download_url.clone(),
+                sig_url: sig.browser_download_url.clone(),
+            })
+        })
+        .collect()
 }
 
 /// Ask the feed. `Ok(None)` is "nothing newer"; an error is the feed not
@@ -107,15 +147,10 @@ pub fn check(cfg: &Config) -> Result<Option<Release>> {
         if version <= running {
             continue;
         }
-        let asset = r.assets.iter().find(|a| a.name == ASSET_NAME);
-        let sig = r
-            .assets
-            .iter()
-            .find(|a| a.name == format!("{ASSET_NAME}.sig"));
-        let (Some(asset), Some(sig)) = (asset, sig) else {
+        let Some(assets) = assets_of(&r) else {
             tracing::warn!(
                 tag = r.tag_name,
-                "release lacks this target's asset or its signature; skipped"
+                "release lacks an asset or a signature for this target; skipped"
             );
             continue;
         };
@@ -123,8 +158,7 @@ pub fn check(cfg: &Config) -> Result<Option<Release>> {
             best = Some(Release {
                 tag: r.tag_name.clone(),
                 version,
-                asset_url: asset.browser_download_url.clone(),
-                sig_url: sig.browser_download_url.clone(),
+                assets,
             });
         }
     }
@@ -159,76 +193,104 @@ pub fn verify(asset: &[u8], sig: &[u8]) -> Result<()> {
         .map_err(|_| anyhow::anyhow!("signature does not match the release key"))
 }
 
-fn exe_path() -> Result<PathBuf> {
-    std::env::current_exe().context("locating this binary")
+/// The directory both executables live in: this one's.
+fn install_dir() -> Result<PathBuf> {
+    let exe = std::env::current_exe().context("locating this binary")?;
+    exe.parent()
+        .map(Path::to_path_buf)
+        .context("binary has no directory")
 }
 
-/// Download the release's asset and signature; verify; leave the verified
-/// binary beside this one as `.new` and return its path.
-pub fn download_and_verify(rel: &Release) -> Result<PathBuf> {
-    tracing::info!(tag = rel.tag, "downloading");
-    let asset = fetch(&rel.asset_url)?;
-    let sig = fetch(&rel.sig_url)?;
-    verify(&asset, &sig)?;
-    let new_path = sibling(&exe_path()?, "new")?;
-    std::fs::write(&new_path, &asset).with_context(|| format!("writing {}", new_path.display()))?;
-    tracing::info!(
-        tag = rel.tag,
-        bytes = asset.len(),
-        "verified against the release key"
-    );
-    Ok(new_path)
+/// A release downloaded and verified, waiting beside the binaries as `.new`
+/// files. Nothing running has been touched yet.
+pub struct Staged {
+    files: Vec<(PathBuf, PathBuf)>,
 }
 
-/// Put the verified binary in place of the running one. Windows lets a
-/// running executable be renamed but not overwritten, hence the two moves.
-pub fn swap_in(new_path: &Path) -> Result<()> {
-    let exe = exe_path()?;
-    let old = sibling(&exe, "old")?;
-    if old.exists() {
-        std::fs::remove_file(&old).with_context(|| format!("removing {}", old.display()))?;
+/// Download every asset and its signature; verify each; leave them beside
+/// the binaries as `<name>.new`.
+pub fn download_and_verify(rel: &Release) -> Result<Staged> {
+    let dir = install_dir()?;
+    let mut files = Vec::new();
+    for a in &rel.assets {
+        tracing::info!(tag = rel.tag, asset = a.local_name, "downloading");
+        let bytes = fetch(&a.url)?;
+        let sig = fetch(&a.sig_url)?;
+        verify(&bytes, &sig).with_context(|| format!("{}: {}", rel.tag, a.local_name))?;
+        let target = dir.join(a.local_name);
+        let new = suffixed(&target, "new");
+        std::fs::write(&new, &bytes).with_context(|| format!("writing {}", new.display()))?;
+        tracing::info!(
+            asset = a.local_name,
+            bytes = bytes.len(),
+            "verified against the release key"
+        );
+        files.push((target, new));
     }
-    std::fs::rename(&exe, &old)
-        .with_context(|| format!("moving the running binary to {}", old.display()))?;
-    if let Err(e) = std::fs::rename(new_path, &exe) {
-        // Put the running one back so the service still has a binary to restart.
-        let _ = std::fs::rename(&old, &exe);
-        return Err(e).with_context(|| format!("moving the new binary to {}", exe.display()));
+    Ok(Staged { files })
+}
+
+/// Put the verified binaries in place of the current ones. Windows lets a
+/// running executable be renamed but not overwritten, hence the two moves
+/// per file; a failure part-way puts back what was moved.
+pub fn swap_in(staged: &Staged) -> Result<()> {
+    let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for (target, new) in &staged.files {
+        let old = suffixed(target, "old");
+        if old.exists() {
+            std::fs::remove_file(&old).with_context(|| format!("removing {}", old.display()))?;
+        }
+        if target.exists() {
+            if let Err(e) = std::fs::rename(target, &old) {
+                undo(&moved);
+                return Err(e).with_context(|| format!("moving {} aside", target.display()));
+            }
+            moved.push((old.clone(), target.clone()));
+        }
+        if let Err(e) = std::fs::rename(new, target) {
+            undo(&moved);
+            return Err(e)
+                .with_context(|| format!("moving the new {} into place", target.display()));
+        }
     }
     Ok(())
 }
 
-/// Delete the `.old` an earlier update left, once this binary has started
-/// well enough to reach here.
-pub fn retire_old_binary() {
-    if let Ok(exe) = exe_path() {
-        if let Ok(old) = sibling(&exe, "old") {
-            if old.exists() {
-                match std::fs::remove_file(&old) {
-                    Ok(()) => tracing::info!("retired the previous binary"),
-                    Err(e) => tracing::warn!(error = %e, "previous binary not removed"),
-                }
+fn undo(moved: &[(PathBuf, PathBuf)]) {
+    for (old, target) in moved.iter().rev() {
+        let _ = std::fs::remove_file(target);
+        let _ = std::fs::rename(old, target);
+    }
+}
+
+/// Delete the `.old` files an earlier update left, once this binary has
+/// started well enough to reach here.
+pub fn retire_old_binaries() {
+    let Ok(dir) = install_dir() else { return };
+    for (_, local) in ASSETS {
+        let old = suffixed(&dir.join(local), "old");
+        if old.exists() {
+            match std::fs::remove_file(&old) {
+                Ok(()) => tracing::info!(file = local, "retired the previous binary"),
+                Err(e) => tracing::warn!(file = local, error = %e, "previous binary not removed"),
             }
         }
     }
 }
 
-fn sibling(exe: &Path, suffix: &str) -> Result<PathBuf> {
-    let name = exe
+fn suffixed(path: &Path, suffix: &str) -> PathBuf {
+    let name = path
         .file_name()
         .and_then(|n| n.to_str())
-        .context("binary has no name")?;
-    Ok(exe.with_file_name(format!("{name}.{suffix}")))
+        .unwrap_or("binary");
+    path.with_file_name(format!("{name}.{suffix}"))
 }
 
-/// The service's update thread: a check shortly after start, then on the
-/// interval, until `stop`. Installs when allowed, then exits the process
-/// so the Service Control Manager restarts it on the new binary.
 pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
     let interval = cfg.update_interval();
     let mut wait = Duration::from_secs(30);
     loop {
-        if sleep_until_stop(&stop, wait) {
+        if sleep_until_stop(&stop, &shared, wait) {
             return;
         }
         wait = interval;
@@ -260,7 +322,7 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
                     });
                     continue;
                 }
-                match download_and_verify(&rel).and_then(|p| swap_in(&p)) {
+                match download_and_verify(&rel).and_then(|s| swap_in(&s)) {
                     Ok(()) => {
                         shared.with_state(|s| {
                             s.last_update_check = Some(now.clone());
@@ -293,14 +355,19 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
     }
 }
 
-/// Sleep in short steps so a stop request is honoured within half a second.
-/// Returns true when stopped.
-fn sleep_until_stop(stop: &AtomicBool, total: Duration) -> bool {
+/// Sleep in short steps so a stop request is honoured within half a second,
+/// and a "check now" from the status page cuts the wait short. Returns true
+/// when stopped.
+fn sleep_until_stop(stop: &AtomicBool, shared: &Shared, total: Duration) -> bool {
     let step = Duration::from_millis(500);
     let mut left = total;
     while !left.is_zero() {
         if stop.load(Ordering::Relaxed) {
             return true;
+        }
+        if shared.take_check_request() {
+            tracing::info!("update check requested from the status page");
+            return false;
         }
         let d = left.min(step);
         std::thread::sleep(d);
@@ -330,8 +397,16 @@ mod tests {
     }
 
     #[test]
-    fn sibling_names() {
-        let p = sibling(Path::new("C:/x/daedalus-agent.exe"), "old").unwrap();
+    fn suffixed_names() {
+        let p = suffixed(Path::new("C:/x/daedalus-agent.exe"), "old");
         assert!(p.ends_with("daedalus-agent.exe.old"));
+    }
+
+    #[test]
+    fn every_asset_has_a_local_name() {
+        for (remote, local) in ASSETS {
+            assert!(!remote.is_empty() && !local.is_empty());
+            assert!(!local.contains('/') && !local.contains('\\'));
+        }
     }
 }

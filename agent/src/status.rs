@@ -2,9 +2,11 @@
 //! agent is there and awake before there is any channel between them.
 //!
 //! `GET /status` (and `/`) answers the document below; `GET /healthz`
-//! answers `ok`. Nothing else, no writes, no auth: it states facts about
-//! this machine that the LAN can already observe, and the firewall rule
-//! `install` adds scopes it to the local subnet.
+//! answers `ok`. One write, and only from this machine: `POST /update/check`
+//! asks the updater to look now — the tray's "check for updates" — and is
+//! refused from any address but loopback. No auth otherwise: the page states
+//! facts about this machine that the LAN can already observe, and the
+//! firewall rule `install` adds scopes it to the local subnet.
 
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -27,6 +29,8 @@ struct Live {
     hold_error: Option<String>,
     update_available: Option<String>,
     restart_pending: bool,
+    /// Raised by `POST /update/check`; the updater clears it when it looks.
+    check_requested: bool,
 }
 
 #[derive(Serialize)]
@@ -55,6 +59,7 @@ impl Shared {
                 hold_error: None,
                 update_available: None,
                 restart_pending: false,
+                check_requested: false,
             }),
         }
     }
@@ -71,6 +76,15 @@ impl Shared {
 
     pub fn set_restart_pending(&self) {
         self.lock().restart_pending = true;
+    }
+
+    pub fn request_check(&self) {
+        self.lock().check_requested = true;
+    }
+
+    /// Whether a check was asked for since the last call; clears it.
+    pub fn take_check_request(&self) -> bool {
+        std::mem::take(&mut self.lock().check_requested)
     }
 
     /// Edit and persist the state in one step.
@@ -124,9 +138,17 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
         .name("status".into())
         .spawn(move || {
             for req in for_thread.incoming_requests() {
+                let local = req.remote_addr().is_some_and(|a| a.ip().is_loopback());
                 let (code, body, ctype) = match (req.method(), req.url()) {
                     (&Method::Get, "/healthz") => (200, "ok\n".to_string(), "text/plain"),
                     (&Method::Get, "/" | "/status") => (200, shared.document(), "application/json"),
+                    (&Method::Post, "/update/check") if local => {
+                        shared.request_check();
+                        (202, "checking\n".to_string(), "text/plain")
+                    }
+                    (&Method::Post, "/update/check") => {
+                        (403, "only from this machine\n".to_string(), "text/plain")
+                    }
                     _ => (404, "not found\n".to_string(), "text/plain"),
                 };
                 let header = Header::from_bytes("Content-Type", ctype)

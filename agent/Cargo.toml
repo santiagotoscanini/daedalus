@@ -1,21 +1,35 @@
 [package]
 name = "daedalus-agent"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 description = "The daedalus agent: keeps a machine on the network awake, reports on it, and updates itself."
 repository = "https://github.com/santiagotoscanini/daedalus"
 license = "MIT"
 publish = false
+build = "build.rs"
 
+[lib]
+name = "daedalus_agent"
+path = "src/lib.rs"
+
+# The service and its verbs.
 [[bin]]
 name = "daedalus-agent"
-path = "src/main.rs"
+path = "src/bin/daedalus-agent.rs"
+
+# The tray: a windowless program in the desktop session that shows what the
+# service reports. Separate binary so it can be a GUI-subsystem executable
+# (no console window at logon) while the verbs keep their console.
+[[bin]]
+name = "daedalus-agent-tray"
+path = "src/bin/daedalus-agent-tray.rs"
 
 [dependencies]
 anyhow = "1"
 ed25519-dalek = { version = "2", features = ["std"] }
 hex = "0.4"
+png = "0.18"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -28,13 +42,19 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 ureq = { version = "2", features = ["json"] }
 
 [target.'cfg(windows)'.dependencies]
+tray-icon = "0.25"
 windows-service = "0.8"
 windows = { version = "0.61", features = [
   "Win32_Foundation",
+  "Win32_Security",
   "Win32_System_Console",
   "Win32_System_Power",
   "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
 ] }
+
+[build-dependencies]
+winresource = "0.1"
 
 [profile.release]
 opt-level = "s"

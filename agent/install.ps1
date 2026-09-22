@@ -41,7 +41,11 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
   throw "run this from an administrator PowerShell (the service and the firewall rule need it)"
 }
 
-$asset = "daedalus-agent-x86_64-pc-windows-msvc.exe"
+# Release asset name -> file name beside the service. Both are required.
+$assets = @{
+  "daedalus-agent-x86_64-pc-windows-msvc.exe"      = "daedalus-agent.exe"
+  "daedalus-agent-tray-x86_64-pc-windows-msvc.exe" = "daedalus-agent-tray.exe"
+}
 $headers = @{ "User-Agent" = "daedalus-agent-install"; "Accept" = "application/vnd.github+json" }
 
 Write-Host "looking up releases of $Repo"
@@ -54,8 +58,9 @@ if ($Version) {
   $release = $candidates | Sort-Object { [version]($_.tag_name -replace '^agent-v', '') } -Descending | Select-Object -First 1
   if (-not $release) { throw "no agent-v* release found in $Repo" }
 }
-$download = ($release.assets | Where-Object { $_.name -eq $asset } | Select-Object -First 1).browser_download_url
-if (-not $download) { throw "$($release.tag_name) has no $asset" }
+foreach ($name in $assets.Keys) {
+  if (-not ($release.assets | Where-Object { $_.name -eq $name })) { throw "$($release.tag_name) has no $name" }
+}
 Write-Host "installing $($release.tag_name)"
 
 $dir = Join-Path $env:ProgramFiles "daedalus-agent"
@@ -68,11 +73,17 @@ if ($service -and $service.Status -ne "Stopped") {
   Stop-Service -Name "daedalus-agent" -Force
   $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
 }
+# The tray holds its executable open; end it so the file can be replaced.
+Get-Process -Name "daedalus-agent-tray" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-$tmp = "$exe.download"
-Invoke-WebRequest -Uri $download -OutFile $tmp -Headers @{ "User-Agent" = "daedalus-agent-install" } -UseBasicParsing
-Unblock-File -Path $tmp
-Move-Item -Force -Path $tmp -Destination $exe
+foreach ($name in $assets.Keys) {
+  $url = ($release.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1).browser_download_url
+  $target = Join-Path $dir $assets[$name]
+  $tmp = "$target.download"
+  Invoke-WebRequest -Uri $url -OutFile $tmp -Headers @{ "User-Agent" = "daedalus-agent-install" } -UseBasicParsing
+  Unblock-File -Path $tmp
+  Move-Item -Force -Path $tmp -Destination $target
+}
 
 & $exe install --port $Port
 if ($LASTEXITCODE -ne 0) { throw "daedalus-agent install exited $LASTEXITCODE" }
