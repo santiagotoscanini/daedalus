@@ -3,7 +3,7 @@ import { readJsonObject } from '../lib/http-result'
 
 // "I am a machine on your network running the agent."
 //
-// The agent POSTs here every minute: a signed envelope (lib/agent/hello.ts)
+// The agent POSTs here every minute: a signed envelope (host/agent-hello.ts)
 // saying who it is, and the answer says what the box has decided about it
 // — `pending` until an admin approves it on System › Machines, `approved`
 // after, `revoked` if the box has turned it away. Nothing else happens on
@@ -28,7 +28,7 @@ export const Route = createFileRoute('/api/nodes/hello')({
         if (!read.ok) {
           return Response.json({ error: 'body must be a JSON object' }, { status: 400 })
         }
-        const { verifyHello } = await import('../lib/agent/hello')
+        const { verifyHello } = await import('../host/agent-hello')
         const verdict = verifyHello(read.value)
         if (!verdict.ok) {
           return Response.json({ error: verdict.reason }, { status: 401 })

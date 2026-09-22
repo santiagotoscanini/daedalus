@@ -25,14 +25,14 @@ function hasTsx(dir: string): boolean {
 describe('app.css @source', () => {
   it('names every directory under src that holds .tsx files', () => {
     const css = readFileSync(join(SRC, 'app.css'), 'utf8')
-    const sources = new Set(
-      [...css.matchAll(/^@source\s+"\.\/([^"]+)";/gm)].map((m) => m[1]),
-    )
+    const sources = new Set([...css.matchAll(/^@source\s+"\.\/([^"]+)";/gm)].map((m) => m[1]))
     const withComponents = readdirSync(SRC)
       .filter((e) => statSync(join(SRC, e)).isDirectory() && hasTsx(join(SRC, e)))
       .sort()
     for (const dir of withComponents) {
-      expect(sources, `src/${dir} holds .tsx files but app.css has no @source for it`).toContain(dir)
+      expect(sources, `src/${dir} holds .tsx files but app.css has no @source for it`).toContain(
+        dir,
+      )
     }
   })
 })

@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm'
+import type { HelloVerdict } from '../../host/agent-hello'
 import { db } from '../../host/db'
 import { type NodeState, nodes } from '../../host/schema'
-import type { HelloVerdict } from '../agent/hello'
 
 // The nodes table: what a verified hello writes, what the Machines tab
 // reads, and the two decisions an admin makes about a row.

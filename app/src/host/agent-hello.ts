@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, verify } from 'node:crypto'
-import { bool, decode, int, nullable, obj, optional, str } from '../contract/decode'
+import { bool, decode, int, nullable, obj, optional, str } from '../lib/contract/decode'
 
 // The hello: how a machine running the agent introduces itself to the box.
 //

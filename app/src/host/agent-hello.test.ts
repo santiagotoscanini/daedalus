@@ -1,6 +1,6 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { HELLO_MAX_SKEW_SECS, nodeIdOf, verifyHello } from './hello'
+import { HELLO_MAX_SKEW_SECS, nodeIdOf, verifyHello } from './agent-hello'
 
 /** A keypair and a signer the way the agent does it: raw ed25519, hex. */
 function agent() {
