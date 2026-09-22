@@ -1,0 +1,10 @@
+# Root notification policy → the email contact point. All alerts route here.
+
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: email
+    group_by:
+      - grafana_folder
+      - alertname

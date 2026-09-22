@@ -1,0 +1,52 @@
+{
+  "uid": "container-logs",
+  "title": "Container logs",
+  "description": "One logs panel, parameterised by a raw Loki label matcher. Exists to be embedded via /d-solo — daedalus frames it wherever a page needs the log lines for one service, without the Drilldown app's label pickers, datasource selector and histogram coming along for the ride. The variable holds the whole matcher (container=\"factorio\", stack=\"lemonade\") rather than a container name, because the one service whose logs did not come from this box's journal — Lemonade, pushed in over the WebSocket bridge in stacks/lemonade-logs — has no container label to be selected by.",
+  "tags": ["logs", "embed"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "selector",
+        "label": "Loki selector",
+        "type": "textbox",
+        "query": "",
+        "current": { "text": "", "value": "" },
+        "hide": 2,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "",
+      "datasource": { "type": "loki", "uid": "loki-default" },
+      "gridPos": { "h": 22, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki-default" },
+          "expr": "{$selector}",
+          "queryType": "range"
+        }
+      ]
+    }
+  ]
+}

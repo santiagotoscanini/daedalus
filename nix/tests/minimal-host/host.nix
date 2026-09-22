@@ -54,6 +54,16 @@
     # Logs, ON: the shipper's config renders from three registries no stack on
     # this host writes, so every generated section is empty and still parses.
     modules.logging.enable = true;
+    # Metrics and dashboards, ON: Grafana takes a database on the cluster and
+    # a client at the provider; the embed policy for the control plane's panels
+    # is absent, since the apps platform is off.
+    modules.monitoring = {
+      enable = true;
+      envSopsFile = ./sops/monitoring/env.sops;
+    };
+    images.prometheus = "docker.io/prom/prometheus:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    images.grafana = "docker.io/grafana/grafana:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    images.node-exporter = "docker.io/prom/node-exporter:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.loki = "docker.io/grafana/loki:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.alloy = "docker.io/grafana/alloy:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.app-db-exporter = "quay.io/prometheuscommunity/postgres-exporter:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";

@@ -1,0 +1,1482 @@
+# All alert rules for the home server, file-provisioned into Grafana's
+# "System" folder, grouped by severity tier (Container / Critical /
+# Predictive / Warning). File-provisioned — this file is the source of
+# truth; UI edits to these rules don't persist.
+#
+# NOTE: no per-container CPU/RAM alerts exist because no rootless-visible
+# per-container metric exists — cgroup exporters can't see cgroups under
+# user.slice/user@1000.service. Liveness (container_up) is the coverage.
+#
+# HOME ASSISTANT IS MUTED. Home Assistant is a work in progress and
+# its devices/integrations fail routinely while being worked on, so
+# every alert path that can name it is switched off: its own rule is
+# paused, and the three generic rules that carry a home-assistant
+# label (Container Disappeared, Web App Probe Failing, Scrape Target
+# Down) exclude it. `grep -n HA-MUTED` here plus the email=false on
+# fleet.monitoredJobs.ha-dbus-relay in platform/bluetooth is the
+# complete set — undo those to put HA back under monitoring.
+#
+# NOT covered: Host Systemd Service Failed still fires if the HA
+# container or the dbus relay exhausts its restarts, because
+# systemd_failed_units is an unlabeled count with nothing to
+# exclude on. That is deliberate — scoping it out would blind the
+# alert to every other unit on the box.
+
+apiVersion: 1
+
+# Orphaned docker-era rules stuck in grafana.db with file provenance
+# (their provisioning file predates this one); the API refuses to
+# delete file-provenance rules, so the deletion is file-provisioned too.
+deleteRules:
+  # Security rules retired 2026-07-30: the router forwards only
+  # 51820/udp + 34197/udp, so internet port scans and SSH brute force
+  # never reach this host — the panels and log labels behind these
+  # rules were removed with them.
+  - orgId: 1
+    uid: portscan-spike-1
+  - orgId: 1
+    uid: ssh-brute-burst-1
+  - orgId: 1
+    uid: fail2ban-ban-spike-1
+  - orgId: 1
+    uid: efal2elu6y5tse # Container High Memory Usage (docker-only metrics)
+  - orgId: 1
+    uid: efal2epnyckcga # Container CPU Throttled (docker-only metrics)
+  # Duplicate host/container rules from the pre-`prometheus-default`
+  # provisioning generation: file provenance, hash UIDs, and they point at
+  # a datasource UID (dfakbms70z4zke) that no longer exists — so each threw
+  # "data source not found" every eval cycle. Their working twins (the
+  # human-readable UIDs below) stay.
+  - orgId: 1
+    uid: bfal2ethfrdhcc # Container Disappeared
+  - orgId: 1
+    uid: ffal28xmfal1cf # Host Out of Disk Space
+  - orgId: 1
+    uid: afal291gvnz0ge # Host Out of Memory
+  - orgId: 1
+    uid: bfal295czyxa8b # Host OOM Kill Detected
+  - orgId: 1
+    uid: bfal299afpy4gb # Host CPU Overtemperature
+  - orgId: 1
+    uid: afal29d6u0hs0d # Host Systemd Service Failed
+  - orgId: 1
+    uid: afal2fwv7mmtce # Disk Will Fill In 24 Hours
+  - orgId: 1
+    uid: dfal2g0pbij28e # Inodes Will Fill In 24 Hours
+  - orgId: 1
+    uid: ffal2b36ys1dsf # Host High CPU Load
+  - orgId: 1
+    uid: afal2b6y5s740a # Host High CPU IOWait
+  - orgId: 1
+    uid: dfal2bapfa96oc # Host Swap Filling Up
+  - orgId: 1
+    uid: efal2befic1dsc # Host Memory Under Pressure
+  - orgId: 1
+    uid: efal2bi8zquiob # Host Out of Inodes
+  - orgId: 1
+    uid: dfal2cuy5hb7ke # Host Disk Read Latency High
+  - orgId: 1
+    uid: ffal2cyt5tvy8d # Host Disk Write Latency High
+  - orgId: 1
+    uid: efal2d2n2835se # Host Network Receive Errors
+  - orgId: 1
+    uid: ffal2d6fs60hsf # Host Network Transmit Errors
+  - orgId: 1
+    uid: bfal2da9w1wqod # Host Clock Skew Detected
+
+groups:
+  - orgId: 1
+    name: Container Alerts
+    folder: System
+    interval: 1m
+    rules:
+      # Liveness via the container_up{} textfile metric (monitoring.nix's
+      # host-liveness-exporter timer) — the only rootless-visible
+      # per-container liveness signal.
+      # container_up{name="X"} is 1 when the declared container is running,
+      # 0 when stopped/missing; fire on 0.
+      - uid: container-disappeared-1
+        title: Container Disappeared
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              # Aggregate by name so each frame is uniquely labelled — raw
+              # container_up carries instance/job labels that the threshold
+              # reducer collapses to {}, colliding across every series
+              # ("frame cannot uniquely be identified by its labels").
+              expr: min by (name) (container_up{name!="home-assistant"})  # HA-MUTED
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          description: Container {{ $labels.name }} is down (container_up = 0).
+          summary: A declared container has stopped unexpectedly
+        labels:
+          severity: warning
+        isPaused: false
+      # A healthy alloy logs nothing, so its journal is useless as a
+      # liveness signal and the whole log pipeline can stop silently.
+      # scrape-target-down covers "alloy is gone"; this covers the other
+      # half — alloy up and scrapeable but no longer shipping to Loki.
+      # 15m window vs the 1m group interval: journal traffic is bursty
+      # and a genuinely quiet minute is normal.
+      - uid: log-shipping-stalled-1
+        title: Log Shipping Stalled
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: sum(rate(loki_write_sent_entries_total[15m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.001
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        # OK on NoData: alloy being absent entirely is scrape-target-down's
+        # job, and double-firing on one outage buries the distinction.
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          description: alloy has sent no entries to Loki for 15m — journal logs are not reaching the log store.
+          summary: Log shipping to Loki has stalled
+        labels:
+          severity: warning
+        isPaused: false
+      # Outside-in: gatus probes every webApp's healthPath through
+      # traefik. container_up alone misses the failure mode where the
+      # container runs but the app serves 5xx (e.g. an aardvark-dns
+      # reload dropping a sibling's name — nextcloud 500'd for ~2h on
+      # 2026-07-18 with every container "up"). 10m tolerance: probes
+      # run every 60s, so this needs a real outage, not a blip.
+      - uid: webapp-probe-failing-1
+        title: Web App Probe Failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: min by (name) (gatus_results_endpoint_success{name!="home-assistant"})  # HA-MUTED
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          description: The gatus probe for {{ $labels.name }} has been failing for 10 minutes (HTTP >= 500, timeout, or cert problem).
+          summary: A published web app is failing its health probe
+        labels:
+          severity: warning
+        isPaused: false
+      # Watchdog for the watchdog: if the host-liveness-exporter timer dies,
+      # container_up (and systemd_failed_units) freeze at their last values
+      # and every liveness reading above is stale. node-exporter exports the
+      # .prom file's mtime; alert when it stops being rewritten (the timer
+      # ticks every 1min). noDataState: Alerting — the file vanishing
+      # entirely is the same failure, worse.
+      - uid: container-watchdog-stale-1
+        title: Container Watchdog Stale
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: time() - node_textfile_mtime_seconds{file="/var/lib/node-exporter/textfile/liveness.prom"}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 300
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: liveness.prom has not been rewritten for over 5 minutes — the host-liveness-exporter timer is dead and every container_up / systemd_failed_units reading is stale. Check `systemctl status host-liveness-exporter.timer`.
+          summary: Container liveness exporter has stopped updating
+        labels:
+          severity: warning
+        isPaused: false
+
+      # The game, not the container. container_up says the JVM process
+      # exists; this says it still answers the protocol — which is the
+      # difference between "running" and "playable". mc-monitor's own `up`
+      # is covered by the generic up == 0 rule, and that one would stay
+      # green through exactly the outage this catches.
+      # noDataState: OK — the series is absent whenever the stack is
+      # deliberately removed, and that must not page.
+      - uid: minecraft-not-answering-1
+        title: Minecraft Not Answering
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: max(minecraft_status_healthy)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: The Minecraft server has not answered a status ping for 5 minutes. The container may still be running — check `podman logs minecraft` for a stalled world save or an OOM, not `systemctl status`.
+          summary: Minecraft is not answering the server-list ping
+        labels:
+          severity: warning
+        isPaused: false
+  - orgId: 1
+    name: Critical Alerts
+    folder: System
+    interval: 1m
+    rules:
+      - uid: host-disk-full-1
+        title: Host Out of Disk Space
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"} / node_filesystem_size_bytes{fstype!~"tmpfs|nfs|ramfs"}) * 100
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Filesystem on {{ $labels.instance }} at {{ $labels.mountpoint }} has only {{ printf "%.1f" $values.A.Value }}% free space.
+          summary: Host filesystem is almost full (< 10% left)
+        labels:
+          severity: critical
+        isPaused: false
+      - uid: host-oom-1
+        title: Host Out of Memory
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Memory on {{ $labels.instance }} has only {{ printf "%.1f" $values.A.Value }}% available.
+          summary: Host memory is critically low (< 10% available)
+        labels:
+          severity: critical
+        isPaused: false
+      - uid: host-oom-kill-1
+        title: Host OOM Kill Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: increase(node_vmstat_oom_kill[5m])
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        annotations:
+          description: An OOM (Out of Memory) kill event was detected on {{ $labels.instance }}. A process was killed due to memory exhaustion.
+          summary: OOM kill detected on host
+        labels:
+          severity: critical
+        isPaused: false
+      - uid: host-cpu-overtemp-1
+        title: Host CPU Overtemperature
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: max(node_hwmon_temp_celsius{chip=~".*coretemp.*"}) or vector(0)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 85
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 2m
+        annotations:
+          description: CPU temperature on {{ $labels.instance }} has reached {{ $values.A }}°C which exceeds safe limits.
+          summary: Host CPU temperature is critically high
+        labels:
+          severity: critical
+        isPaused: false
+      # systemd_failed_units is a textfile gauge written by monitoring.nix's
+      # host-liveness-exporter sweep (node-exporter runs WITHOUT
+      # --collector.systemd, so node_systemd_unit_state does not exist).
+      # noDataState: Alerting — if the gauge vanishes this pages
+      # instead of going silently green.
+      - uid: systemd-unit-failed-1
+        title: Host Systemd Service Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: systemd_failed_units
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          description: "{{ $values.A }} systemd system unit(s) on {{ $labels.instance }} are in failed state. Run `systemctl --failed` on the host to see which."
+          summary: Systemd service has failed
+        labels:
+          severity: critical
+        isPaused: false
+      # node_zfs_zpool_state emits one series per (zpool, state) — 1 on the
+      # active state, 0 on the rest — so the non-online selector always
+      # returns data on a healthy box (all zeros) and noDataState: Alerting
+      # is safe: it only fires if the metric itself disappears. A degraded
+      # mirror is otherwise completely silent.
+      - uid: zfs-pool-state-1
+        title: ZFS Pool Not Online
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: node_zfs_zpool_state{state!="online"}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 1m
+        annotations:
+          description: ZFS pool {{ $labels.zpool }} is in state {{ $labels.state }}. A degraded mirror is otherwise silent — run `zpool status` on the host.
+          summary: ZFS pool is not ONLINE
+        labels:
+          severity: critical
+        isPaused: false
+      # Covers both gluetun instances via the job label (job="gluetun" is
+      # the TV stack, job="gluetun-argus" the argus app tunnel).
+      - uid: vpn-tunnel-down-1
+        title: VPN Tunnel Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: gluetun_vpn_status
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: VPN tunnel for {{ $labels.job }} ({{ $labels.instance }}) has been down for 10 minutes (gluetun_vpn_status = 0).
+          summary: Gluetun VPN tunnel is down
+        labels:
+          severity: critical
+        isPaused: false
+  - orgId: 1
+    name: Predictive Alerts
+    folder: System
+    interval: 1m
+    rules:
+      - uid: disk-fill-24h-1
+        title: Disk Will Fill In 24 Hours
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          description: Based on current usage trends, filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} will be full within 24 hours.
+          summary: Filesystem predicted to fill within 24 hours
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: inodes-fill-24h-1
+        title: Inodes Will Fill In 24 Hours
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: predict_linear(node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          description: Based on current usage trends, filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} will run out of inodes within 24 hours.
+          summary: Filesystem inodes predicted to fill within 24 hours
+        labels:
+          severity: warning
+        isPaused: false
+  - orgId: 1
+    name: Warning Alerts
+    folder: System
+    interval: 1m
+    rules:
+      - uid: host-cpu-load-1
+        title: Host High CPU Load
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 80
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: CPU load on {{ $labels.instance }} is {{ printf "%.1f" $values.A.Value }}%.
+          summary: Host CPU load is high (> 80%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: host-cpu-iowait-1
+        title: Host High CPU IOWait
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: avg by(instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: CPU iowait on {{ $labels.instance }} is {{ printf "%.1f" $values.A.Value }}%. This indicates disk I/O bottleneck.
+          summary: Host CPU iowait is high (> 10%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: host-swap-filling-1
+        title: Host Swap Filling Up
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) * 100 and node_memory_SwapTotal_bytes > 0
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 80
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Swap usage on {{ $labels.instance }} is {{ printf "%.1f" $values.A.Value }}%.
+          summary: Host swap usage is high (> 80%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: host-memory-pressure-1
+        title: Host Memory Under Pressure
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              # PSI "waiting" fraction × 100 = % of wall-clock that
+              # processes stalled waiting on memory. Unlike pgmajfault
+              # (which conflates cache reads / ARC eviction / mmap
+              # faults with real pressure), this only rises when the
+              # kernel actually withholds memory from a runnable task.
+              expr: rate(node_pressure_memory_waiting_seconds_total[5m]) * 100
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: Processes on {{ $labels.instance }} stalled waiting on memory {{ $values.A }}% of the time over 5m — sustained memory pressure.
+          summary: Host is experiencing memory pressure
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: host-inodes-full-1
+        title: Host Out of Inodes
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"} / node_filesystem_files{fstype!~"tmpfs|nfs|ramfs"}) * 100
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has only {{ printf "%.1f" $values.A.Value }}% inodes free.
+          summary: Host filesystem is running out of inodes (< 10% free)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: disk-read-latency-1
+        title: Host Disk Read Latency High
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (rate(node_disk_read_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_reads_completed_total[5m])) and rate(node_disk_reads_completed_total[5m]) > 0
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.1
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Disk read latency on {{ $labels.instance }} device {{ $labels.device }} is {{ $values.A }}s.
+          summary: Host disk read latency is high (> 100ms)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: disk-write-latency-1
+        title: Host Disk Write Latency High
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (rate(node_disk_write_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_writes_completed_total[5m])) and rate(node_disk_writes_completed_total[5m]) > 0
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.1
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Disk write latency on {{ $labels.instance }} device {{ $labels.device }} is {{ $values.A }}s.
+          summary: Host disk write latency is high (> 100ms)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: net-rx-errors-1
+        title: Host Network Receive Errors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (rate(node_network_receive_errs_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) / rate(node_network_receive_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m])) * 100 and rate(node_network_receive_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) > 0
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Network interface {{ $labels.device }} on {{ $labels.instance }} has {{ printf "%.1f" $values.A.Value }}% receive errors.
+          summary: Host network receive errors detected (> 1%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: net-tx-errors-1
+        title: Host Network Transmit Errors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (rate(node_network_transmit_errs_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) / rate(node_network_transmit_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m])) * 100 and rate(node_network_transmit_packets_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]) > 0
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Network interface {{ $labels.device }} on {{ $labels.instance }} has {{ printf "%.1f" $values.A.Value }}% transmit errors.
+          summary: Host network transmit errors detected (> 1%)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: host-clock-skew-1
+        title: Host Clock Skew Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: abs(node_timex_offset_seconds)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.05
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Clock on {{ $labels.instance }} is {{ $values.A }}s out of sync. This can cause issues with TLS certificates and distributed systems.
+          summary: Host clock is out of sync (> 50ms drift)
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: "tsdb-near-cap-1"
+        title: Prometheus TSDB Approaching Cap
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes * 100
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 80
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          description: Prometheus TSDB is at {{ printf "%.1f" $values.A.Value }}% of its retention size cap. Either cardinality is growing or someone bumped retention. The size cap will start dropping old data at 100%.
+          summary: Prometheus TSDB > 80% of size cap
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: scrape-target-down-1
+        title: Scrape Target Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              # myspeed is a speedtest app: its exporter predictably drops when
+              # the WAN blips (nightly dynamic-IP reset), which is not
+              # actionable. Excluded so those blips don't page. Its speed
+              # metrics still graph on the Network dashboard.
+              expr: up{job!~"myspeed|home-assistant"}  # HA-MUTED
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: Scrape target {{ $labels.instance }} of job {{ $labels.job }} is unreachable or returning errors (up = 0) — the exporter is down, the container is gone, or the endpoint 404s.
+          summary: A prometheus scrape target is down
+        labels:
+          severity: warning
+        isPaused: false
+      # Scoped to job="gluetun" (the TV stack): ProtonVPN port forwarding
+      # feeds qBittorrent there. job="gluetun-argus" has no port
+      # forwarding configured and permanently reports 0 — including it
+      # would fire forever.
+      - uid: vpn-portfwd-lost-1
+        title: VPN Port Forward Lost
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: gluetun_forwarded_ports_total{job="gluetun"}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 30m
+        annotations:
+          description: Gluetun ({{ $labels.job }}) has had no forwarded port for 30 minutes — qBittorrent is unconnectable for incoming peers. Check the gluetun container logs and the ProtonVPN port-forward loop.
+          summary: ProtonVPN forwarded port has been lost
+        labels:
+          severity: warning
+        isPaused: false
+      - uid: tls-cert-expiry-1
+        title: TLS Certificate Expiring
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (min(traefik_tls_certs_not_after) - time()) / 86400
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 14
+                    type: lt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 1h
+        annotations:
+          description: The soonest-expiring traefik TLS certificate has {{ $values.A }} days left — ACME renewal (normally at 30 days out) is not working. Check traefik logs and the Cloudflare DNS-01 credentials.
+          summary: A traefik TLS certificate expires in < 14 days
+        labels:
+          severity: warning
+        isPaused: false
+
+      # The one genuinely Home-Assistant-shaped alert. Liveness is
+      # already covered twice over — gatus probes the published
+      # hostname, container_up watches the container — so this instead
+      # watches the thing only HA can see: a device that stopped
+      # answering. `homeassistant_entity_available` reports 0 for an
+      # entity in EITHER the unavailable or the unknown state, and a
+      # healthy instance always carries a floor of permanently-unknown
+      # ones (a conversation agent, a tts service, backup sensors that
+      # have never run) that grows with every integration added. An
+      # absolute `> 0` threshold therefore latches on forever and can
+      # never return to Normal.
+      #
+      # So this alerts on DETERIORATION: the current count minus its own
+      # 6h floor. New benign unknowns raise the floor and stay silent;
+      # a device that drops out is a step above it. A persistent outage
+      # becomes the floor within 6h and stops re-notifying, which is
+      # the intent - you are told once, not every repeat_interval
+      # forever. 15m so a rebooting device or a slow poll is not an
+      # email.
+      #
+      # `media_player` and `remote` are excluded outright. Those
+      # domains report unavailable whenever the device is simply
+      # POWERED OFF, which for a TV is a normal twice-daily event
+      # lasting hours — long enough to clear the 15m `for`, short
+      # enough that it never settles into the 6h floor, so every
+      # power cycle would mail. HA cannot distinguish "off" from
+      # "broken" for these, so there is no signal being dropped.
+      - uid: hass-entities-unavailable-1
+        title: Home Assistant Entities Unavailable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: (count(homeassistant_entity_available{domain!~"media_player|remote"} == 0) or vector(0)) - min_over_time((count(homeassistant_entity_available{domain!~"media_player|remote"} == 0) or vector(0))[6h:5m])
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        # OK on NoData: Home Assistant being unreachable entirely is the
+        # gatus probe's and container_up's job, and double-firing on one
+        # outage buries the distinction.
+        noDataState: OK
+        execErrState: OK
+        for: 15m
+        annotations:
+          description: '{{ $values.A }} Home Assistant entities have been unavailable for 15m — a device or integration has stopped answering. Check the Home Assistant dashboard for which.'
+          summary: Home Assistant has unavailable entities
+        labels:
+          severity: warning
+        isPaused: true  # HA-MUTED
+  - orgId: 1
+    name: Security Alerts
+    folder: System
+    interval: 1m
+    rules:
+      # 5xx through the edge: either an app is failing or something is
+      # hammering one into failing. noDataState OK — no 5xx series exists
+      # until the first 5xx, and absence is the healthy state.
+      - uid: traefik-5xx-spike-1
+        title: Traefik 5xx Spike
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: sum(increase(traefik_entrypoint_requests_total{code=~"5.."}[10m]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 30
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          description: '{{ $values.A }} server errors through traefik in 10 minutes. Check "Auth gate & server errors by router" on the Security dashboard for the failing router, then that stack''s logs.'
+          summary: Traefik is returning 5xx errors
+        labels:
+          severity: warning
+        isPaused: false
+
+      # cfweb is the only path in from the public internet. A sustained
+      # surge there is scraping, credential stuffing, or an app loop —
+      # never normal household traffic.
+      - uid: cfweb-surge-1
+        title: Remote Request Surge
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: sum(rate(traefik_entrypoint_requests_total{entrypoint="cfweb"}[10m])) * 60
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 300
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
+        for: 10m
+        annotations:
+          description: Public traffic through the Cloudflare tunnel is running at {{ $values.A }} requests/min, sustained for 10 minutes. Check the top remote client IPs and user agents on the Security dashboard.
+          summary: Sustained surge of requests from the public internet
+        labels:
+          severity: warning
+        isPaused: false
