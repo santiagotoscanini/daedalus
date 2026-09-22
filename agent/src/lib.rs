@@ -123,6 +123,12 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
             .context("spawning the updater")?
     };
 
+    // The tray watchdog (Windows): a tray that has not reported for a
+    // while is started again in the console user's session, at most once a
+    // minute. Nothing starts it otherwise until the next logon — the Run
+    // key fires once. launchd does this for the Mac by itself.
+    #[cfg(windows)]
+    let mut tray_tried = std::time::Instant::now();
     while !stop.load(Ordering::Relaxed) {
         let wanted = shared.policy().awake_hold;
         if hold_wanted != Some(wanted) {
@@ -154,6 +160,17 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
                 hold = None;
                 shared.set_hold(false, None);
                 tracing::info!("awake hold released: the policy for this machine is off");
+            }
+        }
+        #[cfg(windows)]
+        if !shared.tray_reporting()
+            && started.elapsed() > Duration::from_secs(45)
+            && tray_tried.elapsed() > Duration::from_secs(60)
+        {
+            tray_tried = std::time::Instant::now();
+            match service::launch_tray_for_console_user() {
+                Ok(()) => {}
+                Err(e) => tracing::info!(error = format!("{e:#}"), "tray not started"),
             }
         }
         std::thread::sleep(Duration::from_millis(500));

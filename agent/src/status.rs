@@ -186,6 +186,14 @@ impl Shared {
         }
     }
 
+    /// Whether the tray has reported within the freshness window.
+    pub fn tray_reporting(&self) -> bool {
+        self.lock()
+            .claude
+            .as_ref()
+            .is_some_and(|(_, at)| at.elapsed() < REPORT_FRESH)
+    }
+
     /// The hello's summary of Claude Code: None when the tray is silent.
     pub fn claude_summary(&self) -> Option<Summary> {
         let l = self.lock();

@@ -306,3 +306,92 @@ fn tray_start(tray: &std::path::Path) {
     // which is how an elevated installer launches an unelevated tray.
     let _ = std::process::Command::new("explorer.exe").arg(tray).spawn();
 }
+
+// ── starting the tray from the service ────────────────────────────────────
+//
+// The Run key starts the tray at logon and nothing else does: a tray that
+// dies (an update's relaunch that lost a race, a crash) leaves the machine
+// with no menu and no Claude server until the next login. The service can
+// put it back: it runs as LocalSystem, which may take the console user's
+// token and start a process in that session on the interactive desktop.
+// This is what agent_main calls when the tray has not reported for a while
+// (status.rs `tray.reporting`), and what launchd's KeepAlive does on macOS.
+
+/// Start the tray as the user at the console, in their session, with their
+/// environment. Err when nobody is logged on, or the token is refused.
+pub fn launch_tray_for_console_user() -> Result<()> {
+    use std::ffi::c_void;
+    use windows::core::{PCWSTR, PWSTR};
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::System::Environment::{CreateEnvironmentBlock, DestroyEnvironmentBlock};
+    use windows::Win32::System::RemoteDesktop::{WTSGetActiveConsoleSessionId, WTSQueryUserToken};
+    use windows::Win32::System::Threading::{
+        CreateProcessAsUserW, CREATE_UNICODE_ENVIRONMENT, PROCESS_INFORMATION, STARTUPINFOW,
+    };
+
+    let exe = std::env::current_exe().context("locating this binary")?;
+    let tray = exe.with_file_name(TRAY_EXE);
+    if !tray.exists() {
+        bail!("no {TRAY_EXE} beside the service");
+    }
+    // SAFETY: Win32 calls in the documented order; every handle and block
+    // taken is released before returning.
+    unsafe {
+        let session = WTSGetActiveConsoleSessionId();
+        if session == 0xFFFF_FFFF {
+            bail!("no console session");
+        }
+        let mut token = HANDLE::default();
+        WTSQueryUserToken(session, &mut token).context("taking the console user's token")?;
+        let mut env: *mut c_void = std::ptr::null_mut();
+        let env_ok = CreateEnvironmentBlock(&mut env, Some(token), false).is_ok();
+        let mut cmd: Vec<u16> = format!("\"{}\"", tray.display())
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut desktop: Vec<u16> = "winsta0\\default"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let si = STARTUPINFOW {
+            cb: std::mem::size_of::<STARTUPINFOW>() as u32,
+            lpDesktop: PWSTR(desktop.as_mut_ptr()),
+            ..Default::default()
+        };
+        let mut pi = PROCESS_INFORMATION::default();
+        let r = CreateProcessAsUserW(
+            Some(token),
+            PCWSTR::null(),
+            Some(PWSTR(cmd.as_mut_ptr())),
+            None,
+            None,
+            false,
+            CREATE_UNICODE_ENVIRONMENT,
+            if env_ok {
+                Some(env as *const c_void)
+            } else {
+                None
+            },
+            PCWSTR::null(),
+            &si,
+            &mut pi,
+        );
+        if env_ok {
+            let _ = DestroyEnvironmentBlock(env);
+        }
+        let _ = CloseHandle(token);
+        match r {
+            Ok(()) => {
+                let _ = CloseHandle(pi.hThread);
+                let _ = CloseHandle(pi.hProcess);
+                tracing::info!(
+                    session,
+                    pid = pi.dwProcessId,
+                    "tray started in the console session"
+                );
+                Ok(())
+            }
+            Err(e) => Err(e).context("starting the tray as the console user"),
+        }
+    }
+}
