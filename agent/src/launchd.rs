@@ -20,6 +20,7 @@
 //! `run` is `agent_main` with SIGTERM as the stop: launchd sends it on
 //! `bootout` and at shutdown.
 
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -145,6 +146,26 @@ pub fn install(cfg: &Config) -> Result<()> {
     let logs = config::log_dir();
     std::fs::create_dir_all(&logs).context("creating the log directory")?;
     let path = config::write_if_absent(cfg)?;
+    // Root made these under whatever umask `sudo sh` had — 077 on some
+    // Macs — and the tray runs as the user: it has to traverse the data
+    // directory and bin, read config.toml, and launchd has to read the
+    // plists. The identity key stays root's alone (0600, identity.rs).
+    for (p, mode) in [
+        (config::data_dir(), 0o755),
+        (
+            exe.parent().map(Path::to_path_buf).unwrap_or_default(),
+            0o755,
+        ),
+        (logs.clone(), 0o755),
+        (path.clone(), 0o644),
+        (config::state_path(), 0o644),
+        (exe.clone(), 0o755),
+        (tray.clone(), 0o755),
+    ] {
+        if p.exists() {
+            let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(mode));
+        }
+    }
     println!("config at {}", path.display());
 
     // The daemon. bootout first so a re-install lands on the new binary.
@@ -160,6 +181,7 @@ pub fn install(cfg: &Config) -> Result<()> {
         ),
     )
     .context("writing the daemon's plist")?;
+    let _ = std::fs::set_permissions(daemon_plist(), std::fs::Permissions::from_mode(0o644));
     launchctl(&["bootstrap", "system", &daemon_plist().to_string_lossy()])?;
     println!("service {DAEMON_LABEL} registered and started");
 
@@ -185,6 +207,7 @@ pub fn install(cfg: &Config) -> Result<()> {
             ),
         )
         .context("writing the tray's plist")?;
+        let _ = std::fs::set_permissions(tray_plist(), std::fs::Permissions::from_mode(0o644));
         if let Some(uid) = console_uid().filter(|u| *u != 0) {
             let domain = format!("gui/{uid}");
             let _ = launchctl(&["bootout", &format!("{domain}/{TRAY_LABEL}")]);

@@ -104,7 +104,8 @@ impl Drop for Hold {
 /// turn hibernation off. Idempotent and quiet: `powercfg` does not say whether
 /// a value moved, so this reports only that every call succeeded. A no-op
 /// on macOS, where the assertion is the whole mechanism.
-pub fn converge_plan() -> Result<()> {
+/// Returns what it did, or None where there is nothing to do.
+pub fn converge_plan() -> Result<Option<&'static str>> {
     #[cfg(windows)]
     {
         use std::process::Command;
@@ -125,11 +126,11 @@ pub fn converge_plan() -> Result<()> {
                 );
             }
         }
-        Ok(())
+        Ok(Some("idle sleep and hibernate timers off, hibernation off"))
     }
     #[cfg(not(windows))]
     {
-        Ok(())
+        Ok(None)
     }
 }
 

@@ -212,7 +212,7 @@ impl Shared {
         let doc = Document {
             agent: crate::SERVICE_NAME,
             version: crate::VERSION,
-            hostname: hostname(),
+            hostname: crate::facts::hostname(),
             facts: &self.facts,
             uptime_secs: self.started.elapsed().as_secs(),
             os_uptime_secs: os_uptime,
@@ -241,12 +241,6 @@ impl Shared {
         };
         serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".into())
     }
-}
-
-fn hostname() -> String {
-    std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "unknown".into())
 }
 
 /// Answer on `0.0.0.0:port` from a thread until `unblock` is called on the

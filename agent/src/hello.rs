@@ -133,12 +133,6 @@ pub struct ControlPlane {
     pub error: Option<String>,
 }
 
-fn hostname() -> String {
-    std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "unknown".into())
-}
-
 fn send(
     url: &str,
     id: &Identity,
@@ -149,7 +143,7 @@ fn send(
     claude: Option<Summary>,
 ) -> Result<Answer> {
     let payload = Payload {
-        hostname: &hostname(),
+        hostname: &crate::facts::hostname(),
         os: facts.os,
         os_name: &facts.os_name,
         os_version: &facts.os_version,

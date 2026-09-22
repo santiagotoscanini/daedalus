@@ -197,3 +197,25 @@ fn cpu_name() -> String {
 fn memory_bytes() -> Option<u64> {
     None
 }
+
+/// The machine's name: `COMPUTERNAME` on Windows, `gethostname` elsewhere
+/// (launchd hands a daemon no HOSTNAME), without macOS's `.local`.
+pub fn hostname() -> String {
+    if let Ok(n) = std::env::var("COMPUTERNAME") {
+        return n;
+    }
+    #[cfg(unix)]
+    {
+        let mut buf = [0u8; 256];
+        // SAFETY: a buffer of the stated size; the name is NUL-terminated.
+        let rc = unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) };
+        if rc == 0 {
+            let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+            let name = String::from_utf8_lossy(&buf[..end]).trim().to_string();
+            if !name.is_empty() {
+                return name.trim_end_matches(".local").to_string();
+            }
+        }
+    }
+    std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".into())
+}

@@ -142,9 +142,9 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
                     }
                 };
                 match power::converge_plan() {
-                    Ok(()) => tracing::info!(
-                        "power plan set: idle sleep and hibernate timers off, hibernation off"
-                    ),
+                    Ok(Some(what)) => tracing::info!("power plan set: {what}"),
+                    // Nothing to converge on this OS; the assertion is the whole hold.
+                    Ok(None) => {}
                     Err(e) => tracing::warn!(error = %e, "power plan not set"),
                 }
             } else {

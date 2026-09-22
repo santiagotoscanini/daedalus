@@ -20,6 +20,9 @@
 # instead of the newest), DAEDALUS_AGENT_PORT (the status page's port, on
 # first install only).
 set -eu
+# Root's umask under `sudo sh` can be 077, which would leave the agent's
+# directories unreadable to the user the menu bar app runs as.
+umask 022
 
 REPO="${DAEDALUS_REPO:-santiagotoscanini/daedalus}"
 VERSION="${DAEDALUS_AGENT_VERSION:-}"
@@ -70,8 +73,10 @@ mv -f "$tmp/daedalus-agent" "$BIN/daedalus-agent"
 mv -f "$tmp/daedalus-agent-tray" "$BIN/daedalus-agent-tray"
 # A `daedalus-agent status` from any terminal.
 ln -sf "$BIN/daedalus-agent" /usr/local/bin/daedalus-agent 2>/dev/null || true
+chmod 755 "$ROOT" "$BIN" "$ROOT/logs"
 
 "$BIN/daedalus-agent" install --port "$PORT"
 echo
 echo "installed $tag. Status page: http://$(hostname):$PORT/status"
 echo "logs: $ROOT/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
+echo "the status page answers any address on the LAN without a login: it states what the LAN can already see"
