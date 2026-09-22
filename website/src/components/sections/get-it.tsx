@@ -9,7 +9,9 @@ const INIT = "nix flake init -t github:santiagotoscanini/daedalus#config";
  * build time), so the line never names a version: the script finds the
  * newest agent release itself. */
 const AGENT_INSTALL = "irm https://daedalus.toscanini.me/install.ps1 | iex";
-const AGENT_RELEASES = `${REPO}/releases?q=agent-v`;
+/** GitHub's release search matches titles, not tags: the releases are titled
+ * "daedalus-agent <version>", so that is the word that lists them. */
+const AGENT_RELEASES = `${REPO}/releases?q=daedalus-agent`;
 const AGENT_README = `${REPO}/blob/main/agent/README.md`;
 
 /** The two downloads: the engine for the box, the agent for the machine the
