@@ -198,11 +198,26 @@ fn memory_bytes() -> Option<u64> {
     None
 }
 
-/// The machine's name: `COMPUTERNAME` on Windows, `gethostname` elsewhere
-/// (launchd hands a daemon no HOSTNAME), without macOS's `.local`.
+/// The machine's name: `COMPUTERNAME` on Windows; on macOS the name the
+/// user gave it in System Settings (`scutil --get ComputerName`), which is
+/// what Finder and AirDrop show; else `gethostname` (launchd hands a
+/// daemon no HOSTNAME), without a DHCP or `.local` suffix.
 pub fn hostname() -> String {
     if let Ok(n) = std::env::var("COMPUTERNAME") {
         return n;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(n) = std::process::Command::new("scutil")
+            .args(["--get", "ComputerName"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|n| !n.is_empty())
+        {
+            return n;
+        }
     }
     #[cfg(unix)]
     {
@@ -212,8 +227,8 @@ pub fn hostname() -> String {
         if rc == 0 {
             let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
             let name = String::from_utf8_lossy(&buf[..end]).trim().to_string();
-            if !name.is_empty() {
-                return name.trim_end_matches(".local").to_string();
+            if let Some(short) = name.split('.').next().filter(|s| !s.is_empty()) {
+                return short.to_string();
             }
         }
     }

@@ -66,6 +66,12 @@ pub fn run() -> Result<()> {
     });
     if is_root() {
         converge_permissions();
+        // A moment later, once agent_main has opened the log, so the
+        // outcome is recorded.
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            kickstart_tray();
+        });
     }
     crate::agent_main(stop, false)
 }
@@ -256,5 +262,39 @@ pub fn converge_permissions() {
         if p.exists() {
             let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(mode));
         }
+    }
+}
+
+/// Start the menu bar app in the console user's session if it is not
+/// running. launchd gives up on a job whose spawn failed (a root-only tree
+/// did that to every 0.5.0 install) and a self-update replaces binaries
+/// without touching jobs, so the daemon asks for it at every start, after
+/// the permissions are right. A tray that is already up is left alone;
+/// one whose binary changed relaunches itself.
+pub fn kickstart_tray() {
+    let Some(uid) = console_uid().filter(|u| *u != 0) else {
+        return;
+    };
+    if !tray_plist().exists() {
+        return;
+    }
+    let target = format!("gui/{uid}/{TRAY_LABEL}");
+    // Not loaded in that session yet (a login that predates the install):
+    // bootstrap it, which also starts it. Loaded: kickstart starts it if
+    // it is not running.
+    if launchctl(&["print", &target]).is_err() {
+        match launchctl(&[
+            "bootstrap",
+            &format!("gui/{uid}"),
+            &tray_plist().to_string_lossy(),
+        ]) {
+            Ok(()) => tracing::info!(uid, "menu bar app loaded into the console session"),
+            Err(e) => tracing::warn!(uid, error = %e, "menu bar app not loaded"),
+        }
+        return;
+    }
+    match launchctl(&["kickstart", &target]) {
+        Ok(()) => tracing::info!(uid, "menu bar app kickstarted"),
+        Err(e) => tracing::warn!(uid, error = %e, "menu bar app not kickstarted"),
     }
 }
