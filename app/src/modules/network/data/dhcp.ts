@@ -14,7 +14,7 @@ import { PIHOLE, piholeAdmin, piholeSid } from './shared'
  * in the first and not the second got whatever was free; one in the second and
  * not the first is declared and has not been switched on.
  */
-type Device = {
+export type Device = {
   name: string | null
   ip: string
   mac: string
@@ -62,6 +62,15 @@ type FtlDevice = {
  * single busiest "device" by two orders of magnitude, and leaving it in makes
  * every real device's share round to zero.
  */
+/**
+ * Everything on the LAN as the DHCP tab lists it, for a reader elsewhere —
+ * the Machines tab probes each of these for an agent.
+ */
+export async function lanDevices(ctx: Ctx): Promise<Device[]> {
+  const dhcp = dhcpConfig((await networkFacts()).dhcp, await loadReservationLines(ctx), undefined)
+  return loadDevices(ctx, dhcp.reservations)
+}
+
 async function loadDevices(ctx: Ctx, reservations: Dhcp['reservations']): Promise<Device[]> {
   const base = PIHOLE(ctx)
   const sid = await piholeSid(base)

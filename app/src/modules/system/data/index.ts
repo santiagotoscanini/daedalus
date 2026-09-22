@@ -31,6 +31,7 @@ import { type BuildData, loadBuild } from './build'
 import { type DatabaseData, loadDatabase } from './database'
 import { type DisksData, loadDisks } from './disks'
 import { type HostData, loadHost } from './host'
+import { loadMachines, type MachinesData } from './machines'
 import { loadMemory, type MemoryData } from './memory'
 import { loadPools, type PoolsData } from './pools'
 import { loadUpdates, type UpdatesData } from './updates'
@@ -44,11 +45,13 @@ export type Tabs = {
   database: DatabaseData
   updates: UpdatesData
   backups: BackupsData
+  machines: MachinesData
 }
 export type SystemData = TabPayload<typeof manifest, Tabs>
 
-// No tab here reads the env: every number is prometheus's or the host
-// snapshot's, so the loaders take nothing from the Ctx they are handed.
+// Almost no tab here reads the env: every number is prometheus's or the host
+// snapshot's. Machines is the exception — it asks pi-hole for the LAN and
+// needs the box's own address to leave itself out.
 export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   host: loadHost,
   memory: loadMemory,
@@ -58,6 +61,7 @@ export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   database: loadDatabase,
   updates: loadUpdates,
   backups: loadBackups,
+  machines: loadMachines,
 })
 
 export type { HostFacts } from '../../../lib/dashboard/host-facts'

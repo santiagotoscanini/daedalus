@@ -6,6 +6,7 @@ import { BuildView } from './build'
 import { DatabaseView } from './database'
 import { DisksView } from './disks'
 import { HostView } from './host'
+import { MachinesView } from './machines'
 import { MemoryView } from './memory'
 import { PoolsView } from './pools'
 import { UpdatesView } from './updates'
@@ -39,4 +40,5 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
   database: ({ data }) => <DatabaseView d={data} />,
   updates: ({ data }) => <UpdatesView d={data} />,
   backups: ({ data }) => <BackupsView d={data} />,
+  machines: ({ data }) => <MachinesView d={data} />,
 })

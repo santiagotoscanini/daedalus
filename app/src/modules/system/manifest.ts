@@ -68,5 +68,10 @@ export const manifest = {
       head: false,
       dividerBefore: true,
     },
+    // Past the rule for the same reason as Backups: not this machine. The
+    // other computers on the network that run the agent — found by asking
+    // every device pi-hole has seen for the page the agent answers. One
+    // half-width board per machine, then the how-to-join board.
+    { id: 'machines', label: 'Machines', boardSpans: [6, 6, 12], head: false },
   ],
 } as const satisfies ModuleManifest
