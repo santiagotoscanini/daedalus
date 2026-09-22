@@ -218,8 +218,13 @@ struct CpuTimes {
 
 /// Percent busy between two readings, or None when nothing elapsed.
 fn cpu_usage(prev: CpuTimes, cur: CpuTimes) -> Option<f64> {
-    let idle = cur.idle.saturating_sub(prev.idle);
-    let total = cur.kernel.saturating_sub(prev.kernel) + cur.user.saturating_sub(prev.user);
+    // A counter that went backwards (a clock step, a resumed machine)
+    // describes no interval; say nothing rather than 0 or 100.
+    if cur.idle < prev.idle || cur.kernel < prev.kernel || cur.user < prev.user {
+        return None;
+    }
+    let idle = cur.idle - prev.idle;
+    let total = (cur.kernel - prev.kernel) + (cur.user - prev.user);
     if total == 0 {
         return None;
     }
@@ -933,13 +938,13 @@ mod tests {
         let pct = cpu_usage(a, b).expect("time passed");
         assert!((pct - 70.0).abs() < 1e-9);
         assert_eq!(cpu_usage(a, a), None);
-        // A counter that went backwards clamps rather than panics.
+        // A counter that went backwards is no interval at all.
         let c = CpuTimes {
             idle: 900,
             kernel: 2_400,
             user: 1_600,
         };
-        assert_eq!(cpu_usage(a, c), Some(0.0));
+        assert_eq!(cpu_usage(a, c), None);
     }
 
     #[test]

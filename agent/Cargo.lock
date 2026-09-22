@@ -291,7 +291,7 @@ dependencies = [
 
 [[package]]
 name = "daedalus-agent"
-version = "0.6.2"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "ed25519-dalek",
