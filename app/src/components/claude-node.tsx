@@ -420,25 +420,26 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
 function SessionRow({ s }: { s: NodeClaudeSession }) {
   const started = s.startedAt === null ? null : (Date.now() - s.startedAt) / 1000
   const last = s.lastActivityAt === null ? null : (Date.now() - s.lastActivityAt) / 1000
+  const facts = [
+    s.kind,
+    s.version,
+    s.remoteId === null ? null : s.remoteId.slice(0, 18),
+    started === null ? null : `started ${since(started)}`,
+    last === null || !s.alive ? null : `active ${since(last)}`,
+  ].filter((x): x is string => x !== null)
   return (
     <li className={ROW}>
-      <div className={ROW_MAIN}>
+      <div className={`${ROW_MAIN} flex items-baseline gap-2`}>
         <span className={`${MONO} font-medium`}>
           {s.name ?? s.transcriptId?.slice(0, 8) ?? DASH}
         </span>
-        <span className={NOTE}>{s.cwd ?? ''}</span>
+        <span className={`${NOTE} truncate`}>{s.cwd ?? ''}</span>
       </div>
-      <div className={ROW_SIDE}>
+      <div className={`${ROW_SIDE} flex items-center gap-2`}>
         <Chip tone={s.alive ? (s.status === 'busy' ? 'warn' : 'ok') : 'muted'}>
           {s.alive ? (s.status ?? 'alive') : 'ended'}
         </Chip>
-        {s.kind !== null && <span className={NOTE}>{s.kind}</span>}
-        {s.version !== null && <span className={`${MONO} text-(--dim)`}>{s.version}</span>}
-        {s.remoteId !== null && (
-          <span className={`${MONO} text-(--dim)`}>{s.remoteId.slice(0, 18)}</span>
-        )}
-        {started !== null && <span className={NOTE}>started {since(started)}</span>}
-        {last !== null && s.alive && <span className={NOTE}>active {since(last)}</span>}
+        <span className="truncate">{facts.join(' · ')}</span>
       </div>
     </li>
   )

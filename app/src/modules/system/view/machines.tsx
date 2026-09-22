@@ -182,7 +182,7 @@ function Decision({ m }: { m: Machine }) {
     node.state === 'pending'
       ? `Announced itself ${since(node.lastSeenAgo)} and is waiting for a decision. Approve it if this is your machine.`
       : node.state === 'approved'
-        ? `Approved ${node.approvedAt !== null ? since((Date.now() - Date.parse(node.approvedAt)) / 1000) : ''}${node.approvedBy !== null ? ` by ${node.approvedBy}` : ''}; last hello ${since(node.lastSeenAgo)}.${node.updateCheckRequested ? ' An update check is queued for its next hello.' : ''}`
+        ? `Approved ${node.approvedAt !== null ? since((Date.now() - Date.parse(node.approvedAt)) / 1000) : ''}${node.approvedBy !== null ? ` by ${node.approvedBy}` : ''}; last hello ${since(node.lastSeenAgo)}.${node.updateCheckRequested ? ' An update is queued for its next hello: the agent reads the release feed and installs what it finds.' : ''}`
         : `Revoked; the box ignores its hellos. Approve to trust its key again, or forget it.`
 
   return (
@@ -205,7 +205,7 @@ function Decision({ m }: { m: Machine }) {
               disabled={busy || node.updateCheckRequested}
               onClick={() => act(requestUpdateCheckFn)}
             >
-              {node.updateCheckRequested ? 'Check queued' : 'Check for updates'}
+              {node.updateCheckRequested ? 'Update queued' : 'Update now'}
             </Button>
             <Button asChild size="sm" variant="ghost">
               <Link to="/settings" search={{ tab: 'machines' }}>
