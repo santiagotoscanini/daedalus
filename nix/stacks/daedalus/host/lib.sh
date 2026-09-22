@@ -233,3 +233,24 @@ log_errtail() {
         printf "%s%s", head, tail
       }' || true
 }
+
+# ── the engine override ───────────────────────────────────────────────────
+#
+# site.json's `developer.engineOverride`: an absolute path to an engine clone
+# on this box, or nothing. Nix never reads the key; the three agents that
+# rebuild do, at run time, and each answers it differently — apply.sh builds
+# from that tree (`--override-input`, lock untouched) and activates with
+# `test` rather than `switch`; image-update.sh and engine-update.sh refuse,
+# because a pin moved under an override would name a rev nothing is running.
+# Read here, once, so the three cannot disagree about where the key lives.
+#
+# Prints the path, or nothing: no site.json, an unreadable one, or a null
+# key all mean "no override". Read as the operator and never through a link
+# — site.json is in the operator's tree, and its value becomes a path root
+# hands to nixos-rebuild. Expects SITE_DIR (fleet.site.path) in the
+# environment; never fails.
+site_engine_override() {
+  [ -f "$SITE_DIR/site.json" ] || return 0
+  { read_as_operator "$SITE_DIR/site.json" 2>/dev/null || true; } |
+    jq -r '.developer.engineOverride // empty' 2>/dev/null || true
+}

@@ -205,6 +205,38 @@ done
 as_operator rm -f -- "$PAYLOAD"
 [ "${#WRITTEN[@]}" -gt 0 ] || fail writing "the payload carries none of ${MANAGED[*]}"
 
+# --- the engine override --------------------------------------------------
+# site.json's `developer.engineOverride` (host/lib.sh site_engine_override):
+# an engine clone on this box to build from instead of the pinned input.
+# Read AFTER the write, so the Apply that sets it is already the first one
+# built from the clone, and the Apply that clears it is the switch back onto
+# the pinned engine — the document governs the rebuild that carries it.
+#
+# While it is set, every rebuild below takes the engine from that tree
+# (`--override-input`, and the lock is left alone: nixos-rebuild would
+# otherwise write the override into flake.lock) and the activation is `test`,
+# never `switch`. The running system follows the clone as it stands,
+# uncommitted files included, and the next boot still comes up on the last
+# switched generation — which is the point: engine work is testable through
+# an Apply before a commit is pinned, and a reboot undoes it. The status says
+# so: `testing` where it would say `switching`, `tested` where `complete`.
+ENGINE_OVERRIDE="$(site_engine_override)"
+REBUILD_FLAGS=()
+ACTIVATE="switch"
+if [ -n "$ENGINE_OVERRIDE" ]; then
+  if [ ! -f "$ENGINE_OVERRIDE/flake.nix" ]; then
+    for w in "${WRITTEN[@]}"; do site_restore "$w"; done
+    fail writing "developer.engineOverride names $ENGINE_OVERRIDE, which has no flake.nix — not an engine clone. Nothing was rebuilt; the written files were put back."
+  fi
+  REBUILD_FLAGS=(--override-input daedalus "path:$ENGINE_OVERRIDE" --no-write-lock-file)
+  ACTIVATE="test"
+fi
+
+# `build`, or the activation, with the override's flags when there is one.
+rebuild() {
+  nixos-rebuild "$1" --flake "$FLAKE#$HOSTNAME" "${REBUILD_FLAGS[@]}"
+}
+
 # --- stage, and commit if asked -----------------------------------------
 # A flake only sees git-tracked files, so staging is not bookkeeping — an
 # unstaged new file is invisible to the rebuild below. Committing is the
@@ -270,7 +302,9 @@ rollback() {
     log_run "$LOGFILE" site_commit "$PREFIX: revert — $SUMMARY (the rebuild failed)" "$ACTOR" ||
       log_line "$LOGFILE" "the restore is in the tree but could not be committed — commit it by hand"
   fi
-  log_run "$LOGFILE" nixos-rebuild switch --flake "$FLAKE#$HOSTNAME" || true
+  # The same activation as the run: under an override that is `test` again,
+  # so a failed tested Apply is undone the way it was done.
+  log_run "$LOGFILE" rebuild "$ACTIVATE" || true
   COMMIT_SHA=""
 }
 
@@ -284,13 +318,13 @@ rollback() {
 # by name afterwards.
 write_status running building ""
 log_reset "$LOGFILE"
-if ! log_run "$LOGFILE" nixos-rebuild build --flake "$FLAKE#$HOSTNAME"; then
+if ! log_run "$LOGFILE" rebuild build; then
   build_error="$(errtail)"
   rollback
   fail building "$build_error"
 fi
 
-# --- switch ---------------------------------------------------------------
+# --- switch (or test, under an engine override) ---------------------------
 # Retried once before giving up. `switch` exits non-zero if ANY unit fails to
 # come back, and some of those failures are transient rather than caused by the
 # change: DNS is briefly unavailable while pi-hole restarts, so a unit that
@@ -298,16 +332,27 @@ fi
 # and then succeed on its own Restart=on-failure seconds later. Rolling back on
 # that is both unnecessary and destructive — it reverts a change that was
 # perfectly good. Observed in practice; the second attempt succeeds.
-write_status running switching ""
-if ! log_run "$LOGFILE" nixos-rebuild switch --flake "$FLAKE#$HOSTNAME"; then
-  log_line "$LOGFILE" "switch failed once — retrying in 20s before rolling back"
+#
+# The phase names the verb: `testing` is what the Apply bar shows in
+# `switching`'s slot, and a status ending `tested` is how the Repository tab
+# says the last Apply did not become the next boot.
+if [ "$ACTIVATE" = "test" ]; then
+  ACTIVATE_PHASE=testing
+  DONE_PHASE=tested
+else
+  ACTIVATE_PHASE=switching
+  DONE_PHASE=complete
+fi
+write_status running "$ACTIVATE_PHASE" ""
+if ! log_run "$LOGFILE" rebuild "$ACTIVATE"; then
+  log_line "$LOGFILE" "$ACTIVATE failed once — retrying in 20s before rolling back"
   sleep 20
-  if ! log_run "$LOGFILE" nixos-rebuild switch --flake "$FLAKE#$HOSTNAME"; then
+  if ! log_run "$LOGFILE" rebuild "$ACTIVATE"; then
     switch_error="$(errtail)"
     rollback
-    fail switching "$switch_error"
+    fail "$ACTIVATE_PHASE" "$switch_error"
   fi
-  log_line "$LOGFILE" "switch succeeded on retry (first failure was transient)"
+  log_line "$LOGFILE" "$ACTIVATE succeeded on retry (first failure was transient)"
 fi
 
 # --- push -----------------------------------------------------------------
@@ -324,4 +369,4 @@ if [ "$WANT_COMMIT" = "yes" ] && [ -n "$COMMIT_SHA" ]; then
     log_line "$LOGFILE" "push failed (the switch succeeded; the commit is local only)"
 fi
 
-write_status "done" "complete" ""
+write_status "done" "$DONE_PHASE" ""

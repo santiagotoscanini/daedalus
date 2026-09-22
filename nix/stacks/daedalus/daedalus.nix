@@ -743,6 +743,8 @@ let
     text = ''
       APPLY_DIR=${lib.escapeShellArg applyDir}
       FLAKE=${lib.escapeShellArg config.fleet.config.repo}
+      # For lib.sh's site_engine_override: the agent refuses while one is set.
+      SITE_DIR=${lib.escapeShellArg config.fleet.site.path}
       PINS=${pkgs.writeText "daedalus-image-pins.json" (builtins.toJSON config.fleet.export.domains.images.data.pins)}
       LOCKFILE=${lib.escapeShellArg config.fleet.rebuildLock}
       HOSTNAME=${lib.escapeShellArg config.networking.hostName}

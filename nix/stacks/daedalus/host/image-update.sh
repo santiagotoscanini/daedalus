@@ -178,6 +178,14 @@ podman_() {
 # should be refused while nothing has been pulled, edited or committed.
 write_status running validating ""
 
+# An engine override means the running system is not the pinned engine at
+# all — every Apply builds from a local tree and only tests (host/lib.sh
+# site_engine_override). A pin moved now would be committed against a lock
+# nothing is running, and the next Apply would not build it.
+override="$(site_engine_override)"
+[ -z "$override" ] ||
+  fail validating "clear the engine override first: the running system is built from $override, not from the pinned engine (site.json developer.engineOverride, Settings › Developer)"
+
 [ -n "$CONTAINER" ] || fail validating "no container named in the request"
 
 # The same container twice would pass validation and then fail in `writing`,

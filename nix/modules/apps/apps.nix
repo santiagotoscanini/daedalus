@@ -379,8 +379,10 @@ let
           message = "fleet.apps.${name}: `source.mode = \"local\"` cannot combine with `egress` — the dev server's install step needs the npm registry, which a VPN-only netns doesn't route to.";
         }
         {
-          assertion = proxyAuth -> exposed;
-          message = "fleet.apps.${name}: `auth.mode = \"proxy\"` needs an ingress to gate — the forward-auth middleware is generated from the webApp, and `stage = \"off\"` emits none. Use `auth.mode = \"none\"` while it is unexposed, or expose it.";
+          # A `declared` app runs nothing, so its auth mode is a statement about
+          # its future and only has to hold once it does.
+          assertion = proxyAuth -> (exposed || !running);
+          message = "fleet.apps.${name}: `auth.mode = \"proxy\"` needs an ingress to gate — the forward-auth middleware is generated from the webApp, and `stage = \"off\"` emits none (a `declared` app carries the mode for later). Use `auth.mode = \"none\"` while it is unexposed, or expose it.";
         }
         {
           assertion = app.prometheus.enable -> exposed;

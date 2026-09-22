@@ -92,6 +92,7 @@
         "build-agent.nix"
         "builder.nix"
         "daedalus.nix"
+        "engine-update.nix"
         "railpack.nix"
       ];
 
@@ -153,6 +154,20 @@
           pkgs.runCommand "minimal-host-evaluates" { } (
             builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
           );
+
+        # The schema fixtures under fixtures/ — every site.json and apps.json
+        # version — through platform/site.nix (a minimal host per site fixture)
+        # and registry-lib.nix. The app's vitest reads the same files; a reader
+        # that drifts from the writer fails both. See nix/tests/fixtures.nix.
+        fixtures = import ./nix/tests/fixtures.nix {
+          inherit
+            nixpkgs
+            nixpkgs-unstable
+            sops-nix
+            system
+            ;
+          engine = self;
+        };
       };
 
       nixosModules = {

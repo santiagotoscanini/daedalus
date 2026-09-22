@@ -105,7 +105,10 @@
     config.repo = "/etc/nixos";
     github.owner = "alice";
     github.expectedOwnerId = 1;
-    site.source = ./site;
+    # The current site fixture IS this host's site directory: one copy of
+    # "the smallest site.json platform/site.nix accepts", read here and by the
+    # app's vitest (fixtures/, nix/tests/fixtures.nix).
+    site.source = ../../../fixtures/site/v1;
     data = { };
     mail.smtpHost = "smtp.example.org";
     mail.passwordSopsFile = ./sops/smtp-password.sops;

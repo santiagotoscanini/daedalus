@@ -238,7 +238,41 @@ app_secret_history() {
   *) echo "$out" ;;
   esac
 }
+
+# The engine as the lock pins it: flake.lock's node for the `daedalus` input,
+# which is what the box was built from. The Updates page's engine card joins
+# this with the workspace snapshot's view of the engine CLONE (its head, how
+# far behind origin) to say whether an update would move anything; the
+# update agent (host/engine-update.sh) reads the same node itself.
+#
+# `type`, `url` and `ref` are the input as flake.nix WROTE it — `git` with a
+# `file://` url is a local clone, `github` a published rev — so a reader can
+# say where "latest" comes from without parsing flake.nix. `lastModified` is
+# the locked commit's date, ISO 8601 from the lock's epoch seconds.
+#
+# Read as the operator, never through a link: the lock is in their tree.
+# Null when there is no lock, no such input, or nothing parses — "unknown",
+# never a guess. Never fails.
+engine_lock() {
+  local lock
+  lock=$(read_as_operator "$REPO_DIR/flake.lock" 2>/dev/null || true)
+  if [ -z "$lock" ]; then
+    echo null
+    return
+  fi
+  "$JQ" -c '
+    .nodes[.nodes.root.inputs.daedalus // ""] // null
+    | if . == null or (.locked.rev // "") == "" then null else {
+        rev: .locked.rev,
+        lastModified: (.locked.lastModified | if . == null then null else todate end),
+        type: (.original.type // ""),
+        url: (.original.url // null),
+        ref: (.original.ref // null)
+      } end' <<<"$lock" 2>/dev/null || echo null
+}
+
 config_facts=$(repo_facts "$REPO_DIR")
+engine=$(engine_lock)
 
 # The site directory: where it is, whether it is inside a work tree (and
 # whether that work tree is the configuration repo above — the intended
@@ -281,20 +315,23 @@ site=$("$JQ" -n \
   --arg path "$REPO_DIR" \
   --argjson config "$config_facts" \
   --argjson site "$site" \
+  --argjson engine "$engine" \
   '{
     daedalusExport: 1,
     domain: "repo",
+    # 6: engine — the lock node of the daedalus flake input, for the Updates
+    # page. Null when the lock has no such input.
     # 5: site gained appSecrets — per-key git facts for the operator-secrets
     # files, which is what the app page reads "set <when> by <who>" from.
     # 4: site.files gained README.md and daedalus.json. The reader accepts the
     # older numbers too — for the minutes between a switch and the next run of
     # this timer, the file on disk is still the old shape.
-    schemaVersion: 5,
+    schemaVersion: 6,
     source: "host",
     revision: null,
     generatedAt: $g,
-    data: ({ path: $path } + $config + { site: $site })
+    data: ({ path: $path } + $config + { site: $site, engine: $engine })
   }' | write_json_atomic "$OUT_DIR/repo.json"
 
 config_line=$("$JQ" -r '"\(.branch // "?")@\(.head.rev // "-------" | .[0:7]) +\(.tree.modified)/\(.tree.untracked) dirty, \(.upstream.ahead // 0)/\(.upstream.behind // 0) vs \(.upstream.ref // "no upstream")"' <<<"$config_facts")
-echo "published repo facts: config $config_line; site $("$JQ" -r '"exists=\(.exists) in-repo=\(.inThisRepo) site.json=\(.files["site.json"].status)"' <<<"$site")"
+echo "published repo facts: config $config_line; site $("$JQ" -r '"exists=\(.exists) in-repo=\(.inThisRepo) site.json=\(.files["site.json"].status)"' <<<"$site"); engine $("$JQ" -r 'if . == null then "unknown" else "\(.type)@\(.rev[0:7])" end' <<<"$engine")"

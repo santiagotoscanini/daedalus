@@ -1,5 +1,0 @@
-{
-  "_why": "Fixture for nix/tests/minimal-host: an empty app registry.",
-  "schemaVersion": 2,
-  "apps": {}
-}
