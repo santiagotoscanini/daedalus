@@ -139,6 +139,9 @@
         # toplevel drvPath instantiates the whole system, so every option the
         # engine reads must be declared by the engine and every assertion must
         # hold. Nothing is built. See nix/tests/minimal-host/default.nix.
+        # The template, evaluated as written — a stranger's first evaluation is
+        # the one CI ran. Its site/site.json must stay byte-equal to the current
+        # site fixture: one document, two jobs (the fixture's preamble says so).
         minimal-host =
           let
             host = import ./nix/tests/minimal-host {
@@ -150,7 +153,13 @@
                 ;
               engine = self;
             };
+            siteIsTheFixture =
+              builtins.readFile ./templates/config/site/site.json
+              == builtins.readFile ./fixtures/site/v1/site.json;
           in
+          assert
+            siteIsTheFixture
+            || throw "templates/config/site/site.json and fixtures/site/v1/site.json differ — they are one document; copy the fixture over the template";
           pkgs.runCommand "minimal-host-evaluates" { } (
             builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
           );
@@ -168,6 +177,14 @@
             ;
           engine = self;
         };
+      };
+
+      # `nix flake init -t github:santiagotoscanini/daedalus#config`: the host
+      # this flake's checks evaluate, as a starting point — every value in it
+      # is a documentation value to replace (its files say which).
+      templates.config = {
+        path = ./templates/config;
+        description = "A NixOS host run by daedalus: the engine as a flake input, and the definitions a host brings";
       };
 
       nixosModules = {

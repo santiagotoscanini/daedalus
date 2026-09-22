@@ -49,9 +49,9 @@ let
       )
     );
 
-  # One minimal host per site fixture — the same modules as checks.minimal-host
-  # (nix/tests/minimal-host), with the site directory swapped for the fixture.
-  # mkForce, because host.nix names the current version's fixture itself.
+  # One minimal host per site fixture — the template, as checks.minimal-host
+  # evaluates it (nix/tests/minimal-host), with the site directory swapped for
+  # the fixture. mkForce, because the template names its own site directory.
   siteHosts = lib.genAttrs (versionsOf "site") (
     v:
     nixpkgs.lib.nixosSystem {
@@ -63,7 +63,7 @@ let
       modules = [
         sops-nix.nixosModules.sops
         engine.nixosModules.default
-        ./minimal-host/host.nix
+        ../../templates/config/configuration.nix
         { fleet.site.source = lib.mkForce (fixtures + "/site/${v}"); }
       ];
     }
