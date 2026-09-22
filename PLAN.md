@@ -891,7 +891,8 @@ Hand edits the UI cannot make for itself:
    `.claude/settings.json`. The last two live in the config repo, so the
    usual `git add` and rebuild apply — `platform/claude.nix` renders the
    `.mcp.json` symlink at activation.
-2. **Arming the admins gate** — Phase 8, item 1, in the order given there.
+2. ~~**Arming the admins gate**~~ — armed 2026-09-22 on the reference host
+   (`auth.enforceAdmins` is on; every mutation now requires `admins`).
 3. ~~**Re-enter the off-box projects**~~ — done 2026-09-22: the four rows
    (santree, santree-cli, the daedalus landing page, the portfolio) that
    lived only in the engine's source as a seed are settings now
@@ -903,9 +904,9 @@ Hand edits the UI cannot make for itself:
    `image.yml` publishes the image to ghcr, private until its visibility is
    changed by hand. From then on a host not in dev mode runs
    `fleet.daedalus.image` as the engine defaults it.
-5. **Try Update daedalus once from the page** — it has not run end to end
-   on the box yet (the app half was walked; the host half is shellcheck-
-   clean and mirrors the image update line for line).
+5. ~~**Try Update daedalus once from the page**~~ — ran end to end on
+   2026-09-22 (f69a42f → c7c6bc6, 32 s, lock committed and pushed, the
+   control plane came back).
 
 ## Engine polish
 
