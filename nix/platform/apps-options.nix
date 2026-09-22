@@ -6,13 +6,13 @@
 # hostname and stage, and which platform features it opts into (postgres,
 # storage, SSO, metrics, scheduled tasks, resource caps). The module that
 # MATERIALIZES an entry — the `app-<name>` container, its webApp, the deploy
-# timer, the secrets bootstrap — is the apps stack, which is not in this tree
-# yet. The declaration lives here, ungated, because the control plane's own
+# timer, the secrets bootstrap — is the apps stack, modules/apps in the
+# catalog. The declaration lives here, in the platform, because the control plane's own
 # module writes `fleet.apps.daedalus` and reads the registry for its pages: an
 # engine whose options are declared by a stack it does not ship cannot be
 # evaluated by anyone else.
 #
-# Until the apps stack migrates, a host WITHOUT it can define `fleet.apps`
+# With the apps stack switched off, a host can still define `fleet.apps`
 # entries and nothing will run them.
 #
 # Two defaults read other modules' values, lazily:
@@ -31,13 +31,12 @@ let
 in
 {
   # The apps stack's switch, declared beside the registry it gates so a module
-  # here can read it (the control plane gates what it defines under its own
-  # container on it). The stack that implements it is not in this tree yet: a
-  # host without that stack sets this to false, and `fleet.apps` entries are
-  # then declarations nothing runs.
+  # here can read it with the catalog absent (the control plane gates what it
+  # defines under its own container on it). Off by default, as every catalog
+  # switch: importing the engine starts nothing.
   options.fleet.modules.apps.enable = lib.mkOption {
     type = lib.types.bool;
-    default = true;
+    default = false;
     description = "The apps platform: the self-built apps declared in site/apps.json, deployed from the box's own registry.";
   };
 

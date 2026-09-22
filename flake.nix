@@ -106,6 +106,8 @@
         "app-db/app-db.nix"
         "app-db/claude-ro.nix"
         "app-db/exporter.nix"
+        "apps/apps.nix"
+        "apps/declarations.nix"
         "logging/logging.nix"
         "monitoring/monitoring.nix"
         "pocket-id/clients.nix"

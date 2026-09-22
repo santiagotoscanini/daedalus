@@ -19,22 +19,26 @@
 
   # ── what the ENGINE requires a host to define ────────────────────────
   fleet = {
-    # NOT a host fact — a statement of where the migration is. The apps stack
-    # (what turns a `fleet.apps` entry, the control plane's own included, into a
-    # container) has not moved into the engine yet, so a host that has only the
-    # engine has nothing behind this switch. Delete this line the day
-    # `nix/modules/apps` exists: the check then proves the container too.
-    modules.apps.enable = false;
 
-    # One catalog module, ON — proof that a stranger can enable a migrated
+    # The apps platform, ON: what turns a `fleet.apps` entry — the control
+    # plane's own, from the engine's self.json — into a container. This is the
+    # line that proves a stranger's host has a control plane to log in to.
+    modules.apps.enable = true;
+    # The registry the platform builds into and deploys from.
+    modules.registry = {
+      enable = true;
+      envSopsFile = ./sops/registry/env.sops;
+    };
+    images.zot = "ghcr.io/project-zot/zot:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+
+    # A leaf of the catalog, ON — proof that a stranger can enable a migrated
     # stack with nothing but its switch and its image pin. It writes
-    # `fleet.webApps` and `fleet.ssoClients`; this host runs no reverse proxy
-    # and no identity provider, so both entries are declarations nothing acts
-    # on, and evaluation must not care.
+    # `fleet.webApps` and `fleet.ssoClients`, which the proxy and the provider
+    # below act on.
     modules.stirling-pdf.enable = true;
-    # The shared cluster, ON: no tenant declares a database on this host, so
-    # the cluster itself is not started, but the registry, the bootstraps and
-    # the exporter all evaluate.
+    # The shared cluster, ON: the control plane and the provider are its
+    # tenants here, so the cluster, the bootstraps and the exporter all
+    # evaluate.
     modules.app-db.enable = true;
     # The reverse proxy, ON: every webApp entry above now materializes into a
     # route, its own dashboard included.
@@ -56,7 +60,7 @@
     modules.logging.enable = true;
     # Metrics and dashboards, ON: Grafana takes a database on the cluster and
     # a client at the provider; the embed policy for the control plane's panels
-    # is absent, since the apps platform is off.
+    # names the control plane.
     modules.monitoring = {
       enable = true;
       envSopsFile = ./sops/monitoring/env.sops;

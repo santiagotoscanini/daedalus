@@ -1,0 +1,299 @@
+# Body of app-<name>-deploy.service — poll the image registry (the box's
+# own zot by default), redeploy on a new digest.
+#
+# Nix injects APP / IMAGE / UNIT / APP_HOST / HEALTH_PATH / HEALTH_TIMEOUT /
+# LAN_IP / STATE / SETPRIV / ENV_BIN / PODMAN above this body, and
+# writeShellApplication prepends `set -euo pipefail`.
+#
+# Why this exists at all: the generated container unit runs
+# `podman run --pull missing`, which matches on TAG, not digest. Once
+# `:latest` is in local storage it is never re-fetched, so `systemctl restart
+# podman-app-<name>` re-runs the stale cached image forever, and a
+# nixos-rebuild doesn't help either (the ExecStart string embeds the literal
+# tag, so systemd sees nothing to restart). Something has to pull explicitly.
+#
+# This runs as ROOT — it has to `systemctl restart` a system unit — and drops
+# to the operator for every podman call, because the images live in that user's
+# rootless store, not root's.
+#
+# setpriv, not runuser/sudo: those open a PAM session per call and log a pair
+# of `session opened/closed` lines each time. At a 2-minute tick across every
+# app that's thousands of lines a day into journald and Loki, for nothing.
+# setpriv does the same uid/gid drop without PAM. Absolute paths because the
+# child doesn't inherit writeShellApplication's PATH.
+
+podman_() {
+  "$SETPRIV" --reuid="$OPERATOR_USER" --regid="$OPERATOR_GROUP" --init-groups --inh-caps=-all \
+    "$ENV_BIN" HOME="$OPERATOR_HOME" XDG_RUNTIME_DIR="$OPERATOR_RUNTIME_DIR" \
+    "$PODMAN" "$@"
+}
+
+# Email on a deploy state TRANSITION (ok->failed or failed->ok), never on the
+# per-tick re-fail below. Runs in the root context (before any setpriv drop)
+# so msmtp can read /run/secrets/mail-relay-password. Best-effort: a mail
+# failure must never fail the deploy.
+send_alert() {  # $1 = subject; body on stdin
+  {
+    echo "From: $NOTIFY_FROM"
+    echo "To: $NOTIFY_TO"
+    echo "Subject: $1"
+    echo
+    cat
+  } | msmtp --account=default -t 2>/dev/null || true
+}
+
+# --- published deploy record ----------------------------------------------
+# $STATE and $STATE.pull below are this script's own memory, shaped for shell
+# reads and deliberately jq-free. THIS is the publication: one enveloped JSON
+# per app under the same directory, the shape daedalus decodes
+# (the engine repo, app/src/host/deploy.ts). Pull health is NOT in it — the two
+# axes are independent (see the $STATE comment below), and folding the counter
+# in would overwrite a deploy record with nulls on every pull blip.
+#
+# Every value is shell-generated (digests, ISO timestamps, ok|failed,
+# integers), so printf is safe here for the same reason it is in
+# record_deploy. tmp+mv because daedalus reads the file live: a torn read must
+# surface as "unparseable JSON" in its snapshot reader, never as a
+# half-record.
+jstr() { if [ -n "$1" ]; then printf '"%s"' "$1"; else printf 'null'; fi; }
+
+publish_state() { # digest result httpCode startedAt finishedAt durationMs previousDigest
+  printf '{"daedalusExport":1,"domain":"deploy-state","schemaVersion":1,"source":"host","revision":null,"generatedAt":"%s","data":{"app":"%s","digest":%s,"result":%s,"httpCode":%s,"startedAt":%s,"finishedAt":%s,"durationMs":%s,"previousDigest":%s}}\n' \
+    "$(date -Is)" "$APP" "$(jstr "$1")" "$(jstr "$2")" "$(jstr "$3")" \
+    "$(jstr "$4")" "$(jstr "$5")" "${6:-null}" "$(jstr "$7")" >"$STATE_JSON.tmp"
+  chmod 0644 "$STATE_JSON.tmp"
+  mv "$STATE_JSON.tmp" "$STATE_JSON"
+}
+
+# The restart decision keys on IMAGE IDs, comparing what the CONTAINER runs
+# against what the tag points at after the pull. Not registry digests of the
+# local tag: (a) a crash between pull and restart would leave the tag moved
+# with the old container still running, and a digest-of-tag comparison then
+# reads "no change" forever — silent stale deploy; (b) a container's
+# .ImageDigest is the arch manifest digest while image .Digest is the list
+# digest, so those two never compare equal. IDs are config-blob hashes,
+# identical on both sides. `none` (no container yet) reads as "deploy".
+running=$(podman_ container inspect --format '{{.Image}}' "app-$APP" 2>/dev/null || echo none)
+last=$(cat "$STATE" 2>/dev/null || true)
+
+# Two independent state axes, two files: $STATE holds deploy health
+# (`<digest> ok|failed`), the $STATE.pull marker means "pulls are
+# failing". Sharing one file would let a pull blip overwrite a failed
+# deploy record — and the pull recovery would then report all-clear
+# over a still-unhealthy app.
+#
+# A pull of an unchanged tag is one manifest request, so this is cheap to run
+# every couple of minutes. Every image lives on the box's own zot, which serves
+# anonymous reads, so the pull carries no credential: --retry rides out a
+# sub-15s registry blip within one tick; the debounce below rides out a longer
+# outage that spans ticks (a registry this deploy can't reach is a local
+# failure now, not a WAN one).
+#
+# The nightly dynamic-IP reset (Argentine ISP, ~04:00) drops the WAN for
+# anywhere from a minute to ~10 min — long enough to blow past --retry and span
+# several ticks. Alerting on that is pure noise (and the alert email can't even
+# send while the WAN is down: "No route to host", so a threshold crossed
+# mid-outage yields only a confusing lone RECOVERED). So the $STATE.pull marker
+# is a CONSECUTIVE-FAILURE COUNTER, not a boolean: we only email once the pull
+# has failed PULL_ALERT_AFTER ticks running (~16 min at a 2-min tick), mirroring
+# Grafana's `for:` pending period. The threshold is set ABOVE the longest
+# expected WAN outage so a reset stays fully silent; a real failure (a wedged
+# or unreachable zot is the classic) persists well past that and still alerts
+# — just later, which is fine for a stalled pull — and keeps the unit failed so
+# `systemctl --failed` shows it. Marker existence still means "pulls are
+# failing"; only its contents changed to a count.
+PULL_ALERT_AFTER=8
+if ! podman_ pull --retry 3 --retry-delay 5s --quiet "$IMAGE" >/dev/null; then
+  fails=$(( $(cat "$STATE.pull" 2>/dev/null || echo 0) + 1 ))
+  echo "$fails" > "$STATE.pull"
+  if [ "$fails" -eq "$PULL_ALERT_AFTER" ]; then
+    send_alert "[$HOSTNAME] DEPLOY PULL FAILED: app-$APP" <<EOF
+podman pull $IMAGE has failed $fails ticks running (past a transient blip).
+The image lives on the box's own zot: check podman-zot / registry-config-render.
+Deploys for app-$APP are stalled until the pull succeeds; this alerts once.
+Investigate: journalctl -u app-$APP-deploy
+EOF
+  fi
+  echo "PULL FAILED for $IMAGE ($fails consecutive)"
+  exit 1
+fi
+if [ -e "$STATE.pull" ]; then
+  # Only announce recovery if we actually alerted on the failure — a blip that
+  # cleared before crossing the threshold stayed silent, so its recovery must too.
+  fails=$(cat "$STATE.pull" 2>/dev/null || echo 0)
+  rm -f "$STATE.pull"
+  if [ "$fails" -ge "$PULL_ALERT_AFTER" ]; then
+    send_alert "[$HOSTNAME] RECOVERED: app-$APP pulls" <<EOF
+podman pull works again for app-$APP.
+Deploy health is tracked separately; current state: ${last:-none}
+EOF
+  fi
+fi
+
+new_id=$(podman_ image inspect --format '{{.Id}}' "$IMAGE")
+after=$(podman_ image inspect --format '{{.Digest}}' "$IMAGE")
+
+# One-time migration: a box that deployed before the JSON record existed has
+# only the text state. Synthesise the record from it — timing fields null —
+# so the reader never needs a legacy path; the next real deploy overwrites it
+# with full fields.
+if [ ! -e "$STATE_JSON" ] && [ -n "$last" ]; then
+  publish_state "${last%% *}" "${last##* }" "" "" "" "" ""
+fi
+
+if [ "$new_id" = "$running" ]; then
+  # Nothing new upstream. If what we're already serving failed its health
+  # check when it was deployed, keep failing: a quiet exit 0 here would clear
+  # the unit's failed state and the report would evaporate two minutes later.
+  #
+  # But ask again before saying so. The sentinel is written BEFORE the restart
+  # (see below), so a deploy that was itself killed mid-flight — a
+  # `nixos-rebuild switch` that restarts this unit is the case that produced
+  # this — leaves "failed" over an image that went on to serve fine, and with
+  # no newer image to supersede it that lie would hold for weeks. One probe:
+  # healthy now means the record was wrong, not that the alarm should stay on.
+  if [ "$last" = "$after failed" ]; then
+    code=000
+    if [ "$EXPOSED" = "1" ]; then
+      code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 \
+               --resolve "$APP_HOST:443:$LAN_IP" \
+               "https://$APP_HOST$HEALTH_PATH") || code=000
+    fi
+    if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
+      echo "$after ok" > "$STATE"
+      publish_state "$after" "ok" "$code" "" "$(date -Is)" "" "$after"
+      echo "app-$APP is serving $after and answers HTTP $code; the failed record was stale"
+      exit 0
+    fi
+    echo "app-$APP is serving $after, which failed its health check on deploy (HTTP $code now)"
+    exit 1
+  fi
+  echo "no change ($after)"
+  exit 0
+fi
+
+# The image the container was running is what this deploy supersedes (rmi'd
+# after a healthy deploy so a moving :latest doesn't fill rpool/selfhost).
+old_id=$running
+[ "$old_id" = "none" ] && old_id=""
+
+# --- deploy journal -------------------------------------------------------
+# $STATE holds only the LATEST result, overwritten every time, so on its own
+# there is no history: daedalus could say what is running but never what ran
+# before, when, or for how long. This appends one JSON line per real deploy to
+# $STATE.log, which daedalus ingests into Postgres for its Deployments view.
+#
+# Written HERE rather than by daedalus because most deploys never touch it —
+# the 2-minute timer and a manual `systemctl start` both land in this script.
+# Recording at the one place that always runs is what makes the history
+# complete instead of "the deploys daedalus happened to trigger".
+#
+# Only real deploys are recorded. A "no change" tick returns above, so the
+# journal is not flooded with one line every two minutes per app.
+deploy_started=$(date -Is)
+deploy_started_s=$SECONDS
+prev_digest=${last%% *}
+[ "$prev_digest" = "$last" ] && prev_digest=""
+
+record_deploy() {
+  # All values are shell-generated (digests, ISO timestamps, an app name
+  # constrained by the platform, ok|failed, integers), so printf is safe here
+  # and avoids pulling jq into this unit's closure.
+  printf '{"startedAt":"%s","finishedAt":"%s","app":"%s","digest":"%s","previousDigest":"%s","result":"%s","durationMs":%s,"http":"%s"}\n' \
+    "$deploy_started" "$(date -Is)" "$APP" "$after" "$prev_digest" "$1" \
+    "$(( (SECONDS - deploy_started_s) * 1000 ))" "${2-}" >>"$STATE.log"
+
+  # Bound it. Deploys are infrequent (digest changes only), but this file is
+  # append-only on a dataset with 16K recordsize and frequent snapshots.
+  if [ "$(wc -l <"$STATE.log")" -gt 200 ]; then
+    tail -n 200 "$STATE.log" >"$STATE.log.tmp" && mv "$STATE.log.tmp" "$STATE.log"
+  fi
+}
+
+echo "new image: $running -> $new_id ($after) — restarting $UNIT"
+
+# Write the failed sentinel BEFORE the restart: if systemctl itself
+# dies here (bad entrypoint, podman run failure), set -e aborts this
+# script with no state written — and since the image is already
+# pulled, the next tick would see after == before, read the OLD "ok"
+# state, and exit 0, silently clearing the unit's failed status. The
+# pre-written sentinel keeps that tick loud; the health-check below
+# overwrites it with "ok" on success.
+echo "$after failed" > "$STATE"
+publish_state "$after" "failed" "" "$deploy_started" "" "" "$prev_digest"
+systemctl restart "$UNIT"
+
+# No ingress (stage = "off") means no way to ask whether the new image serves.
+# Record the deploy honestly as unverified rather than failing it: the check is
+# absent, not negative. `podman run -d` returning is the only signal available,
+# and this says so out loud instead of implying a passed health check.
+if [ "$EXPOSED" != "1" ]; then
+  echo "$after ok" > "$STATE"
+  publish_state "$after" "ok" "unverified" "$deploy_started" "$(date -Is)" "$(( (SECONDS - deploy_started_s) * 1000 ))" "$prev_digest"
+  record_deploy ok unverified
+  echo "deployed $after — NOT health-checked (stage=off: no ingress to probe)"
+  if [ -n "$old_id" ]; then
+    podman_ rmi "$old_id" >/dev/null 2>&1 || true
+  fi
+  exit 0
+fi
+
+# The container unit is Type=oneshot (see platform/podman.nix): `podman run -d`
+# returns in milliseconds, so systemd calls the restart a success even for a
+# container that dies on startup. Asking traefik is the only honest signal.
+# --resolve rather than DNS, so a pi-hole hiccup can't read as a dead app.
+# -k because this root unit has no CA bundle in its env; --resolve already
+# pins the connection to our own traefik, so verification adds nothing here.
+# Anything under 500 counts as alive — an Auth.js app 302-ing to a login page
+# is a working app.
+deadline=$((SECONDS + HEALTH_TIMEOUT))
+code=000
+while [ "$SECONDS" -lt "$deadline" ]; do
+  # The fallback must be an assignment, not appended output: curl prints
+  # its -w format (000) even on a failed transfer, so `|| echo 000` inside
+  # the substitution would yield "000000" — which passes both guards below.
+  code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 \
+           --resolve "$APP_HOST:443:$LAN_IP" \
+           "https://$APP_HOST$HEALTH_PATH") || code=000
+
+  if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
+    echo "$after ok" > "$STATE"
+    publish_state "$after" "ok" "$code" "$deploy_started" "$(date -Is)" "$(( (SECONDS - deploy_started_s) * 1000 ))" "$prev_digest"
+    record_deploy ok "$code"
+    echo "deployed $after — healthy (HTTP $code)"
+    # Recovered? Alert once on failed -> ok (not on every healthy deploy).
+    case "$last" in
+      *" failed")
+        send_alert "[$HOSTNAME] RECOVERED: app-$APP deploy" <<EOF
+app-$APP is healthy again (HTTP $code) on image $after.
+Previous deploy state was: $last
+EOF
+        ;;
+    esac
+
+    # Drop only the image this deploy superseded, so a moving :latest doesn't
+    # slowly fill rpool/selfhost with <none> layers.
+    if [ -n "$old_id" ]; then
+      podman_ rmi "$old_id" >/dev/null 2>&1 || true
+    fi
+    exit 0
+  fi
+  sleep 3
+done
+
+# Deploy-and-report: the new image stays running. We don't roll back, we just
+# refuse to go quiet about it.
+echo "$after failed" > "$STATE"
+publish_state "$after" "failed" "$code" "$deploy_started" "$(date -Is)" "$(( (SECONDS - deploy_started_s) * 1000 ))" "$prev_digest"
+record_deploy failed "$code"
+echo "DEPLOY FAILED: app-$APP did not answer within ${HEALTH_TIMEOUT}s (last HTTP $code)"
+# Alert here, on the ok->failed transition only. The per-tick re-fail path
+# above (after == before, last == "$after failed") deliberately stays silent
+# so a broken app doesn't email every 2 minutes.
+send_alert "[$HOSTNAME] DEPLOY FAILED: app-$APP" <<EOF
+app-$APP failed to deploy image $after.
+It did not return HTTP < 500 within ${HEALTH_TIMEOUT}s (last HTTP $code).
+The new image is still running (deploy-and-report; no auto-rollback).
+Investigate: journalctl -u app-$APP-deploy ; state file: $STATE
+EOF
+exit 1
