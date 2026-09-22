@@ -45,6 +45,7 @@
 @source "./routes";
 @source "./components";
 @source "./lib";
+@source "./modules";
 
 /* The dark theme is an explicit attribute, never `prefers-color-scheme`.
    The preference is stored server-side and applied by the boot script in
