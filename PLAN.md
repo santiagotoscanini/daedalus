@@ -36,7 +36,7 @@ configuration takes them as a flake input (Phase 11, first half).
 |---|---|---|
 | 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
 | 9 | Nix: enable surface, literals, state out of the tree | landed 2026-09-20/21; residue (asset literals, missing options) listed in the section |
-| 10 | App module system and a real build | 10a landed; 10b: the built server, run-time identity and the one image are in (2026-09-21) — the nix switch to it, `sops` in the image and the first tag remain |
+| 10 | App module system and a real build | 10a landed; 10b: the built server, run-time identity, the one image with its own `sops`, and the browser walk that proves it are in (2026-09-21) — the nix switch to it and the first tag remain |
 | 11 | The engine becomes importable | the move landed with an identical closure and is published on `main` (2026-09-21; one branch), with its own `nix fmt` / `nix flake check` and CI job — the stacks, one by one, `fleet.imagePins`, `developer.engineOverride`, the "Update daedalus" button, schema fixtures in CI and a `nixosModules.default` that evaluates alone remain |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
@@ -379,12 +379,25 @@ What 9b still leaves for Phase 11, after the asset pass (config `b1f4498`,
      needs `--user 0:0` (the image's user is `node`, and uid 1000 owns
      nothing in the clone), and `COREPACK_HOME`/the store keep their places
      under `/app`. The config still binds the `VITE_` spellings.
-  2. **`sops` in the image.** The end state carries an encrypt-only static
-     `sops`; today the box bind-mounts one at `/usr/local/bin/sops`. Not
-     added in this pass.
-  3. **The `shot` walk** of the built image, authenticated pages included —
-     the proof above is HTTP-level, and forward-auth headers are the only
-     identity, so without a proxy in front every write refuses.
+  2. ~~**`sops` in the image.**~~ — done 2026-09-21: a `sops` stage fetches
+     the getsops 3.13.3 linux/amd64 release with `ADD --checksum` (version
+     and sha256 are the stage's two ARGs; a mismatch fails the build) and the
+     run stage copies it to `/usr/local/bin/sops`, where `core/vault.ts`
+     execs it. Encrypt-only by construction — the image holds no age
+     identity. 52 MB, so the image is 309 MB. The box's module still
+     bind-mounts its nix-built static sops over that path; the nix side (1)
+     drops the mount once it runs this image.
+  3. ~~**The `shot` walk**~~ — done 2026-09-21: `scripts/image-walk.sh` +
+     `scripts/image-walk.mjs`, repeatable and run before a tag. Builds the
+     image, checks its sops, starts it against a throwaway `postgres:16-alpine`
+     with an identity given as env, walks `/`, `/apps`, `/settings`,
+     `/c/system`, `/apps/new` and arms + disarms Settings › Developer ›
+     Authorization with the forward-auth headers set from the driver
+     (`admins`), refuses on any console error, page error, failed same-origin
+     request or 5xx in `events.json`, then runs the dev branch over a copy of
+     `app/` until Vite serves. First green run `20260921-222805-image-walk`:
+     every assertion passed, the recording empty but for the Grafana panel a
+     bare image cannot reach (its own `GRAFANA_URL`).
   4. **The first tag.** Publishing the first public image is the operator's
      decision: bump `app/package.json`, tag `v<version>`, push the tag. The
      ghcr package is private until its visibility is changed by hand. amd64

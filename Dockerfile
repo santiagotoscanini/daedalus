@@ -1,15 +1,34 @@
 # The daedalus engine: one image, run two ways (docker-entrypoint.sh).
 #
 #   podman build -t daedalus .                        # npmjs, what CI does
-#   podman build -t daedalus \                        # on the box, via Verdaccio
-#     --add-host=verdaccio.toscanini.me:host-gateway \
-#     --build-arg NPM_REGISTRY=https://verdaccio.toscanini.me/ .
+#   podman build -t daedalus \                        # through a registry mirror
+#     --add-host=registry.example.internal:host-gateway \
+#     --build-arg NPM_REGISTRY=https://registry.example.internal/ .
 #
-# The context is the repository root; the app is under app/.
+# The context is the repository root; the app is under app/. linux/amd64
+# only: the run stage holds the build platform's argon2 binary, and the sops
+# stage fetches an amd64 release.
 #
 # Debian slim, not alpine: lightningcss, rolldown and @node-rs/argon2 ship
 # glibc prebuilds. Pinned by index digest, so every platform resolves its own.
 ARG NODE_IMAGE=docker.io/library/node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+
+# --- sops --------------------------------------------------------------------
+#
+# Settings › Integrations › Cloudflare › Replace token seals the new token to
+# the recipients in /site/.sops.yaml before it leaves the container, so the
+# plaintext never lands on the bridge directory. Encrypt-only by construction:
+# the image holds no age identity, so sops here can write a secret it can
+# never read back. The upstream release binary is static (no libc to match
+# the run stage's), fetched by version and refused on a checksum mismatch.
+#
+# To bump: pick the release at https://github.com/getsops/sops/releases and
+# take the linux.amd64 line of its `sops-v<version>.checksums.txt`.
+FROM scratch AS sops
+ARG SOPS_VERSION=3.13.3
+ARG SOPS_SHA256=e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
+ADD --checksum=sha256:${SOPS_SHA256} \
+    https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64 /sops
 
 # --- build -------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS build
@@ -65,6 +84,8 @@ COPY --from=build /src/app/drizzle ./drizzle
 COPY --from=build /src/app/node_modules ./node_modules
 COPY --from=build /src/app/dist ./dist
 COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/daedalus-entrypoint
+# Where core/vault.ts execs it (the sops stage above says why it is here).
+COPY --from=sops --chmod=0755 /sops /usr/local/bin/sops
 
 # No init here: node as PID 1 reaps nothing, so run it with `--init`.
 # server.mjs handles SIGTERM itself either way.

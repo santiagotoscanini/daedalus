@@ -201,12 +201,23 @@ The `build` stage installs with `--frozen-lockfile`, runs `pnpm build` (the
 canaries and `check-build` included), then reinstalls with `--prod` from the
 store the first install filled. The final stage is `node:24-slim` plus
 `dist/`, `drizzle/`, `server.mjs`, `package.json` (the engine's version is
-read from it) and that 12 MB `node_modules`: 257 MB, 22 MB over the base.
-About 30 s cold against npmjs, 40 s through Verdaccio. The registry switch
-costs nothing in safety — the lockfile holds integrity hashes and no tarball
-URLs, and `minimumReleaseAge` and `allowBuilds` are read from
-`pnpm-workspace.yaml` whichever registry answers (the cooldown needs each
-package's publish time, which npmjs serves and Verdaccio proxies).
+read from it), that 12 MB `node_modules` and a static `sops` (52 MB, below):
+309 MB, 74 MB over the base. About 30 s cold against npmjs, 40 s through
+Verdaccio. The registry switch costs nothing in safety — the lockfile holds
+integrity hashes and no tarball URLs, and `minimumReleaseAge` and
+`allowBuilds` are read from `pnpm-workspace.yaml` whichever registry answers
+(the cooldown needs each package's publish time, which npmjs serves and
+Verdaccio proxies).
+
+The `sops` stage is the one thing in the image that is not the app: Settings ›
+Integrations › Cloudflare › Replace token seals the new token to the
+recipients in `/site/.sops.yaml` before it leaves the container, so the
+plaintext never lands on the bridge directory. The image holds no age
+identity, which makes that binary encrypt-only by construction — it can write
+a secret it can never read back. It is the upstream release for linux/amd64,
+pinned by version and sha256 in the Dockerfile (`SOPS_VERSION`,
+`SOPS_SHA256`; the comment above them says how to bump) and fetched with
+`ADD --checksum`, so a mismatch fails the build rather than shipping.
 
 **Production** — the default. Nothing is mounted; identity arrives as env:
 
@@ -248,3 +259,16 @@ is 1000. `NPM_REGISTRY` overrides the registry `pnpm-workspace.yaml` names;
 and `:sha-<short sha>` when a `v*` tag is pushed, and only then; the tag
 must match `app/package.json`'s version. On a pull request that touches the
 image files it builds and pushes nothing.
+
+`scripts/image-walk.sh` is the proof to run before a tag: it builds the
+image, checks the `sops` it carries, starts it against a throwaway
+`postgres:16-alpine` on a private podman network with an identity given as
+env, drives a real browser over `/`, `/apps`, `/settings`, `/c/system`,
+`/apps/new` and one authenticated write (the forward-auth headers set by the
+driver, `scripts/image-walk.mjs`), refuses on any console error, page error,
+failed same-origin request or 5xx the browser recorded, and then runs the
+same image with `DAEDALUS_DEV=1` over a copy of `app/` until Vite answers.
+The browser is `shot`, the author's headless-Chromium CLI (a podman wrapper
+around Playwright whose run directory — PNGs, `events.json`, `summary.json`
+— is the evidence); `NPM_REGISTRY` and `PODMAN_ARGS` (`--add-host`, `--dns`)
+reach the build and the dev install, as the script's header shows.
