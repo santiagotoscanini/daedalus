@@ -196,6 +196,25 @@ const registryFileShape = obj({
   apps: recordOf(manifestApp),
 })
 
+/**
+ * The committed registry (site/apps.json) as parsed JSON, decoded and held
+ * to the one schema version this reader understands. The version is finally
+ * read rather than assumed: the declarations.nix assertion guards the
+ * rebuild; this guards the importer and the drift comparison. Exported for
+ * the schema fixtures' test (host/contract/fixtures.test.ts), which is the
+ * only other reader — a fixture that decodes but is the wrong version must
+ * fail exactly the way the box's own file would.
+ */
+export function decodeRegistryFile(raw: unknown): NixManifest['registry'] {
+  const registry = decode(registryFileShape, raw)
+  if (registry.schemaVersion !== REGISTRY_SCHEMA_VERSION) {
+    throw new Error(
+      `applied registry declares schemaVersion ${String(registry.schemaVersion)}; this reader understands ${String(REGISTRY_SCHEMA_VERSION)}`,
+    )
+  }
+  return registry
+}
+
 let cachedManaged: NixManifest['nixManaged'] | null = null
 let cachedSecretApps: string[] | null = null
 
@@ -226,14 +245,7 @@ export async function readNixManifest(): Promise<NixManifest> {
   // what lets an Apply update it without restarting this app. Caching it would
   // reintroduce the restart by another name: the UI would keep reporting drift
   // against a registry that had already been applied.
-  const registry = decode(registryFileShape, JSON.parse(await readFile(registryPath, 'utf8')))
-  if (registry.schemaVersion !== REGISTRY_SCHEMA_VERSION) {
-    // Finally read rather than assumed. The declarations.nix assertion guards
-    // the rebuild; this guards the importer and the drift comparison.
-    throw new Error(
-      `applied registry declares schemaVersion ${String(registry.schemaVersion)}; this reader understands ${String(REGISTRY_SCHEMA_VERSION)}`,
-    )
-  }
+  const registry = decodeRegistryFile(JSON.parse(await readFile(registryPath, 'utf8')))
 
   return {
     schemaVersion: registry.schemaVersion,

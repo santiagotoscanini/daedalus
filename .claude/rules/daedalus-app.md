@@ -65,8 +65,8 @@ the remote is still the copy that survives a disk. Commit often.
   facts and cancel), `settings.tsx`, `claude.tsx`, and
   `settings_.github.callback.ts`, where GitHub returns the App
   manifest's `?code&state`. The `api.*.ts` server routes are healthz,
-  the registry's apply/export/import, image-update, the deploy hook
-  (zot's push event), the GitHub push webhook, app-icon,
+  the registry's apply/export/import, image-update, engine-update, the
+  deploy hook (zot's push event), the GitHub push webhook, app-icon,
   profile-picture, and the two image servers — `shot-run` for a
   shotter run's frames and `deploy-shot` for an app's post-deploy
   screenshot.
@@ -164,6 +164,7 @@ the remote is still the copy that survives a disk. Commit often.
   points at `src/host/schema.ts`).
 - `src/host/` — everything that needs the machine: the bridge and one
   module per verb (`bridge.ts`, `apply.ts`, `apply-flow.ts`,
+  `engine-update.ts`, `engine-flow.ts`,
   `deploy.ts`, `image-update.ts`, `update-flow.ts`, `site-request.ts`,
   `power-request.ts`, `claude-rc-request.ts`, `build-bridge.ts`), the
   database (`db.ts`, `schema.ts`), the env schema and the snapshot
@@ -237,9 +238,12 @@ the remote is still the copy that survives a disk. Commit often.
 - Writes to the box go through the file-drop bridges — one request file
   written into `/apply`, a host `.path` unit watching it, one status
   file written back; the container deliberately holds no host
-  privilege. Ten verbs, as request file → host unit → status file:
+  privilege. Eleven verbs, as request file → host unit → status file:
   `request.json` → `daedalus-apply` → `status.json`;
   `image-request.json` → `daedalus-image-update` → `image-status.json`;
+  `engine-request.json` → `daedalus-engine-update` →
+  `engine-status.json` (the engine's own pin — the `daedalus` flake
+  input — moved to the clone's `main`);
   `deploy-request.json` → `daedalus-deploy-trigger` →
   `deploy-status.json`; `build-request.json` → `daedalus-build` →
   `build-status.json`; `build-cancel-request.json` →
@@ -253,10 +257,11 @@ the remote is still the copy that survives a disk. Commit often.
   `daedalus-github-token` → `github-token-status.json`. `host/bridge.ts`
   is the one implementation of the mechanics (temp + rename, payload
   written before the request that points at it).
-  A dedicated flow module in `host/` exists for exactly two of them —
-  `apply-flow.ts` and `update-flow.ts` — because apply and image-update
+  A dedicated flow module in `host/` exists for exactly three of them —
+  `apply-flow.ts`, `update-flow.ts` and `engine-flow.ts` — because apply,
+  image-update and engine-update
   are the verbs whose button and `api.*` route would otherwise be two
-  hand-copied bodies. Both are arrangements of `host/flow.ts`:
+  hand-copied bodies. All three are arrangements of `host/flow.ts`:
   `defineGate` (the lock, the `running` check, the pickup window) and
   `defineFlow` (check input → refuse busy → prepare → publish, in that
   order). WHO may call stays with each door, and the routes turn the

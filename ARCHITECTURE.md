@@ -9,7 +9,7 @@ path unit notices; a root oneshot reads the file and acts.
 That constraint is the whole design. Everything below is a consequence of it:
 the engine decides, the host executes, and the boundary between them is a
 filename allowlist rather than an API. A compromised control plane can ask for
-the ten things the host knows how to do, and nothing else.
+the eleven things the host knows how to do, and nothing else.
 
 The machine is a NixOS box, so "act" mostly means: write a file into a git
 repository, commit it, and run `nixos-rebuild switch`. The system's real source
@@ -46,7 +46,7 @@ flowchart LR
 
   subgraph root["systemd — root"]
     Paths["daedalus-*.path"]
-    Agents["daedalus-apply, -build, -build-cancel<br/>-image-update, -deploy-trigger, -site-write<br/>-power, -workspace-clone, -claude-rc, -github-token"]
+    Agents["daedalus-apply, -build, -build-cancel<br/>-image-update, -engine-update, -deploy-trigger, -site-write<br/>-power, -workspace-clone, -claude-rc, -github-token"]
     SnapJobs["daedalus-*-snapshot timers"]
     DeployU["app-NAME-deploy.service / .timer"]
   end
@@ -89,10 +89,10 @@ flowchart TB
     Sops["/usr/local/bin/sops: static, holds no age identity<br/>so it can encrypt and never decrypt"]
   end
 
-  Wr[/"the ONE writable mount: apply/<br/>10 request files, their status files, payload-ID.json"/]
+  Wr[/"the ONE writable mount: apply/<br/>11 request files, their status files, payload-ID.json"/]
 
   subgraph priv["systemd — root"]
-    P["daedalus-apply, -build, -build-cancel, -image-update<br/>-deploy-trigger, -site-write, -power<br/>-workspace-clone, -claude-rc, -github-token<br/>each a .path watching one filename"]
+    P["daedalus-apply, -build, -build-cancel, -image-update<br/>-engine-update, -deploy-trigger, -site-write, -power<br/>-workspace-clone, -claude-rc, -github-token<br/>each a .path watching one filename"]
     Caps["may: commit and push as the operator<br/>nixos-rebuild switch under the rebuild lock<br/>start a deploy unit, reboot<br/>read the sops vault, sign as the GitHub App"]
   end
 
@@ -121,7 +121,8 @@ the same directory:
 | `build-request.json` | `daedalus-build` | `build-status.json` |
 | `build-cancel-request.json` | `daedalus-build-cancel` | — |
 | `deploy-request.json` | `daedalus-deploy-trigger` | `deploy-status.json` |
-| `image-request.json` | `daedalus-image-update` | `image-status.json` |
+| `image-request.json` | `daedalus-image-update` | `image-status.json` + `image-last.log` |
+| `engine-request.json` | `daedalus-engine-update` | `engine-status.json` + `engine-last.log` |
 | `site-request.json` | `daedalus-site-write` | `site-status.json` |
 | `workspace-request.json` | `daedalus-workspace-clone` | `workspace-status.json` |
 | `power-request.json` | `daedalus-power` | `power-status.json` |
@@ -225,7 +226,7 @@ flowchart TB
 
   subgraph edge["server only — the two doors"]
     Srv["src/server/**  createServerFn<br/>registry, builds, settings, site, category<br/>host, claude, profile, updates"]
-    Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/deploy<br/>/api/image-update, /api/registry/apply|export|import"]
+    Api["src/routes/api.*.ts<br/>/api/healthz, /api/github/webhook, /api/deploy<br/>/api/image-update, /api/engine-update, /api/registry/apply|export|import"]
     Mcp["src/routes/mcp.ts → src/host/mcp/**<br/>/mcp — Streamable HTTP, 16 tools, 2 resources<br/>a scoped token, not a session"]
   end
 
@@ -478,7 +479,7 @@ happen in one transaction, so a redelivered webhook collides and is ignored.
 | Internet → engine | GitHub webhooks only, over the tunnel, on one hostname and one path | HMAC over the raw body, verified before anything is believed; a body cap enforced while streaming; the delivery id inserted before any work |
 | Operator → engine | Every page and action | Forward-auth in front of the whole host; the engine trusts a header it can only receive from the proxy |
 | Agent → engine | The MCP tools at `/mcp`, on the LAN only | A scoped bearer token, matched against a stored SHA-256 digest in constant time before any work; fail-closed with none minted; write tools additionally pass `assertMachineActor` and are recorded under the token's label |
-| Engine → host | Ten filenames | The rules in [The bridge](#the-bridge) |
+| Engine → host | Eleven filenames | The rules in [The bridge](#the-bridge) |
 | Engine → GitHub | An installation token, minted by the host, never the private key | The key is root-only on the host and never enters the container; the token carries contents+metadata read, checks+deployments write |
 | Host → repository code | A clone and a build | Repository content only ever runs as an unprivileged user inside an egress fence; the registry push credential exists for the duration of the one publishing call and is deleted after it |
 | Build step → the box | Nothing by design | Rootless BuildKit in its own subuid range; a step that escapes lands as a user that owns nothing of the operator's |

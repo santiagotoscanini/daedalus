@@ -92,3 +92,30 @@ export const requestImageUpdateFn = createServerFn({ method: 'POST' })
     // this produces records a person rather than "daedalus".
     return runImageUpdate({ targets: data.targets, actor: actorLabel() })
   })
+
+// ── the engine ────────────────────────────────────────────────────────────
+//
+// The same pair for the engine's own pin: its status, and the one request.
+// Beside the image functions rather than in a module of their own because
+// the Updates page is the only page either is on, and the button is the same
+// gesture one card up.
+
+export const fetchEngineUpdateStatus = createServerFn().handler(async () => {
+  const { readEngineUpdateStatus } = await import('../host/engine-update')
+  return readEngineUpdateStatus()
+})
+
+/**
+ * Ask the host to move the engine's pin to the clone's `main` and rebuild.
+ *
+ * Nothing to validate: the request carries only the actor. What "latest" is,
+ * and whether the box is in a state to take it (no engine override, the
+ * clone not diverged), is the host's answer — reported through the status
+ * file the caller polls, like every other bridge verb.
+ */
+export const requestEngineUpdateFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const { assertAdmin } = await import('../core/authz')
+  await assertAdmin()
+  const { runEngineUpdate } = await import('../host/engine-flow')
+  return runEngineUpdate({ actor: actorLabel() })
+})

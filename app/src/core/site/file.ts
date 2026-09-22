@@ -74,6 +74,18 @@ export type SiteDocument = {
    * could open it for itself. Nix does not read it today.
    */
   auth?: { localLogin: boolean }
+  /**
+   * How this box is developed on, as opposed to run. `engineOverride` is an
+   * absolute path to an engine clone on the box, or null: while set, every
+   * Apply builds against THAT tree (`--override-input daedalus path:<clone>`,
+   * lock untouched) and activates it with `nixos-rebuild test` — never
+   * `switch` — and the image and engine updaters refuse to run, because a
+   * pin moved under an override would name a rev nothing is running. Nix does
+   * not read it; the host agents do (host/lib.sh `engine_override`). Absent
+   * and `{ engineOverride: null }` are the same document, and the renderer
+   * drops the block while it holds that.
+   */
+  developer: { engineOverride: string | null }
 }
 
 /**
@@ -115,6 +127,10 @@ export function siteDocument(s: BoxSettings): SiteDocument {
       zoneId: s.integrations.cloudflare.zoneId,
       tunnelId: s.integrations.cloudflare.tunnelId,
     },
+    // Never read off the running box: the override is a statement about how
+    // the NEXT Apply should build, and a system built from an override says
+    // nothing about whether the next one should be.
+    developer: { engineOverride: null },
   }
 }
 
@@ -132,12 +148,18 @@ function identityAsWritten(identity: SiteDocument['identity']): Record<string, u
 }
 
 export function renderSiteFile(doc: SiteDocument): string {
-  const { github, ...rest } = doc
+  const { github, developer, ...rest } = doc
   const app = github?.app ?? null
   const body = {
     ...PREAMBLE,
     ...rest,
     identity: identityAsWritten(rest.identity),
+    // Same rule as the identity labels: the block exists in the file only
+    // while it says something, so a document from before it re-renders to
+    // its own bytes and clearing the override removes the block again.
+    ...(developer.engineOverride === null
+      ? {}
+      : { developer: { engineOverride: developer.engineOverride } }),
     // Last, and copied key by key. The fixed order keeps a new App a single
     // block in the diff, and nothing else on the caller's object can reach a
     // committed file (the manifest conversion reply also carries the private key).

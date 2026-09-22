@@ -66,6 +66,26 @@ export type SiteDir = {
   appSecrets: AppSecretHistory
 }
 
+/**
+ * The engine as the configuration's `flake.lock` pins it — the `daedalus`
+ * input's locked node. Published from v6 on; null on an older snapshot, on a
+ * lock without that input, and on a lock the host could not read, and the
+ * Updates page says "unknown" for all three rather than guessing.
+ *
+ * `type` and `url` are the input as the host WROTE it: `git` with a
+ * `file://` url is a local clone (the reference arrangement, where "latest"
+ * is that clone's `main`), `github` is a published rev. The update agent
+ * (stacks/daedalus/host/engine-update.sh) branches on the same fields.
+ */
+export type EngineLock = {
+  rev: string
+  /** The locked commit's date, ISO 8601. */
+  lastModified: string | null
+  type: string
+  url: string | null
+  ref: string | null
+}
+
 export type RepoFacts = {
   path: string
   remote: string | null
@@ -79,6 +99,8 @@ export type RepoFacts = {
   /** The most recent commit the apply agent authored. */
   lastApply: RepoCommit | null
   site: SiteDir
+  /** The pinned engine; see `EngineLock`. */
+  engine: EngineLock | null
 }
 
 const commit = obj({ rev: str, subject: optional(str, ''), committedAt: optional(str, '') })
@@ -151,6 +173,22 @@ const shape = obj({
   // Absent in the v1 and v2 shapes. A reader newer than its producer is the
   // normal state for the minutes between a switch and the timer's next run.
   site: optional(siteShape, NO_SITE_DIR),
+  // Published from v6 on, and `null` there too when the lock has no
+  // `daedalus` input. Optional-with-null so a pre-v6 file — the one on disk
+  // until the timer's next run after the switch that added it — reads as
+  // "unknown" rather than failing the whole snapshot.
+  engine: optional(
+    nullable(
+      obj({
+        rev: str,
+        lastModified: optional(nullable(str), null),
+        type: optional(str, ''),
+        url: optional(nullable(str), null),
+        ref: optional(nullable(str), null),
+      }),
+    ),
+    null,
+  ),
 })
 
 export const NO_REPO: RepoFacts = {
@@ -162,6 +200,7 @@ export const NO_REPO: RepoFacts = {
   upstream: null,
   lastApply: null,
   site: NO_SITE_DIR,
+  engine: null,
 }
 
 /** The producing timer runs every 5 minutes; three misses is a stopped producer. */
@@ -176,7 +215,8 @@ export async function repoFacts(): Promise<SnapshotResult<RepoFacts>> {
     // design); decoding it lands on the fallbacks, which is the honest answer.
     // v3 is v4 without README.md and daedalus.json, and is kept because a
     // snapshot written before the rebuild that added them must still decode.
-    acceptVersions: [1, 2, 3, 4, 5],
+    // v6 added `engine`, the pinned engine's lock node — same argument.
+    acceptVersions: [1, 2, 3, 4, 5, 6],
     maxAgeMs: MAX_AGE_MS,
   })
 }

@@ -490,17 +490,47 @@ configuration; its `/rebuild` skill detects a moved engine.
    `fleet.imagePins` was already the parsed read-only view). What remains is
    the other half: a site override map with engine defaults via `mkDefault`,
    which is what would let a migrated stack bring its pin with it.
-3. **`developer.engineOverride`** in `site.json` makes the agents pass
-   `--override-input daedalus <clone>` + `--no-write-lock-file`, so engine
-   work is testable through an Apply before a commit is pinned.
-4. **The schema fixtures in the engine's `ci.yml`.** The formatter and
-   `nix flake check` half of this landed (`a2292b8`: nixfmt, statix, deadnix,
-   every exported `nixosModule` checked to be a module; GitHub-hosted runners,
-   never the box's own, so it answers while the box is down). What remains is
-   the per-schema-version fixtures; the evaluation against a fixture site
-   with no real one present landed as `checks.minimal-host`.
-5. **An "Update daedalus" button**: the engine's own upgrade path — resolve,
-   build, switch, verify, revert — the way System › Updates moves an image.
+3. ~~**`developer.engineOverride`** in `site.json`~~ — done 2026-09-21. A
+   `developer` block in site.json (schema stays v1: absent and `null` are
+   the same document, the renderer drops the block while it is null), edited
+   on Settings › Developer like every other site field, so the Apply that
+   sets it is already the first one built from the clone and the one that
+   clears it is the switch back. While set: `apply.sh` builds with
+   `--override-input daedalus path:<clone> --no-write-lock-file` and
+   activates with `nixos-rebuild test`, never `switch` (status `testing` /
+   `tested`); `image-update.sh` and `engine-update.sh` refuse with "clear
+   the engine override first"; the shell draws a banner on every page. The
+   app half is live; the host half (`host/lib.sh site_engine_override`,
+   `apply.sh`, `image-update.sh`) is one engine commit away.
+4. ~~**The schema fixtures**~~ — done 2026-09-21. `fixtures/site/v<N>/` (a
+   whole site directory at site.json version N) and `fixtures/apps/v<N>/
+   apps.json` (the registry at version N), read by BOTH halves: the app's
+   `host/contract/fixtures.test.ts` decodes every fixture through the real
+   readers and asserts the render round-trip and that the current versions
+   have a fixture; `checks.fixtures` (`nix/tests/fixtures.nix`) evaluates a
+   minimal host per site fixture through `platform/site.nix` and maps every
+   registry fixture through `registry-lib.nix`. The minimal host's own
+   `site/` became a pointer at `fixtures/site/v1`. Both run in the existing
+   `app` and `nix` CI jobs; `ci.yml` is unchanged. One accepted version per
+   document today, so a migration case is the next fixture directory.
+5. ~~**An "Update daedalus" button**~~ — done 2026-09-21. The eleventh
+   bridge verb: `engine-request.json` → `daedalus-engine-update` →
+   `engine-status.json` (`{id,state,phase,error,from,to,startedAt,
+   finishedAt,commit}`), its own module `stacks/daedalus/engine-update.nix`
+   + `host/engine-update.sh`: refuse under an override or a dirty lock,
+   fast-forward the clone the lock names (`git+file://`; diverged = refused,
+   "push them first"), `nix flake update daedalus`, `nixos-rebuild build`
+   (restore the lock on failure), commit `flake.lock` as `engine: daedalus
+   <from> → <to>`, switch with the one retry, poll the control plane's own
+   health path through the proxy for up to ten minutes, `git revert` +
+   switch back on failure, push. An Engine card at the top of System ›
+   Updates (pinned rev from the repo snapshot's new `engine` node, the
+   clone from the workspace snapshot, verdict current / behind origin /
+   unpinned / unknown) with the button, `POST /api/engine-update` beside
+   `/api/image-update`, `host/engine-flow.ts` over `defineFlow`. Owed: the
+   engine commit that adds the module to `daedalusModules` and the box's
+   import line, and the repo snapshot's v6 (the app reads v5 as "unknown"
+   until then).
 6. **Tag-pinning**: decide a `github:` input by tag versus the local clone.
    The reference box uses the clone because its `app/` is a runtime
    dependency anyway.

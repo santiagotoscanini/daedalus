@@ -369,7 +369,12 @@ function SettingsPage() {
           />
         )}
         {tab === 'developer' && authorization !== null && (
-          <Developer settings={settings} tokens={mcpTokens} authorization={authorization} />
+          <Developer
+            settings={settings}
+            edit={edit}
+            tokens={mcpTokens}
+            authorization={authorization}
+          />
         )}
       </div>
 

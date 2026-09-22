@@ -114,6 +114,37 @@ describe('repoFacts', () => {
     expect(r.data.site.path).toBe('/site')
   })
 
+  it('reads the pinned engine from a v6 snapshot, and "unknown" from anything older', async () => {
+    await publish(
+      envelope(
+        {
+          path: '/etc/nixos',
+          engine: {
+            rev: 'c2c88482a0b3c1287bda221f7ef4ae914a9304c0',
+            lastModified: '2026-09-21T10:11:53Z',
+            type: 'git',
+            url: 'file:///srv/engine',
+            ref: 'main',
+          },
+        },
+        new Date().toISOString(),
+        6,
+      ),
+    )
+    const r = await repoFacts()
+    expect(r.data.engine?.rev).toBe('c2c88482a0b3c1287bda221f7ef4ae914a9304c0')
+    expect(r.data.engine?.url).toBe('file:///srv/engine')
+
+    // The minutes between a switch and the timer's next run: the file on disk
+    // is still v5, and the Updates page must read that as not knowing.
+    await publish(envelope({ path: '/etc/nixos' }, new Date().toISOString(), 5))
+    expect((await repoFacts()).data.engine).toBeNull()
+
+    // A v6 lock with no `daedalus` input is published as null, not omitted.
+    await publish(envelope({ path: '/etc/nixos', engine: null }, new Date().toISOString(), 6))
+    expect((await repoFacts()).data.engine).toBeNull()
+  })
+
   it('reports a stopped producer as stale, not as empty', async () => {
     await publish(envelope({ path: '/etc/nixos' }, new Date(Date.now() - 3_600_000).toISOString()))
     const r = await repoFacts()

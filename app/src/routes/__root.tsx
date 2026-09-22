@@ -10,6 +10,7 @@ import {
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import appCss from '../app.css?url'
 import { AccountMenu } from '../components/account-menu'
+import { EngineOverrideBanner } from '../components/engine-override-banner'
 import { ErrorPanel, NotFoundPanel } from '../components/error'
 import { NavIcon, type NavIconName } from '../components/nav-icon'
 import type { Account } from '../core/settings/types'
@@ -21,7 +22,7 @@ import { presetById, type ThemeChoice, themeCss } from '../lib/theme'
 import { fetchActiveModules } from '../server/modules'
 import { fetchAccount } from '../server/profile'
 import { fetchTheme } from '../server/settings'
-import { fetchSite } from '../server/site'
+import { fetchEngineOverride, fetchSite } from '../server/site'
 import { APP_TABS } from './apps.$name'
 
 /**
@@ -147,6 +148,10 @@ export const Route = createRootRoute({
     account: fetchAccount(),
     modules: await fetchActiveModules(),
     site: await fetchSite(),
+    // The fifth, and the last that is awaited: one file read, and a notice
+    // about the whole box that must not stream in under the page it is
+    // about (components/engine-override-banner.tsx).
+    engineOverride: await fetchEngineOverride(),
   }),
   head: () => ({
     meta: [
@@ -250,6 +255,7 @@ function Shell({
   account: Promise<Account | null>
 }) {
   const rail = Route.useLoaderData({ select: (d) => d.modules })
+  const engineOverride = Route.useLoaderData({ select: (d) => d.engineOverride })
   const [collapsed, setCollapsed] = useState(false)
   const [open, setOpen] = useState(false)
   const openButton = useRef<HTMLButtonElement>(null)
@@ -531,6 +537,7 @@ function Shell({
       </aside>
 
       <main className="min-w-0 px-[clamp(1rem,3.5vw,2.75rem)] pt-[1.9rem] pb-28 max-rail:pb-32">
+        <EngineOverrideBanner path={engineOverride} />
         {children ?? <Outlet />}
       </main>
     </div>

@@ -1,0 +1,46 @@
+{
+  "_why": "Schema fixture, site.json at schemaVersion 1 — every field the version defines, with documentation values only (RFC 5737 addresses, example.org, alice). Read by BOTH halves of the contract: the app's vitest parses it through the real site.json reader and asserts it re-renders to itself (app/src/host/contract/fixtures.test.ts), and `nix flake check` evaluates a whole host from this directory through platform/site.nix (nix/tests/fixtures.nix). A version bump adds a sibling directory and leaves this one as it was written.",
+  "schemaVersion": 1,
+  "identity": {
+    "hostname": "box",
+    "baseDomain": "example.org",
+    "controlPlane": "daedalus-app",
+    "controlPlanePrevious": null,
+    "timezone": "Etc/UTC",
+    "owner": "alice",
+    "operator": { "user": "alice", "group": "users" }
+  },
+  "network": {
+    "lanIp": "10.0.0.2",
+    "interface": "eth0",
+    "gateway": "10.0.0.1",
+    "wanHost": "box.example.org",
+    "ddns": { "host": "box.example.org", "interval": "300s" },
+    "dhcp": {
+      "active": false,
+      "router": "10.0.0.1",
+      "start": "10.0.0.100",
+      "end": "10.0.0.200",
+      "leaseTime": "8h"
+    },
+    "dnsUpstreams": ["192.0.2.53"]
+  },
+  "mail": { "sender": "box@example.org", "alertTo": "alice@example.org" },
+  "cloudflare": {
+    "accountId": "00000000000000000000000000000000",
+    "zoneId": "00000000000000000000000000000000",
+    "tunnelId": "00000000-0000-0000-0000-000000000000"
+  },
+  "auth": { "localLogin": false },
+  "developer": { "engineOverride": null },
+  "github": {
+    "app": {
+      "id": 1,
+      "slug": "box-daedalus",
+      "clientId": "Iv1.0000000000000000",
+      "htmlUrl": "https://github.com/apps/box-daedalus",
+      "owner": "alice",
+      "ownerId": 1
+    }
+  }
+}

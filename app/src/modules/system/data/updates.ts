@@ -1,5 +1,9 @@
 import { imagePins } from '../../../host/contract/domains/images'
+import { type EngineLock, repoFacts } from '../../../host/contract/domains/repo'
+import { readCommittedSite } from '../../../host/contract/domains/site-doc'
+import { type EngineUpdateStatus, readEngineUpdateStatus } from '../../../host/engine-update'
 import { type ImageUpdateStatus, readImageUpdateStatus } from '../../../host/image-update'
+import { readWorkspaces, type Workspace, workspaceFor } from '../../../host/workspaces'
 import {
   type CommitGap,
   commitsSince,
@@ -14,6 +18,7 @@ import {
   imageVersion,
   type RunningVersion,
 } from '../../../lib/dashboard/images'
+import { ENGINE_REPO } from '../../../lib/engine'
 
 // Every digest-pinned container on the box, and whether it is behind.
 //
@@ -82,6 +87,8 @@ export type UpdatesData = {
    * already in progress rather than offering to start a second one.
    */
   status: ImageUpdateStatus
+  /** The engine's own pin — the card above the table. */
+  engine: EngineFacts
 }
 
 function verdictOf(f: ImageFreshness | null): UpdateVerdict {
@@ -107,8 +114,78 @@ const ORDER: Record<UpdateVerdict, number> = {
   current: 3,
 }
 
+// ── the engine itself ─────────────────────────────────────────────────────
+//
+// The one pin on the page that is not an image: the configuration's
+// `daedalus` flake input, locked by rev. Its "registry" is the engine clone
+// on the box — the input is `git+file://<clone>?ref=main`, so "latest" is
+// that clone's `main` once it has been fast-forwarded from origin — and its
+// update is the same shape as an image's: move the pin, build, switch, verify
+// that the control plane came back, revert if it did not, push.
+//
+// Two snapshots answer where things stand, and neither is fetched for it:
+// the repo snapshot publishes the lock's node, the workspace snapshot the
+// clone's head, its dirtiness and how far it is behind the origin it last
+// fetched (every 30 minutes). Either missing is "unknown" — never a guess.
+
+/** Where the pinned engine stands against the clone, and the clone against origin. */
+export type EngineVerdict =
+  /** The clone's main is what the lock pins, and origin has nothing newer as of the last fetch. */
+  | 'current'
+  /** Origin has commits the clone has not taken; an update fast-forwards and pins them. */
+  | 'behind-origin'
+  /** The clone's main is past the lock — commits landed locally and were never pinned. */
+  | 'unpinned'
+  /** The lock, the clone, or both are not published. */
+  | 'unknown'
+
+export type EngineFacts = {
+  /** The lock's `daedalus` node; null until the repo snapshot carries it. */
+  pinned: EngineLock | null
+  /** The engine's workspace clone; null when none is under the workspace root. */
+  clone: Workspace | null
+  verdict: EngineVerdict
+  /** site.json's `developer.engineOverride` — the update is refused while it is set. */
+  override: string | null
+  status: EngineUpdateStatus
+}
+
+function engineVerdict(pinned: EngineLock | null, clone: Workspace | null): EngineVerdict {
+  if (pinned === null || clone === null || clone.head === null) return 'unknown'
+  if ((clone.behind ?? 0) > 0) return 'behind-origin'
+  // The snapshot publishes a 12-character head; the lock a full rev.
+  if (!pinned.rev.startsWith(clone.head)) return 'unpinned'
+  return 'current'
+}
+
+export async function loadEngine(): Promise<EngineFacts> {
+  const [repo, workspaces, site, status] = await Promise.all([
+    repoFacts(),
+    readWorkspaces(),
+    readCommittedSite(),
+    readEngineUpdateStatus(),
+  ])
+  // Stale means the producer stopped, and a head from an unknown number of
+  // hours ago is exactly the plausible-looking wrong answer "unknown" exists
+  // to avoid — the same rule the provenance stamp applies (core/site).
+  const pinned = repo.available && !repo.stale ? repo.data.engine : null
+  const clone =
+    workspaces.available && !workspaces.stale ? workspaceFor(ENGINE_REPO, workspaces.data) : null
+  return {
+    pinned,
+    clone,
+    verdict: engineVerdict(pinned, clone),
+    override: site.ok ? site.value.doc.developer.engineOverride : null,
+    status,
+  }
+}
+
 export async function loadUpdates(): Promise<UpdatesData> {
-  const [pins, status] = await Promise.all([imagePins(), readImageUpdateStatus()])
+  const [pins, status, engine] = await Promise.all([
+    imagePins(),
+    readImageUpdateStatus(),
+    loadEngine(),
+  ])
 
   const rows = await Promise.all(
     Object.entries(pins).map(async ([container, pin]): Promise<UpdateRow> => {
@@ -152,6 +229,7 @@ export async function loadUpdates(): Promise<UpdatesData> {
     checkedAt: checked.length === 0 ? null : (checked.sort().at(-1) ?? null),
     probeMissing: checked.length === 0,
     status,
+    engine,
   }
 }
 

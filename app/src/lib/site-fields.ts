@@ -68,6 +68,25 @@ export function controlPlaneLabelError(value: string): string | null {
   return null
 }
 
+/**
+ * The engine override: null (off), or an absolute path to an engine clone on
+ * the box. Only the shape is checked here — the container cannot see the
+ * host's filesystem, and the apply agent refuses a directory with no
+ * flake.nix in it before building anything. A relative path is refused
+ * because the agent runs from a directory the operator never sees, and `~`
+ * because nothing expands it on the way to `--override-input`.
+ */
+export function engineOverrideError(value: unknown): string | null {
+  if (value === null) return null
+  if (typeof value !== 'string') return 'the override is a path, or nothing.'
+  const v = value.trim()
+  if (v === '') return null // the input's empty box saves null
+  if (!v.startsWith('/')) return 'an absolute path on the box, starting with /.'
+  if (/\s/.test(v)) return 'a path without whitespace.'
+  if (v.length > 1 && v.endsWith('/')) return 'without the trailing slash.'
+  return null
+}
+
 /** dnsmasq's lease syntax: a number with an optional unit, or `infinite`. */
 export function leaseTimeError(value: string): string | null {
   const v = value.trim()

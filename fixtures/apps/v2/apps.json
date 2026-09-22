@@ -1,0 +1,43 @@
+{
+  "_why": "Schema fixture, apps.json (the app registry) at schemaVersion 2 — one entry with every field the version defines, at the values the writer emits for a fresh app. Read by BOTH halves of the contract: the app's vitest parses it through the real registry reader (app/src/host/contract/fixtures.test.ts) and `nix flake check` maps every entry through platform/lib/registry-lib.nix (nix/tests/fixtures.nix). fixtures/site/v1/apps.json is a COPY of this file (a link would not survive the store copy a nix path literal makes), and both readers assert the two are equal. A version bump adds a sibling directory and leaves this one as it was written.",
+  "schemaVersion": 2,
+  "apps": {
+    "example": {
+      "stage": "declared",
+      "postgres": true,
+      "storage": false,
+      "litellm": false,
+      "prometheus": false,
+      "deploy": {
+        "enable": true
+      },
+      "image": null,
+      "hostname": null,
+      "egress": null,
+      "env": [
+        {
+          "key": "EXAMPLE_FLAG",
+          "value": "on",
+          "note": "a documented variable"
+        }
+      ],
+      "auth": {
+        "mode": "proxy",
+        "healthPath": "/healthz",
+        "isolated": false,
+        "allowedGroups": null,
+        "bypassRule": null
+      },
+      "presentation": {
+        "description": "A documentation app: every field of the v2 entry, once."
+      },
+      "resources": {
+        "cpus": null,
+        "memoryMb": null,
+        "pids": null
+      },
+      "tasks": [],
+      "notes": {}
+    }
+  }
+}

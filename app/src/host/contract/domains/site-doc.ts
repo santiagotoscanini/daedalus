@@ -50,6 +50,13 @@ const shape = obj({
   // JSON.stringify omits), so a file without the block re-renders to its own
   // bytes; present, it round-trips as written.
   auth: optional(obj({ localLogin: optional(bool, false) }), undefined),
+  // The engine override (core/site/file.ts says what it does). Filled in
+  // rather than left absent, unlike `auth`: it is an EDITABLE field, and the
+  // editor walks the dotted path `developer.engineOverride` into the document.
+  // The renderer drops the block again while the value is null.
+  developer: optional(obj({ engineOverride: optional(nullable(str), null) }), {
+    engineOverride: null,
+  }),
   // The GitHub App's public half. Last, and it must stay last: `obj` copies
   // only the keys named here, so a key missing from this shape is dropped by
   // the next write, and the renderer puts this block after everything else.

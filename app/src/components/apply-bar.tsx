@@ -13,7 +13,7 @@ import { Button } from './ui/button'
 // it names what changed, it needs a click, and it reports the phase the host
 // agent is actually in rather than a spinner.
 
-const PHASES = [
+const PHASES: readonly string[] = [
   'waiting',
   'validating',
   'writing',
@@ -21,7 +21,7 @@ const PHASES = [
   'building',
   'switching',
   'pushing',
-] as const
+]
 
 /**
  * "2 apps changed", "The site changed", "1 app and the site changed". The
@@ -62,7 +62,14 @@ export function ApplyBar({
 
   // The phase vocabulary lives in host/apply.sh; a phase this list has not
   // heard of must still render as progress, not blank the tracker.
-  const activeIndex = PHASES.indexOf(status.phase as (typeof PHASES)[number])
+  //
+  // Under an engine override (site.json `developer.engineOverride`) the agent
+  // activates with `nixos-rebuild test` and reports `testing` in the slot
+  // where `switching` would be. Same step, different verb — so it takes that
+  // slot rather than appearing as an unknown phase after it.
+  const phases =
+    status.phase === 'testing' ? PHASES.map((p) => (p === 'switching' ? 'testing' : p)) : PHASES
+  const activeIndex = phases.indexOf(status.phase)
 
   return (
     <div
@@ -85,7 +92,7 @@ export function ApplyBar({
           <>
             <strong>Applying…</strong>
             <ol className="ml-3.5 inline-flex list-none gap-3.5 p-0 text-(--dim) text-xs">
-              {PHASES.map((p, i) => (
+              {phases.map((p, i) => (
                 <li
                   key={p}
                   className={cn(

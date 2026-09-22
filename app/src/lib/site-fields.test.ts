@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   baseDomainError,
   controlPlaneLabelError,
+  engineOverrideError,
   hostnameShapeError,
   interfaceError,
   ipv4Error,
@@ -88,5 +89,19 @@ describe('upstreams', () => {
     expect(upstreamsError([])).not.toBeNull()
     expect(upstreamsError(['dns.google'])).not.toBeNull()
     expect(upstreamsError(['8.8.8.8#x'])).not.toBeNull()
+  })
+})
+
+describe('engineOverrideError', () => {
+  it('takes an absolute path or nothing, and refuses what the agent could not use', () => {
+    expect(engineOverrideError(null)).toBeNull()
+    expect(engineOverrideError('')).toBeNull()
+    expect(engineOverrideError('/srv/engine')).toBeNull()
+    expect(engineOverrideError(' /srv/engine ')).toBeNull()
+    expect(engineOverrideError('projects/daedalus')).toMatch(/absolute/)
+    expect(engineOverrideError('~/projects/daedalus')).toMatch(/absolute/)
+    expect(engineOverrideError('/srv/engine/')).toMatch(/trailing/)
+    expect(engineOverrideError('/srv/my engine')).toMatch(/whitespace/)
+    expect(engineOverrideError(42)).toMatch(/path, or nothing/)
   })
 })

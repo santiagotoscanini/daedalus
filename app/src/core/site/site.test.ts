@@ -36,6 +36,7 @@ const doc: SiteDocument = {
   },
   mail: { sender: 's@example.test', alertTo: 'a@example.test' },
   cloudflare: { accountId: 'acc', zoneId: 'zone', tunnelId: 'tun' },
+  developer: { engineOverride: null },
 }
 
 const APP: SiteGithubApp = {
@@ -60,6 +61,27 @@ describe('site.json round trip', () => {
     expect(decodeSiteDocument(JSON.parse(on)).auth).toEqual({ localLogin: true })
     expect(reRender(on)).toBe(on)
     expect(decodeSiteDocument(JSON.parse(renderSiteFile(doc))).auth).toBeUndefined()
+  })
+
+  it('carries the engine override, and leaves the block out while it is off', () => {
+    // Another field nix does not read — the host agents do. Off (null) and
+    // absent are the same document, so a file from before the block, and one
+    // whose override was cleared, both render without it; set, it survives
+    // the round trip and sits before the github block.
+    expect(renderSiteFile(doc)).not.toContain('developer')
+    const on = renderSiteFile({ ...doc, developer: { engineOverride: '/srv/engine' } })
+    expect(on).toContain('"engineOverride": "/srv/engine"')
+    expect(decodeSiteDocument(JSON.parse(on)).developer).toEqual({ engineOverride: '/srv/engine' })
+    expect(reRender(on)).toBe(on)
+    expect(decodeSiteDocument(JSON.parse(renderSiteFile(doc))).developer).toEqual({
+      engineOverride: null,
+    })
+    const withApp = renderSiteFile({
+      ...doc,
+      developer: { engineOverride: '/srv/engine' },
+      github: { app: APP },
+    })
+    expect(withApp.indexOf('"developer"')).toBeLessThan(withApp.indexOf('"github"'))
   })
 
   it('render → parse → decode → render is a fixed point', () => {
@@ -207,6 +229,12 @@ describe('changesBetween', () => {
     edited.identity.hostname = 'renamed'
     expect(changesBetween(doc, edited)).toEqual([])
     expect(getField(edited, 'network.lanIp')).toBe('10.0.0.2')
+  })
+
+  it('reports the engine override, which the host agents read at Apply time', () => {
+    const edited = structuredClone(doc)
+    edited.developer.engineOverride = '/srv/engine'
+    expect(changesBetween(doc, edited)).toEqual(['developer.engineOverride'])
   })
 
   it('reports nothing pending for a github block the committed file already holds', () => {

@@ -9,8 +9,9 @@ import type { SnapshotResult } from '../../host/contract/snapshot'
 import { env } from '../../host/env'
 import { requestSiteWrite, type SiteFileName } from '../../host/site-request'
 import { readWorkspaces, workspaceFor } from '../../host/workspaces'
+import { ENGINE_REPO } from '../../lib/engine'
 import type { Result } from '../../lib/result'
-import { controlPlaneLabelError } from '../../lib/site-fields'
+import { controlPlaneLabelError, engineOverrideError } from '../../lib/site-fields'
 import type { Ctx } from '../ctx'
 import { readBoxSettings } from '../settings'
 import {
@@ -85,6 +86,11 @@ export const EDITABLE = [
   'mail.sender',
   'mail.alertTo',
   'cloudflare.zoneId',
+  // Not sourced by nix — read by the host agents at Apply time (core/site/
+  // file.ts). It rides the same draft → Apply path as the rest so that the
+  // Apply that sets it is already governed by it, and the one that clears it
+  // is the switch back onto the pinned engine.
+  'developer.engineOverride',
 ] as const
 
 /** One field of the document that the UI may edit. Dotted path into SiteDocument. */
@@ -263,6 +269,15 @@ async function refuseUnknown(
     }
   }
 
+  // The engine override: an absolute path or nothing. Whether a clone is
+  // there is the host's to find out — the container cannot see the box's
+  // filesystem — and apply.sh refuses a path with no flake.nix in it before
+  // it builds anything.
+  if ('developer.engineOverride' in patch && !unchanged('developer.engineOverride')) {
+    const problem = engineOverrideError(patch['developer.engineOverride'])
+    if (problem !== null) throw new Error(problem)
+  }
+
   if ('identity.timezone' in patch && !unchanged('identity.timezone')) {
     const { readTimezones } = await import('../settings/timezones')
     const tz = patch['identity.timezone']
@@ -365,9 +380,6 @@ export async function saveSiteEdit(
 // snapshot whose producer stopped. A stamp that occasionally invents a
 // revision is worth less than no stamp, because nothing distinguishes the
 // invented entries from the real ones afterwards.
-
-/** The engine's own repository, as the workspace snapshot names its remote. */
-const ENGINE_REPO = 'santiagotoscanini/daedalus'
 
 /** A snapshot's data, or null when it is missing, undecodable or stale. */
 function fresh<T>(snap: SnapshotResult<T>): T | null {

@@ -1,6 +1,7 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { GHOST_BTN } from '../../../components/apps/shared'
+import { EngineCard } from '../../../components/engine-update'
 import { UpdateControl, UpdateProgress } from '../../../components/image-update'
 import { Changelog } from '../../../components/release-notes'
 import { usePolledStatus } from '../../../components/status'
@@ -130,6 +131,9 @@ export function UpdatesView({ d }: { d: UpdatesData }) {
 
   return (
     <BoardGrid>
+      {/* The engine first: the one pin here that is not a container, and the
+          one whose update restarts the page reporting it. */}
+      <EngineCard e={d.engine} />
       <QueuePanel
         queue={queue}
         initialStatus={d.status}

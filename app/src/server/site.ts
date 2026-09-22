@@ -94,3 +94,15 @@ export const saveSiteEditFn = createServerFn({ method: 'POST' })
     const requestHost = raw.split(',')[0]?.trim().replace(/:\d+$/, '') || null
     return saveSiteEdit(await makeCtx(), data, { requestHost })
   })
+
+/**
+ * The engine override as the COMMITTED site.json holds it — the value the
+ * host agents read — or null. For the banner the shell draws on every page:
+ * the root loader awaits it, so it is in the server's HTML like the theme. A
+ * pending edit is not an override yet; the Developer tab shows that one.
+ */
+export const fetchEngineOverride = createServerFn().handler(async (): Promise<string | null> => {
+  const { readCommittedSite } = await import('../host/contract/domains/site-doc')
+  const site = await readCommittedSite()
+  return site.ok ? site.value.doc.developer.engineOverride : null
+})
