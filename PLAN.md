@@ -892,12 +892,11 @@ Hand edits the UI cannot make for itself:
    usual `git add` and rebuild apply — `platform/claude.nix` renders the
    `.mcp.json` symlink at activation.
 2. **Arming the admins gate** — Phase 8, item 1, in the order given there.
-3. **Re-enter the off-box projects** (2026-09-22): the four rows of the
-   reference host's external-projects list lived only in the engine's source
-   as a seed, which a public engine cannot carry. They are settings now
-   (Settings › General › Off-box projects): santree, santree-cli, the
-   daedalus landing page and the portfolio — name, hostname, platform,
-   repository, description. Until entered, `/apps` shows no off-box section.
+3. ~~**Re-enter the off-box projects**~~ — done 2026-09-22: the four rows
+   (santree, santree-cli, the daedalus landing page, the portfolio) that
+   lived only in the engine's source as a seed are settings now
+   (Settings › General › Off-box projects), entered by hand on the
+   reference host.
 4. **The first tag** (Phase 10b, item 4) and **the license** (open
    decision 3) — one act, when the operator chooses: bump
    `app/package.json`, add `LICENSE`, tag `v<version>`, push the tag;
