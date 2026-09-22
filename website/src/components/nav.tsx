@@ -12,6 +12,7 @@ const links = [
   { label: "The idea", hash: "cloud" },
   { label: "The pages", hash: "features" },
   { label: "How it works", hash: "loop" },
+  { label: "Get it", hash: "get" },
 ];
 
 /** Slim full-width header: invisible over the hero, gaining a hairline

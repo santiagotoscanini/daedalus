@@ -42,14 +42,12 @@ export function OpenSource() {
           <h2 className="text-balance text-4xl font-semibold tracking-[-0.02em] sm:text-[2.75rem]">
             Follow the thread.
           </h2>
-          {/* Not "run the app". The repo is the engine and this site; the
-              NixOS module that stands it up is still in the author's own
-              machine configuration (README, "What's in this repository"), so
-              a clone is something to read and take from, not yet something
-              to install. Saying otherwise is the first thing a visitor
-              disproves, and the rest of the page pays for it. */}
+          {/* The clone is for reading. Running it is the section above: a
+              host imports the engine as a flake input and starts from the
+              template. This one is for the visitor who wants to see how it
+              is built before deciding to. */}
           <p className="mx-auto mt-5 max-w-lg text-pretty text-[15px] leading-relaxed text-muted">
-            Read the code, steal the patterns.
+            Read the code. Every module, the control plane and this site are one repository.
           </p>
         </Reveal>
         <Reveal delay={0.08}>
@@ -86,15 +84,15 @@ export function OpenSource() {
             </button>
           </div>
         </Reveal>
-        {/* The scope note. A visitor who clones expecting a machine finds an
-            app, and the disappointment is the site's fault, not the repo's —
-            the README says this plainly and the landing page did not say it
-            at all. Same quiet register as the docs page's closing line. */}
+        {/* The scope note, kept honest as the scope moved: the modules are in
+            the repository since 2026-09-21 and a host imports them, but no
+            release is tagged yet, so what a clone gets is main. Same quiet
+            register as the docs page's closing line. */}
         <Reveal delay={0.2}>
           <p className="mx-auto mt-6 max-w-lg text-pretty text-[12.5px] leading-relaxed text-dim">
-            What's in there: the engine and this site. The NixOS module that stands it up on a
-            machine still lives in the author's own configuration — making it importable is the
-            next phase of the plan.
+            What's in there: the NixOS modules a host imports, the control plane they run, the
+            template a new host starts from, and this site. Pre-release — there is no tagged
+            version yet, so a clone follows main.
           </p>
         </Reveal>
       </div>

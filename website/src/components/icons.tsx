@@ -18,3 +18,20 @@ export function GitHubLogo({ size = 16, className }: IconProps) {
     </svg>
   );
 }
+
+/** The Windows logomark: four panes, drawn as one path so it fills with
+ * `currentColor` like the GitHub mark beside it. */
+export function WindowsLogo({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+    >
+      <path d="M3 5.5 11 4.4v7.2H3V5.5Zm0 13L11 19.6v-7.1H3v6Zm9 1.2 9 1.3V12.5h-9v7.2Zm0-15.4v7.3h9V3L12 4.3Z" />
+    </svg>
+  );
+}

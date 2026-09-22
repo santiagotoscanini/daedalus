@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Hero } from "~/components/hero/hero";
 import { FeatureRow } from "~/components/sections/feature-row";
 import { FEATURES } from "~/components/sections/features";
+import { GetIt } from "~/components/sections/get-it";
 import { Loop } from "~/components/sections/loop";
 import { OpenSource } from "~/components/sections/open-source";
 import { Principles } from "~/components/sections/principles";
@@ -43,6 +44,8 @@ function Landing() {
       <div className="divider mx-auto max-w-4xl" aria-hidden />
       <Loop />
       <Principles />
+      <div className="divider mx-auto max-w-4xl" aria-hidden />
+      <GetIt />
       <OpenSource />
     </main>
   );

@@ -84,6 +84,11 @@ export function Footer() {
                 Principles
               </Link>
             </li>
+            <li>
+              <Link to="/" hash="get" className="transition-colors hover:text-fg">
+                Get it
+              </Link>
+            </li>
           </ul>
         </nav>
       </div>
