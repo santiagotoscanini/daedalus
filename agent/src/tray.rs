@@ -91,19 +91,6 @@ fn decode(png: &[u8]) -> Result<Icon> {
     Icon::from_rgba(rgba, info.width, info.height).context("tray icon pixels")
 }
 
-/// Refuse to be the second tray. The mutex lives as long as the process.
-fn claim_single_instance() -> bool {
-    use windows::core::w;
-    use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
-    use windows::Win32::System::Threading::CreateMutexW;
-    // SAFETY: plain Win32 call; the handle is intentionally leaked so the
-    // mutex outlives this function and is released when the process ends.
-    unsafe {
-        let _ = CreateMutexW(None, false, w!("Local\\daedalus-agent-tray"));
-        GetLastError() != ERROR_ALREADY_EXISTS
-    }
-}
-
 fn read_page(port: u16) -> Option<Page> {
     ureq::get(&format!("http://127.0.0.1:{port}/status"))
         .timeout(Duration::from_secs(2))
@@ -117,14 +104,6 @@ fn request_check(port: u16) {
     let _ = ureq::post(&format!("http://127.0.0.1:{port}/update/check"))
         .timeout(Duration::from_secs(2))
         .call();
-}
-
-/// Open a URL or a folder through Explorer, which needs no console and
-/// hands a URL to the default browser.
-fn open(target: &str) {
-    let _ = std::process::Command::new("explorer.exe")
-        .arg(target)
-        .spawn();
 }
 
 /// Time of day from an RFC 3339 UTC stamp, in the machine's local clock is
@@ -350,106 +329,274 @@ fn send_report(port: u16, report: &Report) -> Option<ReportAnswer> {
 /// service reports a version other than ours: the file under our feet is a
 /// newer one by then. The supervisor is dropped with us, so the Claude
 /// server restarts under the new tray — the one interruption an agent
-/// update costs a session on this machine.
+/// update costs a session on this machine. Under launchd, leaving is
+/// enough: KeepAlive starts the new binary.
 fn relaunch_self() {
+    #[cfg(windows)]
     if let Ok(exe) = std::env::current_exe() {
         let _ = std::process::Command::new(exe).spawn();
     }
 }
 
-/// Pump the Win32 message queue until it is empty; the tray and its menu
-/// are windows on this thread and need it.
-fn pump() -> bool {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE, WM_QUIT,
-    };
-    let mut msg = MSG::default();
-    // SAFETY: standard message loop on the thread that owns the windows.
-    unsafe {
-        while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
-            if msg.message == WM_QUIT {
-                return false;
-            }
-            let _ = TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-    }
-    true
+/// What a tick or a menu click decided.
+#[derive(PartialEq, Eq)]
+enum Flow {
+    Continue,
+    Quit,
 }
 
-/// Wait up to `timeout` for input on this thread's queue, so the loop below
-/// idles instead of spinning.
-fn wait_for_input(timeout: Duration) {
-    use windows::Win32::UI::WindowsAndMessaging::{MsgWaitForMultipleObjects, QS_ALLINPUT};
-    // SAFETY: no handles, just the queue with a timeout.
-    unsafe {
-        let _ = MsgWaitForMultipleObjects(None, false, timeout.as_millis() as u32, QS_ALLINPUT);
-    }
+/// The tray's state between ticks: the supervisor, the menu, and when to
+/// look at the page next. The platform loops below drive it — Win32
+/// messages on Windows, a tao event loop on macOS — and it knows nothing
+/// about either.
+struct Session {
+    port: u16,
+    logs: PathBuf,
+    claude_log: PathBuf,
+    sup: Supervisor,
+    ui: Ui,
+    next_poll: Instant,
+    cfg_workdir: Option<String>,
 }
 
-pub fn run() -> Result<()> {
-    if !claim_single_instance() {
-        return Ok(());
+impl Session {
+    fn start() -> Result<Self> {
+        let cfg = config::load_or_default()?;
+        let logs: PathBuf = config::user_log_dir();
+        let claude_log = logs.join("claude-rc.log");
+        let ui = Ui::build()?;
+        // The Claude server, in this session with this user's login. Wanted by
+        // the config until the service relays the box's policy; run in the
+        // directory the config names, else the most recent trusted project.
+        let sup = Supervisor::new(
+            cfg.claude_workdir.clone(),
+            claude_log.clone(),
+            cfg.claude_remote_control,
+        );
+        Ok(Self {
+            port: cfg.port,
+            logs,
+            claude_log,
+            sup,
+            ui,
+            next_poll: Instant::now(),
+            cfg_workdir: cfg.claude_workdir,
+        })
     }
-    let cfg = config::load_or_default()?;
-    let port = cfg.port;
-    let logs: PathBuf = config::log_dir();
-    let claude_log = logs.join("claude-rc.log");
-    let mut ui = Ui::build()?;
 
-    // The Claude server, in this session with this user's login. Wanted by
-    // the config until the service relays the box's policy; run in the
-    // directory the config names, else the most recent trusted project.
-    let mut sup = Supervisor::new(
-        cfg.claude_workdir.clone(),
-        claude_log.clone(),
-        cfg.claude_remote_control,
-    );
-
-    let mut next_poll = Instant::now();
-    loop {
-        if !pump() {
-            return Ok(());
-        }
-        sup.tick();
+    /// Every menu click since the last look.
+    fn menu(&mut self) -> Flow {
         while let Ok(ev) = MenuEvent::receiver().try_recv() {
             let id = ev.id();
-            if *id == ui.open_status.id() {
-                open(&format!("http://127.0.0.1:{port}/status"));
-            } else if *id == ui.check_now.id() {
-                request_check(port);
-                next_poll = Instant::now() + Duration::from_secs(2);
-            } else if *id == ui.restart_claude.id() {
-                sup.restart();
-                next_poll = Instant::now() + Duration::from_secs(1);
-            } else if *id == ui.open_logs.id() {
-                open(&logs.to_string_lossy());
-            } else if *id == ui.open_claude_log.id() {
-                open(&claude_log.to_string_lossy());
-            } else if *id == ui.quit.id() {
+            if *id == self.ui.open_status.id() {
+                open(&format!("http://127.0.0.1:{}/status", self.port));
+            } else if *id == self.ui.check_now.id() {
+                request_check(self.port);
+                self.next_poll = Instant::now() + Duration::from_secs(2);
+            } else if *id == self.ui.restart_claude.id() {
+                self.sup.restart();
+                self.next_poll = Instant::now() + Duration::from_secs(1);
+            } else if *id == self.ui.open_logs.id() {
+                open(&self.logs.to_string_lossy());
+            } else if *id == self.ui.open_claude_log.id() {
+                open(&self.claude_log.to_string_lossy());
+            } else if *id == self.ui.quit.id() {
+                return Flow::Quit;
+            }
+        }
+        Flow::Continue
+    }
+
+    /// Advance the supervisor and, when due, read the page, report, and
+    /// redraw. Quit means an update swapped the binary and we are leaving
+    /// for the new one.
+    fn tick(&mut self) -> Flow {
+        self.sup.tick();
+        if Instant::now() < self.next_poll {
+            return Flow::Continue;
+        }
+        let page = read_page(self.port);
+        if let Some(p) = &page {
+            if p.version != VERSION && !p.restart_pending {
+                relaunch_self();
+                return Flow::Quit;
+            }
+        }
+        self.sup.tick();
+        let report = self.sup.report();
+        if let Some(answer) = send_report(self.port, &report) {
+            self.sup
+                .set_named_workdir(answer.workdir.or_else(|| self.cfg_workdir.clone()));
+            self.sup.set_wanted(answer.wanted);
+            if answer.restart {
+                self.sup.restart();
+            }
+        }
+        self.ui.show(page.as_ref(), &report, self.sup.wanted());
+        self.next_poll = Instant::now() + POLL;
+        Flow::Continue
+    }
+}
+
+#[cfg(windows)]
+mod platform {
+    use super::*;
+
+    /// Refuse to be the second tray. The mutex lives as long as the process.
+    pub fn claim_single_instance() -> bool {
+        use windows::core::w;
+        use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+        use windows::Win32::System::Threading::CreateMutexW;
+        // SAFETY: plain Win32 call; the handle is intentionally leaked so the
+        // mutex outlives this function and is released when the process ends.
+        unsafe {
+            let _ = CreateMutexW(None, false, w!("Local\\daedalus-agent-tray"));
+            GetLastError() != ERROR_ALREADY_EXISTS
+        }
+    }
+
+    /// Open a URL or a folder through Explorer, which needs no console and
+    /// hands a URL to the default browser.
+    pub fn open(target: &str) {
+        let _ = std::process::Command::new("explorer.exe")
+            .arg(target)
+            .spawn();
+    }
+
+    /// Pump the Win32 message queue until it is empty; the tray and its menu
+    /// are windows on this thread and need it.
+    fn pump() -> bool {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE, WM_QUIT,
+        };
+        let mut msg = MSG::default();
+        // SAFETY: standard message loop on the thread that owns the windows.
+        unsafe {
+            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                if msg.message == WM_QUIT {
+                    return false;
+                }
+                let _ = TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+        true
+    }
+
+    /// Wait up to `timeout` for input on this thread's queue, so the loop
+    /// idles instead of spinning.
+    fn wait_for_input(timeout: Duration) {
+        use windows::Win32::UI::WindowsAndMessaging::{MsgWaitForMultipleObjects, QS_ALLINPUT};
+        // SAFETY: no handles, just the queue with a timeout.
+        unsafe {
+            let _ = MsgWaitForMultipleObjects(None, false, timeout.as_millis() as u32, QS_ALLINPUT);
+        }
+    }
+
+    pub fn run() -> Result<()> {
+        if !claim_single_instance() {
+            return Ok(());
+        }
+        let mut s = Session::start()?;
+        loop {
+            if !pump() {
                 return Ok(());
             }
-        }
-        if Instant::now() >= next_poll {
-            let page = read_page(port);
-            if let Some(p) = &page {
-                if p.version != VERSION && !p.restart_pending {
-                    relaunch_self();
-                    return Ok(());
-                }
+            if s.menu() == Flow::Quit || s.tick() == Flow::Quit {
+                return Ok(());
             }
-            sup.tick();
-            let report = sup.report();
-            if let Some(answer) = send_report(port, &report) {
-                sup.set_named_workdir(answer.workdir.or_else(|| cfg.claude_workdir.clone()));
-                sup.set_wanted(answer.wanted);
-                if answer.restart {
-                    sup.restart();
-                }
-            }
-            ui.show(page.as_ref(), &report, sup.wanted());
-            next_poll = Instant::now() + POLL;
+            wait_for_input(Duration::from_millis(250));
         }
-        wait_for_input(Duration::from_millis(250));
     }
+}
+
+#[cfg(target_os = "macos")]
+mod platform {
+    use super::*;
+    use tao::event::{Event, StartCause};
+    use tao::event_loop::{ControlFlow, EventLoop};
+    use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
+
+    /// One tray per user: a lock on a file in the user's log directory,
+    /// held for the life of the process.
+    pub fn claim_single_instance() -> bool {
+        use std::os::fd::AsRawFd;
+        let dir = config::user_log_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let Ok(f) = std::fs::File::create(dir.join("tray.lock")) else {
+            return true;
+        };
+        // SAFETY: flock on a file we own; the descriptor is leaked on purpose.
+        let rc = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        std::mem::forget(f);
+        rc == 0
+    }
+
+    /// `open` hands a URL to the default browser and a folder to Finder.
+    pub fn open(target: &str) {
+        let _ = std::process::Command::new("open").arg(target).spawn();
+    }
+
+    /// Quit means quit: launchd would otherwise start us again within
+    /// seconds, so the job is booted out of this login session (it returns
+    /// at the next).
+    fn bootout() {
+        // SAFETY: no arguments.
+        let uid = unsafe { libc::getuid() };
+        let _ = std::process::Command::new("launchctl")
+            .args([
+                "bootout",
+                &format!("gui/{uid}/{}", crate::launchd::TRAY_LABEL),
+            ])
+            .spawn();
+    }
+
+    pub fn run() -> Result<()> {
+        if !claim_single_instance() {
+            return Ok(());
+        }
+        // AppKit wants the event loop on the main thread and the tray made
+        // once it runs; as an accessory the process has no Dock icon.
+        let mut event_loop = EventLoop::new();
+        event_loop.set_activation_policy(ActivationPolicy::Accessory);
+        let mut session: Option<Session> = None;
+        event_loop.run(move |event, _, control_flow| {
+            if let Event::NewEvents(StartCause::Init) = event {
+                match Session::start() {
+                    Ok(s) => session = Some(s),
+                    Err(e) => {
+                        // `run` never returns, so the reason is written where
+                        // the bin would have written it.
+                        let dir = config::user_log_dir();
+                        let _ = std::fs::create_dir_all(&dir);
+                        let _ = std::fs::write(dir.join("tray.err"), format!("{e:#}\n"));
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
+                }
+            }
+            let Some(s) = session.as_mut() else {
+                *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
+                return;
+            };
+            let menu = s.menu();
+            if menu == Flow::Quit {
+                bootout();
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+            if s.tick() == Flow::Quit {
+                // Leaving on a version change; launchd starts the new binary.
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+            *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(250));
+        });
+    }
+}
+
+use platform::open;
+
+pub fn run() -> Result<()> {
+    platform::run()
 }

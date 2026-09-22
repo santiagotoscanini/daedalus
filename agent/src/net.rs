@@ -2,7 +2,8 @@
 //! its hardware address, and the DNS search suffixes DHCP handed it — the
 //! last being how the agent finds the box (see discover.rs).
 //!
-//! Windows reads `GetAdaptersAddresses`; elsewhere everything is empty.
+//! Windows reads `GetAdaptersAddresses`, macOS asks `route`, `ifconfig` and
+//! `scutil`; elsewhere everything is empty.
 
 #[derive(Clone, Debug, Default)]
 pub struct Adapter {
@@ -20,7 +21,11 @@ pub fn primary() -> Adapter {
     {
         win::primary()
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        mac::primary()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Adapter::default()
     }
@@ -97,6 +102,56 @@ mod win {
                     }
                 }
                 cur = a.Next;
+            }
+        }
+        out
+    }
+}
+#[cfg(target_os = "macos")]
+mod mac {
+    use super::Adapter;
+
+    fn run(cmd: &str, args: &[&str]) -> String {
+        std::process::Command::new(cmd)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default()
+    }
+
+    /// The interface the default route leaves through, then its hardware
+    /// and IPv4 addresses from `ifconfig`, and the search domains from
+    /// `scutil --dns` — which is where DHCP's domain lands on macOS.
+    pub fn primary() -> Adapter {
+        let mut out = Adapter::default();
+        let route = run("route", &["-n", "get", "default"]);
+        let iface = route
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("interface:"))
+            .map(|s| s.trim().to_string());
+        if let Some(iface) = iface {
+            let cfg = run("ifconfig", &[&iface]);
+            for l in cfg.lines() {
+                let l = l.trim();
+                if let Some(rest) = l.strip_prefix("ether ") {
+                    out.mac = rest.split_whitespace().next().map(|m| m.to_uppercase());
+                } else if let Some(rest) = l.strip_prefix("inet ") {
+                    out.ipv4 = rest.split_whitespace().next().map(str::to_string);
+                }
+            }
+        }
+        let dns = run("scutil", &["--dns"]);
+        for l in dns.lines() {
+            let l = l.trim();
+            if l.starts_with("search domain[") {
+                if let Some(d) = l.split(':').nth(1) {
+                    let d = d.trim().trim_end_matches('.').to_string();
+                    if !d.is_empty() && !out.dns_suffixes.contains(&d) {
+                        out.dns_suffixes.push(d);
+                    }
+                }
             }
         }
         out

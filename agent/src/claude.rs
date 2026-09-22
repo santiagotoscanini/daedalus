@@ -225,6 +225,11 @@ pub fn find_cli() -> Option<PathBuf> {
     if let Some(a) = std::env::var_os("APPDATA") {
         dirs.push(PathBuf::from(a).join("npm"));
     }
+    // A LaunchAgent's PATH is the system's four directories; Homebrew and
+    // the native installer both live outside it.
+    for d in ["/opt/homebrew/bin", "/usr/local/bin"] {
+        dirs.push(PathBuf::from(d));
+    }
     if let Some(p) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&p));
     }
@@ -308,9 +313,13 @@ fn pid_alive(pid: u32) -> bool {
             ok && code == STILL_ACTIVE
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        Path::new(&format!("/proc/{pid}")).exists()
+        // Signal 0 delivers nothing and says whether the pid exists (EPERM
+        // means it does, owned by someone else).
+        // SAFETY: kill with signal 0 has no effect on the target.
+        let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        rc == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
     }
 }
 
@@ -673,6 +682,27 @@ impl Supervisor {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        #[cfg(unix)]
+        {
+            // Its own process group, so a stop can reach the sessions it
+            // spawned and not only the server.
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+        #[cfg(target_os = "macos")]
+        {
+            // The LaunchAgent's PATH is the system's; the server spawns git
+            // and shells from wherever the user installed them.
+            let path = std::env::var("PATH").unwrap_or_default();
+            let local = home_dir().map(|h| h.join(".local/bin").display().to_string());
+            cmd.env(
+                "PATH",
+                format!(
+                    "{}:/opt/homebrew/bin:/usr/local/bin:{path}",
+                    local.unwrap_or_default()
+                ),
+            );
+        }
         let mut child = match hidden(&mut cmd).spawn() {
             Ok(c) => c,
             Err(e) => {
@@ -744,6 +774,21 @@ impl Supervisor {
                 .stderr(Stdio::null())
                 .status();
         }
+        #[cfg(unix)]
+        {
+            // SAFETY: a signal to the group the child leads; nothing else is
+            // in it.
+            unsafe {
+                let _ = libc::kill(-(pid as libc::pid_t), libc::SIGTERM);
+            }
+            // A moment to leave on its own before the hard kill below.
+            for _ in 0..20 {
+                if matches!(r.child.try_wait(), Ok(Some(_))) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
         let _ = r.child.kill();
         let _ = r.child.wait();
         self.last_exit = Some(format!("stopped ({why}) at {}", now_rfc3339()));
@@ -791,7 +836,7 @@ impl Supervisor {
         if self.cli.is_none() {
             return (
                 "not-installed".into(),
-                Some("no `claude` command in ~/.local/bin, %APPDATA%\\npm or PATH".into()),
+                Some("no `claude` command in ~/.local/bin, npm's bin, Homebrew's or PATH".into()),
             );
         }
         if !self.wanted {

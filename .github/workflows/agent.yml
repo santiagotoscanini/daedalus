@@ -1,16 +1,24 @@
 # The agent (agent/ — the Rust service for machines the box does not run).
 #
-# Two jobs. `check` runs on every push and PR that touches agent/: fmt,
-# clippy with warnings denied, and the tests, on Windows (the target that
-# ships) and Linux (where the tests also run and where the box does its own
-# checks). `release` runs on an `agent-v*` tag: builds the Windows binary,
-# signs it with the release key, and publishes a GitHub release whose assets
-# every installed agent watches (agent/src/update.rs).
+# `check` runs on every push and PR that touches agent/: fmt, clippy with
+# warnings denied, and the tests, on Windows and macOS (the targets that
+# ship) and Linux (where the tests also run and where the box does its own
+# checks). On an `agent-v*` tag, `build-windows` and `build-macos` produce
+# the binaries, and `release` signs every one with the release key and
+# publishes a GitHub release whose assets every installed agent watches
+# (agent/src/update.rs).
 #
-# Signing: the asset's bytes get a raw ed25519 signature from the
-# AGENT_SIGNING_KEY secret (a PEM private key); the public half is compiled
-# into the agent. Done on Linux with openssl after the Windows build, so the
-# key is only ever read on a runner that never held the toolchain's caches.
+# Two signatures on a macOS binary, for two audiences. Apple's — Developer
+# ID codesign with the hardened runtime, then notarization — is what
+# Gatekeeper and the application firewall look at, and it happens on the
+# macOS runner when the `release` environment holds the certificate and the
+# App Store Connect key (the same six secrets santree's release uses; see
+# agent/README.md "Releasing"). Without them the binaries ship unsigned and
+# the job says so: launchd runs an unsigned daemon fine, so an unsigned
+# release still installs and updates. Ours — the raw ed25519 signature from
+# AGENT_SIGNING_KEY, whose public half is compiled into the agent — is what
+# the updater checks, and it is made on Linux with openssl after the builds,
+# so the key is only ever read on a runner that never held a toolchain cache.
 #
 # Convention: third-party actions are pinned to full commit SHAs.
 name: Agent
@@ -39,6 +47,8 @@ env:
   CARGO_TERM_COLOR: always
   ASSET: daedalus-agent-x86_64-pc-windows-msvc.exe
   TRAY_ASSET: daedalus-agent-tray-x86_64-pc-windows-msvc.exe
+  MAC_ASSET: daedalus-agent-universal-apple-darwin
+  MAC_TRAY_ASSET: daedalus-agent-tray-universal-apple-darwin
 
 jobs:
   check:
@@ -46,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -68,10 +78,27 @@ jobs:
       - name: Test
         run: cargo test
 
-  build:
-    name: Build (windows)
+  # The tag names the version; Cargo.toml must agree, or an agent would
+  # install a release that reports a different version than its tag.
+  guard:
+    name: Tag matches Cargo.toml
     if: startsWith(github.ref, 'refs/tags/agent-v')
     needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          tag="${REF_NAME#agent-v}"
+          crate="$(grep -m1 '^version = ' agent/Cargo.toml | sed 's/version = "\(.*\)"/\1/')"
+          [ "$tag" = "$crate" ] || { echo "tag $tag != Cargo.toml $crate"; exit 1; }
+
+  build-windows:
+    name: Build (windows)
+    needs: guard
     runs-on: windows-latest
     defaults:
       run:
@@ -84,16 +111,6 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
-      # The tag names the version; Cargo.toml must agree, or an agent would
-      # install a release that reports a different version than its tag.
-      - name: Tag matches Cargo.toml
-        shell: bash
-        env:
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          tag="${REF_NAME#agent-v}"
-          crate="$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')"
-          [ "$tag" = "$crate" ] || { echo "tag $tag != Cargo.toml $crate"; exit 1; }
       - name: Build
         run: cargo build --release --target x86_64-pc-windows-msvc
       - name: Stage
@@ -105,14 +122,115 @@ jobs:
           cp install.ps1 dist/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: agent-dist
+          name: agent-dist-windows
+          path: agent/dist/
+          if-no-files-found: error
+
+  build-macos:
+    name: Build (macos)
+    needs: guard
+    runs-on: macos-latest
+    # The Apple signing secrets live in this environment, restricted to
+    # agent-v* tags, so no other workflow in the repo can reach them.
+    environment: release
+    defaults:
+      run:
+        working-directory: agent
+    env:
+      HAS_APPLE: ${{ secrets.APPLE_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      # One universal binary rather than two per-arch downloads: Intel Macs
+      # are still out there, and the updater's asset table names one file.
+      - name: Build both architectures
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+      - name: Stage universal binaries
+        run: |
+          mkdir -p dist
+          for bin in daedalus-agent daedalus-agent-tray; do
+            lipo -create -output "dist/$bin" \
+              "target/aarch64-apple-darwin/release/$bin" \
+              "target/x86_64-apple-darwin/release/$bin"
+            lipo -info "dist/$bin"
+          done
+          cp install.sh dist/
+      - name: Import the signing certificate
+        if: env.HAS_APPLE == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/agent-signing.keychain-db"
+          password=$(openssl rand -base64 24)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/cert.p12"
+          # Without this, codesign's first use of the key blocks on a GUI
+          # prompt nothing on a runner can answer.
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychain -d user -s "$keychain" login.keychain-db
+          if ! security find-identity -v -p codesigning "$keychain" \
+              | grep -qF "$APPLE_SIGNING_IDENTITY"; then
+            echo "::error::the imported certificate does not provide the expected signing identity"
+            exit 1
+          fi
+      - name: Codesign and notarize
+        if: env.HAS_APPLE == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$APPLE_API_KEY" > "$RUNNER_TEMP/asc-api-key.p8"
+          for bin in daedalus-agent daedalus-agent-tray; do
+            codesign --force --options runtime --timestamp \
+              --sign "$APPLE_SIGNING_IDENTITY" "dist/$bin"
+            codesign --verify --strict --verbose=2 "dist/$bin"
+          done
+          # Bare executables notarize as a zip and cannot be stapled; a Mac
+          # that is online fetches the ticket. The updater and launchd do
+          # not ask Gatekeeper at all, so this is hygiene rather than a gate.
+          (cd dist && zip -q ../notarize.zip daedalus-agent daedalus-agent-tray)
+          xcrun notarytool submit notarize.zip --wait \
+            --key "$RUNNER_TEMP/asc-api-key.p8" \
+            --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER"
+          rm -f notarize.zip "$RUNNER_TEMP/asc-api-key.p8"
+      - name: Unsigned by Apple
+        if: env.HAS_APPLE != 'true'
+        run: |
+          echo "::warning::no APPLE_CERTIFICATE in the release environment — the macOS binaries are not codesigned or notarized (launchd still runs them; see agent/README.md)"
+      - name: Name the assets
+        run: |
+          mv dist/daedalus-agent "dist/$MAC_ASSET"
+          mv dist/daedalus-agent-tray "dist/$MAC_TRAY_ASSET"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agent-dist-macos
           path: agent/dist/
           if-no-files-found: error
 
   release:
     name: Sign and publish
-    if: startsWith(github.ref, 'refs/tags/agent-v')
-    needs: build
+    needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -122,8 +240,9 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: agent-dist
+          pattern: agent-dist-*
           path: dist
+          merge-multiple: true
       - name: Sign
         env:
           AGENT_SIGNING_KEY: ${{ secrets.AGENT_SIGNING_KEY }}
@@ -131,12 +250,14 @@ jobs:
           set -euo pipefail
           umask 077
           printf '%s\n' "$AGENT_SIGNING_KEY" > key.pem
-          for a in "$ASSET" "$TRAY_ASSET"; do
+          for a in "$ASSET" "$TRAY_ASSET" "$MAC_ASSET" "$MAC_TRAY_ASSET"; do
             openssl pkeyutl -sign -inkey key.pem -rawin -in "dist/$a" -out "dist/$a.sig"
             [ "$(stat -c %s "dist/$a.sig")" = 64 ] || { echo "$a: signature is not 64 bytes"; exit 1; }
           done
           rm -f key.pem
-          (cd dist && sha256sum "$ASSET" "$ASSET.sig" "$TRAY_ASSET" "$TRAY_ASSET.sig" install.ps1 > SHA256SUMS)
+          (cd dist && sha256sum "$ASSET" "$ASSET.sig" "$TRAY_ASSET" "$TRAY_ASSET.sig" \
+            "$MAC_ASSET" "$MAC_ASSET.sig" "$MAC_TRAY_ASSET" "$MAC_TRAY_ASSET.sig" \
+            install.ps1 install.sh > SHA256SUMS)
           cat dist/SHA256SUMS
       # The agent's compiled-in public key must accept what was just signed,
       # or every installed agent would refuse this release. Checked here with
@@ -146,7 +267,7 @@ jobs:
           set -euo pipefail
           hex="$(grep -A1 'RELEASE_PUBLIC_KEY_HEX' agent/src/update.rs | grep -o '"[0-9a-f]\{64\}"' | tr -d '"')"
           printf '302a300506032b6570032100%s' "$hex" | xxd -r -p > pub.der
-          for a in "$ASSET" "$TRAY_ASSET"; do
+          for a in "$ASSET" "$TRAY_ASSET" "$MAC_ASSET" "$MAC_TRAY_ASSET"; do
             openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in "dist/$a" -sigfile "dist/$a.sig"
           done
       - name: Publish
@@ -157,5 +278,7 @@ jobs:
           set -euo pipefail
           gh release create "$REF_NAME" \
             --title "daedalus-agent ${REF_NAME#agent-v}" \
-            --notes "Windows x86_64: the service and the tray. Installed agents pick this up on their next check; new machines: from an administrator PowerShell, `irm https://daedalus.toscanini.me/install.ps1 | iex`." \
-            "dist/$ASSET" "dist/$ASSET.sig" "dist/$TRAY_ASSET" "dist/$TRAY_ASSET.sig" dist/install.ps1 dist/SHA256SUMS
+            --notes "Windows x86_64 and macOS (universal): the service and the tray. Installed agents pick this up on their next check. New machines — Windows, from an administrator PowerShell: \`irm https://daedalus.toscanini.me/install.ps1 | iex\`; macOS: \`curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh\`." \
+            "dist/$ASSET" "dist/$ASSET.sig" "dist/$TRAY_ASSET" "dist/$TRAY_ASSET.sig" \
+            "dist/$MAC_ASSET" "dist/$MAC_ASSET.sig" "dist/$MAC_TRAY_ASSET" "dist/$MAC_TRAY_ASSET.sig" \
+            dist/install.ps1 dist/install.sh dist/SHA256SUMS

@@ -1,7 +1,8 @@
 //! daedalus-agent — the box's presence on a machine it does not run.
 //!
-//! PLAN.md feature 6, phases 1–3: a Windows service that holds the machine
-//! awake for as long as the box wants it to, answers a small status page on
+//! PLAN.md feature 6, phases 1–3: a Windows service (a launchd daemon on
+//! macOS) that holds the machine awake for as long as the box wants it to,
+//! answers a small status page on
 //! the LAN, announces itself to the box with a signed hello once a minute
 //! and follows the policy the answer carries, and updates itself to the
 //! newest `agent-v*` release of the engine repository; and a tray program
@@ -11,12 +12,12 @@
 //! the agent will later be able to do arrives as a new release the existing
 //! one installs on its own — which is why the update path shipped first.
 //!
-//! Two executables from this crate:
+//! Two executables from this crate (no `.exe` on macOS):
 //!
 //!   daedalus-agent.exe        the service and its verbs (src/bin/daedalus-agent.rs)
 //!   daedalus-agent-tray.exe   the tray icon + the Claude supervisor (src/bin/daedalus-agent-tray.rs)
 //!
-//! Layout on the machine:
+//! Layout on the machine (Windows; launchd.rs has the macOS one):
 //!
 //!   C:\Program Files\daedalus-agent\daedalus-agent.exe        the service (and .old / .new around an update)
 //!   C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at logon
@@ -30,6 +31,7 @@ pub mod config;
 pub mod discover;
 pub mod facts;
 pub mod hello;
+pub mod http;
 pub mod identity;
 pub mod net;
 pub mod power;
@@ -37,9 +39,11 @@ pub mod state;
 pub mod status;
 pub mod update;
 
+#[cfg(target_os = "macos")]
+pub mod launchd;
 #[cfg(windows)]
 pub mod service;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 pub mod tray;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -50,7 +54,10 @@ use anyhow::{Context, Result};
 
 pub const SERVICE_NAME: &str = "daedalus-agent";
 pub const DISPLAY_NAME: &str = "Daedalus Agent";
+#[cfg(windows)]
 pub const TRAY_EXE: &str = "daedalus-agent-tray.exe";
+#[cfg(not(windows))]
+pub const TRAY_EXE: &str = "daedalus-agent-tray";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The agent's work, shared by `run` (as a service) and `serve` (in a

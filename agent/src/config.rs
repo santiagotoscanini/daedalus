@@ -73,12 +73,16 @@ impl Config {
     }
 }
 
-/// `C:\ProgramData\daedalus-agent` — config, state and logs. Falls back to
-/// a directory beside the binary when ProgramData is not defined, which is
-/// only ever a developer's machine.
+/// `C:\ProgramData\daedalus-agent` on Windows, `/Library/Application
+/// Support/daedalus-agent` on macOS — config, state and logs. Falls back to
+/// a directory beside the binary elsewhere, which is only ever a developer's
+/// machine.
 pub fn data_dir() -> PathBuf {
     if let Ok(pd) = std::env::var("ProgramData") {
         return PathBuf::from(pd).join(crate::SERVICE_NAME);
+    }
+    if cfg!(target_os = "macos") {
+        return PathBuf::from("/Library/Application Support").join(crate::SERVICE_NAME);
     }
     std::env::current_exe()
         .ok()
@@ -98,6 +102,21 @@ pub fn log_dir() -> PathBuf {
     data_dir().join("logs")
 }
 
+/// Where the TRAY writes: the same folder on Windows (ProgramData lets a
+/// user create files there); on macOS the data directory is root's, so the
+/// user's own `~/Library/Logs/daedalus-agent`.
+pub fn user_log_dir() -> PathBuf {
+    if cfg!(target_os = "macos") {
+        if let Some(h) = std::env::var_os("HOME") {
+            return PathBuf::from(h)
+                .join("Library")
+                .join("Logs")
+                .join(crate::SERVICE_NAME);
+        }
+    }
+    log_dir()
+}
+
 pub fn load_or_default() -> Result<Config> {
     let path = config_path();
     match std::fs::read_to_string(&path) {
@@ -109,8 +128,8 @@ pub fn load_or_default() -> Result<Config> {
 
 /// Writes the config file if there is none, so `install` never overwrites
 /// an operator's edits on a reinstall. Only `install` calls it, and `install`
-/// is Windows-only for now.
-#[cfg_attr(not(windows), allow(dead_code))]
+/// exists on Windows and macOS.
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 pub fn write_if_absent(cfg: &Config) -> Result<PathBuf> {
     let path = config_path();
     std::fs::create_dir_all(data_dir()).context("creating the data directory")?;

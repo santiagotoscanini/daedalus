@@ -33,7 +33,8 @@ import { BOARD_FOOT, BOARD_NOTE, MONO, VIZ_EMPTY } from './shared'
 // not here yet is one PowerShell line away, and this is where the person
 // looking for it is standing.
 
-const INSTALL = 'irm https://daedalus.toscanini.me/install.ps1 | iex'
+const INSTALL_WINDOWS = 'irm https://daedalus.toscanini.me/install.ps1 | iex'
+const INSTALL_MACOS = 'curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh'
 
 /** The OS's mark, by the family the agent reports. */
 function osMark(os: string): { src: string; invert: boolean } | null {
@@ -319,14 +320,18 @@ export function MachinesView({ d }: { d: MachinesData }) {
       )}
 
       <Board title="How a machine joins" span={12}>
-        <p className={BOARD_NOTE}>Install the agent on it, from an administrator PowerShell:</p>
-        <p className={`${MONO} mt-2 select-all text-[0.8rem]`}>{INSTALL}</p>
+        <p className={BOARD_NOTE}>
+          Install the agent on it. Windows, from an administrator PowerShell:
+        </p>
+        <p className={`${MONO} mt-2 select-all text-[0.8rem]`}>{INSTALL_WINDOWS}</p>
+        <p className={`${BOARD_NOTE} mt-3`}>A Mac, from a terminal:</p>
+        <p className={`${MONO} mt-2 select-all text-[0.8rem]`}>{INSTALL_MACOS}</p>
         <p className={BOARD_FOOT}>
-          The agent keeps the machine awake, shows itself in the tray, updates itself from each
-          release, and announces itself to this box every minute with a key it made at install — the
-          machine then appears above as "wants to join" until you approve it. The page also asks
-          every device pi-hole has seen in the last week for the agent's status page on TCP{' '}
-          {String(d.port)} ({String(d.probed)} asked just now
+          The agent keeps the machine awake, shows itself in the tray or the menu bar, updates
+          itself from each release, and announces itself to this box every minute with a key it made
+          at install — the machine then appears above as "wants to join" until you approve it. The
+          page also asks every device pi-hole has seen in the last week for the agent's status page
+          on TCP {String(d.port)} ({String(d.probed)} asked just now
           {d.skipped > 0 && `, ${String(d.skipped)} too long silent`}), so an agent that cannot find
           the box is still seen.
         </p>

@@ -1,24 +1,25 @@
 import { type ReactNode, useState } from "react";
-import { GitHubLogo, WindowsLogo } from "~/components/icons";
+import { AppleLogo, GitHubLogo, WindowsLogo } from "~/components/icons";
 import { Reveal } from "~/components/reveal";
 import { SectionHeading } from "~/components/ui/section-heading";
 
 const REPO = "https://github.com/santiagotoscanini/daedalus";
 const INIT = "nix flake init -t github:santiagotoscanini/daedalus#config";
-/** The installer is served from this site (copied from agent/install.ps1 at
- * build time), so the line never names a version: the script finds the
- * newest agent release itself. */
-const AGENT_INSTALL = "irm https://daedalus.toscanini.me/install.ps1 | iex";
+/** The installers are served from this site (copied from agent/install.ps1
+ * and agent/install.sh at build time), so neither line names a version: the
+ * script finds the newest agent release itself. */
+const AGENT_INSTALL_WINDOWS = "irm https://daedalus.toscanini.me/install.ps1 | iex";
+const AGENT_INSTALL_MACOS = "curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh";
 /** GitHub's release search matches titles, not tags: the releases are titled
  * "daedalus-agent <version>", so that is the word that lists them. */
 const AGENT_RELEASES = `${REPO}/releases?q=daedalus-agent`;
 const AGENT_README = `${REPO}/blob/main/agent/README.md`;
 
 /** The two downloads: the engine for the box, the agent for the machine the
- * box does not run. Two cards on one row, each with the one line that
- * installs it and a button to where it lives. The state tag says how far
- * each has come — the engine runs a box in production, the agent is early —
- * so the page never dresses one as the other. */
+ * box does not run. Two cards on one row, each with the line that installs
+ * it and a button to where it lives. The state tag says how far each has
+ * come — the engine runs a box in production, the agent is early — so the
+ * page never dresses one as the other. */
 export function GetIt() {
   return (
     <section id="get" className="scroll-mt-28 py-32">
@@ -26,7 +27,7 @@ export function GetIt() {
         <SectionHeading
           kicker="Get it"
           title="Two machines, two pieces."
-          sub="The engine runs the box. The agent runs the second machine the box only talks to — a GPU box serving models."
+          sub="The engine runs the box. The agent runs the other machines the box only talks to — a GPU box serving models, a Mac on the desk."
         />
         <div className="mx-auto mt-16 grid max-w-4xl gap-5 md:grid-cols-2">
           <Reveal>
@@ -35,21 +36,23 @@ export function GetIt() {
               state="ships"
               title="The engine"
               body="A flake input. One import gives a NixOS host the control plane, the catalog of modules it can switch on, and a configuration to start from."
-              command={INIT}
-              commandNote="In an empty directory; then fill in the host and rebuild."
-              action={{ href: REPO, label: "Get it on GitHub", icon: <GitHubLogo size={15} /> }}
+              commands={[{ text: INIT, note: "In an empty directory; then fill in the host and rebuild." }]}
+              actions={[{ href: REPO, label: "Get it on GitHub", icon: <GitHubLogo size={15} /> }]}
             />
           </Reveal>
           <Reveal delay={0.08}>
             <Card
-              platform="Windows"
+              platform="Windows · macOS"
               state="early"
               title="The agent"
-              body="A service for the machine that serves the models. It keeps that machine awake, shows itself in the tray, and updates itself from each new release — one install, then never a walk to it again."
-              command={AGENT_INSTALL}
+              body="A service for the machines the box does not run. It keeps them awake, shows itself in the tray or the menu bar, runs Claude Code's remote control there, and updates itself from each new release — one install, then never a walk to it again."
+              commands={[
+                { label: "Windows", text: AGENT_INSTALL_WINDOWS, note: "In an administrator PowerShell." },
+                { label: "macOS", text: AGENT_INSTALL_MACOS, note: "In a terminal; it asks for your password once." },
+              ]}
               commandNote={
                 <>
-                  In an administrator PowerShell. What it installs, and how it updates, is in the{" "}
+                  What it installs, and how it updates, is in the{" "}
                   <a
                     href={AGENT_README}
                     className="underline decoration-hairline underline-offset-4 transition-colors hover:text-fg"
@@ -59,11 +62,10 @@ export function GetIt() {
                   .
                 </>
               }
-              action={{
-                href: AGENT_RELEASES,
-                label: "Download for Windows",
-                icon: <WindowsLogo size={14} />,
-              }}
+              actions={[
+                { href: AGENT_RELEASES, label: "Windows", icon: <WindowsLogo size={14} /> },
+                { href: AGENT_RELEASES, label: "macOS", icon: <AppleLogo size={14} /> },
+              ]}
             />
           </Reveal>
         </div>
@@ -77,17 +79,17 @@ function Card({
   state,
   title,
   body,
-  command,
+  commands,
   commandNote,
-  action,
+  actions,
 }: {
   platform: string;
   state: "ships" | "early";
   title: string;
   body: string;
-  command: string;
-  commandNote: ReactNode;
-  action: { href: string; label: string; icon: ReactNode };
+  commands: { label?: string; text: string; note: ReactNode }[];
+  commandNote?: ReactNode;
+  actions: { href: string; label: string; icon: ReactNode }[];
 }) {
   return (
     <div className="card flex h-full min-w-0 flex-col p-7">
@@ -96,13 +98,22 @@ function Card({
         {title}
       </h3>
       <p className="mt-3 text-pretty text-[14px] leading-relaxed text-muted">{body}</p>
-      <Command text={command} />
-      <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">{commandNote}</p>
-      <div className="mt-auto pt-7">
-        <a href={action.href} className="btn btn-primary h-11 w-full px-5 sm:w-auto">
-          {action.icon}
-          {action.label}
-        </a>
+      {commands.map((c) => (
+        <div key={c.text}>
+          <Command text={c.text} label={c.label} />
+          <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">{c.note}</p>
+        </div>
+      ))}
+      {commandNote !== undefined && (
+        <p className="mt-2.5 text-pretty text-[12px] leading-relaxed text-dim">{commandNote}</p>
+      )}
+      <div className="mt-auto flex flex-wrap gap-3 pt-7">
+        {actions.map((a) => (
+          <a key={a.label} href={a.href} className="btn btn-primary h-11 px-5">
+            {a.icon}
+            {a.label}
+          </a>
+        ))}
       </div>
     </div>
   );
@@ -111,7 +122,7 @@ function Card({
 /** The one line that installs it, with a copy button. Wraps rather than
  * scrolls: neither line fits a card on a phone, and a clipped command with
  * no scrollbar reads as a shorter one. */
-function Command({ text }: { text: string }) {
+function Command({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -126,6 +137,7 @@ function Command({ text }: { text: string }) {
   return (
     <div className="mt-6 flex min-w-0 items-start justify-between gap-3 rounded-lg border border-hairline bg-black/30 px-3.5 py-2.5">
       <code className="min-w-0 select-all whitespace-pre-wrap break-all font-mono text-[12px] leading-relaxed text-muted">
+        {label !== undefined && <span className="mr-2 text-dim">{label}</span>}
         {text}
       </code>
       <button

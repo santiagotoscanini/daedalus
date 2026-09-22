@@ -63,9 +63,13 @@ fn run_as_service() -> Result<()> {
     {
         daedalus_agent::service::run()
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     {
-        bail!("`run` is the Windows service entry point; use `serve` here")
+        daedalus_agent::launchd::run()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        bail!("`run` is the service entry point on Windows and macOS; use `serve` here")
     }
 }
 
@@ -79,7 +83,8 @@ fn serve_foreground() -> Result<()> {
 }
 
 /// A Ctrl-C hook without a crate: on Windows through the console control
-/// handler, elsewhere by ignoring it (the foreground mode is a convenience
+/// handler, on unix through `signal(2)`; elsewhere by ignoring it (the
+/// foreground mode is a convenience
 /// there, not a deployment).
 fn ctrlc_handler<F: Fn() + Send + Sync + 'static>(f: F) {
     #[cfg(windows)]
@@ -100,7 +105,28 @@ fn ctrlc_handler<F: Fn() + Send + Sync + 'static>(f: F) {
             let _ = SetConsoleCtrlHandler(Some(on_ctrl), true);
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
+    {
+        // A C handler cannot carry a closure; a flag and a relay thread can.
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static HIT: AtomicBool = AtomicBool::new(false);
+        extern "C" fn on_int(_: libc::c_int) {
+            HIT.store(true, Ordering::Relaxed);
+        }
+        // SAFETY: the handler only stores to an atomic.
+        unsafe {
+            libc::signal(libc::SIGINT, on_int as *const () as libc::sighandler_t);
+            libc::signal(libc::SIGTERM, on_int as *const () as libc::sighandler_t);
+        }
+        std::thread::spawn(move || loop {
+            if HIT.load(Ordering::Relaxed) {
+                f();
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        });
+    }
+    #[cfg(not(any(windows, unix)))]
     {
         let _ = f;
     }
@@ -125,10 +151,14 @@ fn install(args: &[String]) -> Result<()> {
     {
         daedalus_agent::service::install(&cfg)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        daedalus_agent::launchd::install(&cfg)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = cfg;
-        bail!("install is Windows-only in this version")
+        bail!("install is for Windows and macOS in this version")
     }
 }
 
@@ -137,9 +167,13 @@ fn uninstall() -> Result<()> {
     {
         daedalus_agent::service::uninstall()
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     {
-        bail!("uninstall is Windows-only in this version")
+        daedalus_agent::launchd::uninstall()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        bail!("uninstall is for Windows and macOS in this version")
     }
 }
 

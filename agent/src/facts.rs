@@ -2,7 +2,8 @@
 //! beyond the agent's own state. Read once at start (none of them change
 //! while the service runs) and cheap to read again.
 //!
-//! On Windows they come from the registry and one kernel call; elsewhere
+//! On Windows they come from the registry and one kernel call, on macOS
+//! from `sw_vers` and `sysctl`; elsewhere
 //! they are empty, which the readers on the box tolerate.
 
 use serde::Serialize;
@@ -139,19 +140,60 @@ mod win {
 #[cfg(windows)]
 use win::{cpu_name, memory_bytes, os_name, os_version};
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod mac {
+    /// One line of a command's stdout, trimmed; empty when it fails.
+    fn line(cmd: &str, args: &[&str]) -> String {
+        std::process::Command::new(cmd)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default()
+    }
+
+    /// "macOS" — `sw_vers` says so; the edition is the version.
+    pub fn os_name() -> String {
+        line("sw_vers", &["--productName"])
+    }
+
+    /// "15.1 (24B83)".
+    pub fn os_version() -> String {
+        let v = line("sw_vers", &["--productVersion"]);
+        let b = line("sw_vers", &["--buildVersion"]);
+        match (v.is_empty(), b.is_empty()) {
+            (false, false) => format!("{v} ({b})"),
+            (false, true) => v,
+            _ => b,
+        }
+    }
+
+    pub fn cpu_name() -> String {
+        line("sysctl", &["-n", "machdep.cpu.brand_string"])
+    }
+
+    pub fn memory_bytes() -> Option<u64> {
+        line("sysctl", &["-n", "hw.memsize"]).parse().ok()
+    }
+}
+
+#[cfg(target_os = "macos")]
+use mac::{cpu_name, memory_bytes, os_name, os_version};
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn os_name() -> String {
     String::new()
 }
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn os_version() -> String {
     String::new()
 }
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn cpu_name() -> String {
     String::new()
 }
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn memory_bytes() -> Option<u64> {
     None
 }

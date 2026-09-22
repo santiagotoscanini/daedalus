@@ -1,10 +1,11 @@
 # daedalus-agent
 
-The box's presence on a machine it does not run. Phase one (see
-`PLAN.md`, feature 6): a Windows service that
+The box's presence on a machine it does not run: a Windows service or a
+macOS launchd daemon, with a tray / menu bar app beside it, that
 
-- **holds the machine awake** for as long as it runs — a Windows power
-  request visible in `powercfg /requests`, plus the power plan's sleep and
+- **holds the machine awake** for as long as the box wants it to — a Windows power
+  request visible in `powercfg /requests` (an IOKit assertion on macOS, in
+  `pmset -g assertions`), plus, on Windows, the power plan's sleep and
   hibernate timers set to never as a second line;
 - **answers a status page** on the LAN, `http://<machine>:7787/status`, so
   the box can see the agent is there before any channel exists between
@@ -61,15 +62,31 @@ there is none, and starts the service. Re-running it later replaces the binary a
 config. `daedalus-agent uninstall` removes the service and the firewall
 rule; the data directory stays.
 
+
+On a Mac, from a terminal:
+
+```sh
+curl -fsSL https://daedalus.toscanini.me/install.sh | sudo sh
+```
+
+The script downloads the two universal binaries to
+`/Library/Application Support/daedalus-agent/bin/`, registers the service as a
+LaunchDaemon (root, at boot, kept alive) and the menu bar app as a
+LaunchAgent for every user, starts both, and links `daedalus-agent` into
+`/usr/local/bin`. Re-running it replaces the binaries and keeps the config;
+`sudo daedalus-agent uninstall` removes both jobs. Claude Code is found in
+`~/.local/bin`, Homebrew's bin or PATH, and its remote control runs in the
+most recently used trusted project (or the directory the policy names).
+
 Trust at install is HTTPS to GitHub. Every update after that is verified
 by the agent against the release key it carries.
 
 ## Verbs
 
 ```
-daedalus-agent install [--port N]   register and start the service (administrator)
-daedalus-agent uninstall            stop and remove the service (administrator)
-daedalus-agent run                  service entry point; what the SCM calls
+daedalus-agent install [--port N]   register and start the service (administrator / sudo)
+daedalus-agent uninstall            stop and remove the service (administrator / sudo)
+daedalus-agent run                  service entry point; what the SCM or launchd calls
 daedalus-agent serve                the same work in the foreground, in a terminal
 daedalus-agent status               print the running agent's status page
 daedalus-agent update [--apply]     check the release feed now; --apply installs
@@ -87,6 +104,17 @@ C:\ProgramData\daedalus-agent\state.json             last update check and resul
 C:\ProgramData\daedalus-agent\logs\agent.log.*       daily-rotated log
 C:\ProgramData\daedalus-agent\logs\claude-rc.log      what `claude remote-control` printed
 ```
+On macOS:
+
+```
+/Library/Application Support/daedalus-agent/bin/daedalus-agent        the service (.old / .new around an update)
+/Library/Application Support/daedalus-agent/bin/daedalus-agent-tray   the menu bar app
+/Library/Application Support/daedalus-agent/{config.toml,state.json,identity.key,logs/}
+/Library/LaunchDaemons/me.toscanini.daedalus-agent.plist              the service's job
+/Library/LaunchAgents/me.toscanini.daedalus-agent-tray.plist          the menu bar app's job
+~/Library/Logs/daedalus-agent/                                        the menu bar app's logs (claude-rc.log)
+```
+
 
 ## How an update happens
 
@@ -105,18 +133,34 @@ installed.
 ## Releasing
 
 Bump `version` in `Cargo.toml`, commit, tag `agent-v<version>`, push the
-tag. `.github/workflows/agent.yml` builds the Windows binary, signs it with
-the `AGENT_SIGNING_KEY` secret, checks the signature against the compiled-in
-public key, and publishes the release. The tag and `Cargo.toml` must agree
-or the build refuses.
+tag. `.github/workflows/agent.yml` builds the Windows binary and the two
+macOS universal binaries, signs every one with the `AGENT_SIGNING_KEY`
+secret, checks the signatures against the compiled-in public key, and
+publishes the release. The tag and `Cargo.toml` must agree or the build
+refuses.
 
 The private key has no recovery path but the operator's copies; losing it
 strands every installed agent on its version. Rotation is a release signed
 with the old key that carries the new public key.
 
-## Developing without Windows
+**Apple's signature.** The macOS binaries are codesigned (Developer ID,
+hardened runtime) and notarized on the runner when the repository's
+`release` environment holds the same six secrets santree's release uses:
+`APPLE_CERTIFICATE` (the Developer ID Application .p12, base64),
+`APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (the certificate's
+common name), `APPLE_API_KEY` (the App Store Connect .p8), `APPLE_API_KEY_ID`
+and `APPLE_API_ISSUER`. Without them the job warns and ships the binaries
+unsigned by Apple — launchd runs them all the same, and the updater trusts
+only our own signature — so the environment can be filled in later without a
+code change. Bare executables notarize but cannot be stapled; a Mac that is
+online fetches the ticket.
 
-The crate cross-checks and lints against `x86_64-pc-windows-gnu` from Linux
-(`rustup target add x86_64-pc-windows-gnu` plus `gcc-mingw-w64-x86-64`);
-the tests are platform-neutral and run anywhere. The service, the power
-request and `install` are Windows-only and are exercised on the machine.
+## Developing without Windows or a Mac
+
+The crate cross-checks and lints against `x86_64-pc-windows-gnu` and
+`aarch64-apple-darwin` from Linux (`rustup target add` both, plus
+`gcc-mingw-w64-x86-64` for the Windows linker; the macOS check needs no
+Apple toolchain because the agent uses the OS's TLS through native-tls
+rather than a C crypto library). The tests are platform-neutral and run
+anywhere. The service, the power request, the tray and `install` are
+exercised on the machines themselves.

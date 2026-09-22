@@ -1,6 +1,6 @@
 [package]
 name = "daedalus-agent"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.85"
 description = "The daedalus agent: keeps a machine on the network awake, reports on it, and updates itself."
@@ -40,7 +40,11 @@ toml = "0.8"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-ureq = { version = "2", features = ["json"] }
+# The OS's own TLS (SChannel, Security.framework, OpenSSL on Linux) rather
+# than rustls: the machine's trust store decides, and no C crypto library
+# has to be cross-compiled to check a target from another OS.
+ureq = { version = "2", default-features = false, features = ["json", "gzip", "native-tls"] }
+native-tls = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 tray-icon = "0.25"
@@ -60,6 +64,17 @@ windows = { version = "0.61", features = [
   "Win32_System_Threading",
   "Win32_UI_WindowsAndMessaging",
 ] }
+
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# The menu bar app: tray-icon draws the item, tao runs the main-thread event
+# loop AppKit requires (no window is ever opened; the process is an
+# accessory, so no Dock icon).
+[target.'cfg(target_os = "macos")'.dependencies]
+tray-icon = "0.25"
+tao = "0.37"
 
 [build-dependencies]
 winresource = "0.1"

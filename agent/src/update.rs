@@ -57,7 +57,15 @@ pub const ASSETS: &[(&str, &str)] = &[
         "daedalus-agent-tray.exe",
     ),
 ];
-#[cfg(not(all(windows, target_arch = "x86_64")))]
+#[cfg(target_os = "macos")]
+pub const ASSETS: &[(&str, &str)] = &[
+    ("daedalus-agent-universal-apple-darwin", "daedalus-agent"),
+    (
+        "daedalus-agent-tray-universal-apple-darwin",
+        "daedalus-agent-tray",
+    ),
+];
+#[cfg(not(any(all(windows, target_arch = "x86_64"), target_os = "macos")))]
 pub const ASSETS: &[(&str, &str)] = &[("daedalus-agent-unsupported", "daedalus-agent")];
 
 const TAG_PREFIX: &str = "agent-v";
@@ -123,7 +131,8 @@ pub fn check(cfg: &Config) -> Result<Option<Release>> {
         "https://api.github.com/repos/{}/releases?per_page=20",
         cfg.release_repo
     );
-    let releases: Vec<ApiRelease> = ureq::get(&url)
+    let releases: Vec<ApiRelease> = crate::http::agent()
+        .get(&url)
         .set("User-Agent", USER_AGENT)
         .set("Accept", "application/vnd.github+json")
         .timeout(Duration::from_secs(20))
@@ -166,7 +175,8 @@ pub fn check(cfg: &Config) -> Result<Option<Release>> {
 }
 
 fn fetch(url: &str) -> Result<Vec<u8>> {
-    let resp = ureq::get(url)
+    let resp = crate::http::agent()
+        .get(url)
         .set("User-Agent", USER_AGENT)
         .timeout(Duration::from_secs(300))
         .call()
@@ -220,6 +230,13 @@ pub fn download_and_verify(rel: &Release) -> Result<Staged> {
         let target = dir.join(a.local_name);
         let new = suffixed(&target, "new");
         std::fs::write(&new, &bytes).with_context(|| format!("writing {}", new.display()))?;
+        #[cfg(unix)]
+        {
+            // A downloaded file is not executable until it is said to be.
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755))
+                .with_context(|| format!("marking {} executable", new.display()))?;
+        }
         tracing::info!(
             asset = a.local_name,
             bytes = bytes.len(),
