@@ -80,10 +80,9 @@ impl Drop for Hold {
 }
 
 /// Set the plan so the machine never sleeps or hibernates on its own, and
-/// turn hibernation off. Returns whether anything had to change, as far as
-/// `powercfg` reports it (it does not: each call is idempotent and quiet, so
-/// this is "ran without error").
-pub fn converge_plan() -> Result<bool> {
+/// turn hibernation off. Idempotent and quiet: `powercfg` does not say whether
+/// a value moved, so this reports only that every call succeeded.
+pub fn converge_plan() -> Result<()> {
     #[cfg(windows)]
     {
         use std::process::Command;
@@ -104,11 +103,11 @@ pub fn converge_plan() -> Result<bool> {
                 );
             }
         }
-        Ok(true)
+        Ok(())
     }
     #[cfg(not(windows))]
     {
-        Ok(false)
+        Ok(())
     }
 }
 
@@ -122,6 +121,21 @@ pub fn requests_report() -> Option<String> {
             .output()
             .ok()?;
         Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+/// Seconds since the machine booted, from the OS — distinct from the
+/// agent's own uptime, and the number that shows a scheduled restart.
+pub fn os_uptime_secs() -> Option<u64> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::SystemInformation::GetTickCount64;
+        // SAFETY: no arguments, no state.
+        Some(unsafe { GetTickCount64() } / 1000)
     }
     #[cfg(not(windows))]
     {

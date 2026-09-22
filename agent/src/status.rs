@@ -40,6 +40,10 @@ struct Document<'a> {
     hostname: String,
     os: &'static str,
     uptime_secs: u64,
+    /// The machine's, not the agent's: a small number here after a night is a reboot.
+    os_uptime_secs: Option<u64>,
+    /// When the machine booted, RFC 3339 UTC, derived from the OS uptime.
+    booted_at: Option<String>,
     awake_hold: bool,
     hold_error: Option<&'a str>,
     power_requests: Option<String>,
@@ -100,12 +104,15 @@ impl Shared {
 
     fn document(&self) -> String {
         let l = self.lock();
+        let os_uptime = crate::power::os_uptime_secs();
         let doc = Document {
             agent: crate::SERVICE_NAME,
             version: crate::VERSION,
             hostname: hostname(),
             os: std::env::consts::OS,
             uptime_secs: self.started.elapsed().as_secs(),
+            os_uptime_secs: os_uptime,
+            booted_at: os_uptime.map(crate::state::rfc3339_ago),
             awake_hold: l.awake_hold,
             hold_error: l.hold_error.as_deref(),
             power_requests: crate::power::requests_report(),

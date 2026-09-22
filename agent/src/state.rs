@@ -44,10 +44,16 @@ impl State {
 
 /// Now, as RFC 3339 in UTC, without a chrono dependency.
 pub fn now_rfc3339() -> String {
+    rfc3339_ago(0)
+}
+
+/// `ago` seconds before now, as RFC 3339 in UTC.
+pub fn rfc3339_ago(ago: u64) -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .unwrap_or(0)
+        .saturating_sub(ago);
     // Civil-from-days (Howard Hinnant's algorithm), enough for a timestamp.
     let days = (secs / 86_400) as i64;
     let rem = secs % 86_400;
