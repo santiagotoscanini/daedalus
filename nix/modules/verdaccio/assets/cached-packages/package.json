@@ -1,0 +1,8 @@
+{
+  "name": "verdaccio-cached-packages",
+  "version": "1.0.0",
+  "description": "Serve uplink-cached packages to the verdaccio web UI listing and search",
+  "main": "index.js",
+  "private": true,
+  "license": "MIT"
+}

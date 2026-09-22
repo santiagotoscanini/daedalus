@@ -1,0 +1,80 @@
+# Verdaccio config — consumed by stacks/verdaccio/verdaccio.nix.
+# Trimmed default docker.yaml; diff against
+# https://github.com/verdaccio/verdaccio/blob/master/packages/config/src/conf/docker.yaml
+# when bumping the image tag to catch upstream drift.
+
+storage: /verdaccio/storage/data
+plugins: /verdaccio/plugins
+
+web:
+  title: s2 Verdaccio
+  darkMode: true
+  gravatar: false
+
+auth:
+  # Pocket ID SSO. client-id/secret are ENV VAR NAMES the plugin reads
+  # at runtime (VERDACCIO_OPENID_CLIENT_{ID,SECRET} from env.sops) — no
+  # secrets in this tracked file. provider-host discovery finds
+  # <host>/.well-known/openid-configuration. username-claim=preferred_username
+  # (Pocket ID). File store survives restarts (in-memory default is 60s
+  # TTL, too short for the npm login handoff).
+  openid:
+    provider-host: @ssoIssuer@
+    client-id: VERDACCIO_OPENID_CLIENT_ID
+    client-secret: VERDACCIO_OPENID_CLIENT_SECRET
+    username-claim: preferred_username
+    groups-claim: groups
+    scope: openid profile email groups
+    store-type: file
+    store-config: /verdaccio/storage/openid-store
+    login-button-text: Login with Pocket ID
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    # Package installs still proxy upstream; only SEARCH is kept local.
+    # npmjs rejects the `text=*` wildcard a catalogue search sends with a
+    # 400, which verdaccio surfaces as a recurring `uplink error` — and what
+    # anything here wants is the count of LOCALLY published packages, which
+    # is exactly what a local-only search returns.
+    search: false
+
+packages:
+  '@*/*':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+
+  '**':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+
+server:
+  keepAliveTimeout: 60
+  # Trust LAN proxies so `req.ip` resolves to the original client.
+  trustProxy: 'loopback,linklocal,uniquelocal'
+
+middlewares:
+  audit:
+    enabled: true
+  # Registers /-/oauth/* routes + the web-UI SSO button (Pocket ID).
+  openid:
+    enabled: true
+  # Local plugin (assets/cached-packages) — makes the UI package list and
+  # search box include uplink-CACHED packages, which verdaccio otherwise
+  # hides because both read the private-publish list only. `ttl` is the
+  # storage-scan cache in seconds.
+  cached-packages:
+    enabled: true
+    ttl: 60
+
+log:
+  type: stdout
+  format: pretty
+  level: http
+
+i18n:
+  web: en-US

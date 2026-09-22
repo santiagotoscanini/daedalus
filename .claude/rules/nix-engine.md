@@ -395,11 +395,11 @@ brand. `#` comments and descriptions are closure-neutral; text inside a
 script or a rendered asset is not (§1): leave those for a commit that
 states the restart, or batch them with a real change.
 
-**Prove a stranger can enable it.** Switch the module on in
-`templates/config/host/modules.nix` with a placeholder pin in
-`templates/config/host/images.nix` and a placeholder secret under
-`templates/config/host/sops/<id>/` — the template IS the host
-`nix flake check` evaluates, and it must stay a host a stranger would
-write, so every addition there is documented the way its neighbours are.
+**Prove a stranger can enable it.** The spine is switched on in
+`templates/config` (the host a stranger starts from — a leaf does not
+belong there); a leaf goes into `nix/tests/full-catalog/leaves.nix` with a
+placeholder pin and whatever its switch requires, so `checks.full-catalog`
+evaluates the whole catalog on one host. Either way the host it joins must
+stay one a stranger would write: every addition documented like its neighbours.
 Then say what the host brings at the top of the module ("The host
 brings:"), and add the module to the catalog table in `nix/README.md`.

@@ -10,7 +10,7 @@ drives.
 | `platform/lib/` | Plain libraries imported **by path**, never as modules: `gluetun-lib.nix` (`mkGluetunInstance`), `fleet-lib.nix`, `registry-lib.nix`, `operator-secrets-lib.nix`. |
 | `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix`, the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), `self.json`, and the privileged host agents (`host/*.sh` — apply, deploy, build, image update, engine update, site write, snapshots). |
 | `modules/<id>/` | The catalog: stacks that have migrated here, each behind `fleet.modules.<id>.enable`, **off by default**. A module brings the mechanism; the host brings the image pin (`fleet.images.<container>`), the secrets (`fleet.modules.<id>.*SopsFile`) and the policy (who may log in, under what name, reachable off-LAN or not). |
-| `tests/` | `minimal-host/` evaluates the config template (below) as a whole system; `fixtures.nix` evaluates every schema fixture under `../fixtures/` through `platform/site.nix` and `registry-lib.nix`. Both run in `nix flake check`; nothing is built. |
+| `tests/` | `minimal-host/` evaluates the config template (below) as a whole system; `full-catalog/` the same host with every leaf switched on; `fixtures.nix` every schema fixture under `../fixtures/` through `platform/site.nix` and `registry-lib.nix`. All run in `nix flake check`; nothing is built. |
 
 The root `flake.nix` exports:
 
@@ -51,10 +51,17 @@ evaluation with the option's name.
 | `pihole` | LAN DNS and DHCP (native), every published hostname's local record. | `dhcpHostsSopsFile` (optional), `localDomain` |
 | `pocket-id` | The identity provider and the convergence of every declared client. | `envSopsFile`, `exposeRemotely`, `fleet.images.pocket-id`; `fleet.sso.logoDir` for the host's own stacks' logos |
 | `registry` | zot, the box's own OCI registry: builds push, deploys pull. | `envSopsFile`, `retireRepositories`, `fleet.images.zot` |
+| `grocy` | Household ERP: groceries, chores, recipes. | `authGroups`, `exposeRemotely`, `fleet.images.grocy` |
+| `intel-gpu-exporter` | Prometheus exporter for an Intel iGPU. | `fleet.images.intel-gpu-exporter` |
+| `metube` | yt-dlp web UI. | `downloadsDir` (required), `authGroups`, `fleet.images.metube` |
+| `myspeed` | Internet speed tracker. | `authGroups`, `fleet.images.myspeed` |
 | `stirling-pdf` | A PDF toolbox — the first leaf, and the template for one. | `authGroups`, `fleet.images.stirling-pdf` |
 | `traefik` | The reverse proxy: every published hostname, the forward-auth middlewares, the wildcard certificate. | `envSopsFile`, `fleet.images.traefik` |
+| `verdaccio` | A private npm mirror; the box's builds and the control plane's dev container install through it. | nothing — its image is built on the box |
 
-Every one of these is switched on in `templates/config`, so a host made
+The spine — everything above but the leaves (grocy, intel-gpu-exporter,
+metube, myspeed, stirling-pdf, verdaccio) — is switched on in
+`templates/config`, so a host made
 from the template is a box with a control plane to log in to.
 
 ## Importing it
@@ -184,8 +191,9 @@ deploy. `CONTRIBUTING.md` has the image's own story.
 ## What is NOT done yet
 
 - **The rest of the reference host's stacks.** The spine — everything a
-  box needs to log in to its control plane — is in the catalog. About
-  thirty more stacks (media, home automation, the AI cluster, games, VPN
+  box needs to log in to its control plane — is in the catalog, and five
+  leaves beside it. About
+  twenty-five more stacks (media, home automation, the AI cluster, games, VPN
   tenants, small tools) are still in the reference operator's private
   configuration; each moves as `.claude/rules/nix-engine.md` §7 describes,
   and none is needed for a box to run.

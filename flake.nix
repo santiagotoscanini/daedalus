@@ -111,15 +111,20 @@
         "apps/declarations.nix"
         "cloudflared/cloudflared.nix"
         "gatus/gatus.nix"
+        "grocy/grocy.nix"
         "healthchecks/healthchecks.nix"
+        "intel-gpu-exporter/intel-gpu-exporter.nix"
         "logging/logging.nix"
+        "metube/metube.nix"
         "monitoring/monitoring.nix"
+        "myspeed/myspeed.nix"
         "pihole/pihole.nix"
         "pocket-id/clients.nix"
         "pocket-id/pocket-id.nix"
         "registry/registry.nix"
         "stirling-pdf/stirling-pdf.nix"
         "traefik/traefik.nix"
+        "verdaccio/verdaccio.nix"
       ];
     in
     {
@@ -161,6 +166,24 @@
             siteIsTheFixture
             || throw "templates/config/site/site.json and fixtures/site/v1/site.json differ — they are one document; copy the fixture over the template";
           pkgs.runCommand "minimal-host-evaluates" { } (
+            builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
+          );
+
+        # The template with every leaf of the catalog switched on as well:
+        # the whole catalog evaluates on one host (nix/tests/full-catalog).
+        full-catalog =
+          let
+            host = import ./nix/tests/full-catalog {
+              inherit
+                nixpkgs
+                nixpkgs-unstable
+                sops-nix
+                system
+                ;
+              engine = self;
+            };
+          in
+          pkgs.runCommand "full-catalog-evaluates" { } (
             builtins.seq host.config.system.build.toplevel.drvPath "touch $out"
           );
 
