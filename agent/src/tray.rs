@@ -443,16 +443,33 @@ mod platform {
     use super::*;
 
     /// Refuse to be the second tray. The mutex lives as long as the process.
+    ///
+    /// Tried for up to ten seconds: after an update the OLD tray spawns us and
+    /// then leaves, and its leaving first stops the Claude server it
+    /// supervised — a second or two during which its mutex is still held. A
+    /// single check here quit the new tray on that overlap and left the
+    /// machine with no tray until the next login.
     pub fn claim_single_instance() -> bool {
         use windows::core::w;
-        use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+        use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS};
         use windows::Win32::System::Threading::CreateMutexW;
-        // SAFETY: plain Win32 call; the handle is intentionally leaked so the
-        // mutex outlives this function and is released when the process ends.
-        unsafe {
-            let _ = CreateMutexW(None, false, w!("Local\\daedalus-agent-tray"));
-            GetLastError() != ERROR_ALREADY_EXISTS
+        for _ in 0..40 {
+            // SAFETY: plain Win32 calls; on success the handle is intentionally
+            // leaked so the mutex outlives this function and is released when
+            // the process ends. A losing attempt closes its handle so the
+            // winner's mutex is not kept alive by us.
+            unsafe {
+                let h = CreateMutexW(None, false, w!("Local\\daedalus-agent-tray"));
+                if GetLastError() != ERROR_ALREADY_EXISTS {
+                    return true;
+                }
+                if let Ok(h) = h {
+                    let _ = CloseHandle(h);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(250));
         }
+        false
     }
 
     /// Open a URL or a folder through Explorer, which needs no console and
