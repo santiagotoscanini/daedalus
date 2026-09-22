@@ -42,7 +42,7 @@ stacks; Phase 10, finished but for the first tag).
 | 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
 | 9 | Nix: enable surface, literals, state out of the tree | landed 2026-09-20/21; residue (asset literals, missing options) listed in the section |
 | 10 | App module system and a real build | 10a landed; 10b landed 2026-09-22 — the one image (its `runtime` stage is the reference box's dev mode), `sops` inside it, the browser walk; only the first `v*` tag remains, and that is the operator's call |
-| 11 | The engine becomes importable | the finish line reached 2026-09-22: the spine and five leaves are in the catalog, a host made from `templates.config` evaluates with a control plane, `developer.engineOverride`, Update daedalus and the schema fixtures are in; 25 optional stacks remain private, and the reference box still names modules one by one |
+| 11 | The engine becomes importable | the finish line reached 2026-09-22: the spine and seven leaves are in the catalog, a host made from `templates.config` evaluates with a control plane, `developer.engineOverride`, Update daedalus and the schema fixtures are in; 23 optional stacks remain private, and the reference box still names modules one by one |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
 Beside the phases, the **Features** section lists what the product is missing
@@ -547,14 +547,15 @@ re-litigated:
 **What remains of Phase 11.**
 
 1. **The other stacks, one by one**, none of them needed for a box to run:
-   twenty-five in the reference host's configuration (media and its
-   janitors, home automation, the AI cluster, games, VPN tenants, the
-   books pair, a few tools). Five leaves went first (`grocy`,
-   `intel-gpu-exporter`, `metube`, `myspeed`, `verdaccio`, engine
-   `f15f037`, with `checks.full-catalog` — the template host plus every
+   twenty-three in the reference host's configuration (media and its
+   janitors, home automation, the AI cluster, VPN tenants, the
+   books pair, a few tools). Seven leaves went first (`grocy`,
+   `intel-gpu-exporter`, `metube`, `myspeed`, `verdaccio`, then `factorio`
+   and `wg-easy` with their secrets; engine
+   `f15f037` and after, with `checks.full-catalog` — the template host plus every
    leaf — as the proof, since the template itself stays the spine). Next:
-   the leaves with secrets (`recyclarr`, `scraparr`, `janitorr`,
-   `wg-easy`, `factorio`), the books pair (`calibre-web` + `shelfmark`),
+   the media janitors (`recyclarr`, `scraparr`, `janitorr`, `cleanuparr`
+   with the media family), the books pair (`calibre-web` + `shelfmark`),
    the database tenants, the AI cluster as one group, then the netns
    owners and their tenants together (`downloads`, `argus-vpn`, `tv`).
    Until they move, the reference host names the engine's modules one by

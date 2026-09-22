@@ -44,6 +44,7 @@ evaluation with the option's name.
 | `apps` | The apps platform: every `fleet.apps` entry becomes a container, a route, a database, a deploy loop, scheduled tasks — the control plane's own entry included. | `site/apps.json`; per-app operator secrets in `site/vault/apps/`. The switch is declared in `platform/apps-options.nix`. |
 | `app-db` | The shared Postgres cluster (with pgvector), one role and database per tenant, its exporter, a read-only role for the operator's MCP client. | `fleet.images.app-db-exporter` |
 | `cloudflared` | The Cloudflare tunnel — public ingress — and the reconciler that keeps the zone's CNAMEs matching the routes. | `credentialsSopsFile`, `fleet.images.cloudflared` |
+| `factorio` | The headless Factorio server behind OpenFactorioServerManager; the game port is forwarded by the router. | `version` (required), `envSopsFile`, `fleet.images.factorio` |
 | `gatus` | Outside-in uptime and TLS-expiry probing of every published hostname. | `allowedSubjects` (required), `envSopsFile` (optional), `fleet.images.gatus` |
 | `healthchecks` | Dead-man's-switch monitoring of the scheduled jobs. | `envSopsFile`, `fleet.images.healthchecks` |
 | `logging` | Loki and the alloy shipper. Other stacks contribute `fleet.logStacks`, `fleet.logDrops`, `fleet.logFiles`. | `fleet.images.{loki,alloy}` |
@@ -58,9 +59,10 @@ evaluation with the option's name.
 | `stirling-pdf` | A PDF toolbox — the first leaf, and the template for one. | `authGroups`, `fleet.images.stirling-pdf` |
 | `traefik` | The reverse proxy: every published hostname, the forward-auth middlewares, the wildcard certificate. | `envSopsFile`, `fleet.images.traefik` |
 | `verdaccio` | A private npm mirror; the box's builds and the control plane's dev container install through it. | nothing — its image is built on the box |
+| `wg-easy` | A WireGuard server and its admin UI; the tunnel port is forwarded by the router. | `envSopsFile`, `fleet.images.wg-easy` |
 
 The spine — everything above but the leaves (grocy, intel-gpu-exporter,
-metube, myspeed, stirling-pdf, verdaccio) — is switched on in
+metube, myspeed, stirling-pdf, verdaccio, wg-easy) — is switched on in
 `templates/config`, so a host made
 from the template is a box with a control plane to log in to.
 
@@ -191,9 +193,9 @@ deploy. `CONTRIBUTING.md` has the image's own story.
 ## What is NOT done yet
 
 - **The rest of the reference host's stacks.** The spine — everything a
-  box needs to log in to its control plane — is in the catalog, and five
+  box needs to log in to its control plane — is in the catalog, and seven
   leaves beside it. About
-  twenty-five more stacks (media, home automation, the AI cluster, games, VPN
+  twenty-three more stacks (media, home automation, the AI cluster, VPN
   tenants, small tools) are still in the reference operator's private
   configuration; each moves as `.claude/rules/nix-engine.md` §7 describes,
   and none is needed for a box to run.

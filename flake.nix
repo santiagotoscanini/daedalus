@@ -110,6 +110,7 @@
         "apps/apps.nix"
         "apps/declarations.nix"
         "cloudflared/cloudflared.nix"
+        "factorio/factorio.nix"
         "gatus/gatus.nix"
         "grocy/grocy.nix"
         "healthchecks/healthchecks.nix"
@@ -125,6 +126,7 @@
         "stirling-pdf/stirling-pdf.nix"
         "traefik/traefik.nix"
         "verdaccio/verdaccio.nix"
+        "wg-easy/wg-easy.nix"
       ];
     in
     {
