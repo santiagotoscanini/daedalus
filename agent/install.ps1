@@ -10,9 +10,11 @@
   administrator PowerShell:
 
     Set-ExecutionPolicy -Scope Process Bypass -Force
-    irm https://github.com/santiagotoscanini/daedalus/releases/latest/download/install.ps1 | iex
+    irm https://daedalus.toscanini.me/install.ps1 | iex
 
-  (or download this file and run it). Re-running on an installed machine
+  (the site serves this file from agent/install.ps1 on main, so the line never
+  names a version; the script finds the newest agent-v* release itself).
+  Re-running on an installed machine
   replaces the binary and keeps config.toml. `daedalus-agent uninstall`
   removes the service.
 

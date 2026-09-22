@@ -29,7 +29,7 @@ From an administrator PowerShell on the machine:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-irm https://github.com/santiagotoscanini/daedalus/releases/download/agent-v0.2.0/install.ps1 | iex
+irm https://daedalus.toscanini.me/install.ps1 | iex
 ```
 
 The script downloads the release, places both binaries under

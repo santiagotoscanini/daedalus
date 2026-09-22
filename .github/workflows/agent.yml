@@ -157,5 +157,5 @@ jobs:
           set -euo pipefail
           gh release create "$REF_NAME" \
             --title "daedalus-agent ${REF_NAME#agent-v}" \
-            --notes "Windows x86_64: the service and the tray. Installed agents pick this up on their next check; new machines: run install.ps1 from an administrator PowerShell." \
+            --notes "Windows x86_64: the service and the tray. Installed agents pick this up on their next check; new machines: from an administrator PowerShell, `irm https://daedalus.toscanini.me/install.ps1 | iex`." \
             "dist/$ASSET" "dist/$ASSET.sig" "dist/$TRAY_ASSET" "dist/$TRAY_ASSET.sig" dist/install.ps1 dist/SHA256SUMS

@@ -40,3 +40,5 @@ website/tsconfig.tsbuildinfo
 
 # pnpm content-addressable store, when pnpm falls back to a repo-local one.
 .pnpm-store/
+# Copied in from agent/install.ps1 by the Pages workflow at build time.
+website/public/install.ps1

@@ -14,11 +14,13 @@ on:
   pull_request:
     paths:
       - "website/**"
+      - "agent/install.ps1"
       - ".github/workflows/website.yml"
   push:
     branches: [main]
     paths:
       - "website/**"
+      - "agent/install.ps1"
       - ".github/workflows/website.yml"
   workflow_dispatch:
 
@@ -62,6 +64,14 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # The agent's installer is served from the site at a fixed address —
+      # https://daedalus.toscanini.me/install.ps1 — so the install line never
+      # names a version: the script itself finds the newest agent-v* release.
+      # Copied at build time from its one source in agent/, never committed
+      # under website/ (gitignored there), so the two cannot drift.
+      - name: Serve the agent installer from the site
+        run: cp ../agent/install.ps1 public/install.ps1
+
       - name: Build (static prerender)
         run: pnpm build
 
@@ -72,6 +82,7 @@ jobs:
           # just an empty shell. Update alongside any hero rewrite.
           grep -q "Build yourself" dist/client/index.html
           grep -q "a cloud." dist/client/index.html
+          test -f dist/client/install.ps1
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
