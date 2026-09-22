@@ -5,7 +5,7 @@ import { DASH } from '../../../lib/format'
 
 /* The board vocabulary is one module now (components/tokens.ts): it is the
    same handful of strings on every category page, and was restated per file
-   only while styles.css was being retired. These eight tabs call four of them
+   only while styles.css was being retired. These tabs call four of them
    by their own longer names, which is why this is an aliased re-export rather
    than an import in each tab. */
 /* The row vocabulary moved out to tokens.ts the day the Claude page needed

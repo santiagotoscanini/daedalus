@@ -7,9 +7,9 @@
 //
 // ── where each tab's numbers come from ────────────────────────────────────
 //
-// Host, Memory and Database are pure prometheus: node_exporter, the cgroup
-// reader in host-liveness-exporter, and postgres_exporter respectively. There
-// is nothing to publish for them because they are already scraped every 60s.
+// Host and Memory are pure prometheus: node_exporter and the cgroup reader in
+// host-liveness-exporter. There is nothing to publish for them because they
+// are already scraped every 60s.
 //
 // Disks, Pools and Backups are the opposite: SMART, self-test history, scrub
 // state, `usedbysnapshots` and replication lag have NO prometheus collector on
@@ -28,10 +28,8 @@ import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
 import { manifest } from '../manifest'
 import { type BackupsData, loadBackups } from './backups'
 import { type BuildData, loadBuild } from './build'
-import { type DatabaseData, loadDatabase } from './database'
 import { type DisksData, loadDisks } from './disks'
 import { type HostData, loadHost } from './host'
-import { loadMachines, type MachinesData } from './machines'
 import { loadMemory, type MemoryData } from './memory'
 import { loadPools, type PoolsData } from './pools'
 import { loadUpdates, type UpdatesData } from './updates'
@@ -42,26 +40,21 @@ export type Tabs = {
   disks: DisksData
   pools: PoolsData
   build: BuildData
-  database: DatabaseData
   updates: UpdatesData
   backups: BackupsData
-  machines: MachinesData
 }
 export type SystemData = TabPayload<typeof manifest, Tabs>
 
-// Almost no tab here reads the env: every number is prometheus's or the host
-// snapshot's. Machines is the exception — it asks pi-hole for the LAN and
-// needs the box's own address to leave itself out.
+// No tab here reads the env: every number is prometheus's or the host
+// snapshot's.
 export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   host: loadHost,
   memory: loadMemory,
   disks: loadDisks,
   pools: loadPools,
   build: loadBuild,
-  database: loadDatabase,
   updates: loadUpdates,
   backups: loadBackups,
-  machines: loadMachines,
 })
 
 export type { HostFacts } from '../../../lib/dashboard/host-facts'

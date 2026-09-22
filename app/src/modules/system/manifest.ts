@@ -10,23 +10,24 @@ export const manifest = {
   // No dots anywhere on this row. Every other category's tabs are services,
   // and gatus probes services; these are layers of one machine, and the page
   // you are reading is running on it. A row of permanently grey circles
-  // would be eight claims that nothing is being checked, which is false —
+  // would be seven claims that nothing is being checked, which is false —
   // the checking is on the page.
   //
   // The rule separates the state of the machine NOW from what outlives it.
   // Everything left of it is gone the moment the box is; Backups is the only
   // tab here answering a question about tomorrow.
   //
-  // `head: false` on all but one, and it is the same argument as the dots:
-  // these are layers of a machine, and a header saying "version 6.12.93,
-  // current, Open ↗" is a claim about a service that is not there. Database
-  // is the exception and a real one — a tab whose subject is postgres, which
-  // has a version, a release cycle and security fixes in its minors like any
-  // other service here.
-  //
-  // `nix` on Database alone, for the same reason it alone has a head: it is
-  // the one tab whose subject is a stack the box can switch off. The rest
-  // are the machine, and the machine is always shown.
+  // `head: false` throughout, and it is the same argument as the dots: these
+  // are layers of a machine, and a header saying "version 6.12.93, current,
+  // Open ↗" is a claim about a service that is not there. No `nix` either:
+  // every tab here is the machine, and the machine is always shown. The one
+  // tab that had both — the shared postgres cluster, a service with a version
+  // and a release cycle that the box can switch off — is the Database module
+  // now, one rail entry down; and the other machines on the network are
+  // Settings › Machines, beside the policy the box sends them.
+  // A machine picker above the tabs: a node's System page is one view of
+  // its telemetry (components/machine-system.tsx) rather than these tabs.
+  machinePicker: true,
   tabs: [
     { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4], head: false },
     { id: 'memory', label: 'Memory', boardSpans: [8, 4, 4, 8], head: false },
@@ -43,7 +44,6 @@ export const manifest = {
     // case with a screwdriver. Four thirds and a wide row — the components
     // are peers, so none of them gets to be the big panel.
     { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 12], head: false },
-    { id: 'database', label: 'Database', boardSpans: [8, 4, 12], nix: 'app-db' },
     // The one tab in this row whose subject is the fleet rather than a layer
     // of the machine — every digest-pinned container and whether it is
     // behind. It sits here because it is the box's own maintenance state,
@@ -68,10 +68,5 @@ export const manifest = {
       head: false,
       dividerBefore: true,
     },
-    // Past the rule for the same reason as Backups: not this machine. The
-    // other computers on the network that run the agent — found by asking
-    // every device pi-hole has seen for the page the agent answers. One
-    // half-width board per machine, then the how-to-join board.
-    { id: 'machines', label: 'Machines', boardSpans: [6, 6, 12], head: false },
   ],
 } as const satisfies ModuleManifest

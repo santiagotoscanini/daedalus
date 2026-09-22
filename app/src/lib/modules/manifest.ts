@@ -67,6 +67,14 @@ export type ModuleManifest = {
   /** Position in the rail. Modules sort by this, then by id. */
   order: number
   tabs: readonly TabSpec[]
+  /**
+   * The page has a machine picker above its tabs: this box, then every
+   * approved node. Picking a node replaces the tabs with that machine's own
+   * view (System's is components/machine-system.tsx); the box's tabs are
+   * what the module declares. Only a page whose subject exists on every
+   * machine sets it.
+   */
+  machinePicker?: boolean
 }
 
 /** What a category page needs to draw its frame — a manifest minus its rail position. */

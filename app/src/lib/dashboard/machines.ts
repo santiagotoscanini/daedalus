@@ -1,10 +1,13 @@
-import type { Ctx } from '../../../core/ctx'
-import { AGENT_PORT, type AgentStatus, agentStatus } from '../../../lib/agent/status'
-import { getJsonResult } from '../../../lib/http'
-import { listNodes, type NodeRow } from '../../../lib/repo/nodes'
-import { type Device, lanDevices } from '../../network/data/dhcp'
+import type { Ctx } from '../../core/ctx'
+import { type Device, lanDevices } from '../../modules/network/data/dhcp'
+import { AGENT_PORT, type AgentStatus, agentStatus } from '../agent/status'
+import { getJsonResult } from '../http'
+import { listNodes, type NodeRow } from '../repo/nodes'
 
-// The other machines: what announced itself, and what was found.
+// The other machines: what announced itself, and what was found. The reader
+// behind Settings › Machines — here rather than in a module's data tree
+// because Settings is a route, not a dashboard module, and it reaches the
+// box the way the module loaders do, through a Ctx.
 //
 // Two sources, one list. A machine that said hello (routes/api.nodes.hello)
 // has a row in the nodes table keyed on its signing key, with a state the
@@ -12,7 +15,7 @@ import { type Device, lanDevices } from '../../network/data/dhcp'
 // the agent's status page on TCP 7787 is found by asking — pi-hole's
 // network table knows everything on the LAN that ever asked for a name,
 // and each address seen in the last week is probed in parallel with a
-// short timeout. The two are joined on the address: a node's board shows
+// short timeout. The two are joined on the address: a node's card shows
 // the live page when it answers, and a page with no node behind it is a
 // machine whose agent has not found the box (an older agent, or one on a
 // LAN whose DNS is not the box's).

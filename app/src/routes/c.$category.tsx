@@ -2,12 +2,16 @@ import { createFileRoute, notFound } from '@tanstack/react-router'
 
 import { StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
+import { MachinePicker } from '../components/machine-picker'
+import { MachineSystemView } from '../components/machine-system'
 import { ModuleBoards } from '../components/modules/boards'
 import { PageHead } from '../components/page'
 import { BoardsSkeleton, ServiceHeadSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
+import { EMPTY } from '../components/tokens'
 import { isDotted, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
 import { moduleById } from '../lib/modules/registry'
+import { fetchMachineNodesFn, fetchNodeSystemFn } from '../server/machines'
 import { fetchModuleBoards } from '../server/modules'
 import { fetchTabStatus, type TabStatus } from '../server/tab-status'
 
@@ -32,24 +36,40 @@ import { fetchTabStatus, type TabStatus } from '../server/tab-status'
 // flash — the placeholders appear only when something is actually being
 // fetched.
 
+const NODE_ID = /^[0-9a-f]{16}$/
+
 export const Route = createFileRoute('/c/$category')({
   // Same reasoning as the app detail page: the sub-tab is in the URL so it
-  // survives a refresh, can be linked, and renders on the server.
-  validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
+  // survives a refresh, can be linked, and renders on the server. So is the
+  // picked machine, on the one module that has a picker.
+  validateSearch: (search: Record<string, unknown>): { tab?: string; machine?: string } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
+    machine:
+      typeof search.machine === 'string' && NODE_ID.test(search.machine)
+        ? search.machine
+        : undefined,
   }),
-  loaderDeps: ({ search }) => ({ tab: search.tab }),
-  loader: ({ params, deps }) => {
+  loaderDeps: ({ search }) => ({ tab: search.tab, machine: search.machine }),
+  loader: async ({ params, deps }) => {
     const spec = moduleById(params.category)
     // An unknown module is a 404, not an empty page: the rail cannot produce
     // one, so anything else got here by hand-editing the URL.
     if (spec === undefined) throw notFound()
 
     const tab = resolveTabOf(spec, deps.tab)
+    const picker = spec.machinePicker === true
+    // A node only makes sense on a module with a picker; elsewhere the
+    // search param is ignored rather than honoured.
+    const machine = picker ? (deps.machine ?? null) : null
 
     return {
       spec,
       tab,
+      // The node list is one table read and the picker is part of the frame,
+      // so it is awaited; a node's own page streams in like the boards.
+      nodes: picker ? await fetchMachineNodesFn() : [],
+      machine,
+      node: machine === null ? null : fetchNodeSystemFn({ data: { id: machine } }),
       boards: fetchModuleBoards({ data: { module: spec.id, tab } }),
       // Only where a tab actually wears a dot. All three ways of declaring one
       // count; testing `probe` alone would skip the request for a module whose
@@ -62,45 +82,76 @@ export const Route = createFileRoute('/c/$category')({
 })
 
 function CategoryPage() {
-  const { spec, tab, boards, tabStatus } = Route.useLoaderData()
+  const { spec, tab, boards, tabStatus, nodes, machine, node } = Route.useLoaderData()
   const { category } = Route.useParams()
   // Switching module or tab clears a caught failure; staying put does not,
   // so a section that failed stays failed until its loader is re-run.
-  const sectionKey = `${category}/${tab}`
+  const sectionKey = `${category}/${tab}/${machine ?? ''}`
 
   return (
     <>
-      <PageHead title={spec.label}>{spec.lede}</PageHead>
+      <PageHead title={spec.label}>
+        {node === null
+          ? spec.lede
+          : 'Another machine on the network, as its agent reports it every fifteen seconds: what it is, what firmware and system it runs, and how hard it is working right now.'}
+      </PageHead>
 
-      {spec.tabs.length > 0 &&
-        (tabStatus === null ? (
-          <TabNav spec={spec} category={category} tab={tab} status={null} />
-        ) : (
-          // The tabs are drawn immediately either way — navigation is the one
-          // thing on this page that must never wait. The dot arrives in its
-          // reserved slot, grey until it is known, so nothing moves.
-          //
-          // Guarded, like the boards below: this is the single render path for
-          // every module and every tab, and it fans out over a dozen
-          // upstreams. An unguarded rejection here throws past the Suspense
-          // fallback and blanks the whole dashboard — one dead upstream must
-          // cost its own row of dots, not the page.
+      {spec.machinePicker === true && (
+        <MachinePicker nodes={nodes} active={machine} page="system" />
+      )}
+
+      {node !== null ? (
+        <GuardedAwait
+          resetKey={sectionKey}
+          promise={node}
+          fallback={
+            <>
+              <ServiceHeadSkeleton />
+              <BoardsSkeleton spans={[6, 6, 6, 6, 12, 6, 6, 6]} />
+            </>
+          }
+        >
+          {(d) =>
+            d === null ? (
+              <p className={EMPTY}>No machine with that id. It may have been forgotten.</p>
+            ) : (
+              <MachineSystemView d={d} />
+            )
+          }
+        </GuardedAwait>
+      ) : (
+        <>
+          {spec.tabs.length > 0 &&
+            (tabStatus === null ? (
+              <TabNav spec={spec} category={category} tab={tab} status={null} />
+            ) : (
+              // The tabs are drawn immediately either way — navigation is the one
+              // thing on this page that must never wait. The dot arrives in its
+              // reserved slot, grey until it is known, so nothing moves.
+              //
+              // Guarded, like the boards below: this is the single render path for
+              // every module and every tab, and it fans out over a dozen
+              // upstreams. An unguarded rejection here throws past the Suspense
+              // fallback and blanks the whole dashboard — one dead upstream must
+              // cost its own row of dots, not the page.
+              <GuardedAwait
+                resetKey={sectionKey}
+                promise={tabStatus}
+                fallback={<TabNav spec={spec} category={category} tab={tab} status={null} />}
+              >
+                {(status) => <TabNav spec={spec} category={category} tab={tab} status={status} />}
+              </GuardedAwait>
+            ))}
+
           <GuardedAwait
             resetKey={sectionKey}
-            promise={tabStatus}
-            fallback={<TabNav spec={spec} category={category} tab={tab} status={null} />}
+            promise={boards}
+            fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
           >
-            {(status) => <TabNav spec={spec} category={category} tab={tab} status={status} />}
+            {(payload) => <ModuleBoards payload={payload} />}
           </GuardedAwait>
-        ))}
-
-      <GuardedAwait
-        resetKey={sectionKey}
-        promise={boards}
-        fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
-      >
-        {(payload) => <ModuleBoards payload={payload} />}
-      </GuardedAwait>
+        </>
+      )}
     </>
   )
 }

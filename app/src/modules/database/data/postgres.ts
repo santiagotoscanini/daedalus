@@ -2,7 +2,7 @@ import { promScalar, promScalars, promVector } from '../../../host/prom'
 import type { VersionGap } from '../../../lib/dashboard/github'
 import { postgresGap } from '../../../lib/dashboard/postgres'
 
-/* ── Database ─────────────────────────────────────────────────────────── */
+/* ── Postgres ─────────────────────────────────────────────────────────── */
 
 /**
  * The shared Postgres cluster, which every app on this box is a tenant of.
@@ -13,7 +13,7 @@ import { postgresGap } from '../../../lib/dashboard/postgres'
  * whether it is serving from cache, whether anything is stuck in a
  * transaction, whether a tenant is rolling back more than it commits.
  */
-export type DatabaseData = {
+export type PostgresData = {
   databases: {
     name: string
     sizeBytes: number
@@ -41,12 +41,12 @@ export type DatabaseData = {
    * The mirror at postgres/postgres carries tags and publishes no releases, so
    * the usual `versionGap` would report the one service on this box whose
    * minors are almost purely security fixes as having no notes at all. See
-   * ../postgres.ts.
+   * lib/dashboard/postgres.ts.
    */
   gap: VersionGap
 }
 
-export async function loadDatabase(): Promise<DatabaseData> {
+export async function loadPostgres(): Promise<PostgresData> {
   const [sizes, conns, hits, reads, commits, rollbacks, deadlocks, totals, up] = await Promise.all([
     promVector('pg_database_size_bytes'),
     promVector('pg_stat_database_numbackends'),

@@ -25,6 +25,9 @@ export type NavIconName =
   | 'gaming'
   | 'network'
   | 'system'
+  // Also an app's Database section: the same cylinder, because it is the
+  // same cluster seen from the tenant's side.
+  | 'database'
   | 'monitoring'
   | 'claude'
   | 'menu'
@@ -34,7 +37,6 @@ export type NavIconName =
   // the categories: the icon name IS the tab id, nothing to keep in sync.
   | 'overview'
   | 'deployments'
-  | 'database'
   | 'vpn'
   | 'access'
   | 'settings'

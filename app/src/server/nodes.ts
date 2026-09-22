@@ -2,10 +2,11 @@ import { createServerFn } from '@tanstack/react-start'
 import { actorLabel } from '../core/auth'
 import type { NodePolicy } from '../host/schema'
 
-// Server functions behind System › Machines' decisions about a node:
-// approve, revoke, forget. Each is an admin action under the gate, and
-// each records who made it. Value imports are dynamic, like every other
-// server module here — the repository reaches the database.
+// Server functions behind Settings › Machines: the page's one read, and
+// its decisions about a node — approve, revoke, forget, the policy. Each
+// write is an admin action under the gate, and each records who made it.
+// Value imports are dynamic, like every other server module here — the
+// repository reaches the database.
 
 const NODE_ID = /^[0-9a-f]{16}$/
 
@@ -60,10 +61,15 @@ export const requestClaudeRestartFn = createServerFn({ method: 'POST' })
     return { ok: await requestClaudeRestart(data.id) }
   })
 
-/** Settings › Machines' rows: every node, with its policy. Read-only, so no gate beyond the page's. */
-export const fetchNodesFn = createServerFn().handler(async () => {
-  const { listNodes } = await import('../lib/repo/nodes')
-  return listNodes()
+/**
+ * Settings › Machines' cards: every node with its policy, joined to what the
+ * LAN answered just now. Read-only, so no gate beyond the page's. Built on a
+ * Ctx the way the module boards are — the reader asks pi-hole for the LAN.
+ */
+export const fetchMachinesFn = createServerFn().handler(async () => {
+  const { makeCtx } = await import('../core/ctx')
+  const { loadMachines } = await import('../lib/dashboard/machines')
+  return loadMachines(await makeCtx())
 })
 
 const NAME_MAX = 40

@@ -26,7 +26,7 @@ import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
 import { TabBar } from '../components/tabs'
 import type { GithubAppStatus, GithubCallbackNotice } from '../core/settings/types'
-import { fetchNodesFn } from '../server/nodes'
+import { fetchMachinesFn } from '../server/nodes'
 import { fetchApplyStatus } from '../server/registry'
 import {
   fetchAuthorization,
@@ -60,7 +60,10 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // preference after them — belongs in Postgres, where changing it is an
 // UPDATE and nothing rebuilds. Appearance, Projects and Machines are
 // deliberately the second kind, which is why they save on click with no
-// Apply bar.
+// Apply bar. Machines is also where the other machines are SHOWN — what
+// each one is, whether it answers, whether the box trusts it — because the
+// decision about a machine and the policy sent to it are one story, and
+// splitting it across a dashboard tab and a settings tab meant reading both.
 //
 // Two things that look like settings are not on this page, on purpose. The
 // person — the Pocket ID account — is /profile, reached from the account
@@ -71,8 +74,8 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 //
 // The tabs are the eight subjects a box has, in the order a first visit
 // reads them: what it is called, how it is reached, what it talks to, where
-// its configuration lives, what else it lists, what it asks of the other
-// machines, how it looks, and how it is driven.
+// its configuration lives, what else it lists, which other machines it
+// trusts and what it asks of them, how it looks, and how it is driven.
 
 /** A tab's label with its icon: drawn quieter than the word, which carries the meaning. */
 function TabLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
@@ -173,8 +176,8 @@ export const Route = createFileRoute('/settings')({
       deps.tab === 'developer' ? fetchMcpTokens() : Promise.resolve([]),
       // The decision for this very request: two headers and one row.
       deps.tab === 'developer' ? fetchAuthorization() : Promise.resolve(null),
-      // The node rows with their policies: one table read, for the tab that edits them.
-      deps.tab === 'machines' ? fetchNodesFn() : Promise.resolve([]),
+      // The machines: one table read plus a LAN probe, for the tab that shows them.
+      deps.tab === 'machines' ? fetchMachinesFn() : Promise.resolve(null),
     ])
     return {
       theme,
@@ -374,7 +377,7 @@ function SettingsPage() {
             </GuardedAwait>
           ))}
         {tab === 'projects' && <ExternalApps rows={externalApps} />}
-        {tab === 'machines' && <Machines rows={machines} />}
+        {tab === 'machines' && machines !== null && <Machines d={machines} />}
         {tab === 'appearance' && (
           <Appearance
             value={choice}

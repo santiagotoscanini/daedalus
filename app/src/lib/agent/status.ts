@@ -326,3 +326,261 @@ export function nodeClaudeReport(body: unknown): NodeClaude | null {
   if (body === null) return null
   return nodeClaude(decode(claude, body))
 }
+
+// ── telemetry (agent 0.7.0+) ────────────────────────────────────────────────
+//
+// What the machine is and how it is doing, sampled by the agent every 15 s
+// (agent/src/telemetry.rs). Every field the agent could not read is null or
+// an empty list, and `errors` says why, so a page draws a reason rather than
+// a dash. Decoded loosely on purpose: a field an older agent lacks is null.
+
+export type NodeTelemetry = {
+  sampledAt: string
+  machine: {
+    manufacturer: string | null
+    model: string | null
+    chip: string | null
+    biosVendor: string | null
+    biosVersion: string | null
+    biosDate: string | null
+    boardManufacturer: string | null
+    boardProduct: string | null
+  }
+  os: { kernel: string | null; build: string | null; installedAt: string | null }
+  cpu: {
+    model: string | null
+    cores: number | null
+    threads: number | null
+    frequencyMhz: number | null
+    usagePct: number | null
+    load: [number, number, number] | null
+    temperatureC: number | null
+  }
+  memory: {
+    totalBytes: number | null
+    usedBytes: number | null
+    availableBytes: number | null
+    swapTotalBytes: number | null
+    swapUsedBytes: number | null
+  }
+  disks: {
+    mount: string
+    name: string | null
+    fs: string | null
+    totalBytes: number | null
+    usedBytes: number | null
+    freeBytes: number | null
+    kind: string | null
+  }[]
+  gpus: {
+    name: string
+    vendor: string | null
+    driver: string | null
+    vramTotalBytes: number | null
+    vramUsedBytes: number | null
+    usagePct: number | null
+    temperatureC: number | null
+    powerW: number | null
+  }[]
+  temperatures: { label: string; celsius: number }[]
+  network: {
+    interface: string
+    rxBytes: number | null
+    txBytes: number | null
+    rxBps: number | null
+    txBps: number | null
+  }[]
+  battery: { percent: number | null; charging: boolean | null; healthPct: number | null } | null
+  errors: string[]
+}
+
+const nbool = optional(nullable(bool), null)
+
+const telemetryShape = obj({
+  sampled_at: optional(str, ''),
+  machine: optional(
+    obj({
+      manufacturer: nstr,
+      model: nstr,
+      chip: nstr,
+      bios_vendor: nstr,
+      bios_version: nstr,
+      bios_date: nstr,
+      board_manufacturer: nstr,
+      board_product: nstr,
+    }),
+    {
+      manufacturer: null,
+      model: null,
+      chip: null,
+      bios_vendor: null,
+      bios_version: null,
+      bios_date: null,
+      board_manufacturer: null,
+      board_product: null,
+    },
+  ),
+  os: optional(obj({ kernel: nstr, build: nstr, installed_at: nstr }), {
+    kernel: null,
+    build: null,
+    installed_at: null,
+  }),
+  cpu: optional(
+    obj({
+      model: nstr,
+      cores: nint,
+      threads: nint,
+      frequency_mhz: nnum,
+      usage_pct: nnum,
+      load: optional(nullable(arrayOf(num)), null),
+      temperature_c: nnum,
+    }),
+    {
+      model: null,
+      cores: null,
+      threads: null,
+      frequency_mhz: null,
+      usage_pct: null,
+      load: null,
+      temperature_c: null,
+    },
+  ),
+  memory: optional(
+    obj({
+      total_bytes: nnum,
+      used_bytes: nnum,
+      available_bytes: nnum,
+      swap_total_bytes: nnum,
+      swap_used_bytes: nnum,
+    }),
+    {
+      total_bytes: null,
+      used_bytes: null,
+      available_bytes: null,
+      swap_total_bytes: null,
+      swap_used_bytes: null,
+    },
+  ),
+  disks: optional(
+    arrayOf(
+      obj({
+        mount: optional(str, ''),
+        name: nstr,
+        fs: nstr,
+        total_bytes: nnum,
+        used_bytes: nnum,
+        free_bytes: nnum,
+        kind: nstr,
+      }),
+    ),
+    [],
+  ),
+  gpus: optional(
+    arrayOf(
+      obj({
+        name: optional(str, ''),
+        vendor: nstr,
+        driver: nstr,
+        vram_total_bytes: nnum,
+        vram_used_bytes: nnum,
+        usage_pct: nnum,
+        temperature_c: nnum,
+        power_w: nnum,
+      }),
+    ),
+    [],
+  ),
+  temperatures: optional(arrayOf(obj({ label: optional(str, ''), celsius: num })), []),
+  network: optional(
+    arrayOf(
+      obj({
+        interface: optional(str, ''),
+        rx_bytes: nnum,
+        tx_bytes: nnum,
+        rx_bps: nnum,
+        tx_bps: nnum,
+      }),
+    ),
+    [],
+  ),
+  battery: optional(nullable(obj({ percent: nnum, charging: nbool, health_pct: nnum })), null),
+  errors: optional(arrayOf(str), []),
+})
+
+function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
+  const load = t.cpu.load
+  return {
+    sampledAt: t.sampled_at,
+    machine: {
+      manufacturer: t.machine.manufacturer,
+      model: t.machine.model,
+      chip: t.machine.chip,
+      biosVendor: t.machine.bios_vendor,
+      biosVersion: t.machine.bios_version,
+      biosDate: t.machine.bios_date,
+      boardManufacturer: t.machine.board_manufacturer,
+      boardProduct: t.machine.board_product,
+    },
+    os: { kernel: t.os.kernel, build: t.os.build, installedAt: t.os.installed_at },
+    cpu: {
+      model: t.cpu.model,
+      cores: t.cpu.cores,
+      threads: t.cpu.threads,
+      frequencyMhz: t.cpu.frequency_mhz,
+      usagePct: t.cpu.usage_pct,
+      load: load !== null && load.length === 3 ? [load[0] ?? 0, load[1] ?? 0, load[2] ?? 0] : null,
+      temperatureC: t.cpu.temperature_c,
+    },
+    memory: {
+      totalBytes: t.memory.total_bytes,
+      usedBytes: t.memory.used_bytes,
+      availableBytes: t.memory.available_bytes,
+      swapTotalBytes: t.memory.swap_total_bytes,
+      swapUsedBytes: t.memory.swap_used_bytes,
+    },
+    disks: t.disks.map((d) => ({
+      mount: d.mount,
+      name: d.name,
+      fs: d.fs,
+      totalBytes: d.total_bytes,
+      usedBytes: d.used_bytes,
+      freeBytes: d.free_bytes,
+      kind: d.kind,
+    })),
+    gpus: t.gpus.map((g) => ({
+      name: g.name,
+      vendor: g.vendor,
+      driver: g.driver,
+      vramTotalBytes: g.vram_total_bytes,
+      vramUsedBytes: g.vram_used_bytes,
+      usagePct: g.usage_pct,
+      temperatureC: g.temperature_c,
+      powerW: g.power_w,
+    })),
+    temperatures: t.temperatures.map((x) => ({ label: x.label, celsius: x.celsius })),
+    network: t.network.map((n) => ({
+      interface: n.interface,
+      rxBytes: n.rx_bytes,
+      txBytes: n.tx_bytes,
+      rxBps: n.rx_bps,
+      txBps: n.tx_bps,
+    })),
+    battery:
+      t.battery === null
+        ? null
+        : {
+            percent: t.battery.percent,
+            charging: t.battery.charging,
+            healthPct: t.battery.health_pct,
+          },
+    errors: t.errors,
+  }
+}
+
+/** The telemetry block of a status document, when the agent carries one (0.7.0+). */
+export function nodeTelemetry(statusBody: unknown): NodeTelemetry | null {
+  if (typeof statusBody !== 'object' || statusBody === null) return null
+  const t = (statusBody as { telemetry?: unknown }).telemetry
+  if (typeof t !== 'object' || t === null) return null
+  return telemetryOf(decode(telemetryShape, t))
+}

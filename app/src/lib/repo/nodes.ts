@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { desc, eq } from 'drizzle-orm'
 import type { HelloVerdict } from '../../host/agent-hello'
 import { db } from '../../host/db'
+import { nodeTargetsMissing, writeNodeTargets } from '../../host/node-targets'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
 
 // The nodes table: what a verified hello writes, what the Machines tab and
@@ -144,6 +145,11 @@ export type HelloAnswer = {
 export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promise<HelloAnswer> {
   const p = v.payload
   const now = new Date()
+  const [before] = await db
+    .select({ lanIp: nodes.lanIp })
+    .from(nodes)
+    .where(eq(nodes.id, v.nodeId))
+    .limit(1)
   const [saved] = await db
     .insert(nodes)
     .values({
@@ -184,6 +190,15 @@ export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promi
   const state = saved?.state ?? 'pending'
   const checkUpdate = saved?.checkUpdate === true
   const restartClaude = saved?.restartClaude === true
+  // A machine whose address moved since the last hello moves its scrape
+  // target too. Compared on the row before this write; a first hello is
+  // pending and publishes nothing.
+  if (
+    state === 'approved' &&
+    ((before?.lanIp ?? null) !== (p.lanIp ?? null) || nodeTargetsMissing())
+  ) {
+    await publishNodeTargets()
+  }
   // An approved row without a token (approved before tokens existed) gets
   // one now, so the box can read it from this hello on.
   let token = saved?.token ?? null
@@ -238,6 +253,7 @@ export async function setNodePolicy(id: string, policy: NodePolicy): Promise<boo
     .set({ policy })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
+  await publishNodeTargets()
   return updated.length > 0
 }
 
@@ -253,6 +269,7 @@ export async function approveNode(id: string, by: string): Promise<boolean> {
     })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
+  await publishNodeTargets()
   return updated.length > 0
 }
 
@@ -262,12 +279,14 @@ export async function revokeNode(id: string): Promise<boolean> {
     .set({ state: 'revoked', revokedAt: new Date(), token: null })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
+  await publishNodeTargets()
   return updated.length > 0
 }
 
 /** Forget a row entirely — for a machine that is gone, or a key that was a mistake. */
 export async function forgetNode(id: string): Promise<boolean> {
   const gone = await db.delete(nodes).where(eq(nodes.id, id)).returning({ id: nodes.id })
+  await publishNodeTargets()
   return gone.length > 0
 }
 
@@ -288,4 +307,29 @@ export async function nodeToken(id: string): Promise<string | null> {
     .where(eq(nodes.id, id))
     .limit(1)
   return n?.state === 'approved' ? (n.token ?? null) : null
+}
+
+/**
+ * Publish the approved nodes as scrape targets (host/node-targets.ts).
+ * Best effort: a failure to write the file is logged and never fails the
+ * decision that triggered it — the targets are a consequence, not the act.
+ */
+export async function publishNodeTargets(): Promise<void> {
+  try {
+    const all = await db.select().from(nodes)
+    await writeNodeTargets(
+      all
+        .filter((n) => n.state === 'approved' && n.lanIp !== null)
+        .map((n) => ({
+          id: n.id,
+          hostname: n.hostname,
+          name: (n.policy ?? {}).displayName?.trim() || n.hostname,
+          os: n.os,
+          lanIp: n.lanIp ?? '',
+          statusPort: n.statusPort ?? 7787,
+        })),
+    )
+  } catch (e) {
+    console.warn(`node targets not written: ${e instanceof Error ? e.message : String(e)}`)
+  }
 }

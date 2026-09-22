@@ -3,28 +3,21 @@ import type { Tabs } from '../data'
 import { manifest } from '../manifest'
 import { BackupsView } from './backups'
 import { BuildView } from './build'
-import { DatabaseView } from './database'
 import { DisksView } from './disks'
 import { HostView } from './host'
-import { MachinesView } from './machines'
 import { MemoryView } from './memory'
 import { PoolsView } from './pools'
 import { UpdatesView } from './updates'
 
 // The System pages — a tab per layer of the machine.
 //
-// No ServiceHead on five of the six, unlike Media and Home: there is no
-// service to name, no version to compare and no UI to open. The subject is the
-// box, so each tab opens straight into the panel that answers its question.
-// That is declared per tab in the manifest (`head: false`) rather than merely
+// No ServiceHead on any of them, unlike Media and Home: there is no service
+// to name, no version to compare and no UI to open. The subject is the box,
+// so each tab opens straight into the panel that answers its question. That
+// is declared per tab in the manifest (`head: false`) rather than merely
 // omitted here, because the SKELETON has to know it before the data exists —
-// see the note there.
-//
-// Database is the exception, and a real one rather than an inconsistency: its
-// subject is postgres, which has a version, a release cycle, and minors that
-// are almost entirely security and data-corruption fixes. Treating the one
-// process every app on this box depends on as a "layer of the machine" is what
-// kept the cluster's own upgrade state off this dashboard entirely.
+// see the note there. The shared postgres cluster, which was the exception,
+// is the Database module.
 //
 // Half the tabs read prometheus and half read a snapshot the host publishes,
 // and the pages say which where it matters — a SMART temperature is at most
@@ -37,8 +30,6 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
   disks: ({ data }) => <DisksView d={data} />,
   pools: ({ data }) => <PoolsView d={data} />,
   build: ({ data }) => <BuildView d={data} />,
-  database: ({ data }) => <DatabaseView d={data} />,
   updates: ({ data }) => <UpdatesView d={data} />,
   backups: ({ data }) => <BackupsView d={data} />,
-  machines: ({ data }) => <MachinesView d={data} />,
 })

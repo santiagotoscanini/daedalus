@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { ClaudeView, ShotterView } from '../components/claude'
-import { MachinePicker, NodeClaudeView } from '../components/claude-node'
+import { NodeClaudeView } from '../components/claude-node'
 import { GuardedAwait } from '../components/error'
+import { MachinePicker } from '../components/machine-picker'
 import { PageHead } from '../components/page'
 import { BoardsSkeleton, ServiceHeadSkeleton, StripSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
@@ -91,7 +92,7 @@ function ClaudePage() {
     <>
       <PageHead title="Claude">{LEDE[active]}</PageHead>
 
-      <MachinePicker nodes={nodes} active={machine ?? null} />
+      <MachinePicker nodes={nodes} active={machine ?? null} page="claude" />
 
       {node === null && (
         <TabBar

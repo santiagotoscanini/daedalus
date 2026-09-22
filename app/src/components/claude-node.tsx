@@ -2,7 +2,6 @@ import { Link, useRouter } from '@tanstack/react-router'
 import { useState, useTransition } from 'react'
 
 import { agentHasClaude, type NodeClaudeSession } from '../lib/agent/status'
-import { cn } from '../lib/cn'
 import type { NodeClaudeData } from '../lib/dashboard/node-claude'
 import { DASH, duration, num, since, text, until } from '../lib/format'
 import { errorText } from '../lib/redact'
@@ -28,57 +27,6 @@ import { Board, BoardGrid, Chip, Facts, Stat, StatStrip } from './viz'
 // the server runs in the user's DESKTOP session, because that is where the
 // Claude login lives. Nobody logged on means no tray, no report, and no
 // server — and the page says so rather than reading as broken.
-
-const OS_MARK: Record<string, { src: string; invert: boolean }> = {
-  windows: { src: '/icon-windows.svg', invert: false },
-  macos: { src: '/icon-apple.svg', invert: true },
-  linux: { src: '/icon-linux.svg', invert: true },
-}
-
-/** The machine picker: this box, then every approved node. Drawn only once there is a node. */
-export function MachinePicker({ nodes, active }: { nodes: NodeRow[]; active: string | null }) {
-  if (nodes.length === 0) return null
-  const pill = (selected: boolean) =>
-    cn(
-      'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[0.8rem] transition-colors',
-      selected
-        ? 'border-primary bg-primary/10 text-foreground'
-        : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground',
-    )
-  return (
-    <nav aria-label="Machine" className="mb-4 flex flex-wrap items-center gap-2">
-      <Link to="/claude" search={{}} className={pill(active === null)}>
-        <img src="/icon-nixos.webp" alt="" width={14} height={14} className="size-3.5" />
-        This box
-      </Link>
-      {nodes.map((n) => {
-        const mark = OS_MARK[n.os]
-        return (
-          <Link
-            key={n.id}
-            to="/claude"
-            search={{ machine: n.id }}
-            className={pill(active === n.id)}
-          >
-            {mark !== undefined && (
-              <img
-                src={mark.src}
-                alt=""
-                width={14}
-                height={14}
-                className={cn('size-3.5', mark.invert && 'dark:invert')}
-              />
-            )}
-            {n.name}
-            {n.claude !== null && n.claude.sessions > 0 && (
-              <span className={`${MONO} text-[0.7rem] text-(--dim)`}>{n.claude.sessions}</span>
-            )}
-          </Link>
-        )
-      })}
-    </nav>
-  )
-}
 
 type Verdict = { label: string; tone: Tone }
 
@@ -426,11 +374,8 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
             <Link to="/settings" search={{ tab: 'machines' }}>
               Settings › Machines
             </Link>
-            ; the rest of the machine is on{' '}
-            <Link to="/c/$category" params={{ category: 'system' }} search={{ tab: 'machines' }}>
-              System › Machines
-            </Link>
-            .
+            , with the rest of the machine: what it is, whether it answers, and whether the box
+            trusts it.
           </p>
         </Board>
       </BoardGrid>
