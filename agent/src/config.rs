@@ -30,6 +30,14 @@ pub struct Config {
     pub auto_update: bool,
     /// `info` by default; `debug` for a bug report.
     pub log_level: String,
+    /// The box's base URL, when it cannot be found through DNS (a machine
+    /// whose resolver is not the box's). Empty means: find it.
+    pub control_plane_url: Option<String>,
+    /// Search domains to ask for the `_daedalus._tcp` record besides the
+    /// ones DHCP handed the adapters.
+    pub search_domains: Vec<String>,
+    /// How often the agent announces itself to the box, in seconds.
+    pub hello_secs: u64,
 }
 
 impl Default for Config {
@@ -40,6 +48,9 @@ impl Default for Config {
             update_check_secs: 600,
             auto_update: true,
             log_level: "info".into(),
+            control_plane_url: None,
+            search_domains: Vec::new(),
+            hello_secs: 60,
         }
     }
 }

@@ -15,11 +15,14 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use tiny_http::{Header, Method, Response, Server};
 
+use crate::facts::Facts;
+use crate::hello::ControlPlane;
 use crate::state::State;
 
 /// What the threads share: the persisted state plus the live facts.
 pub struct Shared {
     started: Instant,
+    facts: Facts,
     inner: Mutex<Live>,
 }
 
@@ -29,8 +32,10 @@ struct Live {
     hold_error: Option<String>,
     update_available: Option<String>,
     restart_pending: bool,
-    /// Raised by `POST /update/check`; the updater clears it when it looks.
+    /// Raised by `POST /update/check` or by the box's answer to a hello; the
+    /// updater clears it when it looks.
     check_requested: bool,
+    control_plane: ControlPlane,
 }
 
 #[derive(Serialize)]
@@ -38,7 +43,8 @@ struct Document<'a> {
     agent: &'static str,
     version: &'static str,
     hostname: String,
-    os: &'static str,
+    #[serde(flatten)]
+    facts: &'a Facts,
     uptime_secs: u64,
     /// The machine's, not the agent's: a small number here after a night is a reboot.
     os_uptime_secs: Option<u64>,
@@ -49,14 +55,17 @@ struct Document<'a> {
     power_requests: Option<String>,
     update_available: Option<&'a str>,
     restart_pending: bool,
+    /// The box, as this agent last saw it.
+    control_plane: &'a ControlPlane,
     #[serde(flatten)]
     state: &'a State,
 }
 
 impl Shared {
-    pub fn new(state: State, started: Instant) -> Self {
+    pub fn new(state: State, facts: Facts, started: Instant) -> Self {
         Self {
             started,
+            facts,
             inner: Mutex::new(Live {
                 state,
                 awake_hold: false,
@@ -64,6 +73,7 @@ impl Shared {
                 update_available: None,
                 restart_pending: false,
                 check_requested: false,
+                control_plane: ControlPlane::default(),
             }),
         }
     }
@@ -80,6 +90,23 @@ impl Shared {
 
     pub fn set_restart_pending(&self) {
         self.lock().restart_pending = true;
+    }
+
+    pub fn awake_hold(&self) -> bool {
+        self.lock().awake_hold
+    }
+
+    pub fn set_control_plane(&self, c: ControlPlane) {
+        self.lock().control_plane = c;
+    }
+
+    pub fn update_control_plane(&self, f: impl FnOnce(&mut ControlPlane)) {
+        f(&mut self.lock().control_plane);
+    }
+
+    /// A copy of what the page says about the box, for the tray.
+    pub fn control_plane(&self) -> ControlPlane {
+        self.lock().control_plane.clone()
     }
 
     pub fn request_check(&self) {
@@ -109,7 +136,7 @@ impl Shared {
             agent: crate::SERVICE_NAME,
             version: crate::VERSION,
             hostname: hostname(),
-            os: std::env::consts::OS,
+            facts: &self.facts,
             uptime_secs: self.started.elapsed().as_secs(),
             os_uptime_secs: os_uptime,
             booted_at: os_uptime.map(crate::state::rfc3339_ago),
@@ -118,6 +145,7 @@ impl Shared {
             power_requests: crate::power::requests_report(),
             update_available: l.update_available.as_deref(),
             restart_pending: l.restart_pending,
+            control_plane: &l.control_plane,
             state: &l.state,
         };
         serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".into())

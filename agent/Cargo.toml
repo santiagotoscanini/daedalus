@@ -1,6 +1,6 @@
 [package]
 name = "daedalus-agent"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.85"
 description = "The daedalus agent: keeps a machine on the network awake, reports on it, and updates itself."
@@ -27,7 +27,8 @@ path = "src/bin/daedalus-agent-tray.rs"
 
 [dependencies]
 anyhow = "1"
-ed25519-dalek = { version = "2", features = ["std"] }
+ed25519-dalek = { version = "2", features = ["std", "rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
 hex = "0.4"
 png = "0.18"
 semver = "1"
@@ -46,9 +47,15 @@ tray-icon = "0.25"
 windows-service = "0.8"
 windows = { version = "0.61", features = [
   "Win32_Foundation",
+  "Win32_NetworkManagement_Dns",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_NetworkManagement_Ndis",
+  "Win32_Networking_WinSock",
   "Win32_Security",
+  "Win32_Security_Cryptography",
   "Win32_System_Console",
   "Win32_System_Power",
+  "Win32_System_Registry",
   "Win32_System_SystemInformation",
   "Win32_System_Threading",
   "Win32_UI_WindowsAndMessaging",

@@ -38,6 +38,16 @@ struct Page {
     restart_pending: bool,
     last_update_check: Option<String>,
     last_update_result: Option<String>,
+    #[serde(default)]
+    control_plane: Box_,
+}
+
+/// The box, as the page reports it.
+#[derive(Deserialize, Default)]
+struct Box_ {
+    url: Option<String>,
+    state: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -119,6 +129,7 @@ struct Ui {
     look: Look,
     line_hold: MenuItem,
     line_update: MenuItem,
+    line_box: MenuItem,
     open_status: MenuItem,
     check_now: MenuItem,
     open_logs: MenuItem,
@@ -135,6 +146,7 @@ impl Ui {
         let title = MenuItem::new(format!("{DISPLAY_NAME} {VERSION}"), false, None);
         let line_hold = MenuItem::new("Awake hold: …", false, None);
         let line_update = MenuItem::new("Updates: …", false, None);
+        let line_box = MenuItem::new("Box: …", false, None);
         let open_status = MenuItem::new("Open status page", true, None);
         let check_now = MenuItem::new("Check for updates now", true, None);
         let open_logs = MenuItem::new("Open logs folder", true, None);
@@ -145,6 +157,7 @@ impl Ui {
             &title,
             &line_hold,
             &line_update,
+            &line_box,
             &PredefinedMenuItem::separator(),
             &open_status,
             &check_now,
@@ -167,6 +180,7 @@ impl Ui {
             look: Look::Off,
             line_hold,
             line_update,
+            line_box,
             open_status,
             check_now,
             open_logs,
@@ -193,6 +207,7 @@ impl Ui {
             self.set_look(Look::Off);
             self.line_hold.set_text("Awake hold: service not answering");
             self.line_update.set_text("Updates: unknown");
+            self.line_box.set_text("Box: unknown");
             let _ = self.tray.set_tooltip(Some(format!(
                 "{DISPLAY_NAME} {VERSION}\nService not answering"
             )));
@@ -218,6 +233,23 @@ impl Ui {
         };
         self.line_hold.set_text(&hold);
         self.line_update.set_text(&update);
+        let host = p.control_plane.url.as_deref().map(|u| {
+            u.trim_start_matches("https://")
+                .trim_start_matches("http://")
+                .to_string()
+        });
+        let box_line = match (
+            p.control_plane.state.as_deref(),
+            host,
+            &p.control_plane.error,
+        ) {
+            (Some("approved"), Some(h), _) => format!("Box: approved by {h}"),
+            (Some("pending"), Some(h), _) => format!("Box: {h} — waiting for approval"),
+            (Some("revoked"), Some(h), _) => format!("Box: {h} — revoked"),
+            (_, _, Some(e)) => format!("Box: {e}"),
+            _ => "Box: looking…".to_string(),
+        };
+        self.line_box.set_text(&box_line);
 
         let short = if !p.awake_hold {
             "awake hold OFF"

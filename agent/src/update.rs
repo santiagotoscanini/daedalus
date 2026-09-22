@@ -355,9 +355,24 @@ pub fn run_loop(cfg: Config, shared: Arc<Shared>, stop: Arc<AtomicBool>) {
     }
 }
 
-/// Sleep in short steps so a stop request is honoured within half a second,
-/// and a "check now" from the status page cuts the wait short. Returns true
-/// when stopped.
+/// Sleep in short steps so a stop request is honoured within half a second.
+/// Returns true when stopped. For threads with nothing else to wake for.
+pub fn sleep_until(stop: &AtomicBool, total: Duration) -> bool {
+    let step = Duration::from_millis(500);
+    let mut left = total;
+    while !left.is_zero() {
+        if stop.load(Ordering::Relaxed) {
+            return true;
+        }
+        let d = left.min(step);
+        std::thread::sleep(d);
+        left -= d;
+    }
+    stop.load(Ordering::Relaxed)
+}
+
+/// The updater's wait: like `sleep_until`, and a "check now" — from the
+/// status page or from the box — cuts it short. Returns true when stopped.
 fn sleep_until_stop(stop: &AtomicBool, shared: &Shared, total: Duration) -> bool {
     let step = Duration::from_millis(500);
     let mut left = total;

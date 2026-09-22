@@ -24,6 +24,11 @@
 //!   C:\ProgramData\daedalus-agent\logs\agent.log.*            daily-rotated log
 
 pub mod config;
+pub mod discover;
+pub mod facts;
+pub mod hello;
+pub mod identity;
+pub mod net;
 pub mod power;
 pub mod state;
 pub mod status;
@@ -59,7 +64,9 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
 
     let started = std::time::Instant::now();
     let state = state::State::load();
-    let shared = Arc::new(status::Shared::new(state, started));
+    let facts = facts::read();
+    tracing::info!(os = %facts.os_name, version = %facts.os_version, cpu = %facts.cpu, "this machine");
+    let shared = Arc::new(status::Shared::new(state, facts.clone(), started));
 
     update::retire_old_binaries();
 
@@ -87,6 +94,30 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
 
     let server = status::serve(cfg.port, Arc::clone(&shared))?;
 
+    // The machine's key, made on the first start. Without it there is no
+    // hello, but the hold and the page above do not depend on it.
+    let announcer = match identity::Identity::load_or_create() {
+        Ok(id) => {
+            tracing::info!(node = id.node_id(), "identity loaded");
+            let shared = Arc::clone(&shared);
+            let stop = Arc::clone(&stop);
+            let cfg = cfg.clone();
+            Some(
+                std::thread::Builder::new()
+                    .name("hello".into())
+                    .spawn(move || hello::run_loop(cfg, id, facts, shared, stop))
+                    .context("spawning the announcer")?,
+            )
+        }
+        Err(e) => {
+            tracing::error!(
+                error = format!("{e:#}"),
+                "no identity; the box will not hear from this machine"
+            );
+            None
+        }
+    };
+
     let updater = {
         let shared = Arc::clone(&shared);
         let stop = Arc::clone(&stop);
@@ -103,6 +134,9 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     tracing::info!("stopping");
     server.unblock();
     let _ = updater.join();
+    if let Some(a) = announcer {
+        let _ = a.join();
+    }
     drop(hold);
     Ok(())
 }

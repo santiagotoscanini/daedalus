@@ -229,12 +229,13 @@ dependencies = [
 
 [[package]]
 name = "daedalus-agent"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "ed25519-dalek",
  "hex",
  "png",
+ "rand_core",
  "semver",
  "serde",
  "serde_json",
@@ -343,6 +344,7 @@ checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
+ "rand_core",
  "serde",
  "sha2",
  "subtle",
