@@ -26,6 +26,7 @@ fn main() {
         "serve" => serve_foreground(),
         "status" => status_cmd(),
         "update" => update_cmd(rest),
+        "claude" => claude_cmd(rest),
         "version" | "--version" | "-V" => {
             println!("daedalus-agent {VERSION}");
             Ok(())
@@ -52,6 +53,7 @@ fn print_help() {
          serve                run in the foreground, in this terminal\n  \
          status               print the running agent's status page\n  \
          update [--apply]     check the release feed now; --apply installs a newer release\n  \
+         claude restart       ask the tray to restart `claude remote-control`\n  \
          version              print the version"
     );
 }
@@ -168,4 +170,21 @@ fn update_cmd(args: &[String]) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn claude_cmd(args: &[String]) -> Result<()> {
+    let cfg = config::load_or_default()?;
+    match args.first().map(String::as_str) {
+        Some("restart") => {
+            let url = format!("http://127.0.0.1:{}/claude/restart", cfg.port);
+            let body = ureq::post(&url)
+                .timeout(Duration::from_secs(3))
+                .call()
+                .with_context(|| format!("the agent did not answer at {url}"))?
+                .into_string()?;
+            print!("{body}");
+            Ok(())
+        }
+        _ => bail!("usage: daedalus-agent claude restart"),
+    }
 }

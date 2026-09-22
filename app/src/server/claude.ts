@@ -123,3 +123,26 @@ export const fetchClaudeSessionStatusFn = createServerFn().handler(async () => {
   const { readClaudeSessionStatus } = await import('../host/claude-session-request')
   return readClaudeSessionStatus()
 })
+
+/**
+ * The machines the picker offers beside this box: every approved node. One
+ * table read, so awaited by the loader; the picker is part of the frame.
+ */
+export const fetchClaudeNodesFn = createServerFn().handler(async () => {
+  const { listNodes } = await import('../lib/repo/nodes')
+  return (await listNodes()).filter((n) => n.state === 'approved')
+})
+
+const NODE_ID = /^[0-9a-f]{16}$/
+
+/** The Claude page for one node: its row and its live status page. */
+export const fetchNodeClaudeFn = createServerFn()
+  .validator((data: unknown): { id: string } => {
+    const id = (data as { id?: unknown } | null)?.id
+    if (typeof id !== 'string' || !NODE_ID.test(id)) throw new Error('expected a node id')
+    return { id }
+  })
+  .handler(async ({ data }) => {
+    const { loadNodeClaude } = await import('../lib/dashboard/node-claude')
+    return loadNodeClaude(data.id)
+  })

@@ -801,7 +801,14 @@ priority; each can be done independently unless noted.
      Machines tab with Approve / Revoke / Forget and "Check for updates"
      riding the next hello; the gaming PC announced itself two minutes
      after the release. Nodes are Postgres rows for now, not nodes.json —
-     the Apply question below is still open. macOS not started. Original
+     the Apply question below is decided for policy: a node's policy is a
+     Postgres row (`nodes.policy`), because nothing nix builds reads it.
+     (3, in part) ~~Per-node policy and Claude~~ — shipped 2026-09-22 as
+     agent-v0.4.0: Settings › Machines (display name, keep awake, Claude
+     remote control) rides the hello answer; the tray supervises `claude
+     remote-control` in the user's session and reports it; the Claude page
+     has a machine picker. Still open in 3: power commands (sleep/wake/
+     reboot) and declared services. macOS not started. Original
      plan for reference: (1) Core and Windows, keep-awake first: the trait, the
      service, the indefinite power hold with the power plan converged as
      a second line, the heartbeat and the missed-heartbeat alert,

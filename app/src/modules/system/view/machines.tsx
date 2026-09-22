@@ -1,7 +1,8 @@
-import { useRouter } from '@tanstack/react-router'
+import { Link, useRouter } from '@tanstack/react-router'
 import { useState, useTransition } from 'react'
 import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Facts, type Tone } from '../../../components/viz'
+import { agentHasClaude } from '../../../lib/agent/status'
 import { cn } from '../../../lib/cn'
 import { bytes, duration, since } from '../../../lib/format'
 import { errorText } from '../../../lib/redact'
@@ -59,6 +60,8 @@ function verdict(m: Machine): Verdict {
       return { chip: 'revoked', tone: 'bad' }
     case 'approved':
       if (s === null) return { chip: 'not answering', tone: 'muted' }
+      // Off because the box said so is a state, not a fault.
+      if (!s.awakeHold && !s.policy.awakeHold) return { chip: 'may sleep', tone: 'muted' }
       if (!s.awakeHold) return { chip: 'hold OFF', tone: 'bad' }
       if (s.updateAvailable !== null || s.restartPending) return { chip: 'updating', tone: 'warn' }
       return { chip: 'held awake', tone: 'ok' }
@@ -88,7 +91,7 @@ function Head({ m }: { m: Machine }) {
       )}
       <div className="flex min-w-0 flex-auto flex-col items-start gap-[0.2rem]">
         <strong className="text-[0.98rem] text-foreground tracking-[-0.01em] wrap-anywhere">
-          {s?.hostname || m.node?.hostname || m.lanName || m.ip}
+          {m.node?.name || s?.hostname || m.lanName || m.ip}
         </strong>
         <span className="text-[0.73rem] text-(--text-muted) leading-[1.4]">
           {edition}
@@ -98,6 +101,53 @@ function Head({ m }: { m: Machine }) {
       </div>
     </div>
   )
+}
+
+/**
+ * Claude Code on the machine, in one line: what the tray reports through the
+ * status page when it answers, the last hello's summary when it does not.
+ * The Claude page's picker is where the rest is.
+ */
+function ClaudeCell({ m }: { m: Machine }) {
+  const s = m.status
+  const c = s?.claude
+  if (c != null) {
+    const alive = c.sessions.filter((x) => x.alive).length
+    const version = c.server.version ?? c.cliVersion
+    return c.state === 'running' || c.state === 'starting' ? (
+      <span className={BOARD_NOTE}>
+        <Chip tone="ok">remote control {c.state}</Chip>
+        {version !== null && <span className={`${MONO} ml-2`}>{version}</span>}
+        {` · ${String(alive)} session${alive === 1 ? '' : 's'}`}
+      </span>
+    ) : (
+      <span className={BOARD_NOTE}>
+        <Chip tone={c.state === 'off' ? 'muted' : 'warn'}>{c.state}</Chip>
+        {c.detail !== null && ` ${c.detail}`}
+      </span>
+    )
+  }
+  if (s !== null && !agentHasClaude(s.version)) {
+    return <span className={BOARD_NOTE}>needs agent 0.4.0 (has {s.version})</span>
+  }
+  if (s !== null && !s.trayReporting) {
+    return (
+      <span className={BOARD_NOTE}>
+        {s.policy.claudeRemoteControl ? 'nobody logged on — the tray is not reporting' : '—'}
+      </span>
+    )
+  }
+  const h = m.node?.claude ?? null
+  if (h !== null) {
+    return (
+      <span className={BOARD_NOTE}>
+        {h.state}
+        {h.serverVersion !== null && ` ${h.serverVersion}`} · {String(h.sessions)} session
+        {h.sessions === 1 ? '' : 's'} · from the last hello
+      </span>
+    )
+  }
+  return <span className={BOARD_NOTE}>—</span>
 }
 
 function Decision({ m }: { m: Machine }) {
@@ -146,8 +196,9 @@ function Decision({ m }: { m: Machine }) {
         )}
         {node.state === 'approved' && (
           <>
-            {/* Rides the next hello's answer, so within a minute: the one thing
-                the box can ask of a node today. */}
+            {/* Rides the next hello's answer, so within a minute. The policy —
+                awake, Claude — is on Settings › Machines, beside the other
+                things that save at once. */}
             <Button
               size="sm"
               variant="outline"
@@ -155,6 +206,11 @@ function Decision({ m }: { m: Machine }) {
               onClick={() => act(requestUpdateCheckFn)}
             >
               {node.updateCheckRequested ? 'Check queued' : 'Check for updates'}
+            </Button>
+            <Button asChild size="sm" variant="ghost">
+              <Link to="/settings" search={{ tab: 'machines' }}>
+                Policy
+              </Link>
             </Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(revokeNodeFn)}>
               Revoke
@@ -186,6 +242,7 @@ function MachineBoard({ m, port }: { m: Machine; port: number }) {
       k: 'Machine up',
       v: <span className={MONO}>{s?.osUptimeSecs == null ? '—' : duration(s.osUptimeSecs)}</span>,
     },
+    { k: 'Claude', v: <ClaudeCell m={m} /> },
     {
       k: 'Updates',
       v:

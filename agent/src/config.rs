@@ -38,6 +38,15 @@ pub struct Config {
     pub search_domains: Vec<String>,
     /// How often the agent announces itself to the box, in seconds.
     pub hello_secs: u64,
+    /// Hold the machine awake. The local default; once the box has approved
+    /// this machine, its Settings › Machines policy replaces it.
+    pub awake_hold: bool,
+    /// Run `claude remote-control` in the user's desktop session (the tray
+    /// supervises it). Same rule: the box's policy replaces it once approved.
+    pub claude_remote_control: bool,
+    /// The directory the server runs in — where a session opened from
+    /// claude.ai lands. Empty means the user's profile directory.
+    pub claude_workdir: Option<String>,
 }
 
 impl Default for Config {
@@ -51,6 +60,9 @@ impl Default for Config {
             control_plane_url: None,
             search_domains: Vec::new(),
             hello_secs: 60,
+            awake_hold: true,
+            claude_remote_control: true,
+            claude_workdir: None,
         }
     }
 }

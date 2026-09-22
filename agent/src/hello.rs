@@ -10,9 +10,15 @@
 //!
 //! The answer is what the box has decided: `pending` until an admin approves
 //! the machine on System › Machines, `approved` after, `revoked` if turned
-//! away. One instruction can ride it — `check_update: true`, which asks the
-//! updater to look now rather than on its next tick — and that is the only
-//! thing the box can make this agent do in this version.
+//! away. An approved machine's answer also carries the box's POLICY for it
+//! — whether to hold it awake, whether to run Claude remote control — as
+//! set on Settings › Machines, and up to two instructions: `check_update`
+//! (the updater looks now) and `restart_claude` (the tray restarts the
+//! server). Nothing else rides it.
+//!
+//! The payload carries a summary of Claude Code on this machine when the
+//! tray has reported one (claude.rs): its state, versions, environment id
+//! and session count, so the box's Claude page can list this machine.
 //!
 //! Finding the box is discover.rs's job; it is re-done when a hello fails
 //! and every few minutes regardless, so a box that moves is found again.
@@ -24,6 +30,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::claude::Summary;
 use crate::config::Config;
 use crate::discover::{self, Found};
 use crate::facts::Facts;
@@ -50,6 +57,9 @@ struct Payload<'a> {
     status_port: u16,
     os_uptime_secs: Option<u64>,
     awake_hold: bool,
+    /// Claude Code here, as the tray last reported it; absent when it has not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    claude: Option<Summary>,
     ts: u64,
 }
 
@@ -60,11 +70,46 @@ struct Envelope<'a> {
     sig: &'a str,
 }
 
+/// What the box wants of this machine. Defaults are the config's, and stand
+/// until the box has answered a hello for an approved machine.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct Policy {
+    /// Hold the machine awake (the agent's first job; off means the box
+    /// decided this machine may sleep).
+    pub awake_hold: bool,
+    /// Run `claude remote-control` in the user's session.
+    pub claude_remote_control: bool,
+}
+
+impl Default for Policy {
+    fn default() -> Self {
+        Self {
+            awake_hold: true,
+            claude_remote_control: true,
+        }
+    }
+}
+
+impl Policy {
+    pub fn from_config(cfg: &Config) -> Self {
+        Self {
+            awake_hold: cfg.awake_hold,
+            claude_remote_control: cfg.claude_remote_control,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct Answer {
     state: String,
     #[serde(default)]
     check_update: bool,
+    #[serde(default)]
+    restart_claude: bool,
+    /// Absent from an older box, or for a machine it has not approved.
+    #[serde(default)]
+    policy: Option<Policy>,
 }
 
 /// What the status page and the tray show about the box.
@@ -95,6 +140,7 @@ fn send(
     adapter: &net::Adapter,
     cfg: &Config,
     awake: bool,
+    claude: Option<Summary>,
 ) -> Result<Answer> {
     let payload = Payload {
         hostname: &hostname(),
@@ -110,6 +156,7 @@ fn send(
         status_port: cfg.port,
         os_uptime_secs: crate::power::os_uptime_secs(),
         awake_hold: awake,
+        claude,
         ts: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -187,7 +234,8 @@ pub fn run_loop(
         };
 
         let awake = shared.awake_hold();
-        match send(&box_.url, &id, &facts, &adapter, &cfg, awake) {
+        let claude = shared.claude_summary();
+        match send(&box_.url, &id, &facts, &adapter, &cfg, awake, claude) {
             Ok(a) => {
                 shared.update_control_plane(|c| {
                     c.url = Some(box_.url.clone());
@@ -199,6 +247,21 @@ pub fn run_loop(
                 if a.check_update {
                     tracing::info!("the box asked for an update check");
                     shared.request_check();
+                }
+                if a.restart_claude {
+                    tracing::info!("the box asked for a Claude remote-control restart");
+                    shared.request_claude_restart();
+                }
+                // The policy is the box's to set only once it has approved
+                // this machine; before that the config's defaults stand.
+                if let (Some(p), "approved") = (a.policy, a.state.as_str()) {
+                    if shared.set_policy(p.clone()) {
+                        tracing::info!(
+                            awake_hold = p.awake_hold,
+                            claude_remote_control = p.claude_remote_control,
+                            "policy from the box"
+                        );
+                    }
                 }
             }
             Err(e) => {

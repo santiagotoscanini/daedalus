@@ -538,8 +538,29 @@ export const nodes = pgTable('nodes', {
   approvedAt: timestamp('approved_at', { withTimezone: true }),
   approvedBy: text('approved_by'),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  /// The one instruction the box can send a node in this version: "check
-  /// for updates now". Set by an admin, carried by the next hello's answer,
-  /// cleared as it goes out.
+  /// The two instructions the box can send a node: "check for updates now"
+  /// and "restart Claude remote control". Set by an admin, carried by the
+  /// next hello's answer, cleared as they go out.
   updateCheckRequested: boolean('update_check_requested').notNull().default(false),
+  claudeRestartRequested: boolean('claude_restart_requested').notNull().default(false),
+  /// What the box wants of this machine, set on Settings › Machines and
+  /// carried by every hello's answer once the node is approved. A JSON
+  /// object rather than columns because it is the agent's vocabulary
+  /// (agent/src/hello.rs `Policy`) and grows with the agent; absent keys
+  /// mean the agent's own defaults. Postgres, not site/: nothing nix
+  /// builds reads it, so changing it is an UPDATE and nothing rebuilds.
+  policy: jsonb('policy').$type<NodePolicy>().notNull().default({}),
 })
+
+/**
+ * The per-node policy. Every key optional: the agent's defaults stand for
+ * a key that is not set, and the page shows those defaults as the value.
+ */
+export type NodePolicy = {
+  /** What the pages call the machine instead of its hostname. */
+  displayName?: string
+  /** Hold the machine awake. The agent's default is true. */
+  awakeHold?: boolean
+  /** Run `claude remote-control` in the user's session. The agent's default is true. */
+  claudeRemoteControl?: boolean
+}

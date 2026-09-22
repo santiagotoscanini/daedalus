@@ -2,22 +2,37 @@
 //! agent is there and awake before there is any channel between them.
 //!
 //! `GET /status` (and `/`) answers the document below; `GET /healthz`
-//! answers `ok`. One write, and only from this machine: `POST /update/check`
-//! asks the updater to look now — the tray's "check for updates" — and is
-//! refused from any address but loopback. No auth otherwise: the page states
-//! facts about this machine that the LAN can already observe, and the
-//! firewall rule `install` adds scopes it to the local subnet.
+//! answers `ok`. The writes are few and only from this machine — refused
+//! from any address but loopback:
+//!
+//!   POST /update/check    the updater looks now (the tray's "check for updates")
+//!   POST /claude/report   the tray's picture of Claude Code (claude.rs); the
+//!                         answer carries the box's policy and, once, a restart
+//!   POST /claude/restart  ask the tray to restart the server on its next report
+//!
+//! No auth otherwise: the page states facts about this machine that the LAN
+//! can already observe, and the firewall rule `install` adds scopes it to
+//! the local subnet. The tokens in the user's Claude profile never reach
+//! this page — the report copies dates and a plan name, not credentials.
 
+use std::io::Read;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use serde::Serialize;
 use tiny_http::{Header, Method, Response, Server};
 
+use crate::claude::{Report, ReportAnswer, Summary};
 use crate::facts::Facts;
-use crate::hello::ControlPlane;
+use crate::hello::{ControlPlane, Policy};
 use crate::state::State;
+
+/// A report older than this means the tray is gone (logged off, or no
+/// desktop session at all), and the page says so instead of repeating it.
+const REPORT_FRESH: Duration = Duration::from_secs(30);
+/// The largest report body accepted.
+const MAX_BODY: u64 = 1 << 20;
 
 /// What the threads share: the persisted state plus the live facts.
 pub struct Shared {
@@ -36,6 +51,22 @@ struct Live {
     /// updater clears it when it looks.
     check_requested: bool,
     control_plane: ControlPlane,
+    /// What the box wants of this machine; the config's defaults until the
+    /// box has answered a hello.
+    policy: Policy,
+    /// The tray's last report and when it landed.
+    claude: Option<(Report, Instant)>,
+    /// Raised by the box's answer or `POST /claude/restart`; the tray takes
+    /// it with its next report.
+    claude_restart_requested: bool,
+}
+
+/// The tray, as the page describes it.
+#[derive(Serialize)]
+struct Tray {
+    /// A report landed within the freshness window.
+    reporting: bool,
+    last_report: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -55,6 +86,13 @@ struct Document<'a> {
     power_requests: Option<String>,
     update_available: Option<&'a str>,
     restart_pending: bool,
+    /// What the box asked of this machine.
+    policy: &'a Policy,
+    /// Claude Code on this machine, as the tray last reported it; null when
+    /// the tray has not reported lately.
+    claude: Option<&'a Report>,
+    tray: Tray,
+    claude_restart_requested: bool,
     /// The box, as this agent last saw it.
     control_plane: &'a ControlPlane,
     #[serde(flatten)]
@@ -62,7 +100,7 @@ struct Document<'a> {
 }
 
 impl Shared {
-    pub fn new(state: State, facts: Facts, started: Instant) -> Self {
+    pub fn new(state: State, facts: Facts, started: Instant, policy: Policy) -> Self {
         Self {
             started,
             facts,
@@ -74,8 +112,46 @@ impl Shared {
                 restart_pending: false,
                 check_requested: false,
                 control_plane: ControlPlane::default(),
+                policy,
+                claude: None,
+                claude_restart_requested: false,
             }),
         }
+    }
+
+    pub fn policy(&self) -> Policy {
+        self.lock().policy.clone()
+    }
+
+    /// The box's decision, from a hello's answer. Returns whether it changed.
+    pub fn set_policy(&self, p: Policy) -> bool {
+        let mut l = self.lock();
+        let changed = l.policy != p;
+        l.policy = p;
+        changed
+    }
+
+    pub fn request_claude_restart(&self) {
+        self.lock().claude_restart_requested = true;
+    }
+
+    /// The tray's report; answers with the policy and takes the restart flag.
+    pub fn set_claude(&self, r: Report) -> ReportAnswer {
+        let mut l = self.lock();
+        l.claude = Some((r, Instant::now()));
+        ReportAnswer {
+            wanted: l.policy.claude_remote_control,
+            restart: std::mem::take(&mut l.claude_restart_requested),
+        }
+    }
+
+    /// The hello's summary of Claude Code: None when the tray is silent.
+    pub fn claude_summary(&self) -> Option<Summary> {
+        let l = self.lock();
+        l.claude
+            .as_ref()
+            .filter(|(_, at)| at.elapsed() < REPORT_FRESH)
+            .map(|(r, _)| r.summary())
     }
 
     pub fn set_hold(&self, held: bool, error: Option<String>) {
@@ -145,6 +221,20 @@ impl Shared {
             power_requests: crate::power::requests_report(),
             update_available: l.update_available.as_deref(),
             restart_pending: l.restart_pending,
+            policy: &l.policy,
+            claude: l
+                .claude
+                .as_ref()
+                .filter(|(_, at)| at.elapsed() < REPORT_FRESH)
+                .map(|(r, _)| r),
+            tray: Tray {
+                reporting: l
+                    .claude
+                    .as_ref()
+                    .is_some_and(|(_, at)| at.elapsed() < REPORT_FRESH),
+                last_report: l.claude.as_ref().map(|(r, _)| r.reported_at.clone()),
+            },
+            claude_restart_requested: l.claude_restart_requested,
             control_plane: &l.control_plane,
             state: &l.state,
         };
@@ -172,7 +262,7 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
     std::thread::Builder::new()
         .name("status".into())
         .spawn(move || {
-            for req in for_thread.incoming_requests() {
+            for mut req in for_thread.incoming_requests() {
                 let local = req.remote_addr().is_some_and(|a| a.ip().is_loopback());
                 let (code, body, ctype) = match (req.method(), req.url()) {
                     (&Method::Get, "/healthz") => (200, "ok\n".to_string(), "text/plain"),
@@ -181,7 +271,33 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                         shared.request_check();
                         (202, "checking\n".to_string(), "text/plain")
                     }
-                    (&Method::Post, "/update/check") => {
+                    (&Method::Post, "/claude/restart") if local => {
+                        shared.request_claude_restart();
+                        (
+                            202,
+                            "restart queued for the tray\n".to_string(),
+                            "text/plain",
+                        )
+                    }
+                    (&Method::Post, "/claude/report") if local => {
+                        let mut body = String::new();
+                        let read = req.as_reader().take(MAX_BODY).read_to_string(&mut body);
+                        match read
+                            .ok()
+                            .and_then(|_| serde_json::from_str::<Report>(&body).ok())
+                        {
+                            Some(r) => {
+                                let answer = shared.set_claude(r);
+                                (
+                                    200,
+                                    serde_json::to_string(&answer).unwrap_or_else(|_| "{}".into()),
+                                    "application/json",
+                                )
+                            }
+                            None => (400, "not a report\n".to_string(), "text/plain"),
+                        }
+                    }
+                    (&Method::Post, "/update/check" | "/claude/restart" | "/claude/report") => {
                         (403, "only from this machine\n".to_string(), "text/plain")
                     }
                     _ => (404, "not found\n".to_string(), "text/plain"),

@@ -1,19 +1,20 @@
 //! daedalus-agent — the box's presence on a machine it does not run.
 //!
-//! Phase one, and only phase one (PLAN.md, feature 6): a Windows service
-//! that holds the machine awake for as long as it runs, answers a small
-//! status page on the LAN so the box can see that it does, and updates
-//! itself to the newest `agent-v*` release of the engine repository; and
-//! a tray program in the desktop session that shows what the service
-//! reports. No commands, no telemetry beyond the status page, no listening
-//! for anything but that page. Everything the agent will later be able to
-//! do arrives as a new release the existing one installs on its own —
-//! which is why the update path ships first.
+//! PLAN.md feature 6, phases 1–3: a Windows service that holds the machine
+//! awake for as long as the box wants it to, answers a small status page on
+//! the LAN, announces itself to the box with a signed hello once a minute
+//! and follows the policy the answer carries, and updates itself to the
+//! newest `agent-v*` release of the engine repository; and a tray program
+//! in the desktop session that shows what the service reports and — with
+//! the user's own login, which only that session has — runs `claude
+//! remote-control` the way the box runs its own (claude.rs). Everything
+//! the agent will later be able to do arrives as a new release the existing
+//! one installs on its own — which is why the update path shipped first.
 //!
 //! Two executables from this crate:
 //!
 //!   daedalus-agent.exe        the service and its verbs (src/bin/daedalus-agent.rs)
-//!   daedalus-agent-tray.exe   the tray icon (src/bin/daedalus-agent-tray.rs)
+//!   daedalus-agent-tray.exe   the tray icon + the Claude supervisor (src/bin/daedalus-agent-tray.rs)
 //!
 //! Layout on the machine:
 //!
@@ -22,7 +23,9 @@
 //!   C:\ProgramData\daedalus-agent\config.toml                 what install wrote; edit and restart
 //!   C:\ProgramData\daedalus-agent\state.json                  what the agent last did
 //!   C:\ProgramData\daedalus-agent\logs\agent.log.*            daily-rotated log
+//!   C:\ProgramData\daedalus-agent\logs\claude-rc.log          what `claude remote-control` printed
 
+pub mod claude;
 pub mod config;
 pub mod discover;
 pub mod facts;
@@ -66,31 +69,16 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     let state = state::State::load();
     let facts = facts::read();
     tracing::info!(os = %facts.os_name, version = %facts.os_version, cpu = %facts.cpu, "this machine");
-    let shared = Arc::new(status::Shared::new(state, facts.clone(), started));
+    let policy = hello::Policy::from_config(&cfg);
+    let shared = Arc::new(status::Shared::new(state, facts.clone(), started, policy));
 
     update::retire_old_binaries();
 
-    // The point of the whole thing. Held for the life of the process; the
-    // guard releases it on a clean stop, the OS releases it on any other.
-    let hold = match power::Hold::acquire(
-        "daedalus-agent: this machine serves the fleet and is kept awake by the box",
-    ) {
-        Ok(h) => {
-            shared.set_hold(true, None);
-            Some(h)
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "could not hold the machine awake");
-            shared.set_hold(false, Some(e.to_string()));
-            None
-        }
-    };
-    match power::converge_plan() {
-        Ok(()) => tracing::info!(
-            "power plan set: idle sleep and hibernate timers off, hibernation off (same on every start)"
-        ),
-        Err(e) => tracing::warn!(error = %e, "power plan not set"),
-    }
+    // The point of the whole thing. Held while the policy says so — the
+    // config's default, then the box's word once it has approved this
+    // machine; the guard releases it on a clean stop, the OS on any other.
+    let mut hold: Option<power::Hold> = None;
+    let mut hold_wanted: Option<bool> = None;
 
     let server = status::serve(cfg.port, Arc::clone(&shared))?;
 
@@ -129,6 +117,38 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     };
 
     while !stop.load(Ordering::Relaxed) {
+        let wanted = shared.policy().awake_hold;
+        if hold_wanted != Some(wanted) {
+            hold_wanted = Some(wanted);
+            if wanted {
+                hold = match power::Hold::acquire(
+                    "daedalus-agent: this machine serves the fleet and is kept awake by the box",
+                ) {
+                    Ok(h) => {
+                        shared.set_hold(true, None);
+                        Some(h)
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "could not hold the machine awake");
+                        shared.set_hold(false, Some(e.to_string()));
+                        None
+                    }
+                };
+                match power::converge_plan() {
+                    Ok(()) => tracing::info!(
+                        "power plan set: idle sleep and hibernate timers off, hibernation off"
+                    ),
+                    Err(e) => tracing::warn!(error = %e, "power plan not set"),
+                }
+            } else {
+                // The box said this machine may sleep: release the request.
+                // The plan's timers stay as they are — the request is what
+                // held the machine, and the plan is the user's to set back.
+                hold = None;
+                shared.set_hold(false, None);
+                tracing::info!("awake hold released: the policy for this machine is off");
+            }
+        }
         std::thread::sleep(Duration::from_millis(500));
     }
     tracing::info!("stopping");

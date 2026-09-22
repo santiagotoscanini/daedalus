@@ -6,9 +6,11 @@ import { readJsonObject } from '../lib/http-result'
 // The agent POSTs here every minute: a signed envelope (host/agent-hello.ts)
 // saying who it is, and the answer says what the box has decided about it
 // — `pending` until an admin approves it on System › Machines, `approved`
-// after, `revoked` if the box has turned it away. Nothing else happens on
-// this path: no command rides the answer, and a hello from an unknown key
-// creates a pending row and nothing more.
+// after, `revoked` if the box has turned it away. For an approved node the
+// answer also carries the policy Settings › Machines set (hold it awake,
+// run Claude remote control) and up to two one-shot instructions (check
+// for updates, restart Claude). A hello from an unknown key creates a
+// pending row and nothing more.
 //
 // OUTSIDE the Pocket ID gate (authBypassRule in the daedalus nix module),
 // because a service has no passkey. Its credential is the signature: the
@@ -38,9 +40,20 @@ export const Route = createFileRoute('/api/nodes/hello')({
         return Response.json({
           node: verdict.nodeId,
           state: answer.state,
-          // The one thing the box may ask of a node today; the agent's
-          // updater looks now instead of on its next tick.
+          // The instructions: the agent's updater looks now instead of on
+          // its next tick; the tray restarts `claude remote-control`.
           check_update: answer.checkUpdate,
+          restart_claude: answer.restartClaude,
+          // The policy, in the agent's vocabulary (agent/src/hello.rs
+          // `Policy`); absent until the node is approved.
+          ...(answer.policy === null
+            ? {}
+            : {
+                policy: {
+                  awake_hold: answer.policy.awakeHold,
+                  claude_remote_control: answer.policy.claudeRemoteControl,
+                },
+              }),
           // The box's clock, so an agent whose clock drifts can see why it
           // was refused before it is.
           server_time: Math.floor(Date.now() / 1000),

@@ -17,19 +17,31 @@ The box's presence on a machine it does not run. Phase one (see
   state; the box is found through the `_daedalus._tcp` SRV record under
   the DNS search domain DHCP handed out (or `control_plane_url` in the
   config), and appears on System › Machines as "wants to join" until an
-  admin approves it. The answer can carry one instruction, "check for
-  updates now";
+  admin approves it. The answer carries the box's **policy** for an
+  approved machine — hold it awake or not, run Claude remote control or
+  not, set on Settings › Machines — and two one-shot instructions, "check
+  for updates now" and "restart Claude remote control";
+- **runs Claude Code's remote control** the way the box runs its own: the
+  tray (the one process in the user's desktop session, where the Claude
+  login lives) supervises `claude remote-control --verbose`, restarts it
+  with backoff, writes its output to `logs\claude-rc.log`, and reports it
+  to the service — state, versions, environment id, the sessions under it,
+  the credential clock (dates and plan, never a token). The status page
+  carries the report, the hello a summary, and the box's Claude page has a
+  machine picker that shows it. Nobody logged on means no tray and no
+  server, so a machine that reboots unattended wants automatic sign-in;
 - **shows itself in the tray**: a second, windowless program in the desktop
   session (`daedalus-agent-tray.exe`, started at every logon) draws the
-  daedalus mark beside the clock — ember when the hold is on, an amber dot
-  when an update is pending or the hold failed, grey when the service does
-  not answer — with the state in its tooltip and menu, and three actions:
-  open the status page, check for updates now, open the logs folder.
+  daedalus mark beside the clock — ember when all is well, an amber dot
+  when an update is pending, the hold failed or Claude is not running, grey
+  when the service does not answer — with the state in its tooltip and
+  menu, and the actions: open the status page, check for updates now,
+  restart Claude remote control, open the logs, open Claude's log.
 
-Nothing else yet: no commands, no telemetry beyond the page, no inbound
-port but the page's. What the agent will do next arrives as a release the
-installed one applies on its own, which is why the update path shipped
-first.
+Nothing else yet: no other commands, no telemetry beyond the page, no
+inbound port but the page's. What the agent will do next arrives as a
+release the installed one applies on its own, which is why the update path
+shipped first.
 
 ## Install
 
@@ -61,6 +73,7 @@ daedalus-agent run                  service entry point; what the SCM calls
 daedalus-agent serve                the same work in the foreground, in a terminal
 daedalus-agent status               print the running agent's status page
 daedalus-agent update [--apply]     check the release feed now; --apply installs
+daedalus-agent claude restart       ask the tray to restart `claude remote-control`
 daedalus-agent version
 ```
 
@@ -69,9 +82,10 @@ daedalus-agent version
 ```
 C:\Program Files\daedalus-agent\daedalus-agent.exe        the service (.old / .new around an update)
 C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at logon
-C:\ProgramData\daedalus-agent\config.toml            port, release repo, check interval, auto_update, log level
+C:\ProgramData\daedalus-agent\config.toml            port, release repo, check interval, auto_update, log level, awake_hold, claude_remote_control, claude_workdir
 C:\ProgramData\daedalus-agent\state.json             last update check and result
 C:\ProgramData\daedalus-agent\logs\agent.log.*       daily-rotated log
+C:\ProgramData\daedalus-agent\logs\claude-rc.log      what `claude remote-control` printed
 ```
 
 ## How an update happens

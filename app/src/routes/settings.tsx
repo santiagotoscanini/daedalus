@@ -3,6 +3,7 @@ import {
   CodeIcon,
   FolderGit2Icon,
   GlobeIcon,
+  MonitorSmartphoneIcon,
   NetworkIcon,
   PaletteIcon,
   PlugIcon,
@@ -19,11 +20,13 @@ import { Developer } from '../components/settings/developer'
 import { ExternalApps } from '../components/settings/external-apps'
 import { General } from '../components/settings/general'
 import { Integrations } from '../components/settings/integrations'
+import { Machines } from '../components/settings/machines'
 import { Network } from '../components/settings/network'
 import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
 import { TabBar } from '../components/tabs'
 import type { GithubAppStatus, GithubCallbackNotice } from '../core/settings/types'
+import { fetchNodesFn } from '../server/nodes'
 import { fetchApplyStatus } from '../server/registry'
 import {
   fetchAuthorization,
@@ -53,8 +56,9 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // The dividing line every section on this page has to respect: a setting the
 // NixOS side consumes belongs in the site repository, where changing it is a
 // commit and a rebuild. A setting it does not — the theme, the off-box
-// projects, and every UI preference after them — belongs in Postgres, where
-// changing it is an UPDATE and nothing rebuilds. Appearance and Projects are
+// projects, what the box asks of the other machines, and every UI
+// preference after them — belongs in Postgres, where changing it is an
+// UPDATE and nothing rebuilds. Appearance, Projects and Machines are
 // deliberately the second kind, which is why they save on click with no
 // Apply bar.
 //
@@ -65,10 +69,10 @@ import { fetchSiteEdit, fetchSiteState } from '../server/site'
 // box RUNS — the NixOS release, its support window, the channel — is on
 // System › Updates beside the engine's pin, with the other things that move.
 //
-// The tabs are the seven subjects a box has, in the order a first visit
+// The tabs are the eight subjects a box has, in the order a first visit
 // reads them: what it is called, how it is reached, what it talks to, where
-// its configuration lives, what else it lists, how it looks, and how it is
-// driven.
+// its configuration lives, what else it lists, what it asks of the other
+// machines, how it looks, and how it is driven.
 
 /** A tab's label with its icon: drawn quieter than the word, which carries the meaning. */
 function TabLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
@@ -88,6 +92,7 @@ const TABS = [
   { id: 'integrations', label: <TabLabel icon={<PlugIcon />}>Integrations</TabLabel> },
   { id: 'repository', label: <TabLabel icon={<FolderGit2Icon />}>Site</TabLabel> },
   { id: 'projects', label: <TabLabel icon={<GlobeIcon />}>Projects</TabLabel> },
+  { id: 'machines', label: <TabLabel icon={<MonitorSmartphoneIcon />}>Machines</TabLabel> },
   { id: 'appearance', label: <TabLabel icon={<PaletteIcon />}>Appearance</TabLabel> },
   { id: 'developer', label: <TabLabel icon={<CodeIcon />}>Developer</TabLabel> },
 ] as const
@@ -152,6 +157,7 @@ export const Route = createFileRoute('/settings')({
       githubApp,
       mcpTokens,
       authorization,
+      machines,
     ] = await Promise.all([
       fetchTheme(),
       fetchBoxSettings(),
@@ -167,6 +173,8 @@ export const Route = createFileRoute('/settings')({
       deps.tab === 'developer' ? fetchMcpTokens() : Promise.resolve([]),
       // The decision for this very request: two headers and one row.
       deps.tab === 'developer' ? fetchAuthorization() : Promise.resolve(null),
+      // The node rows with their policies: one table read, for the tab that edits them.
+      deps.tab === 'machines' ? fetchNodesFn() : Promise.resolve([]),
     ])
     return {
       theme,
@@ -178,6 +186,7 @@ export const Route = createFileRoute('/settings')({
       githubApp,
       mcpTokens,
       authorization,
+      machines,
       // The zone list asks Cloudflare, so it streams in behind the tab like the
       // integration checks.
       zones: general ? fetchZones() : null,
@@ -204,6 +213,7 @@ function SettingsPage() {
     githubApp,
     mcpTokens,
     authorization,
+    machines,
   } = Route.useLoaderData()
   // The bar's vocabulary is the registry's — a list of named things and the
   // fields that changed — so the site document is one entry named `site`.
@@ -291,7 +301,7 @@ function SettingsPage() {
     <Measure>
       <PageHead title="Settings">
         How this box is configured, and how it looks. What nix builds from is edited here and
-        applied as a rebuild; Projects and Appearance save to this control plane at once.
+        applied as a rebuild; Projects, Machines and Appearance save to this control plane at once.
       </PageHead>
 
       <TabBar
@@ -364,6 +374,7 @@ function SettingsPage() {
             </GuardedAwait>
           ))}
         {tab === 'projects' && <ExternalApps rows={externalApps} />}
+        {tab === 'machines' && <Machines rows={machines} />}
         {tab === 'appearance' && (
           <Appearance
             value={choice}

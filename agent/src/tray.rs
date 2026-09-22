@@ -9,6 +9,13 @@
 //! first lines are the state and whose rest are the few things worth a
 //! click — the status page, a check for updates, the log folder.
 //!
+//! It is also the Claude supervisor (claude.rs): this process is the one in
+//! the user's session, with the user's Claude login, so `claude
+//! remote-control` runs as its child. Every poll it sends the service a
+//! report of that and reads back the box's policy — run it or not — and
+//! the one instruction, restart. The service, in session 0, could do
+//! neither.
+//!
 //! It also keeps itself current: when the page reports a version other than
 //! its own, an update has swapped the binaries under it, and it restarts
 //! itself onto the new one. One instance at a time, through a named mutex.
@@ -21,6 +28,8 @@ use serde::Deserialize;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
+use crate::claude::{self, Report, ReportAnswer, Supervisor};
+use crate::hello::Policy;
 use crate::{config, DISPLAY_NAME, VERSION};
 
 const POLL: Duration = Duration::from_secs(5);
@@ -40,6 +49,8 @@ struct Page {
     last_update_result: Option<String>,
     #[serde(default)]
     control_plane: Box_,
+    #[serde(default)]
+    policy: Policy,
 }
 
 /// The box, as the page reports it.
@@ -130,10 +141,13 @@ struct Ui {
     line_hold: MenuItem,
     line_update: MenuItem,
     line_box: MenuItem,
+    line_claude: MenuItem,
     open_status: MenuItem,
     check_now: MenuItem,
+    restart_claude: MenuItem,
     open_logs: MenuItem,
-    hide: MenuItem,
+    open_claude_log: MenuItem,
+    quit: MenuItem,
 }
 
 impl Ui {
@@ -147,10 +161,17 @@ impl Ui {
         let line_hold = MenuItem::new("Awake hold: …", false, None);
         let line_update = MenuItem::new("Updates: …", false, None);
         let line_box = MenuItem::new("Box: …", false, None);
+        let line_claude = MenuItem::new("Claude: …", false, None);
         let open_status = MenuItem::new("Open status page", true, None);
         let check_now = MenuItem::new("Check for updates now", true, None);
+        let restart_claude = MenuItem::new("Restart Claude remote control", true, None);
         let open_logs = MenuItem::new("Open logs folder", true, None);
-        let hide = MenuItem::new("Hide icon (the service keeps running)", true, None);
+        let open_claude_log = MenuItem::new("Open Claude remote-control log", true, None);
+        let quit = MenuItem::new(
+            "Quit tray (stops Claude remote control; the service keeps running)",
+            true,
+            None,
+        );
 
         let menu = Menu::new();
         menu.append_items(&[
@@ -158,12 +179,15 @@ impl Ui {
             &line_hold,
             &line_update,
             &line_box,
+            &line_claude,
             &PredefinedMenuItem::separator(),
             &open_status,
             &check_now,
+            &restart_claude,
             &open_logs,
+            &open_claude_log,
             &PredefinedMenuItem::separator(),
-            &hide,
+            &quit,
         ])
         .context("building the menu")?;
 
@@ -181,10 +205,13 @@ impl Ui {
             line_hold,
             line_update,
             line_box,
+            line_claude,
             open_status,
             check_now,
+            restart_claude,
             open_logs,
-            hide,
+            open_claude_log,
+            quit,
         })
     }
 
@@ -201,21 +228,26 @@ impl Ui {
         self.look = look;
     }
 
-    /// Reflect one read of the page (or its absence).
-    fn show(&mut self, page: Option<&Page>) {
+    /// Reflect one read of the page (or its absence) and the supervisor's state.
+    fn show(&mut self, page: Option<&Page>, claude: &Report, claude_wanted: bool) {
+        let claude_line = claude_line(claude);
+        self.line_claude.set_text(&claude_line);
+
         let Some(p) = page else {
             self.set_look(Look::Off);
             self.line_hold.set_text("Awake hold: service not answering");
             self.line_update.set_text("Updates: unknown");
             self.line_box.set_text("Box: unknown");
             let _ = self.tray.set_tooltip(Some(format!(
-                "{DISPLAY_NAME} {VERSION}\nService not answering"
+                "{DISPLAY_NAME} {VERSION}\nService not answering\n{claude_line}"
             )));
             return;
         };
 
         let hold = if p.awake_hold {
             "Awake hold: on".to_string()
+        } else if !p.policy.awake_hold {
+            "Awake hold: off — the box lets this machine sleep".to_string()
         } else {
             match &p.hold_error {
                 Some(e) => format!("Awake hold: OFF — {e}"),
@@ -251,18 +283,25 @@ impl Ui {
         };
         self.line_box.set_text(&box_line);
 
-        let short = if !p.awake_hold {
+        // The hold is a fault only when the box wants it; Claude, only when
+        // it is wanted and not (yet) running.
+        let hold_bad = !p.awake_hold && p.policy.awake_hold;
+        let claude_bad = claude_wanted && !matches!(claude.state.as_str(), "running" | "starting");
+        let short = if hold_bad {
             "awake hold OFF"
         } else if p.update_available.is_some() || p.restart_pending {
             "update pending"
+        } else if claude_bad {
+            "Claude remote control not running"
         } else {
-            "awake hold on · up to date"
+            "up to date"
         };
-        let _ = self
-            .tray
-            .set_tooltip(Some(format!("{DISPLAY_NAME} {}\n{short}", p.version)));
+        let _ = self.tray.set_tooltip(Some(format!(
+            "{DISPLAY_NAME} {}\n{short}\n{claude_line}",
+            p.version
+        )));
 
-        let look = if !p.awake_hold || p.update_available.is_some() || p.restart_pending {
+        let look = if hold_bad || p.update_available.is_some() || p.restart_pending || claude_bad {
             Look::Warn
         } else {
             Look::Ok
@@ -271,9 +310,47 @@ impl Ui {
     }
 }
 
+/// One line for Claude Code, as the menu and the tooltip show it.
+fn claude_line(r: &Report) -> String {
+    let sessions = r.sessions.iter().filter(|s| s.alive).count();
+    let version = r
+        .server
+        .version
+        .as_deref()
+        .or(r.cli_version.as_deref())
+        .unwrap_or("");
+    match r.state.as_str() {
+        "running" => format!(
+            "Claude: remote control running {version} · {sessions} session{}",
+            if sessions == 1 { "" } else { "s" }
+        ),
+        "starting" => format!("Claude: remote control starting {version}"),
+        "waiting" => format!(
+            "Claude: remote control exited — {}",
+            r.detail.as_deref().unwrap_or("retrying")
+        ),
+        "off" => "Claude: remote control off (the box's policy)".to_string(),
+        "not-installed" => "Claude: Claude Code is not installed for this user".to_string(),
+        other => format!("Claude: remote control {other}"),
+    }
+}
+
+/// Send the supervisor's report to the service; its answer says whether the
+/// box wants the server running and whether to restart it now.
+fn send_report(port: u16, report: &Report) -> Option<ReportAnswer> {
+    ureq::post(&format!("http://127.0.0.1:{port}/claude/report"))
+        .timeout(Duration::from_secs(2))
+        .send_json(serde_json::to_value(report).ok()?)
+        .ok()?
+        .into_json()
+        .ok()
+}
+
 /// Start this same program again from its path and leave. Used when the
 /// service reports a version other than ours: the file under our feet is a
-/// newer one by then.
+/// newer one by then. The supervisor is dropped with us, so the Claude
+/// server restarts under the new tray — the one interruption an agent
+/// update costs a session on this machine.
 fn relaunch_self() {
     if let Ok(exe) = std::env::current_exe() {
         let _ = std::process::Command::new(exe).spawn();
@@ -317,13 +394,26 @@ pub fn run() -> Result<()> {
     let cfg = config::load_or_default()?;
     let port = cfg.port;
     let logs: PathBuf = config::log_dir();
+    let claude_log = logs.join("claude-rc.log");
     let mut ui = Ui::build()?;
+
+    // The Claude server, in this session with this user's login. Wanted by
+    // the config until the service relays the box's policy.
+    let workdir = cfg
+        .claude_workdir
+        .as_deref()
+        .filter(|d| !d.is_empty())
+        .map(PathBuf::from)
+        .or_else(claude::home_dir)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let mut sup = Supervisor::new(workdir, claude_log.clone(), cfg.claude_remote_control);
 
     let mut next_poll = Instant::now();
     loop {
         if !pump() {
             return Ok(());
         }
+        sup.tick();
         while let Ok(ev) = MenuEvent::receiver().try_recv() {
             let id = ev.id();
             if *id == ui.open_status.id() {
@@ -331,9 +421,14 @@ pub fn run() -> Result<()> {
             } else if *id == ui.check_now.id() {
                 request_check(port);
                 next_poll = Instant::now() + Duration::from_secs(2);
+            } else if *id == ui.restart_claude.id() {
+                sup.restart();
+                next_poll = Instant::now() + Duration::from_secs(1);
             } else if *id == ui.open_logs.id() {
                 open(&logs.to_string_lossy());
-            } else if *id == ui.hide.id() {
+            } else if *id == ui.open_claude_log.id() {
+                open(&claude_log.to_string_lossy());
+            } else if *id == ui.quit.id() {
                 return Ok(());
             }
         }
@@ -345,7 +440,15 @@ pub fn run() -> Result<()> {
                     return Ok(());
                 }
             }
-            ui.show(page.as_ref());
+            sup.tick();
+            let report = sup.report();
+            if let Some(answer) = send_report(port, &report) {
+                sup.set_wanted(answer.wanted);
+                if answer.restart {
+                    sup.restart();
+                }
+            }
+            ui.show(page.as_ref(), &report, sup.wanted());
             next_poll = Instant::now() + POLL;
         }
         wait_for_input(Duration::from_millis(250));
