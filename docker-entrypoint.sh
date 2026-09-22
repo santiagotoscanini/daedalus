@@ -27,8 +27,8 @@ if [ "${DAEDALUS_DEV:-}" = "1" ]; then
       exit 1
     fi
 
-    # The registry is the mounted tree's own declaration unless the caller
-    # overrides it (a checkout that cannot reach that registry). pnpm silently
+    # The registry is the mounted tree's own declaration (npmjs) unless the caller
+    # names a mirror (a box that publishes one hands it in). pnpm silently
     # IGNORES npm_config_registry / NPM_CONFIG_REGISTRY, hence the flag.
     REGISTRY="${NPM_REGISTRY:-$(sed -n 's|^registry:[[:space:]]*||p' pnpm-workspace.yaml)}"
     test -n "$REGISTRY"

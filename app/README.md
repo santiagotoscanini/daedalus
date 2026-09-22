@@ -15,7 +15,7 @@ Everything else is one level up, and this file does not restate it:
 - [`../.claude/rules/`](../.claude/rules/): the architecture map, the
   data-flow rules and the UI rules.
 - [`../PLAN.md`](../PLAN.md): where the productization stands.
-- `pnpm-workspace.yaml`: how to add a dependency through Verdaccio and
+- `pnpm-workspace.yaml`: how to add a dependency under the registry policy and
   the 7-day release cooldown, in its comments.
 
 `/api/healthz` is load-bearing: it is the gatus probe, the forward-auth

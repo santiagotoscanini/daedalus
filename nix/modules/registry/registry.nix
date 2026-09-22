@@ -231,6 +231,16 @@ in
 
     fleet.logStacks.registry = [ "zot" ];
 
+    # zot prints its whole configuration at INFO on every start — the OIDC
+    # client secret masked, the deploy hook's token NOT. That line would land
+    # in Loki, readable by anything with a Grafana session. Dropped; every
+    # other line zot emits still arrives.
+    fleet.logDrops.zot-config-dump = {
+      selector = "{container=\"zot\"}";
+      expression = "\"message\":\"configuration settings\"";
+      reason = "zot_config_dump";
+    };
+
     # Pocket ID client — id `zot`, secret generated on the box. Not
     # group-restricted: anonymous pull
     # is the point, and the browser UI is the only thing OIDC covers.

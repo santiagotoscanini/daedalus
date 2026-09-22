@@ -67,8 +67,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
 
-      # pnpm-workspace.yaml sends every install to the box's Verdaccio, which a
-      # hosted runner cannot reach. What pins a tarball is the lockfile's
+      # pnpm-workspace.yaml names npmjs already; the flag says so here as well,
+      # where a reader looks first. What pins a tarball is the lockfile's
       # integrity hash, not the registry it came from, so npmjs has to serve the
       # same bytes, and minimumReleaseAge still applies to every entry.
       - name: Install

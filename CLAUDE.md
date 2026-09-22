@@ -50,7 +50,7 @@ it. What a change needs:
 - `app/src/**` → nothing. Saving the file is the deploy; Vite compile
   errors land in `podman logs app-daedalus`.
 - `app/package.json` → `sudo systemctl restart podman-app-daedalus`
-  (re-runs `pnpm install --frozen-lockfile`; Verdaccio is a hard
+  (re-runs `pnpm install --frozen-lockfile`; the npm registry is a hard
   startup dependency, minutes on a cold cache).
 - routes added/renamed → `pnpm generate-routes`, or `pnpm typecheck`,
   which runs it. `app/src/routeTree.gen.ts` is generated and

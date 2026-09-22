@@ -7,7 +7,7 @@
 #
 # On GitHub-hosted runners for the same reason as ci.yml, and one more: the
 # image is what a box that is not this one installs, so it has to build where
-# the box's Verdaccio does not exist. The Dockerfile's NPM_REGISTRY defaults to
+# no mirror exists. The Dockerfile's NPM_REGISTRY defaults to
 # npmjs; the lockfile's integrity hashes are what pin the bytes.
 #
 # A release is `ghcr.io/<owner>/daedalus:<version>` and `:sha-<short sha>`, and

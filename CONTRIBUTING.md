@@ -23,16 +23,14 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 11.18.0, and `engineStrict` makes Node 24 a hard requirement rather than a
 warning.
 
-**The `--registry` flag is not optional.** `pnpm-workspace.yaml` sends
-every install to the author's Verdaccio, which has no public DNS record.
-What pins a tarball is the lockfile's integrity hash, not the host that
-served it, so npmjs delivers the same bytes — this is exactly what CI does
-(`.github/workflows/ci.yml`). Leave the flag off and pnpm does not fail
-fast: it retries every lockfile entry against a name that does not resolve,
-one minute apart, printing `ENOTFOUND … Will retry in 1 minute` for
-minutes. The 7-day `minimumReleaseAge` cooldown is re-verified on every
-install, `--frozen-lockfile` included; it costs about three seconds and
-needs no configuration.
+`pnpm-workspace.yaml` names npmjs, so a plain install works anywhere; the
+`--registry` flag above only says so where a reader looks first. What pins
+a tarball is the lockfile's integrity hash, not the host that served it, so
+any mirror that serves the same bytes will do — the author's own box hands
+its containers one through `NPM_REGISTRY`, which the image build and the
+dev entrypoint both take. The 7-day `minimumReleaseAge` cooldown is
+re-verified on every install, `--frozen-lockfile` included; it costs about
+three seconds and needs no configuration.
 
 Install is 264 packages and 189 MB, done in seconds. Lint, typecheck, test
 and build take under fifteen seconds together; 857 tests pass and 2 skip —

@@ -1,18 +1,16 @@
 # pnpm 11 reads project settings from this file, not .npmrc.
 
-# Every dependency resolves through the self-hosted Verdaccio — the dev
-# container's entrypoint reads this line rather than restating a registry, so
-# there is exactly one declaration and no per-environment drift.
+# Every dependency resolves from npmjs unless the environment says otherwise:
+# CI passes `--registry`, the image build takes NPM_REGISTRY, and a box that
+# publishes its own mirror hands the dev container NPM_REGISTRY as well
+# (docker-entrypoint.sh reads this line only when it is not told). One
+# declaration, and a checkout anywhere installs.
 #
-# Verdaccio proxies npmjs transparently and vets nothing; a malicious package
-# passes straight through. The real defence is the lockfile — pnpm checks every
-# tarball against the integrity hash pinned there, so even a compromised proxy
-# cannot swap the contents of a locked dependency.
-#
-# Consequence to accept: Verdaccio is a hard dependency of every install here.
-# If its npmjs uplink is down it answers 500 for anything uncached and the
-# container's install step fails. That is the intended behaviour of a gate.
-registry: https://verdaccio.toscanini.me/
+# A mirror vets nothing; a malicious package passes straight through. The real
+# defence is the lockfile — pnpm checks every tarball against the integrity
+# hash pinned there, so even a compromised proxy cannot swap the contents of a
+# locked dependency.
+registry: https://registry.npmjs.org/
 
 # Supply-chain cooldown: refuse a package version published less than 7 days
 # ago, so a freshly-published (possibly compromised) release ages out before

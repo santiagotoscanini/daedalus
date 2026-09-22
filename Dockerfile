@@ -34,8 +34,8 @@ ADD --checksum=sha256:${SOPS_SHA256} \
 # --- build -------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS build
 
-# app/pnpm-workspace.yaml names the box's Verdaccio, which nothing outside the
-# house can reach. The lockfile holds integrity hashes and no tarball URLs, so
+# app/pnpm-workspace.yaml names npmjs; a box with a mirror of its own passes
+# it here. The lockfile holds integrity hashes and no tarball URLs, so
 # any registry that serves the same bytes will do; minimumReleaseAge and
 # allowBuilds come from the same file and apply whichever registry answers.
 ARG NPM_REGISTRY=https://registry.npmjs.org/
