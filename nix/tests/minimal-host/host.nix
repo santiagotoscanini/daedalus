@@ -58,6 +58,9 @@
     # Logs, ON: the shipper's config renders from three registries no stack on
     # this host writes, so every generated section is empty and still parses.
     modules.logging.enable = true;
+    # The LAN resolver, ON, with no reservations file: every published
+    # hostname gets a local record; no DHCP inventory, no render for it.
+    modules.pihole.enable = true;
     # Metrics and dashboards, ON: Grafana takes a database on the cluster and
     # a client at the provider; the embed policy for the control plane's panels
     # names the control plane.

@@ -110,6 +110,7 @@
         "apps/declarations.nix"
         "logging/logging.nix"
         "monitoring/monitoring.nix"
+        "pihole/pihole.nix"
         "pocket-id/clients.nix"
         "pocket-id/pocket-id.nix"
         "registry/registry.nix"
