@@ -1,6 +1,7 @@
 # The daedalus engine: one image, run two ways (docker-entrypoint.sh).
 #
 #   podman build -t daedalus .                        # npmjs, what CI does
+#   podman build -t daedalus-runtime --target runtime . # the runtime alone (dev mode)
 #   podman build -t daedalus \                        # through a registry mirror
 #     --add-host=registry.example.internal:host-gateway \
 #     --build-arg NPM_REGISTRY=https://registry.example.internal/ .
@@ -66,8 +67,13 @@ RUN pnpm build
 RUN rm -rf node_modules \
  && pnpm install --prod --frozen-lockfile --offline --config.registry="${NPM_REGISTRY}"
 
-# --- run ---------------------------------------------------------------------
-FROM ${NODE_IMAGE}
+# --- runtime -----------------------------------------------------------------
+# Everything but the app: node, corepack's shims, sops, the entrypoint. The
+# final stage puts the bundle on top of it. A box that runs the control plane
+# in dev mode builds THIS stage on its own (`--target runtime`, from a context
+# of just this file and the entrypoint) and mounts its checkout at /app — so
+# that image moves only when the runtime does, never when a route is edited.
+FROM ${NODE_IMAGE} AS runtime
 
 # Shims only, a few symlinks: the dev branch fetches the pnpm its mounted tree
 # names. This, and node itself, is all of the toolchain the image carries —
@@ -78,11 +84,6 @@ RUN corepack enable
 # hide the bundle the entrypoint falls back to.
 WORKDIR /opt/daedalus
 
-# package.json is read at run time for the engine's version (core/site).
-COPY --from=build /src/app/package.json /src/app/server.mjs ./
-COPY --from=build /src/app/drizzle ./drizzle
-COPY --from=build /src/app/node_modules ./node_modules
-COPY --from=build /src/app/dist ./dist
 COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/daedalus-entrypoint
 # Where core/vault.ts execs it (the sops stage above says why it is here).
 COPY --from=sops --chmod=0755 /sops /usr/local/bin/sops
@@ -94,3 +95,12 @@ ENV PORT=3000
 EXPOSE 3000
 
 ENTRYPOINT ["daedalus-entrypoint"]
+
+# --- run ---------------------------------------------------------------------
+FROM runtime
+
+# package.json is read at run time for the engine's version (core/site).
+COPY --from=build /src/app/package.json /src/app/server.mjs ./
+COPY --from=build /src/app/drizzle ./drizzle
+COPY --from=build /src/app/node_modules ./node_modules
+COPY --from=build /src/app/dist ./dist

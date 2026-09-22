@@ -419,6 +419,8 @@ in
         name, # localhost/<name>
         tagPrefix, # human-readable tag part (e.g. the app version)
         contextDir, # store path with the Containerfile + context
+        file ? "Containerfile", # the build file, relative to contextDir
+        target ? null, # a stage to stop at (`podman build --target`), or the whole file
         gates, # consumer units; build runs before= / wantedBy= them
       }:
       let
@@ -444,7 +446,7 @@ in
             cd ${ctx}
             ${pkgs.podman}/bin/podman build \
               --tag ${image} \
-              --file Containerfile \
+              --file ${file} \${lib.optionalString (target != null) "\n  --target ${target} \\"}
               .
           '';
         };

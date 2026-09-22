@@ -30,21 +30,13 @@
 # image on this host (daedalus-build, stacks/daedalus). Override for
 # forks or pinned digests.
 #
-# Source modes — `source.mode`, which half of the platform an app uses:
-#
-#   "registry" (default) — everything above. The box builds, zot hosts,
-#                the deploy timer pulls. Push to main and it's live.
-#   "local"    — the source lives on THIS HOST at `source.path` (daedalus:
-#                the engine clone under the operator's projects) and is
-#                bind-mounted at /app; the container runs a dev server
-#                against it, so editing a file is the whole deploy. The
-#                image built from `source.contextDir` carries only the
-#                runtime: a mkLocalImage context is interpolated into
-#                /nix/store, so code copied in would be a frozen snapshot
-#                and hot reload would be watching the wrong files.
-#                Suppresses the deploy timer (nothing to poll) and the
-#                box's build agent (stacks/daedalus/build-agent.nix filters
-#                on this). Current user: stacks/daedalus.
+# Dev mode — `source.dev`: the image is the same, but it runs as a dev
+# server over a checkout on THIS HOST (`source.path`, bind-mounted at /app):
+# editing a file is the whole deploy. The container gets `DAEDALUS_DEV=1`
+# and runs as container uid 0 — the operator, who owns the checkout. Used
+# by the control plane on the reference host (stacks/daedalus). Suppresses
+# the deploy timer by default (a new image would only restart the dev
+# server).
 #
 # Database: `postgres.enable = true` materializes a role + database
 # on the shared `pg` cluster via modules/app-db. App reads
@@ -116,7 +108,7 @@
   config,
   lib,
   pkgs,
-  mkLocalImage,
+
   mkRootlessContainer,
   ...
 }:
@@ -193,25 +185,10 @@ let
       # only ever talks to the database is off, not undeclared.
       exposed = running && app.stage != "off";
 
-      # Local-source app (stacks/daedalus, the control plane): run from a checkout on this host
-      # (`source.path`) instead of an image pulled from the registry, with the
-      # source bind-mounted so a dev server hot-reloads it. See the `source`
-      # option's description for
-      # why the code must NOT ride in the image.
-      localSource = app.source.mode == "local";
-
-      # The runtime-only dev image. mkLocalImage tags with the build context's
-      # store hash, so the tag — and therefore this container's ExecStart —
-      # moves when the Containerfile changes and stays put when app code
-      # changes. That asymmetry is the whole point: editing a route must not
-      # restart anything. Forced only under `localSource`, so `contextDir`
-      # being null in registry mode never gets interpolated.
-      devImage = mkLocalImage {
-        name = "${cName}-dev";
-        tagPrefix = "dev";
-        inherit (app.source) contextDir;
-        gates = [ "podman-${cName}.service" ];
-      };
+      # Dev mode (the control plane on the reference host): the same image,
+      # run as a dev server over a checkout on this host. See the `source`
+      # option's description.
+      inherit (app.source) dev;
 
       # cgroup v2 caps — see the `resources` option descriptions for what each
       # one actually enforces. Omitted entirely when null, so an app with no
@@ -367,16 +344,16 @@ let
           message = "fleet.apps.${name}: `auth.headers` are set by the forward-auth middleware — they only exist under `auth.mode = \"proxy\"`.";
         }
         {
-          assertion = localSource -> (app.source.path != null && app.source.contextDir != null);
-          message = "fleet.apps.${name}: `source.mode = \"local\"` needs both `source.path` (the host dir bind-mounted at /app) and `source.contextDir` (the dir holding the dev Containerfile).";
+          assertion = dev -> app.source.path != null;
+          message = "fleet.apps.${name}: `source.dev` needs `source.path` — the host directory bind-mounted at /app for the dev server to run against.";
         }
         {
-          assertion = !localSource -> (app.source.path == null && app.source.contextDir == null);
-          message = "fleet.apps.${name}: `source.path` / `source.contextDir` only apply to `source.mode = \"local\"` — a registry app runs a prebuilt image and mounts no source.";
+          assertion = !dev -> app.source.path == null;
+          message = "fleet.apps.${name}: `source.path` only applies to `source.dev` — an app runs from its bundle and mounts no source otherwise.";
         }
         {
-          assertion = localSource -> !egressEnabled;
-          message = "fleet.apps.${name}: `source.mode = \"local\"` cannot combine with `egress` — the dev server's install step needs the npm registry, which a VPN-only netns doesn't route to.";
+          assertion = dev -> !egressEnabled;
+          message = "fleet.apps.${name}: `source.dev` cannot combine with `egress` — the dev server's install step needs the npm registry, which a VPN-only netns doesn't route to.";
         }
         {
           # A `declared` app runs nothing, so its auth mode is a statement about
@@ -613,10 +590,10 @@ let
         }
       );
 
-      # One attrset rather than four `systemd.services."x" = …` statements:
-      # the image-build unit must be absent (not merely disabled) for registry
-      # apps, and `lib.optionalAttrs` cannot be mixed with dotted-path
-      # definitions of the same attribute.
+      # One attrset rather than several `systemd.services."x" = …` statements:
+      # a unit that must be ABSENT for some apps (the task units, the deploy
+      # unit of a `declared` app) cannot be expressed by mixing
+      # `lib.optionalAttrs` with dotted-path definitions of the same attribute.
       systemd.services = {
         # Baseline secrets bootstrap. Generates AUTH_SECRET on first boot
         # and writes the per-app env file. Idempotent: re-running is safe;
@@ -681,9 +658,7 @@ let
         # Container ordering: the secrets bootstrap plus (egress mode) the
         # netns owner. The pg + per-app-bootstrap edges are NOT repeated
         # here — appDatabases.consumers already generates both (including
-        # the transaction-proof direct podman-pg edge). The local-source
-        # image build adds its own before=/wantedBy= edges via mkLocalImage's
-        # `gates`, so it needs no entry here either.
+        # the transaction-proof direct podman-pg edge).
       }
       // lib.optionalAttrs running {
         "podman-${cName}" = {
@@ -696,9 +671,6 @@ let
           ]
           ++ (lib.optional egressEnabled "podman-${app.egress.container}.service");
         };
-      }
-      // lib.optionalAttrs localSource {
-        "app-${name}-image-build" = devImage.service;
       }
       // lib.listToAttrs (
         map (t: {
@@ -772,20 +744,20 @@ let
       virtualisation.oci-containers.containers = lib.optionalAttrs running {
         "${cName}" = mkRootlessContainer (
           {
-            image = if localSource then devImage.image else app.image;
+            inherit (app) image;
 
             # A hostPath on another dataset additionally picks up RequiresMountsFor for
             # free — podman.nix extracts it from `volumes`, closing the
             # cold-boot race where the container starts before the ZFS
             # dataset mounts and writes into the empty underlay.
             #
-            # The local-source mount goes at /app, i.e. the image's WORKDIR:
-            # this is the live repo directory, not a copy, which is what lets
+            # The dev-mode mount goes at /app, where the image's entrypoint looks
+            # for a tree: the live checkout, not a copy, which is what lets
             # the dev server watch files edited on the host. /app/data (storage)
             # nests inside it when both are on; podman orders nested mounts by
             # path depth, so the inner one still wins.
             volumes =
-              lib.optional localSource "${app.source.path}:/app"
+              lib.optional dev "${app.source.path}:/app"
               ++ lib.optional storageEnabled "${storageHostPath}:/app/data";
 
             environmentFiles = [
@@ -829,6 +801,17 @@ let
               OIDC_PROVIDER_NAME = "Pocket ID";
               OIDC_SCOPES = app.auth.scopes;
             })
+            # Dev mode: the entrypoint's switch, and — when the box publishes an
+            # npm mirror — where the install at start goes. The image reads the
+            # registry out of the mounted tree's own declaration otherwise.
+            // (lib.optionalAttrs dev (
+              {
+                DAEDALUS_DEV = "1";
+              }
+              // lib.optionalAttrs (config.fleet.builder.npmMirrorHost != null) {
+                NPM_REGISTRY = "https://${config.fleet.builder.npmMirrorHost}/";
+              }
+            ))
             // app.env;
 
             # Every app image lives on the box's own zot, which serves
@@ -845,6 +828,9 @@ let
             extraOptions = [
               "--init"
             ]
+            # Dev mode runs as container uid 0 — the operator on the host, who
+            # owns the checkout; the image's own user owns nothing there.
+            ++ lib.optional dev "--user=0:0"
             ++ (lib.optional egressEnabled "--network=container:${app.egress.container}")
             ++ resourceFlags;
           }

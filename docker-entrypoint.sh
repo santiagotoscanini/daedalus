@@ -54,6 +54,13 @@ fi
 
 cd /opt/daedalus
 
+# The runtime stage alone (`--target runtime`, what a dev-mode box builds)
+# carries no bundle. Saying so beats node's "Cannot find module".
+if [ ! -f server.mjs ]; then
+  echo "[daedalus] this image is the runtime stage only — no bundle at /opt/daedalus. Run it with DAEDALUS_DEV=1 and a source tree at /app." >&2
+  exit 1
+fi
+
 # Set here and not with ENV: pnpm skips devDependencies under
 # NODE_ENV=production, which would leave the dev branch without Vite.
 export NODE_ENV=production

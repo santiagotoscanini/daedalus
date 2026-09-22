@@ -10,7 +10,7 @@ This tree is the OS half of daedalus: `nix/platform/**` (the base every
 stack rides on — container runtime and its helpers, the publish layer,
 site constants, secrets, ZFS, backup, mail, git, the weekly upgrade),
 `nix/stacks/daedalus/**` (the control plane's own module, `self.json`, the
-host agents in `host/*.sh`, the runtime image context in `assets/`),
+host agents in `host/*.sh`),
 `nix/modules/<id>/**` (the catalog: stacks that have migrated here, each
 behind a switch that defaults OFF — §7) and `nix/tests/minimal-host/` (a
 stranger's smallest host, evaluated by `nix flake check`).

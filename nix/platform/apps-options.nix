@@ -17,8 +17,7 @@
 #
 # Two defaults read other modules' values, lazily:
 #   image             `<fleet.webApps.registry.hostname>/<name>:latest` — the
-#                     container-registry stack publishes that webApp. Only
-#                     forced for a `source.mode = "registry"` app.
+#                     container-registry stack publishes that webApp.
 #   storage.hostPath  under `<fleet.stateRoot>/apps`.
 
 let
@@ -45,59 +44,37 @@ in
       lib.types.submodule (
         { name, config, ... }: {
           options = {
-            # Where the running code comes from. "registry" is the platform's
-            # normal loop (the box builds, zot hosts, the deploy timer pulls);
-            # "local" is the escape hatch for an app whose source lives in
-            # this flake repo and is edited in place.
+            # The image is always the app's `image` — the build agent's, or a
+            # published one. `source.dev` decides how it RUNS: from its bundle
+            # (the platform's normal loop), or as a dev server over a checkout
+            # on this host, for the one app whose source is edited in place.
             source = {
-              mode = lib.mkOption {
-                type = lib.types.enum [
-                  "registry"
-                  "local"
-                ];
-                default = "registry";
+              dev = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
                 description = ''
-                  "registry" — the image is built on this box by the build
-                  agent (daedalus-build), pushed to `${registryHost}`,
-                  and pulled here by `app-<name>-deploy.timer`. Push to main
-                  and it's live.
+                  Run the image in dev mode: `source.path` is bind-mounted at
+                  /app, the container is told `DAEDALUS_DEV=1` and runs as
+                  container uid 0 (the operator on the host, who owns the
+                  checkout), and the image's entrypoint installs and starts a
+                  dev server against the mounted tree. Editing a file IS the
+                  deploy: no commit, no build, no image pull, no rebuild.
 
-                  "local" — the source lives on this host at `source.path`
-                  (daedalus: the engine clone under ${operator.home}/projects) and
-                  is bind-mounted into the container at /app, which runs a dev
-                  server against it. Editing a file IS the deploy: no commit,
-                  no build, no image pull, no rebuild. The image built from
-                  `source.contextDir` carries ONLY the runtime — copying the
-                  code in would defeat the whole thing, since a `mkLocalImage`
-                  context is interpolated into /nix/store and frozen there.
-
-                  Consequences of "local", all deliberate: no auto-deploy
-                  timer (nothing to poll), nothing for the build agent to
-                  build (only registry-mode apps are buildable), and the app's
-                  availability now depends on the npm registry at container
-                  start.
+                  Consequences, all deliberate: no auto-deploy timer by
+                  default (a new image would only restart the dev server), and
+                  the app's availability now depends on the npm registry at
+                  container start.
                 '';
               };
               path = lib.mkOption {
                 type = lib.types.nullOr lib.types.str;
                 default = null;
                 description = ''
-                  Local mode: host directory bind-mounted at /app. A plain
+                  Dev mode: the host directory bind-mounted at /app. A plain
                   string, NOT a nix path — a path literal would be copied into
                   /nix/store and the container would watch the frozen copy.
                 '';
                 example = "${operator.home}/projects/daedalus/app";
-              };
-              contextDir = lib.mkOption {
-                type = lib.types.nullOr lib.types.path;
-                default = null;
-                description = ''
-                  Local mode: directory holding the dev runtime's
-                  `Containerfile`. Keep the app source OUT of it — the store
-                  hash of this directory is the image tag, so anything in here
-                  restarts the container when it changes.
-                '';
-                example = lib.literalExpression "./assets";
               };
             };
 
@@ -113,8 +90,8 @@ in
                 forks, or pinned digests (the immutable `sha-<sha>` tags the
                 build agent pushes beside `latest`).
 
-                Ignored entirely when `source.mode = "local"` — that image is
-                built on the box from `source.contextDir`.
+                In dev mode (`source.dev`) this is the runtime the dev server
+                runs in — the mounted tree supplies the code.
               '';
               example = "${registryHost}/example:sha-89dfc4456f8b2c4531f84790cce5e179bdaeae6a";
             };
@@ -445,15 +422,15 @@ in
             deploy = {
               enable = lib.mkOption {
                 type = lib.types.bool;
-                default = config.source.mode == "registry";
-                defaultText = lib.literalExpression ''config.source.mode == "registry"'';
+                default = !config.source.dev;
+                defaultText = lib.literalExpression "!config.source.dev";
                 description = ''
                   Poll the registry and redeploy the container when the image digest
                   moves. ON by default for registry apps: every one of them rides a
                   moving `:latest` the box's build agent publishes on push-to-main,
                   so "new image → run it" is the expected behaviour, not an opt-in.
-                  OFF by default
-                  under `source.mode = "local"`, where there is no registry to poll
+                  OFF by default in dev mode (`source.dev`), where a new image
+                  would only restart the dev server
                   and the source is already live.
 
                   Turn OFF to freeze an app on whatever it's running — pair with a
