@@ -1,0 +1,102 @@
+{
+  "distSpecVersion": "1.1.1",
+  "storage": {
+    "rootDirectory": "/var/lib/zot",
+    "dedupe": true,
+    "gc": true,
+    "gcDelay": "1h",
+    "gcInterval": "24h",
+    "retention": {
+      "dryRun": false,
+      "delay": "24h",
+      "policies": [
+        {
+          "repositories": ["ipcrawl", "cache/ipcrawl", "spike"],
+          "deleteReferrers": true,
+          "deleteUntagged": true,
+          "keepTags": []
+        },
+        {
+          "repositories": ["cache/**"],
+          "deleteReferrers": true,
+          "deleteUntagged": true,
+          "keepTags": [
+            { "patterns": ["^buildkit$"] },
+            { "patterns": [".*"], "pushedWithin": "48h" }
+          ]
+        },
+        {
+          "repositories": ["**"],
+          "deleteReferrers": true,
+          "deleteUntagged": true,
+          "keepTags": [
+            { "patterns": ["^latest$"] },
+            { "patterns": ["^sha-"], "mostRecentlyPushedCount": 10 },
+            { "patterns": [".*"], "pushedWithin": "72h" }
+          ]
+        }
+      ]
+    }
+  },
+  "http": {
+    "address": "0.0.0.0",
+    "port": "5000",
+    "externalUrl": "${REGISTRY_URL}",
+    "compat": ["docker2s2"],
+    "readTimeout": "600s",
+    "writeTimeout": "600s",
+    "auth": {
+      "htpasswd": { "path": "/etc/zot/htpasswd" },
+      "failDelay": 5,
+      "apikey": true,
+      "openid": {
+        "providers": {
+          "oidc": {
+            "issuer": "${SSO_ISSUER}",
+            "clientid": "${OIDC_CLIENT_ID}",
+            "clientsecret": "${OIDC_CLIENT_SECRET}",
+            "scopes": ["openid", "profile", "email"]
+          }
+        }
+      }
+    },
+    "accessControl": {
+      "metrics": {
+        "users": ["prometheus"]
+      },
+      "repositories": {
+        "**": {
+          "anonymousPolicy": ["read"],
+          "policies": [{ "users": ["builder"], "actions": ["read", "create", "update"] }],
+          "defaultPolicy": ["read"]
+        }
+      },
+      "adminPolicy": {
+        "users": ["${OPERATOR_EMAIL}"],
+        "actions": ["read", "create", "update", "delete"]
+      }
+    }
+  },
+  "log": { "level": "info" },
+  "extensions": {
+    "search": {
+      "enable": true,
+      "cve": { "updateInterval": "24h" }
+    },
+    "ui": { "enable": true },
+    "metrics": { "enable": true, "prometheus": { "path": "/metrics" } },
+    "scrub": { "enable": true, "interval": "168h" },
+
+    "events": {
+      "enable": true,
+      "sinks": [
+        {
+          "type": "http",
+          "address": "${DAEDALUS_DEPLOY_URL}",
+          "timeout": "10s",
+          "headers": { "X-Deploy-Token": "${DEPLOY_HOOK_TOKEN}" }
+        }
+      ]
+    }
+  }
+}

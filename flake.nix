@@ -108,6 +108,7 @@
         "app-db/exporter.nix"
         "pocket-id/clients.nix"
         "pocket-id/pocket-id.nix"
+        "registry/registry.nix"
         "stirling-pdf/stirling-pdf.nix"
         "traefik/traefik.nix"
       ];
