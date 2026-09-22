@@ -1473,10 +1473,10 @@ in
             # account and tunnel ids beside it are the tunnel's business and arrive
             # from stacks/cloudflared through fleet.dashboard while it runs.
             CF_ZONE_ID = config.fleet.cloudflare.zoneId;
-            # The default route, which is the router. Bound from the one option that
-            # already says where this box sends everything it cannot deliver itself,
-            # so there is no second copy of the address to drift.
-            GATEWAY_IP = config.networking.defaultGateway.address;
+            # The default route, which is the router. Bound from the site's gateway
+            # (site.nix, from site.json) — the one place that says where this box
+            # sends everything it cannot deliver itself, so no second copy can drift.
+            GATEWAY_IP = config.fleet.gateway;
             # The product name, and ONLY that. The router serves no API, but its
             # login page carries a build stamp — model, hardware revision, firmware,
             # build date — so all four of those are read off the device and a
@@ -1490,8 +1490,8 @@ in
             # HTTP for a page that carries no secret. The LINK is a person about to
             # type an admin password, where TLS is the whole point. Both interpolate
             # the same gateway option, so neither can drift from the other.
-            ROUTER_URL = "http://${config.networking.defaultGateway.address}";
-            ROUTER_ADMIN_URL = "https://${config.networking.defaultGateway.address}/webpages/index.html#/login";
+            ROUTER_URL = "http://${config.fleet.gateway}";
+            ROUTER_ADMIN_URL = "https://${config.fleet.gateway}/webpages/index.html#/login";
             # What nearly every pi-hole hosts entry points at. Bound from the option
             # that GENERATES those entries, so "this one points somewhere else" stays
             # a real distinction instead of a comparison against a stale literal.

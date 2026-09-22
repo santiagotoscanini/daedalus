@@ -90,7 +90,10 @@ let
   # down is this box's link. A literal address for the far end, never a
   # name — resolving it would route the check through pi-hole and turn a DNS
   # outage into a phantom internet outage.
-  gateway = config.networking.defaultGateway.address;
+  # The site's gateway (site.nix, from site.json) rather than the static route
+  # the reference host happens to configure: a host on DHCP has no
+  # `networking.defaultGateway`, and the router is a fact about the site.
+  inherit (config.fleet) gateway;
   farSide = "1.1.1.1";
 
   livenessScript = pkgs.writeShellScript "container-up-export" ''
