@@ -265,36 +265,65 @@ pub fn converge_permissions() {
     }
 }
 
+/// `launchctl` with a deadline: `kickstart` on a job in "spawn scheduled"
+/// blocks forever (0.5.2 leaked one hung root child per daemon start), and
+/// nothing here is worth waiting on for more than a few seconds.
+fn launchctl_timeout(args: &[&str], secs: u64) -> Result<String> {
+    let mut child = Command::new("launchctl")
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    loop {
+        if let Some(status) = child.try_wait()? {
+            let out = child.wait_with_output()?;
+            let text = String::from_utf8_lossy(&out.stdout).to_string();
+            if status.success() {
+                return Ok(text);
+            }
+            bail!(
+                "launchctl {}: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            bail!("launchctl {}: no answer in {secs} s", args.join(" "));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 /// Start the menu bar app in the console user's session if it is not
 /// running. launchd gives up on a job whose spawn failed (a root-only tree
 /// did that to every 0.5.0 install) and a self-update replaces binaries
-/// without touching jobs, so the daemon asks for it at every start, after
-/// the permissions are right. A tray that is already up is left alone;
-/// one whose binary changed relaunches itself.
+/// without touching jobs, so the daemon does this at every start, after
+/// the permissions are right. A job with a pid is left alone; one without
+/// is booted out — which clears its stale failure — and bootstrapped again,
+/// which starts it.
 pub fn kickstart_tray() {
     let Some(uid) = console_uid().filter(|u| *u != 0) else {
+        tracing::info!("no console user; the menu bar app starts at the next login");
         return;
     };
     if !tray_plist().exists() {
         return;
     }
-    let target = format!("gui/{uid}/{TRAY_LABEL}");
-    // Not loaded in that session yet (a login that predates the install):
-    // bootstrap it, which also starts it. Loaded: kickstart starts it if
-    // it is not running.
-    if launchctl(&["print", &target]).is_err() {
-        match launchctl(&[
-            "bootstrap",
-            &format!("gui/{uid}"),
-            &tray_plist().to_string_lossy(),
-        ]) {
-            Ok(()) => tracing::info!(uid, "menu bar app loaded into the console session"),
-            Err(e) => tracing::warn!(uid, error = %e, "menu bar app not loaded"),
-        }
+    let domain = format!("gui/{uid}");
+    let target = format!("{domain}/{TRAY_LABEL}");
+    let running = launchctl_timeout(&["print", &target], 5)
+        .map(|text| text.lines().any(|l| l.trim().starts_with("pid = ")))
+        .unwrap_or(false);
+    if running {
         return;
     }
-    match launchctl(&["kickstart", &target]) {
-        Ok(()) => tracing::info!(uid, "menu bar app kickstarted"),
-        Err(e) => tracing::warn!(uid, error = %e, "menu bar app not kickstarted"),
+    let _ = launchctl_timeout(&["bootout", &target], 10);
+    match launchctl_timeout(&["bootstrap", &domain, &tray_plist().to_string_lossy()], 10) {
+        Ok(_) => tracing::info!(uid, "menu bar app loaded into the console session"),
+        Err(e) => tracing::warn!(uid, error = %e, "menu bar app not loaded"),
     }
 }
