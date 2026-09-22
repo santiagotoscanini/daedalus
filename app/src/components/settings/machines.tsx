@@ -120,7 +120,9 @@ function MachineSection({ n }: { n: NodeRow }) {
         <span className="inline-flex flex-wrap items-center gap-2">
           {state}
           <span>
-            {n.hostname} · agent {n.agentVersion} · last hello {since(n.lastSeenAgo)}
+            {n.hostname}
+            {n.mac !== null && ` · ${n.mac}`} · agent {n.agentVersion} · last hello{' '}
+            {since(n.lastSeenAgo)}
           </span>
         </span>
       }

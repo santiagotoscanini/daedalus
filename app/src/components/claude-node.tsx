@@ -48,7 +48,7 @@ export function MachinePicker({ nodes, active }: { nodes: NodeRow[]; active: str
   return (
     <nav aria-label="Machine" className="mb-4 flex flex-wrap items-center gap-2">
       <Link to="/claude" search={{}} className={pill(active === null)}>
-        <img src="/icon-claude.svg" alt="" width={14} height={14} className="size-3.5" />
+        <img src="/icon-nixos.webp" alt="" width={14} height={14} className="size-3.5" />
         This box
       </Link>
       {nodes.map((n) => {

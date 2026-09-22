@@ -222,7 +222,12 @@ function Decision({ m }: { m: Machine }) {
             Forget
           </Button>
         )}
-        <span className={`${MONO} text-[0.7rem] text-(--dim)`}>key {node.id}</span>
+        <span
+          className={`${MONO} text-[0.7rem] text-(--dim)`}
+          title="sha256 of the machine's public key, the first 16 hex digits: what the box trusts"
+        >
+          key {node.id}
+        </span>
       </div>
       {error !== null && <p className="m-0 text-[0.78rem] text-destructive">{error}</p>}
     </div>
@@ -276,6 +281,9 @@ function MachineBoard({ m, port }: { m: Machine; port: number }) {
           </a>
         ),
     },
+    ...(m.node?.mac != null
+      ? [{ k: 'Hardware address', v: <span className={MONO}>{m.node.mac}</span> }]
+      : []),
   ]
   return (
     <Board
