@@ -1,0 +1,91 @@
+# daedalus-agent
+
+The box's presence on a machine it does not run. Phase one (see
+`PLAN.md`, feature 6): a Windows service that
+
+- **holds the machine awake** for as long as it runs — a Windows power
+  request visible in `powercfg /requests`, plus the power plan's sleep and
+  hibernate timers set to never as a second line;
+- **answers a status page** on the LAN, `http://<machine>:7787/status`, so
+  the box can see the agent is there before any channel exists between
+  them;
+- **updates itself** to the newest `agent-v*` release of this repository,
+  verifying every asset against the ed25519 key compiled into it.
+
+Nothing else yet: no commands, no telemetry beyond the page, no inbound
+port but the page's. What the agent will do next arrives as a release the
+installed one applies on its own, which is why the update path shipped
+first.
+
+## Install
+
+From an administrator PowerShell on the machine:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+irm https://github.com/santiagotoscanini/daedalus/releases/download/agent-v0.1.0/install.ps1 | iex
+```
+
+The script downloads the release, places the binary under
+`C:\Program Files\daedalus-agent\`, registers the `daedalus-agent` service
+(LocalSystem, automatic start, restart on failure), opens TCP 7787 to the
+local subnet, writes `C:\ProgramData\daedalus-agent\config.toml` if there is
+none, and starts it. Re-running it later replaces the binary and keeps the
+config. `daedalus-agent uninstall` removes the service and the firewall
+rule; the data directory stays.
+
+Trust at install is HTTPS to GitHub. Every update after that is verified
+by the agent against the release key it carries.
+
+## Verbs
+
+```
+daedalus-agent install [--port N]   register and start the service (administrator)
+daedalus-agent uninstall            stop and remove the service (administrator)
+daedalus-agent run                  service entry point; what the SCM calls
+daedalus-agent serve                the same work in the foreground, in a terminal
+daedalus-agent status               print the running agent's status page
+daedalus-agent update [--apply]     check the release feed now; --apply installs
+daedalus-agent version
+```
+
+## On the machine
+
+```
+C:\Program Files\daedalus-agent\daedalus-agent.exe   the binary (.old / .new around an update)
+C:\ProgramData\daedalus-agent\config.toml            port, release repo, check interval, auto_update, log level
+C:\ProgramData\daedalus-agent\state.json             last update check and result
+C:\ProgramData\daedalus-agent\logs\agent.log.*       daily-rotated log
+```
+
+## How an update happens
+
+Every ten minutes (config `update_check_secs`) the agent lists the
+repository's releases, keeps the `agent-v<semver>` ones that are neither
+drafts nor prereleases, and takes the highest above its own version. It
+downloads that release's `daedalus-agent-x86_64-pc-windows-msvc.exe` and
+`.sig`, checks the raw ed25519 signature against `RELEASE_PUBLIC_KEY_HEX`
+in `src/update.rs`, renames the running binary to `.old`, moves the new one
+into place and exits with code 3. The service's recovery action starts it
+again on the new binary; the next clean start deletes `.old`. A release
+without a valid signature is reported on the status page and never
+installed.
+
+## Releasing
+
+Bump `version` in `Cargo.toml`, commit, tag `agent-v<version>`, push the
+tag. `.github/workflows/agent.yml` builds the Windows binary, signs it with
+the `AGENT_SIGNING_KEY` secret, checks the signature against the compiled-in
+public key, and publishes the release. The tag and `Cargo.toml` must agree
+or the build refuses.
+
+The private key has no recovery path but the operator's copies; losing it
+strands every installed agent on its version. Rotation is a release signed
+with the old key that carries the new public key.
+
+## Developing without Windows
+
+The crate cross-checks and lints against `x86_64-pc-windows-gnu` from Linux
+(`rustup target add x86_64-pc-windows-gnu` plus `gcc-mingw-w64-x86-64`);
+the tests are platform-neutral and run anywhere. The service, the power
+request and `install` are Windows-only and are exercised on the machine.

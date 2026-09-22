@@ -1,0 +1,155 @@
+# The agent (agent/ — the Rust service for machines the box does not run).
+#
+# Two jobs. `check` runs on every push and PR that touches agent/: fmt,
+# clippy with warnings denied, and the tests, on Windows (the target that
+# ships) and Linux (where the tests also run and where the box does its own
+# checks). `release` runs on an `agent-v*` tag: builds the Windows binary,
+# signs it with the release key, and publishes a GitHub release whose assets
+# every installed agent watches (agent/src/update.rs).
+#
+# Signing: the asset's bytes get a raw ed25519 signature from the
+# AGENT_SIGNING_KEY secret (a PEM private key); the public half is compiled
+# into the agent. Done on Linux with openssl after the Windows build, so the
+# key is only ever read on a runner that never held the toolchain's caches.
+#
+# Convention: third-party actions are pinned to full commit SHAs.
+name: Agent
+
+on:
+  pull_request:
+    paths:
+      - "agent/**"
+      - ".github/workflows/agent.yml"
+  push:
+    branches: [main]
+    paths:
+      - "agent/**"
+      - ".github/workflows/agent.yml"
+    tags: ["agent-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+  ASSET: daedalus-agent-x86_64-pc-windows-msvc.exe
+
+jobs:
+  check:
+    name: Check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The runners ship rustup; stable with the two components is all the
+      # crate needs, and no third-party toolchain action to pin.
+      - name: Toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup default stable
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test
+
+  build:
+    name: Build (windows)
+    if: startsWith(github.ref, 'refs/tags/agent-v')
+    needs: check
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      # The tag names the version; Cargo.toml must agree, or an agent would
+      # install a release that reports a different version than its tag.
+      - name: Tag matches Cargo.toml
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          tag="${REF_NAME#agent-v}"
+          crate="$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')"
+          [ "$tag" = "$crate" ] || { echo "tag $tag != Cargo.toml $crate"; exit 1; }
+      - name: Build
+        run: cargo build --release --target x86_64-pc-windows-msvc
+      - name: Stage
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/x86_64-pc-windows-msvc/release/daedalus-agent.exe" "dist/$ASSET"
+          cp install.ps1 dist/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agent-dist
+          path: agent/dist/
+          if-no-files-found: error
+
+  release:
+    name: Sign and publish
+    if: startsWith(github.ref, 'refs/tags/agent-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: agent-dist
+          path: dist
+      - name: Sign
+        env:
+          AGENT_SIGNING_KEY: ${{ secrets.AGENT_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$AGENT_SIGNING_KEY" > key.pem
+          openssl pkeyutl -sign -inkey key.pem -rawin -in "dist/$ASSET" -out "dist/$ASSET.sig"
+          rm -f key.pem
+          [ "$(stat -c %s "dist/$ASSET.sig")" = 64 ] || { echo "signature is not 64 bytes"; exit 1; }
+          (cd dist && sha256sum "$ASSET" "$ASSET.sig" install.ps1 > SHA256SUMS)
+          cat dist/SHA256SUMS
+      # The agent's compiled-in public key must accept what was just signed,
+      # or every installed agent would refuse this release. Checked here with
+      # the same key material the agent embeds (agent/src/update.rs).
+      - name: Verify against the compiled-in key
+        run: |
+          set -euo pipefail
+          hex="$(grep -A1 'RELEASE_PUBLIC_KEY_HEX' agent/src/update.rs | grep -o '"[0-9a-f]\{64\}"' | tr -d '"')"
+          printf '302a300506032b6570032100%s' "$hex" | xxd -r -p > pub.der
+          openssl pkeyutl -verify -pubin -inkey pub.der -keyform DER -rawin -in "dist/$ASSET" -sigfile "dist/$ASSET.sig"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release create "$REF_NAME" \
+            --title "daedalus-agent ${REF_NAME#agent-v}" \
+            --notes "Windows x86_64. Installed agents pick this up on their next check; new machines: run install.ps1 from an administrator PowerShell." \
+            "dist/$ASSET" "dist/$ASSET.sig" dist/install.ps1 dist/SHA256SUMS
