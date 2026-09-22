@@ -42,7 +42,7 @@ stacks; Phase 10, finished but for the first tag).
 | 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
 | 9 | Nix: enable surface, literals, state out of the tree | landed 2026-09-20/21; residue (asset literals, missing options) listed in the section |
 | 10 | App module system and a real build | 10a landed; 10b landed 2026-09-22 — the one image (its `runtime` stage is the reference box's dev mode), `sops` inside it, the browser walk; only the first `v*` tag remains, and that is the operator's call |
-| 11 | The engine becomes importable | the finish line reached 2026-09-22: the spine is in the catalog, a host made from `templates.config` evaluates with a control plane, `developer.engineOverride`, Update daedalus and the schema fixtures are in; ~30 optional stacks remain private, and the reference box still names modules one by one |
+| 11 | The engine becomes importable | the finish line reached 2026-09-22: the spine and five leaves are in the catalog, a host made from `templates.config` evaluates with a control plane, `developer.engineOverride`, Update daedalus and the schema fixtures are in; 25 optional stacks remain private, and the reference box still names modules one by one |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
 Beside the phases, the **Features** section lists what the product is missing
