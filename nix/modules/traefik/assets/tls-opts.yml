@@ -1,0 +1,12 @@
+# Named TLS options referenced by every websecure router as
+# `tls.options: tls-opts@file`. Loaded by Traefik's file provider.
+#
+# Deliberately thin: with minVersion TLS 1.2, Go's default cipher and
+# curve selection is already the modern ECDHE+AEAD set with X25519
+# preferred — hand-listing suites here only drifts from upstream (and
+# TLS 1.3 suites aren't configurable in Go at all).
+tls:
+  options:
+    tls-opts:
+      minVersion: VersionTLS12
+      sniStrict: true

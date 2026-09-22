@@ -2360,7 +2360,7 @@ in
     # watching the UI. Mail it.
     fleet.monitoredJobs.daedalus-apply = { };
 
-    # ── the GitHub App: the public webhook path (unconditional) ─────────────
+    # ── the GitHub App: the public webhook path (whenever the app runs) ─────
     #
     # GitHub delivers to https://hooks.<baseDomain>/api/github/webhook through
     # the Cloudflare tunnel, and that is the ONLY thing the name answers:
@@ -2392,7 +2392,11 @@ in
     #     request costs traefik nothing; buffering; the in-flight cap last, so
     #     a slow uploader holds a traefik buffer rather than one of the ten
     #     slots GitHub's deliveries need.
-    fleet.traefikRawRules."hooks-github.yml" =
+    #
+    # Gated on the apps switch, like the container itself: the route names the
+    # app's own service and reads its own webApp entry, neither of which exists
+    # on a host that has the control plane's agents but not (yet) its container.
+    fleet.traefikRawRules."hooks-github.yml" = lib.mkIf appsOn (
       let
         inherit (config.fleet.webApps) daedalus;
       in
@@ -2423,11 +2427,12 @@ in
             service = "daedalus-svc";
           };
         };
-      };
+      }
+    );
 
     # The tunnel ingress + the proxied CNAME route-sync keeps for it. The label
     # is reserved by the assertion at the top of this module.
-    fleet.cloudflareRoutes.daedalus-hooks.hostname = hooksHost;
+    fleet.cloudflareRoutes = lib.mkIf appsOn { daedalus-hooks.hostname = hooksHost; };
 
     # ── the GitHub App: credentials (once site/vault/github-app.sops exists) ─
     #

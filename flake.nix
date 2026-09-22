@@ -73,13 +73,13 @@
         "gpu-host.nix"
         "gpu.nix"
         "hc-ping/hc-ping.nix"
+        "identity.nix"
         "machine-state.nix"
         "mail/mail.nix"
         "operator.nix"
         "podman-prune.nix"
         "podman.nix"
         "publishing.nix"
-        "registries.nix"
         "sensors.nix"
         "site.nix"
         "smartd.nix"
@@ -107,6 +107,7 @@
         "app-db/claude-ro.nix"
         "app-db/exporter.nix"
         "stirling-pdf/stirling-pdf.nix"
+        "traefik/traefik.nix"
       ];
     in
     {

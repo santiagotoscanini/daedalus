@@ -36,6 +36,15 @@
     # the cluster itself is not started, but the registry, the bootstraps and
     # the exporter all evaluate.
     modules.app-db.enable = true;
+    # The reverse proxy, ON: every webApp entry above now materializes into a
+    # route, and the one it publishes itself (the dashboard) is gated by an
+    # identity provider this host does not run — the middleware renders, the
+    # client is a declaration nothing acts on.
+    modules.traefik = {
+      enable = true;
+      envSopsFile = ./sops/traefik/env.sops;
+    };
+    images.traefik = "docker.io/library/traefik:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.app-db-exporter = "quay.io/prometheuscommunity/postgres-exporter:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.stirling-pdf = "docker.io/stirlingtools/stirling-pdf:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
 

@@ -1,24 +1,81 @@
 { config, lib, ... }:
 
-# Registries an engine module WRITES and a stack outside this tree still
-# IMPLEMENTS.
+# platform/identity.nix — the fleet's single-sign-on interface.
 #
-# A stack migrates here one at a time, and the first thing each one does is
-# contribute to a registry — an OIDC client for its login, a log label, a
-# database. While the registry's owner is still a stack in a host's own
-# configuration, its `options` declaration has to live where every writer can
-# see it, which is here: ungated, no switch, exactly as it was declared in its
-# owner. The owner keeps the `config` half (the units that converge what the
-# registry describes) and migrates later with nothing left to untangle.
+# One identity provider issues every login on a box, and nearly everything
+# else is a client of it: the reverse proxy's forward-auth middlewares, the
+# apps that speak OIDC themselves, the probes that fetch its discovery
+# document at start. What they all share is declared HERE, in the platform,
+# and implemented by whichever stack runs the provider (the catalog's
+# pocket-id) — the same split as publishing.nix, where `webApps` is the
+# interface and the proxy, the resolver and the tunnel are its readers.
 #
-# With the owner absent, an entry is a declaration nothing acts on: a host
-# that enables a module writing `fleet.ssoClients.<n>` but runs no identity
-# provider stack evaluates, and gets no client.
+#   sso.issuerUrl            where the provider is, for every client's config
+#   sso.discoveryConsumers   containers the provider's stack must gate at boot
+#   ssoClients.<id>          the clients to converge, one per login
+#   sso.clientEnvFile        where the proxy finds its clients' credentials
+#   sso.renderDir            where each client's credentials are rendered
+#   sso.logoDir              a host's logos for the clients of its own stacks
 #
-# When an owner migrates into this tree its declaration moves back beside its
-# implementation and leaves this file. The file is meant to shrink to nothing.
+# With the provider's stack switched off, every entry is a declaration
+# nothing acts on: a host that enables a module writing `fleet.ssoClients.<n>`
+# but runs no identity provider evaluates, and gets no client — and
+# `issuerUrl` is "" so a consumer that is on while the provider is off is
+# MISCONFIGURED (its endpoints point at ""), not an eval error. Turning the
+# provider off is a change to the box's identity model that each gated app
+# has to answer for itself.
 {
   options.fleet.sso = {
+    issuerUrl = lib.mkOption {
+      type = lib.types.str;
+      default =
+        if config.fleet.webApps ? pocket-id then
+          "https://${config.fleet.webApps.pocket-id.hostname}"
+        else
+          "";
+      defaultText = lib.literalExpression ''"https://''${fleet.webApps.pocket-id.hostname}"'';
+      description = "OIDC issuer URL of the box-wide identity provider; \"\" while none is switched on.";
+    };
+
+    discoveryConsumers = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        Container names that fetch the OIDC discovery document while
+        starting up and cannot recover if it isn't being served yet —
+        they either panic or silently come up with OIDC login broken until
+        a restart. Under `--rm` a crash leaves the oneshot unit green with
+        no container behind it, so the failure is invisible.
+
+        The identity provider's stack orders each listed container behind
+        the proxy and itself, and blocks it on a bounded probe of the real
+        discovery URL. Ordering alone is not enough: it only proves
+        `podman run -d` returned, and the request path that actually matters
+        runs through the proxy.
+
+        Registration is opt-in — an app that fetches discovery lazily or
+        re-tries on its own doesn't need it.
+      '';
+      example = lib.literalExpression ''[ "gatus" "zot" ]'';
+    };
+
+    clientEnvFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      readOnly = true;
+      default =
+        if lib.filterAttrs (_: c: c.traefikForwardAuth) config.fleet.ssoClients == { } then
+          null
+        else
+          "${config.fleet.sso.renderDir}/traefik-env";
+      defaultText = lib.literalExpression ''"''${fleet.sso.renderDir}/traefik-env"'';
+      description = ''
+        Rendered env file carrying POCKET_OIDC_<NAME>_CLIENT_{ID,SECRET}
+        for every `traefikForwardAuth` client — consumed by the reverse
+        proxy. null when no such client is declared (the proxy must not be
+        handed a path that was never rendered).
+      '';
+    };
+
     renderDir = lib.mkOption {
       type = lib.types.str;
       default = "/run/sso-clients";
