@@ -14,9 +14,9 @@ in `ARCHITECTURE.md` and `BUILDS.md` for the design as built, and in
 `~/.claude/plans/piped-gathering-meerkat.md` for the GitHub App + Railpack
 build-out (closed 2026-09-13).
 
-## Where things stand (2026-09-21)
+## Where things stand (2026-09-22)
 
-Phases 1–9 of the productization plan have landed, and the first half of 10:
+Phases 1–11 of the productization plan have landed:
 the UI foundation, the read-only then editable Settings, the
 repository split (private config `s2-server`, public engine `daedalus`),
 `site/` as the one directory the UI writes, nix reading `site.json` and
@@ -30,14 +30,19 @@ enable switch on all 43 stacks (9a, config `43388f0`) and the control plane
 no longer reaching into other stacks at eval time (9c, `046b3ff`). On the
 21st the NixOS side moved in: `nix/platform/**` and `nix/stacks/daedalus/**`
 live here, on `main` — the repo's only branch — and the operator's
-configuration takes them as a flake input (Phase 11, first half).
+configuration takes them as a flake input. On the 22nd the spine followed —
+the eleven stacks a box needs to log in to its control plane are catalog
+modules, one image runs the control plane two ways, the engine updates
+itself from its own page, and `nix flake init -t …#config` writes a host
+that evaluates with all of it on (Phase 11, finished but for the optional
+stacks; Phase 10, finished but for the first tag).
 
 | Phase | What | State |
 |---|---|---|
 | 8 | Auth hardening | built; arming is the operator's hand (see "Owed to the operator") |
 | 9 | Nix: enable surface, literals, state out of the tree | landed 2026-09-20/21; residue (asset literals, missing options) listed in the section |
-| 10 | App module system and a real build | 10a landed; 10b: the built server, run-time identity, the one image with its own `sops`, and the browser walk that proves it are in (2026-09-21) — the nix switch to it and the first tag remain |
-| 11 | The engine becomes importable | the move landed with an identical closure and is published on `main` (2026-09-21; one branch), with its own `nix fmt` / `nix flake check` and CI job — the stacks, one by one, `fleet.imagePins`, `developer.engineOverride`, the "Update daedalus" button, schema fixtures in CI and a `nixosModules.default` that evaluates alone remain |
+| 10 | App module system and a real build | 10a landed; 10b landed 2026-09-22 — the one image (its `runtime` stage is the reference box's dev mode), `sops` inside it, the browser walk; only the first `v*` tag remains, and that is the operator's call |
+| 11 | The engine becomes importable | the finish line reached 2026-09-22: the spine is in the catalog, a host made from `templates.config` evaluates with a control plane, `developer.engineOverride`, Update daedalus and the schema fixtures are in; ~30 optional stacks remain private, and the reference box still names modules one by one |
 | 12 | Onboarding, `init`, catalog, release | not started |
 
 Beside the phases, the **Features** section lists what the product is missing
@@ -373,20 +378,33 @@ What 9b still leaves for Phase 11, after the asset pass (config `b1f4498`,
   never run.
 
   What remains of 10b, in order:
-  1. **The nix side.** `source.mode` becomes a boolean that adds the bind
-     mount and `DAEDALUS_DEV=1`; the container runs this image instead of
-     `stacks/daedalus/assets/Containerfile`. Dev mode under rootless podman
-     needs `--user 0:0` (the image's user is `node`, and uid 1000 owns
-     nothing in the clone), and `COREPACK_HOME`/the store keep their places
-     under `/app`. The config still binds the `VITE_` spellings.
+  1. ~~**The nix side.**~~ — done 2026-09-22 (engine `db281f9`, config
+     `41fbd90`), with one design change from the paragraph above: the box does
+     NOT pull the published image. The Dockerfile gained a `runtime` stage
+     (node, corepack's shims, sops, the entrypoint — everything but the
+     bundle; the final stage builds on it), and a dev-mode box builds THAT
+     stage on its own with `--target runtime` from a `lib.fileset` context of
+     exactly `Dockerfile` + `docker-entrypoint.sh`, so the image's tag moves
+     when the runtime changes and never when a route is edited — the property
+     the old `assets/Containerfile` existed for, now with one Dockerfile.
+     `source.mode`/`source.contextDir` became `source.dev` + `source.path`
+     on every app (the image is always the app's; dev mode decides how it
+     runs: the mount, `DAEDALUS_DEV=1`, `--user 0:0`, `NPM_REGISTRY` from
+     `fleet.builder.npmMirrorHost`); `mkLocalImage` takes a build file and a
+     target; the control plane's module has `fleet.daedalus.dev` (the box
+     sets it) and `fleet.daedalus.image` (default: the engine's ghcr image at
+     the version `app/package.json` declares, so pinning the engine pins the
+     control plane). The sops bind mount is gone; the old Containerfile and
+     entrypoint are deleted. Switched and verified: the container runs
+     `localhost/app-daedalus-dev:runtime-<hash>`, healthz 200, `sops 3.13.3`
+     from the image. The config still binds the `VITE_` spellings.
   2. ~~**`sops` in the image.**~~ — done 2026-09-21: a `sops` stage fetches
      the getsops 3.13.3 linux/amd64 release with `ADD --checksum` (version
      and sha256 are the stage's two ARGs; a mismatch fails the build) and the
      run stage copies it to `/usr/local/bin/sops`, where `core/vault.ts`
      execs it. Encrypt-only by construction — the image holds no age
-     identity. 52 MB, so the image is 309 MB. The box's module still
-     bind-mounts its nix-built static sops over that path; the nix side (1)
-     drops the mount once it runs this image.
+     identity. 52 MB, so the image is 309 MB. The box's module dropped its
+     own bind mount with (1).
   3. ~~**The `shot` walk**~~ — done 2026-09-21: `scripts/image-walk.sh` +
      `scripts/image-walk.mjs`, repeatable and run before a tag. Builds the
      image, checks its sops, starts it against a throwaway `postgres:16-alpine`
@@ -407,7 +425,7 @@ Compatibility: 10a is a refactor with tests (module registry tests, the
 existing suite, fixture-driven loader tests that survive a null upstream);
 10b is gated by `vite build` producing a working server.
 
-### Phase 11 — The engine becomes importable (the move has landed; then one stack at a time)
+### Phase 11 — The engine becomes importable (the finish line is reached; the leaves remain)
 
 **Landed 2026-09-21 — the big-bang move, with an IDENTICAL closure.**
 `platform/**` and `stacks/daedalus/**` left the operator's configuration and
@@ -469,78 +487,99 @@ configuration; its `/rebuild` skill detects a moved engine.
   flake input. (`build-agent.nix`'s node image and `railpack.nix`'s frontend
   are not oci-containers; bumped by hand.)
 
+**The finish line, reached 2026-09-22.** A host made from the engine's
+template (`nix flake init -t …#config`) evaluates to a whole system with a
+control plane to log in to: the reverse proxy, the identity provider, the
+shared cluster, the registry, the resolver, the tunnel, logs, metrics, the
+two monitors and the apps platform — the control plane's own container
+included — are catalog modules, every one switched on in the template, and
+`nix flake check` evaluates that template as written. Eleven stacks
+crossed in one day, each under the identical-derivation gate, in this
+order: `app-db` (engine `3e2d070`), `traefik` (`3969bd3`), `pocket-id`
+(`ce47489`), `registry` (`f612aa7`), `logging` (`46e3a03`), `monitoring`
+(`967e82b`), `apps` (`35c7a1c`), `pihole` (`5cbcaca`), `cloudflared`
+(`0495b71`), `gatus` + `healthchecks` (`596f6b2`). What each move taught is
+in `.claude/rules/nix-engine.md` §7; the decisions, so they are not
+re-litigated:
+
+- **The identity interface is the platform's.** `platform/registries.nix`
+  ("shrinks to nothing") became `platform/identity.nix` and keeps
+  `fleet.sso.*` + `fleet.ssoClients` for good: many readers, one
+  implementation — the same split `publishing.nix` makes for `webApps`. A
+  registry with one consumer (`fleet.appDatabases`) lives in that consumer.
+- **`catalogModules` lists files, not stacks.** The module system merges a
+  module's own `imports` ahead of everything at the level above it
+  (measured), so a module that imported its siblings reordered the host's
+  unit dependencies. Each file keeps its own slot, in the flake and in the
+  host's list.
+- **What other stacks contributed to a stack's rendered config is a
+  registry.** The shipper's drop rules and file sources became
+  `fleet.logDrops` and `fleet.logFiles`, each entry with its owner (the
+  remote-control transcript drop rides `platform/claude-rc.nix`; zot's
+  config dump, which prints the deploy hook's token, is dropped by the
+  registry module). The registry's retirement list became
+  `fleet.modules.registry.retireRepositories`; the build agent's npm mirror
+  became `fleet.builder.npmMirrorHost`, contributed by the stack that runs
+  the mirror.
+- **Policy without a narrow default has no default.** `gatus.allowedSubjects`
+  is required: without it the gate admits every account. Conventional
+  labels (`id`, `status`, `hc`) are `mkDefault`s a host overrides on the
+  webApp entry.
+- **A host's secrets keep their basenames** under `host/sops/<id>/`: the
+  basename is in the sops manifest's store path, so a directory per module
+  is what keeps a move closure-neutral.
+- **The generic dashboards template the NIC** (`@lanInterface@`); the two
+  that name pools are the host's, through `fleet.grafanaDashboardsByFolder`.
+- **The GPU box and the router's address are the site's** (`gpu-host.nix`,
+  nullable; `fleet.gateway` from site.json, never
+  `networking.defaultGateway`, which a DHCP host lacks).
+- **Engine-shipped default pins: declined** (item 2 below). A pin in the
+  engine could never be moved by the control plane's updater, and two
+  sources of truth for one image would drift; the host keeps every pin, and
+  Phase 12's `init` resolves the first set.
+- **Tag versus clone (item 6): decided by what the input is for.** The
+  reference box uses the local clone because its `app/` is a runtime
+  dependency and its lock must be able to name a commit that only exists
+  on the box; the template uses `github:santiagotoscanini/daedalus`, and
+  `engine-update.sh` accepts either. A `?ref=v<tag>` pin is a host's choice
+  and the same update path applies.
+
 **What remains of Phase 11.**
 
-1. **Stacks, ONE BY ONE, into `nix/modules/<id>`** behind
-   `fleet.modules.<id>.enable` (default OFF here), each its own small rebuild
-   that leaves the box working. `nixosModules.default` now EVALUATES alone
-   (`checks.minimal-host`): the `fleet.apps` and `fleet.ssoClients`
-   declarations moved to `platform/{apps-options,registries}.nix`, and
-   `stirling-pdf` moved as the template (conventions: `nix-engine.md` §7).
-   It turned out the control plane READS no host-declared registry — it only
-   writes `fleet.apps.daedalus`, and everything in that entry is forced by
-   the apps stack's implementation alone. So the finish line moved: the
-   minimal host sets `fleet.modules.apps.enable = false`, and deleting that
-   line — apps, then app-db, traefik, pocket-id, registry — is what is left
-   before a stranger's box has a control plane to log in to. The
-   configuration shrinks toward `flake.nix`, `configuration.nix`,
-   `hardware-configuration.nix`, `host/`, `site/`, `.claude/` and its docs.
-2. **Engine-default pins.** `fleet.images.<container>` exists (host-defined,
-   one file, rewritten in place by `image-update.sh` as before — the name
-   `fleet.imagePins` was already the parsed read-only view). What remains is
-   the other half: a site override map with engine defaults via `mkDefault`,
-   which is what would let a migrated stack bring its pin with it.
-3. ~~**`developer.engineOverride`** in `site.json`~~ — done 2026-09-21. A
-   `developer` block in site.json (schema stays v1: absent and `null` are
-   the same document, the renderer drops the block while it is null), edited
-   on Settings › Developer like every other site field, so the Apply that
-   sets it is already the first one built from the clone and the one that
-   clears it is the switch back. While set: `apply.sh` builds with
-   `--override-input daedalus path:<clone> --no-write-lock-file` and
-   activates with `nixos-rebuild test`, never `switch` (status `testing` /
-   `tested`); `image-update.sh` and `engine-update.sh` refuse with "clear
-   the engine override first"; the shell draws a banner on every page. The
-   app half is live; the host half (`host/lib.sh site_engine_override`,
-   `apply.sh`, `image-update.sh`) is one engine commit away.
-4. ~~**The schema fixtures**~~ — done 2026-09-21. `fixtures/site/v<N>/` (a
-   whole site directory at site.json version N) and `fixtures/apps/v<N>/
-   apps.json` (the registry at version N), read by BOTH halves: the app's
-   `host/contract/fixtures.test.ts` decodes every fixture through the real
-   readers and asserts the render round-trip and that the current versions
-   have a fixture; `checks.fixtures` (`nix/tests/fixtures.nix`) evaluates a
-   minimal host per site fixture through `platform/site.nix` and maps every
-   registry fixture through `registry-lib.nix`. The minimal host's own
-   `site/` became a pointer at `fixtures/site/v1`. Both run in the existing
-   `app` and `nix` CI jobs; `ci.yml` is unchanged. One accepted version per
-   document today, so a migration case is the next fixture directory.
-5. ~~**An "Update daedalus" button**~~ — done 2026-09-21. The eleventh
-   bridge verb: `engine-request.json` → `daedalus-engine-update` →
-   `engine-status.json` (`{id,state,phase,error,from,to,startedAt,
-   finishedAt,commit}`), its own module `stacks/daedalus/engine-update.nix`
-   + `host/engine-update.sh`: refuse under an override or a dirty lock,
-   fast-forward the clone the lock names (`git+file://`; diverged = refused,
-   "push them first"), `nix flake update daedalus`, `nixos-rebuild build`
-   (restore the lock on failure), commit `flake.lock` as `engine: daedalus
-   <from> → <to>`, switch with the one retry, poll the control plane's own
-   health path through the proxy for up to ten minutes, `git revert` +
-   switch back on failure, push. An Engine card at the top of System ›
-   Updates (pinned rev from the repo snapshot's new `engine` node, the
-   clone from the workspace snapshot, verdict current / behind origin /
-   unpinned / unknown) with the button, `POST /api/engine-update` beside
-   `/api/image-update`, `host/engine-flow.ts` over `defineFlow`. Owed: the
-   engine commit that adds the module to `daedalusModules` and the box's
-   import line, and the repo snapshot's v6 (the app reads v5 as "unknown"
-   until then).
-6. **Tag-pinning**: decide a `github:` input by tag versus the local clone.
-   The reference box uses the clone because its `app/` is a runtime
-   dependency anyway.
-7. `templates.config` and the remaining reshape (`host/`, `docs/` at the
-   root) ride along with step 1.
-
-Done since the move, so not re-listed: the branch is published (above); the
-last box-only constants left (`b32123f` — `fleet.github.expectedOwnerId` has
-no default here and the host defines it; the replication panel reads the
-host's `fleet.backup.replications` pairs).
+1. **The other stacks, one by one**, none of them needed for a box to run:
+   about thirty in the reference host's configuration (media and its
+   janitors, home automation, the AI cluster, games, VPN tenants, small
+   tools). Each is a candidate catalog module; the trivial leaves first
+   (`intel-gpu-exporter`, `metube`, `myspeed`, `grocy`, `calibre-web`,
+   `cleanuparr`, `verdaccio`), then the ones with secrets, then the netns
+   owners and their tenants together. Until they move, the reference host
+   names the engine's modules one by one through `enginePath` (import
+   order, §6) and adopts `nixosModules.default` afterwards in a deliberate,
+   separately-gated rebuild.
+2. ~~**Engine-default pins.**~~ — decided against 2026-09-22 (above).
+3. ~~**`developer.engineOverride`**~~ — done 2026-09-21/22: the app half
+   (`4d97cf6`) and the host half (`90e2cd4`: `host/lib.sh
+   site_engine_override`, `apply.sh` builds and TESTS against the clone,
+   `image-update.sh` refuses).
+4. ~~**The schema fixtures**~~ — done 2026-09-21/22: `fixtures/site/v<N>/`
+   and `fixtures/apps/v<N>/apps.json`, read by the app's
+   `host/contract/fixtures.test.ts` and by `checks.fixtures`
+   (`nix/tests/fixtures.nix`); the template's `site/site.json` is the
+   current site fixture, byte-equal and asserted.
+5. ~~**An "Update daedalus" button**~~ — done 2026-09-21/22: the eleventh
+   bridge verb (`engine-request.json` → `daedalus-engine-update` →
+   `engine-status.json`), `stacks/daedalus/engine-update.nix` +
+   `host/engine-update.sh`, the Engine card on System › Updates,
+   `POST /api/engine-update`. Refuses an override, a dirty lock and a
+   diverged clone; fast-forwards, re-resolves, builds, commits the lock,
+   switches, verifies the control plane through the proxy, reverts on
+   failure, pushes. The repo snapshot publishes the lock's `daedalus` node
+   (schema 6). Not yet exercised end to end on the box.
+6. ~~**Tag-pinning**~~ — decided 2026-09-22 (above).
+7. ~~**`templates.config`**~~ — done 2026-09-22 (`113648f`): the host the
+   checks evaluate is the host a stranger starts from. The reshape of the
+   reference host's own tree (`host/`, `docs/`) is that repository's
+   business and rides with item 1.
 
 Gate for what remains, unchanged in spirit: every step is a
 `nixos-rebuild build` whose closure difference is exactly the step's stated
@@ -847,6 +886,21 @@ Hand edits the UI cannot make for itself:
    usual `git add` and rebuild apply — `platform/claude.nix` renders the
    `.mcp.json` symlink at activation.
 2. **Arming the admins gate** — Phase 8, item 1, in the order given there.
+3. **Re-enter the off-box projects** (2026-09-22): the four rows of the
+   reference host's external-projects list lived only in the engine's source
+   as a seed, which a public engine cannot carry. They are settings now
+   (Settings › General › Off-box projects): santree, santree-cli, the
+   daedalus landing page and the portfolio — name, hostname, platform,
+   repository, description. Until entered, `/apps` shows no off-box section.
+4. **The first tag** (Phase 10b, item 4) and **the license** (open
+   decision 3) — one act, when the operator chooses: bump
+   `app/package.json`, add `LICENSE`, tag `v<version>`, push the tag;
+   `image.yml` publishes the image to ghcr, private until its visibility is
+   changed by hand. From then on a host not in dev mode runs
+   `fleet.daedalus.image` as the engine defaults it.
+5. **Try Update daedalus once from the page** — it has not run end to end
+   on the box yet (the app half was walked; the host half is shellcheck-
+   clean and mirrors the image update line for line).
 
 ## Engine polish
 
@@ -928,6 +982,14 @@ lifecycle), `CONTRIBUTING.md` (tested from a fresh clone). Missing:
 
 Known and accepted, not forgotten:
 
+- The deploy hook's token appears in zot's own startup log line (it prints
+  its configuration at INFO with only the OIDC secret masked). Dropped from
+  Loki by `fleet.logDrops.zot-config-dump` (2026-09-22); the journal itself
+  still holds the line for its retention window, readable by root and the
+  `systemd-journal` group. Rotating the token is `sops host/sops/registry/env.sops`.
+- The router's retail name was a literal in the public engine for three
+  commits (2026-09-21); it is an option now. Low sensitivity; rewriting
+  published history is the operator's call.
 - A build step that escapes its sandbox lands as `buildkit` — the daemon
   user, which can see the zot push credential the buildctl session passes.
   Mitigations: rootless user namespace, the egress fence, `builder` has no

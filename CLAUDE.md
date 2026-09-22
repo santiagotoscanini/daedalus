@@ -18,12 +18,14 @@ path-scoped rules load as you touch files.
   results reach GitHub as a check run plus a Deployment. The app repos carry
   no workflow files; a `railpack.json` is the normal build path, and a repo's
   own Dockerfile is still a supported strategy.
-- **Also is:** the NixOS side. `nix/platform/**`
-  (the OS-level base) and `nix/stacks/daedalus/**` (`daedalus.nix`, the
-  builder, the host agents `host/*.sh` — apply, deploy, build, image and
-  site bridges, the snapshot scripts — and the runtime image context
-  `assets/`), exported by the root `flake.nix` as
-  `nixosModules.{platform,daedalus,default}`. The operator's private
+- **Also is:** the NixOS side. `nix/platform/**` (the OS-level base),
+  `nix/stacks/daedalus/**` (`daedalus.nix`, the builder, the engine's own
+  updater, the host agents `host/*.sh` — apply, deploy, build, image and
+  engine updates, site bridges, the snapshot scripts) and `nix/modules/<id>/`
+  (the catalog: the spine every box needs, plus leaves), exported by the
+  root `flake.nix` as `nixosModules.{platform,daedalus,catalog,default}` and
+  `templates.config` (a host to start from, and the host CI evaluates). The
+  operator's private
   configuration takes it as a flake input pinned by rev. It lives on
   `main` with everything else — this repo has exactly ONE branch, always
   — at the root beside `app/`. On the operator's box this clone is

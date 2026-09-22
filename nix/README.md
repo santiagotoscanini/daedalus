@@ -6,160 +6,99 @@ drives.
 
 | Path | What it is |
 |---|---|
-| `platform/` | The base every stack rides on, with no enable switches: the rootless-podman runtime and its helpers (`mkRootlessContainer`, `mkDotenvSecret`, `mkSecretRender`, `mkLocalImage`), the publish layer (`fleet.webApps` → reverse-proxy routes, LAN DNS, tunnel routes, health probes), the site constants read from the host's `site/` directory, sops wiring, ZFS and replication mechanisms, mail, git identity, dead-man pings, the weekly lock upgrade, and the export domains the app reads its facts from. |
+| `platform/` | The base every stack rides on, with no enable switches: the rootless-podman runtime and its helpers (`mkRootlessContainer`, `mkDotenvSecret`, `mkSecretRender`, `mkLocalImage`, `pinnedImage`), the publish layer (`fleet.webApps` → reverse-proxy routes, LAN DNS, tunnel routes, health probes; the observability registries), the single-sign-on interface (`identity.nix`: `fleet.sso.*`, `fleet.ssoClients`), the apps registry (`apps-options.nix`: `fleet.apps`), the site constants read from the host's `site/` directory, sops wiring, ZFS and replication mechanisms, mail, git identity, dead-man pings, the GPU box, the weekly lock upgrade, and the export domains the app reads its facts from. |
 | `platform/lib/` | Plain libraries imported **by path**, never as modules: `gluetun-lib.nix` (`mkGluetunInstance`), `fleet-lib.nix`, `registry-lib.nix`, `operator-secrets-lib.nix`. |
-| `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix`, the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), `self.json`, the privileged host agents (`host/*.sh` — apply, deploy, build, image update, engine update, site write, snapshots) and the runtime image context (`assets/`). |
-| `modules/<id>/` | The catalog: stacks that have migrated here, each behind `fleet.modules.<id>.enable`, **off by default**. Today: `stirling-pdf` (the template). A module brings the mechanism; the host brings the image pin (`fleet.images.<container>`) and the policy (who may log in). |
-| `tests/minimal-host/` | A stranger's smallest host — `nixosModules.default`, sops-nix, the current site fixture (`fixtures/site/v1`) as its site directory, and definitions for exactly the table below. `nix flake check` evaluates its whole system (`checks.x86_64-linux.minimal-host`; nothing is built). `tests/fixtures.nix` is the sibling check: every fixture under `fixtures/` through `platform/site.nix` and `registry-lib.nix` (`checks.x86_64-linux.fixtures`). |# `nix/` — the engine, as NixOS modules
+| `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix`, the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), `self.json`, and the privileged host agents (`host/*.sh` — apply, deploy, build, image update, engine update, site write, snapshots). |
+| `modules/<id>/` | The catalog: stacks that have migrated here, each behind `fleet.modules.<id>.enable`, **off by default**. A module brings the mechanism; the host brings the image pin (`fleet.images.<container>`), the secrets (`fleet.modules.<id>.*SopsFile`) and the policy (who may log in, under what name, reachable off-LAN or not). |
+| `tests/` | `minimal-host/` evaluates the config template (below) as a whole system; `fixtures.nix` evaluates every schema fixture under `../fixtures/` through `platform/site.nix` and `registry-lib.nix`. Both run in `nix flake check`; nothing is built. |
 
 The root `flake.nix` exports:
 
 - `nixosModules.platform`, `nixosModules.daedalus`, `nixosModules.catalog`,
   and `nixosModules.default` (all three);
+- `templates.config` — a host to start from (`nix flake init -t
+  github:santiagotoscanini/daedalus#config`), which is also the host the
+  checks evaluate;
 - `lib.path` — this directory as a path, for a host that keeps stacks of
   its own and needs the libraries.
 
 Its **modules take nothing from the flake's inputs**, on purpose. The
-engine is modules and libraries;
-the host chooses the nixpkgs they are evaluated against, imports sops-nix
-beside them, and hands in `nixpkgs-unstable` where a module asks for it.
-An engine that evaluated against its own nixpkgs would be a second opinion
-about the system it is a guest in. The inputs `flake.nix` does declare
-(`nixpkgs`, `treefmt-nix`, and — for the `minimal-host` check alone —
-`sops-nix` and `nixpkgs-unstable`) exist for this repo's own `nix fmt` and
-`nix flake check`; a host makes all four follow its own.
+engine is modules and libraries; the host chooses the nixpkgs they are
+evaluated against, imports sops-nix beside them, and hands in
+`nixpkgs-unstable` where a module asks for it. An engine that evaluated
+against its own nixpkgs would be a second opinion about the system it is a
+guest in. The inputs `flake.nix` does declare (`nixpkgs`, `treefmt-nix`,
+and — for the checks alone — `sops-nix` and `nixpkgs-unstable`) exist for
+this repo's own `nix fmt` and `nix flake check`; a host makes all four
+follow its own.
 
 The design rule throughout: **the engine declares, the host defines.**
 Nothing in this tree names a user, a domain, an address or a pool. Every
 such fact is an option without a default, so a host that forgets one fails
 evaluation with the option's name.
 
+## The catalog
+
+| Module | What it is | What the host brings beside the switch |
+|---|---|---|
+| `apps` | The apps platform: every `fleet.apps` entry becomes a container, a route, a database, a deploy loop, scheduled tasks — the control plane's own entry included. | `site/apps.json`; per-app operator secrets in `site/vault/apps/`. The switch is declared in `platform/apps-options.nix`. |
+| `app-db` | The shared Postgres cluster (with pgvector), one role and database per tenant, its exporter, a read-only role for the operator's MCP client. | `fleet.images.app-db-exporter` |
+| `cloudflared` | The Cloudflare tunnel — public ingress — and the reconciler that keeps the zone's CNAMEs matching the routes. | `credentialsSopsFile`, `fleet.images.cloudflared` |
+| `gatus` | Outside-in uptime and TLS-expiry probing of every published hostname. | `allowedSubjects` (required), `envSopsFile` (optional), `fleet.images.gatus` |
+| `healthchecks` | Dead-man's-switch monitoring of the scheduled jobs. | `envSopsFile`, `fleet.images.healthchecks` |
+| `logging` | Loki and the alloy shipper. Other stacks contribute `fleet.logStacks`, `fleet.logDrops`, `fleet.logFiles`. | `fleet.images.{loki,alloy}` |
+| `monitoring` | Prometheus, Grafana, node-exporter, the per-container liveness sweep, the generic dashboards. | `envSopsFile`, `fleet.images.{prometheus,grafana,node-exporter}`; its own dashboards through `fleet.grafanaDashboardsByFolder` |
+| `pihole` | LAN DNS and DHCP (native), every published hostname's local record. | `dhcpHostsSopsFile` (optional), `localDomain` |
+| `pocket-id` | The identity provider and the convergence of every declared client. | `envSopsFile`, `exposeRemotely`, `fleet.images.pocket-id`; `fleet.sso.logoDir` for the host's own stacks' logos |
+| `registry` | zot, the box's own OCI registry: builds push, deploys pull. | `envSopsFile`, `retireRepositories`, `fleet.images.zot` |
+| `stirling-pdf` | A PDF toolbox — the first leaf, and the template for one. | `authGroups`, `fleet.images.stirling-pdf` |
+| `traefik` | The reverse proxy: every published hostname, the forward-auth middlewares, the wildcard certificate. | `envSopsFile`, `fleet.images.traefik` |
+
+Every one of these is switched on in `templates/config`, so a host made
+from the template is a box with a control plane to log in to.
+
 ## Importing it
 
-Your configuration is a flake of your own. The engine is one input.
+`nix flake init -t github:santiagotoscanini/daedalus#config` writes the
+host below into an empty directory; replace every documentation value in
+it (each file says which), replace `hardware-configuration.nix` with
+`nixos-generate-config`'s, create the secrets (`host/sops/README.md`),
+resolve the image pins, and switch. What it is, in short:
 
 ```nix
-# flake.nix
-{
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
-    sops-nix = {
-      url = "github:Mic92/sops-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    # Pin it. The lock's rev is which engine your box runs; move it with
-    # `nix flake update daedalus`, never on a timer.
-    daedalus = {
-      url = "github:santiagotoscanini/daedalus";
-      # The engine's own inputs serve only ITS `nix fmt` / `nix flake check`;
-      # the modules take nothing from them. Following yours keeps them out
-      # of your lock. (No treefmt-nix of your own? Drop that line and accept
-      # one extra lock node — it is never built.)
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.nixpkgs-unstable.follows = "nixpkgs-unstable";
-      inputs.sops-nix.follows = "sops-nix";
-      inputs.treefmt-nix.follows = "treefmt-nix";
-    };
-    treefmt-nix = {
-      url = "github:numtide/treefmt-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+# flake.nix — the engine is one input, pinned by rev, followed on all four
+# of its own inputs so importing it adds nothing to your lock
+daedalus = {
+  url = "github:santiagotoscanini/daedalus";
+  inputs.nixpkgs.follows = "nixpkgs";
+  inputs.nixpkgs-unstable.follows = "nixpkgs-unstable";
+  inputs.sops-nix.follows = "sops-nix";
+  inputs.treefmt-nix.follows = "treefmt-nix";
+};
+# …
+nixosConfigurations.box = nixpkgs.lib.nixosSystem {
+  specialArgs = {
+    inherit nixpkgs-unstable;          # two engine modules pick a package from it
+    enginePath = "${daedalus}/nix";    # for stacks of your own that import a library
   };
-
-  outputs =
-    { self, nixpkgs, nixpkgs-unstable, sops-nix, daedalus, ... }:
-    {
-      nixosConfigurations.box = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          # Two engine modules cherry-pick packages from unstable.
-          inherit nixpkgs-unstable;
-          # Where the engine's libraries are, for stacks of your own:
-          #   import (enginePath + "/platform/lib/gluetun-lib.nix") { … }
-          # A specialArg because it is used at import time.
-          enginePath = "${daedalus}/nix";
-        };
-        modules = [
-          ./configuration.nix
-          sops-nix.nixosModules.sops
-          daedalus.nixosModules.default
-          { system.configurationRevision = self.rev or self.dirtyRev or null; }
-        ];
-      };
-    };
-}
+  modules = [ sops-nix.nixosModules.sops daedalus.nixosModules.default ./configuration.nix ];
+};
 ```
 
-```nix
-# configuration.nix
-{ config, ... }:
-{
-  imports = [ ./hardware-configuration.nix ];
-
-  networking.hostName = "box";
-  networking.hostId = "8425e349"; # the platform enables ZFS; ZFS wants a stable hostId
-
-  # ── who and where ────────────────────────────────────────────────────
-  fleet.operator = {
-    user = "alice";
-    uid = 1000;
-    email = "alice@example.org";       # the OIDC e-mail claim apps match their admin on
-    gitName = "Alice Example";         # author of the commits the box makes
-    gitEmail = "alice@example.org";
-  };
-  fleet.config.repo = "/etc/nixos";    # where THIS checkout lives (run-time path)
-  fleet.github.owner = "alice";
-  fleet.github.expectedOwnerId = 1234567; # that account's numeric id
-
-  # TEMPORARY — see "What is NOT done yet": the apps stack has not migrated.
-  fleet.modules.apps.enable = false;
-
-  # ── catalog modules: off until you say so; the pin is yours ──────────
-  # fleet.modules.stirling-pdf.enable = true;
-  # fleet.images.stirling-pdf = "docker.io/stirlingtools/stirling-pdf:<tag>@sha256:<digest>";
-
-  # ── the site directory: what this box IS, as data ────────────────────
-  # ./site/site.json, ./site/apps.json, ./site/vault/*.sops — the one
-  # directory the control plane writes. `source` is how nix reads it.
-  fleet.site.source = ./site;
-
-  # ── storage ──────────────────────────────────────────────────────────
-  # Named bulk-data roots outside the state tree; `{ }` if you have none.
-  fleet.data = {
-    photos = "/tank/photos";
-  };
-  # Optional: the dataset table zfs-converge asserts, and what mirrors where.
-  # fleet.zfs.datasets."tank/photos" = { mount = "/tank/photos"; properties.recordsize = "1M"; };
-  # fleet.backup.replications."zroot/state" = { target = "tank/backup/state"; slug = "backup-state"; };
-
-  # ── credentials the engine's modules read: YOUR ciphertext, handed in ─
-  fleet.mail.smtpHost = "smtp.example.org";
-  fleet.mail.passwordSopsFile = ./sops/smtp-password.sops;        # binary
-  fleet.git.sshKeySopsFile = ./sops/git-ssh-key.sops;             # binary
-  fleet.daedalus.serviceKeysSopsFile = ./sops/service-keys.sops;  # dotenv
-  # Optional:
-  # fleet.hcPing.keySopsFile = ./sops/ping-key.sops;
-  # fleet.claude.mcpSopsFile = ./.claude/mcp.json.sops;
-
-  # The weekly upgrade moves only what you name — leave the engine out.
-  fleet.autoupgrade.inputs = [ "nixpkgs" "nixpkgs-unstable" "sops-nix" ];
-
-  users.users.${config.fleet.operator.user} = {
-    inherit (config.fleet.operator) uid;
-    isNormalUser = true;
-    extraGroups = [ "wheel" ];
-    linger = true; # rootless podman needs the runtime dir at boot
-  };
-
-  system.stateVersion = "25.11";
-}
+```
+configuration.nix           hardware, the operator's account, fleet.site.source = ./site
+host/identity.nix           fleet.operator.*, fleet.config.repo, fleet.github.*, fleet.mail.smtpHost
+host/modules.nix            fleet.modules.<id>.enable + each module's policy
+host/images.nix             fleet.images.<container>, one file, full literals
+host/secrets.nix            the *SopsFile options the platform and the control plane read
+host/storage.nix            fleet.data (+ fleet.zfs.datasets, fleet.backup.replications)
+site/                       site.json, apps.json, vault/ — what the control plane writes
 ```
 
 ### What the host must define
 
 Options declared here without a default. Forgetting one is an evaluation
-error naming it.
+error naming it. The template defines every one.
 
 | Option | What it is |
 |---|---|
@@ -169,14 +108,14 @@ error naming it.
 | `fleet.config.repo` | Where your configuration checkout lives on disk. |
 | `fleet.github.owner` | The account your app repositories live under. |
 | `fleet.github.expectedOwnerId` | That account's numeric id — the one copy the control plane cannot rewrite. |
-| `fleet.modules.apps.enable` | **`false`, for now.** Not a fact about your box: the apps stack has not migrated here, so nothing stands behind the switch. See below. |
 | `fleet.site.source` | `./site`. Defaults to null, and null fails evaluation on purpose. |
 | `fleet.data` | Name → path of each bulk-data root. `{ }` is a valid answer. |
 | `fleet.mail.smtpHost`, `fleet.mail.passwordSopsFile` | The SMTP relay and its encrypted password. |
 | `fleet.git.sshKeySopsFile` | Encrypted SSH key the box pushes to its forge with. |
 | `fleet.daedalus.serviceKeysSopsFile` | Encrypted dotenv of read-only API keys for the dashboard's panels. |
-| `fleet.gluetun.image`, `.exporterImage` | Only if you build a VPN tunnel with `mkGluetunInstance`: the digest-pinned images. Pins live in YOUR repo — see below. |
-| `fleet.images.<container>` | Only for catalog modules you switch on: the digest-pinned image of each of their containers. Forgetting one fails evaluation naming the key and the upstream repository. |
+| `fleet.gluetun.image`, `.exporterImage` | Only if you build a VPN tunnel with `mkGluetunInstance`: the digest-pinned images. |
+| `fleet.images.<container>` | For every catalog module you switch on: the digest-pinned image of each of its containers. Forgetting one fails evaluation naming the key and the upstream repository. |
+| `fleet.modules.<id>.*SopsFile`, `fleet.modules.gatus.allowedSubjects` | A module's own required inputs, read only while it is on (the catalog table). |
 
 And from `site/site.json`, which `platform/site.nix` turns into options
 (edit these from the control plane's Settings once it runs):
@@ -190,12 +129,25 @@ And from `site/site.json`, which `platform/site.nix` turns into options
 | `network.dhcp.{active,router,start,end,leaseTime}` | `fleet.dhcp.*` |
 | `mail.sender`, `mail.alertTo` | `fleet.mail.sender`, `fleet.mail.alertTo` |
 | `cloudflare.{accountId,tunnelId,zoneId}` | `fleet.cloudflare.*` |
+| `developer.engineOverride` | read by the host agents at run time, never by nix (below) |
 
 plus two files beside it: `site/apps.json` (the app registry) and
 `site/vault/cloudflare-api-token.sops` (the one API token; the engine
 renders it for every consumer).
 
+Optional, null or empty by default: `fleet.gpuHost` / `fleet.gpuHostIp`
+(a model server on another machine), `fleet.hcPing.keySopsFile`,
+`fleet.claude.mcpSopsFile`, `fleet.zfs.datasets`, `fleet.zfs.arcMaxBytes`,
+`fleet.backup.replications`, `fleet.autoupgrade.inputs`,
+`fleet.daedalus.routerProduct`, `fleet.builder.npmMirrorHost`,
+`fleet.daedalus.dev`, `fleet.daedalus.image`.
+
 ### Moving the engine
+
+From the control plane: **System › Updates › Engine** fast-forwards the
+engine clone, re-resolves the input, builds, commits the lock, switches,
+verifies the control plane answers and reverts if it does not, then pushes
+(`stacks/daedalus/host/engine-update.sh`). By hand, the same thing is:
 
 ```
 nix flake update daedalus      # re-pin to the newest commit
@@ -203,71 +155,56 @@ git add flake.lock
 sudo nixos-rebuild test        # then: switch, commit, push
 ```
 
-To try an engine checkout you are editing, without committing it:
+To try an engine checkout you are editing, without committing it: set
+`developer.engineOverride` to the clone's path (Settings › Developer).
+While it is set, an Apply builds and **tests** against that tree — never
+switches — and the image and engine updates refuse; a banner says so on
+every page, and a reboot comes up on the last switched generation. By
+hand:
 
 ```
 sudo nixos-rebuild build --override-input daedalus path:/path/to/your/clone
 ```
 
-`build`, never `switch`: an activated override is a generation no commit
-can reproduce. A flake sees only git-**tracked** files — in your
+`build` or `test`, never `switch`: an activated override is a generation no
+commit can reproduce. A flake sees only git-**tracked** files — in your
 configuration and in the engine alike — except through `path:`, which
 copies the directory as it stands.
 
-## What a stranger gets today
+### The control plane's image
 
-`nixosModules.default` **evaluates on its own** — `nix flake check` proves
-it on every push, against `tests/minimal-host` and nothing else. What that
-host is:
-
-- **The platform, whole.** Rootless podman and its helpers, the publish
-  registries, the site constants, sops wiring, ZFS and replication, mail,
-  git identity, the weekly upgrade, the export domains.
-- **The control plane's HOST half.** Its agents (apply, deploy, build,
-  image update, site write, snapshots), the export publisher, the builder.
-- **Not the control plane's container.** `fleet.apps.daedalus` is a
-  declaration; what turns a `fleet.apps` entry into an `app-<name>`
-  container, a route and a deploy timer is the apps stack, which is still in
-  the reference operator's private configuration — along with what that
-  container needs to be useful: a reverse proxy, an identity provider, the
-  shared Postgres and the container registry. That is why the minimal host
-  sets `fleet.modules.apps.enable = false`, and it is the one line in it
-  that is not a fact about a box.
-- **One catalog module, `stirling-pdf`**, switched on in the test to prove a
-  migrated stack evaluates on a host that has neither a reverse proxy nor an
-  identity provider: its `fleet.webApps` and `fleet.ssoClients` entries are
-  declarations nothing acts on yet.
-
-So: it evaluates, and it would build, but it is not yet a box you can log
-in to. The stacks migrate **one by one** into `nix/modules/<id>`
-(`.claude/rules/nix-engine.md` §7 is how); the ones above are next, in
-dependency order. The one box that runs this imports the engine's modules
-individually through `enginePath`, interleaved with its own stacks (see
-PLAN.md Phase 11 for why the order matters).
+One Dockerfile at the repository root builds one image; a host runs its
+bundle (`fleet.daedalus.image`, by default the engine's published image at
+the version this rev's `app/package.json` declares — pinning the engine
+pins the control plane). The host that develops the engine sets
+`fleet.daedalus.dev = true`: the image's `runtime` stage is built on the box
+and the engine checkout's `app/` is mounted into it, so saving a file is the
+deploy. `CONTRIBUTING.md` has the image's own story.
 
 ## What is NOT done yet
 
-- **The apps stack, and the four stacks the control plane stands on**, as
-  above.
+- **The rest of the reference host's stacks.** The spine — everything a
+  box needs to log in to its control plane — is in the catalog. About
+  thirty more stacks (media, home automation, the AI cluster, games, VPN
+  tenants, small tools) are still in the reference operator's private
+  configuration; each moves as `.claude/rules/nix-engine.md` §7 describes,
+  and none is needed for a box to run.
 - **ZFS is assumed.** `platform/zfs.nix` enables ZFS support
   unconditionally; there is no switch for a box without it.
-- **CI evaluates one host, not the schemas.** `nix flake check` runs
-  nixfmt, statix, deadnix, nix's own module check and the `minimal-host`
-  evaluation; per-schema-version fixtures of `site.json` / `apps.json` are
-  still planned.
-- **Image pins are the host's.** No oci-container digest pin lives in this
-  tree: the control plane's updater rewrites a pin in place in the host's
-  repository and cannot write into a flake input. A catalog module reads
-  `fleet.images.<container>`, which the host defines (one file,
-  `host/images.nix`, is the convention). Engine-shipped DEFAULT pins that a
-  host overrides are not designed yet. (Two pins here are not
-  oci-containers and are bumped by hand: the build agent's node image and
-  the Railpack frontend.)
-- **No `developer.engineOverride`** — the control plane's own Apply
-  cannot yet be pointed at an engine checkout; only a hand-run
-  `--override-input` can.
-- **No "Update daedalus" button** — moving the engine is the three
-  commands above.
-- **No `templates.config`, no `init`.** Writing the host flake is by hand.
+- **The generic dashboards know no pools.** The storage and overview
+  dashboards name a box's pools, so they are the host's (contributed through
+  `fleet.grafanaDashboardsByFolder`); a pool-agnostic version, templated
+  over `fleet.zfs.datasets`, would let them return to the engine.
+- **Engine-shipped default pins were considered and declined.** A pin in
+  this tree could never be moved by the control plane's updater, and two
+  sources of truth for one image would drift. The host keeps every pin; a
+  future `init` resolves the first set.
+- **The reference host still names the engine's modules one by one** in
+  its import list, interleaved with its own stacks, because list-typed
+  options merge in import order and the identical-closure gate forbade a
+  reorder. It adopts `nixosModules.default` in a deliberate rebuild once
+  nothing of its own is left to interleave.
+- **No `init`.** The template is a start; resolving pins, creating secrets
+  and the first switch are by hand.
 
 For editing this tree: `.claude/rules/nix-engine.md`.

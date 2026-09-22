@@ -41,7 +41,7 @@ THIS repo's `app/` at /app, running the Vite dev server against it.
   `drizzle-orm`, `@node-rs/argon2`) — the image installs `--prod`, and
   `check-build` fails on a mismatch either way. Everything the build
   bundles, React included, is a devDependency: `pnpm add -D`.
-- `nix/stacks/daedalus/assets/**` (the runtime image context) →
+- `Dockerfile`, `docker-entrypoint.sh` (the runtime image's context) →
   commit + push on `main`, `nix flake update daedalus` +
   `nixos-rebuild` in the configuration repo (context hash → new image
   tag → restart).
