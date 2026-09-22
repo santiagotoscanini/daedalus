@@ -698,28 +698,60 @@ priority; each can be done independently unless noted.
    10b (the production build must exist before there is something to
    toggle to).
 
-6. **Windows companion agent for remote machines.** A lightweight agent
-   installed on the gaming PC (the Lemonade model server) that reports
-   hardware telemetry daedalus cannot see today: GPU utilization and
-   temperature, CPU usage, RAM, BIOS/firmware version, disk health, and
-   whether the machine is awake. It also accepts commands from daedalus:
-   keep the display/machine awake (suppress sleep), restart, and
-   shutdown — so the operator can manage the AI workload machine from the
-   daedalus UI without walking to it or opening RDP. Windows-only for
-   now; a Linux agent is a future expansion.
-   - **Telemetry:** Prometheus-compatible `/metrics` endpoint (or a push
-     to the box's Prometheus via remote-write) exposing GPU load/temp/VRAM
-     (NVML or WMI), CPU per-core usage, RAM, disk SMART, BIOS version,
-     uptime, and sleep/wake state.
-   - **Commands:** a small authenticated API (or a polling model where the
-     agent checks daedalus for pending commands) for wake-lock, restart,
-     shutdown, and cancel-wake-lock.
-   - **UI:** a new page or section in daedalus showing the remote
-     machine's live metrics, hardware summary, and the power buttons.
-   - **Packaging:** a single `.exe` or MSI installer; runs as a Windows
-     service; auto-updates from a GitHub release (the engine repo or its
-     own repo). Written in Go or Rust for a single static binary with no
-     runtime dependency.
+6. **Windows agent for the GPU box.** A Rust service on the gaming PC (the
+   Lemonade model server), designed 2026-09-22 around the one problem the
+   box has today: the machine goes to sleep after a few days and takes
+   every AI workload with it. Phase one is two jobs, and small on purpose.
+   - **Keep awake, unconditionally.** A Windows service running as SYSTEM
+     that creates a power request (`PowerCreateRequest` +
+     `PowerSetRequest(PowerRequestSystemRequired)`) at start and holds it
+     for its lifetime — visible in `powercfg /requests` with a reason
+     string. On every start it also converges the power plan
+     (`standby-timeout-ac 0`, `hibernate-timeout-ac 0`, hibernate off) as
+     a second line of defence. No idle policy, no display hold, no
+     listening port. Starts at boot before login, restarts on failure.
+     Sleep-on-purpose from the UI is a later exception, not the rule. A
+     power request does NOT stop a Windows Update restart; if
+     `Get-WinEvent` (Kernel-Power 42/41/109) shows that is what has been
+     happening, the fix is the update policy, and the agent only reports.
+   - **Prove it is awake.** A heartbeat every minute over an outbound
+     WebSocket to `/api/agent/ws` on the box — an auth-bypass path with
+     its own bearer token, the deploy hook's pattern — carrying version,
+     uptime and the hold state. daedalus shows "held awake by agent vX
+     since …"; five missed heartbeats raise the alert nothing raises
+     today: the machine slept or the service died. That is phase one's
+     whole telemetry.
+   - **Update itself.** The agent version is a pin in `site.json` beside
+     the image pins, moved from System › Updates with its changelog like
+     everything else. The agent reads the pin on each heartbeat, downloads
+     the release asset from GitHub, verifies an ed25519 signature against
+     a key compiled into the binary, renames the running exe aside, moves
+     the new one in and restarts the service. A failed verification or an
+     unreachable daedalus leaves the current version running; rollback is
+     moving the pin back. Ships in phase one because it is the one thing
+     that cannot be added later without a walk to the machine.
+   - **Install once.** One PowerShell line shown in the UI, carrying a
+     fifteen-minute enrollment token: installs the service, writes the
+     box's address to ProgramData, exchanges the token for a long-lived
+     agent token stored DPAPI-encrypted, reports hostname and MAC, starts.
+   - **Repo and release.** `agent/` in this monorepo (its protocol is
+     coupled to daedalus's API), tag `agent-v*`, a workflow on a Windows
+     runner building the MSVC target and publishing the asset plus its
+     signature. Crates: `windows`, `windows-service`, `tokio`,
+     `tokio-tungstenite`, `serde`, `ed25519-dalek`.
+   - **Later phases, in order.** (2) Telemetry: a `/metrics` listener
+     firewalled to the box, read by Prometheus alongside Lemonade's own
+     `/metrics` (live and unscraped today) — GPU load and VRAM from
+     Windows performance counters first, AMD temps and power via ADLX
+     after; nix generalizes `fleet.gpuHost{,Ip}` into
+     `fleet.remoteMachines.<name>` (host, ip, mac, ports) that litellm,
+     gatus, lemonade-logs and the dashboards read; a `System › Machines`
+     tab. (3) Power buttons: hold with a duration, release, restart, shut
+     down, and wake by magic packet from the box — with the sleep-aware
+     alert (`up == 0` unless daedalus expects it asleep). (4) Lemonade
+     supervision and updates through a session helper launched into the
+     logged-on desktop with the user's token, because the tray app runs
+     there today and whether ROCm works from session 0 is untested.
 
 7. **Git commit attribution from the signed-in user.** Today every
    `site/` commit is authored by "daedalus" regardless of who pressed
