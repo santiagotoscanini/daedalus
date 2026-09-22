@@ -13,6 +13,13 @@ export type AgentStatus = {
   version: string
   hostname: string
   os: string
+  /** "Windows 11 Pro", "macOS"; empty from an agent older than 0.3.0. */
+  osName: string
+  /** "24H2 (26100.4652)", "15.1"; empty from an older agent. */
+  osVersion: string
+  arch: string
+  cpu: string
+  memoryBytes: number | null
   /** The agent process's uptime. */
   uptimeSecs: number
   /** The machine's; null from an agent older than 0.2.1. */
@@ -30,6 +37,11 @@ const shape = obj({
   version: str,
   hostname: optional(str, ''),
   os: optional(str, ''),
+  os_name: optional(str, ''),
+  os_version: optional(str, ''),
+  arch: optional(str, ''),
+  cpu: optional(str, ''),
+  memory_bytes: optional(nullable(int), null),
   uptime_secs: optional(int, 0),
   os_uptime_secs: optional(nullable(int), null),
   booted_at: optional(nullable(str), null),
@@ -48,6 +60,11 @@ export function agentStatus(body: unknown): AgentStatus {
     version: s.version,
     hostname: s.hostname,
     os: s.os,
+    osName: s.os_name,
+    osVersion: s.os_version,
+    arch: s.arch,
+    cpu: s.cpu,
+    memoryBytes: s.memory_bytes,
     uptimeSecs: s.uptime_secs,
     osUptimeSecs: s.os_uptime_secs,
     bootedAt: s.booted_at,

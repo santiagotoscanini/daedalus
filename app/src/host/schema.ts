@@ -505,3 +505,37 @@ export const localAdmins = pgTable('local_admins', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
 })
+
+// The other machines, once they have said hello (core/nodes.ts).
+//
+// A row is a machine's KEY, not its address: the agent generates an ed25519
+// keypair at install and signs every hello with it, and `id` is the first
+// sixteen hex characters of the public key's SHA-256. Hostnames change and
+// leases move; the key is what the box trusts, and `state` is what the box
+// has decided about it. `pending` is a machine that announced itself and
+// has not been approved; `approved` is a node the box may act on;
+// `revoked` is a key the box will no longer listen to, kept rather than
+// deleted so its history still explains itself.
+//
+// `lastHello` is the whole last payload, as the agent sent it, so a field
+// the agent adds later is visible here before anything reads it by name.
+export type NodeState = 'pending' | 'approved' | 'revoked'
+
+export const nodes = pgTable('nodes', {
+  id: text('id').primaryKey(),
+  publicKey: text('public_key').notNull().unique(),
+  state: text('state').$type<NodeState>().notNull().default('pending'),
+  hostname: text('hostname').notNull(),
+  os: text('os').notNull(),
+  arch: text('arch').notNull(),
+  agentVersion: text('agent_version').notNull(),
+  mac: text('mac'),
+  lanIp: text('lan_ip'),
+  statusPort: integer('status_port'),
+  lastHello: jsonb('last_hello').$type<Record<string, unknown>>().notNull(),
+  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  approvedBy: text('approved_by'),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+})

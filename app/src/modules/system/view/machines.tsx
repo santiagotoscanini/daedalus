@@ -1,15 +1,27 @@
+import { useRouter } from '@tanstack/react-router'
+import { useState, useTransition } from 'react'
+import { Button } from '../../../components/ui/button'
 import { Board, BoardGrid, Chip, Facts, type Tone } from '../../../components/viz'
-import { duration, since } from '../../../lib/format'
+import { cn } from '../../../lib/cn'
+import { bytes, duration, since } from '../../../lib/format'
+import { errorText } from '../../../lib/redact'
+import { approveNodeFn, forgetNodeFn, revokeNodeFn } from '../../../server/nodes'
 import type { Machine, MachinesData } from '../data/machines'
 import { BOARD_FOOT, BOARD_NOTE, MONO, VIZ_EMPTY } from './shared'
 
 // System › Machines: the other computers on this network that run the agent.
 //
-// One board per machine, because each is a machine and not a row — it has a
-// name, a version, a hold and an uptime of its own, and will have a great
-// deal more once the agent reports telemetry and takes commands. Until then
-// the board is small and says exactly what the status page says, with the
-// address it was read from, so a reader can open the page themselves.
+// One board per machine, headed like a hardware part on Build — the OS's mark
+// beside the machine's name and edition — because that is what a machine is
+// on this page: a physical thing with a name, not a row. Under the head, the
+// facts the agent reports; at the foot, the decision the box has made about
+// it and the buttons that change it.
+//
+// Two kinds of machine, told apart by the chip. One that said hello has a
+// node row and a state — pending until approved, approved, or revoked — and
+// the buttons act on that row. One that was merely found (its status page
+// answers, but no hello reached the box) has no identity the box can act on;
+// the board says why and what to do.
 //
 // The install line is on the page rather than in a doc: a machine that is
 // not here yet is one PowerShell line away, and this is where the person
@@ -17,71 +29,192 @@ import { BOARD_FOOT, BOARD_NOTE, MONO, VIZ_EMPTY } from './shared'
 
 const INSTALL = 'irm https://daedalus.toscanini.me/install.ps1 | iex'
 
-function holdTone(m: Machine): Tone {
-  if (!m.status.awakeHold) return 'bad'
-  if (m.status.updateAvailable !== null || m.status.restartPending) return 'warn'
-  return 'ok'
+/** The OS's mark, by the family the agent reports. */
+function osMark(os: string): { src: string; invert: boolean } | null {
+  switch (os) {
+    case 'windows':
+      return { src: '/icon-windows.svg', invert: false }
+    case 'macos':
+      return { src: '/icon-apple.svg', invert: true }
+    case 'linux':
+      return { src: '/icon-linux.svg', invert: true }
+    default:
+      return null
+  }
+}
+
+type Verdict = { chip: string; tone: Tone }
+
+function verdict(m: Machine): Verdict {
+  const s = m.status
+  switch (m.node?.state) {
+    case 'pending':
+      return { chip: 'wants to join', tone: 'warn' }
+    case 'revoked':
+      return { chip: 'revoked', tone: 'bad' }
+    case 'approved':
+      if (s === null) return { chip: 'not answering', tone: 'muted' }
+      if (!s.awakeHold) return { chip: 'hold OFF', tone: 'bad' }
+      if (s.updateAvailable !== null || s.restartPending) return { chip: 'updating', tone: 'warn' }
+      return { chip: 'held awake', tone: 'ok' }
+    default:
+      return { chip: 'found, not announced', tone: 'muted' }
+  }
+}
+
+/** The machine's name and, under it, what it runs — the part head, for a machine. */
+function Head({ m }: { m: Machine }) {
+  const s = m.status
+  const os = s?.os ?? m.node?.os ?? ''
+  const mark = osMark(os)
+  const edition = s?.osName || (os ? os.charAt(0).toUpperCase() + os.slice(1) : 'unknown OS')
+  const version = s?.osVersion ?? ''
+  const arch = s?.arch || m.node?.arch || ''
+  return (
+    <div className="flex min-h-[2.6rem] items-center gap-[0.9rem] pb-[0.35rem]">
+      {mark !== null && (
+        <img
+          src={mark.src}
+          alt=""
+          width={40}
+          height={40}
+          className={cn('size-10 flex-none', mark.invert && 'dark:invert')}
+        />
+      )}
+      <div className="flex min-w-0 flex-auto flex-col items-start gap-[0.2rem]">
+        <strong className="text-[0.98rem] text-foreground tracking-[-0.01em] wrap-anywhere">
+          {s?.hostname || m.node?.hostname || m.lanName || m.ip}
+        </strong>
+        <span className="text-[0.73rem] text-(--text-muted) leading-[1.4]">
+          {edition}
+          {version !== '' && ` · ${version}`}
+          {arch !== '' && ` · ${arch}`}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function Decision({ m }: { m: Machine }) {
+  const router = useRouter()
+  const [busy, start] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const node = m.node
+  const act = (fn: (opts: { data: { id: string } }) => Promise<unknown>) => {
+    if (node === null) return
+    setError(null)
+    start(async () => {
+      try {
+        await fn({ data: { id: node.id } })
+        await router.invalidate()
+      } catch (e) {
+        setError(errorText(e))
+      }
+    })
+  }
+
+  if (node === null) {
+    return (
+      <p className={BOARD_FOOT}>
+        Its status page answers but no hello has reached the box, so there is no key to trust: the
+        agent is older than 0.3.0, or it cannot find the box in DNS. It will announce itself on its
+        next update; nothing to press here.
+      </p>
+    )
+  }
+
+  const line =
+    node.state === 'pending'
+      ? `Announced itself ${since(node.lastSeenAgo)} and is waiting for a decision. Approve it if this is your machine.`
+      : node.state === 'approved'
+        ? `Approved ${node.approvedAt !== null ? since((Date.now() - Date.parse(node.approvedAt)) / 1000) : ''}${node.approvedBy !== null ? ` by ${node.approvedBy}` : ''}; last hello ${since(node.lastSeenAgo)}.`
+        : `Revoked; the box ignores its hellos. Approve to trust its key again, or forget it.`
+
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <p className={BOARD_NOTE}>{line}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {node.state !== 'approved' && (
+          <Button size="sm" disabled={busy} onClick={() => act(approveNodeFn)}>
+            Approve
+          </Button>
+        )}
+        {node.state === 'approved' && (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => act(revokeNodeFn)}>
+            Revoke
+          </Button>
+        )}
+        {node.state !== 'approved' && (
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(forgetNodeFn)}>
+            Forget
+          </Button>
+        )}
+        <span className={`${MONO} text-[0.7rem] text-(--dim)`}>key {node.id}</span>
+      </div>
+      {error !== null && <p className="m-0 text-[0.78rem] text-destructive">{error}</p>}
+    </div>
+  )
 }
 
 function MachineBoard({ m, port }: { m: Machine; port: number }) {
   const s = m.status
-  const title = s.hostname || m.name || m.ip
+  const v = verdict(m)
+  const rows = [
+    { k: 'Agent', v: <span className={MONO}>{s?.version ?? m.node?.agentVersion ?? '—'}</span> },
+    ...(s?.cpu ? [{ k: 'Processor', v: <span className={MONO}>{s.cpu}</span> }] : []),
+    ...(s?.memoryBytes != null
+      ? [{ k: 'Memory', v: <span className={MONO}>{bytes(s.memoryBytes)}</span> }]
+      : []),
+    {
+      k: 'Machine up',
+      v: <span className={MONO}>{s?.osUptimeSecs == null ? '—' : duration(s.osUptimeSecs)}</span>,
+    },
+    {
+      k: 'Updates',
+      v:
+        s === null ? (
+          <span className={BOARD_NOTE}>—</span>
+        ) : s.restartPending ? (
+          <Chip tone="warn">installed, restarting</Chip>
+        ) : s.updateAvailable !== null ? (
+          <Chip tone="warn">{s.updateAvailable} available</Chip>
+        ) : (
+          <span className={BOARD_NOTE}>
+            {s.lastUpdateResult ?? 'not checked yet'}
+            {s.lastUpdateCheck !== null &&
+              ` · ${since((Date.now() - Date.parse(s.lastUpdateCheck)) / 1000)}`}
+          </span>
+        ),
+    },
+    {
+      k: 'Address',
+      v:
+        m.ip === null ? (
+          <span className={BOARD_NOTE}>—</span>
+        ) : (
+          <a
+            href={`http://${m.ip}:${String(port)}/status`}
+            target="_blank"
+            rel="noreferrer"
+            className={MONO}
+          >
+            {m.ip}:{port}
+          </a>
+        ),
+    },
+  ]
   return (
     <Board
-      title={title}
+      title={m.node?.state === 'pending' ? 'New machine' : 'Machine'}
       span={6}
-      aside={<Chip tone={holdTone(m)}>{s.awakeHold ? 'held awake' : 'hold OFF'}</Chip>}
+      aside={<Chip tone={v.tone}>{v.chip}</Chip>}
     >
-      <Facts
-        rows={[
-          { k: 'Agent', v: <span className={MONO}>{s.version}</span> },
-          { k: 'OS', v: <span className={MONO}>{s.os || '—'}</span> },
-          {
-            k: 'Machine up',
-            v: (
-              <span className={MONO}>
-                {s.osUptimeSecs === null ? '—' : duration(s.osUptimeSecs)}
-              </span>
-            ),
-          },
-          { k: 'Agent up', v: <span className={MONO}>{duration(s.uptimeSecs)}</span> },
-          {
-            k: 'Updates',
-            v: s.restartPending ? (
-              <Chip tone="warn">installed, restarting</Chip>
-            ) : s.updateAvailable !== null ? (
-              <Chip tone="warn">{s.updateAvailable} available</Chip>
-            ) : (
-              <span className={BOARD_NOTE}>
-                {s.lastUpdateResult ?? 'not checked yet'}
-                {s.lastUpdateCheck !== null &&
-                  ` · ${since((Date.now() - Date.parse(s.lastUpdateCheck)) / 1000)}`}
-              </span>
-            ),
-          },
-          {
-            k: 'Address',
-            v: (
-              <a
-                href={`http://${m.ip}:${String(port)}/status`}
-                target="_blank"
-                rel="noreferrer"
-                className={MONO}
-              >
-                {m.ip}:{port}
-              </a>
-            ),
-          },
-        ]}
-      />
-      {s.holdError !== null && (
+      <Head m={m} />
+      <Facts rows={rows} />
+      {s?.holdError != null && (
         <p className={`${BOARD_NOTE} mt-2`}>The hold failed: {s.holdError}</p>
       )}
-      <p className={BOARD_FOOT}>
-        {m.name !== null && m.name !== s.hostname ? `${m.name} on the LAN · ` : ''}
-        {s.bootedAt !== null ? `booted ${s.bootedAt.slice(0, 16).replace('T', ' ')} UTC` : ''}
-        {m.lastSeenAgo !== null && ` · resolved a name ${since(m.lastSeenAgo)}`}
-      </p>
+      <Decision m={m} />
     </Board>
   )
 }
@@ -94,23 +227,26 @@ export function MachinesView({ d }: { d: MachinesData }) {
           <p className={VIZ_EMPTY}>
             {d.error !== null
               ? `The LAN device list could not be read: ${d.error}`
-              : `No machine on the LAN answered the agent's status page (${String(d.probed)} asked).`}
+              : `No machine has announced itself, and none of the ${String(d.probed)} asked answered the agent's status page.`}
           </p>
         </Board>
       ) : (
-        d.machines.map((m) => <MachineBoard key={m.mac} m={m} port={d.port} />)
+        d.machines.map((m) => (
+          <MachineBoard key={m.node?.id ?? m.ip ?? m.lanName ?? ''} m={m} port={d.port} />
+        ))
       )}
 
       <Board title="How a machine joins" span={12}>
         <p className={BOARD_NOTE}>Install the agent on it, from an administrator PowerShell:</p>
         <p className={`${MONO} mt-2 select-all text-[0.8rem]`}>{INSTALL}</p>
         <p className={BOARD_FOOT}>
-          The agent keeps the machine awake, shows itself in the tray and updates itself from each
-          release. This page finds it by asking every device pi-hole has seen in the last week for
-          the page it answers on TCP {String(d.port)} — {String(d.probed)} asked just now
-          {d.skipped > 0 && `, ${String(d.skipped)} too long silent to ask`}. Discovery only: a
-          machine listed here is one the box can see, not yet one it can act on; the signed hello
-          and the approval that make it a node come next.
+          The agent keeps the machine awake, shows itself in the tray, updates itself from each
+          release, and announces itself to this box every minute with a key it made at install — the
+          machine then appears above as "wants to join" until you approve it. The page also asks
+          every device pi-hole has seen in the last week for the agent's status page on TCP{' '}
+          {String(d.port)} ({String(d.probed)} asked just now
+          {d.skipped > 0 && `, ${String(d.skipped)} too long silent`}), so an agent that cannot find
+          the box is still seen.
         </p>
       </Board>
     </BoardGrid>
