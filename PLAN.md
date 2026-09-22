@@ -808,7 +808,12 @@ priority; each can be done independently unless noted.
      remote control) rides the hello answer; the tray supervises `claude
      remote-control` in the user's session and reports it; the Claude page
      has a machine picker. Still open in 3: power commands (sleep/wake/
-     reboot) and declared services. macOS not started. Original
+     reboot) and declared services. macOS: agent-v0.5.0 (2026-09-22) ships
+     the same crate as a LaunchDaemon + a menu bar LaunchAgent, universal
+     binaries, `install.sh` from the site; Apple codesign/notarization
+     runs once the repo's `release` environment holds the six santree
+     secrets (unsigned by Apple until then — launchd runs it regardless).
+     Not yet run on a real Mac. Original
      plan for reference: (1) Core and Windows, keep-awake first: the trait, the
      service, the indefinite power hold with the power plan converged as
      a second line, the heartbeat and the missed-heartbeat alert,
