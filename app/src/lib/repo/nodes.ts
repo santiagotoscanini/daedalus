@@ -22,6 +22,7 @@ export type NodeRow = {
   approvedAt: string | null
   approvedBy: string | null
   revokedAt: string | null
+  updateCheckRequested: boolean
   /** Seconds since the last hello, resolved on the server (the page streams). */
   lastSeenAgo: number
 }
@@ -43,6 +44,7 @@ function row(n: typeof nodes.$inferSelect): NodeRow {
     approvedAt: n.approvedAt?.toISOString() ?? null,
     approvedBy: n.approvedBy,
     revokedAt: n.revokedAt?.toISOString() ?? null,
+    updateCheckRequested: n.updateCheckRequested,
     lastSeenAgo: (Date.now() - n.lastSeenAt.getTime()) / 1000,
   }
 }
@@ -58,7 +60,10 @@ export async function listNodes(): Promise<NodeRow[]> {
  * state is never touched here — only an admin moves it — and the answer is
  * what the agent shows: whether it is waiting, trusted, or turned away.
  */
-export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promise<NodeState> {
+/// What the answer to a hello carries: the decision, and the one instruction.
+export type HelloAnswer = { state: NodeState; checkUpdate: boolean }
+
+export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promise<HelloAnswer> {
   const p = v.payload
   const now = new Date()
   const [saved] = await db
@@ -91,8 +96,24 @@ export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promi
         lastSeenAt: now,
       },
     })
-    .returning({ state: nodes.state })
-  return saved?.state ?? 'pending'
+    .returning({ state: nodes.state, checkUpdate: nodes.updateCheckRequested })
+  const state = saved?.state ?? 'pending'
+  // The instruction is delivered once: it goes out with this answer and is
+  // cleared in the same breath, so a second hello does not repeat it.
+  if (saved?.checkUpdate === true) {
+    await db.update(nodes).set({ updateCheckRequested: false }).where(eq(nodes.id, v.nodeId))
+  }
+  return { state, checkUpdate: saved?.checkUpdate === true }
+}
+
+/** Ask the node to check for updates on its next hello. */
+export async function requestUpdateCheck(id: string): Promise<boolean> {
+  const updated = await db
+    .update(nodes)
+    .set({ updateCheckRequested: true })
+    .where(eq(nodes.id, id))
+    .returning({ id: nodes.id })
+  return updated.length > 0
 }
 
 export async function approveNode(id: string, by: string): Promise<boolean> {

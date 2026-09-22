@@ -5,7 +5,12 @@ import { Board, BoardGrid, Chip, Facts, type Tone } from '../../../components/vi
 import { cn } from '../../../lib/cn'
 import { bytes, duration, since } from '../../../lib/format'
 import { errorText } from '../../../lib/redact'
-import { approveNodeFn, forgetNodeFn, revokeNodeFn } from '../../../server/nodes'
+import {
+  approveNodeFn,
+  forgetNodeFn,
+  requestUpdateCheckFn,
+  revokeNodeFn,
+} from '../../../server/nodes'
 import type { Machine, MachinesData } from '../data/machines'
 import { BOARD_FOOT, BOARD_NOTE, MONO, VIZ_EMPTY } from './shared'
 
@@ -127,7 +132,7 @@ function Decision({ m }: { m: Machine }) {
     node.state === 'pending'
       ? `Announced itself ${since(node.lastSeenAgo)} and is waiting for a decision. Approve it if this is your machine.`
       : node.state === 'approved'
-        ? `Approved ${node.approvedAt !== null ? since((Date.now() - Date.parse(node.approvedAt)) / 1000) : ''}${node.approvedBy !== null ? ` by ${node.approvedBy}` : ''}; last hello ${since(node.lastSeenAgo)}.`
+        ? `Approved ${node.approvedAt !== null ? since((Date.now() - Date.parse(node.approvedAt)) / 1000) : ''}${node.approvedBy !== null ? ` by ${node.approvedBy}` : ''}; last hello ${since(node.lastSeenAgo)}.${node.updateCheckRequested ? ' An update check is queued for its next hello.' : ''}`
         : `Revoked; the box ignores its hellos. Approve to trust its key again, or forget it.`
 
   return (
@@ -140,9 +145,21 @@ function Decision({ m }: { m: Machine }) {
           </Button>
         )}
         {node.state === 'approved' && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => act(revokeNodeFn)}>
-            Revoke
-          </Button>
+          <>
+            {/* Rides the next hello's answer, so within a minute: the one thing
+                the box can ask of a node today. */}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || node.updateCheckRequested}
+              onClick={() => act(requestUpdateCheckFn)}
+            >
+              {node.updateCheckRequested ? 'Check queued' : 'Check for updates'}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(revokeNodeFn)}>
+              Revoke
+            </Button>
+          </>
         )}
         {node.state !== 'approved' && (
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(forgetNodeFn)}>

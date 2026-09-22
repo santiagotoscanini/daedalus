@@ -40,3 +40,12 @@ export const forgetNodeFn = createServerFn({ method: 'POST' })
     const { forgetNode } = await import('../lib/repo/nodes')
     return { ok: await forgetNode(data.id) }
   })
+
+export const requestUpdateCheckFn = createServerFn({ method: 'POST' })
+  .validator(nodeId)
+  .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { requestUpdateCheck } = await import('../lib/repo/nodes')
+    return { ok: await requestUpdateCheck(data.id) }
+  })

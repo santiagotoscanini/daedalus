@@ -34,10 +34,13 @@ export const Route = createFileRoute('/api/nodes/hello')({
           return Response.json({ error: verdict.reason }, { status: 401 })
         }
         const { recordHello } = await import('../lib/repo/nodes')
-        const state = await recordHello(verdict)
+        const answer = await recordHello(verdict)
         return Response.json({
           node: verdict.nodeId,
-          state,
+          state: answer.state,
+          // The one thing the box may ask of a node today; the agent's
+          // updater looks now instead of on its next tick.
+          check_update: answer.checkUpdate,
           // The box's clock, so an agent whose clock drifts can see why it
           // was refused before it is.
           server_time: Math.floor(Date.now() / 1000),

@@ -538,4 +538,8 @@ export const nodes = pgTable('nodes', {
   approvedAt: timestamp('approved_at', { withTimezone: true }),
   approvedBy: text('approved_by'),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  /// The one instruction the box can send a node in this version: "check
+  /// for updates now". Set by an admin, carried by the next hello's answer,
+  /// cleared as it goes out.
+  updateCheckRequested: boolean('update_check_requested').notNull().default(false),
 })

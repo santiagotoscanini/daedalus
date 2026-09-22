@@ -1,0 +1,1 @@
+ALTER TABLE "nodes" ADD COLUMN "update_check_requested" boolean DEFAULT false NOT NULL;
