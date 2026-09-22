@@ -131,12 +131,7 @@ export function TraefikView({ data: d }: { data: Proxy }) {
           </>
         }
         actions={
-          <a
-            className={ACTION}
-            href="https://traefik.toscanini.me/dashboard/"
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a className={ACTION} href={d.dashboardUrl} target="_blank" rel="noreferrer">
             Open the dashboard ↗
           </a>
         }

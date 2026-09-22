@@ -7,7 +7,7 @@ import { env } from './env'
 
 // Redeploy: pull the app's image and restart it if the digest moved.
 //
-// daedalus decides; the host executes. It cannot `podman pull` into santiago's
+// daedalus decides; the host executes. It cannot `podman pull` into the operator's
 // rootless store or restart a system unit, so it drops a request in the bind
 // mount and daedalus-deploy-trigger.service starts the app's EXISTING
 // `app-<name>-deploy.service` — the one that already knows how to compare

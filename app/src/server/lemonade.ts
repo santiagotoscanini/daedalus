@@ -13,7 +13,7 @@ import type { Result } from '../lib/result'
 // "free that card up" and "keep this one warm, I am about to use it".
 //
 // Doing either meant opening Lemonade's own GUI on the gaming PC, which is the
-// exact detour /etc/nixos/lemonade.md tells us to skip: it is one API call.
+// exact detour the configuration repo's lemonade.md tells us to skip: it is one API call.
 //
 // ── deliberately not here ─────────────────────────────────────────────────
 //

@@ -16,6 +16,7 @@ import { PageHead } from '../components/page'
 import { usePoll } from '../components/poll'
 import { Appearance } from '../components/settings/appearance'
 import { Developer } from '../components/settings/developer'
+import { ExternalApps } from '../components/settings/external-apps'
 import { General } from '../components/settings/general'
 import { Integrations } from '../components/settings/integrations'
 import { Network } from '../components/settings/network'
@@ -29,6 +30,7 @@ import { fetchApplyStatus } from '../server/registry'
 import {
   fetchAuthorization,
   fetchBoxSettings,
+  fetchExternalApps,
   fetchGeneralLive,
   fetchGithubAppStatus,
   fetchIntegrationStatus,
@@ -130,27 +132,39 @@ export const Route = createFileRoute('/settings')({
   // only for the tab that shows them.
   loader: async ({ deps }) => {
     const general = !isTab(deps.tab) || deps.tab === 'general'
-    const [theme, settings, edit, applyStatus, timezones, githubApp, mcpTokens, authorization] =
-      await Promise.all([
-        fetchTheme(),
-        fetchBoxSettings(),
-        fetchSiteEdit(),
-        fetchApplyStatus(),
-        // A file read, so awaited like the facts; only General has the picker.
-        general ? fetchTimezones() : Promise.resolve<string[]>([]),
-        // Two file reads and a row, no upstream: awaited, for the tab that shows it.
-        deps.tab === 'integrations' ? fetchGithubAppStatus() : Promise.resolve(null),
-        // One indexed table read, and only for the tab that lists them.
-        deps.tab === 'developer' ? fetchMcpTokens() : Promise.resolve([]),
-        // The decision for this very request: two headers and one row.
-        deps.tab === 'developer' ? fetchAuthorization() : Promise.resolve(null),
-      ])
+    const [
+      theme,
+      settings,
+      edit,
+      applyStatus,
+      timezones,
+      externalApps,
+      githubApp,
+      mcpTokens,
+      authorization,
+    ] = await Promise.all([
+      fetchTheme(),
+      fetchBoxSettings(),
+      fetchSiteEdit(),
+      fetchApplyStatus(),
+      // A file read, so awaited like the facts; only General has the picker.
+      general ? fetchTimezones() : Promise.resolve<string[]>([]),
+      // One row, and only General has the editor.
+      general ? fetchExternalApps() : Promise.resolve([]),
+      // Two file reads and a row, no upstream: awaited, for the tab that shows it.
+      deps.tab === 'integrations' ? fetchGithubAppStatus() : Promise.resolve(null),
+      // One indexed table read, and only for the tab that lists them.
+      deps.tab === 'developer' ? fetchMcpTokens() : Promise.resolve([]),
+      // The decision for this very request: two headers and one row.
+      deps.tab === 'developer' ? fetchAuthorization() : Promise.resolve(null),
+    ])
     return {
       theme,
       settings,
       edit,
       applyStatus,
       timezones,
+      externalApps,
       githubApp,
       mcpTokens,
       authorization,
@@ -179,6 +193,7 @@ function SettingsPage() {
     applyStatus,
     timezones,
     live,
+    externalApps,
     githubApp,
     mcpTokens,
     authorization,
@@ -298,6 +313,7 @@ function SettingsPage() {
               {(l) => <General settings={settings} edit={edit} timezones={timezones} live={l} />}
             </GuardedAwait>
           ))}
+        {tab === 'general' && <ExternalApps rows={externalApps} />}
         {tab === 'network' && <Network settings={settings} edit={edit} />}
         {tab === 'integrations' &&
           (integrations === null ? (

@@ -26,9 +26,9 @@ export const Route = createFileRoute('/api/app-icon/$name')({
         // JSON body — which a browser would try to decode as an image.
         const miss = new Response(null, { status: 404 })
 
-        // Registry apps first, then the static off-box list — the resolution
-        // order that makes external ids forbidden from colliding with app
-        // names (see lib/external-apps.ts).
+        // Registry apps first, then the operator's off-box list — the
+        // resolution order that makes external ids forbidden from colliding
+        // with app names (see lib/external-apps.ts).
         const record = await getApp(params.name)
         const external = record ? null : await findExternalApp(await makeCtx(), params.name)
         if (!record && !external) return miss

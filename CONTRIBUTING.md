@@ -190,11 +190,11 @@ One `Dockerfile` at the repository root, one image, and
 # from the repository root; npmjs is the default registry, as in CI
 podman build -t daedalus .
 
-# on the author's box: through Verdaccio, which the build container reaches
-# by the host gateway (pi-hole rate-limits a cold npmjs install)
+# through a local npm mirror (Verdaccio or the like) that the build container
+# reaches by the host gateway — a cold npmjs install can trip a LAN DNS rate limit
 podman build -t daedalus \
-  --add-host=verdaccio.toscanini.me:host-gateway \
-  --build-arg NPM_REGISTRY=https://verdaccio.toscanini.me/ .
+  --add-host=registry.example.internal:host-gateway \
+  --build-arg NPM_REGISTRY=https://registry.example.internal/ .
 ```
 
 The `build` stage installs with `--frozen-lockfile`, runs `pnpm build` (the

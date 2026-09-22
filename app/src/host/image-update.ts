@@ -167,7 +167,7 @@ export async function readImageUpdateStatus(): Promise<ImageUpdateStatus> {
     error:
       `The host agent stopped writing during "${s.phase}" and did not report a result. ` +
       'The rebuild may or may not have completed — check `journalctl -u daedalus-image-update` ' +
-      'and `git log` in /etc/nixos before retrying.',
+      'and `git log` in the configuration checkout before retrying.',
   }
 }
 

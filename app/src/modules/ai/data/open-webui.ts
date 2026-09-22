@@ -23,6 +23,8 @@ type Reach = {
 }
 
 export type OpenWebUiData = {
+  /** `https://<hostname>`, as the box publishes it. */
+  url: string
   version: string | null
   gap: VersionGap
   /** Whether the digest pin still matches the moving `main` tag. */
@@ -115,6 +117,7 @@ export async function loadOpenWebUi(ctx: Ctx): Promise<OpenWebUiData> {
   ]
 
   return {
+    url: base,
     version,
     gap: await versionGap('open-webui/open-webui', version),
     freshness,

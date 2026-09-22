@@ -49,6 +49,8 @@ type N8nFlow = {
 }
 
 export type N8nData = {
+  /** `https://<hostname>`, as the box publishes it. */
+  url: string
   version: string | null
   gap: VersionGap
   /** Every day of the window, oldest first — including the empty ones. */
@@ -248,6 +250,7 @@ export async function loadN8n(ctx: Ctx): Promise<N8nData> {
   })
 
   return {
+    url: base,
     version,
     gap: await versionGap('n8n-io/n8n', version, {
       // `n8n@2.33.4`, not `v2.33.4`. The repo also publishes moving `stable`

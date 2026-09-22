@@ -82,10 +82,10 @@
 // An interactive `claude` in a directory whose trust has never been accepted
 // blocks on "Is this a project you created or one you trust?" and starts
 // nothing at all. From a systemd unit that is a hang with nobody able to
-// answer the prompt. `/etc/nixos` is already trusted so the common case is
+// answer the prompt. The configuration checkout is already trusted so the common case is
 // fine, but a row's `cwd` is any directory a session was once opened in and
 // carries no such guarantee — which is why the host runs a resume in
-// /etc/nixos and nowhere else, refusing any other cwd up front rather than
+// the configuration checkout and nowhere else, refusing any other cwd up front rather than
 // leaving a unit started and useless. The guard is in
 // stacks/daedalus/host/claude-session.sh; host/claude-session-request.ts
 // carries the rest of the selector rules.

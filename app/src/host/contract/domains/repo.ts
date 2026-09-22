@@ -14,8 +14,8 @@ import { readSnapshot, type SnapshotResult } from '../snapshot'
 
 // /repo/repo.json — the configuration repository as the host sees it, and
 // the state of the site directory inside it, published by
-// daedalus-repo-snapshot (stacks/daedalus/host/repo-snapshot.sh in the
-// s2-server repo). The container never mounts the repository; this is the
+// daedalus-repo-snapshot (nix/stacks/daedalus/host/repo-snapshot.sh in the
+// engine). The container never mounts the repository; this is the
 // whole of what it may know about it.
 
 export type RepoCommit = { rev: string; subject: string; committedAt: string }

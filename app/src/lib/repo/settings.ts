@@ -47,7 +47,7 @@ export async function deleteSetting(key: string): Promise<void> {
 /** The keys this app uses, so a typo is a compile error rather than a default. */
 export const SETTING_KEYS = {
   theme: 'ui.theme',
-  /** The off-box project list (lib/external-apps.ts is the seed). */
+  /** The off-box project list (lib/external-apps.ts is the shape; Settings › General the editor). */
   externalApps: 'apps.external',
   /** Whether the host commits what it writes under site/ (it always stages). */
   siteCommit: 'site.commit',

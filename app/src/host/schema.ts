@@ -74,7 +74,7 @@ export const apps = pgTable(
     // server). See the `source.mode` option in stacks/apps/apps.nix.
     sourceMode: text('source_mode').notNull().default('registry'),
 
-    // null = the platform default, registry.toscanini.me/<name>:latest.
+    // null = the platform default, <registryHost>/<name>:latest.
     // A value here is an override: a fork, a placeholder, or a pinned digest.
     image: text('image'),
 

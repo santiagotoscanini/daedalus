@@ -6,7 +6,7 @@ import { defineBridge } from './bridge'
 //
 // The most powerful verb on this bridge. Every other one starts a unit whose
 // argv nix already fixed against a target nix already enumerated; a resume
-// causes root to start a process AS THE OPERATOR, in /etc/nixos, with
+// causes root to start a process AS THE OPERATOR, in the configuration checkout, with
 // passwordless sudo on PATH, the operator's Claude credentials and GitHub SSH
 // identity, and an outbound channel that exposes that shell to claude.ai.
 //

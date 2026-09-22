@@ -47,6 +47,8 @@ type Caller = Volume & {
 }
 
 export type LitellmData = {
+  /** `https://<hostname>`, as the box publishes it; the admin UI is under `/ui`. */
+  url: string
   /**
    * False on a box with no gateway bound (LITELLM_BASE_URL and
    * LITELLM_API_KEY). Everything below is then empty, and the view says so
@@ -163,8 +165,9 @@ const PAGE_SIZE = 1000
 const RANGE = `${String(DAYS)}d`
 
 export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
+  const url = ctx.hosts.base('litellm')
   const gateway = ctx.gateway
-  if (gateway === null) return notConfigured()
+  if (gateway === null) return notConfigured(url)
   const auth = { headers: { Authorization: `Bearer ${gateway.apiKey}` } }
 
   // Every day in the window, oldest first — the chart's x axis, independent of
@@ -296,6 +299,7 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
   })
 
   return {
+    url,
     configured: true,
     version,
     gap: await versionGap('BerriAI/litellm', version),
@@ -332,8 +336,9 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
  * its behalf: the neighbours are the gateway's, and a release gap for a
  * service that is not installed is noise.
  */
-function notConfigured(): LitellmData {
+function notConfigured(url: string): LitellmData {
   return {
+    url,
     configured: false,
     version: null,
     gap: EMPTY_GAP,

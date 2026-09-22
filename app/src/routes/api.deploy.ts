@@ -154,7 +154,7 @@ export const Route = createFileRoute('/api/deploy')({
 function repoToApp(raw: string): string | null {
   let repo = raw.trim().replace(/^https?:\/\//, '')
 
-  // "registry.toscanini.me/anansi" → "anansi". A first segment containing a
+  // "registry.example.org/anansi" → "anansi". A first segment containing a
   // dot is a hostname; a first segment without one is a real namespace.
   const first = repo.split('/')[0] ?? ''
   if (repo.includes('/') && first.includes('.')) {

@@ -61,7 +61,7 @@ export function N8nView({ data }: { data: Extract<AiData, { tab: 'n8n' }> }) {
         }
         actions={
           <Button asChild size="sm">
-            <a href="https://n8n.toscanini.me" target="_blank" rel="noreferrer">
+            <a href={data.url} target="_blank" rel="noreferrer">
               Open n8n ↗
             </a>
           </Button>

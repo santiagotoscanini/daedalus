@@ -121,7 +121,7 @@ export function IdpView({ data: d }: { data: IdpData }) {
         }
         actions={
           <Button asChild size="sm">
-            <a href="https://id.toscanini.me" target="_blank" rel="noreferrer">
+            <a href={d.url} target="_blank" rel="noreferrer">
               Open Pocket ID ↗
             </a>
           </Button>

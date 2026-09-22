@@ -11,6 +11,7 @@ import type {
   IntegrationStatus,
 } from '../core/settings/types'
 import type { McpTokenRow } from '../host/mcp/tokens'
+import { type ExternalApp, type ExternalAppInput, isPlatform } from '../lib/external-apps'
 import { isRecord } from '../lib/is-record'
 import { isMcpScope, type McpScope } from '../lib/mcp'
 import type { Result } from '../lib/result'
@@ -204,6 +205,63 @@ export const saveTheme = createServerFn({ method: 'POST' })
     const { writeSetting, SETTING_KEYS } = await import('../lib/repo/settings')
     await writeSetting(SETTING_KEYS.theme, data)
     return data
+  })
+
+// ── Settings › General › Off-box projects ──────────────────────────────────
+//
+// The second editable preference, and the same kind as the theme: a row in
+// Postgres, saved on click, nothing rebuilds. core/settings/external-apps.ts
+// holds the rules; these are its doors, behind the admin gate like every
+// other mutation.
+
+export const fetchExternalApps = createServerFn().handler(async (): Promise<ExternalApp[]> => {
+  const { makeCtx } = await import('../core/ctx')
+  const { listExternalApps } = await import('../core/settings/external-apps')
+  return listExternalApps(await makeCtx())
+})
+
+/** Add a row. The refusal is the sentence the form shows under the fields. */
+export const addExternalAppFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): ExternalAppInput => {
+    if (
+      !isRecord(data) ||
+      typeof data.name !== 'string' ||
+      typeof data.host !== 'string' ||
+      typeof data.description !== 'string' ||
+      !(data.repo === null || typeof data.repo === 'string')
+    ) {
+      throw new Error('expected a name, host, platform, description and repo')
+    }
+    if (!isPlatform(data.platform)) throw new Error('not a platform this build knows')
+    return {
+      name: data.name,
+      host: data.host,
+      platform: data.platform,
+      description: data.description,
+      repo: data.repo,
+    }
+  })
+  .handler(async ({ data }): Promise<Result<ExternalApp>> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { makeCtx } = await import('../core/ctx')
+    const { addExternalApp } = await import('../core/settings/external-apps')
+    return addExternalApp(await makeCtx(), data)
+  })
+
+/** Drop a row. The site keeps running wherever it runs; only the listing goes. */
+export const removeExternalAppFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { id: string } => {
+    if (!isRecord(data) || typeof data.id !== 'string') throw new Error('expected a row id')
+    return { id: data.id }
+  })
+  .handler(async ({ data }): Promise<Result<null>> => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { makeCtx } = await import('../core/ctx')
+    const { removeExternalApp } = await import('../core/settings/external-apps')
+    const done = await removeExternalApp(await makeCtx(), data.id)
+    return done ? { ok: true, value: null } : { ok: false, reason: 'No such row.' }
   })
 
 // ── Settings › Developer › MCP tokens ──────────────────────────────────────

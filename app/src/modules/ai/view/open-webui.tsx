@@ -48,7 +48,7 @@ export function OpenWebUiView({ data }: { data: Extract<AiData, { tab: 'open-web
         }
         actions={
           <Button asChild size="sm">
-            <a href="https://chat.toscanini.me" target="_blank" rel="noreferrer">
+            <a href={data.url} target="_blank" rel="noreferrer">
               Open the chat ↗
             </a>
           </Button>

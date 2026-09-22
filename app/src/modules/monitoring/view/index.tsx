@@ -165,9 +165,9 @@ function AlertsView({ data: d }: { data: Alerts }) {
             <span className={MONO}>media_player</span> and <span className={MONO}>remote</span> are
             excluded. The 25 Tuya lights sitting unavailable in the floor are genuinely not healthy,
             which is why the entity-count rule could not be re-armed with a higher threshold. Grep{' '}
-            <span className={MONO}>HA-MUTED</span> in <span className={MONO}>/etc/nixos</span> to
-            find every switch. Nothing above will ever mention Home Assistant while that holds, and
-            a quiet board is not evidence that it is well.
+            <span className={MONO}>HA-MUTED</span> in the configuration checkout to find every
+            switch. Nothing above will ever mention Home Assistant while that holds, and a quiet
+            board is not evidence that it is well.
           </p>
         </Board>
 

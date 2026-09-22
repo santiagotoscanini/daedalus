@@ -72,7 +72,7 @@ export async function readMcpDoc(doc: McpDoc): Promise<string> {
       'The engine workspace is mounted read-only into this container by ' +
       'stacks/daedalus (ENGINE_DOCS_DIR); a mount added but not yet switched ' +
       'onto the running system looks exactly like this. Read the file from ' +
-      '~santiago/projects/daedalus/ on the host instead.'
+      'the engine workspace clone on the host instead.'
     )
   }
 }

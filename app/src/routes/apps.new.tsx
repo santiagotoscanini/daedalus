@@ -121,7 +121,7 @@ function Wizard({ options }: { options: Options }) {
   const [recheck, setRecheck] = useState(0)
 
   // The app key IS the repo name. Not a free field: the default image is
-  // `registry.toscanini.me/<name>:latest` and the build queue keys an app's
+  // `<registryHost>/<name>:latest` and the build queue keys an app's
   // builds off the same name, so a name that differs from the repo silently
   // points both at something that does not exist. A fork with a different name
   // is what the image override is for.

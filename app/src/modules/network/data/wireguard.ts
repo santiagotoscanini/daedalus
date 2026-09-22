@@ -91,7 +91,7 @@ type DdnsData = {
    * What the address ACTUALLY is, per Cloudflare's view of the tunnel.
    *
    * The one place on this box that can answer it: everything here is behind
-   * NAT and sees 192.168.0.2. Comparing the two is the whole check — a name
+   * NAT and sees the LAN address. Comparing the two is the whole check — a name
    * pointed at a stale address is a Factorio server nobody can join, with no
    * error anywhere.
    */
@@ -373,7 +373,7 @@ async function loadCfTunnel(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<Tunne
 async function resolvePublic(name: string): Promise<{ ip: string | null; ttl: number | null }> {
   if (name === '') return { ip: null, ttl: null }
   // 1.1.1.1 directly, NOT this box's resolver: pi-hole short-circuits
-  // *.toscanini.me to 192.168.0.2 so the LAN never leaves the house for its
+  // `*.<baseDomain>` to the LAN address so the LAN never leaves the house for its
   // own services, which is right and would make this check answer itself.
   const body = await getJson<{ Answer?: { type: number; data: string; TTL: number }[] }>(
     `https://1.1.1.1/dns-query?name=${encodeURIComponent(name)}&type=A`,
@@ -402,7 +402,7 @@ async function loadDdns(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<DdnsData>
     lokiScalar(`sum(count_over_time(${FAIL} [7d]))`),
     lokiScalar(`sum(count_over_time(${FAIL} [30d]))`),
     versionGap('ddclient/ddclient', version),
-    // `SUCCESS: [cloudflare][s2.toscanini.me]> IPv4 address set to 1.2.3.4`,
+    // `SUCCESS: [cloudflare][<wanHost>]> IPv4 address set to 1.2.3.4`,
     // logged only when the record actually changes.
     lokiEntries('{unit="ddclient.service"} |= "IPv4 address set to"'),
     // systemd's own line, not ddclient's: a run that changed nothing says

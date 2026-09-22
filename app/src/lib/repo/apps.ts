@@ -254,7 +254,7 @@ export async function createApp(input: NewApp): Promise<{ name: string }> {
  * Cloudflare CNAME (route-sync prunes what is no longer declared); pushes to
  * its repo stop building, because nothing declares the app any more.
  * It does NOT reclaim state, and nothing here pretends otherwise — the
- * postgres role and database, /home/santiago/selfhost/apps/<name>/data, the
+ * postgres role and database, <stateRoot>/apps/<name>/data, the
  * per-app secrets dir and any <name>-env.sops all survive, because deleting
  * data is not something a UI button should do on the strength of one click.
  * The caller shows that list before confirming.

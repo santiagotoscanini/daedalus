@@ -2,8 +2,8 @@
 //
 // The rule is one DNS label under the base domain, and it comes from
 // infrastructure rather than taste. traefik serves a single entrypoint-level
-// ACME cert — `main=toscanini.me` + `sans=*.toscanini.me` (stacks/traefik) —
-// and a wildcard matches exactly one label. `a.b.toscanini.me` would resolve,
+// ACME cert — `main=<baseDomain>` + `sans=*.<baseDomain>` (stacks/traefik) —
+// and a wildcard matches exactly one label. `a.b.example.org` would resolve,
 // route, and then serve a certificate no browser accepts. The Cloudflare
 // tunnel's CNAMEs and pi-hole's short-circuit make the same assumption.
 //
@@ -76,7 +76,7 @@ export const RESERVED_LABELS: Readonly<Record<string, string>> = {
  * The key is the most load-bearing string on the platform: it is the container
  * name `app-<name>`, the default hostname, the postgres role and database, the
  * GitHub repo, the systemd unit names, and the directory under
- * /home/santiago/selfhost/apps. Nothing renames it — a rename is a new app
+ * <stateRoot>/apps. Nothing renames it — a rename is a new app
  * plus a migration — so it is worth being strict at the one moment it is
  * chosen.
  *

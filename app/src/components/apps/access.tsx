@@ -321,7 +321,7 @@ export function Access({
  * stacks/monitoring: grafana no longer sends `X-Frame-Options: deny`
  * (GF_SECURITY_ALLOW_EMBEDDING), and the narrower `frame-ancestors` CSP that
  * replaced it names daedalus. daedalus and grafana are both under
- * toscanini.me, so they are same-site and grafana's session cookie rides along
+ * the base domain, so they are same-site and grafana's session cookie rides along
  * with the frame load — no second sign-in, no anonymous access.
  *
  * The caveat is that first load. Grafana auto-logs-in through Pocket ID, and

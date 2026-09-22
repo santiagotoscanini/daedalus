@@ -249,10 +249,10 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
             The environment id is what a phone connects to, and it is minted per server start — the
             link in the header carries it, so a restart changes the link and the old one stops
             resolving. Spawn mode <span className={MONO}>same-dir</span> means a session started
-            from claude.ai lands in <span className={MONO}>/etc/nixos</span>, this repo, with the
-            permission matrix and <span className={MONO}>bash-guard.sh</span> in force exactly as
-            they are on the console. Memory and CPU are the whole unit including every session under
-            it, which is why they are large.
+            from claude.ai lands in the configuration checkout, with the permission matrix and{' '}
+            <span className={MONO}>bash-guard.sh</span> in force exactly as they are on the console.
+            Memory and CPU are the whole unit including every session under it, which is why they
+            are large.
           </p>
           <RestartServerControl live={live.length} />
         </Board>
@@ -302,7 +302,7 @@ export function ClaudeView({ data }: { data: ClaudeData }) {
                 automatically about once an hour and its expiry is never the problem. The{' '}
                 <b>refresh</b> token running out is: Remote Control stops connecting, with no other
                 warning anywhere on this box. The fix is manual and takes a minute: SSH in, run{' '}
-                <span className={MONO}>claude</span> in <span className={MONO}>/etc/nixos</span>,{' '}
+                <span className={MONO}>claude</span> in the configuration checkout,{' '}
                 <span className={MONO}>/login</span>, then the restart control on this page. Neither
                 token is in the snapshot this page reads; only the two dates and the plan are copied
                 out.
@@ -1240,9 +1240,8 @@ function RosterRow({
             {control.kind === 'resume' ? (
               <>
                 This CONTINUES the session — same id, same transcript, appended to. It comes back as
-                a live session on claude.ai, running in <span className={MONO}>/etc/nixos</span> as{' '}
-                <span className={MONO}>santiago</span>, with sudo available to it. Nothing is
-                branched and nothing is overwritten.
+                a live session on claude.ai, running in the configuration checkout as the operator,
+                with sudo available to it. Nothing is branched and nothing is overwritten.
               </>
             ) : control.kind === 'stop-unit' ? (
               <>

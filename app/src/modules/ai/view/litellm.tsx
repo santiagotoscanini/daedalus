@@ -76,7 +76,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
         }
         actions={
           <Button asChild size="sm">
-            <a href="https://litellm.toscanini.me/ui" target="_blank" rel="noreferrer">
+            <a href={`${data.url}/ui`} target="_blank" rel="noreferrer">
               Open the admin UI ↗
             </a>
           </Button>
@@ -85,7 +85,7 @@ export function LitellmView({ data }: { data: Extract<AiData, { tab: 'litellm' }
       <LinkRow
         links={[
           { label: 'Docs', href: 'https://docs.litellm.ai/docs/simple_proxy' },
-          { label: 'Model hub', href: 'https://litellm.toscanini.me/ui/model_hub_table' },
+          { label: 'Model hub', href: `${data.url}/ui/model_hub_table` },
           { label: 'GitHub', href: 'https://github.com/BerriAI/litellm' },
         ]}
       />

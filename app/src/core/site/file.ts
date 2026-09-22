@@ -1,3 +1,4 @@
+import { ENGINE_REPO } from '../../lib/engine'
 import type { BoxSettings } from '../settings/types'
 
 // Renders the site directory's files — the exact bytes that land in it.
@@ -194,7 +195,7 @@ export function renderSiteReadme(doc: SiteDocument): string {
   return `# site/ — what ${doc.identity.hostname} is, as data
 
 The one directory in this configuration that
-[daedalus](https://github.com/santiagotoscanini/daedalus) writes. Nothing else
+[daedalus](https://github.com/${ENGINE_REPO}) writes. Nothing else
 in the repository is touched by it — and everything generated in here is
 written BY it, from the UI. A hand edit to a generated file lasts until the
 next write and no longer.

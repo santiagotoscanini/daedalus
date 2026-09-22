@@ -110,6 +110,8 @@ type IdpUser = {
 }
 
 export type IdpData = {
+  /** `https://<hostname>`, as the box publishes it. */
+  url: string
   version: string | null
   gap: VersionGap
   clients: IdpClient[]
@@ -284,6 +286,7 @@ export async function loadIdp(ctx: Ctx): Promise<IdpData> {
   }
 
   return {
+    url: ctx.hosts.base('pocket-id'),
     version,
     gap,
     // Ordered by RECENCY, not by volume. The question a registration list

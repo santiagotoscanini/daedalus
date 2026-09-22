@@ -336,8 +336,8 @@ export function AppsList({ data }: { data: ListData }) {
       )}
 
       {/* Projects hosted off the box, one section per platform. The registry
-          knows nothing about them — the list is a hand-edited literal
-          (lib/external-apps.ts) — so the rows link out to the site itself
+          knows nothing about them — the list is the operator's, kept in the
+          settings store (Settings › General) — so the rows link out to the site itself
           rather than to a detail page there is no data to fill. */}
       {PLATFORMS.map((p) => {
         const entries = offBox.filter((e) => e.platform === p.id)

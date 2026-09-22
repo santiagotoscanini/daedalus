@@ -47,7 +47,7 @@ const FOLD_STACK = '[[data-fold]+&]:mt-[0.5rem]'
  * How a name becomes an address, on both sides of the front door.
  *
  * Two halves of one sentence rather than two subjects: pi-hole answers
- * everything asked from inside the house, the toscanini.me zone answers
+ * everything asked from inside the house, the base domain's zone answers
  * everything asked from outside it, and neither is legible alone. The zone
  * cannot explain why a name works on the sofa and not on mobile data; the
  * resolver cannot explain what the internet is told. The tables on both sides

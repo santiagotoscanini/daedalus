@@ -37,6 +37,8 @@ type RouteRow = {
 }
 
 export type TraefikData = {
+  /** The dashboard, on the hostname the box publishes it at (`traefik-dashboard`). */
+  dashboardUrl: string
   /** What the process reports, not what the flake pinned — see /api/version. */
   version: string | null
   codename: string | null
@@ -97,7 +99,7 @@ export type TraefikData = {
  * unprotected one does not. One request, for one column.
  */
 export async function loadProxy(ctx: Ctx): Promise<TraefikData> {
-  return loadTraefik(idpClients(ctx))
+  return loadTraefik(idpClients(ctx), `${ctx.hosts.base('traefik-dashboard')}/dashboard/`)
 }
 
 /**
@@ -108,7 +110,10 @@ export async function loadProxy(ctx: Ctx): Promise<TraefikData> {
  * is reachable because daedalus shares a private bridge with traefik. The
  * numbers come from prometheus, which is scraping the same process.
  */
-async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikData> {
+async function loadTraefik(
+  clientsP: Promise<PocketClient[]>,
+  dashboardUrl: string,
+): Promise<TraefikData> {
   const api = 'http://traefik:8080/api'
 
   const [
@@ -179,6 +184,7 @@ async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikDa
   const routes = buildRoutes(routers ?? [], perRouter, nativeHosts)
 
   return {
+    dashboardUrl,
     version: version3,
     codename: version?.Codename ?? null,
     gap: await versionGap('traefik/traefik', version3),
@@ -208,7 +214,7 @@ async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikDa
     windowDays: DAYS,
     certs: certs
       .map((c) => {
-        // The SANs are the whole point of the wildcard: `*.toscanini.me`
+        // The SANs are the whole point of the wildcard: `*.<baseDomain>`
         // covering every name on the box is why there is one certificate here
         // and not forty.
         const sans = (c.metric.sans ?? '').split(',').filter((s) => s !== '')
@@ -232,7 +238,7 @@ async function loadTraefik(clientsP: Promise<PocketClient[]>): Promise<TraefikDa
  * Does a certificate SAN answer for a hostname.
  *
  * A wildcard matches exactly ONE label, which is the rule the whole naming
- * convention on this box rests on — `*.toscanini.me` covers `immich.…` and
+ * convention on this box rests on — `*.example.org` covers `immich.…` and
  * does not cover `a.b.…`, which is why every published name is one level
  * under the apex (see the assertion in stacks/apps).
  */

@@ -285,7 +285,7 @@ export function factGroups(row: RowShape, now: number): FactGroup[] {
     // `?` is the existing mark for a cwd un-slugged from the project directory
     // name, where a dash inside a real directory name comes back wrong. It
     // goes on the DIRECTORY, not on the end of the group: the branch is read
-    // from the file and is not in doubt, and `/etc/nixos on main?` puts the
+    // from the file and is not in doubt, and `/srv/config on main?` puts the
     // doubt on the only half of the line that does not have any.
     const dir = row.cwdExact ? row.cwd : `${row.cwd}?`
     const where = meta.branch === null ? dir : `${dir} on ${meta.branch}`

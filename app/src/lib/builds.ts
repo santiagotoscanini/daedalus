@@ -110,7 +110,7 @@ export const BUILD_REQUEST_MAX_BYTES = 60 * 1024
 
 // ── the build env rules, identical on the host ─────────────────────────────
 //
-// host/build.sh (s2-server stacks/daedalus/host) holds the same two rules as
+// nix/stacks/daedalus/host/build.sh holds the same two rules as
 // two assignments: RESERVED_ENV_RE (built from the two lists below, in this
 // order) and RAILPACK_KNOBS (RAILPACK_KNOB_PATTERNS as JSON). The host refuses
 // on its own whatever this file refuses, because the container can write a

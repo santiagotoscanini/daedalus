@@ -12,9 +12,9 @@ import { lanIp, piholeAdmin, type TraefikRouter } from './shared'
 //
 // One tab for two halves of the same sentence. A name becomes an address in
 // exactly two places: pi-hole, for anything asked from inside the house, and
-// the toscanini.me zone at Cloudflare, for everything asked from outside it.
+// the base domain's zone at Cloudflare, for everything asked from outside it.
 // Neither is legible without the other — the zone alone cannot explain why
-// `jellyfin.toscanini.me` works on the sofa and not on mobile data, and the
+// `jellyfin.<baseDomain>` works on the sofa and not on mobile data, and the
 // resolver alone cannot explain what the internet is told.
 //
 // The registration sits here too because it is the failure nothing on this box
@@ -309,7 +309,7 @@ async function loadResolver(ctx: Ctx, base: string): Promise<ResolverData> {
 
   // Everything FTL answered from neither the cache, the blocklist, nor an
   // upstream: the hosts file and the DHCP lease table. It is the share that
-  // makes `<app>.toscanini.me` an address without leaving the house, so it is
+  // makes `<app>.<baseDomain>` an address without leaving the house, so it is
   // worth naming rather than folding into "cached".
   const local = total === null ? 0 : Math.max(0, total - cached - blocked - forwarded)
 
@@ -549,8 +549,8 @@ async function loadZone(ctx: Ctx): Promise<ZoneData> {
       // traefik serves is a webApp — the shared postgres cluster is a TCP/SNI
       // router contributed as raw YAML, and comparing against webApps alone
       // reported it as broken while it was working exactly as designed. And
-      // only entries whose address IS this box: `gaming-pc.local` points at
-      // 192.168.0.120, so traefik is not in its path and "no router" would be
+      // only entries whose address IS this box: a `gaming-pc.local` record points
+      // at another machine, so traefik is not in its path and "no router" would be
       // a true statement about an irrelevant program.
       lanWithoutRoute:
         served === null
