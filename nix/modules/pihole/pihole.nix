@@ -291,8 +291,15 @@ in
           # apex and every public record): names NOT in dns.hosts fall
           # through to upstreams normally, so the apex and every public
           # record resolve to their real addresses.
+          #
+          # SRV records under the LAN's own domain (fleet.dnsSrv): how a
+          # machine on the network finds a service here by asking the search
+          # domain DHCP handed it, without being told an address.
           dnsmasq_lines =
             map (h: "local=/${h}/") localOnlyHostnames
+            ++ map (
+              s: "srv-host=${s.service}.${cfg.localDomain},${s.target},${toString s.port}"
+            ) config.fleet.dnsSrv
             ++ lib.optional haveReservations "dhcp-hostsfile=${config.sops.secrets."pihole-dhcp-hosts".path}";
         };
       };

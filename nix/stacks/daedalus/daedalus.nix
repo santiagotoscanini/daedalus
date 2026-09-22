@@ -1455,6 +1455,15 @@ in
         #                 potentially to an off-box Claude key. That is a wider
         #                 blast radius than the control plane's own UI has.
         #
+        #   /api/nodes/hello — the agent on another machine announcing itself
+        #                 (agent/, app/src/routes/api.nodes.hello.ts). A service has
+        #                 no passkey, so the path carries its own credential:
+        #                 every hello is signed by the ed25519 key the agent made
+        #                 at install, the box verifies the bytes, and a stranger
+        #                 on the LAN can at most create a pending row an admin
+        #                 will look at. No command rides the answer; nothing on
+        #                 this path writes anything but that row.
+        #
         #   the icons   — iOS fetches the apple-touch-icon when a page is added
         #                 to the home screen, and that fetch does not carry the
         #                 forward-auth session cookie. Gated, it is answered with
@@ -1467,7 +1476,7 @@ in
         # deserve it: three of these are the app's own artwork and the other two
         # authenticate themselves. Everything else on this app still needs a
         # passkey.
-        authBypassRule = "Path(`/api/deploy`) || PathPrefix(`/mcp`) || Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`)";
+        authBypassRule = "Path(`/api/deploy`) || PathPrefix(`/mcp`) || Path(`/api/nodes/hello`) || Path(`/icon.svg`) || Path(`/icon.png`) || Path(`/apple-icon.png`)";
       };
 
       # The build log mount (volumes below) exists only once the App does, like
@@ -2493,6 +2502,19 @@ in
     # The tunnel ingress + the proxied CNAME route-sync keeps for it. The label
     # is reserved by the assertion at the top of this module.
     fleet.cloudflareRoutes = lib.mkIf appsOn { daedalus-hooks.hostname = hooksHost; };
+
+    # How the agent on another machine finds this control plane without
+    # being told: an SRV record under the LAN's search domain, answered by
+    # the resolver this box runs. The target is the control plane's own
+    # hostname, which the same resolver answers with the LAN address; 443 is
+    # traefik, and /api/nodes/hello is on the auth bypass above.
+    fleet.dnsSrv = lib.mkIf appsOn [
+      {
+        service = "_daedalus._tcp";
+        target = config.fleet.apps.daedalus.hostname;
+        port = 443;
+      }
+    ];
 
     # ── the GitHub App: credentials (once site/vault/github-app.sops exists) ─
     #

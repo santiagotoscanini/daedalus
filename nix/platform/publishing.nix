@@ -272,6 +272,38 @@ in
       example = [ "10.0.0.2 foo.example.com" ];
     };
 
+    dnsSrv = lib.mkOption {
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options = {
+            service = lib.mkOption {
+              type = lib.types.str;
+              example = "_daedalus._tcp";
+              description = "The service label pair, without the domain.";
+            };
+            target = lib.mkOption {
+              type = lib.types.str;
+              example = "control.example.org";
+              description = "The host the record points at.";
+            };
+            port = lib.mkOption {
+              type = lib.types.port;
+              example = 443;
+            };
+          };
+        }
+      );
+      default = [ ];
+      description = ''
+        SRV records the LAN resolver answers under the LAN's own domain
+        (`fleet.modules.pihole.localDomain`, the search domain DHCP hands
+        out). How a thing on the network finds a service the box runs
+        without being told: it asks for `<service>.<search domain>` and gets
+        a host and a port. The control plane announces itself this way for
+        the agent on other machines.
+      '';
+    };
+
     prometheusScrapes = lib.mkOption {
       type = lib.types.listOf (lib.types.attrsOf lib.types.unspecified);
       default = [ ];
