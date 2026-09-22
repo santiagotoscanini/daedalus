@@ -9,7 +9,10 @@ macOS launchd daemon, with a tray / menu bar app beside it, that
   hibernate timers set to never as a second line;
 - **answers a status page** on the LAN, `http://<machine>:7787/status`, so
   the box can see the agent is there before any channel exists between
-  them;
+  them — machine facts and a summary of Claude Code; the full Claude
+  report (sessions, paths, ids) is on `/claude`, which answers only on
+  loopback or to the node token the box mints at approval and hands down
+  every hello answer;
 - **updates itself** to the newest `agent-v*` release of this repository,
   verifying every asset against the ed25519 key compiled into it;
 - **announces itself to the box** every minute: an ed25519 key made on first

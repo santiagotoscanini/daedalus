@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { desc, eq } from 'drizzle-orm'
 import type { HelloVerdict } from '../../host/agent-hello'
 import { db } from '../../host/db'
@@ -9,19 +10,19 @@ import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
 
 /**
  * Claude Code on the node, as the last hello summarised it (agent/src/
- * claude.rs `Summary`). Read out of the hello payload rather than columns:
- * it is the agent's word, refreshed every minute, and nothing here joins
- * on it.
+ * claude.rs `Summary`): what the open page also carries — a state, versions
+ * and a count, never a session's name, path or id. Read out of the hello
+ * payload rather than columns: it is the agent's word, refreshed every
+ * minute, and nothing here joins on it.
  */
 export type NodeClaudeSummary = {
   state: string
+  detail: string | null
   cliVersion: string | null
   serverVersion: string | null
-  environmentId: string | null
   sessions: number
   startedAt: string | null
-  subscriptionType: string | null
-  refreshExpiresAt: number | null
+  signedIn: boolean
 }
 
 export type NodeRow = {
@@ -74,13 +75,12 @@ function claudeOf(hello: Record<string, unknown>): NodeClaudeSummary | null {
   const s = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : null)
   return {
     state: s('state') ?? 'stopped',
+    detail: s('detail'),
     cliVersion: s('cli_version'),
     serverVersion: s('server_version'),
-    environmentId: s('environment_id'),
     sessions: typeof o.sessions === 'number' ? o.sessions : 0,
     startedAt: s('started_at'),
-    subscriptionType: s('subscription_type'),
-    refreshExpiresAt: typeof o.refresh_expires_at === 'number' ? o.refresh_expires_at : null,
+    signedIn: o.signed_in === true,
   }
 }
 
@@ -131,6 +131,8 @@ export type HelloAnswer = {
   checkUpdate: boolean
   restartClaude: boolean
   policy: { awakeHold: boolean; claudeRemoteControl: boolean; claudeWorkdir: string | null } | null
+  /** The node token for an approved node: what opens its full Claude report to the box. */
+  nodeToken: string | null
 }
 
 /**
@@ -177,10 +179,18 @@ export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promi
       checkUpdate: nodes.updateCheckRequested,
       restartClaude: nodes.claudeRestartRequested,
       policy: nodes.policy,
+      token: nodes.token,
     })
   const state = saved?.state ?? 'pending'
   const checkUpdate = saved?.checkUpdate === true
   const restartClaude = saved?.restartClaude === true
+  // An approved row without a token (approved before tokens existed) gets
+  // one now, so the box can read it from this hello on.
+  let token = saved?.token ?? null
+  if (state === 'approved' && token === null) {
+    token = mintToken()
+    await db.update(nodes).set({ token }).where(eq(nodes.id, v.nodeId))
+  }
   // An instruction is delivered once: it goes out with this answer and is
   // cleared in the same breath, so a second hello does not repeat it.
   if (checkUpdate || restartClaude) {
@@ -194,6 +204,7 @@ export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promi
     checkUpdate,
     restartClaude,
     policy: state === 'approved' ? effectivePolicy(saved?.policy ?? {}) : null,
+    nodeToken: state === 'approved' ? token : null,
   }
 }
 
@@ -233,7 +244,13 @@ export async function setNodePolicy(id: string, policy: NodePolicy): Promise<boo
 export async function approveNode(id: string, by: string): Promise<boolean> {
   const updated = await db
     .update(nodes)
-    .set({ state: 'approved', approvedAt: new Date(), approvedBy: by, revokedAt: null })
+    .set({
+      state: 'approved',
+      approvedAt: new Date(),
+      approvedBy: by,
+      revokedAt: null,
+      token: mintToken(),
+    })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
   return updated.length > 0
@@ -242,7 +259,7 @@ export async function approveNode(id: string, by: string): Promise<boolean> {
 export async function revokeNode(id: string): Promise<boolean> {
   const updated = await db
     .update(nodes)
-    .set({ state: 'revoked', revokedAt: new Date() })
+    .set({ state: 'revoked', revokedAt: new Date(), token: null })
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
   return updated.length > 0
@@ -252,4 +269,23 @@ export async function revokeNode(id: string): Promise<boolean> {
 export async function forgetNode(id: string): Promise<boolean> {
   const gone = await db.delete(nodes).where(eq(nodes.id, id)).returning({ id: nodes.id })
   return gone.length > 0
+}
+
+/** 32 random bytes as hex: what the box shows the agent to read its full report. */
+function mintToken(): string {
+  return randomBytes(32).toString('hex')
+}
+
+/**
+ * The token for one node, for the server-side loader that reads the
+ * agent's `/claude` — never for a page. Null for a node that is not
+ * approved or has not said hello since approval.
+ */
+export async function nodeToken(id: string): Promise<string | null> {
+  const [n] = await db
+    .select({ token: nodes.token, state: nodes.state })
+    .from(nodes)
+    .where(eq(nodes.id, id))
+    .limit(1)
+  return n?.state === 'approved' ? (n.token ?? null) : null
 }

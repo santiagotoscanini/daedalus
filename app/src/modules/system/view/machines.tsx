@@ -111,15 +111,14 @@ function Head({ m }: { m: Machine }) {
  */
 function ClaudeCell({ m }: { m: Machine }) {
   const s = m.status
-  const c = s?.claude
-  if (c != null) {
-    const alive = c.sessions.filter((x) => x.alive).length
-    const version = c.server.version ?? c.cliVersion
+  const c = s?.claude ?? null
+  if (c !== null) {
+    const version = c.serverVersion ?? c.cliVersion
     return c.state === 'running' || c.state === 'starting' ? (
       <span className={BOARD_NOTE}>
         <Chip tone="ok">remote control {c.state}</Chip>
         {version !== null && <span className={`${MONO} ml-2`}>{version}</span>}
-        {` · ${String(alive)} session${alive === 1 ? '' : 's'}`}
+        {` · ${String(c.sessions)} session${c.sessions === 1 ? '' : 's'}`}
       </span>
     ) : (
       <span className={BOARD_NOTE}>

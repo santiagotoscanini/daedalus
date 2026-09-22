@@ -57,6 +57,9 @@ export const Route = createFileRoute('/api/nodes/hello')({
                     : { claude_workdir: answer.policy.claudeWorkdir }),
                 },
               }),
+          // The node token: the box's credential for the agent's full Claude
+          // report. Only for an approved node, only over this HTTPS answer.
+          ...(answer.nodeToken === null ? {} : { node_token: answer.nodeToken }),
           // The box's clock, so an agent whose clock drifts can see why it
           // was refused before it is.
           server_time: Math.floor(Date.now() / 1000),

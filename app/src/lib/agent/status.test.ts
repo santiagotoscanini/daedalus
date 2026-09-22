@@ -38,38 +38,27 @@ describe('agentStatus', () => {
   })
 })
 
-describe('agentStatus, 0.4.0', () => {
-  it('reads the policy and the Claude report', () => {
+describe('agentStatus, 0.6.0', () => {
+  it('reads the policy and the open page’s Claude summary', () => {
     const s = agentStatus({
-      version: '0.4.0',
+      version: '0.6.0',
       hostname: 'SANTI-PC',
       awake_hold: false,
       policy: { awake_hold: false, claude_remote_control: true },
       tray: { reporting: true, last_report: '2026-09-22T20:00:00Z' },
       claude: {
-        path: 'C:\\Users\\santi\\.local\\bin\\claude.exe',
-        cli_version: '2.1.276',
         state: 'running',
-        pid: 1234,
+        cli_version: '2.1.276',
+        server_version: '2.1.276',
+        sessions: 2,
         started_at: '2026-09-22T19:00:00Z',
-        restarts: 1,
-        server: {
-          version: '2.1.276',
-          environment_id: 'env_1',
-          spawn_mode: 'same-dir',
-          max_sessions: 4,
-        },
-        sessions: [{ pid: 9, name: 'santi-ab', alive: true, started_at: 1790000000000 }],
-        credentials: { present: true, subscription_type: 'max', refresh_expires_at: 1790500000000 },
-        settings: { model: 'opus' },
-        reported_at: '2026-09-22T20:00:00Z',
+        signed_in: true,
       },
     })
     expect(s.policy.awakeHold).toBe(false)
     expect(s.trayReporting).toBe(true)
-    expect(s.claude?.server.environmentId).toBe('env_1')
-    expect(s.claude?.sessions[0]?.name).toBe('santi-ab')
-    expect(s.claude?.credentials.subscriptionType).toBe('max')
+    expect(s.claude?.sessions).toBe(2)
+    expect(s.claude?.signedIn).toBe(true)
   })
 
   it('gives an older agent the held-awake, no-Claude defaults', () => {
@@ -77,6 +66,38 @@ describe('agentStatus, 0.4.0', () => {
     expect(s.policy).toEqual({ awakeHold: true, claudeRemoteControl: false })
     expect(s.claude).toBeNull()
     expect(s.trayReporting).toBe(false)
+  })
+})
+
+describe('nodeClaudeReport', () => {
+  it('reads the full report behind the token, including a Keychain login', async () => {
+    const { nodeClaudeReport } = await import('./status')
+    const r = nodeClaudeReport({
+      path: '/Users/x/.local/bin/claude',
+      cli_version: '2.1.260',
+      state: 'running',
+      pid: 1234,
+      started_at: '2026-09-22T19:00:00Z',
+      restarts: 1,
+      server: {
+        version: '2.1.260',
+        environment_id: 'env_1',
+        spawn_mode: 'same-dir',
+        max_sessions: 32,
+      },
+      sessions: [{ pid: 9, name: 'x-ab', alive: true, started_at: 1790000000000 }],
+      credentials: { present: true, store: 'keychain' },
+      settings: { model: 'opus' },
+      workdir: '/Users/x/dev/p',
+      workdir_via: 'most recent trusted project',
+      reported_at: '2026-09-22T20:00:00Z',
+    })
+    expect(r?.server.environmentId).toBe('env_1')
+    expect(r?.sessions[0]?.name).toBe('x-ab')
+    expect(r?.credentials.store).toBe('keychain')
+    expect(r?.credentials.refreshExpiresAt).toBeNull()
+    expect(r?.workdirVia).toBe('most recent trusted project')
+    expect(nodeClaudeReport(null)).toBeNull()
   })
 })
 

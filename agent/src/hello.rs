@@ -17,8 +17,11 @@
 //! server). Nothing else rides it.
 //!
 //! The payload carries a summary of Claude Code on this machine when the
-//! tray has reported one (claude.rs): its state, versions, environment id
-//! and session count, so the box's Claude page can list this machine.
+//! tray has reported one (claude.rs): its state, versions
+//! and session count, so the box's Claude page can list this machine. The
+//! full report — sessions, paths, the environment id — is not in the hello:
+//! the box reads it from the agent's `/claude` with the node token the
+//! answer hands down (status.rs).
 //!
 //! Finding the box is discover.rs's job; it is re-done when a hello fails
 //! and every few minutes regardless, so a box that moves is found again.
@@ -116,6 +119,10 @@ struct Answer {
     /// Absent from an older box, or for a machine it has not approved.
     #[serde(default)]
     policy: Option<Policy>,
+    /// The token that opens this node's full Claude report to the box;
+    /// minted at approval, sent with every answer after.
+    #[serde(default)]
+    node_token: Option<String>,
 }
 
 /// What the status page and the tray show about the box.
@@ -253,6 +260,12 @@ pub fn run_loop(
                     tracing::info!("the box asked for a Claude remote-control restart");
                     shared.request_claude_restart();
                 }
+                // The token is only ever carried for an approved node; anything
+                // else clears it, so a revoked node stops answering the box too.
+                shared.set_node_token(
+                    a.node_token
+                        .filter(|t| !t.is_empty() && a.state == "approved"),
+                );
                 // The policy is the box's to set only once it has approved
                 // this machine; before that the config's defaults stand.
                 if let (Some(p), "approved") = (a.policy, a.state.as_str()) {

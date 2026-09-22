@@ -85,7 +85,8 @@ type Verdict = { label: string; tone: Tone }
 function verdict(d: NodeClaudeData): Verdict {
   const s = d.status
   if (s === null) return { label: 'agent not answering', tone: 'bad' }
-  const c = s.claude
+  // The report when the box could read it, else the open page's summary.
+  const c = d.report ?? s.claude
   if (c === null) {
     if (!agentHasClaude(s.version)) return { label: `agent ${s.version} is too old`, tone: 'warn' }
     return s.trayReporting
@@ -114,7 +115,7 @@ function ago(iso: string | null): number | null {
 
 export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
   const { node, status } = d
-  const c = status?.claude ?? null
+  const c = d.report
   const v = verdict(d)
   const alive = c?.sessions.filter((s) => s.alive) ?? []
   const running = c?.server.version ?? c?.cliVersion ?? node.claude?.serverVersion ?? null
@@ -181,6 +182,12 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
           machine is asleep, off, or on a network this box cannot reach; the last hello was{' '}
           {since(node.lastSeenAgo)}.
         </p>
+      ) : c === null && status.claude !== null ? (
+        <p className={EMPTY}>
+          The agent answers, and its tray reports Claude Code ({status.claude.state}), but the full
+          report was not read: {d.reportError ?? 'no reason given'}. The open page carries only a
+          summary; the rest needs the token the box hands an approved node on its next hello.
+        </p>
       ) : c === null ? (
         <p className={EMPTY}>
           {!agentHasClaude(status.version)
@@ -223,16 +230,24 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
         />
         <Stat
           label="Login"
-          value={refreshIn === null ? DASH : until(refreshIn)}
+          value={
+            refreshIn !== null
+              ? until(refreshIn)
+              : c?.credentials.store === 'keychain'
+                ? 'signed in'
+                : DASH
+          }
           tone={refreshIn !== null && refreshIn < 6 * 86400 ? 'warn' : undefined}
           sub={
             c === null
               ? undefined
               : !c.credentials.present
                 ? 'no credentials found'
-                : refreshIn === null
-                  ? 'no expiry in the file'
-                  : 'until re-login'
+                : c.credentials.store === 'keychain'
+                  ? 'in the Keychain; dates unread'
+                  : refreshIn === null
+                    ? 'no expiry in the file'
+                    : 'until re-login'
           }
         />
       </StatStrip>
@@ -306,6 +321,12 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
         <Board title="Sign-in" span={6}>
           {c === null ? (
             <p className={EMPTY}>Nothing reported.</p>
+          ) : c.credentials.store === 'keychain' ? (
+            <p className={EMPTY}>
+              The login is in the macOS Keychain, where the CLI keeps it on a Mac. Its dates are not
+              readable without a prompt on the machine, so there is no clock here; the server
+              connecting is the proof the login works.
+            </p>
           ) : !c.credentials.present ? (
             <p className={EMPTY}>
               No credentials file in <span className={MONO}>{text(c.home)}</span>. Nobody has run{' '}

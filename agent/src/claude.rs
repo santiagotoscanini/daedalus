@@ -105,6 +105,10 @@ pub struct Session {
 #[serde(default)]
 pub struct Credentials {
     pub present: bool,
+    /// "file" (`.credentials.json`) or "keychain" (macOS, where the CLI
+    /// keeps the login in the login keychain and the dates are not
+    /// readable without a prompt).
+    pub store: Option<String>,
     pub subscription_type: Option<String>,
     pub rate_limit_tier: Option<String>,
     /// Milliseconds since the epoch, both.
@@ -150,32 +154,39 @@ pub struct Report {
     pub reported_at: String,
 }
 
-/// The part of the report a hello carries: enough for a card and a picker,
-/// not the roster.
+/// The part of the report the OPEN status page and the hello carry: enough
+/// for a card and a picker, and nothing anyone on the LAN should not see —
+/// no session names, paths or ids, no environment id, no account facts.
+/// The full report is behind the node token (status.rs `/claude`).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Summary {
     pub state: String,
+    /// The state's reason, minus anything the server printed (a last log
+    /// line can name a path).
+    pub detail: Option<String>,
     pub cli_version: Option<String>,
     pub server_version: Option<String>,
-    pub environment_id: Option<String>,
+    /// Sessions alive now.
     pub sessions: usize,
     pub started_at: Option<String>,
-    pub subscription_type: Option<String>,
-    pub refresh_expires_at: Option<u64>,
+    /// Whether a login exists at all; its dates and plan are in the report.
+    pub signed_in: bool,
 }
 
 impl Report {
     pub fn summary(&self) -> Summary {
         Summary {
             state: self.state.clone(),
+            detail: self
+                .detail
+                .as_deref()
+                .map(|d| d.split(" · last line:").next().unwrap_or(d).to_string()),
             cli_version: self.cli_version.clone(),
             server_version: self.server.version.clone(),
-            environment_id: self.server.environment_id.clone(),
             sessions: self.sessions.iter().filter(|s| s.alive).count(),
             started_at: self.started_at.clone(),
-            subscription_type: self.credentials.subscription_type.clone(),
-            refresh_expires_at: self.credentials.refresh_expires_at,
+            signed_in: self.credentials.present,
         }
     }
 }
@@ -369,11 +380,12 @@ fn session_of(v: &serde_json::Value) -> Option<Session> {
 pub fn read_credentials(dir: &Path) -> Credentials {
     let path = dir.join(".credentials.json");
     let Ok(text) = std::fs::read_to_string(&path) else {
-        return Credentials::default();
+        return keychain_credentials();
     };
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
         return Credentials {
             present: true,
+            store: Some("file".into()),
             ..Default::default()
         };
     };
@@ -386,11 +398,37 @@ pub fn read_credentials(dir: &Path) -> Credentials {
     let n = |k: &str| o.and_then(|o| o.get(k)).and_then(|x| x.as_u64());
     Credentials {
         present: true,
+        store: Some("file".into()),
         subscription_type: s("subscriptionType"),
         rate_limit_tier: s("rateLimitTier"),
         expires_at: n("expiresAt"),
         refresh_expires_at: n("refreshTokenExpiresAt"),
     }
+}
+
+/// macOS keeps the login in the login keychain under the service name the
+/// CLI uses. Listing the item's attributes needs no access to the secret
+/// and so triggers no prompt; the dates inside it would, so they stay
+/// unread. Absent everywhere else.
+fn keychain_credentials() -> Credentials {
+    #[cfg(target_os = "macos")]
+    {
+        let found = std::process::Command::new("security")
+            .args(["find-generic-password", "-s", "Claude Code-credentials"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if found {
+            return Credentials {
+                present: true,
+                store: Some("keychain".into()),
+                ..Default::default()
+            };
+        }
+    }
+    Credentials::default()
 }
 
 pub fn read_settings(dir: &Path) -> Settings {

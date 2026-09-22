@@ -10,6 +10,12 @@
 //!                         answer carries the box's policy and, once, a restart
 //!   POST /claude/restart  ask the tray to restart the server on its next report
 //!
+//! And one read that is not for the LAN: `GET /claude` is the tray's full
+//! report — session names, working directories, ids, the login's dates —
+//! answered on loopback, or to a caller holding the NODE TOKEN the box
+//! minted at approval and hands down every hello answer (`Authorization:
+//! Bearer <token>`). The open page carries only a summary of it.
+//!
 //! No auth otherwise: the page states facts about this machine that the LAN
 //! can already observe, and the firewall rule `install` adds scopes it to
 //! the local subnet. The tokens in the user's Claude profile never reach
@@ -59,6 +65,9 @@ struct Live {
     /// Raised by the box's answer or `POST /claude/restart`; the tray takes
     /// it with its next report.
     claude_restart_requested: bool,
+    /// What the box handed down at approval; a caller with it may read the
+    /// full report. None until then, and then nobody but loopback may.
+    node_token: Option<String>,
 }
 
 /// The tray, as the page describes it.
@@ -90,7 +99,7 @@ struct Document<'a> {
     policy: &'a Policy,
     /// Claude Code on this machine, as the tray last reported it; null when
     /// the tray has not reported lately.
-    claude: Option<&'a Report>,
+    claude: Option<Summary>,
     tray: Tray,
     claude_restart_requested: bool,
     /// The box, as this agent last saw it.
@@ -115,6 +124,7 @@ impl Shared {
                 policy,
                 claude: None,
                 claude_restart_requested: false,
+                node_token: None,
             }),
         }
     }
@@ -129,6 +139,36 @@ impl Shared {
         let changed = l.policy != p;
         l.policy = p;
         changed
+    }
+
+    /// The token the box minted for this node, from a hello's answer.
+    pub fn set_node_token(&self, t: Option<String>) {
+        self.lock().node_token = t;
+    }
+
+    /// Whether a bearer token matches the node token. Never true without one.
+    fn token_ok(&self, header: Option<&str>) -> bool {
+        let l = self.lock();
+        match (l.node_token.as_deref(), header) {
+            (Some(t), Some(h)) => {
+                let given = h.trim().strip_prefix("Bearer ").unwrap_or("").trim();
+                !t.is_empty() && constant_time_eq(t.as_bytes(), given.as_bytes())
+            }
+            _ => false,
+        }
+    }
+
+    /// The full report as JSON, for loopback and the box.
+    fn claude_document(&self) -> String {
+        let l = self.lock();
+        match l
+            .claude
+            .as_ref()
+            .filter(|(_, at)| at.elapsed() < REPORT_FRESH)
+        {
+            Some((r, _)) => serde_json::to_string_pretty(r).unwrap_or_else(|_| "{}".into()),
+            None => "null".into(),
+        }
     }
 
     pub fn request_claude_restart(&self) {
@@ -227,7 +267,7 @@ impl Shared {
                 .claude
                 .as_ref()
                 .filter(|(_, at)| at.elapsed() < REPORT_FRESH)
-                .map(|(r, _)| r),
+                .map(|(r, _)| r.summary()),
             tray: Tray {
                 reporting: l
                     .claude
@@ -262,6 +302,22 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                 let (code, body, ctype) = match (req.method(), req.url()) {
                     (&Method::Get, "/healthz") => (200, "ok\n".to_string(), "text/plain"),
                     (&Method::Get, "/" | "/status") => (200, shared.document(), "application/json"),
+                    (&Method::Get, "/claude") => {
+                        let auth = req
+                            .headers()
+                            .iter()
+                            .find(|h| h.field.equiv("Authorization"))
+                            .map(|h| h.value.as_str().to_string());
+                        if local || shared.token_ok(auth.as_deref()) {
+                            (200, shared.claude_document(), "application/json")
+                        } else {
+                            (
+                                403,
+                                "the node token, or this machine\n".to_string(),
+                                "text/plain",
+                            )
+                        }
+                    }
                     (&Method::Post, "/update/check") if local => {
                         shared.request_check();
                         (202, "checking\n".to_string(), "text/plain")
@@ -309,4 +365,12 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
         .context("spawning the status server")?;
     tracing::info!(port, "status page answering");
     Ok(server)
+}
+
+/// Equal length and bytes, without an early exit on the first difference.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }

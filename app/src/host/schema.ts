@@ -550,6 +550,11 @@ export const nodes = pgTable('nodes', {
   /// mean the agent's own defaults. Postgres, not site/: nothing nix
   /// builds reads it, so changing it is an UPDATE and nothing rebuilds.
   policy: jsonb('policy').$type<NodePolicy>().notNull().default({}),
+  /// The secret the box presents to the agent to read its full Claude
+  /// report (`GET /claude` on the status page). Minted at approval, handed
+  /// down every hello answer over HTTPS, cleared on revoke. Never leaves
+  /// the server: NodeRow does not carry it.
+  token: text('token'),
 })
 
 /**

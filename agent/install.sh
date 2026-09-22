@@ -79,4 +79,4 @@ chmod 755 "$ROOT" "$BIN" "$ROOT/logs"
 echo
 echo "installed $tag. Status page: http://$(hostname):$PORT/status"
 echo "logs: $ROOT/logs (the service), ~/Library/Logs/daedalus-agent (the menu bar app)"
-echo "the status page answers any address on the LAN without a login: it states what the LAN can already see"
+echo "the status page answers the LAN without a login with machine facts and a Claude summary; sessions and paths are only for the box (node token) and this machine"

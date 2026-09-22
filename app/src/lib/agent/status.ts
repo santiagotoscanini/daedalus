@@ -56,6 +56,8 @@ export type NodeClaude = {
   sessions: NodeClaudeSession[]
   credentials: {
     present: boolean
+    /** "file" or "keychain" (macOS: present, but the dates are not readable). */
+    store: string | null
     subscriptionType: string | null
     rateLimitTier: string | null
     expiresAt: number | null
@@ -70,6 +72,37 @@ export type NodeClaude = {
   log: string | null
   reportedAt: string
 }
+
+/**
+ * Claude Code on the node as the OPEN status page states it: a state,
+ * versions, a count. The agent keeps everything a stranger on the LAN
+ * should not read — session names, paths, ids, the environment id, the
+ * login's dates — for `/claude`, which only the box's token opens
+ * (`nodeClaudeReport` below).
+ */
+export type NodeClaudeSummary = {
+  state: string
+  detail: string | null
+  cliVersion: string | null
+  serverVersion: string | null
+  sessions: number
+  startedAt: string | null
+  signedIn: boolean
+}
+
+const nstr = optional(nullable(str), null)
+const nint = optional(nullable(int), null)
+const nnum = optional(nullable(num), null)
+
+const summary = obj({
+  state: optional(str, 'stopped'),
+  detail: nstr,
+  cli_version: nstr,
+  server_version: nstr,
+  sessions: optional(int, 0),
+  started_at: nstr,
+  signed_in: optional(bool, false),
+})
 
 export type AgentStatus = {
   version: string
@@ -96,14 +129,10 @@ export type AgentStatus = {
   /** The agent's policy; an agent older than 0.4.0 holds the machine awake and has no Claude. */
   policy: AgentPolicy
   /** Null when the tray has not reported lately (nobody logged on), or the agent predates it. */
-  claude: NodeClaude | null
+  claude: NodeClaudeSummary | null
   /** Whether the tray — the user's session — is reporting to the service. */
   trayReporting: boolean
 }
-
-const nstr = optional(nullable(str), null)
-const nint = optional(nullable(int), null)
-const nnum = optional(nullable(num), null)
 
 const session = obj({
   pid: int,
@@ -142,6 +171,7 @@ const claude = obj({
   credentials: optional(
     obj({
       present: optional(bool, false),
+      store: nstr,
       subscription_type: nstr,
       rate_limit_tier: nstr,
       expires_at: nnum,
@@ -149,6 +179,7 @@ const claude = obj({
     }),
     {
       present: false,
+      store: null,
       subscription_type: null,
       rate_limit_tier: null,
       expires_at: null,
@@ -189,7 +220,7 @@ const shape = obj({
     }),
     { awake_hold: true, claude_remote_control: false },
   ),
-  claude: optional(nullable(claude), null),
+  claude: optional(nullable(summary), null),
   tray: optional(obj({ reporting: optional(bool, false) }), { reporting: false }),
 })
 
@@ -225,6 +256,7 @@ function nodeClaude(c: NonNullable<ReturnType<typeof claude>>): NodeClaude {
     })),
     credentials: {
       present: c.credentials.present,
+      store: c.credentials.store,
       subscriptionType: c.credentials.subscription_type,
       rateLimitTier: c.credentials.rate_limit_tier,
       expiresAt: c.credentials.expires_at,
@@ -262,7 +294,7 @@ export function agentStatus(body: unknown): AgentStatus {
     lastUpdateCheck: s.last_update_check,
     lastUpdateResult: s.last_update_result,
     policy: { awakeHold: s.policy.awake_hold, claudeRemoteControl: s.policy.claude_remote_control },
-    claude: s.claude === null ? null : nodeClaude(s.claude),
+    claude: s.claude === null ? null : summaryOf(s.claude),
     trayReporting: s.tray.reporting,
   }
 }
@@ -271,4 +303,26 @@ export function agentStatus(body: unknown): AgentStatus {
 export function agentHasClaude(version: string): boolean {
   const [major = 0, minor = 0] = version.split('.').map((p) => Number.parseInt(p, 10))
   return major > 0 || minor >= 4
+}
+
+function summaryOf(s: ReturnType<typeof summary>): NodeClaudeSummary {
+  return {
+    state: s.state,
+    detail: s.detail,
+    cliVersion: s.cli_version,
+    serverVersion: s.server_version,
+    sessions: s.sessions,
+    startedAt: s.started_at,
+    signedIn: s.signed_in,
+  }
+}
+
+/**
+ * Decode the agent's `/claude` — the full report, which the agent answers
+ * only on loopback or to the box's node token. Null when the tray has not
+ * reported lately.
+ */
+export function nodeClaudeReport(body: unknown): NodeClaude | null {
+  if (body === null) return null
+  return nodeClaude(decode(claude, body))
 }
