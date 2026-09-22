@@ -37,6 +37,7 @@ pub mod net;
 pub mod power;
 pub mod state;
 pub mod status;
+pub mod telemetry;
 pub mod update;
 
 #[cfg(target_os = "macos")]
@@ -113,6 +114,15 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
         }
     };
 
+    let sampler = {
+        let shared = Arc::clone(&shared);
+        let stop = Arc::clone(&stop);
+        std::thread::Builder::new()
+            .name("telemetry".into())
+            .spawn(move || telemetry::run_loop(shared, stop))
+            .context("spawning the sampler")?
+    };
+
     let updater = {
         let shared = Arc::clone(&shared);
         let stop = Arc::clone(&stop);
@@ -178,6 +188,7 @@ pub fn agent_main(stop: Arc<AtomicBool>, foreground: bool) -> Result<()> {
     tracing::info!("stopping");
     server.unblock();
     let _ = updater.join();
+    let _ = sampler.join();
     if let Some(a) = announcer {
         let _ = a.join();
     }

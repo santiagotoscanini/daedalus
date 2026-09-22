@@ -5,6 +5,7 @@
 //! answers `ok`. The writes are few and only from this machine — refused
 //! from any address but loopback:
 //!
+//!   GET  /metrics         the telemetry as Prometheus text (telemetry.rs)
 //!   POST /update/check    the updater looks now (the tray's "check for updates")
 //!   POST /claude/report   the tray's picture of Claude Code (claude.rs); the
 //!                         answer carries the box's policy and, once, a restart
@@ -33,6 +34,7 @@ use crate::claude::{Report, ReportAnswer, Summary};
 use crate::facts::Facts;
 use crate::hello::{ControlPlane, Policy};
 use crate::state::State;
+use crate::telemetry::Telemetry;
 
 /// A report older than this means the tray is gone (logged off, or no
 /// desktop session at all), and the page says so instead of repeating it.
@@ -68,6 +70,8 @@ struct Live {
     /// What the box handed down at approval; a caller with it may read the
     /// full report. None until then, and then nobody but loopback may.
     node_token: Option<String>,
+    /// The last telemetry document, from the sampling thread.
+    telemetry: Option<Telemetry>,
 }
 
 /// The tray, as the page describes it.
@@ -102,6 +106,9 @@ struct Document<'a> {
     claude: Option<Summary>,
     tray: Tray,
     claude_restart_requested: bool,
+    /// What the machine is and how it is doing (telemetry.rs); null until
+    /// the first sample, a few seconds after start.
+    telemetry: Option<&'a Telemetry>,
     /// The box, as this agent last saw it.
     control_plane: &'a ControlPlane,
     #[serde(flatten)]
@@ -125,6 +132,7 @@ impl Shared {
                 claude: None,
                 claude_restart_requested: false,
                 node_token: None,
+                telemetry: None,
             }),
         }
     }
@@ -168,6 +176,19 @@ impl Shared {
         {
             Some((r, _)) => serde_json::to_string_pretty(r).unwrap_or_else(|_| "{}".into()),
             None => "null".into(),
+        }
+    }
+
+    pub fn set_telemetry(&self, t: Telemetry) {
+        self.lock().telemetry = Some(t);
+    }
+
+    /// Prometheus text for `/metrics`; empty before the first sample.
+    fn metrics(&self) -> String {
+        let l = self.lock();
+        match &l.telemetry {
+            Some(t) => crate::telemetry::metrics_text(t, crate::VERSION, &crate::facts::hostname()),
+            None => String::new(),
         }
     }
 
@@ -284,6 +305,7 @@ impl Shared {
                 last_report: l.claude.as_ref().map(|(r, _)| r.reported_at.clone()),
             },
             claude_restart_requested: l.claude_restart_requested,
+            telemetry: l.telemetry.as_ref(),
             control_plane: &l.control_plane,
             state: &l.state,
         };
@@ -309,6 +331,9 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                 let local = req.remote_addr().is_some_and(|a| a.ip().is_loopback());
                 let (code, body, ctype) = match (req.method(), req.url()) {
                     (&Method::Get, "/healthz") => (200, "ok\n".to_string(), "text/plain"),
+                    (&Method::Get, "/metrics") => {
+                        (200, shared.metrics(), "text/plain; version=0.0.4")
+                    }
                     (&Method::Get, "/" | "/status") => (200, shared.document(), "application/json"),
                     (&Method::Get, "/claude") => {
                         let auth = req
