@@ -547,15 +547,20 @@ re-litigated:
 **What remains of Phase 11.**
 
 1. **The other stacks, one by one**, none of them needed for a box to run:
-   about thirty in the reference host's configuration (media and its
-   janitors, home automation, the AI cluster, games, VPN tenants, small
-   tools). Each is a candidate catalog module; the trivial leaves first
-   (`intel-gpu-exporter`, `metube`, `myspeed`, `grocy`, `calibre-web`,
-   `cleanuparr`, `verdaccio`), then the ones with secrets, then the netns
-   owners and their tenants together. Until they move, the reference host
-   names the engine's modules one by one through `enginePath` (import
-   order, §6) and adopts `nixosModules.default` afterwards in a deliberate,
-   separately-gated rebuild.
+   twenty-five in the reference host's configuration (media and its
+   janitors, home automation, the AI cluster, games, VPN tenants, the
+   books pair, a few tools). Five leaves went first (`grocy`,
+   `intel-gpu-exporter`, `metube`, `myspeed`, `verdaccio`, engine
+   `f15f037`, with `checks.full-catalog` — the template host plus every
+   leaf — as the proof, since the template itself stays the spine). Next:
+   the leaves with secrets (`recyclarr`, `scraparr`, `janitorr`,
+   `wg-easy`, `factorio`), the books pair (`calibre-web` + `shelfmark`),
+   the database tenants, the AI cluster as one group, then the netns
+   owners and their tenants together (`downloads`, `argus-vpn`, `tv`).
+   Until they move, the reference host names the engine's modules one by
+   one through `enginePath` (import order, §6) and adopts
+   `nixosModules.default` afterwards in a deliberate, separately-gated
+   rebuild.
 2. ~~**Engine-default pins.**~~ — decided against 2026-09-22 (above).
 3. ~~**`developer.engineOverride`**~~ — done 2026-09-21/22: the app half
    (`4d97cf6`) and the host half (`90e2cd4`: `host/lib.sh
