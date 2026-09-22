@@ -1,0 +1,33 @@
+# TCP/SNI route for the shared `pg` cluster — exposes
+# postgres.@baseDomain@:5432 on the LAN for DBeaver/psql clients.
+#
+# Consumed by stacks/app-db/app-db.nix via fleet.traefikRawRules.
+# `pg-tls@file` (bottom of this file — traefik's file provider merges
+# tls.options across rule files) advertises the `postgresql` ALPN
+# protocol so direct-TLS clients (libpq 17+ / pgjdbc 42.7+) succeed
+# instead of getting `tlsv1 alert no application protocol`.
+
+tcp:
+  routers:
+    postgres-tcp-rtr:
+      entryPoints: [ postgres ]
+      rule: "HostSNI(`postgres.@baseDomain@`)"
+      service: postgres-tcp-svc
+      tls:
+        certResolver: dns-cloudflare
+        options: pg-tls@file
+        domains:
+          - main: "@baseDomain@"
+            sans:
+              - "*.@baseDomain@"
+  services:
+    postgres-tcp-svc:
+      loadBalancer:
+        servers:
+          - address: "pg:5432"
+
+tls:
+  options:
+    pg-tls:
+      alpnProtocols:
+        - postgresql

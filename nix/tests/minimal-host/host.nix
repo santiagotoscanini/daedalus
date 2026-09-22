@@ -32,6 +32,11 @@
     # and no identity provider, so both entries are declarations nothing acts
     # on, and evaluation must not care.
     modules.stirling-pdf.enable = true;
+    # The shared cluster, ON: no tenant declares a database on this host, so
+    # the cluster itself is not started, but the registry, the bootstraps and
+    # the exporter all evaluate.
+    modules.app-db.enable = true;
+    images.app-db-exporter = "quay.io/prometheuscommunity/postgres-exporter:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.stirling-pdf = "docker.io/stirlingtools/stirling-pdf:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
     operator = {

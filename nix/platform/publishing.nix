@@ -3,7 +3,8 @@
 # Declares the fleet.* options a stack uses to expose itself — webApps
 # (the primary one-block interface), the lower-level traefikRoutes /
 # traefikRawRules / cloudflareRoutes / dnsHosts escape hatches, the
-# observability registries (prometheusScrapes, grafanaDashboards{,ByFolder})
+# observability registries (prometheusScrapes, grafanaDashboards{,ByFolder},
+# logStacks)
 # — plus the materialization that turns each webApp into routes, DNS
 # entries, tunnel CNAMEs, probes and scrapes, and the assertions that keep
 # those combinations coherent.
@@ -429,6 +430,27 @@ in
           "Apps" = {
             "app-anansi" = builtins.readFile ./dashboard.json;
           };
+        }
+      '';
+    };
+
+    logStacks = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+      default = { };
+      description = ''
+        Map: stack name -> container names whose logs get
+        `stack = <name>` in Loki. Rendered into the log shipper's relabel
+        rules by the logging stack. Each stack contributes its own entry;
+        lists merge across modules like every fleet option.
+
+        Containers covered by no entry fall back to
+        `stack = <container name>` (still queryable, just ungrouped), so
+        registration is optional for single-container stacks and only
+        adds grouping for multi-container ones.
+      '';
+      example = lib.literalExpression ''
+        {
+          tv = [ "gluetun" "qbittorrent" "sonarr" "radarr" ];
         }
       '';
     };

@@ -95,11 +95,18 @@
         "railpack.nix"
       ];
 
-      # The catalog: one stack per directory, `modules/<id>/<id>.nix`, each
-      # behind `fleet.modules.<id>.enable` — default OFF, so importing them all
-      # costs a host nothing.
+      # The catalog: one stack per directory, `modules/<id>/…`, each behind
+      # `fleet.modules.<id>.enable` — default OFF, so importing them all costs a
+      # host nothing. Listed FILE by file like the two lists above, because a
+      # multi-file stack keeps its files as separate entries: the module system
+      # merges list-typed options in an order that depends on nesting, and a
+      # host that names these files one by one in its own list (nix-engine.md
+      # §6) must be able to keep each in the slot it always had.
       catalogModules = [
-        "stirling-pdf"
+        "app-db/app-db.nix"
+        "app-db/claude-ro.nix"
+        "app-db/exporter.nix"
+        "stirling-pdf/stirling-pdf.nix"
       ];
     in
     {
@@ -151,7 +158,7 @@
 
         # The catalog of stacks, all switched off until the host says otherwise.
         catalog = {
-          imports = map (m: root + "/modules/${m}/${m}.nix") catalogModules;
+          imports = map (m: root + "/modules/${m}") catalogModules;
         };
 
         default = {

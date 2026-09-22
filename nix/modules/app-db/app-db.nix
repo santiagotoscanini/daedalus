@@ -1,0 +1,523 @@
+# app-db — single shared Postgres cluster, one database per app.
+#
+# Three files, one switch: this one (the cluster, the registry and the
+# per-tenant bootstraps), exporter.nix (its metrics) and claude-ro.nix (a
+# read-only role for the operator's MCP client), listed one by one in
+# flake.nix and in a host's import list — list-typed options merge in an
+# order that depends on nesting, so a stack never imports its own siblings.
+#
+# Active when `fleet.modules.app-db.enable` is on AND `fleet.appDatabases`
+# is non-empty (declaring an entry IS the enable signal — a cluster with no
+# tenant is not started). Materializes:
+#
+#   - One `pg` container (`postgres:18.4-alpine` with pgvector, built on the
+#     box from assets/pg-image) on the shared `app-db-net` bridge. Data at
+#     <stateRoot>/app-db/postgres, owner 100069:100069 (in-container UID 70
+#     = postgres mapped through the operator's subuid range).
+#   - `app-db-cluster-bootstrap.service` — one-time, generates the cluster
+#     superuser POSTGRES_PASSWORD into
+#     <machineState>/app-db/cluster/env.
+#   - Per app, `app-db-<name>-bootstrap.service` — runs idempotent SQL
+#     against `pg` to materialize the per-app role + database, then
+#     writes <machineState>/app-db/<name>/env with the per-app
+#     DATABASE_URL (postgresql://<name>:<pwd>@pg:5432/<name>).
+#
+# Isolation:
+#   - Per-app role owns its database.
+#   - `REVOKE ALL ON DATABASE <name> FROM PUBLIC` so other roles can't
+#     even connect.
+#   - `ALTER ROLE` keeps role passwords in sync with the env file
+#     (rotation = delete the env file + rebuild).
+#
+# Per-app resource limits:
+#   - Connection cap via `ALTER ROLE <name> CONNECTION LIMIT N` if
+#     needed (default: cluster-wide max_connections shared).
+#   - statement_timeout / lock_timeout per-role via ALTER ROLE.
+#   - For full container-level isolation, switch that app to a
+#     dedicated container — escape hatch, not implemented yet.
+#
+# Tuning (shared cluster — sized for ~10 hobby apps):
+#   shared_buffers       = 256MB
+#   max_connections      = 200
+#   work_mem             = 8MB
+#   maintenance_work_mem = 64MB
+#   effective_cache_size = 1GB
+#
+# Container caps: cpus=2, memory=2g, pids-limit=500. Sizing and tuning are
+# the module's, fixed: they are a hobby-fleet default rather than any one
+# host's policy, and a host that outgrows them overrides the container's
+# `cmd` / `extraOptions` with `lib.mkForce` rather than the engine growing
+# an option per postgres knob.
+#
+# TODO: front this with PgBouncer (transaction pooling) when
+# pg_stat_activity connection counts approach max_connections=200
+# (a fleet of ~15 tenants, each opening ORM-style pools of 10–25
+# connections, trips the ceiling well before RAM). PgBouncer means apps
+# point DATABASE_URL at `pgbouncer:6432` instead of `pg:5432`; the
+# direct-pg TCP/SNI route at postgres.<baseDomain> stays untouched
+# so DBeaver and superuser admin still hit the cluster directly.
+#   https://github.com/pgbouncer/pgbouncer
+# Trade-off: transaction-mode pooling breaks LISTEN/NOTIFY, session-
+# scoped SET, and naive prepared statements — each new app needs a
+# one-time check that its driver is pooler-aware (Drizzle/Prisma/
+# postgres-js all support it via a flag).
+#
+# The host brings:
+#   fleet.modules.app-db.enable     the switch (default off, as every catalog module)
+#   fleet.images.app-db-exporter    the exporter's digest-pinned image (exporter.nix)
+#   fleet.appDatabases.<name>       one entry per tenant, from whichever stack owns it
+# The cluster image itself is built here from assets/pg-image/Containerfile;
+# its base pin is bumped by hand, in the engine (nix-engine.md §4).
+
+{
+  config,
+  lib,
+  pkgs,
+  mkLocalImage,
+  mkRootlessContainer,
+  ...
+}:
+
+let
+  cfg = config.fleet.appDatabases;
+
+  activeApps = lib.attrNames cfg;
+  enabled = activeApps != [ ];
+
+  # App names land as postgres role + database identifiers and the
+  # env file path. Force a narrow shape so we don't have to defend
+  # any of those downstream.
+  nameRegex = "[a-z][a-z0-9_]*";
+
+  envBase = "${config.fleet.machineState}/app-db";
+  clusterEnv = "${envBase}/cluster/env";
+  appEnvFile = name: "${envBase}/${name}/env";
+
+  hostRoot = "${config.fleet.stateRoot}/app-db";
+  dataDir = "${hostRoot}/postgres";
+
+  # Locally-built postgres image with pgvector compiled in (see
+  # assets/pg-image/Containerfile). Built FROM the same alpine base as
+  # the old plain image, so the postgres UID stays 70 — the data dir
+  # ownership (100069:100069) is unchanged and there is no migration.
+  # The tag embeds the build-context hash: editing the Containerfile
+  # rebuilds the image and restarts pg; unchanged contexts are ~instant
+  # (layer cache). Enables `CREATE EXTENSION vector` in any tenant db
+  # that requests it via `extensions` (see the submodule below).
+  pgImageBuild = mkLocalImage {
+    name = "pg-pgvector";
+    tagPrefix = "18.4";
+    contextDir = ./assets/pg-image;
+    gates = [ "podman-pg.service" ];
+  };
+
+  # The bash body lives at assets/bootstrap.sh (shellcheckable
+  # standalone). This wrapper exports the four parameters it reads
+  # (APP_NAME, ENV_BASE, CLUSTER_ENV, APP_ENV_FILE) and concatenates
+  # the body so it all runs in a single shell with `set -eu` from
+  # the systemd script preamble.
+  perAppBootstrapScript = name: ''
+    set -eu
+
+    export APP_NAME=${lib.escapeShellArg name}
+    export EXTRA_DBS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.${name}.extraDatabases)}
+    export EXTENSIONS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.${name}.extensions)}
+    export ENV_BASE=${lib.escapeShellArg envBase}
+    export CLUSTER_ENV=${lib.escapeShellArg clusterEnv}
+    export APP_ENV_FILE=${lib.escapeShellArg (appEnvFile name)}
+    export DB_HOST=${lib.escapeShellArg cfg.${name}.dbHost}
+    export DB_PORT=${lib.escapeShellArg (toString cfg.${name}.dbPort)}
+    export OPERATOR_USER=${lib.escapeShellArg config.fleet.operator.user}
+    export OPERATOR_GROUP=${lib.escapeShellArg config.fleet.operator.group}
+
+    ${builtins.readFile ./assets/bootstrap.sh}
+  '';
+in
+{
+
+  options.fleet.modules.app-db.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = "The shared Postgres cluster: one role and database per app, its exporter, and a read-only login for the operator's MCP client.";
+  };
+
+  options.fleet.appDatabases = lib.mkOption {
+    # An entry's presence IS the enable signal; per-app fields live
+    # in the submodule (room to grow: connection caps, extensions...).
+    type = lib.types.attrsOf (
+      lib.types.submodule (
+        { name, ... }:
+        {
+          options.extraDatabases = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "sonarr_log" ];
+            description = ''
+              Additional databases owned by the same role. Used by the
+              *arr apps, which keep config/history and log entries in
+              two separate databases behind one login.
+            '';
+          };
+          options.extensions = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "vector" ];
+            description = ''
+              Postgres extensions to `CREATE EXTENSION IF NOT EXISTS`
+              in this app's database (and any extraDatabases), run as
+              the cluster superuser by the bootstrap oneshot. The
+              extension's `.so` must be present in the pg image — the
+              cluster image ships pgvector (`vector`). Idempotent;
+              dropping a name here does NOT drop the extension.
+            '';
+          };
+          options.consumers = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ "app-${name}" ];
+            example = [ "nextcloud-app" ];
+            description = ''
+              Container names that must not start before this app's
+              bootstrap has materialized the role/db/env file — the
+              generated ordering is `podman-<consumer>.service`
+              after/wants `app-db-<name>-bootstrap.service`. Default
+              fits the apps platform (container `app-<name>`); stack
+              tenants set their own container name(s).
+            '';
+          };
+          options.reach = lib.mkOption {
+            type = lib.types.enum [
+              "bridge"
+              "hostPort"
+            ];
+            default = "bridge";
+            description = ''
+              How this tenant dials the cluster, which is what the
+              generated DATABASE_URL says.
+
+              "bridge" — `pg:5432` by container DNS over app-db-net.
+              The default, and the only one that stays on a private
+              bridge.
+
+              "hostPort" — `host.containers.internal:5433`, the
+              plain-TCP host port. For tenants that share another
+              container's network namespace (the gluetun-netns *arrs,
+              and any `fleet.apps` entry using `egress`): a netns has
+              no bridge interface, so `pg` does not resolve there.
+              The netns owner must also allow egress to the pasta host
+              alias, or gluetun's kill switch drops the connection —
+              `mkGluetunInstance`'s `hostEgress` does that.
+            '';
+          };
+          # Derived, so no tenant restates the host or the port. bazarr
+          # and the *arrs used to carry both as literals in their own
+          # module; a second copy of a fact the cluster already knows is
+          # a copy that can disagree with it.
+          options.dbHost = lib.mkOption {
+            type = lib.types.str;
+            readOnly = true;
+            default =
+              if config.fleet.appDatabases.${name}.reach == "bridge" then "pg" else "host.containers.internal";
+            description = "Host this tenant reaches the cluster on. Derived from `reach`.";
+          };
+          options.dbPort = lib.mkOption {
+            type = lib.types.port;
+            readOnly = true;
+            default = if config.fleet.appDatabases.${name}.reach == "bridge" then 5432 else 5433;
+            description = "Port this tenant reaches the cluster on. Derived from `reach`.";
+          };
+          options.envFile = lib.mkOption {
+            type = lib.types.str;
+            readOnly = true;
+            default = "${envBase}/${name}/env";
+            description = ''
+              Path of the bootstrap-written env file (DATABASE_URL +
+              the password under every tenant-read name). Reference
+              this instead of hardcoding the path.
+            '';
+          };
+        }
+      )
+    );
+    default = { };
+    description = ''
+      Per-app Postgres databases on the single shared `pg` cluster.
+      Each entry materializes a database + login role owned by that
+      role (no PUBLIC connect) and the per-app env file with
+      DATABASE_URL. LAN access is the shared
+      `postgres.${config.fleet.baseDomain}:5432` TCP/SNI route.
+
+      The attribute key is used directly as the postgres role, the
+      database name, and the env-file directory — the nameRegex
+      assertion enforces the allowed shape.
+
+      See stacks/app-db/README.md.
+    '';
+  };
+
+  config = lib.mkIf (config.fleet.modules.app-db.enable && enabled) {
+    # The cluster and per-app credentials used to live under
+    # stacks/app-db/secrets in the checkout. Every unit that generates or
+    # reads them REQUIRES the migration (platform/machine-state.nix): a
+    # cluster bootstrap that ran first would mint a new superuser password
+    # beside a cluster initialised with the old one.
+    fleet.machineStateLegacy.app-db = "${config.fleet.config.repo}/stacks/app-db/secrets";
+    fleet.machineStateReaders = [
+      "app-db-cluster-bootstrap.service"
+      "podman-pg.service"
+    ]
+    ++ map (n: "app-db-${n}-bootstrap.service") activeApps;
+
+    # Validate app names at eval time. The name lands in SQL (via
+    # psql's `%I` for the role/db) and in the env file path — catch
+    # garbage names at build time, not at first podman exec.
+    assertions =
+      (map (n: {
+        assertion = builtins.match nameRegex n != null;
+        message = ''
+          fleet.appDatabases."${n}": invalid app name.
+          Must match ${nameRegex} — used as the postgres role,
+          database, and env-file directory.
+        '';
+      }) activeApps)
+      # `cluster` holds the superuser env and `monitoring` the exporter
+      # role env under the same machine-state tree — a tenant with either
+      # name would read the wrong password as its "existing" one (the
+      # cluster case: creating a login role that shares the SUPERUSER
+      # password) and then rewrite the env file in tenant shape.
+      ++ (map (n: {
+        assertion =
+          !(lib.elem n [
+            "cluster"
+            "monitoring"
+          ]);
+        message = ''
+          fleet.appDatabases."${n}": reserved name — `cluster` and
+          `monitoring` are infrastructure env dirs under the machine state.
+        '';
+      }) activeApps)
+      ++ (lib.concatMap (
+        n:
+        map (d: {
+          assertion = builtins.match nameRegex d != null;
+          message = ''
+            fleet.appDatabases."${n}".extraDatabases: "${d}" is not a
+            valid database name (${nameRegex}).
+          '';
+        }) cfg.${n}.extraDatabases
+      ) activeApps)
+      # Extension names land in `CREATE EXTENSION %I` — same narrow shape.
+      ++ (lib.concatMap (
+        n:
+        map (e: {
+          assertion = builtins.match nameRegex e != null;
+          message = ''
+            fleet.appDatabases."${n}".extensions: "${e}" is not a valid
+            extension name (${nameRegex}).
+          '';
+        }) cfg.${n}.extensions
+      ) activeApps);
+
+    # app-db-net: pg + every app container. pg-wire-net: private bridge
+    # carrying the TCP/SNI postgres wire — traefik and pg are its only
+    # members, keeping the cluster unreachable from the other web
+    # containers (traefik's membership is appended to its list here;
+    # bridgeMemberships lists merge across modules).
+    fleet.bridgeMemberships."pg" = [
+      "app-db"
+      "pg-wire"
+    ];
+    fleet.bridgeMemberships.traefik = [ "pg-wire" ];
+
+    fleet.logStacks.app-db = [
+      "pg"
+      "app-db-exporter"
+    ];
+
+    # LAN access for direct-TLS postgres clients (DBeaver, psql, JDBC).
+    # One shared hostname for the whole cluster; the client picks the
+    # database (and matching role) via the `dbname=` / `user=` fields
+    # in its connection string.
+    #
+    # Per-app hostnames (`pg-<name>.<baseDomain>`) would be decorative —
+    # all routes would terminate at the same `pg:5432` backend and the
+    # host doesn't influence which database the client lands in. One
+    # shared route avoids fan-out in traefik rules + pi-hole entries.
+    #
+    # The TCP route is a single fixed YAML — contributed via the
+    # existing `traefikRawRules` escape hatch (same mechanism
+    # nextcloud's dual-router uses). traefik.nix gates the :5432
+    # entrypoint + firewall on `fleet.appDatabases != { }`.
+    fleet.traefikRawRules."postgres-tcp.yml" =
+      builtins.replaceStrings [ "@baseDomain@" ] [ config.fleet.baseDomain ]
+        (builtins.readFile ./assets/traefik-tcp.yml);
+    fleet.dnsHosts = [ "${config.fleet.lanIp} postgres.${config.fleet.baseDomain}" ];
+
+    # The plain-TCP host port (see `ports` on the pg container).
+    networking.firewall.allowedTCPPorts = [ 5433 ];
+
+    fleet.statePaths = {
+      "${hostRoot}" = { };
+      "${dataDir}" = {
+        uid = 70;
+        mode = "0700";
+      };
+      "${envBase}/cluster".mode = "0700";
+    }
+    // lib.listToAttrs (map (n: lib.nameValuePair "${envBase}/${n}" { mode = "0700"; }) activeApps);
+
+    # Cluster bootstrap (one-shot: generate superuser POSTGRES_PASSWORD)
+    # + per-app bootstrap services (idempotent SQL: materialize role +
+    # database, write per-app env file). Combined via lib.mkMerge so
+    # the two assignments don't conflict.
+    systemd.services = lib.mkMerge [
+      {
+        # Build the pgvector image before pg starts (gated in mkLocalImage).
+        pg-image-build = pgImageBuild.service;
+
+        "app-db-cluster-bootstrap" = {
+          description = "Bootstrap pg cluster: generate superuser POSTGRES_PASSWORD on first boot";
+          before = [ "podman-pg.service" ];
+          wantedBy = [ "podman-pg.service" ];
+          after = [ "local-fs.target" ];
+          path = [
+            pkgs.openssl
+            pkgs.coreutils
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            Restart = "on-failure";
+            RestartSec = "5s";
+          };
+          script = ''
+            set -eu
+            # state-paths.service also declares this dir, but there is no
+            # ordering edge between the two oneshots — create it here so
+            # a fresh restore can't race (install -d is idempotent).
+            install -d -m 0700 -o ${config.fleet.operator.user} -g ${config.fleet.operator.group} "${envBase}/cluster"
+            if [ ! -e "${clusterEnv}" ]; then
+              PASSWORD=$(openssl rand -hex 32)
+              install -m 0600 -o ${config.fleet.operator.user} -g ${config.fleet.operator.group} /dev/stdin "${clusterEnv}" <<EOF
+            POSTGRES_PASSWORD=$PASSWORD
+            EOF
+            fi
+          '';
+        };
+      }
+
+      # Per-app bootstrap services: SQL-driven role+db materialization.
+      # Run as the operator so we can `podman exec` into rootless pg.
+      (lib.listToAttrs (
+        map (
+          name:
+          lib.nameValuePair "app-db-${name}-bootstrap" {
+            description = "Materialize role + database `${name}` on shared pg cluster";
+            # Gate every declared consumer container on the bootstrap
+            # (role/db/env file must exist before the tenant dials pg).
+            before = map (c: "podman-${c}.service") cfg.${name}.consumers;
+            wantedBy = map (c: "podman-${c}.service") cfg.${name}.consumers;
+            after = [ "podman-pg.service" ];
+            wants = [ "podman-pg.service" ];
+            path = [
+              pkgs.openssl
+              pkgs.coreutils
+              pkgs.gnugrep
+              pkgs.gnused
+              pkgs.podman
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              User = config.fleet.operator.user;
+              Environment = "XDG_RUNTIME_DIR=${config.fleet.operator.runtimeDir}";
+              Restart = "on-failure";
+              RestartSec = "5s";
+            };
+            script = perAppBootstrapScript name;
+          }
+        ) activeApps
+      ))
+
+      # pg readiness gate: "podman-pg finished" only means `podman run
+      # -d` returned; postgres accepts connections ~1s later, and
+      # tenants that dial fatally at startup (pocket-id, gatus) crash
+      # into --rm oblivion inside that window. ExecStartPost holds the
+      # unit — and everything ordered after it — until the server
+      # actually answers.
+      {
+        podman-pg.serviceConfig.ExecStartPost = pkgs.writeShellScript "wait-pg-ready" ''
+          for _ in $(seq 1 60); do
+            # -U postgres: podman exec defaults to the container root user,
+            # so a bare pg_isready probes as role "root" and logs a FATAL
+            # "role \"root\" does not exist" each poll until pg is up. The
+            # superuser role exists from first boot, so probe as it.
+            ${pkgs.podman}/bin/podman exec pg pg_isready -q -U postgres && exit 0
+            sleep 1
+          done
+          echo "pg did not become ready within 60s" >&2
+          exit 1
+        '';
+      }
+
+      # Direct pg edge on every consumer. At boot the bootstrap chain
+      # orders this transitively (consumer → bootstrap → pg), but
+      # systemd ordering is per-transaction: a mass restart (a
+      # podman.nix change touching every unit) re-queues consumers while
+      # the already-active bootstrap stays put, and tenants then race
+      # pg's start. Declaring the edge on the consumer itself keeps it
+      # in every transaction.
+      (lib.listToAttrs (
+        lib.concatMap (
+          name:
+          map (
+            c:
+            lib.nameValuePair "podman-${c}" {
+              after = [ "podman-pg.service" ];
+              wants = [ "podman-pg.service" ];
+            }
+          ) cfg.${name}.consumers
+        ) activeApps
+      ))
+    ];
+
+    virtualisation.oci-containers.containers."pg" = mkRootlessContainer {
+      inherit (pgImageBuild) image;
+      environmentFiles = [ clusterEnv ];
+      environment = {
+        # Postgres 18 default PGDATA is /var/lib/postgresql/<major>/docker
+        # for pg_upgrade ergonomics; we mount at the legacy path and pin
+        # PGDATA so initdb doesn't bail with "unused mount/volume".
+        PGDATA = "/var/lib/postgresql/data";
+      };
+      volumes = [ "${dataDir}:/var/lib/postgresql/data" ];
+      ports = [
+        # Plain-TCP LAN access for tenants that can't ride a bridge:
+        # the VPN-netns tenants dial `<lanIp>:5433` directly
+        # (their Npgsql client can't do the direct-TLS handshake the
+        # traefik :5432 TCP/SNI route requires — that route stays the
+        # TLS front door for DBeaver-style clients).
+        "5433:5432"
+      ];
+      cmd = [
+        "postgres"
+        "-c"
+        "shared_buffers=256MB"
+        "-c"
+        "max_connections=200"
+        "-c"
+        "work_mem=8MB"
+        "-c"
+        "maintenance_work_mem=64MB"
+        "-c"
+        "effective_cache_size=1GB"
+        "-c"
+        "log_min_messages=warning"
+      ];
+      extraOptions = [
+        "--cpus=2"
+        "--memory=2g"
+        "--pids-limit=500"
+      ];
+    };
+  };
+}

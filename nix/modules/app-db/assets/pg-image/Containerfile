@@ -1,0 +1,21 @@
+# pgvector-enabled build of the shared cluster's postgres image.
+#
+# FROM the exact same digest-pinned alpine base as the plain image
+# (keep this pin in sync with `pgBaseImage` in ../../app-db.nix) so the
+# in-container postgres UID stays 70 — no data-dir re-chown, no
+# 70-vs-105 trap on the live cluster.
+#
+# pgvector is compiled from source, pinned by tag. `with_llvm=no`
+# overrides the PGXS default so the build never needs clang/llvm to
+# emit JIT bitcode (the base image's llvm config then doesn't matter);
+# postgres simply skips JIT for vector ops — a negligible cost here.
+FROM docker.io/library/postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+RUN set -eux; \
+    apk add --no-cache --virtual .build-deps build-base git; \
+    git clone --branch v0.8.5 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector; \
+    cd /tmp/pgvector; \
+    make OPTFLAGS="" with_llvm=no; \
+    make OPTFLAGS="" with_llvm=no install; \
+    cd /; \
+    rm -rf /tmp/pgvector; \
+    apk del .build-deps
