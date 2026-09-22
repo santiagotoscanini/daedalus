@@ -11,6 +11,14 @@ The box's presence on a machine it does not run. Phase one (see
   them;
 - **updates itself** to the newest `agent-v*` release of this repository,
   verifying every asset against the ed25519 key compiled into it;
+- **announces itself to the box** every minute: an ed25519 key made on first
+  start (DPAPI-wrapped under ProgramData) signs a hello carrying the
+  machine's name, OS edition and version, processor, memory, address and
+  state; the box is found through the `_daedalus._tcp` SRV record under
+  the DNS search domain DHCP handed out (or `control_plane_url` in the
+  config), and appears on System › Machines as "wants to join" until an
+  admin approves it. The answer can carry one instruction, "check for
+  updates now";
 - **shows itself in the tray**: a second, windowless program in the desktop
   session (`daedalus-agent-tray.exe`, started at every logon) draws the
   daedalus mark beside the clock — ember when the hold is on, an amber dot

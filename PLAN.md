@@ -793,7 +793,16 @@ priority; each can be done independently unless noted.
    - **A power request does not stop a Windows Update restart.** If the
      gaming PC's Kernel-Power events (42/41/109) show that is what has
      been happening, the fix is the update policy; the agent reports it.
-   - **Phases.** (1) Core and Windows, keep-awake first: the trait, the
+   - **Phases.** (1) ~~Core and Windows, keep-awake first~~ — shipped
+     2026-09-22 as agent-v0.1.0 → 0.2.1 (service, hold, status page, tray,
+     self-update proven end to end on the gaming PC). (2) ~~Discovery and
+     approval~~ — shipped 2026-09-22: SRV record via `fleet.dnsSrv`, the
+     signed hello on `/api/nodes/hello` (bypass), the `nodes` table,
+     Machines tab with Approve / Revoke / Forget and "Check for updates"
+     riding the next hello; the gaming PC announced itself two minutes
+     after the release. Nodes are Postgres rows for now, not nodes.json —
+     the Apply question below is still open. macOS not started. Original
+     plan for reference: (1) Core and Windows, keep-awake first: the trait, the
      service, the indefinite power hold with the power plan converged as
      a second line, the heartbeat and the missed-heartbeat alert,
      self-update from a pin, a one-line install with a one-time token.
