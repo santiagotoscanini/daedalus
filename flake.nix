@@ -106,6 +106,7 @@
         "app-db/app-db.nix"
         "app-db/claude-ro.nix"
         "app-db/exporter.nix"
+        "logging/logging.nix"
         "pocket-id/clients.nix"
         "pocket-id/pocket-id.nix"
         "registry/registry.nix"

@@ -51,6 +51,11 @@
       envSopsFile = ./sops/pocket-id/env.sops;
     };
     images.pocket-id = "ghcr.io/pocket-id/pocket-id:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    # Logs, ON: the shipper's config renders from three registries no stack on
+    # this host writes, so every generated section is empty and still parses.
+    modules.logging.enable = true;
+    images.loki = "docker.io/grafana/loki:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    images.alloy = "docker.io/grafana/alloy:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.app-db-exporter = "quay.io/prometheuscommunity/postgres-exporter:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.stirling-pdf = "docker.io/stirlingtools/stirling-pdf:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
 

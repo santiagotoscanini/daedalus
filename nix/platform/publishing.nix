@@ -4,7 +4,7 @@
 # (the primary one-block interface), the lower-level traefikRoutes /
 # traefikRawRules / cloudflareRoutes / dnsHosts escape hatches, the
 # observability registries (prometheusScrapes, grafanaDashboards{,ByFolder},
-# logStacks)
+# logStacks, logDrops, logFiles)
 # — plus the materialization that turns each webApp into routes, DNS
 # entries, tunnel CNAMEs, probes and scrapes, and the assertions that keep
 # those combinations coherent.
@@ -452,6 +452,103 @@ in
         {
           tv = [ "gluetun" "qbittorrent" "sonarr" "radarr" ];
         }
+      '';
+    };
+
+    logDrops = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            selector = lib.mkOption {
+              type = lib.types.str;
+              description = "Stream selector the rule applies to, e.g. `{container=\"foo\"}`.";
+              example = ''{container="foo"}'';
+            };
+            expression = lib.mkOption {
+              type = lib.types.str;
+              description = "RE2 regex; a matching line is dropped before it reaches Loki.";
+              example = "GET /metrics HTTP";
+            };
+            reason = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                The `reason` label on loki_process_dropped_lines_total, so the
+                drop stays observable. One word or snake_case.
+              '';
+              example = "foo_metrics_access";
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Lines a stack asks the log shipper to keep out of Loki: a third-party
+        emitter's flood that cannot be silenced at the source. The owning
+        stack contributes the entry with the reason beside it. Journald
+        still retains everything (it rotates); this only spares Loki and
+        keeps real logs legible.
+      '';
+      example = lib.literalExpression ''
+        {
+          foo-metrics = {
+            selector = "{container=\"foo\"}";
+            expression = "GET /metrics HTTP";
+            reason = "foo_metrics_access";
+          };
+        }
+      '';
+    };
+
+    logFiles = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            path = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                The file to tail. An exact path, never a glob: a chatty
+                neighbour or a rotated copy in the same directory would be
+                swallowed whole.
+              '';
+              example = "/var/log/foo/foo.log";
+            };
+            mountDir = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                The directory the shipper's container mounts read-only to
+                reach the file — the DIRECTORY, so rotation does not pin a
+                stale inode.
+              '';
+              example = "/var/log/foo";
+            };
+            labels = lib.mkOption {
+              type = lib.types.attrsOf lib.types.str;
+              default = { };
+              description = ''
+                Labels on every line, applied at the source (relabel rules on
+                the journal do not reach a file). Set the ones the rest of
+                the fleet queries by: `unit`, `stack`, `host`, `service_name`.
+              '';
+            };
+            stages = lib.mkOption {
+              type = lib.types.lines;
+              default = "";
+              description = ''
+                Alloy `stage.*` blocks for this file's lines, verbatim,
+                indented two spaces: the timestamp and the level are the
+                usual ones, since neither the journal's parse nor the
+                container level parse applies to a file.
+              '';
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Log files outside the journal, tailed by the log shipper. For the
+        rare service that writes its own files and sends nothing to journald
+        — the owning stack contributes the entry. The attr name is the alloy
+        component label: `[a-z_][a-z0-9_]*`.
       '';
     };
 

@@ -77,6 +77,20 @@ in
 {
   fleet.monitoredJobs.claude-remote-control = { };
 
+  # `--verbose` prints each session's transcript messages to stdout as one
+  # JSON object per line, and the journal ships them to Loki like any unit's
+  # output. The ones carrying `tool_result` hold what a tool RETURNED: file
+  # contents, command output, including whatever secret a session just read.
+  # ~1,600 such lines a day. Dropped; the stream's other lines (connection
+  # events, session status, the assistant's own messages) still arrive. The
+  # full transcripts live in the operator's ~/.claude/projects on their own,
+  # so Loki loses nothing it should keep.
+  fleet.logDrops.claude-rc-tool-output = {
+    selector = "{unit=\"claude-remote-control.service\"}";
+    expression = "tool_result";
+    reason = "claude_rc_tool_output";
+  };
+
   systemd.services.claude-remote-control = {
     description = "Claude Code Remote Control server (claude.ai/code + mobile)";
     wantedBy = [ "multi-user.target" ];
