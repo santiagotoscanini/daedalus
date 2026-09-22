@@ -324,8 +324,8 @@ in
       description = ''
         Directories of prometheus file-based discovery documents, by
         name. The monitoring module mounts each one read-only at
-        `/etc/prometheus/sd/<name>` inside the prometheus container, so a
-        `prometheusScrapes` job can name `/etc/prometheus/sd/<name>/*.json`
+        `/etc/prometheus-sd/<name>` inside the prometheus container, so a
+        `prometheusScrapes` job can name `/etc/prometheus-sd/<name>/*.json`
         in its `file_sd_configs`. For targets that change without a
         rebuild — machines the control plane approves at run time — where a
         static_configs list would be stale from the moment it was built.

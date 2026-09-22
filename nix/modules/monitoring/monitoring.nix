@@ -549,8 +549,10 @@ in
       ]
       # File-based discovery directories (fleet.prometheusFileSd): read-only,
       # one mount per name, re-read by prometheus when their files change.
+      # Beside /etc/prometheus, not under it: that one is a read-only store
+      # path, and a nested mount point cannot be created inside it.
       ++ lib.mapAttrsToList (
-        name: dir: "${dir}:/etc/prometheus/sd/${name}:ro"
+        name: dir: "${dir}:/etc/prometheus-sd/${name}:ro"
       ) config.fleet.prometheusFileSd;
 
       extraOptions = [

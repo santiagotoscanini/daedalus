@@ -1954,7 +1954,7 @@ in
         job_name = "nodes";
         file_sd_configs = [
           {
-            files = [ "/etc/prometheus/sd/nodes/*.json" ];
+            files = [ "/etc/prometheus-sd/nodes/*.json" ];
             refresh_interval = "1m";
           }
         ];
