@@ -771,6 +771,25 @@ priority; each can be done independently unless noted.
      macOS a file the agent downloads carries no quarantine attribute,
      so Gatekeeper is not involved; the first install is
      `curl | sudo sh` from the box's LAN-only address.
+   - **Distribution and signing.** macOS is santree's pipeline reused: the
+     Developer ID Application and Installer certificates and the App Store
+     Connect API key in a `release` environment restricted to the agent's
+     tag; `codesign` with the hardened runtime, `notarytool`, staple. A
+     `.pkg`, not a bare binary — a package can be stapled, and its
+     postinstall drops and loads the LaunchDaemon; `installer -pkg` runs it
+     from the one-line install. Signing is also what names the daemon in
+     System Settings › Login Items; unsigned, it reads as unknown and is one
+     click from disabled. Windows has no equivalent of that certificate:
+     phase one ships unsigned, which works because SmartScreen checks only
+     shell launches — a service the Service Control Manager starts, and an
+     exe the updater swapped in, never pass through it. Authenticode comes
+     back the day the landing page's download button goes live and a
+     stranger's SmartScreen sees the file: Azure Trusted Signing (~$10/month,
+     identity validation, check the country list) or SignPath Foundation
+     (free for qualifying open source) before a bought OV/EV certificate on
+     a token. Independent of both: the updater verifies our own ed25519
+     signature on every asset, with the public key compiled in — the one
+     artifact with no recovery path, kept like santree's updater key.
    - **A power request does not stop a Windows Update restart.** If the
      gaming PC's Kernel-Power events (42/41/109) show that is what has
      been happening, the fix is the update policy; the agent reports it.
