@@ -67,6 +67,8 @@ export const fetchNodesFn = createServerFn().handler(async () => {
 })
 
 const NAME_MAX = 40
+/** A Windows path; MAX_PATH is 260 and nothing here needs longer. */
+const PATH_MAX = 260
 
 /**
  * A policy from the page. Every key optional and every value checked: the
@@ -85,6 +87,13 @@ const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
     const name = o.displayName.trim().replace(/\s+/g, ' ')
     if (name.length > NAME_MAX) throw new Error(`displayName is longer than ${String(NAME_MAX)}`)
     if (name !== '') policy.displayName = name
+  }
+  if (o.claudeWorkdir !== undefined) {
+    if (typeof o.claudeWorkdir !== 'string') throw new Error('claudeWorkdir must be text')
+    const dir = o.claudeWorkdir.trim()
+    if (dir.length > PATH_MAX) throw new Error(`claudeWorkdir is longer than ${String(PATH_MAX)}`)
+    if (/[\r\n]/.test(dir)) throw new Error('claudeWorkdir must be one line')
+    if (dir !== '') policy.claudeWorkdir = dir
   }
   for (const k of ['awakeHold', 'claudeRemoteControl'] as const) {
     if (o[k] !== undefined) {

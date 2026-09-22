@@ -82,7 +82,7 @@ daedalus-agent version
 ```
 C:\Program Files\daedalus-agent\daedalus-agent.exe        the service (.old / .new around an update)
 C:\Program Files\daedalus-agent\daedalus-agent-tray.exe   the tray, started at logon
-C:\ProgramData\daedalus-agent\config.toml            port, release repo, check interval, auto_update, log level, awake_hold, claude_remote_control, claude_workdir
+C:\ProgramData\daedalus-agent\config.toml            port, release repo, check interval, auto_update, log level, awake_hold, claude_remote_control, claude_workdir (empty = the most recent trusted project; Claude refuses the home directory)
 C:\ProgramData\daedalus-agent\state.json             last update check and result
 C:\ProgramData\daedalus-agent\logs\agent.log.*       daily-rotated log
 C:\ProgramData\daedalus-agent\logs\claude-rc.log      what `claude remote-control` printed

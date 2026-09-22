@@ -65,6 +65,8 @@ export type NodeClaude = {
   user: string | null
   home: string | null
   workdir: string | null
+  /** "named", "most recent trusted project", or the home fallback with its reason. */
+  workdirVia: string | null
   log: string | null
   reportedAt: string
 }
@@ -157,6 +159,7 @@ const claude = obj({
   user: nstr,
   home: nstr,
   workdir: nstr,
+  workdir_via: nstr,
   log: nstr,
   reported_at: optional(str, ''),
 })
@@ -231,6 +234,7 @@ function nodeClaude(c: NonNullable<ReturnType<typeof claude>>): NodeClaude {
     user: c.user,
     home: c.home,
     workdir: c.workdir,
+    workdirVia: c.workdir_via,
     log: c.log,
     reportedAt: c.reported_at,
   }

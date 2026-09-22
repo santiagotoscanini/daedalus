@@ -50,6 +50,7 @@ function MachineSection({ n }: { n: NodeRow }) {
   // The name is typed, so it is held here and saved on blur or Enter; the
   // switches save on click.
   const [name, setName] = useState(n.policy.displayName ?? '')
+  const [workdir, setWorkdir] = useState(n.policy.claudeWorkdir ?? '')
 
   const save = (policy: NodePolicy) => {
     setError(null)
@@ -67,6 +68,12 @@ function MachineSection({ n }: { n: NodeRow }) {
     if (trimmed === (n.policy.displayName ?? '')) return
     const { displayName: _old, ...rest } = n.policy
     save(trimmed === '' ? rest : { ...rest, displayName: trimmed })
+  }
+  const saveWorkdir = () => {
+    const trimmed = workdir.trim()
+    if (trimmed === (n.policy.claudeWorkdir ?? '')) return
+    const { claudeWorkdir: _old, ...rest } = n.policy
+    save(trimmed === '' ? rest : { ...rest, claudeWorkdir: trimmed })
   }
   const restartClaude = () => {
     setError(null)
@@ -185,6 +192,30 @@ function MachineSection({ n }: { n: NodeRow }) {
                 that user's Claude login, the way this box runs its own.
                 {n.claude !== null &&
                   ` Now: ${n.claude.state}${n.claude.serverVersion !== null ? ` ${n.claude.serverVersion}` : ''}, ${String(n.claude.sessions)} session${n.claude.sessions === 1 ? '' : 's'}.`}
+              </span>
+            </Stack>
+          ),
+        },
+        {
+          k: 'Claude working directory',
+          v: (
+            <Stack className="w-full max-w-[28rem]">
+              <Input
+                value={workdir}
+                placeholder="the most recently used trusted project"
+                maxLength={260}
+                disabled={busy || !approved}
+                onChange={(e) => setWorkdir(e.target.value)}
+                onBlur={saveWorkdir}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                }}
+              />
+              <span className={ASIDE}>
+                Where the server runs, and so where a session opened from claude.ai lands. Claude
+                refuses the home directory (home-directory trust is never saved), so this must be a
+                project directory <Mono>claude</Mono> has been run in once and trusted. Empty lets
+                the tray pick the trusted project used most recently.
               </span>
             </Stack>
           ),

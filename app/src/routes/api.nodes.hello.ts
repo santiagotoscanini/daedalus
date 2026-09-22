@@ -52,6 +52,9 @@ export const Route = createFileRoute('/api/nodes/hello')({
                 policy: {
                   awake_hold: answer.policy.awakeHold,
                   claude_remote_control: answer.policy.claudeRemoteControl,
+                  ...(answer.policy.claudeWorkdir === null
+                    ? {}
+                    : { claude_workdir: answer.policy.claudeWorkdir }),
                 },
               }),
           // The box's clock, so an agent whose clock drifts can see why it

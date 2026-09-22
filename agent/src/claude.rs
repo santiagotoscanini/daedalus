@@ -144,6 +144,8 @@ pub struct Report {
     pub user: Option<String>,
     pub home: Option<String>,
     pub workdir: Option<String>,
+    /// How the directory was chosen: "named", "most recent trusted project", or the home fallback.
+    pub workdir_via: Option<String>,
     pub log: Option<String>,
     pub reported_at: String,
 }
@@ -187,6 +189,8 @@ pub struct ReportAnswer {
     pub wanted: bool,
     /// Restart it now, once.
     pub restart: bool,
+    /// The directory the policy names for the server, if any.
+    pub workdir: Option<String>,
 }
 
 // ── where things are ───────────────────────────────────────────────────────
@@ -394,6 +398,74 @@ pub fn read_settings(dir: &Path) -> Settings {
     }
 }
 
+// ── where the server runs ──────────────────────────────────────────────────
+//
+// `claude remote-control` refuses the home directory: home-directory trust
+// is never saved, so it has to run in a project directory the user has
+// trusted once (the dialog on first `claude` there). The box runs its own in
+// the configuration checkout; a node has no such fixed place, so the tray
+// picks one: the directory the policy or the config names, or else the
+// trusted project the user ran Claude in most recently — the CLI records
+// both facts per project in `~/.claude.json`.
+
+/// `~/.claude.json`, the CLI's own record of projects and trust.
+fn cli_config_path() -> Option<PathBuf> {
+    if let Some(d) = std::env::var_os("CLAUDE_CONFIG_DIR") {
+        return Some(PathBuf::from(d).join(".claude.json"));
+    }
+    home_dir().map(|h| h.join(".claude.json"))
+}
+
+/// The trusted project directory used most recently, if any exists.
+pub fn most_recent_trusted_project() -> Option<PathBuf> {
+    let text = std::fs::read_to_string(cli_config_path()?).ok()?;
+    trusted_project_in(&text, home_dir().as_deref(), Path::is_dir)
+}
+
+/// The pure half: the most recently started trusted project in the CLI's
+/// config text, skipping the home directory and anything `exists` denies.
+fn trusted_project_in(
+    config: &str,
+    home: Option<&Path>,
+    exists: impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    let v: serde_json::Value = serde_json::from_str(config).ok()?;
+    v.get("projects")?
+        .as_object()?
+        .iter()
+        .filter(|(_, p)| p.get("hasTrustDialogAccepted").and_then(|t| t.as_bool()) == Some(true))
+        .map(|(dir, p)| {
+            let last = ["lastStartTime", "lastSessionModified"]
+                .iter()
+                .find_map(|k| p.get(k).and_then(|t| t.as_str()))
+                .unwrap_or_default()
+                .to_string();
+            (PathBuf::from(dir), last)
+        })
+        .filter(|(dir, _)| home != Some(dir.as_path()) && exists(dir))
+        .max_by(|a, b| a.1.cmp(&b.1))
+        .map(|(dir, _)| dir)
+}
+
+/// Where the server should run: the named directory when it exists, else the
+/// most recent trusted project, else the home directory (which will not
+/// work, and the server's own message says why).
+pub fn pick_workdir(named: Option<&str>) -> (PathBuf, &'static str) {
+    if let Some(d) = named.map(str::trim).filter(|d| !d.is_empty()) {
+        let p = PathBuf::from(d);
+        if p.is_dir() {
+            return (p, "named");
+        }
+    }
+    if let Some(p) = most_recent_trusted_project() {
+        return (p, "most recent trusted project");
+    }
+    (
+        home_dir().unwrap_or_else(|| PathBuf::from(".")),
+        "home (no trusted project found)",
+    )
+}
+
 // ── the supervisor ─────────────────────────────────────────────────────────
 
 struct Running {
@@ -411,7 +483,11 @@ struct Running {
 pub struct Supervisor {
     cli: Option<PathBuf>,
     cli_version: Option<String>,
+    /// The directory the policy or the config names; None means pick one.
+    named_workdir: Option<String>,
+    /// What the running (or next) server uses, and how it was chosen.
     workdir: PathBuf,
+    workdir_via: &'static str,
     log_path: PathBuf,
     wanted: bool,
     running: Option<Running>,
@@ -426,13 +502,16 @@ pub struct Supervisor {
 }
 
 impl Supervisor {
-    pub fn new(workdir: PathBuf, log_path: PathBuf, wanted: bool) -> Self {
+    pub fn new(named_workdir: Option<String>, log_path: PathBuf, wanted: bool) -> Self {
         let cli = find_cli();
         let cli_version = cli.as_deref().and_then(cli_version);
+        let (workdir, workdir_via) = pick_workdir(named_workdir.as_deref());
         Self {
             cli,
             cli_version,
+            named_workdir,
             workdir,
+            workdir_via,
             log_path,
             wanted,
             running: None,
@@ -468,6 +547,27 @@ impl Supervisor {
         } else {
             self.failures = 0;
             self.next_start = Some(Instant::now());
+        }
+    }
+
+    /// The directory the box (or the config) names. A change restarts the
+    /// server there; None goes back to picking the most recent trusted
+    /// project.
+    pub fn set_named_workdir(&mut self, named: Option<String>) {
+        let named = named
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        if named == self.named_workdir {
+            return;
+        }
+        self.named_workdir = named;
+        let (dir, via) = pick_workdir(self.named_workdir.as_deref());
+        if dir != self.workdir {
+            self.workdir = dir;
+            self.workdir_via = via;
+            if self.running.is_some() {
+                self.restart();
+            }
         }
     }
 
@@ -544,6 +644,10 @@ impl Supervisor {
             self.next_start = Some(Instant::now() + Duration::from_secs(60));
             return;
         };
+        // A trust accepted since the last look is honoured on the next start.
+        let (dir, via) = pick_workdir(self.named_workdir.as_deref());
+        self.workdir = dir;
+        self.workdir_via = via;
         let log = match open_log(&self.log_path) {
             Ok(f) => f,
             Err(e) => {
@@ -677,6 +781,7 @@ impl Supervisor {
                 .ok(),
             home: dir.map(|d| d.display().to_string()),
             workdir: Some(self.workdir.display().to_string()),
+            workdir_via: Some(self.workdir_via.to_string()),
             log: Some(self.log_path.display().to_string()),
             reported_at: now_rfc3339(),
         }
@@ -834,11 +939,29 @@ mod tests {
     }
 
     #[test]
+    fn picks_the_latest_trusted_project_and_never_home() {
+        let cfg = r#"{"projects":{
+            "/home/u":{"hasTrustDialogAccepted":true,"lastStartTime":"2026-09-22T10:00:00Z"},
+            "/home/u/old":{"hasTrustDialogAccepted":true,"lastStartTime":"2026-09-01T00:00:00Z"},
+            "/home/u/new":{"hasTrustDialogAccepted":true,"lastStartTime":"2026-09-20T00:00:00Z"},
+            "/home/u/gone":{"hasTrustDialogAccepted":true,"lastStartTime":"2026-09-21T00:00:00Z"},
+            "/home/u/untrusted":{"hasTrustDialogAccepted":false,"lastStartTime":"2026-09-22T00:00:00Z"}
+        }}"#;
+        let exists = |p: &Path| p != Path::new("/home/u/gone");
+        assert_eq!(
+            trusted_project_in(cfg, Some(Path::new("/home/u")), exists),
+            Some(PathBuf::from("/home/u/new"))
+        );
+        assert_eq!(trusted_project_in("{}", None, |_| true), None);
+        assert_eq!(trusted_project_in("not json", None, |_| true), None);
+    }
+
+    #[test]
     fn supervisor_without_a_cli_reports_it() {
         // No `claude` on the test machine's PATH is the common case; when
         // there is one, the state is whatever it is and this test says so.
         let sup = Supervisor::new(
-            std::env::temp_dir(),
+            Some(std::env::temp_dir().display().to_string()),
             std::env::temp_dir().join("daedalus-claude-test.log"),
             false,
         );

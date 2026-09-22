@@ -563,4 +563,6 @@ export type NodePolicy = {
   awakeHold?: boolean
   /** Run `claude remote-control` in the user's session. The agent's default is true. */
   claudeRemoteControl?: boolean
+  /** The directory the server runs in. Unset, the tray picks the most recently used trusted project. */
+  claudeWorkdir?: string
 }

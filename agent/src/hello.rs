@@ -80,6 +80,10 @@ pub struct Policy {
     pub awake_hold: bool,
     /// Run `claude remote-control` in the user's session.
     pub claude_remote_control: bool,
+    /// The directory the server runs in; empty means the tray picks the
+    /// most recently used trusted project.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claude_workdir: Option<String>,
 }
 
 impl Default for Policy {
@@ -87,6 +91,7 @@ impl Default for Policy {
         Self {
             awake_hold: true,
             claude_remote_control: true,
+            claude_workdir: None,
         }
     }
 }
@@ -96,6 +101,7 @@ impl Policy {
         Self {
             awake_hold: cfg.awake_hold,
             claude_remote_control: cfg.claude_remote_control,
+            claude_workdir: cfg.claude_workdir.clone().filter(|d| !d.is_empty()),
         }
     }
 }
@@ -259,6 +265,7 @@ pub fn run_loop(
                         tracing::info!(
                             awake_hold = p.awake_hold,
                             claude_remote_control = p.claude_remote_control,
+                            claude_workdir = p.claude_workdir.as_deref().unwrap_or(""),
                             "policy from the box"
                         );
                     }

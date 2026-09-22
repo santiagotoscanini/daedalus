@@ -277,7 +277,17 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
                 { k: 'Restarts', v: `${num(c.restarts)} since the tray came up` },
                 { k: 'Last exit', v: text(c.lastExit) },
                 { k: 'Runs as', v: <span className={MONO}>{text(c.user)}</span> },
-                { k: 'Working dir', v: <span className={MONO}>{text(c.workdir)}</span> },
+                {
+                  k: 'Working dir',
+                  v: (
+                    <span>
+                      <span className={MONO}>{text(c.workdir)}</span>
+                      {c.workdirVia !== null && (
+                        <span className="text-(--text-muted)"> · {c.workdirVia}</span>
+                      )}
+                    </span>
+                  ),
+                },
                 { k: 'Command', v: <span className={MONO}>{text(c.path)}</span> },
                 { k: 'Default model', v: <span className={MONO}>{text(c.settings.model)}</span> },
                 { k: 'Effort', v: text(c.settings.effortLevel) },

@@ -28,7 +28,7 @@ use serde::Deserialize;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-use crate::claude::{self, Report, ReportAnswer, Supervisor};
+use crate::claude::{Report, ReportAnswer, Supervisor};
 use crate::hello::Policy;
 use crate::{config, DISPLAY_NAME, VERSION};
 
@@ -398,15 +398,13 @@ pub fn run() -> Result<()> {
     let mut ui = Ui::build()?;
 
     // The Claude server, in this session with this user's login. Wanted by
-    // the config until the service relays the box's policy.
-    let workdir = cfg
-        .claude_workdir
-        .as_deref()
-        .filter(|d| !d.is_empty())
-        .map(PathBuf::from)
-        .or_else(claude::home_dir)
-        .unwrap_or_else(|| PathBuf::from("."));
-    let mut sup = Supervisor::new(workdir, claude_log.clone(), cfg.claude_remote_control);
+    // the config until the service relays the box's policy; run in the
+    // directory the config names, else the most recent trusted project.
+    let mut sup = Supervisor::new(
+        cfg.claude_workdir.clone(),
+        claude_log.clone(),
+        cfg.claude_remote_control,
+    );
 
     let mut next_poll = Instant::now();
     loop {
@@ -443,6 +441,7 @@ pub fn run() -> Result<()> {
             sup.tick();
             let report = sup.report();
             if let Some(answer) = send_report(port, &report) {
+                sup.set_named_workdir(answer.workdir.or_else(|| cfg.claude_workdir.clone()));
                 sup.set_wanted(answer.wanted);
                 if answer.restart {
                     sup.restart();

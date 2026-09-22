@@ -142,6 +142,7 @@ impl Shared {
         ReportAnswer {
             wanted: l.policy.claude_remote_control,
             restart: std::mem::take(&mut l.claude_restart_requested),
+            workdir: l.policy.claude_workdir.clone(),
         }
     }
 

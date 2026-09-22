@@ -58,10 +58,12 @@ export const POLICY_DEFAULTS = { awakeHold: true, claudeRemoteControl: true } as
 export function effectivePolicy(p: NodePolicy): {
   awakeHold: boolean
   claudeRemoteControl: boolean
+  claudeWorkdir: string | null
 } {
   return {
     awakeHold: p.awakeHold ?? POLICY_DEFAULTS.awakeHold,
     claudeRemoteControl: p.claudeRemoteControl ?? POLICY_DEFAULTS.claudeRemoteControl,
+    claudeWorkdir: p.claudeWorkdir?.trim() || null,
   }
 }
 
@@ -128,7 +130,7 @@ export type HelloAnswer = {
   state: NodeState
   checkUpdate: boolean
   restartClaude: boolean
-  policy: { awakeHold: boolean; claudeRemoteControl: boolean } | null
+  policy: { awakeHold: boolean; claudeRemoteControl: boolean; claudeWorkdir: string | null } | null
 }
 
 /**
