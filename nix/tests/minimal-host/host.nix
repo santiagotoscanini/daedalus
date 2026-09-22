@@ -37,14 +37,20 @@
     # the exporter all evaluate.
     modules.app-db.enable = true;
     # The reverse proxy, ON: every webApp entry above now materializes into a
-    # route, and the one it publishes itself (the dashboard) is gated by an
-    # identity provider this host does not run — the middleware renders, the
-    # client is a declaration nothing acts on.
+    # route, its own dashboard included.
     modules.traefik = {
       enable = true;
       envSopsFile = ./sops/traefik/env.sops;
     };
     images.traefik = "docker.io/library/traefik:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    # The identity provider, ON: it needs a database on the cluster, so the
+    # cluster now has a tenant and starts; every `auth = "oidc"` entry above
+    # gets a client, and the proxy's middleware finds its credentials.
+    modules.pocket-id = {
+      enable = true;
+      envSopsFile = ./sops/pocket-id/env.sops;
+    };
+    images.pocket-id = "ghcr.io/pocket-id/pocket-id:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.app-db-exporter = "quay.io/prometheuscommunity/postgres-exporter:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     images.stirling-pdf = "docker.io/stirlingtools/stirling-pdf:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
 

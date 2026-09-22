@@ -106,6 +106,8 @@
         "app-db/app-db.nix"
         "app-db/claude-ro.nix"
         "app-db/exporter.nix"
+        "pocket-id/clients.nix"
+        "pocket-id/pocket-id.nix"
         "stirling-pdf/stirling-pdf.nix"
         "traefik/traefik.nix"
       ];
