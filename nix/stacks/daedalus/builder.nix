@@ -503,6 +503,20 @@ in
       logDir = ro types.str "Build logs, on the root filesystem (root 0755).";
       user = ro types.str "The unprivileged client user (also its group).";
       registryHost = ro types.str "The registry the builder pushes to.";
+      # Not readOnly: a host CONTRIBUTES it from the stack that publishes the
+      # mirror, inside that stack's own switch.
+      npmMirrorHost = lib.mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "npm.example.org";
+        description = ''
+          Hostname of an npm registry mirror THIS box publishes (through the
+          reverse proxy, on the LAN address): a build installs through
+          `https://<host>/` and pins the name to the LAN address inside
+          BuildKit, where the box's own resolver is not reachable. Null: builds
+          install straight from registry.npmjs.org.
+        '';
+      };
       registryUser = ro types.str "zot htpasswd user for pushes.";
       registryPasswordFile = ro types.str "Machine-generated dotenv carrying REGISTRY_BUILDER_PASSWORD (root 0600).";
       registryPasswordRead = ro types.path "Script printing the builder password; refuses a missing, foreign-owned, non-0600, empty or short file. Capture into a variable, never argv.";

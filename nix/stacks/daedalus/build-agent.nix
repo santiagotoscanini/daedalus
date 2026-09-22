@@ -125,7 +125,7 @@ let
       CLIENT_ID=${esc (appField "clientId")}
       PEM=${esc config.sops.secrets."github-app-pem".path}
       REGISTRY=${esc builder.registryHost}
-      VERDACCIO_HOST=${esc config.fleet.webApps.verdaccio.hostname}
+      NPM_MIRROR_HOST=${esc (toString builder.npmMirrorHost)}
       LAN_IP=${esc config.fleet.lanIp}
       NODE_IMAGE=${esc nodeImage}
       BUILDKIT_ADDR=${esc builder.socket}

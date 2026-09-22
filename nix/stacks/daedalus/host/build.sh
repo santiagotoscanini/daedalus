@@ -4,7 +4,7 @@
 #
 # Inlined by build-agent.nix's writeShellApplication wrapper after host/lib.sh
 # and host/github-lib.sh. The wrapper sets: APPLY_DIR, BUILDABLE, DEPLOYABLE,
-# OWNER, OWNER_ID, CLIENT_ID, PEM, REGISTRY, VERDACCIO_HOST, LAN_IP,
+# OWNER, OWNER_ID, CLIENT_ID, PEM, REGISTRY, NPM_MIRROR_HOST, LAN_IP,
 # NODE_IMAGE, BUILDKIT_ADDR, RAILPACK_FRONTEND, DOCKER_CONFIG_DIR, BUILD_ROOT,
 # WORK_ROOT, MISE_CACHE_DIR, MISE_MOUNT, MISE_PATH, MISE_BINARY, LOG_DIR,
 # BUILD_USER, BUILD_GROUP, BUILD_PATH, CHECKS_DOCKERFILE, FENCE_CHECK,
@@ -79,6 +79,18 @@ set -euo pipefail
 
 REQ="$APPLY_DIR/build-request.json"
 STATUS="$APPLY_DIR/build-status.json"
+
+# Where a build installs its packages from. With a mirror the box publishes
+# (fleet.builder.npmMirrorHost), its name is pinned to the LAN address inside
+# BuildKit — the box's own resolver is not reachable from there — and without
+# one, npmjs directly and nothing to pin.
+if [ -n "$NPM_MIRROR_HOST" ]; then
+  NPM_REGISTRY_URL="https://$NPM_MIRROR_HOST/"
+  NPM_MIRROR_ARGS=(--opt "add-hosts=$NPM_MIRROR_HOST=$LAN_IP")
+else
+  NPM_REGISTRY_URL="https://registry.npmjs.org/"
+  NPM_MIRROR_ARGS=()
+fi
 
 MAX_REQUEST_BYTES=65536
 MAX_CLONE_BYTES=$((2 * 1024 * 1024 * 1024))
@@ -1341,8 +1353,8 @@ else
     timed_as_build "$CHECKS_LIMIT" plain buildctl --addr "$BUILDKIT_ADDR" build --progress=plain \
       --frontend dockerfile.v0 --local "context=$SRC" --local "dockerfile=$CTL/checks" \
       --opt target=checks --opt "build-arg:NODE_IMAGE=$NODE_IMAGE" --opt "build-arg:APP=$APP" \
-      --opt "build-arg:REGISTRY_URL=https://$VERDACCIO_HOST/" --opt "build-arg:CHECKS=${CHECK_NAMES[*]}" \
-      --opt "add-hosts=$VERDACCIO_HOST=$LAN_IP" \
+      --opt "build-arg:REGISTRY_URL=$NPM_REGISTRY_URL" --opt "build-arg:CHECKS=${CHECK_NAMES[*]}" \
+      "${NPM_MIRROR_ARGS[@]}" \
       --secret "id=daedalus-check-env,src=$CTL/secrets/check-env" || rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
@@ -1381,7 +1393,7 @@ else
   FRONTEND_ARGS=(
     --frontend dockerfile.v0
     --local "context=$SRC" --local "dockerfile=$SRC"
-    --opt "add-hosts=$VERDACCIO_HOST=$LAN_IP"
+    "${NPM_MIRROR_ARGS[@]}"
     --opt "label:org.opencontainers.image.revision=$SHA"
     --opt "label:org.opencontainers.image.source=$SOURCE_URL"
     --opt "label:org.opencontainers.image.title=$APP"

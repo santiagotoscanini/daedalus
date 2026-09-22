@@ -13,7 +13,7 @@
 # missing one fails loudly instead of silently resolving somewhere else):
 #   NODE_IMAGE    node:24-slim pinned by digest (build-agent.nix)
 #   APP           the app's name, only to key the cache mount per app
-#   REGISTRY_URL  the box's Verdaccio, for corepack's pnpm download
+#   REGISTRY_URL  the npm registry (the box's mirror, or npmjs), for corepack's pnpm download
 #   CHECKS        the contract's script names, space-separated
 #
 # The v1 contract is pnpm-only (every hosted app is); build.sh does not run
