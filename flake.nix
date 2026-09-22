@@ -108,6 +108,7 @@
         "app-db/exporter.nix"
         "apps/apps.nix"
         "apps/declarations.nix"
+        "cloudflared/cloudflared.nix"
         "logging/logging.nix"
         "monitoring/monitoring.nix"
         "pihole/pihole.nix"

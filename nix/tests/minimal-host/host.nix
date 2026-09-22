@@ -58,6 +58,13 @@
     # Logs, ON: the shipper's config renders from three registries no stack on
     # this host writes, so every generated section is empty and still parses.
     modules.logging.enable = true;
+    # The tunnel, ON: public ingress for every `exposeRemotely` entry, and the
+    # reconciler that keeps the zone's CNAMEs matching them.
+    modules.cloudflared = {
+      enable = true;
+      credentialsSopsFile = ./sops/cloudflared/credentials.json.sops;
+    };
+    images.cloudflared = "docker.io/cloudflare/cloudflared:0.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     # The LAN resolver, ON, with no reservations file: every published
     # hostname gets a local record; no DHCP inventory, no render for it.
     modules.pihole.enable = true;
