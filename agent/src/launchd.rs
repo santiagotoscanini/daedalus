@@ -64,6 +64,9 @@ pub fn run() -> Result<()> {
         }
         std::thread::sleep(std::time::Duration::from_millis(200));
     });
+    if is_root() {
+        converge_permissions();
+    }
     crate::agent_main(stop, false)
 }
 
@@ -146,26 +149,7 @@ pub fn install(cfg: &Config) -> Result<()> {
     let logs = config::log_dir();
     std::fs::create_dir_all(&logs).context("creating the log directory")?;
     let path = config::write_if_absent(cfg)?;
-    // Root made these under whatever umask `sudo sh` had — 077 on some
-    // Macs — and the tray runs as the user: it has to traverse the data
-    // directory and bin, read config.toml, and launchd has to read the
-    // plists. The identity key stays root's alone (0600, identity.rs).
-    for (p, mode) in [
-        (config::data_dir(), 0o755),
-        (
-            exe.parent().map(Path::to_path_buf).unwrap_or_default(),
-            0o755,
-        ),
-        (logs.clone(), 0o755),
-        (path.clone(), 0o644),
-        (config::state_path(), 0o644),
-        (exe.clone(), 0o755),
-        (tray.clone(), 0o755),
-    ] {
-        if p.exists() {
-            let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(mode));
-        }
-    }
+    converge_permissions();
     println!("config at {}", path.display());
 
     // The daemon. bootout first so a re-install lands on the new binary.
@@ -181,7 +165,6 @@ pub fn install(cfg: &Config) -> Result<()> {
         ),
     )
     .context("writing the daemon's plist")?;
-    let _ = std::fs::set_permissions(daemon_plist(), std::fs::Permissions::from_mode(0o644));
     launchctl(&["bootstrap", "system", &daemon_plist().to_string_lossy()])?;
     println!("service {DAEMON_LABEL} registered and started");
 
@@ -207,7 +190,6 @@ pub fn install(cfg: &Config) -> Result<()> {
             ),
         )
         .context("writing the tray's plist")?;
-        let _ = std::fs::set_permissions(tray_plist(), std::fs::Permissions::from_mode(0o644));
         if let Some(uid) = console_uid().filter(|u| *u != 0) {
             let domain = format!("gui/{uid}");
             let _ = launchctl(&["bootout", &format!("{domain}/{TRAY_LABEL}")]);
@@ -223,6 +205,8 @@ pub fn install(cfg: &Config) -> Result<()> {
     } else {
         println!("no {TRAY_EXE} beside the service; the menu bar app is not registered");
     }
+    // Once more after the plists are written, so they are readable too.
+    converge_permissions();
     Ok(())
 }
 
@@ -243,4 +227,34 @@ pub fn uninstall() -> Result<()> {
     }
     println!("service and menu bar app removed");
     Ok(())
+}
+
+/// What the user's processes must be able to read. Root made the tree
+/// under whatever umask `sudo sh` had — 077 on some Macs — and the tray
+/// runs as the user: it has to traverse the data directory and bin and
+/// read config.toml, and launchd has to read the plists. Run at install
+/// AND at every service start, because a self-update swaps binaries
+/// without re-running install. The identity key stays root's alone
+/// (0600, identity.rs).
+pub fn converge_permissions() {
+    let exe = std::env::current_exe().unwrap_or_default();
+    let bin = exe.parent().map(Path::to_path_buf).unwrap_or_default();
+    let dirs = [config::data_dir(), bin.clone(), config::log_dir()];
+    let files = [
+        config::config_path(),
+        config::state_path(),
+        daemon_plist(),
+        tray_plist(),
+    ];
+    let bins = [exe.clone(), bin.join(TRAY_EXE)];
+    for (p, mode) in dirs
+        .iter()
+        .map(|p| (p, 0o755))
+        .chain(files.iter().map(|p| (p, 0o644)))
+        .chain(bins.iter().map(|p| (p, 0o755)))
+    {
+        if p.exists() {
+            let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(mode));
+        }
+    }
 }
