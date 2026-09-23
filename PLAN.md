@@ -344,62 +344,149 @@ priority; each can be done independently unless noted.
    hand edit. Waits on Phase 10b's first tag: until an image is published
    there is nothing to toggle to.
 
-6. **Machines: the rest of the story.** Shipped (agent-v0.10.0, engine
-   `049333c`): the Windows service and the macOS LaunchDaemon from one
-   crate, the tray, keep-awake, the SRV record and the signed hello, Approve
-   / Revoke / Forget and per-node policy on Settings › Machines, self-update
-   from a signed release with "Update now", the Claude remote-control
-   server per machine with the page picker, `/telemetry` behind the node
-   token and `/metrics` into the box's Prometheus through file_sd, and a
-   System page per machine shaped to its OS (Windows: Motherboard with the
-   vendor's BIOS list, Graphics, Software, Updates; macOS: Apple's releases
-   with notes and CVE counts, Apps; both: Host, Memory, Disks, Build,
-   Claude, Chromium). Missing, in the order it earns its keep:
-   - **Power verbs from the box.** The only power request today is the
-     box's own reboot. Sleep, restart and shut down a node from its page,
-     and wake it with a magic packet (the agent reports its MAC). Each is
-     an admin action under the armed gate, journaled with its actor. A
-     Windows Update restart is not stopped by a keep-awake; the agent
-     should report Kernel-Power events 41/42/109 so the fix is seen to be
-     the update policy.
-   - **Declared services.** A node's policy lists what the agent supervises
-     — name, executable, arguments, restart policy — and it keeps them
-     running like a very small systemd. "Start" from the UI means one of
-     those; no shell, ever. The tray already supervises `claude
-     remote-control` this way; generalize that path.
-   - **Providers.** Lemonade on the PC, Ollama headless on the Mac: a
-     declared service plus three things the box does with it — install and
-     update it, ask which models it has, register them in LiteLLM so the AI
-     tab shows them. `fleet.gpuHost`/`gpuHostIp` (a literal in the
-     reference host's `configuration.nix`, read by litellm, lemonade-logs,
-     pihole and gatus) generalizes into `fleet.nodes`, exported from the
-     nodes table the way `apps.json` is, so a machine that joins with a GPU
-     appears in the gateway.
-   - **Dashboards and sleep-aware alerts.** The nodes are scraped and
-     nothing draws them: a Grafana dashboard per node kind from the agent's
-     metrics, and an alert that distinguishes "asleep on purpose" from
-     "gone".
-   - **The WIP boards**, blurred on the System page until the agent can
-     read them: die temperatures (Windows via vendor libraries, macOS via
-     SMC), GPU live figures (load, VRAM, clocks), AMD's "Vendor ships"
-     driver feed through a box browser job like the motherboard's, Homebrew
-     formulae through the tray. Each is an agent field plus the board
-     unblurred; the contract grows a minor version per field.
-   - **The next agent release** carries the classifier fix already on
-     `main` (launchers before runtimes; Xbox helper packages skipped), so
-     Battle.net stops reading as a runtime on the PC.
-   - **Signing.** Apple codesign and notarization run once the repo's
-     `release` environment holds the six santree secrets (the pipeline is
-     in place; unsigned until then, and launchd runs it regardless). Windows
-     ships unsigned, which works because SmartScreen checks only shell
-     launches; Authenticode (Azure Trusted Signing or SignPath) comes back
-     the day the landing page's download button goes live.
-   - **Small, noted:** the EVGA 650 GM photo for the parts catalog; Arc's
-     default-browser ProgId on Windows; `powermetrics` on the Mac needs a
-     deadline so a hung call cannot stall a telemetry read.
+6. **Machines as adjacent providers — the cluster and what stands beside
+   it.** The design of 2026-09-23, from a question the operator asked: the
+   agent reports a MAC, so why is the gaming PC a hand-typed name and
+   address in `configuration.nix`, copied into LiteLLM, gatus and the log
+   bridge? The answer is the pattern this section builds: a box is the
+   cluster; the other machines on its network are **providers** that join
+   by approval, are named by the box, and offer things the cluster's
+   services consume — a model server today, a runner later — with the
+   wiring generated, never typed.
+
+   **What is true today**, and shapes the design:
+   - `fleet.gpuHost = "gaming-pc.local.<domain>"` and `gpuHostIp` are
+     literals in the reference host's `configuration.nix`; litellm's
+     `config.yaml` (`@gpuHost@`, eleven hand-curated routes with mode,
+     context sizes, cost 0, timeouts), gatus (a health probe), lemonade-logs
+     (a scrape target and `LEMONADE_HOST`) and pihole (an A record) all
+     read them.
+   - pi-hole already gives every lease `<hostname>.lan` (`localDomain`),
+     and `gaming-pc.lan` already resolves, because the household's
+     encrypted `dhcp-hostsfile` names the PC's MAC `gaming-pc` at .120.
+     That file is sops on purpose: a device inventory (MACs) is not for any
+     git history. The agent reports the same MAC and address in its hello,
+     and the nodes table holds them.
+   - The control plane already writes a runtime file the host reads with no
+     rebuild: `<apply dir>/nodes/targets.json`, Prometheus file_sd for the
+     nodes' `/metrics`.
+   - daedalus's `LITELLM_API_KEY` is the master key, rendered by the litellm
+     stack; LiteLLM runs `STORE_MODEL_IN_DB=True`, so `/model/new`,
+     `/model/delete` and `/model/info` are open to it.
+   - Lemonade's `/api/v1/models` is a catalog with `labels` (`tool-calling`,
+     `vision`, `image`, `edit`, `mtp`, `custom`, the recipe) and
+     `downloaded`; `/api/v1/health` says what is loaded and the version.
+     That is everything the hand-written routes encode, minus the aliases.
+
+   **The rule that sorts every piece.** What nix builds from goes in
+   `site/` as JSON; what the host needs at runtime and must not be in git
+   (a MAC) is a file the control plane writes and a path unit applies;
+   what a service manages through its own API (LiteLLM's model table) is
+   driven through that API. Three kinds of change, three costs: an Apply, a
+   file write, a request.
+
+   **The name comes from the MAC, not the address.** A node gets a slug
+   (`gaming-pc`; default the hostname slugified, editable on Settings ›
+   Machines, unique). The control plane writes one dnsmasq line per
+   approved node, `<MAC>,<slug>`, to `<apply dir>/nodes/dhcp-hosts`;
+   the pihole module names that directory as `dhcp-hostsdir` and
+   `hostsdir` (`misc.dnsmasq_lines`), copied by a path unit into a
+   pihole-readable `/run/daedalus-nodes/` that also sends FTL a SIGHUP
+   (`pihole reloaddns`: dnsmasq re-reads its hosts files without dropping
+   a query — new files are read on their own, a changed or removed line
+   needs the HUP). dnsmasq gives the lease that hostname, overriding what
+   the client sent, so `gaming-pc.lan` follows the machine whatever
+   address the pool hands it; "pin the address" is a per-node toggle that
+   adds the IP to the line. No rebuild, no MAC in git, and the household
+   file loses the line it carries for the PC (the operator's one sops
+   edit, or a `reservation-set` bridge verb later). Verify on the box
+   before relying on it: a `dhcp-host=MAC,name` line with no address,
+   FTL honouring `dhcp-hostsdir` through `dnsmasq_lines`, and a HUP
+   landing without a gap in DNS.
+
+   **`site/nodes.json` is what nix needs, and only that.** Written by the
+   control plane on approve, rename and provider change (the same
+   site-write bridge and Apply as `apps.json`), read by
+   `platform/site.nix` into `fleet.nodes`:
+   ```
+   { "schemaVersion": 1, "nodes": [
+     { "id": "a2272f1b0bdac468", "name": "gaming-pc", "os": "windows",
+       "providers": { "lemonade": { "port": 13305 } } } ] }
+   ```
+   No MAC, no address: consumers dial `<name>.<localDomain>`. Consumers
+   then derive themselves — gatus probes each provider's health, the log
+   bridge scrapes each lemonade node, prometheus keeps file_sd — and
+   `fleet.gpuHost`/`gpuHostIp` go: litellm's `@gpuHost@` becomes the
+   first lemonade node's name as a bridge, then nothing once the routes
+   move (below). This is the one step that is an Apply, and it happens
+   when a provider joins or leaves, not when a model does.
+
+   **Providers are what a machine offers, reported by the agent.** A
+   `Provider` trait in the agent (`kind`, `detect`, `catalog`, `health`;
+   later `start`, `stop`, `update`) with Lemonade first: probe
+   `127.0.0.1:<port>/api/v1/health` (port from the policy, default
+   13305), read the catalog, and carry both in the telemetry document as
+   `providers: [{ kind, version, port, loaded: [...], models: [{ id,
+   labels, downloaded, recipe }] }]`, the catalog refreshed every few
+   minutes, the health every tick. Ollama on the Mac is the second
+   implementation of the same trait (`/api/tags`, port 11434), headless,
+   when the operator wants it. The System page's Host tab shows the
+   provider; Settings › Machines › the node shows it with a switch,
+   "offer to the gateway", and the model table.
+
+   **Models reach LiteLLM through LiteLLM, not through nix.** A model
+   comes and goes with a click in Lemonade's window; a rebuild and a
+   gateway restart per click is the wrong cost, and the catalog is the
+   provider's state, not the box's. So a sync in the control plane
+   reconciles LiteLLM's model table with what every offering provider
+   reports, on each telemetry tick and on Apply: for each downloaded
+   model, `/model/new` with `model_name` the alias, `litellm_params`
+   `{ model: openai/<id>, api_base: http://<name>.<localDomain>:<port>/api/v1,
+   api_key, timeout }`, and `model_info` derived from the labels (mode:
+   chat, embedding, rerank, audio_transcription, audio_speech,
+   image_generation; `supports_function_calling`, `supports_vision`;
+   context from the catalog where it says; cost 0) tagged
+   `daedalus: { node, provider }` so the sync owns exactly what it made;
+   `/model/delete` for a model that left. The operator's curation — the
+   alias (`gemma-4-12b` for `Gemma-4-12B-it-MTP-GGUF`), a mode the labels
+   got wrong, "do not offer this one" — is per-model policy in Postgres,
+   read by the sync. `config.yaml` keeps what is not a node's: SearXNG,
+   the pass-throughs, the MCP registry. Open WebUI sees a new model within
+   a tick. Recovery is free: the models are in LiteLLM's database on the
+   shared cluster, and the sync rebuilds them from the next telemetry
+   anyway. Rejected: nodes.json carrying the model list for nix to render
+   `config.yaml` (an Apply per download) and a LiteLLM wildcard route per
+   node (`openai/*`: no per-model mode, so every embedding and image model
+   would present as chat).
+
+   **Order of work**, each step usable on its own:
+   1. Agent 0.11: the `Provider` trait and Lemonade detection in
+      telemetry; the classifier fix rides along. The Host tab and Settings
+      › Machines show the provider and its models. No nix.
+   2. The slug and the runtime name: policy `name`, the dnsmasq file, the
+      pihole module's `dhcp-hostsdir`/`hostsdir` lines and the HUP path
+      unit (one engine nix change, closure-neutral for a host without
+      nodes). `gaming-pc.lan` follows the MAC; the sops line retires.
+   3. `site/nodes.json` and `fleet.nodes`: the site-write, the option,
+      gatus and lemonade-logs reading it, litellm's `@gpuHost@` bridged
+      to the first lemonade node; `fleet.gpuHost` removed from
+      `configuration.nix` and from the engine. The template host gains
+      `nodes.json` with an empty list and a fixture.
+   4. The model sync and the per-model policy; the lemonade block leaves
+      `config.yaml`; the AI tab lists the gateway's models by machine.
+   5. Providers as declared services: start, stop, install and update
+      Lemonade from the box through the agent; Ollama on the Mac.
+   6. Power verbs (sleep, restart, shut down, wake by magic packet),
+      dashboards and sleep-aware alerts, the WIP boards (die temperatures,
+      GPU live figures, the AMD driver feed, Homebrew formulae), signing
+      (Apple once the `release` environment holds the six santree
+      secrets; Authenticode when the download button goes live), and the
+      small noted items (the EVGA photo, Arc's ProgId, a `powermetrics`
+      deadline). Runners on the nodes are feature 11's, and wait.
    - **Docs.** `ARCHITECTURE.md` has no section on the agent, the hello,
-     the node token or the telemetry document; `agent/README.md` is the
-     only doc. One section in the architecture that points at it.
+     the node token, the telemetry document or the provider pattern;
+     `agent/README.md` is the only doc. One section in the architecture
+     that points at it, once step 3 has landed the shape.
 
 7. **Git commit attribution from the signed-in user.** Every `site/` commit
    is authored by "daedalus" regardless of who pressed Apply (no `--author`
