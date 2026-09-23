@@ -1,6 +1,6 @@
 import { useRouter } from '@tanstack/react-router'
 import { MonitorSmartphoneIcon } from 'lucide-react'
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 
 import type { NodePolicy } from '../../host/schema'
 import { agentHasClaude } from '../../lib/agent/status'
@@ -8,6 +8,7 @@ import { cn } from '../../lib/cn'
 import type { Machine, MachineShape, MachinesData } from '../../lib/dashboard/machines'
 import { bytes, duration, since } from '../../lib/format'
 import { CHOSEN_KINDS, finishesFor, partsOfKind } from '../../lib/hardware/catalog'
+import { LAN_DOMAIN, LEMONADE_DEFAULT_PORT, NODE_NAME_RE, slugOf } from '../../lib/nodes-file'
 import { errorText } from '../../lib/redact'
 import type { NodeRow } from '../../lib/repo/nodes'
 import { useShown } from '../../lib/shown'
@@ -240,9 +241,22 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
   // The name is typed, so it is held here and saved on blur or Enter; the
   // switches save on click.
   const [name, setName] = useState(n.policy.displayName ?? '')
+  const [netName, setNetName] = useState(n.policy.name ?? '')
+  const [port, setPort] = useState(
+    String(n.policy.providers?.lemonade?.port ?? LEMONADE_DEFAULT_PORT),
+  )
   const [workdir, setWorkdir] = useState(n.policy.claudeWorkdir ?? '')
 
+  // The policy the next save builds on: what the page last saved, until the
+  // reload brings the row back. Two quick edits — a name, then a switch —
+  // would otherwise each start from the row as it was before both, and the
+  // second would silently undo the first.
+  const base = useRef<NodePolicy>(n.policy)
+  useEffect(() => {
+    base.current = n.policy
+  }, [n.policy])
   const save = (policy: NodePolicy) => {
+    base.current = policy
     setError(null)
     start(async () => {
       try {
@@ -255,17 +269,41 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
   }
   const saveName = () => {
     const trimmed = name.trim()
-    if (trimmed === (n.policy.displayName ?? '')) return
-    const { displayName: _old, ...rest } = n.policy
+    if (trimmed === (base.current.displayName ?? '')) return
+    const { displayName: _old, ...rest } = base.current
     save(trimmed === '' ? rest : { ...rest, displayName: trimmed })
+  }
+  // The network name: a label, or empty for the hostname's slug. Checked
+  // here so a bad one never leaves the field, and again on the server.
+  const netNameBad = netName !== '' && !NODE_NAME_RE.test(netName)
+  const saveNetName = () => {
+    const trimmed = netName.trim().toLowerCase()
+    setNetName(trimmed)
+    if (trimmed === (base.current.name ?? '') || (trimmed !== '' && !NODE_NAME_RE.test(trimmed))) {
+      return
+    }
+    const { name: _old, ...rest } = base.current
+    save(trimmed === '' ? rest : { ...rest, name: trimmed })
+  }
+  const lemonade = n.policy.providers?.lemonade ?? { port: LEMONADE_DEFAULT_PORT, offer: false }
+  const saveLemonade = (next: { port: number; offer: boolean }) => {
+    save({ ...base.current, providers: { ...base.current.providers, lemonade: next } })
+  }
+  const savePort = () => {
+    const p = Number(port)
+    if (!Number.isInteger(p) || p < 1 || p > 65535) {
+      setPort(String(lemonade.port))
+      return
+    }
+    if (p !== lemonade.port) saveLemonade({ ...lemonade, port: p })
   }
   const saveHardware = (
     key: keyof NonNullable<NodePolicy['hardware']>,
     value: string | undefined,
   ) => {
-    const { [key]: _old, ...rest } = n.policy.hardware ?? {}
+    const { [key]: _old, ...rest } = base.current.hardware ?? {}
     const hardware = value === undefined ? rest : { ...rest, [key]: value }
-    const { hardware: _h, ...policy } = n.policy
+    const { hardware: _h, ...policy } = base.current
     save(Object.keys(hardware).length === 0 ? policy : { ...policy, hardware })
   }
   // What the machine is decides what is worth asking. A Mac is a laptop
@@ -274,8 +312,8 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
   const finishes = finishesFor(shape?.model)
   const saveWorkdir = () => {
     const trimmed = workdir.trim()
-    if (trimmed === (n.policy.claudeWorkdir ?? '')) return
-    const { claudeWorkdir: _old, ...rest } = n.policy
+    if (trimmed === (base.current.claudeWorkdir ?? '')) return
+    const { claudeWorkdir: _old, ...rest } = base.current
     save(trimmed === '' ? rest : { ...rest, claudeWorkdir: trimmed })
   }
   const restartClaude = () => {
@@ -298,6 +336,7 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
     busy,
     failed,
   )
+  const [offer, showOffer] = useShown(lemonade.offer, busy, failed)
 
   return (
     <div className="flex flex-col gap-3 border-(--border-soft) border-t pt-4">
@@ -324,6 +363,82 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
             ),
           },
           {
+            k: 'Name on the network',
+            v: (
+              <Stack className="w-full max-w-[22rem]">
+                <span className="inline-flex items-center gap-2">
+                  <Input
+                    value={netName}
+                    placeholder={slugOf(n.hostname)}
+                    maxLength={32}
+                    disabled={busy}
+                    aria-invalid={netNameBad}
+                    aria-label="Name on the network"
+                    onChange={(e) => setNetName(e.target.value)}
+                    onBlur={saveNetName}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    }}
+                  />
+                  <Mono>
+                    {netName || slugOf(n.hostname)}.{LAN_DOMAIN}
+                  </Mono>
+                </span>
+                <span className={ASIDE}>
+                  {netNameBad
+                    ? 'Letters, digits and hyphens, 1 to 32 long, not starting or ending with a hyphen.'
+                    : n.namedByHousehold
+                      ? `The household reservations already name this machine's MAC; pi-hole keeps that name, and this one goes to site/nodes.json only, until the household line is removed.`
+                      : 'pi-hole gives the lease this name, so the address can be whatever the pool hands out. Empty means the hostname as a label. Nix reads it from site/nodes.json on the next Apply.'}
+                </span>
+              </Stack>
+            ),
+          },
+          {
+            k: 'Lemonade',
+            v: (
+              <Stack className="w-full max-w-[28rem]">
+                <span className="inline-flex flex-wrap items-center gap-3">
+                  <Switch
+                    checked={offer}
+                    disabled={busy}
+                    onCheckedChange={(v) => {
+                      showOffer(v)
+                      saveLemonade({ ...lemonade, offer: v })
+                    }}
+                    aria-label="Offer Lemonade to the gateway"
+                  />
+                  <span className="text-[0.82rem]">
+                    {offer ? 'offered to the gateway' : 'not offered'}
+                  </span>
+                  <span className="inline-flex items-center gap-2 text-[0.82rem]">
+                    port
+                    <Input
+                      className="w-[6.5rem]"
+                      value={port}
+                      inputMode="numeric"
+                      disabled={busy}
+                      aria-label="Lemonade port"
+                      onChange={(e) => setPort(e.target.value)}
+                      onBlur={savePort}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                      }}
+                    />
+                  </span>
+                </span>
+                <span className={ASIDE}>
+                  The model server on this machine. Offered, it goes to site/nodes.json and the
+                  gateway, gatus and the log bridge dial{' '}
+                  <Mono>
+                    {netName || slugOf(n.hostname)}.{LAN_DOMAIN}:{port}
+                  </Mono>{' '}
+                  after the next Apply. The agent probes the port and reports whether it answers.
+                </span>
+              </Stack>
+            ),
+          },
+          {
             k: 'Keep awake',
             v: (
               <Stack>
@@ -333,7 +448,7 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
                     disabled={busy}
                     onCheckedChange={(v) => {
                       showAwake(v)
-                      save({ ...n.policy, awakeHold: v })
+                      save({ ...base.current, awakeHold: v })
                     }}
                     aria-label="Keep awake"
                   />
@@ -356,7 +471,7 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
                     disabled={busy}
                     onCheckedChange={(v) => {
                       showClaude(v)
-                      save({ ...n.policy, claudeRemoteControl: v })
+                      save({ ...base.current, claudeRemoteControl: v })
                     }}
                     aria-label="Claude remote control"
                   />

@@ -564,6 +564,27 @@ export const nodes = pgTable('nodes', {
 export type NodePolicy = {
   /** What the pages call the machine instead of its hostname. */
   displayName?: string
+  /**
+   * What the machine is called ON THE NETWORK: a DNS label
+   * (lib/nodes-file.ts NODE_NAME_RE), unique among approved nodes. Unset,
+   * the hostname slugified. pi-hole gives the lease this name (the box
+   * writes the dnsmasq line, host/node-targets.ts), and nix reads it from
+   * site/nodes.json.
+   */
+  name?: string
+  /**
+   * Add the machine's current address to its dnsmasq line, so the pool
+   * keeps handing it that address. Off, the name follows whatever lease
+   * the machine gets. No page sets this yet.
+   */
+  pinAddress?: boolean
+  /**
+   * The providers this machine offers and on which port. `offer` false
+   * keeps the provider out of site/nodes.json (nothing on the box dials
+   * it) without forgetting the port. The agent hears the port, never
+   * `offer`.
+   */
+  providers?: { lemonade?: { port: number; offer: boolean } }
   /** Hold the machine awake. The agent's default is true. */
   awakeHold?: boolean
   /** Run `claude remote-control` in the user's session. The agent's default is true. */

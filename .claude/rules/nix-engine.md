@@ -113,7 +113,7 @@ the key fails eval):
 - `fleet.mail.{sender,alertTo}` ← `mail.*`.
 - `fleet.cloudflare.{accountId,tunnelId,zoneId}` ← `cloudflare.*`; `fleet.cloudflare.tokenEnvFile` is rendered by the engine from `site/vault/cloudflare-api-token.sops`, which must exist.
 - asserted equal, not yet sourced: `identity.hostname` = `networking.hostName`, `identity.owner` = `fleet.github.owner`, `identity.operator.user` = `fleet.operator.user`.
-- `site/apps.json` must exist (`fleet.registry.file`).
+- `site/apps.json` must exist (`fleet.registry.file`); `site/nodes.json` is optional and becomes `fleet.nodes` (`platform/nodes.nix`: the approved machines by id, name and what each offers; never a MAC or an address — the control plane binds MAC to name at runtime through `stacks/daedalus`'s `nodes/dhcp-hosts` and the resolver's `dhcp-hostsdir`).
 
 Optional, null/empty by default, host-defined when wanted:
 `fleet.claude.mcpSopsFile`, `fleet.hcPing.keySopsFile`,
@@ -366,7 +366,8 @@ in `app-db`). A let-bound constant a declaration shared with its
 implementation becomes a read-only option both read
 (`fleet.sso.renderDir`, `fleet.sso.clientEnvFile`), never a second copy.
 A fact about a machine the fleet talks to but does not run is the
-platform's (`gpu-host.nix`). Never stub a registry in the template.
+platform's (`nodes.nix`: the machines that run the agent, from
+`site/nodes.json`). Never stub a registry in the template.
 
 **Assets that another stack looked up by name move with their owner.**
 The identity provider found each client's logo as `assets/logos/<client>.png`

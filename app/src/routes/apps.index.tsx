@@ -16,6 +16,7 @@ import { CloneButton } from '../components/workspace'
 import { cn } from '../lib/cn'
 import { PLATFORMS, type Platform } from '../lib/external-apps'
 import { type AppStage, isAppStage } from '../lib/stage'
+import { fetchNodesChangeFn } from '../server/nodes'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
 import { fetchSiteEdit } from '../server/site'
 
@@ -57,13 +58,18 @@ export const Route = createFileRoute('/apps/')({
 })
 
 /**
- * The app list plus the site document's pending fields. One Apply writes
- * both files and rebuilds once, so the bar at the foot of this page has to
- * say everything that Apply will do — not just the apps' half of it.
+ * The app list plus the site document's pending fields and the machines'.
+ * One Apply writes every file and rebuilds once, so the bar at the foot of
+ * this page has to say everything that Apply will do — not just the apps'
+ * half of it.
  */
 async function fetchAppsTab() {
-  const [list, site] = await Promise.all([fetchApps(), fetchSiteEdit()])
-  return { ...list, siteChanges: site.changes }
+  const [list, site, nodesChanges] = await Promise.all([
+    fetchApps(),
+    fetchSiteEdit(),
+    fetchNodesChangeFn(),
+  ])
+  return { ...list, siteChanges: site.changes, nodesChanges }
 }
 
 type ListData = Awaited<ReturnType<typeof fetchAppsTab>>
@@ -233,6 +239,7 @@ export function AppsList({ data }: { data: ListData }) {
       .filter((a) => !a.managedInNix && a.drift.length > 0)
       .map((a) => ({ name: a.name, fields: a.drift })),
     ...(data.siteChanges.length > 0 ? [{ name: 'site', fields: [...data.siteChanges] }] : []),
+    ...(data.nodesChanges.length > 0 ? [{ name: 'nodes', fields: [...data.nodesChanges] }] : []),
   ]
 
   return (

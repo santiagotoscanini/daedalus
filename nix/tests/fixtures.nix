@@ -2,10 +2,11 @@
 #
 # `fixtures/` at the repository root holds one directory per document per
 # schema version: `site/v<N>/` is a whole site directory whose site.json is at
-# version N, and `apps/v<N>/apps.json` is the app registry at version N. A
-# site fixture carries an apps.json of its own — a COPY of the current
-# registry fixture, since a link would not survive the store copy a nix path
-# literal makes of the directory — and the two are asserted equal below.
+# version N, `apps/v<N>/apps.json` is the app registry at version N, and
+# `nodes/v<N>/nodes.json` the nodes document at version N. A site fixture
+# carries an apps.json and a nodes.json of its own — COPIES of the current
+# fixtures, since a link would not survive the store copy a nix path literal
+# makes of the directory — and each pair is asserted equal below.
 # The daedalus app's vitest reads the same files through its readers
 # (app/src/host/contract/fixtures.test.ts); this is the nix half, so that a
 # reader that drifts from the writer fails in `nix flake check` and in
@@ -23,6 +24,9 @@
 #                 entry to a `fleet.apps.<name>` value, a pure function on the
 #                 JSON. Each registry fixture is asserted to be at a version
 #                 the mapper accepts and every entry is mapped and forced.
+#   nodes.json    platform/site.nix reads it into `fleet.nodes`, and
+#                 platform/nodes.nix asserts the names; the copy inside the
+#                 site fixture is what the minimal host evaluates.
 #
 # EVALUATED, never built: forcing a toplevel's drvPath instantiates every
 # derivation of a system without realising one. A new schema version is a
@@ -95,8 +99,18 @@ let
     || throw "fixtures/site/${v}/apps.json is not a byte-for-byte copy of any fixtures/apps/v*/apps.json"
   ) (versionsOf "site");
 
+  nodeCopiesAgree = lib.all (
+    v:
+    let
+      copy = builtins.readFile (fixtures + "/site/${v}/nodes.json");
+      originals = map (a: builtins.readFile (fixtures + "/nodes/${a}/nodes.json")) (versionsOf "nodes");
+    in
+    lib.elem copy originals
+    || throw "fixtures/site/${v}/nodes.json is not a byte-for-byte copy of any fixtures/nodes/v*/nodes.json"
+  ) (versionsOf "site");
+
   forced = builtins.deepSeq registries (
-    builtins.seq copiesAgree (
+    builtins.seq (copiesAgree && nodeCopiesAgree) (
       lib.mapAttrsToList (_: host: host.config.system.build.toplevel.drvPath) siteHosts
     )
   );
@@ -105,6 +119,7 @@ pkgs.runCommand "schema-fixtures-evaluate" { } (
   builtins.seq (builtins.deepSeq forced null) ''
     echo "site fixtures: ${lib.concatStringsSep " " (lib.attrNames siteHosts)}"
     echo "apps fixtures: ${lib.concatStringsSep " " (lib.attrNames registries)}"
+    echo "nodes fixtures: ${lib.concatStringsSep " " (versionsOf "nodes")}"
     touch $out
   ''
 )

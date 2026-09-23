@@ -53,6 +53,8 @@ export async function readApplyStatus(): Promise<ApplyStatus> {
  */
 export type ApplyFiles = {
   'apps.json'?: string
+  /** The machines that joined, as nix reads them (lib/nodes-file.ts). Rides every Apply like apps.json. */
+  'nodes.json'?: string
   'site.json'?: string
   /** The provenance stamp (core/site/file.ts): who wrote this directory, with
       which engine, when. Rides every Apply, and never decides its subject. */
@@ -84,6 +86,7 @@ export function summarise(changed: { name: string; fields: string[] }[]): string
     // The host prefixes the subject with what it wrote (`site:`, `apps:`), so a
     // site-only change names its fields and nothing else.
     if (only.name === 'site') return only.fields.join(', ')
+    if (only.name === 'nodes') return only.fields.join(', ')
     return `${only.name}: ${only.fields.join(', ')}`
   }
   return `${String(changed.length)} apps updated (${changed.map((c) => c.name).join(', ')})`

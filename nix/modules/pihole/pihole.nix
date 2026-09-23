@@ -10,8 +10,10 @@
 # query history, macvendor.db, tls.pem) lives in /var/lib/pihole and
 # is fully mutable — UI changes go there, not into pihole.toml.
 #
-# Per-stack DNS entries flow in via `fleet.dnsHosts`. The
-# one entry added below is the GPU box (`fleet.gpuHost`), which no stack runs.
+# Per-stack DNS entries flow in via `fleet.dnsHosts`. The nodes (the other
+# machines running the agent) get no record here: the control plane binds
+# each node's MAC to its name in a runtime file dnsmasq reads as a
+# `dhcp-hostsdir` (stacks/daedalus), so the lease itself carries the name.
 #
 # The host brings:
 #   fleet.modules.pihole.enable              the switch (default off, as every catalog module)
@@ -31,11 +33,7 @@
 let
   cfg = config.fleet.modules.pihole;
 
-  hostEntries =
-    config.fleet.dnsHosts
-    ++ lib.optional (
-      config.fleet.gpuHostIp != null
-    ) "${config.fleet.gpuHostIp} ${config.fleet.gpuHost}";
+  hostEntries = config.fleet.dnsHosts;
 
   # Hostname half of each entry — used for the per-name `local=` lines below.
   localOnlyHostnames = map (e: lib.elemAt (lib.splitString " " e) 1) hostEntries;
@@ -66,10 +64,13 @@ in
 
     localDomain = lib.mkOption {
       type = lib.types.str;
-      default = "lan";
+      default = config.fleet.lanDomain;
+      defaultText = lib.literalExpression "config.fleet.lanDomain";
       description = ''
         The LAN's own DNS domain: dnsmasq answers `<device>.<localDomain>`
-        for every lease and reservation, and marks the zone local.
+        for every lease and reservation, and marks the zone local. Defaults
+        to `fleet.lanDomain`, the name the platform composes node addresses
+        under, so the two agree unless a host says otherwise.
       '';
     };
   };
@@ -300,7 +301,13 @@ in
             ++ map (
               s: "srv-host=${s.service}.${cfg.localDomain},${s.target},${toString s.port}"
             ) config.fleet.dnsSrv
-            ++ lib.optional haveReservations "dhcp-hostsfile=${config.sops.secrets."pihole-dhcp-hosts".path}";
+            ++ lib.optional haveReservations "dhcp-hostsfile=${config.sops.secrets."pihole-dhcp-hosts".path}"
+            # The nodes' MAC-to-name bindings, written at runtime by the control
+            # plane and copied under /run/daedalus-nodes (stacks/daedalus): a
+            # directory rather than a file so dnsmasq picks a new file up on
+            # its own, and a HUP (which the copier sends) re-reads a changed
+            # one. A join never needs a rebuild, and no MAC enters nix.
+            ++ lib.optional config.fleet.modules.daedalus.enable "dhcp-hostsdir=/run/daedalus-nodes";
         };
       };
     };

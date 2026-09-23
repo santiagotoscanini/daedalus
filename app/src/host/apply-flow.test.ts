@@ -38,6 +38,9 @@ vi.mock('../lib/repo/apps', () => ({
   toRegistryExport: () => ({ schemaVersion: 3, apps: {} }),
 }))
 vi.mock('./nix-manifest', () => ({ manifestEntries: async () => [] }))
+// The machines ride every Apply as nodes.json; none here, so the render is
+// the empty document and "changed" is whether the temp site dir holds it.
+vi.mock('../lib/repo/nodes', () => ({ nodesForFile: async () => [] }))
 vi.mock('../core/ctx', () => ({ makeCtx: async () => ({}) }))
 vi.mock('../core/site', () => ({
   siteEdit: async () => ({ changes: h.siteChanges, render: { after: '{"site":true}\n' } }),

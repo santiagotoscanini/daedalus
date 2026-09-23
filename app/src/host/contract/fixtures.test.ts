@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { renderSiteFile } from '../../core/site/file'
 import { REGISTRY_SCHEMA_VERSION } from '../../lib/contract/version'
+import { NODES_SCHEMA_VERSION, parseNodesFile, renderNodesFile } from '../../lib/nodes-file'
 import { renderRegistryFile } from '../../lib/registry-file'
 import { decodeRegistryFile } from '../nix-manifest'
 import { decodeSiteDocument } from './domains/site-doc'
@@ -30,7 +31,7 @@ import { decodeSiteDocument } from './domains/site-doc'
 const FIXTURES = resolve(process.cwd(), '../fixtures')
 
 /** `v3` → 3, for the directories under one document's fixture root. */
-function versions(doc: 'site' | 'apps'): number[] {
+function versions(doc: 'site' | 'apps' | 'nodes'): number[] {
   return readdirSync(join(FIXTURES, doc))
     .map((d) => /^v(\d+)$/.exec(d)?.[1])
     .filter((v): v is string => v !== undefined)
@@ -91,4 +92,31 @@ describe('apps.json fixtures', () => {
     const own = parse(join(FIXTURES, 'apps', `v${String(REGISTRY_SCHEMA_VERSION)}`, 'apps.json'))
     expect(linked).toEqual(own)
   })
+})
+
+describe('nodes.json fixtures', () => {
+  it('exist for the version the writer emits', () => {
+    expect(versions('nodes')).toContain(NODES_SCHEMA_VERSION)
+  })
+
+  for (const v of versions('nodes')) {
+    it(`v${String(v)} decodes, and is byte-identical to its own render`, () => {
+      const path = join(FIXTURES, 'nodes', `v${String(v)}`, 'nodes.json')
+      const raw = parse(path) as Record<string, unknown>
+      expect(raw.schemaVersion).toBe(v)
+      const doc = parseNodesFile(raw)
+      expect(doc.nodes.length).toBeGreaterThan(0)
+      // The fixture is what an Apply writes, so the writer must reproduce
+      // it exactly — the nix side (nix/tests/fixtures.nix) reads this file.
+      const rendered = renderNodesFile(
+        doc.nodes.map((n) => ({
+          ...n,
+          providers: Object.fromEntries(
+            Object.entries(n.providers).map(([k, p]) => [k, { port: p.port, offer: true }]),
+          ),
+        })),
+      )
+      expect(rendered).toBe(readFileSync(path, 'utf8'))
+    })
+  }
 })

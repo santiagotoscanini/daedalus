@@ -2,8 +2,14 @@ import { randomBytes } from 'node:crypto'
 import { asc, eq } from 'drizzle-orm'
 import type { HelloVerdict } from '../../host/agent-hello'
 import { db } from '../../host/db'
-import { nodeTargetsMissing, writeNodeTargets } from '../../host/node-targets'
+import {
+  householdMacs,
+  nodeTargetsMissing,
+  writeDhcpHosts,
+  writeNodeTargets,
+} from '../../host/node-targets'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
+import { LEMONADE_DEFAULT_PORT, type NodeForFile, slugOf } from '../nodes-file'
 
 // The nodes table: what a verified hello writes, what the Machines tab and
 // the Claude page read, the decisions an admin makes about a row, and the
@@ -33,6 +39,13 @@ export type NodeRow = {
   hostname: string
   /** The policy's display name, or the hostname. */
   name: string
+  /** What it is called on the network: the policy's label, or the hostname's slug. */
+  netName: string
+  /**
+   * The household's encrypted reservations already name this MAC: the box
+   * writes no line for it, and the name in effect is theirs (host/node-targets.ts).
+   */
+  namedByHousehold: boolean
   os: string
   arch: string
   agentVersion: string
@@ -56,17 +69,30 @@ export type NodeRow = {
 /** The agent's own defaults, shown for a key the policy does not set. */
 export const POLICY_DEFAULTS = { awakeHold: true, claudeRemoteControl: true } as const
 
-/** The policy the answer to a hello carries: every key resolved. */
+/** The policy the answer to a hello carries: every key resolved; `offer` stays here. */
 export function effectivePolicy(p: NodePolicy): {
   awakeHold: boolean
   claudeRemoteControl: boolean
   claudeWorkdir: string | null
+  providers: { lemonade: { port: number } }
 } {
   return {
     awakeHold: p.awakeHold ?? POLICY_DEFAULTS.awakeHold,
     claudeRemoteControl: p.claudeRemoteControl ?? POLICY_DEFAULTS.claudeRemoteControl,
     claudeWorkdir: p.claudeWorkdir?.trim() || null,
+    providers: { lemonade: { port: p.providers?.lemonade?.port ?? LEMONADE_DEFAULT_PORT } },
   }
+}
+
+/** The network name a row resolves to: the policy's label, else the hostname's slug. */
+export function netNameOf(n: { hostname: string; policy: NodePolicy | null }): string {
+  return n.policy?.name ?? slugOf(n.hostname)
+}
+
+/** The providers a row offers, every key resolved, for site/nodes.json. */
+export function providersOf(p: NodePolicy): Record<string, { port: number; offer: boolean }> {
+  const l = p.providers?.lemonade
+  return { lemonade: { port: l?.port ?? LEMONADE_DEFAULT_PORT, offer: l?.offer ?? false } }
 }
 
 function claudeOf(hello: Record<string, unknown>): NodeClaudeSummary | null {
@@ -85,7 +111,7 @@ function claudeOf(hello: Record<string, unknown>): NodeClaudeSummary | null {
   }
 }
 
-function row(n: typeof nodes.$inferSelect): NodeRow {
+function row(n: typeof nodes.$inferSelect, household: ReadonlySet<string>): NodeRow {
   const policy = n.policy ?? {}
   return {
     id: n.id,
@@ -93,6 +119,8 @@ function row(n: typeof nodes.$inferSelect): NodeRow {
     state: n.state,
     hostname: n.hostname,
     name: policy.displayName?.trim() || n.hostname,
+    netName: netNameOf(n),
+    namedByHousehold: n.mac !== null && household.has(n.mac.toLowerCase()),
     os: n.os,
     arch: n.arch,
     agentVersion: n.agentVersion,
@@ -117,12 +145,13 @@ export async function listNodes(): Promise<NodeRow[]> {
   // whose pills swap places between two loads because one machine said
   // hello a second later reads as a race, not as a list.
   const all = await db.select().from(nodes).orderBy(asc(nodes.firstSeenAt), asc(nodes.id))
-  return all.map(row)
+  const household = await householdMacs()
+  return all.map((n) => row(n, household))
 }
 
 export async function getNode(id: string): Promise<NodeRow | null> {
   const [n] = await db.select().from(nodes).where(eq(nodes.id, id)).limit(1)
-  return n === undefined ? null : row(n)
+  return n === undefined ? null : row(n, await householdMacs())
 }
 
 /**
@@ -134,7 +163,7 @@ export type HelloAnswer = {
   state: NodeState
   checkUpdate: boolean
   restartClaude: boolean
-  policy: { awakeHold: boolean; claudeRemoteControl: boolean; claudeWorkdir: string | null } | null
+  policy: ReturnType<typeof effectivePolicy> | null
   /** The node token for an approved node: what opens its full Claude report to the box. */
   nodeToken: string | null
 }
@@ -251,6 +280,17 @@ export async function requestClaudeRestart(id: string): Promise<boolean> {
  * goes back to the agent's default rather than lingering.
  */
 export async function setNodePolicy(id: string, policy: NodePolicy): Promise<boolean> {
+  // Two machines cannot share a name on the network: the lease, the
+  // nodes.json entry and every consumer dial it.
+  if (policy.name !== undefined) {
+    const others = await db.select().from(nodes)
+    const taken = others.find(
+      (n) => n.id !== id && n.state === 'approved' && netNameOf(n) === policy.name,
+    )
+    if (taken !== undefined) {
+      throw new Error(`"${policy.name}" is already ${taken.hostname}'s name on the network`)
+    }
+  }
   const updated = await db
     .update(nodes)
     .set({ policy })
@@ -320,9 +360,10 @@ export async function nodeToken(id: string): Promise<string | null> {
 export async function publishNodeTargets(): Promise<void> {
   try {
     const all = await db.select().from(nodes)
+    const approved = all.filter((n) => n.state === 'approved')
     await writeNodeTargets(
-      all
-        .filter((n) => n.state === 'approved' && n.lanIp !== null)
+      approved
+        .filter((n) => n.lanIp !== null)
         .map((n) => ({
           id: n.id,
           hostname: n.hostname,
@@ -332,7 +373,33 @@ export async function publishNodeTargets(): Promise<void> {
           statusPort: n.statusPort ?? 7787,
         })),
     )
+    // The dnsmasq lines: how each machine gets its name from pi-hole. A MAC
+    // the household file already names is theirs to name, and skipped.
+    const household = await householdMacs()
+    await writeDhcpHosts(
+      approved
+        .filter((n) => n.mac !== null && !household.has(n.mac.toLowerCase()))
+        .map((n) => ({
+          id: n.id,
+          mac: n.mac ?? '',
+          name: netNameOf(n),
+          lanIp: n.policy?.pinAddress === true ? n.lanIp : null,
+        })),
+    )
   } catch (e) {
     console.warn(`node targets not written: ${e instanceof Error ? e.message : String(e)}`)
   }
+}
+
+/** What an Apply writes to site/nodes.json: the approved nodes, resolved (lib/nodes-file.ts). */
+export async function nodesForFile(): Promise<NodeForFile[]> {
+  const all = await db.select().from(nodes)
+  return all
+    .filter((n) => n.state === 'approved')
+    .map((n) => ({
+      id: n.id,
+      name: netNameOf(n),
+      os: n.os,
+      providers: providersOf(n.policy ?? {}),
+    }))
 }

@@ -47,7 +47,7 @@ import {
 // siteState. Server-only.
 
 export type SiteFileView = {
-  name: 'site.json' | 'apps.json' | 'README.md' | 'daedalus.json'
+  name: 'site.json' | 'apps.json' | 'nodes.json' | 'README.md' | 'daedalus.json'
   status: SiteFileStatus
   /** Byte-identical to what this box would write now. Null = not compared. */
   current: boolean | null
@@ -466,6 +466,9 @@ export async function siteState(ctx: Ctx, facts?: RepoFacts): Promise<SiteState>
         current: compare(files['site.json'], renderSiteFile(desired)),
       },
       { name: 'apps.json', status: files['apps.json'].status, current: null },
+      // Rendered by an Apply from the nodes table, like apps.json; the
+      // Apply bar is what compares it (host/apply-flow.ts nodesChange).
+      { name: 'nodes.json', status: files['nodes.json'].status, current: null },
       {
         name: 'README.md',
         status: files['README.md'].status,

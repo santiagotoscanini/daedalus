@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { actorLabel } from '../core/auth'
 import type { NodePolicy } from '../host/schema'
 import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
+import { NODE_NAME_RE } from '../lib/nodes-file'
 
 // Server functions behind Settings › Machines: the page's one read, and
 // its decisions about a node — approve, revoke, forget, the policy. Each
@@ -95,6 +96,37 @@ const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
     if (name.length > NAME_MAX) throw new Error(`displayName is longer than ${String(NAME_MAX)}`)
     if (name !== '') policy.displayName = name
   }
+  if (o.name !== undefined) {
+    if (typeof o.name !== 'string') throw new Error('name must be text')
+    const label = o.name.trim().toLowerCase()
+    if (label !== '') {
+      if (!NODE_NAME_RE.test(label)) {
+        throw new Error('name must be a DNS label: letters, digits and hyphens, 1 to 32 long')
+      }
+      policy.name = label
+    }
+  }
+  if (o.pinAddress !== undefined) {
+    if (typeof o.pinAddress !== 'boolean') throw new Error('pinAddress must be true or false')
+    if (o.pinAddress) policy.pinAddress = true
+  }
+  if (o.providers !== undefined) {
+    if (typeof o.providers !== 'object' || o.providers === null) {
+      throw new Error('providers must be an object')
+    }
+    const l = (o.providers as Record<string, unknown>).lemonade
+    if (l !== undefined) {
+      if (typeof l !== 'object' || l === null)
+        throw new Error('providers.lemonade must be an object')
+      const { port, offer } = l as Record<string, unknown>
+      if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error('providers.lemonade.port must be a port number')
+      }
+      if (typeof offer !== 'boolean')
+        throw new Error('providers.lemonade.offer must be true or false')
+      policy.providers = { lemonade: { port, offer } }
+    }
+  }
   if (o.claudeWorkdir !== undefined) {
     if (typeof o.claudeWorkdir !== 'string') throw new Error('claudeWorkdir must be text')
     const dir = o.claudeWorkdir.trim()
@@ -137,3 +169,14 @@ export const saveNodePolicyFn = createServerFn({ method: 'POST' })
     const { setNodePolicy } = await import('../lib/repo/nodes')
     return { ok: await setNodePolicy(data.id, data.policy) }
   })
+
+/**
+ * What an Apply would do about the machines: the fields the bar shows
+ * ("gaming-pc offers lemonade"), or none when site/nodes.json already
+ * holds what the table would render.
+ */
+export const fetchNodesChangeFn = createServerFn().handler(async (): Promise<string[]> => {
+  const { nodesChange } = await import('../host/apply-flow')
+  const c = await nodesChange()
+  return c.changed ? c.fields : []
+})

@@ -179,7 +179,7 @@ jq -e .files "$PAYLOAD_COPY" >/dev/null 2>&1 || fail writing "payload-$REQ_ID.js
 # all, and a payload naming one is skipped like any other unmanaged key.
 # It goes after the vault root entries and before daedalus.json, so both
 # orderings the subject below relies on still hold.
-MANAGED=(apps.json site.json vault/cloudflare-api-token.sops vault/github-app.sops "${VAULT_APP_SECRETS[@]}" daedalus.json)
+MANAGED=(apps.json nodes.json site.json vault/cloudflare-api-token.sops vault/github-app.sops "${VAULT_APP_SECRETS[@]}" daedalus.json)
 WRITTEN=()
 for f in "${MANAGED[@]}"; do
   [ "$(jq -r --arg f "$f" 'if (.files[$f] | type) == "string" then "yes" else "no" end' "$PAYLOAD_COPY")" = "yes" ] || continue
@@ -278,6 +278,7 @@ for w in "${WRITTEN[@]}"; do
 done
 case "${SUBJECT[*]}" in
 apps.json) PREFIX=apps ;;
+nodes.json) PREFIX=nodes ;;
 site.json) PREFIX=site ;;
 vault/*) PREFIX=vault ;;
 "site.json vault/"*)

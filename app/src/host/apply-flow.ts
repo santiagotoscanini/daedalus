@@ -53,12 +53,78 @@ async function currentChanges() {
   const { makeCtx } = await import('../core/ctx')
   const { siteEdit } = await import('../core/site')
   const site = await siteEdit(await makeCtx())
-  const changed =
-    site.changes.length > 0
-      ? [...appChanges, { name: 'site', fields: [...site.changes] }]
-      : appChanges
 
-  return { records, site, changed }
+  // The machines ride it too: nodes.json is rendered from the nodes table
+  // every Apply, and counts as a change when its bytes differ from the
+  // committed file — a join, a rename, a provider switched on or off.
+  const nodesFile = await nodesChange()
+  const changed = [
+    ...appChanges,
+    ...(site.changes.length > 0 ? [{ name: 'site', fields: [...site.changes] }] : []),
+    ...(nodesFile.changed ? [{ name: 'nodes', fields: nodesFile.fields }] : []),
+  ]
+
+  return { records, site, nodesFile, changed }
+}
+
+/**
+ * nodes.json as this Apply would write it, against the committed one. The
+ * fields name the difference in words the bar can show: "gaming-pc joined",
+ * "macbook-pro renamed", "gaming-pc offers lemonade".
+ */
+export async function nodesChange(): Promise<{ text: string; changed: boolean; fields: string[] }> {
+  const { readFile } = await import('node:fs/promises')
+  const { join } = await import('node:path')
+  const { env } = await import('./env')
+  const { nodesForFile } = await import('../lib/repo/nodes')
+  const { parseNodesFile, renderNodesFile } = await import('../lib/nodes-file')
+
+  const wanted = await nodesForFile()
+  const text = renderNodesFile(wanted)
+  let committedText: string | null = null
+  try {
+    committedText = await readFile(join(env.get('SITE_PATH'), 'nodes.json'), 'utf8')
+  } catch {
+    committedText = null
+  }
+  if (committedText === text) return { text, changed: false, fields: [] }
+  // No file and no machines say the same thing to nix (platform/site.nix
+  // reads the file only when it exists), so a box that never enrolled one
+  // is not forever one Apply behind.
+  if (committedText === null && wanted.length === 0) return { text, changed: false, fields: [] }
+
+  let before = new Map<string, { name: string; providers: string[] }>()
+  try {
+    before = new Map(
+      (committedText === null ? [] : parseNodesFile(JSON.parse(committedText)).nodes).map((n) => [
+        n.id,
+        { name: n.name, providers: Object.keys(n.providers).sort() },
+      ]),
+    )
+  } catch {
+    before = new Map()
+  }
+  const fields: string[] = []
+  for (const n of wanted) {
+    const was = before.get(n.id)
+    const offers = Object.entries(n.providers)
+      .filter(([, p]) => p.offer)
+      .map(([k]) => k)
+      .sort()
+    if (was === undefined) {
+      fields.push(`${n.name} joined${offers.length > 0 ? ` (offers ${offers.join(', ')})` : ''}`)
+      continue
+    }
+    if (was.name !== n.name) fields.push(`${was.name} renamed ${n.name}`)
+    for (const k of offers) if (!was.providers.includes(k)) fields.push(`${n.name} offers ${k}`)
+    for (const k of was.providers)
+      if (!offers.includes(k)) fields.push(`${n.name} stops offering ${k}`)
+  }
+  for (const [id, was] of before) {
+    if (!wanted.some((n) => n.id === id)) fields.push(`${was.name} left`)
+  }
+  if (fields.length === 0) fields.push(`${String(wanted.length)} nodes`)
+  return { text, changed: true, fields }
 }
 
 async function commitSwitch(): Promise<boolean> {
@@ -78,7 +144,7 @@ const apply = defineFlow<string, { changed: { name: string; fields: string[] }[]
     const { renderRegistryFile } = await import('../lib/registry-file')
     const { renderSiteStampFile } = await import('../core/site')
 
-    const { records, site, changed } = await currentChanges()
+    const { records, site, nodesFile, changed } = await currentChanges()
     if (changed.length === 0) {
       return { ok: false, code: 'noop', reason: 'nothing to apply' }
     }
@@ -92,10 +158,11 @@ const apply = defineFlow<string, { changed: { name: string; fields: string[] }[]
           // bytes verbatim and never parses either. apps.json always — its
           // render is idempotent and the agent reports no-change; site.json
           // only when its desired document differs from the committed one;
-          // daedalus.json always, because the point of the stamp is that every
+          // nodes.json always, for the same reason as apps.json; daedalus.json always, because the point of the stamp is that every
           // write into the directory says which engine made it.
           files: {
             'apps.json': renderRegistryFile(toRegistryExport(records)),
+            'nodes.json': nodesFile.text,
             ...(site.changes.length > 0 ? { 'site.json': site.render.after } : {}),
             'daedalus.json': await renderSiteStampFile('apply', actor),
           },

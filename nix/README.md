@@ -6,7 +6,7 @@ drives.
 
 | Path | What it is |
 |---|---|
-| `platform/` | The base every stack rides on, with no enable switches: the rootless-podman runtime and its helpers (`mkRootlessContainer`, `mkDotenvSecret`, `mkSecretRender`, `mkLocalImage`, `pinnedImage`), the publish layer (`fleet.webApps` → reverse-proxy routes, LAN DNS, tunnel routes, health probes; the observability registries), the single-sign-on interface (`identity.nix`: `fleet.sso.*`, `fleet.ssoClients`), the apps registry (`apps-options.nix`: `fleet.apps`), the site constants read from the host's `site/` directory, sops wiring, ZFS and replication mechanisms, mail, git identity, dead-man pings, the GPU box, the weekly lock upgrade, and the export domains the app reads its facts from. |
+| `platform/` | The base every stack rides on, with no enable switches: the rootless-podman runtime and its helpers (`mkRootlessContainer`, `mkDotenvSecret`, `mkSecretRender`, `mkLocalImage`, `pinnedImage`), the publish layer (`fleet.webApps` → reverse-proxy routes, LAN DNS, tunnel routes, health probes; the observability registries), the single-sign-on interface (`identity.nix`: `fleet.sso.*`, `fleet.ssoClients`), the apps registry (`apps-options.nix`: `fleet.apps`), the site constants read from the host's `site/` directory, sops wiring, ZFS and replication mechanisms, mail, git identity, dead-man pings, the nodes (`nodes.nix`: `fleet.nodes`, `fleet.lanDomain`), the weekly lock upgrade, and the export domains the app reads its facts from. |
 | `platform/lib/` | Plain libraries imported **by path**, never as modules: `gluetun-lib.nix` (`mkGluetunInstance`), `fleet-lib.nix`, `registry-lib.nix`, `operator-secrets-lib.nix`. |
 | `stacks/daedalus/` | The control plane's own module behind `fleet.modules.daedalus.enable`: `daedalus.nix`, the image builder (`builder.nix`, `build-agent.nix`, `railpack.nix`), the engine's own updater (`engine-update.nix`), `self.json`, and the privileged host agents (`host/*.sh` — apply, deploy, build, image update, engine update, site write, snapshots). |
 | `modules/<id>/` | The catalog: stacks that have migrated here, each behind `fleet.modules.<id>.enable`, **off by default**. A module brings the mechanism; the host brings the image pin (`fleet.images.<container>`), the secrets (`fleet.modules.<id>.*SopsFile`) and the policy (who may log in, under what name, reachable off-LAN or not). |
@@ -140,12 +140,13 @@ And from `site/site.json`, which `platform/site.nix` turns into options
 | `cloudflare.{accountId,tunnelId,zoneId}` | `fleet.cloudflare.*` |
 | `developer.engineOverride` | read by the host agents at run time, never by nix (below) |
 
-plus two files beside it: `site/apps.json` (the app registry) and
+plus files beside it: `site/apps.json` (the app registry),
+`site/nodes.json` (the approved nodes — id, name, OS and what each offers,
+read into `fleet.nodes`; optional, a box without machines has none) and
 `site/vault/cloudflare-api-token.sops` (the one API token; the engine
 renders it for every consumer).
 
-Optional, null or empty by default: `fleet.gpuHost` / `fleet.gpuHostIp`
-(a model server on another machine), `fleet.hcPing.keySopsFile`,
+Optional, null or empty by default: `fleet.hcPing.keySopsFile`,
 `fleet.claude.mcpSopsFile`, `fleet.zfs.datasets`, `fleet.zfs.arcMaxBytes`,
 `fleet.backup.replications`, `fleet.autoupgrade.inputs`,
 `fleet.daedalus.routerProduct`, `fleet.builder.npmMirrorHost`,

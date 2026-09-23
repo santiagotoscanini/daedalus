@@ -57,6 +57,19 @@ let
   siteDoc =
     if sourced then builtins.fromJSON (builtins.readFile "${cfg.site.source}/site.json") else null;
 
+  # site/nodes.json — the approved nodes, as an Apply writes them
+  # (platform/nodes.nix says what is in it and why so little). Optional: a
+  # site written before nodes existed, or a box with none, has no file and
+  # no nodes. One schema version so far; a document from a newer control
+  # plane fails here by name rather than as a missing attribute.
+  nodesFile = "${cfg.site.source}/nodes.json";
+  nodesDoc =
+    if sourced && builtins.pathExists nodesFile then
+      builtins.fromJSON (builtins.readFile nodesFile)
+    else
+      null;
+  nodesSchemaVersions = [ 1 ];
+
   same = name: a: b: {
     assertion = a == b;
     message = "site.json disagrees with the configuration about ${name}: site.json says ${builtins.toJSON a}, configuration.nix says ${builtins.toJSON b}. This value is not yet sourced from site.json; write site.json again from Settings › Site.";
@@ -231,6 +244,16 @@ in
     # The sourced constants. Plain definitions, not mkDefault: there must be
     # exactly one place these are written, and it is the document.
     fleet = {
+      # The fields are picked by name so a key the control plane adds later
+      # cannot fail the submodule's type check before this module learns it.
+      nodes = map (n: {
+        inherit (n)
+          id
+          name
+          os
+          ;
+        providers = lib.mapAttrs (_: p: { inherit (p) port; }) (n.providers or { });
+      }) (if nodesDoc == null then [ ] else nodesDoc.nodes);
       inherit (siteDoc.identity) baseDomain;
       inherit (siteDoc.network) lanIp;
       inherit (siteDoc.network) wanHost;
@@ -320,6 +343,12 @@ in
         assertion = cfg.github.app == null || cfg.github.app.ownerId == cfg.github.expectedOwnerId;
         message = "site.json github.app.ownerId (${toString cfg.github.app.ownerId}) is not fleet.github.expectedOwnerId (${toString cfg.github.expectedOwnerId}): the GitHub App must belong to the account this box trusts. If the account really changed, change fleet.github.expectedOwnerId in the host config deliberately.";
       }
-    ];
+    ]
+    ++ lib.optional (nodesDoc != null) {
+      assertion = lib.elem (nodesDoc.schemaVersion or null) nodesSchemaVersions;
+      message = "site/nodes.json declares schemaVersion ${
+        builtins.toJSON (nodesDoc.schemaVersion or null)
+      }, but this engine understands ${builtins.toJSON nodesSchemaVersions}.";
+    };
   };
 }

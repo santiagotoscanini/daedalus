@@ -293,6 +293,7 @@ site=$("$JQ" -n \
   --arg repo "$REPO_DIR" \
   --argjson siteFile "$(site_file site.json)" \
   --argjson appsFile "$(site_file apps.json)" \
+  --argjson nodesFile "$(site_file nodes.json)" \
   --argjson readmeFile "$(site_file README.md)" \
   --argjson stampFile "$(site_file daedalus.json)" \
   --argjson appSecrets "$(app_secret_history)" \
@@ -304,6 +305,7 @@ site=$("$JQ" -n \
     files: {
       "site.json": $siteFile,
       "apps.json": $appsFile,
+      "nodes.json": $nodesFile,
       "README.md": $readmeFile,
       "daedalus.json": $stampFile
     },
@@ -321,12 +323,13 @@ site=$("$JQ" -n \
     domain: "repo",
     # 6: engine — the lock node of the daedalus flake input, for the Updates
     # page. Null when the lock has no such input.
+    # 7: site.files gained nodes.json — the machines, rendered by an Apply.
     # 5: site gained appSecrets — per-key git facts for the operator-secrets
     # files, which is what the app page reads "set <when> by <who>" from.
     # 4: site.files gained README.md and daedalus.json. The reader accepts the
     # older numbers too — for the minutes between a switch and the next run of
     # this timer, the file on disk is still the old shape.
-    schemaVersion: 6,
+    schemaVersion: 7,
     source: "host",
     revision: null,
     generatedAt: $g,

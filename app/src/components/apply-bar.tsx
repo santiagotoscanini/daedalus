@@ -24,16 +24,23 @@ const PHASES: readonly string[] = [
 ]
 
 /**
- * "2 apps changed", "The site changed", "1 app and the site changed". The
- * entry named `site` is the site document (host/apply-flow.ts), not an app,
- * and counting it as one would misstate what the rebuild is for.
+ * "2 apps changed", "The site changed", "1 app and the site changed", "The
+ * machines changed". The entries named `site` and `nodes` are the site
+ * document and the machines (host/apply-flow.ts), not apps, and counting
+ * either as one would misstate what the rebuild is for.
  */
 function heading(changed: { name: string }[]): string {
-  const apps = changed.filter((c) => c.name !== 'site').length
+  const apps = changed.filter((c) => c.name !== 'site' && c.name !== 'nodes').length
   const site = changed.some((c) => c.name === 'site')
-  const parts = [apps > 0 && `${String(apps)} app${apps === 1 ? '' : 's'}`, site && 'the site']
+  const machines = changed.some((c) => c.name === 'nodes')
+  const parts = [
+    apps > 0 && `${String(apps)} app${apps === 1 ? '' : 's'}`,
+    site && 'the site',
+    machines && 'the machines',
+  ]
     .filter((p): p is string => typeof p === 'string')
-    .join(' and ')
+    .join(', ')
+    .replace(/, ([^,]*)$/, ' and $1')
   const s = `${parts} changed`
   return s.charAt(0).toUpperCase() + s.slice(1)
 }

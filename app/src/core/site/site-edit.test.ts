@@ -180,6 +180,7 @@ describe('the github block through the site edit paths', () => {
         files: {
           'site.json': { status: 'clean', sha256 },
           'apps.json': { status: 'clean', sha256: null },
+          'nodes.json': { status: 'clean', sha256: null },
           'README.md': { status: 'clean', sha256: null },
           'daedalus.json': { status: 'clean', sha256: null },
         },

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": "07122fc9eb01b748",
+      "name": "macbook-pro",
+      "os": "macos",
+      "providers": {}
+    },
+    {
+      "id": "a2272f1b0bdac468",
+      "name": "gaming-pc",
+      "os": "windows",
+      "providers": {
+        "lemonade": {
+          "port": 13305
+        }
+      }
+    }
+  ]
+}

@@ -59,6 +59,8 @@ export type SiteDir = {
   files: {
     'site.json': SiteFile
     'apps.json': SiteFile
+    /** The machines (lib/nodes-file.ts); v7 on, absent before. */
+    'nodes.json': SiteFile
     'README.md': SiteFile
     'daedalus.json': SiteFile
   }
@@ -123,6 +125,7 @@ export const NO_SITE_DIR: SiteDir = {
   files: {
     'site.json': NO_FILE,
     'apps.json': NO_FILE,
+    'nodes.json': NO_FILE,
     'README.md': NO_FILE,
     'daedalus.json': NO_FILE,
   },
@@ -143,6 +146,7 @@ const siteShape = obj({
       // still decodes, reporting them absent rather than failing whole.
       'README.md': optional(siteFile, NO_FILE),
       'daedalus.json': optional(siteFile, NO_FILE),
+      'nodes.json': optional(siteFile, NO_FILE),
     }),
     NO_SITE_DIR.files,
   ),
@@ -216,7 +220,8 @@ export async function repoFacts(): Promise<SnapshotResult<RepoFacts>> {
     // v3 is v4 without README.md and daedalus.json, and is kept because a
     // snapshot written before the rebuild that added them must still decode.
     // v6 added `engine`, the pinned engine's lock node — same argument.
-    acceptVersions: [1, 2, 3, 4, 5, 6],
+    // v7 added nodes.json to site.files, optional for the same minutes.
+    acceptVersions: [1, 2, 3, 4, 5, 6, 7],
     maxAgeMs: MAX_AGE_MS,
   })
 }

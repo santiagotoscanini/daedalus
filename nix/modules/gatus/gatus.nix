@@ -86,18 +86,21 @@ let
   # No CERTIFICATE_EXPIRATION condition — these are plain HTTP on the LAN, and
   # gatus reports a failed condition rather than skipping an inapplicable one.
   #
-  # Conditional on the GPU box existing at all (`fleet.gpuHost` is null on a
-  # host without one), so the list is empty rather than a probe of nowhere.
-  offBoxEndpoints = lib.optional (config.fleet.gpuHost != null) {
-    # The model server on the GPU box (lemonade.md in the configuration
-    # repo). Every AI workload on this box terminates there, and until this
-    # probe nothing watched it: LiteLLM stays green while returning errors, so
-    # a Lemonade outage surfaced as "the chat is broken" rather than as an
+  # One per node that offers a model server (platform/nodes.nix, from
+  # site/nodes.json): a host with none has an empty list rather than a probe
+  # of nowhere. The first keeps the name the probe has always had, so the
+  # rule and the dot on daedalus's AI → Lemonade tab keep their series; a
+  # second node's probe is named after the node.
+  offBoxEndpoints = lib.imap0 (i: node: {
+    # The model server on a node (lemonade.md in the configuration repo).
+    # Every AI workload on this box terminates there, and until this probe
+    # nothing watched it: LiteLLM stays green while returning errors, so a
+    # Lemonade outage surfaced as "the chat is broken" rather than as an
     # alert. Feeds the same gatus_results_endpoint_success rule as everything
-    # else, and the dot on daedalus's AI → Lemonade tab.
-    name = "lemonade";
+    # else.
+    name = if i == 0 then "lemonade" else "lemonade-${node.name}";
     group = "off-box";
-    url = "http://${config.fleet.gpuHost}:13305/api/v1/health";
+    url = "http://${config.fleet.nodeHost node}:${toString node.providers.lemonade.port}/api/v1/health";
     interval = "60s";
     conditions = [
       "[STATUS] == 200"
@@ -105,7 +108,7 @@ let
       # state, and a server whose backends have all died still returns 200.
       "[BODY].status == ok"
     ];
-  };
+  }) config.fleet.lemonadeNodes;
 
   endpoints = webAppEndpoints ++ offBoxEndpoints;
 
