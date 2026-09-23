@@ -1,0 +1,244 @@
+import { Link } from '@tanstack/react-router'
+
+import type { BoardInfo } from '../../lib/dashboard/board-info'
+import type { NodeSystemData } from '../../lib/dashboard/node-system'
+import { bytes, DASH, num } from '../../lib/format'
+import type { Tone } from '../../lib/tone'
+import { Board, BoardGrid, Chip, Facts, Measures } from '../viz'
+import {
+  ago,
+  EMPTY,
+  FOOT,
+  LIST,
+  MONO,
+  NOTE,
+  PART,
+  PART_DETAIL,
+  PART_ID,
+  PART_NAME,
+  ROW,
+  ROW_MAIN,
+  ROW_SIDE,
+  shortVendor,
+} from './shared'
+
+/* ── Motherboard ──────────────────────────────────────────────────────── */
+
+/**
+ * The board, its firmware, and what the maker has published since.
+ *
+ * Build already names the board. This tab exists for the one question
+ * Build refuses to answer — "am I behind?" — and answers it only where a
+ * feed exists that will not change shape under us: MSI's download host,
+ * which names every package by board code and version and puts a
+ * one-page note at the front of each (lib/dashboard/board-releases.ts).
+ * Where there is no such feed the tab says why, in the maker's own terms,
+ * rather than scraping a page that refuses this box anyway.
+ */
+export function BoardView({ info }: { info: BoardInfo }) {
+  const r = info.releases
+  const newest = r.releases[0]
+  const verdict: { tone: Tone; label: string } =
+    r.make === null
+      ? { tone: 'muted', label: 'no feed' }
+      : r.releases.length === 0
+        ? { tone: 'muted', label: 'no list' }
+        : r.behind === null
+          ? { tone: 'muted', label: 'not on the list' }
+          : r.behind === 0
+            ? { tone: 'ok', label: 'newest' }
+            : { tone: r.behind >= 4 ? 'bad' : 'warn', label: `${num(r.behind)} behind` }
+  const newerThan = (v: string) =>
+    r.behind !== null && r.releases.findIndex((x) => x.version === v) < r.behind
+
+  return (
+    <BoardGrid>
+      <Board
+        title="The board"
+        icon="hash"
+        span={4}
+        aside={
+          <span className={NOTE}>
+            {info.revision === null || info.revision === 'x.x'
+              ? 'revision unstated'
+              : `rev ${info.revision}`}
+          </span>
+        }
+      >
+        <div className={PART}>
+          <div className={PART_ID}>
+            <strong className={PART_NAME}>{info.model ?? DASH}</strong>
+            <span className={PART_DETAIL}>
+              {shortVendor(info.vendor)}
+              {info.form !== null && ` · ${info.form}`}
+            </span>
+          </div>
+        </div>
+        <Facts
+          rows={[
+            { k: 'Firmware', v: <span className={MONO}>{info.bios.version ?? DASH}</span> },
+            { k: 'Built', v: info.bios.date ?? DASH },
+            { k: 'Firmware by', v: shortVendor(info.bios.vendor) },
+            { k: 'Maker', v: shortVendor(info.vendor) },
+          ]}
+        />
+        <p className={FOOT}>
+          {r.make === 'apple'
+            ? 'Apple’s boards have no BIOS: the firmware is part of macOS and moves with it, so the version here is the last system update’s.'
+            : r.make === 'gigabyte'
+              ? 'Gigabyte writes no revision into SMBIOS (it says “x.x”); the firmware series tells it instead — an FA-series BIOS is the rev 1.2 board, an F-series the earlier one.'
+              : 'From SMBIOS, which is what the firmware was told at the factory. The spec sheet is on Build.'}
+        </p>
+      </Board>
+
+      <Board
+        title="Firmware"
+        icon="◈"
+        span={8}
+        aside={<Chip tone={verdict.tone}>{verdict.label}</Chip>}
+      >
+        <Measures
+          items={[
+            { k: 'running', v: r.running ?? info.bios.version ?? DASH },
+            { k: 'newest', v: newest?.version ?? DASH },
+            { k: 'published', v: newest?.date ?? DASH },
+            { k: 'releases', v: r.releases.length === 0 ? DASH : num(r.releases.length) },
+          ]}
+        />
+        <p className={FOOT}>
+          {r.make === 'msi' && r.error === null && r.releases.length > 0 && (
+            <>
+              Read from MSI&rsquo;s download host{r.checkedAt !== null && ` ${ago(r.checkedAt)}`}:
+              every package the board&rsquo;s code has, with its date, and the note at the front of
+              each. The website would be the obvious source and refuses this box, curl and Chromium
+              alike; the packages are plain files.{' '}
+              {r.behind !== null && r.behind > 0 && (
+                <>
+                  Being {num(r.behind)} behind is a fact, not a verdict: a BIOS update on a machine
+                  that works is a risk taken for the notes below, and nothing here applies one.
+                </>
+              )}
+            </>
+          )}
+          {r.make === 'msi' && r.error !== null && <>{r.error}. </>}
+          {r.make === 'msi' && r.releases.length > 0 && r.behind === null && (
+            <>
+              The running version {info.bios.version ?? ''} did not match a package name, so nothing
+              is counted.{' '}
+            </>
+          )}
+          {r.make === 'gigabyte' && <>{r.error}</>}
+          {r.make === 'apple' && (
+            <>{r.error} A pending macOS update there is a pending firmware update here.</>
+          )}
+          {r.make === null && (
+            <>
+              No maker recognised from the SMBIOS vendor string, so there is nothing to compare
+              against. The version is stated and left alone.
+            </>
+          )}
+        </p>
+      </Board>
+
+      <Board
+        title={r.releases.length === 0 ? 'Releases' : `${num(r.releases.length)} releases`}
+        icon="⎌"
+        span={12}
+        aside={
+          r.source === null ? undefined : (
+            <span className={`${NOTE} ${MONO}`}>{r.source.replace(/^https?:\/\//, '')}</span>
+          )
+        }
+      >
+        {r.releases.length === 0 ? (
+          <p className={EMPTY}>
+            {r.make === 'apple'
+              ? 'Apple publishes firmware only inside macOS updates; the machine’s own list is on Updates.'
+              : r.make === 'gigabyte'
+                ? 'No list from Gigabyte yet.'
+                : r.make === null
+                  ? 'No maker feed for this board.'
+                  : (r.error ?? 'Nothing read yet.')}
+          </p>
+        ) : (
+          <ul className={LIST}>
+            {r.releases.map((rel) => (
+              <li key={rel.version} className={`${ROW} flex-wrap`}>
+                <span className={`${ROW_MAIN} flex min-w-0 flex-col gap-[0.15rem]`}>
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className={MONO}>{rel.version}</span>
+                    {rel.version === r.running && <Chip tone="ok">running</Chip>}
+                    {newerThan(rel.version) && <Chip tone="warn">newer</Chip>}
+                    <span className={NOTE}>{rel.date ?? DASH}</span>
+                  </span>
+                  {rel.notes.length === 0 ? (
+                    <span className={NOTE}>no note in the package</span>
+                  ) : (
+                    <span className="flex flex-col gap-[0.1rem] text-[0.8rem] text-foreground leading-[1.45]">
+                      {rel.notes.map((n) => (
+                        <span key={n}>{n}</span>
+                      ))}
+                    </span>
+                  )}
+                </span>
+                <span className={ROW_SIDE}>
+                  {rel.url === null ? (
+                    bytes(rel.sizeBytes)
+                  ) : (
+                    <a href={rel.url} target="_blank" rel="noreferrer" className={MONO}>
+                      {bytes(rel.sizeBytes)} ↗
+                    </a>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className={FOOT}>
+          {r.make === 'msi'
+            ? 'Newest first, the maker’s own words, English section only. Every package is a link; flashing one is done at the machine, from its BIOS, and is not this page’s to start.'
+            : r.make === 'apple'
+              ? 'The Mac’s pending and installed system updates are the firmware history that exists.'
+              : 'Nothing to list.'}
+        </p>
+      </Board>
+    </BoardGrid>
+  )
+}
+
+/** A node's Motherboard tab: the same view over its telemetry. */
+export function NodeBoardView({ d }: { d: NodeSystemData }) {
+  const t = d.telemetry
+  if (t === null) return null
+  if (d.releases === null) {
+    return (
+      <p className={EMPTY}>
+        The maker&rsquo;s list was not read for this page. Open the tab again from{' '}
+        <Link
+          to="/c/$category"
+          params={{ category: 'system' }}
+          search={{ tab: 'board', machine: d.node.id }}
+        >
+          Motherboard
+        </Link>
+        .
+      </p>
+    )
+  }
+  return (
+    <BoardView
+      info={{
+        vendor: t.machine.boardManufacturer ?? t.machine.manufacturer,
+        model: t.machine.boardProduct ?? t.machine.model,
+        revision: null,
+        form: t.machine.form,
+        bios: {
+          vendor: t.machine.biosVendor,
+          version: t.machine.biosVersion,
+          date: t.machine.biosDate,
+        },
+        releases: d.releases,
+      }}
+    />
+  )
+}

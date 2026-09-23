@@ -3,6 +3,7 @@ import { defineViews } from '../../../lib/modules/tabs'
 import type { Tabs } from '../data'
 import { manifest } from '../manifest'
 import { BackupsView } from './backups'
+import { BoardView } from './board'
 import { BuildView } from './build'
 import { DisksView } from './disks'
 import { HostView } from './host'
@@ -31,6 +32,7 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
   disks: ({ data }) => <DisksView d={data} />,
   pools: ({ data }) => <PoolsView d={data} />,
   build: ({ data }) => <BuildView d={data} />,
+  board: ({ data }) => <BoardView d={data} />,
   updates: ({ data }) => <UpdatesView d={data} />,
   backups: ({ data }) => <BackupsView d={data} />,
   claude: ({ data }) => <ClaudeView data={data} />,

@@ -1,4 +1,5 @@
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
+import { NodeBoardView } from './board'
 import { NodeBuildView } from './build'
 import { NodeDisksView } from './disks'
 import { NodeHostView } from './host'
@@ -22,6 +23,7 @@ export const NODE_TABS = [
   { id: 'memory', label: 'Memory', boardSpans: [8, 4, 4, 8] },
   { id: 'disks', label: 'Disks', boardSpans: [4, 4, 4, 12] },
   { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 6, 6, 12] },
+  { id: 'board', label: 'Motherboard', boardSpans: [4, 8, 12] },
   { id: 'updates', label: 'Updates', boardSpans: [12, 12, 6, 6] },
   // Who maintains it, as on the box: the remote-control server the agent's
   // tray runs there. Drawn by components/claude-node.tsx from the node's
@@ -51,6 +53,8 @@ export function MachineSystemView({ d, tab }: { d: NodeSystemData; tab: NodeTabI
         <NodeMemoryView d={d} />
       ) : tab === 'disks' ? (
         <NodeDisksView d={d} />
+      ) : tab === 'board' ? (
+        <NodeBoardView d={d} />
       ) : tab === 'build' ? (
         <NodeBuildView d={d} />
       ) : tab === 'updates' ? (

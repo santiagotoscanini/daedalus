@@ -94,7 +94,10 @@ export const Route = createFileRoute('/c/$category')({
       // reads, and a strip that said less on the Claude tab than on Host read
       // as a page that had not finished. The Claude tab adds its report (the
       // tray's picture of the remote-control server) for its boards.
-      node: machine === null ? null : fetchNodeSystemFn({ data: { id: machine } }),
+      node:
+        machine === null
+          ? null
+          : fetchNodeSystemFn({ data: { id: machine, board: nodeTab === 'board' } }),
       nodeClaude:
         machine !== null && nodeTab === 'claude'
           ? fetchNodeClaudeFn({ data: { id: machine } })

@@ -27,6 +27,7 @@
 import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
 import { manifest } from '../manifest'
 import { type BackupsData, loadBackups } from './backups'
+import { type BoardData, loadBoard } from './board'
 import { type BuildData, loadBuild } from './build'
 import { type ClaudeData, loadClaude } from './claude'
 import { type DisksData, loadDisks } from './disks'
@@ -41,6 +42,7 @@ export type Tabs = {
   disks: DisksData
   pools: PoolsData
   build: BuildData
+  board: BoardData
   updates: UpdatesData
   backups: BackupsData
   claude: ClaudeData
@@ -56,6 +58,7 @@ export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   disks: loadDisks,
   pools: loadPools,
   build: loadBuild,
+  board: loadBoard,
   updates: loadUpdates,
   backups: loadBackups,
   claude: loadClaude,

@@ -9,6 +9,7 @@ import {
 } from '../agent/status'
 import { getJsonResult } from '../http'
 import { getNode, type NodeRow, nodeToken } from '../repo/nodes'
+import { type BoardReleases, boardReleases } from './board-releases'
 
 // The System page for a machine that is not this box, the same tabs the
 // box draws for itself (components/machine-system/): one read of the
@@ -37,12 +38,20 @@ export type NodeSystemData = {
    */
   full: boolean
   detailError: string | null
+  /**
+   * The maker's BIOS releases, read only for the Motherboard tab (it asks a
+   * download host on the internet, which the other tabs have no use for).
+   */
+  releases: BoardReleases | null
   /** Processor busy, six hours at two-minute steps, from the box's Prometheus. */
   cpuSpark: number[]
   error: string | null
 }
 
-export async function loadNodeSystem(id: string): Promise<NodeSystemData | null> {
+export async function loadNodeSystem(
+  id: string,
+  opts: { board?: boolean } = {},
+): Promise<NodeSystemData | null> {
   const node = await getNode(id)
   if (node === null) return null
   const none = {
@@ -51,6 +60,7 @@ export async function loadNodeSystem(id: string): Promise<NodeSystemData | null>
     telemetry: null,
     full: false,
     detailError: null,
+    releases: null,
     cpuSpark: [] as number[],
   }
   if (node.lanIp === null) {
@@ -82,6 +92,14 @@ export async function loadNodeSystem(id: string): Promise<NodeSystemData | null>
   } catch (e) {
     return { ...none, cpuSpark, error: e instanceof Error ? e.message : 'not a status page' }
   }
+  const withReleases = async (t: NodeTelemetry): Promise<BoardReleases | null> =>
+    opts.board === true
+      ? boardReleases({
+          vendor: t.machine.boardManufacturer ?? t.machine.manufacturer,
+          product: t.machine.boardProduct ?? t.machine.model,
+          biosVersion: t.machine.biosVersion,
+        })
+      : null
   if (open === null) {
     return { ...none, status, cpuSpark, error: null }
   }
@@ -91,6 +109,7 @@ export async function loadNodeSystem(id: string): Promise<NodeSystemData | null>
       status,
       telemetry: open,
       cpuSpark,
+      releases: await withReleases(open),
       detailError: 'no node token yet: approve the machine',
       error: null,
     }
@@ -107,13 +126,29 @@ export async function loadNodeSystem(id: string): Promise<NodeSystemData | null>
         : fullDoc.reason.status === 404
           ? 'the agent is older than 0.8.0: drives, processes, services and updates arrive with it'
           : (fullDoc.reason.error ?? `HTTP ${String(fullDoc.reason.status)}`)
-    return { ...none, status, telemetry: open, cpuSpark, detailError: why, error: null }
+    return {
+      ...none,
+      status,
+      telemetry: open,
+      releases: await withReleases(open),
+      cpuSpark,
+      detailError: why,
+      error: null,
+    }
   }
   try {
     const t = nodeTelemetryFull(fullDoc.value)
     return t === null
       ? { ...none, status, telemetry: open, cpuSpark, detailError: 'empty answer', error: null }
-      : { ...none, status, telemetry: t, full: true, cpuSpark, error: null }
+      : {
+          ...none,
+          status,
+          telemetry: t,
+          full: true,
+          releases: await withReleases(t),
+          cpuSpark,
+          error: null,
+        }
   } catch (e) {
     return {
       ...none,

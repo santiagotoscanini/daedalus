@@ -51,6 +51,11 @@ export const manifest = {
     // case with a screwdriver. Four thirds and a wide row — the components
     // are peers, so none of them gets to be the big panel.
     { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 12], head: false },
+    // The one part of the build with a version and a maker who moves it.
+    // Build says what the board IS; this says what firmware it runs, what
+    // the maker has published since, and what each release changed — read
+    // from the maker's download host, since its website refuses this box.
+    { id: 'board', label: 'Motherboard', boardSpans: [4, 8, 12], head: false },
     // The one tab in this row whose subject is the fleet rather than a layer
     // of the machine — every digest-pinned container and whether it is
     // behind. It sits here because it is the box's own maintenance state,

@@ -85,6 +85,7 @@ export function shortVendor(v: string | null): string {
     .replace(/Micro-Star International Co\., Ltd\.?/i, 'MSI')
     .replace(/American Megatrends International, LLC\.?/i, 'AMI')
     .replace(/Apple Inc\.?/i, 'Apple')
+    .replace(/Gigabyte Technology Co\., Ltd\.?/i, 'Gigabyte')
     .replace(/, (Inc|LLC|Ltd)\.?$/i, '')
 }
 
