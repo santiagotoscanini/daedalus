@@ -13,11 +13,18 @@ import {
 } from '../components/machine-system'
 import { ModuleBoards } from '../components/modules/boards'
 import { PageHead } from '../components/page'
-import { BoardsSkeleton, ServiceHeadSkeleton, StripSkeleton } from '../components/skeleton'
+import {
+  BoardsSkeleton,
+  HeadStripSkeleton,
+  ServiceHeadSkeleton,
+  StripSkeleton,
+} from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { EMPTY } from '../components/tokens'
+import type { AgentStatus } from '../lib/agent/status'
 import { isDotted, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
 import { moduleById } from '../lib/modules/registry'
+import type { NodeRow } from '../lib/repo/nodes'
 import { fetchNodeClaudeFn } from '../server/claude'
 import { fetchBoxHeadFn, fetchMachineNodesFn, fetchNodeSystemFn } from '../server/machines'
 import { fetchModuleBoards } from '../server/modules'
@@ -129,6 +136,12 @@ function CategoryPage() {
 
       {nodeTab !== null ? (
         <>
+          {/* The strip first, then the tabs, as on the box. It waits for the
+              node's answer behind a skeleton of its own size, so the tabs
+              below never move and never wait. Whichever promise the tab is
+              on carries the node and its status, which is all the strip
+              reads. */}
+          <NodeHead promise={nodeClaude ?? node} resetKey={sectionKey} />
           <TabBar
             tabs={NODE_TABS.map((t) => ({ id: t.id, label: t.label }))}
             active={nodeTab}
@@ -154,10 +167,7 @@ function CategoryPage() {
                 d === null ? (
                   <p className={EMPTY}>No machine with that id. It may have been forgotten.</p>
                 ) : (
-                  <>
-                    <MachineHead d={d} />
-                    <NodeClaudeView d={d} />
-                  </>
+                  <NodeClaudeView d={d} />
                 )
               }
             </GuardedAwait>
@@ -166,12 +176,9 @@ function CategoryPage() {
               resetKey={sectionKey}
               promise={node}
               fallback={
-                <>
-                  <ServiceHeadSkeleton />
-                  <BoardsSkeleton
-                    spans={[...(NODE_TABS.find((t) => t.id === nodeTab)?.boardSpans ?? [8, 4, 4])]}
-                  />
-                </>
+                <BoardsSkeleton
+                  spans={[...(NODE_TABS.find((t) => t.id === nodeTab)?.boardSpans ?? [8, 4, 4])]}
+                />
               }
             >
               {(d) =>
@@ -300,5 +307,26 @@ function BoardsPlaceholder({ spec, tab }: { spec: PageSpec; tab: string }) {
       {t?.head !== false && <ServiceHeadSkeleton />}
       <BoardsSkeleton spans={t?.boardSpans ?? spec.boardSpans} />
     </>
+  )
+}
+
+/**
+ * The node's head strip, from whichever of the two node promises the tab is
+ * on. Typed loosely on purpose: both resolve to the node and its agent's
+ * status, which is what the strip draws, and TypeScript cannot narrow a
+ * union of two promise types through `??`.
+ */
+function NodeHead({
+  promise,
+  resetKey,
+}: {
+  promise: Promise<{ node: NodeRow; status: AgentStatus | null } | null> | null
+  resetKey: string
+}) {
+  if (promise === null) return null
+  return (
+    <GuardedAwait resetKey={resetKey} promise={promise} fallback={<HeadStripSkeleton />}>
+      {(d) => (d === null ? null : <MachineHead d={d} />)}
+    </GuardedAwait>
   )
 }

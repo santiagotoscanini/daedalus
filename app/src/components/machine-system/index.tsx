@@ -3,7 +3,7 @@ import { NodeBuildView } from './build'
 import { NodeDisksView } from './disks'
 import { NodeHostView } from './host'
 import { NodeMemoryView } from './memory'
-import { MachineHead, NoDocument } from './shared'
+import { NoDocument } from './shared'
 import { NodeUpdatesView } from './updates'
 
 export { BoxHead, MachineHead } from './shared'
@@ -39,7 +39,6 @@ export function MachineSystemView({ d, tab }: { d: NodeSystemData; tab: NodeTabI
   const ready = d.status !== null && d.telemetry !== null
   return (
     <>
-      <MachineHead d={d} />
       {!ready ? (
         <NoDocument d={d} />
       ) : tab === 'memory' ? (

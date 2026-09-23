@@ -212,3 +212,20 @@ export function BlockSkeleton({ h = 240 }: { h?: number }) {
     />
   )
 }
+
+/**
+ * The strip above the System tabs (components/machine-system HeadStrip):
+ * the OS mark, a name with a chip, one line. The same size as the real
+ * one, so the tabs below it do not move when a node's page answers.
+ */
+export function HeadStripSkeleton() {
+  return (
+    <div className="mb-[1.1rem] flex items-start gap-[0.85rem]">
+      <span className={cn(SK, 'size-11 flex-none rounded-[10px]')} />
+      <div className="flex min-w-0 flex-1 flex-col gap-2 pt-[0.3rem]">
+        <Bar w="24%" h={18} />
+        <Bar w="48%" h={11} />
+      </div>
+    </div>
+  )
+}
