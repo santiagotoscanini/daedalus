@@ -10,6 +10,7 @@ import { bytes, duration, since } from '../../lib/format'
 import { CHOSEN_KINDS, finishesFor, partsOfKind } from '../../lib/hardware/catalog'
 import { errorText } from '../../lib/redact'
 import type { NodeRow } from '../../lib/repo/nodes'
+import { useShown } from '../../lib/shown'
 import type { Tone } from '../../lib/tone'
 import {
   approveNodeFn,
@@ -21,7 +22,7 @@ import {
 } from '../../server/nodes'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Picker } from '../ui/picker'
 import { Switch } from '../ui/switch'
 import { Chip } from '../viz'
 import {
@@ -289,8 +290,14 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
     })
   }
 
-  const awake = n.policy.awakeHold ?? DEFAULTS.awakeHold
-  const claude = n.policy.claudeRemoteControl ?? DEFAULTS.claudeRemoteControl
+  // Shown as flipped the moment they are, while the save runs (lib/shown.ts).
+  const failed = error !== null
+  const [awake, showAwake] = useShown(n.policy.awakeHold ?? DEFAULTS.awakeHold, busy, failed)
+  const [claude, showClaude] = useShown(
+    n.policy.claudeRemoteControl ?? DEFAULTS.claudeRemoteControl,
+    busy,
+    failed,
+  )
 
   return (
     <div className="flex flex-col gap-3 border-(--border-soft) border-t pt-4">
@@ -324,7 +331,10 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
                   <Switch
                     checked={awake}
                     disabled={busy}
-                    onCheckedChange={(v) => save({ ...n.policy, awakeHold: v })}
+                    onCheckedChange={(v) => {
+                      showAwake(v)
+                      save({ ...n.policy, awakeHold: v })
+                    }}
                     aria-label="Keep awake"
                   />
                   <span className="text-[0.82rem]">{awake ? 'held awake' : 'may sleep'}</span>
@@ -344,7 +354,10 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
                   <Switch
                     checked={claude}
                     disabled={busy}
-                    onCheckedChange={(v) => save({ ...n.policy, claudeRemoteControl: v })}
+                    onCheckedChange={(v) => {
+                      showClaude(v)
+                      save({ ...n.policy, claudeRemoteControl: v })
+                    }}
                     aria-label="Claude remote control"
                   />
                   <span className="text-[0.82rem]">{claude ? 'runs' : 'off'}</span>
@@ -403,29 +416,20 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
                     k: 'Finish',
                     v: (
                       <Stack className="w-full max-w-[28rem]">
-                        <Select
+                        <Picker
                           value={n.policy.hardware?.finish ?? NONE}
+                          busy={busy}
+                          failed={failed}
                           disabled={busy}
-                          onValueChange={(v) => {
+                          aria-label="finish"
+                          options={[
+                            { value: NONE, label: 'not set' },
+                            ...finishes.map((f) => ({ value: f.id, label: f.name })),
+                          ]}
+                          onChange={(v) => {
                             saveHardware('finish', v === NONE ? undefined : v)
                           }}
-                        >
-                          <SelectTrigger
-                            size="sm"
-                            aria-label="finish"
-                            className="w-full justify-between"
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE}>not set</SelectItem>
-                            {finishes.map((f) => (
-                              <SelectItem key={f.id} value={f.id}>
-                                {f.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        />
                         <span className={ASIDE}>
                           The machine reports its model and everything in it; the colour is the one
                           thing it does not say. The pages draw the photo that matches.
@@ -438,25 +442,20 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
                 k: kind === 'case' ? 'Case' : kind === 'cooler' ? 'CPU cooler' : 'Power supply',
                 v: (
                   <Stack className="w-full max-w-[28rem]">
-                    <Select
+                    <Picker
                       value={n.policy.hardware?.[kind] ?? NONE}
+                      busy={busy}
+                      failed={failed}
                       disabled={busy}
-                      onValueChange={(v) => {
+                      aria-label={kind}
+                      options={[
+                        { value: NONE, label: 'not set' },
+                        ...partsOfKind(kind).map((p) => ({ value: p.id, label: p.name })),
+                      ]}
+                      onChange={(v) => {
                         saveHardware(kind, v === NONE ? undefined : v)
                       }}
-                    >
-                      <SelectTrigger size="sm" aria-label={kind} className="w-full justify-between">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NONE}>not set</SelectItem>
-                        {partsOfKind(kind).map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    />
                     {kind === 'psu' && (
                       <span className={ASIDE}>
                         Nothing in a PC reports its case, cooler or supply, so these are chosen

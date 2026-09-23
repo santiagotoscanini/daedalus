@@ -23,6 +23,7 @@ import { Button } from '../components/ui/button'
 import { type AccessWindow, DEFAULT_WINDOW, isAccessWindow } from '../lib/access-window'
 import { cn } from '../lib/cn'
 import { isAppName } from '../lib/hostname'
+import { known } from '../lib/known'
 import { appRepo } from '../lib/site'
 import { useSite } from '../lib/site-context'
 import { type Tone, toneStyle } from '../lib/tone'
@@ -97,7 +98,30 @@ export const Route = createFileRoute('/apps/$name')({
     // typed, and a typed URL deserves the not-found page below rather than an
     // error boundary over a rejected request.
     if (!isAppName(params.name)) throw notFound()
-    const shell = await fetchApp({ data: { name: params.name } })
+    // The identity, from this browser's memory past the first visit
+    // (lib/known.ts): the tab bar and the hero must not wait a round trip
+    // on every tab. The request rate and its spark move on every read and
+    // are left out of the comparison; a change of state is not.
+    const shell = await known(
+      `app/${params.name}`,
+      () => fetchApp({ data: { name: params.name } }),
+      (s) =>
+        JSON.stringify(
+          s === null
+            ? null
+            : {
+                ...s,
+                status:
+                  s.status === null
+                    ? null
+                    : {
+                        state: s.status.state,
+                        up: s.status.containerUp,
+                        healthy: s.status.healthy,
+                      },
+              },
+        ),
+    )
     if (!shell) throw notFound()
     return {
       ...shell,

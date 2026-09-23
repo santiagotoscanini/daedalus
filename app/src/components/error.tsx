@@ -184,20 +184,35 @@ function Settled<T>({
     }
   }, [remembered, promise, cacheKey])
 
-  if (remembered) {
-    // A refresh that failed is worth the section, as a first load that failed
-    // is: stale numbers presented as current would be the worse lie.
-    if (failure !== null && failure.promise === promise) throw failure.error
-    return <>{children(settled.get(cacheKey) as T)}</>
-  }
+  // A refresh that failed is worth the section, as a first load that failed
+  // is: stale numbers presented as current would be the worse lie.
+  if (remembered && failure !== null && failure.promise === promise) throw failure.error
+
+  // One <Await> in both cases, so the children keep their place in the
+  // tree. A remembered section used to render them bare, and the first
+  // refresh after a first sight moved them from inside <Await> to outside
+  // it — a remount, which threw away every input and switch state below
+  // and re-ran every effect. React's `use` returns at once from a thenable
+  // already marked fulfilled, which is what the memory hands it.
   return (
-    <Await promise={promise} fallback={fallback}>
+    <Await
+      promise={remembered ? fulfilled(settled.get(cacheKey) as T) : promise}
+      fallback={fallback}
+    >
       {(value) => {
         // Written during render, which is safe for an idempotent map write, and
         // the only place the first answer passes through.
-        if (typeof window !== 'undefined') settled.set(cacheKey, value)
+        if (!remembered && typeof window !== 'undefined') settled.set(cacheKey, value)
         return children(value)
       }}
     </Await>
   )
+}
+
+/** A promise `use` will not suspend on: settled, and saying so. */
+function fulfilled<T>(value: T): Promise<T> {
+  const p = Promise.resolve(value) as Promise<T> & { status?: string; value?: T }
+  p.status = 'fulfilled'
+  p.value = value
+  return p
 }

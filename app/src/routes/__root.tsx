@@ -16,13 +16,12 @@ import { NavIcon, type NavIconName } from '../components/nav-icon'
 import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
 import { useHydrated } from '../lib/hydrated'
+import { known } from '../lib/known'
 import { useResolvedScheme } from '../lib/scheme'
 import { SiteProvider } from '../lib/site-context'
 import { presetById, type ThemeChoice, themeCss } from '../lib/theme'
-import { fetchActiveModules } from '../server/modules'
 import { fetchAccount } from '../server/profile'
-import { fetchTheme } from '../server/settings'
-import { fetchEngineOverride, fetchSite } from '../server/site'
+import { fetchShell } from '../server/shell'
 import { APP_TABS } from './apps.$name'
 
 /**
@@ -143,15 +142,18 @@ export const Route = createRootRoute({
   // is a run-time fact of the box, never of the build. Awaited, it is in the
   // server's HTML and in the dehydrated data, so the browser's first render
   // spells them the same way. It costs an env read.
+  //
+  // The fifth is the engine-override notice: one file read, and a notice
+  // about the whole box that must not stream in under the page it is
+  // about (components/engine-override-banner.tsx).
+  //
+  // The four awaited ones are ONE server call (server/shell.ts), and past
+  // the first load they are answered from this browser's memory and
+  // refreshed behind the page (lib/known.ts): a navigation never waits on
+  // the shell it is already showing.
   loader: async () => ({
-    theme: await fetchTheme(),
+    ...(await known('shell', fetchShell)),
     account: fetchAccount(),
-    modules: await fetchActiveModules(),
-    site: await fetchSite(),
-    // The fifth, and the last that is awaited: one file read, and a notice
-    // about the whole box that must not stream in under the page it is
-    // about (components/engine-override-banner.tsx).
-    engineOverride: await fetchEngineOverride(),
   }),
   head: () => ({
     meta: [
@@ -395,10 +397,17 @@ function Shell({
         aria-hidden="true"
       />
 
+      {/* Fixed, not sticky. A sticky rail depends on the body being the
+          scroller, and every Radix popover (a Select, the account menu)
+          locks the body's overflow while open: Chrome then leaves the
+          sticky rail wherever the page was scrolled to until the next
+          scroll event, which read as the rail vanishing. Fixed to the
+          viewport, it cannot move; the grid's first column is the room it
+          takes, and `main` sits in the second. */}
       <aside
         id="nav"
         className={cn(
-          'sticky top-0 flex h-screen flex-col gap-[1.4rem]',
+          'fixed inset-y-0 left-0 z-20 flex w-(--sidebar-w) flex-col gap-[1.4rem]',
           'border-r border-r-(--border-soft) bg-background px-[0.7rem] pt-[1.1rem] pb-[0.9rem]',
           'nav-collapsed:px-[0.55rem]',
           // Below the breakpoint it stops being a column and becomes a
@@ -548,7 +557,7 @@ function Shell({
         </nav>
       </aside>
 
-      <main className="min-w-0 px-[clamp(1rem,3.5vw,2.75rem)] pt-[1.9rem] pb-28 max-rail:pb-32">
+      <main className="col-start-2 min-w-0 px-[clamp(1rem,3.5vw,2.75rem)] pt-[1.9rem] pb-28 max-rail:pb-32">
         <EngineOverrideBanner path={engineOverride} />
         {children ?? <Outlet />}
       </main>

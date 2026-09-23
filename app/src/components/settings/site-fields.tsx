@@ -3,6 +3,7 @@ import { type ReactNode, useId, useState, useTransition } from 'react'
 import type { SiteEdit, SiteField } from '../../core/site'
 import { cn } from '../../lib/cn'
 import { errorText } from '../../lib/redact'
+import { useShown } from '../../lib/shown'
 import { getSiteField, parseUpstreams } from '../../lib/site-fields'
 import {
   type DiffLine,
@@ -15,15 +16,7 @@ import { saveSiteEditFn } from '../../server/site'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Field, FieldError } from '../ui/field'
 import { Input } from '../ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select'
+import { Picker, type PickerGroup } from '../ui/picker'
 import { Switch } from '../ui/switch'
 import { Textarea } from '../ui/textarea'
 import { Chip } from '../viz'
@@ -208,8 +201,12 @@ export function SiteSwitch({
   field: SiteField
   label: string
 }) {
-  const checked = getSiteField(edit.desired, field) === true
   const { save, saving, refused } = useSiteSave()
+  const [checked, show] = useShown(
+    getSiteField(edit.desired, field) === true,
+    saving,
+    refused !== null,
+  )
   return (
     <Control edit={edit} field={field} error={refused} saving={saving}>
       <Chip tone={checked ? 'ok' : 'muted'}>{checked ? 'active' : 'off'}</Chip>
@@ -218,6 +215,7 @@ export function SiteSwitch({
         checked={checked}
         disabled={edit.committed === null || saving}
         onCheckedChange={(v) => {
+          show(v)
           save({ [field]: v })
         }}
       />
@@ -282,7 +280,7 @@ function ListInner({
   )
 }
 
-export type SelectGroupSpec = { label: string; options: { value: string; label: string }[] }
+export type SelectGroupSpec = PickerGroup
 
 type SelectProps = {
   edit: SiteEdit
@@ -304,40 +302,21 @@ export function SiteSelect({ edit, field, label, groups, patchFor, disabled }: S
   const value = getSiteField(edit.desired, field)
   const current = typeof value === 'string' ? value : ''
   const { save, saving, refused } = useSiteSave()
-  // A value the list does not carry (a zone the token stopped seeing, a name
-  // tzdata renamed) is still shown, as its own group, rather than leaving an
-  // empty trigger that reads as "not set".
-  const known = groups.some((g) => g.options.some((o) => o.value === current))
-  const shown =
-    known || current === ''
-      ? groups
-      : [{ label: 'Current', options: [{ value: current, label: current }] }, ...groups]
   return (
     <Control edit={edit} field={field} error={refused} saving={saving}>
-      <Select
+      <Picker
         value={current}
+        options={groups}
+        aria-label={label}
+        className={INPUT}
+        mono
+        busy={saving}
+        failed={refused !== null}
         disabled={edit.committed === null || saving || disabled === true}
-        onValueChange={(v) => {
-          if (v === current) return
+        onChange={(v) => {
           save(patchFor === undefined ? { [field]: v } : patchFor(v))
         }}
-      >
-        <SelectTrigger size="sm" aria-label={label} className={cn(INPUT, 'justify-between')}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="max-h-80">
-          {shown.map((g) => (
-            <SelectGroup key={g.label}>
-              {shown.length > 1 && <SelectLabel>{g.label}</SelectLabel>}
-              {g.options.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="font-mono text-[0.8rem]">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
+      />
     </Control>
   )
 }

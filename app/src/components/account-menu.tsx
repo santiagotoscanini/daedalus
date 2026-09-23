@@ -14,9 +14,9 @@ import { type ReactNode, useTransition } from 'react'
 
 import type { Account } from '../core/settings/types'
 import { cn } from '../lib/cn'
+import { useSettled } from '../lib/settled'
 import { isScheme, type Scheme, type ThemeChoice } from '../lib/theme'
 import { saveTheme } from '../server/settings'
-import { GuardedAwait } from './error'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,14 +58,10 @@ type Props = {
 }
 
 export function AccountMenu({ account, ...rest }: Props) {
-  return (
-    // Guarded: this is the root route, so an unguarded rejection from Pocket
-    // ID throws past the Suspense fallback and takes every page with it — the
-    // rail included, which is the one thing that must survive.
-    <GuardedAwait resetKey="account" promise={account} fallback={<Menu account={null} {...rest} />}>
-      {(a) => <Menu account={a} {...rest} />}
-    </GuardedAwait>
-  )
+  // One <Menu>, whatever the promise is doing: null until Pocket ID answers,
+  // then the account, remembered across navigations (lib/settled.ts). A
+  // rejection from Pocket ID leaves it null, never the rail broken.
+  return <Menu account={useSettled('account', account)} {...rest} />
 }
 
 function Avatar({ account, size }: { account: Account | null; size: number }) {
@@ -101,7 +97,10 @@ function Menu({
   const label = account?.name ?? 'Account'
 
   return (
-    <DropdownMenu>
+    // Non-modal: a rail menu has no business locking the page's scroll,
+    // switching the body's pointer events off, or hiding the page from a
+    // screen reader while it is open. Outside clicks still close it.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"

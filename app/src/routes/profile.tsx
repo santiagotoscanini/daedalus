@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { GuardedAwait } from '../components/error'
 import { Measure, PageHead } from '../components/page'
 import { ProfilePage } from '../components/profile'
+import { known } from '../lib/known'
 import { fetchOperator, fetchProfile } from '../server/profile'
 
 // The person, not the box: the Pocket ID account the signed-in operator uses
@@ -15,7 +16,7 @@ import { fetchOperator, fetchProfile } from '../server/profile'
 
 export const Route = createFileRoute('/profile')({
   loader: async () => ({
-    operator: await fetchOperator(),
+    operator: await known('operator', fetchOperator),
     profile: fetchProfile(),
   }),
   component: Page,

@@ -24,8 +24,10 @@ import { Machines } from '../components/settings/machines'
 import { Network } from '../components/settings/network'
 import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
+import { BoardsSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import type { GithubAppStatus, GithubCallbackNotice } from '../core/settings/types'
+import { known } from '../lib/known'
 import { fetchMachinesFn } from '../server/nodes'
 import { fetchApplyStatus } from '../server/registry'
 import {
@@ -145,9 +147,13 @@ export const Route = createFileRoute('/settings')({
   loaderDeps: ({ search }) => ({ tab: search.tab }),
   // The facts are awaited: files and one database row, no upstream to wait
   // on. So is the site edit (two file reads and a row) and the apply status,
-  // because the Apply bar is on every tab. The integration checks are not —
-  // they ask Cloudflare and GitHub, so they stream in behind the page, and
-  // only for the tab that shows them.
+  // because the Apply bar is on every tab. Awaited from this browser's
+  // memory past the first visit (lib/known.ts) — the forms are drawn from
+  // them, and a tab that waited on nine round trips to draw a form was the
+  // slowest click in the app — and read fresh when a save invalidates.
+  // The integration checks are not awaited at all: they ask Cloudflare and
+  // GitHub, so they stream in behind the page, and only for the tab that
+  // shows them; so does the machine list, which probes the LAN.
   loader: async ({ deps }) => {
     const general = !isTab(deps.tab) || deps.tab === 'general'
     const [
@@ -160,24 +166,25 @@ export const Route = createFileRoute('/settings')({
       githubApp,
       mcpTokens,
       authorization,
-      machines,
     ] = await Promise.all([
-      fetchTheme(),
-      fetchBoxSettings(),
-      fetchSiteEdit(),
-      fetchApplyStatus(),
-      // A file read, so awaited like the facts; only General has the picker.
-      general ? fetchTimezones() : Promise.resolve<string[]>([]),
+      known('settings/theme', fetchTheme),
+      known('settings/box', fetchBoxSettings),
+      known('settings/edit', fetchSiteEdit),
+      known('settings/apply', fetchApplyStatus),
+      // A file read; only General has the picker.
+      general ? known('settings/timezones', fetchTimezones) : Promise.resolve<string[]>([]),
       // One row, and only Projects has the editor.
-      deps.tab === 'projects' ? fetchExternalApps() : Promise.resolve([]),
-      // Two file reads and a row, no upstream: awaited, for the tab that shows it.
-      deps.tab === 'integrations' ? fetchGithubAppStatus() : Promise.resolve(null),
+      deps.tab === 'projects' ? known('settings/projects', fetchExternalApps) : Promise.resolve([]),
+      // Two file reads and a row, for the tab that shows it.
+      deps.tab === 'integrations'
+        ? known('settings/github', fetchGithubAppStatus)
+        : Promise.resolve(null),
       // One indexed table read, and only for the tab that lists them.
-      deps.tab === 'developer' ? fetchMcpTokens() : Promise.resolve([]),
+      deps.tab === 'developer' ? known('settings/mcp', fetchMcpTokens) : Promise.resolve([]),
       // The decision for this very request: two headers and one row.
-      deps.tab === 'developer' ? fetchAuthorization() : Promise.resolve(null),
-      // The machines: one table read plus a LAN probe, for the tab that shows them.
-      deps.tab === 'machines' ? fetchMachinesFn() : Promise.resolve(null),
+      deps.tab === 'developer'
+        ? known('settings/authorization', fetchAuthorization)
+        : Promise.resolve(null),
     ])
     return {
       theme,
@@ -189,7 +196,10 @@ export const Route = createFileRoute('/settings')({
       githubApp,
       mcpTokens,
       authorization,
-      machines,
+      // One table read plus a LAN probe of every machine, which can take
+      // seconds when one is asleep: streamed, behind a skeleton the first
+      // time and in place after.
+      machines: deps.tab === 'machines' ? fetchMachinesFn() : null,
       // The zone list asks Cloudflare, so it streams in behind the tab like the
       // integration checks.
       zones: general ? fetchZones() : null,
@@ -380,7 +390,16 @@ function SettingsPage() {
             </GuardedAwait>
           ))}
         {tab === 'projects' && <ExternalApps rows={externalApps} />}
-        {tab === 'machines' && machines !== null && <Machines d={machines} />}
+        {tab === 'machines' && machines !== null && (
+          <GuardedAwait
+            resetKey={tab}
+            slot="machines"
+            promise={machines}
+            fallback={<BoardsSkeleton spans={[12, 12, 12]} />}
+          >
+            {(d) => <Machines d={d} />}
+          </GuardedAwait>
+        )}
         {tab === 'appearance' && (
           <Appearance
             value={choice}

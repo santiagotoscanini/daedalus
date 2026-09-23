@@ -1,8 +1,9 @@
 import { createRouter as createTanStackRouter } from '@tanstack/react-router'
+import { attachRouter } from './lib/known'
 import { routeTree } from './routeTree.gen'
 
 export function getRouter() {
-  return createTanStackRouter({
+  const router = createTanStackRouter({
     routeTree,
     scrollRestoration: true,
     // Preload on hover, and — the load-bearing half — actually USE what was
@@ -28,6 +29,11 @@ export function getRouter() {
     // part — long enough for the progress bar in __root, never long enough to
     // justify blanking a page that is already on screen.
   })
+  // The loaders' memory (lib/known.ts) reloads through this router when a
+  // remembered answer turns out to have changed, and reads fresh whenever
+  // the app itself asks for a reload.
+  attachRouter(router)
+  return router
 }
 
 declare module '@tanstack/react-router' {

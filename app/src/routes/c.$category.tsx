@@ -22,6 +22,7 @@ import {
 import { TabBar } from '../components/tabs'
 import { EMPTY } from '../components/tokens'
 import type { NodeSystemData } from '../lib/dashboard/node-system'
+import { known } from '../lib/known'
 import { isDotted, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
 import { moduleById } from '../lib/modules/registry'
 import { fetchNodeClaudeFn } from '../server/claude'
@@ -75,11 +76,16 @@ export const Route = createFileRoute('/c/$category')({
     // A node only makes sense on a module with a picker; elsewhere the
     // search param is ignored rather than honoured.
     const machine = picker ? (deps.machine ?? null) : null
-    // The node list is one table read and the picker is part of the frame,
-    // so it is awaited; a node's own page streams in like the boards. It
-    // also says which OS the picked machine runs, which is what shapes its
-    // tab row (components/machine-system/index.tsx).
-    const nodes = picker ? await fetchMachineNodesFn() : []
+    // The node list is part of the frame — the picker, and which OS the
+    // picked machine runs, which is what shapes its tab row
+    // (components/machine-system/index.tsx) — so it is awaited: from this
+    // browser's memory past the first visit (lib/known.ts), compared on
+    // what the picker draws, since "last seen" moves on every read.
+    const nodes = picker
+      ? await known('machines', fetchMachineNodesFn, (ns) =>
+          ns.map((n) => [n.id, n.name, n.os, n.state, n.claude?.sessions ?? 0].join()).join(';'),
+        )
+      : []
     const nodeOs = machine === null ? null : (nodes.find((n) => n.id === machine)?.os ?? 'windows')
     // The node's tabs share the box's ids where the subject is the same, so
     // `?tab=memory` names the memory of whichever machine is picked; an id
@@ -91,8 +97,8 @@ export const Route = createFileRoute('/c/$category')({
       tab,
       nodes,
       nodeOs,
-      // The strip above the box's tabs, cached reads, part of the frame too.
-      boxHead: picker && machine === null ? await fetchBoxHeadFn() : null,
+      // The strip above the box's tabs, part of the frame too, remembered the same way.
+      boxHead: picker && machine === null ? await known('boxHead', fetchBoxHeadFn) : null,
       machine,
       nodeTab,
       // A node's document is fetched on every tab: it is what the head strip

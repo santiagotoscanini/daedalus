@@ -124,9 +124,11 @@ export function BarList({
 
   return (
     <ul className="m-0 flex list-none flex-col gap-[0.32rem] p-0">
-      {items.map((i) => (
+      {items.map((i, n) => (
         <li
-          key={i.label}
+          // Two rows can share a label — a machine running two claude.exe —
+          // and the same label twice is still two rows.
+          key={`${i.label}#${String(n)}`}
           className="grid min-w-0 grid-cols-[minmax(4.5rem,8rem)_1fr_auto] items-center gap-[0.6rem]"
           style={toneStyle(i.tone ?? tone)}
         >

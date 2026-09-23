@@ -17,7 +17,7 @@ import { addExternalAppFn, removeExternalAppFn } from '../../server/settings'
 import { Button } from '../ui/button'
 import { Field, FieldDescription, FieldError, FieldLabel } from '../ui/field'
 import { Input } from '../ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Picker } from '../ui/picker'
 import { Chip } from '../viz'
 import { ERROR_NOTE, Mono, NOTE, PANEL, Section } from './shared'
 
@@ -182,28 +182,17 @@ export function ExternalApps({ rows }: { rows: ExternalApp[] }) {
             <FieldLabel htmlFor={ids.platform} className={LABEL}>
               Platform
             </FieldLabel>
-            <Select
+            <Picker
+              id={ids.platform}
               value={draft.platform}
-              onValueChange={(v) => {
+              aria-label="Platform"
+              className={INPUT}
+              mono
+              options={PLATFORMS.map((p) => ({ value: p.id, label: p.id }))}
+              onChange={(v) => {
                 if (isPlatform(v)) patch({ platform: v })
               }}
-            >
-              <SelectTrigger
-                id={ids.platform}
-                size="sm"
-                className={cn(INPUT, 'justify-between')}
-                aria-label="Platform"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PLATFORMS.map((p) => (
-                  <SelectItem key={p.id} value={p.id} className="font-mono text-[0.8rem]">
-                    {p.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
             <FieldDescription className={HINT}>{platformNote(draft.platform)}</FieldDescription>
           </Field>
           <Field className="gap-1.5">
