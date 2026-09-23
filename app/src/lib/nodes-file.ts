@@ -19,17 +19,8 @@ import { arrayOf, type Decoder, decode, int, obj, optional, recordOf, str } from
 
 export const NODES_SCHEMA_VERSION = 1
 
-/**
- * The LAN's own DNS domain, the one every lease gets a name under. Mirrors
- * `fleet.lanDomain` (platform/nodes.nix, default "lan"); a host that sets
- * it differently is not read yet, so the pages assume the default.
- */
-export const LAN_DOMAIN = 'lan'
-
 /** A DNS label: what a node is called on the network. */
 export const NODE_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/
-
-export const LEMONADE_DEFAULT_PORT = 13305
 
 export type NodesFileNode = {
   id: string

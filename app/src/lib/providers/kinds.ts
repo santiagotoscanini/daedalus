@@ -31,6 +31,19 @@ export const PROVIDER_NAME: Record<ProviderKind, string> = {
   ollama: 'Ollama',
 }
 
+/**
+ * The kinds a NODE can offer, and so the rows Settings › Machines draws for
+ * one. `subgen` is left out on purpose: it is a container on this box, not
+ * something a machine on the network runs, and the box contributes it from
+ * its own module list (host/providers/fleet.ts). Adding a kind to this list
+ * is what puts it on the page and into a node's policy.
+ */
+export const NODE_PROVIDER_KINDS: readonly ProviderKind[] = ['lemonade', 'ollama']
+
+export function isProviderKind(v: unknown): v is ProviderKind {
+  return typeof v === 'string' && (PROVIDER_KINDS as readonly string[]).includes(v)
+}
+
 /** LiteLLM's `model_info.mode` vocabulary, the subset providers here can fill. */
 export type ModelMode =
   | 'chat'

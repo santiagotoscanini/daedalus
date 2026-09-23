@@ -8,6 +8,13 @@ import { readSnapshot, type SnapshotResult } from '../snapshot'
 // merged config rather than fleet.dnsHosts).
 
 export type NetworkFacts = {
+  /**
+   * The LAN's own DNS domain, contributed by platform/nodes.nix
+   * (`fleet.lanDomain`). Every node is dialled at `<name>.<lanDomain>`, so
+   * this is the one string the app must never assume: empty means the export
+   * predates the field, and the caller says what it fell back to.
+   */
+  lanDomain: string
   lanHosts: { ip: string; host: string }[]
   dnsUpstreams: string[]
   // No reservations here: they moved to an encrypted hostsfile (a household
@@ -24,6 +31,7 @@ export type NetworkFacts = {
 }
 
 const shape = obj({
+  lanDomain: optional(str, ''),
   lanHosts: optional(arrayOf(obj({ ip: str, host: str })), []),
   dnsUpstreams: optional(arrayOf(str), []),
   dhcp: optional(
@@ -39,6 +47,7 @@ const shape = obj({
 })
 
 const EMPTY: NetworkFacts = {
+  lanDomain: '',
   lanHosts: [],
   dnsUpstreams: [],
   dhcp: { active: false, router: '', start: '', end: '', leaseTime: '' },

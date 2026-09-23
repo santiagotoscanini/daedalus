@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { FleetProvider } from '../lib/providers/fleet'
 import type { LitellmRoute, ProviderModel } from '../lib/providers/kinds'
-import type { ProviderReading } from '../lib/providers/read'
 import {
   type GatewayClient,
   type GatewayModel,
@@ -9,6 +7,8 @@ import {
   planRoutes,
   reconcile,
 } from './gateway-sync'
+import type { FleetProvider } from './providers/fleet'
+import type { ProviderReading } from './providers/read'
 
 const pc: FleetProvider = {
   machine: 'pc',

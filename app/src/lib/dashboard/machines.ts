@@ -1,4 +1,5 @@
 import type { Ctx } from '../../core/ctx'
+import { lanDomain } from '../../host/providers/fleet'
 import { type Device, lanDevices } from '../../modules/network/data/dhcp'
 import { AGENT_PORT, type AgentStatus, agentStatus, nodeTelemetry } from '../agent/status'
 import { getJsonResult } from '../http'
@@ -45,6 +46,8 @@ export type Machine = {
 
 export type MachinesData = {
   port: number
+  /** The domain a node's name sits under, as the box publishes it. */
+  lanDomain: string
   /** How many addresses were asked. */
   probed: number
   /** Devices that were on the table but too old to ask. */
@@ -96,7 +99,7 @@ function label(m: Machine): string {
 
 export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
   const port = AGENT_PORT
-  const nodeRows = await listNodes()
+  const [nodeRows, domain] = await Promise.all([listNodes(), lanDomain()])
 
   let devices: Device[] = []
   let error: string | null = null
@@ -152,6 +155,7 @@ export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
 
   return {
     port,
+    lanDomain: domain.domain,
     probed: addresses.size,
     skipped: devices.length - recent.length,
     machines,

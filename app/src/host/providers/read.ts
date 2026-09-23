@@ -1,5 +1,5 @@
 import type { Ctx } from '../../core/ctx'
-import { decode } from '../contract/decode'
+import { decode } from '../../lib/contract/decode'
 import {
   lemonadeCatalogDecoder,
   lemonadeHealthDecoder,
@@ -8,7 +8,7 @@ import {
   type ProviderKind,
   type ProviderModel,
   SUBGEN_MODEL,
-} from './kinds'
+} from '../../lib/providers/kinds'
 
 // Reading a provider: the catalog and the health, from the provider's own
 // API at the address the gateway dials. Server-only (it reads the network

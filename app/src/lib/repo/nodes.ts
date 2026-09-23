@@ -10,7 +10,9 @@ import {
   writeNodeTargets,
 } from '../../host/node-targets'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
-import { LEMONADE_DEFAULT_PORT, type NodeForFile, slugOf } from '../nodes-file'
+import type { NodeForFile } from '../nodes-file'
+import { slugOf } from '../nodes-file'
+import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
 
 // The nodes table: what a verified hello writes, what the Machines tab and
 // the Claude page read, the decisions an admin makes about a row, and the
@@ -75,13 +77,18 @@ export function effectivePolicy(p: NodePolicy): {
   awakeHold: boolean
   claudeRemoteControl: boolean
   claudeWorkdir: string | null
-  providers: { lemonade: { port: number } }
+  providers: Record<ProviderKind, { port: number }>
 } {
   return {
     awakeHold: p.awakeHold ?? POLICY_DEFAULTS.awakeHold,
     claudeRemoteControl: p.claudeRemoteControl ?? POLICY_DEFAULTS.claudeRemoteControl,
     claudeWorkdir: p.claudeWorkdir?.trim() || null,
-    providers: { lemonade: { port: p.providers?.lemonade?.port ?? LEMONADE_DEFAULT_PORT } },
+    // Every kind a node can offer, with the port it would be probed on: the
+    // agent looks for the ones it implements and ignores the rest, so a kind
+    // added here reaches an older agent harmlessly.
+    providers: Object.fromEntries(
+      NODE_PROVIDER_KINDS.map((k) => [k, { port: p.providers?.[k]?.port ?? DEFAULT_PORT[k] }]),
+    ) as Record<ProviderKind, { port: number }>,
   }
 }
 
@@ -90,10 +97,14 @@ export function netNameOf(n: { hostname: string; policy: NodePolicy | null }): s
   return n.policy?.name ?? slugOf(n.hostname)
 }
 
-/** The providers a row offers, every key resolved, for site/nodes.json. */
-export function providersOf(p: NodePolicy): Record<string, { port: number; offer: boolean }> {
-  const l = p.providers?.lemonade
-  return { lemonade: { port: l?.port ?? LEMONADE_DEFAULT_PORT, offer: l?.offer ?? false } }
+/** The providers a row could offer, every key resolved, for site/nodes.json and the page. */
+export function providersOf(p: NodePolicy): Record<ProviderKind, { port: number; offer: boolean }> {
+  return Object.fromEntries(
+    NODE_PROVIDER_KINDS.map((k) => [
+      k,
+      { port: p.providers?.[k]?.port ?? DEFAULT_PORT[k], offer: p.providers?.[k]?.offer ?? false },
+    ]),
+  ) as Record<ProviderKind, { port: number; offer: boolean }>
 }
 
 function claudeOf(hello: Record<string, unknown>): NodeClaudeSummary | null {

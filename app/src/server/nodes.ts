@@ -3,6 +3,7 @@ import { actorLabel } from '../core/auth'
 import type { NodePolicy } from '../host/schema'
 import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
 import { NODE_NAME_RE } from '../lib/nodes-file'
+import { isProviderKind, type ProviderKind } from '../lib/providers/kinds'
 import { modelPolicies } from '../lib/providers/policy'
 
 // Server functions behind Settings › Machines: the page's one read, and
@@ -115,22 +116,25 @@ const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
     if (typeof o.providers !== 'object' || o.providers === null) {
       throw new Error('providers must be an object')
     }
-    const l = (o.providers as Record<string, unknown>).lemonade
-    if (l !== undefined) {
-      if (typeof l !== 'object' || l === null)
-        throw new Error('providers.lemonade must be an object')
-      const { port, offer } = l as Record<string, unknown>
+    // By kind, so a machine can offer whatever the gateway knows how to read
+    // — a name that is not a kind is refused rather than stored and ignored.
+    const providers: NonNullable<NodePolicy['providers']> = {}
+    for (const [kind, raw] of Object.entries(o.providers as Record<string, unknown>)) {
+      if (!isProviderKind(kind)) throw new Error(`providers.${kind} is not a provider kind`)
+      if (typeof raw !== 'object' || raw === null) {
+        throw new Error(`providers.${kind} must be an object`)
+      }
+      const { port, offer, models } = raw as Record<string, unknown>
       if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
-        throw new Error('providers.lemonade.port must be a port number')
+        throw new Error(`providers.${kind}.port must be a port number`)
       }
-      if (typeof offer !== 'boolean')
-        throw new Error('providers.lemonade.offer must be true or false')
-      const { models } = l as Record<string, unknown>
-      policy.providers = {
-        lemonade:
-          models === undefined ? { port, offer } : { port, offer, models: modelPolicies(models) },
+      if (typeof offer !== 'boolean') {
+        throw new Error(`providers.${kind}.offer must be true or false`)
       }
+      providers[kind] =
+        models === undefined ? { port, offer } : { port, offer, models: modelPolicies(models) }
     }
+    if (Object.keys(providers).length > 0) policy.providers = providers
   }
   if (o.claudeWorkdir !== undefined) {
     if (typeof o.claudeWorkdir !== 'string') throw new Error('claudeWorkdir must be text')
@@ -194,24 +198,31 @@ export const fetchNodesChangeFn = createServerFn().handler(async (): Promise<str
  * Settings › Machines. Read-only; a node the box does not know answers an
  * empty list.
  */
+const nodeProvider = (data: unknown): { id: string; kind: ProviderKind } => {
+  const { id } = nodeId(data)
+  const kind = (data as { kind?: unknown }).kind
+  if (!isProviderKind(kind)) throw new Error('kind is not a provider kind')
+  return { id, kind }
+}
+
 export const fetchProviderModelsFn = createServerFn()
-  .validator(nodeId)
+  .validator(nodeProvider)
   .handler(async ({ data }) => {
     const { makeCtx } = await import('../core/ctx')
-    const { fleetProviders } = await import('../lib/providers/fleet')
-    const { readProvider } = await import('../lib/providers/read')
+    const { fleetProviders } = await import('../host/providers/fleet')
+    const { readProvider } = await import('../host/providers/read')
     const { resolveModel } = await import('../lib/providers/policy')
     const { getNode } = await import('../lib/repo/nodes')
     const ctx = await makeCtx()
     const node = await getNode(data.id)
     const provider = (await fleetProviders(ctx)).find(
-      (p) => p.machine === data.id && p.kind === 'lemonade',
+      (p) => p.machine === data.id && p.kind === data.kind,
     )
     if (provider === undefined || node === null) {
       return { reachable: false, error: 'no provider on this machine', version: null, models: [] }
     }
     const reading = await readProvider(ctx, provider.kind, provider.base)
-    const policies = node.policy.providers?.lemonade?.models
+    const policies = node.policy.providers?.[data.kind]?.models
     return {
       reachable: reading.reachable,
       error: reading.error,

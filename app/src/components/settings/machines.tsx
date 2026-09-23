@@ -8,7 +8,13 @@ import { cn } from '../../lib/cn'
 import type { Machine, MachineShape, MachinesData } from '../../lib/dashboard/machines'
 import { bytes, duration, since } from '../../lib/format'
 import { CHOSEN_KINDS, finishesFor, partsOfKind } from '../../lib/hardware/catalog'
-import { LAN_DOMAIN, LEMONADE_DEFAULT_PORT, NODE_NAME_RE, slugOf } from '../../lib/nodes-file'
+import { NODE_NAME_RE, slugOf } from '../../lib/nodes-file'
+import {
+  DEFAULT_PORT,
+  NODE_PROVIDER_KINDS,
+  PROVIDER_NAME,
+  type ProviderKind,
+} from '../../lib/providers/kinds'
 import type { ModelPolicy } from '../../lib/providers/policy'
 import { errorText } from '../../lib/redact'
 import type { NodeRow } from '../../lib/repo/nodes'
@@ -236,7 +242,92 @@ function Decision({ m }: { m: Machine }) {
 const NONE = '—'
 
 /** What the box asks of an approved machine. Each row saves on its own. */
-function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
+/**
+ * One provider a machine could offer: the switch, the port it answers on,
+ * and — once offered — what the gateway should call its models. One row per
+ * kind in NODE_PROVIDER_KINDS, each owning its own optimistic switch, so a
+ * new kind is a name in that list and nothing here.
+ */
+function ProviderRow({
+  kind,
+  nodeId,
+  host,
+  offered,
+  port,
+  busy,
+  failed,
+  onOffer,
+  onPort,
+  onPortDone,
+  onModel,
+}: {
+  kind: ProviderKind
+  nodeId: string
+  host: string
+  offered: boolean
+  port: string
+  busy: boolean
+  failed: boolean
+  onOffer: (v: boolean) => void
+  onPort: (v: string) => void
+  onPortDone: () => void
+  onModel: (id: string, patch: ModelPolicy) => void
+}) {
+  const [offer, showOffer] = useShown(offered, busy, failed)
+  const name = PROVIDER_NAME[kind]
+  return (
+    <Stack className="w-full max-w-[28rem]">
+      <span className="inline-flex flex-wrap items-center gap-3">
+        <Switch
+          checked={offer}
+          disabled={busy}
+          onCheckedChange={(v) => {
+            showOffer(v)
+            onOffer(v)
+          }}
+          aria-label={`Offer ${name} to the gateway`}
+        />
+        <span className="text-[0.82rem]">{offer ? 'offered to the gateway' : 'not offered'}</span>
+        <span className="inline-flex items-center gap-2 text-[0.82rem]">
+          port
+          <Input
+            className="w-[6.5rem]"
+            value={port}
+            inputMode="numeric"
+            disabled={busy}
+            aria-label={`${name} port`}
+            onChange={(e) => onPort(e.target.value)}
+            onBlur={onPortDone}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+          />
+        </span>
+      </span>
+      <span className={ASIDE}>
+        A model server on this machine. Offered, it goes to site/nodes.json and the gateway, gatus
+        and the log bridge dial{' '}
+        <Mono>
+          {host}:{port}
+        </Mono>{' '}
+        after the next Apply. The agent probes the port and reports whether it answers.
+      </span>
+      {offer && (
+        <ProviderModels nodeId={nodeId} kind={kind} busy={busy} failed={failed} change={onModel} />
+      )}
+    </Stack>
+  )
+}
+
+function Policy({
+  n,
+  shape,
+  lanDomain,
+}: {
+  n: NodeRow
+  shape: MachineShape | null
+  lanDomain: string
+}) {
   const router = useRouter()
   const [busy, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -244,8 +335,12 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
   // switches save on click.
   const [name, setName] = useState(n.policy.displayName ?? '')
   const [netName, setNetName] = useState(n.policy.name ?? '')
-  const [port, setPort] = useState(
-    String(n.policy.providers?.lemonade?.port ?? LEMONADE_DEFAULT_PORT),
+  // A port field per kind: typed, so held here and saved on blur, the way
+  // the names are. Adding a kind to NODE_PROVIDER_KINDS fills this in.
+  const [ports, setPorts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      NODE_PROVIDER_KINDS.map((k) => [k, String(n.policy.providers?.[k]?.port ?? DEFAULT_PORT[k])]),
+    ),
   )
   const [workdir, setWorkdir] = useState(n.policy.claudeWorkdir ?? '')
 
@@ -287,22 +382,26 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
     const { name: _old, ...rest } = base.current
     save(trimmed === '' ? rest : { ...rest, name: trimmed })
   }
-  const lemonade = n.policy.providers?.lemonade ?? { port: LEMONADE_DEFAULT_PORT, offer: false }
-  const saveLemonade = (next: { port: number; offer: boolean }) => {
-    const models = base.current.providers?.lemonade?.models
+  const providerOf = (kind: ProviderKind): { port: number; offer: boolean } => {
+    const p = n.policy.providers?.[kind]
+    return { port: p?.port ?? DEFAULT_PORT[kind], offer: p?.offer ?? false }
+  }
+  const saveProvider = (kind: ProviderKind, next: { port: number; offer: boolean }) => {
+    const models = base.current.providers?.[kind]?.models
     save({
       ...base.current,
       providers: {
         ...base.current.providers,
-        lemonade: models === undefined ? next : { ...next, models },
+        [kind]: models === undefined ? next : { ...next, models },
       },
     })
   }
   // The per-model curation rides the same policy: one model's change,
   // merged into what was last saved (never the row from before the previous
   // save — two aliases typed a second apart would undo each other).
-  const changeModel = (id: string, patch: ModelPolicy) => {
-    const current = base.current.providers?.lemonade ?? lemonade
+  const changeModel = (kind: ProviderKind, id: string, patch: ModelPolicy) => {
+    const stored = base.current.providers?.[kind]
+    const current = { ...providerOf(kind), ...stored }
     const models = current.models ?? {}
     const next: ModelPolicy = { ...models[id], ...patch }
     for (const k of Object.keys(next) as (keyof ModelPolicy)[]) {
@@ -315,17 +414,18 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
       ...base.current,
       providers: {
         ...base.current.providers,
-        lemonade: Object.keys(merged).length === 0 ? rest : { ...rest, models: merged },
+        [kind]: Object.keys(merged).length === 0 ? rest : { ...rest, models: merged },
       },
     })
   }
-  const savePort = () => {
-    const p = Number(port)
+  const savePort = (kind: ProviderKind) => {
+    const current = providerOf(kind)
+    const p = Number(ports[kind])
     if (!Number.isInteger(p) || p < 1 || p > 65535) {
-      setPort(String(lemonade.port))
+      setPorts((was) => ({ ...was, [kind]: String(current.port) }))
       return
     }
-    if (p !== lemonade.port) saveLemonade({ ...lemonade, port: p })
+    if (p !== current.port) saveProvider(kind, { ...current, port: p })
   }
   const saveHardware = (
     key: keyof NonNullable<NodePolicy['hardware']>,
@@ -366,7 +466,6 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
     busy,
     failed,
   )
-  const [offer, showOffer] = useShown(lemonade.offer, busy, failed)
 
   return (
     <div className="flex flex-col gap-3 border-(--border-soft) border-t pt-4">
@@ -411,7 +510,7 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
                     }}
                   />
                   <Mono>
-                    {netName || slugOf(n.hostname)}.{LAN_DOMAIN}
+                    {netName || slugOf(n.hostname)}.{lanDomain}
                   </Mono>
                 </span>
                 <span className={ASIDE}>
@@ -424,53 +523,25 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
               </Stack>
             ),
           },
-          {
-            k: 'Lemonade',
+          ...NODE_PROVIDER_KINDS.map((kind) => ({
+            k: PROVIDER_NAME[kind],
             v: (
-              <Stack className="w-full max-w-[28rem]">
-                <span className="inline-flex flex-wrap items-center gap-3">
-                  <Switch
-                    checked={offer}
-                    disabled={busy}
-                    onCheckedChange={(v) => {
-                      showOffer(v)
-                      saveLemonade({ ...lemonade, offer: v })
-                    }}
-                    aria-label="Offer Lemonade to the gateway"
-                  />
-                  <span className="text-[0.82rem]">
-                    {offer ? 'offered to the gateway' : 'not offered'}
-                  </span>
-                  <span className="inline-flex items-center gap-2 text-[0.82rem]">
-                    port
-                    <Input
-                      className="w-[6.5rem]"
-                      value={port}
-                      inputMode="numeric"
-                      disabled={busy}
-                      aria-label="Lemonade port"
-                      onChange={(e) => setPort(e.target.value)}
-                      onBlur={savePort}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                      }}
-                    />
-                  </span>
-                </span>
-                <span className={ASIDE}>
-                  The model server on this machine. Offered, it goes to site/nodes.json and the
-                  gateway, gatus and the log bridge dial{' '}
-                  <Mono>
-                    {netName || slugOf(n.hostname)}.{LAN_DOMAIN}:{port}
-                  </Mono>{' '}
-                  after the next Apply. The agent probes the port and reports whether it answers.
-                </span>
-                {offer && (
-                  <ProviderModels nodeId={n.id} busy={busy} failed={failed} change={changeModel} />
-                )}
-              </Stack>
+              <ProviderRow
+                key={kind}
+                kind={kind}
+                nodeId={n.id}
+                host={`${netName || slugOf(n.hostname)}.${lanDomain}`}
+                offered={providerOf(kind).offer}
+                port={ports[kind] ?? String(DEFAULT_PORT[kind])}
+                busy={busy}
+                failed={failed}
+                onOffer={(v) => saveProvider(kind, { ...providerOf(kind), offer: v })}
+                onPort={(v) => setPorts((was) => ({ ...was, [kind]: v }))}
+                onPortDone={() => savePort(kind)}
+                onModel={(id, patch) => changeModel(kind, id, patch)}
+              />
             ),
-          },
+          })),
           {
             k: 'Keep awake',
             v: (
@@ -623,7 +694,7 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
 }
 
 /** One machine: the head, the facts, the decision, and — once approved — the policy. */
-function MachineSection({ m, port }: { m: Machine; port: number }) {
+function MachineSection({ m, port, lanDomain }: { m: Machine; port: number; lanDomain: string }) {
   const s = m.status
   const os = s?.os ?? m.node?.os ?? ''
   const mark = osMark(os)
@@ -707,7 +778,9 @@ function MachineSection({ m, port }: { m: Machine; port: number }) {
     >
       {s?.holdError != null && <p className={NOTE}>The hold failed: {s.holdError}</p>}
       <Decision m={m} />
-      {m.node !== null && m.node.state === 'approved' && <Policy n={m.node} shape={m.shape} />}
+      {m.node !== null && m.node.state === 'approved' && (
+        <Policy n={m.node} shape={m.shape} lanDomain={lanDomain} />
+      )}
     </Section>
   )
 }
@@ -729,7 +802,12 @@ export function Machines({ d }: { d: MachinesData }) {
         </Section>
       ) : (
         d.machines.map((m) => (
-          <MachineSection key={m.node?.id ?? m.ip ?? m.lanName ?? ''} m={m} port={d.port} />
+          <MachineSection
+            key={m.node?.id ?? m.ip ?? m.lanName ?? ''}
+            m={m}
+            port={d.port}
+            lanDomain={d.lanDomain}
+          />
         ))
       )}
 

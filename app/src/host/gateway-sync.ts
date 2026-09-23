@@ -1,6 +1,5 @@
 import type { Ctx, Gateway } from '../core/ctx'
 import { isRecord } from '../lib/is-record'
-import { type FleetProvider, readFleetProviders } from '../lib/providers/fleet'
 import { type LitellmRoute, type ProviderModel, routeFor } from '../lib/providers/kinds'
 import {
   BOX_PROVIDERS_KEY,
@@ -9,8 +8,9 @@ import {
   type ModelPolicies,
   resolveModel,
 } from '../lib/providers/policy'
-import type { ProviderReading } from '../lib/providers/read'
 import { listNodes } from '../lib/repo/nodes'
+import { type FleetProvider, readFleetProviders } from './providers/fleet'
+import type { ProviderReading } from './providers/read'
 
 // The gateway sync: every offered provider's downloaded models, as LiteLLM
 // routes, through LiteLLM's own model table.
@@ -348,7 +348,7 @@ async function policiesOf(ctx: Ctx): Promise<(p: FleetProvider) => ModelPolicies
   return (p) => {
     if (p.machine === 'box') return p.kind === 'subgen' ? box.subgen?.models : undefined
     const n = nodes.find((x) => x.id === p.machine)
-    return p.kind === 'lemonade' ? n?.policy.providers?.lemonade?.models : undefined
+    return n?.policy.providers?.[p.kind]?.models
   }
 }
 

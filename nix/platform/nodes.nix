@@ -118,6 +118,13 @@ in
     };
   };
 
+  # The domain the app must not guess. Every synced LiteLLM route, and the
+  # name Settings › Machines shows, is `<node>.<lanDomain>` — so a host that
+  # sets this to anything but the default would otherwise have daedalus
+  # writing routes to a hostname that does not exist. Contributed here, where
+  # the option is declared, rather than from the resolver: a box can carry
+  # nodes without running pi-hole.
+  config.fleet.export.domains.network.data.lanDomain = cfg.lanDomain;
   config.assertions = [
     {
       assertion = duplicates == [ ];

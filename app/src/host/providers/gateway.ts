@@ -1,6 +1,6 @@
 import type { Ctx } from '../../core/ctx'
-import { arrayOf, bool, decode, nullable, obj, optional, str } from '../contract/decode'
-import type { ModelMode, ProviderKind } from './kinds'
+import { arrayOf, bool, decode, nullable, obj, optional, str } from '../../lib/contract/decode'
+import type { ModelMode, ProviderKind } from '../../lib/providers/kinds'
 
 // The gateway's routing table, as LiteLLM answers `/model/info`: every
 // published name, what it forwards to, and — for the routes the sync

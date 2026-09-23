@@ -1,4 +1,5 @@
 import { useEffect, useState, useTransition } from 'react'
+import type { ProviderKind } from '../../lib/providers/kinds'
 import { MODE_WORD, MODEL_MODES, type ModelPolicy } from '../../lib/providers/policy'
 import { errorText } from '../../lib/redact'
 import { useShown } from '../../lib/shown'
@@ -103,11 +104,13 @@ function ModelRow({
  */
 export function ProviderModels({
   nodeId,
+  kind,
   busy,
   failed,
   change,
 }: {
   nodeId: string
+  kind: ProviderKind
   busy: boolean
   failed: boolean
   change: (id: string, patch: ModelPolicy) => void
@@ -115,7 +118,7 @@ export function ProviderModels({
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   useEffect(() => {
     let live = true
-    fetchProviderModelsFn({ data: { id: nodeId } }).then(
+    fetchProviderModelsFn({ data: { id: nodeId, kind } }).then(
       (c) => {
         if (live) setCatalog(c)
       },
@@ -127,7 +130,7 @@ export function ProviderModels({
     return () => {
       live = false
     }
-  }, [nodeId])
+  }, [nodeId, kind])
 
   if (catalog === null) {
     return (

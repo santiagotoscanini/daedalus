@@ -1,7 +1,7 @@
 import type { Ctx } from '../../../core/ctx'
+import { type FleetProvider, readFleetProviders } from '../../../host/providers/fleet'
+import { type GatewayRoute, gatewayRoutes } from '../../../host/providers/gateway'
 import { loadNodeSystem } from '../../../lib/dashboard/node-system'
-import { type FleetProvider, readFleetProviders } from '../../../lib/providers/fleet'
-import { type GatewayRoute, gatewayRoutes } from '../../../lib/providers/gateway'
 import {
   defaultAlias,
   PROVIDER_NAME,

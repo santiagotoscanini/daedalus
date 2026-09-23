@@ -27,6 +27,7 @@ import type {
   BuildStrategy,
 } from '../lib/builds'
 import type { McpScope } from '../lib/mcp'
+import type { ProviderKind } from '../lib/providers/kinds'
 import type { ModelPolicies } from '../lib/providers/policy'
 
 // The app registry — daedalus's authoritative copy of what stacks/apps
@@ -558,6 +559,13 @@ export const nodes = pgTable('nodes', {
   token: text('token'),
 })
 
+/** One provider on a node: where it listens, whether to offer it, what to call its models. */
+export type ProviderPolicy = {
+  port?: number
+  offer?: boolean
+  models?: ModelPolicies
+}
+
 /**
  * The per-node policy. Every key optional: the agent's defaults stand for
  * a key that is not set, and the page shows those defaults as the value.
@@ -580,13 +588,15 @@ export type NodePolicy = {
    */
   pinAddress?: boolean
   /**
-   * The providers this machine offers and on which port. `offer` false
-   * keeps the provider out of site/nodes.json (nothing on the box dials
-   * it) without forgetting the port. The agent hears the port, never
-   * `offer` nor `models` — the per-model curation (alias, offered, mode;
-   * lib/providers/policy.ts) is the gateway sync's to read.
+   * The providers this machine offers and on which port, by kind
+   * (lib/providers/kinds.ts NODE_PROVIDER_KINDS). `offer` false keeps the
+   * provider out of site/nodes.json (nothing on the box dials it) without
+   * forgetting the port; an absent key means the kind's own default port
+   * and not offered. The agent hears the port, never `offer` nor `models`
+   * — the per-model curation (alias, offered, mode; lib/providers/policy.ts)
+   * is the gateway sync's to read.
    */
-  providers?: { lemonade?: { port: number; offer: boolean; models?: ModelPolicies } }
+  providers?: Partial<Record<ProviderKind, ProviderPolicy>>
   /** Hold the machine awake. The agent's default is true. */
   awakeHold?: boolean
   /** Run `claude remote-control` in the user's session. The agent's default is true. */

@@ -1,5 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
-import { type GatewayRoutes, gatewayRoutes } from '../../../lib/providers/gateway'
+import { type GatewayRoutes, gatewayRoutes } from '../../../host/providers/gateway'
 import { listNodes } from '../../../lib/repo/nodes'
 import { type LitellmData, loadLitellm } from './litellm'
 
