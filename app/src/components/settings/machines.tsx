@@ -5,8 +5,9 @@ import { useState, useTransition } from 'react'
 import type { NodePolicy } from '../../host/schema'
 import { agentHasClaude } from '../../lib/agent/status'
 import { cn } from '../../lib/cn'
-import type { Machine, MachinesData } from '../../lib/dashboard/machines'
+import type { Machine, MachineShape, MachinesData } from '../../lib/dashboard/machines'
 import { bytes, duration, since } from '../../lib/format'
+import { CHOSEN_KINDS, finishesFor, partsOfKind } from '../../lib/hardware/catalog'
 import { errorText } from '../../lib/redact'
 import type { NodeRow } from '../../lib/repo/nodes'
 import type { Tone } from '../../lib/tone'
@@ -20,6 +21,7 @@ import {
 } from '../../server/nodes'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Switch } from '../ui/switch'
 import { Chip } from '../viz'
 import {
@@ -226,8 +228,11 @@ function Decision({ m }: { m: Machine }) {
   )
 }
 
+/** The dropdown value for "no part chosen": Radix refuses an empty string. */
+const NONE = '—'
+
 /** What the box asks of an approved machine. Each row saves on its own. */
-function Policy({ n }: { n: NodeRow }) {
+function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
   const router = useRouter()
   const [busy, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -253,6 +258,19 @@ function Policy({ n }: { n: NodeRow }) {
     const { displayName: _old, ...rest } = n.policy
     save(trimmed === '' ? rest : { ...rest, displayName: trimmed })
   }
+  const saveHardware = (
+    key: keyof NonNullable<NodePolicy['hardware']>,
+    value: string | undefined,
+  ) => {
+    const { [key]: _old, ...rest } = n.policy.hardware ?? {}
+    const hardware = value === undefined ? rest : { ...rest, [key]: value }
+    const { hardware: _h, ...policy } = n.policy
+    save(Object.keys(hardware).length === 0 ? policy : { ...policy, hardware })
+  }
+  // What the machine is decides what is worth asking. A Mac is a laptop
+  // whatever the chassis field says; the model names its finishes.
+  const laptop = shape?.form === 'laptop' || n.os === 'macos'
+  const finishes = finishesFor(shape?.model)
   const saveWorkdir = () => {
     const trimmed = workdir.trim()
     if (trimmed === (n.policy.claudeWorkdir ?? '')) return
@@ -372,6 +390,84 @@ function Policy({ n }: { n: NodeRow }) {
               </Stack>
             ),
           },
+          // The parts nothing in the machine reports. A desktop gets a
+          // dropdown per kind over the catalog (lib/hardware/catalog.ts) —
+          // case, cooler, supply — and the Build tab draws what is chosen.
+          // A laptop IS its case, cooler and supply, and reports every part
+          // but its colour, so it gets the one thing left to ask: the finish.
+          ...(laptop
+            ? finishes.length === 0
+              ? []
+              : [
+                  {
+                    k: 'Finish',
+                    v: (
+                      <Stack className="w-full max-w-[28rem]">
+                        <Select
+                          value={n.policy.hardware?.finish ?? NONE}
+                          disabled={busy}
+                          onValueChange={(v) => {
+                            saveHardware('finish', v === NONE ? undefined : v)
+                          }}
+                        >
+                          <SelectTrigger
+                            size="sm"
+                            aria-label="finish"
+                            className="w-full justify-between"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE}>not set</SelectItem>
+                            {finishes.map((f) => (
+                              <SelectItem key={f.id} value={f.id}>
+                                {f.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className={ASIDE}>
+                          The machine reports its model and everything in it; the colour is the one
+                          thing it does not say. The pages draw the photo that matches.
+                        </span>
+                      </Stack>
+                    ),
+                  },
+                ]
+            : CHOSEN_KINDS.map((kind) => ({
+                k: kind === 'case' ? 'Case' : kind === 'cooler' ? 'CPU cooler' : 'Power supply',
+                v: (
+                  <Stack className="w-full max-w-[28rem]">
+                    <Select
+                      value={n.policy.hardware?.[kind] ?? NONE}
+                      disabled={busy}
+                      onValueChange={(v) => {
+                        saveHardware(kind, v === NONE ? undefined : v)
+                      }}
+                    >
+                      <SelectTrigger size="sm" aria-label={kind} className="w-full justify-between">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>not set</SelectItem>
+                        {partsOfKind(kind).map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {kind === 'psu' && (
+                      <span className={ASIDE}>
+                        Nothing in a PC reports its case, cooler or supply, so these are chosen
+                        rather than read; the Build tab draws what is chosen, with the catalog's
+                        photo and specification. A part that is not on the list is a line in the
+                        catalog.
+                      </span>
+                    )}
+                  </Stack>
+                ),
+              }))),
         ]}
       />
       {error !== null && <p className={ERROR_NOTE}>{error}</p>}
@@ -464,7 +560,7 @@ function MachineSection({ m, port }: { m: Machine; port: number }) {
     >
       {s?.holdError != null && <p className={NOTE}>The hold failed: {s.holdError}</p>}
       <Decision m={m} />
-      {m.node !== null && m.node.state === 'approved' && <Policy n={m.node} />}
+      {m.node !== null && m.node.state === 'approved' && <Policy n={m.node} shape={m.shape} />}
     </Section>
   )
 }

@@ -570,4 +570,10 @@ export type NodePolicy = {
   claudeRemoteControl?: boolean
   /** The directory the server runs in. Unset, the tray picks the most recently used trusted project. */
   claudeWorkdir?: string
+  /**
+   * The parts nothing in the machine reports — case, cooler, power supply —
+   * chosen from lib/hardware/catalog.ts by id. Only the pages read these;
+   * the agent never hears them.
+   */
+  hardware?: { case?: string; cooler?: string; psu?: string; finish?: string }
 }

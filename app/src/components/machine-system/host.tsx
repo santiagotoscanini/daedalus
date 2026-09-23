@@ -4,6 +4,8 @@ import { agentHasClaude } from '../../lib/agent/status'
 import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { DASH, duration, num, pct, since, text } from '../../lib/format'
+import { partMatching } from '../../lib/hardware/catalog'
+import { PartPhoto } from '../part'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../viz'
 import {
   DetailNote,
@@ -48,6 +50,11 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
     .sort((a, b) => (b.cpuPct ?? 0) - (a.cpuPct ?? 0))
     .slice(0, 6)
   const threads = t.cpu.threads ?? t.cpu.cores
+  const machinePart = partMatching(
+    'machine',
+    t.machine.boardProduct ?? t.machine.model,
+    node.policy.hardware?.finish,
+  )
 
   return (
     <BoardGrid>
@@ -134,14 +141,21 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
           machine you would recognise from across the room. */}
       <Board title="The machine" icon="▣" span={4}>
         <div className={PART}>
-          {mark !== undefined && (
-            <img
-              src={mark.src}
-              alt=""
-              width={56}
-              height={56}
-              className={cn('block size-14 flex-none object-contain', mark.invert && 'dark:invert')}
-            />
+          {machinePart !== null ? (
+            <PartPhoto part={machinePart} />
+          ) : (
+            mark !== undefined && (
+              <img
+                src={mark.src}
+                alt=""
+                width={56}
+                height={56}
+                className={cn(
+                  'block size-14 flex-none object-contain',
+                  mark.invert && 'dark:invert',
+                )}
+              />
+            )
           )}
           <div className={PART_ID}>
             <strong className={PART_NAME}>{t.machine.model ?? node.name}</strong>

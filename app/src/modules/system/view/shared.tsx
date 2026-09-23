@@ -1,5 +1,18 @@
 import type { LogNeighbour } from '../../../components/logs'
 import { DASH } from '../../../lib/format'
+import { type Part, partById } from '../../../lib/hardware/catalog'
+
+/* The part vocabulary is one module for every machine (components/part.tsx);
+   these tabs keep reading it from here. */
+export {
+  PART,
+  PART_DETAIL,
+  PART_ID,
+  PART_NAME,
+  PART_WIDE,
+  PartHead,
+  PartPhoto,
+} from '../../../components/part'
 
 /* ── shared ───────────────────────────────────────────────────────────── */
 
@@ -75,78 +88,27 @@ export function hours(h: number | null): string {
  * SMBIOS knows the board, the cpu and the memory modules, and that is where
  * this page reads them from. It has never heard of the cooler, the case or
  * the power supply — nothing in a PC reports those — so those three are
- * written down here, and they are the only declared facts on the tab.
- *
- * Written down ONCE, next to the picture, rather than spread through the
- * markup: when one of them is replaced the edit is this table and nothing
- * else, and a part whose photo and specification live in the same object
- * cannot end up showing last year's cooler beside this year's numbers.
+ * CHOSEN, here, by catalog id (lib/hardware/catalog.ts: the photo, the name
+ * and the spec of every part this house has bought, one entry each). A
+ * node chooses the same three on Settings › Machines; the box chooses them
+ * in code, because the box is configuration.
  */
-type Part = {
-  photo: { src: string; width: number; height: number } | null
-  name: string
-  detail: string
-  specs: { k: string; v: string }[]
+export const BOX_PARTS = {
+  case: 'jonsbo-n4',
+  cooler: 'noctua-nh-l9x65',
+  psu: 'evga-supernova-650-gm',
+  memory: 'corsair-vengeance-lpx-64',
+} as const
+
+function chosen(id: string): Part {
+  const p = partById(id)
+  if (p === null) throw new Error(`the catalog has no part ${id}`)
+  return p
 }
 
 export const PARTS = {
-  case: {
-    photo: { src: '/part-case-jonsbo-n4.png', width: 700, height: 603 },
-    name: 'Jonsbo N4',
-    detail:
-      'Steel and wood, six 3.5" bays. That is why this box is a NAS shape rather than a tower.',
-    specs: [
-      { k: 'Bays', v: '6 × 3.5" + 2 × 2.5"' },
-      { k: 'Board', v: 'ITX / mATX' },
-      { k: 'Size', v: '286 × 300 × 228 mm' },
-      { k: 'Cooler clearance', v: '70 mm' },
-      { k: 'PSU', v: 'SFX, up to 125 mm' },
-    ],
-  },
-  memory: {
-    photo: { src: '/part-ram-vengeance-lpx.png', width: 700, height: 256 },
-    name: 'Corsair Vengeance LPX',
-    detail:
-      'Low-profile heat spreaders, which on a board this small is the specification that matters. A tall kit fouls the cooler.',
-    specs: [],
-  },
-} satisfies Record<string, Part>
-
-/* One vocabulary for every component panel, so a page of six parts reads as
-   one inventory rather than six designs. Photo beside identity — a physical
-   object named, pictured, and then measured underneath. The panels that build
-   their own `PartHead` (Host's case, Build's board, cpu, cooler, gpu and
-   supply) compose these directly. */
-export const PART = 'flex min-h-[2.6rem] items-center gap-[0.9rem] pb-[0.35rem]'
-export const PART_ID = 'flex min-w-0 flex-auto flex-col items-start gap-[0.25rem]'
-export const PART_NAME = 'text-[0.98rem] text-foreground tracking-[-0.01em] wrap-anywhere'
-export const PART_DETAIL = 'text-[0.73rem] text-(--text-muted) leading-[1.4]'
-
-/** A part's photo and name, for the panels that have artwork. */
-export function PartHead({ part }: { part: Part }) {
-  return (
-    <div className={PART}>
-      <PartPhoto part={part} />
-      <div className={PART_ID}>
-        <strong className={PART_NAME}>{part.name}</strong>
-        <span className={PART_DETAIL}>{part.detail}</span>
-      </div>
-    </div>
-  )
-}
-
-export function PartPhoto({ part }: { part: Part }) {
-  if (part.photo === null) return null
-  return (
-    <img
-      // A fraction of the board rather than a fixed size, because a board is
-      // anywhere from a third of the page to all of it; the maximum caps it on
-      // a phone, where a percentage would run away.
-      className="h-auto w-[clamp(78px,34%,128px)] flex-none object-contain"
-      src={part.photo.src}
-      alt=""
-      width={part.photo.width}
-      height={part.photo.height}
-    />
-  )
+  case: chosen(BOX_PARTS.case),
+  cooler: chosen(BOX_PARTS.cooler),
+  psu: chosen(BOX_PARTS.psu),
+  memory: chosen(BOX_PARTS.memory),
 }

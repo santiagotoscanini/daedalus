@@ -1,6 +1,6 @@
 import type { Ctx } from '../../core/ctx'
 import { type Device, lanDevices } from '../../modules/network/data/dhcp'
-import { AGENT_PORT, type AgentStatus, agentStatus } from '../agent/status'
+import { AGENT_PORT, type AgentStatus, agentStatus, nodeTelemetry } from '../agent/status'
 import { getJsonResult } from '../http'
 import { listNodes, type NodeRow } from '../repo/nodes'
 
@@ -39,6 +39,8 @@ export type Machine = {
   lastResolvedAgo: number | null
   /** The status page, when it answered just now. */
   status: AgentStatus | null
+  /** What it is, from the same answer; null when it did not answer. */
+  shape: MachineShape | null
 }
 
 export type MachinesData = {
@@ -52,11 +54,29 @@ export type MachinesData = {
   error: string | null
 }
 
-async function probe(ip: string, port: number): Promise<AgentStatus | null> {
+/** What the status page says the machine IS, for the settings that depend on it. */
+export type MachineShape = {
+  /** "laptop" | "desktop" | …, from the chassis. */
+  form: string | null
+  /** The model or board product: "Mac15,7", "B650 AORUS ELITE AX". */
+  model: string | null
+}
+
+async function probe(
+  ip: string,
+  port: number,
+): Promise<{ status: AgentStatus; shape: MachineShape } | null> {
   const r = await getJsonResult<unknown>(`http://${ip}:${port}/status`, {}, PROBE_MS)
   if (!r.ok) return null
   try {
-    return agentStatus(r.value)
+    const t = nodeTelemetry(r.value)
+    return {
+      status: agentStatus(r.value),
+      shape: {
+        form: t?.machine.form ?? null,
+        model: t?.machine.boardProduct ?? t?.machine.model ?? null,
+      },
+    }
   } catch {
     // Something answered on the port with JSON that is not a status page.
     return null
@@ -94,7 +114,7 @@ export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
   // said it was, in case pi-hole has not heard from it.
   const addresses = new Set<string>(recent.map((d) => d.ip))
   for (const n of nodeRows) if (n.lanIp !== null && n.lanIp !== self) addresses.add(n.lanIp)
-  const answers = new Map<string, AgentStatus | null>()
+  const answers = new Map<string, { status: AgentStatus; shape: MachineShape } | null>()
   await Promise.all(
     [...addresses].map(async (ip) => {
       answers.set(ip, await probe(ip, port))
@@ -112,13 +132,21 @@ export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
       lanName: dev?.name ?? null,
       ip,
       lastResolvedAgo: dev?.lastSeenAgo ?? null,
-      status: ip === null ? null : (answers.get(ip) ?? null),
+      status: ip === null ? null : (answers.get(ip)?.status ?? null),
+      shape: ip === null ? null : (answers.get(ip)?.shape ?? null),
     }
   })
   for (const d of recent) {
-    const status = answers.get(d.ip) ?? null
-    if (status === null || claimed.has(d.ip)) continue
-    machines.push({ node: null, lanName: d.name, ip: d.ip, lastResolvedAgo: d.lastSeenAgo, status })
+    const a = answers.get(d.ip) ?? null
+    if (a === null || claimed.has(d.ip)) continue
+    machines.push({
+      node: null,
+      lanName: d.name,
+      ip: d.ip,
+      lastResolvedAgo: d.lastSeenAgo,
+      status: a.status,
+      shape: a.shape,
+    })
   }
   machines.sort((a, b) => rank(a) - rank(b) || label(a).localeCompare(label(b)))
 

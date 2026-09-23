@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { actorLabel } from '../core/auth'
 import type { NodePolicy } from '../host/schema'
+import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
 
 // Server functions behind Settings › Machines: the page's one read, and
 // its decisions about a node — approve, revoke, forget, the policy. Each
@@ -100,6 +101,24 @@ const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
     if (dir.length > PATH_MAX) throw new Error(`claudeWorkdir is longer than ${String(PATH_MAX)}`)
     if (/[\r\n]/.test(dir)) throw new Error('claudeWorkdir must be one line')
     if (dir !== '') policy.claudeWorkdir = dir
+  }
+  if (o.hardware !== undefined) {
+    if (typeof o.hardware !== 'object' || o.hardware === null) {
+      throw new Error('hardware must be an object')
+    }
+    const h = o.hardware as Record<string, unknown>
+    const hardware: NonNullable<NodePolicy['hardware']> = {}
+    for (const kind of CHOSEN_KINDS) {
+      const id = h[kind]
+      if (id === undefined || id === null || id === '') continue
+      if (!isChosenPart(kind, id)) throw new Error(`${kind}: not a part the catalog knows`)
+      hardware[kind] = id
+    }
+    if (h.finish !== undefined && h.finish !== null && h.finish !== '') {
+      if (!isFinish(h.finish)) throw new Error('finish: not a colour the catalog knows')
+      hardware.finish = h.finish
+    }
+    if (Object.keys(hardware).length > 0) policy.hardware = hardware
   }
   for (const k of ['awakeHold', 'claudeRemoteControl'] as const) {
     if (o[k] !== undefined) {

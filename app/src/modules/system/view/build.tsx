@@ -2,6 +2,7 @@ import { LogBoard } from '../../../components/logs'
 import { BarList, Board, BoardGrid, Facts, Measures } from '../../../components/viz'
 import { cn } from '../../../lib/cn'
 import { DASH, num, pct } from '../../../lib/format'
+import { partMatching } from '../../../lib/hardware/catalog'
 import type { SystemData } from '../data'
 import {
   BOARD_FOOT,
@@ -32,6 +33,7 @@ export function BuildView({ d }: { d: Build }) {
   const hw = d.hardware
   const spinning = d.fans.filter((f) => f.rpm > 0)
   const board = hw.board
+  const cpuPart = partMatching('cpu', hw.cpu.model)
 
   return (
     <BoardGrid>
@@ -82,6 +84,7 @@ export function BuildView({ d }: { d: Build }) {
         aside={<span className={BOARD_NOTE}>{temp(d.cpu.tempC)}</span>}
       >
         <div className={PART}>
+          {cpuPart !== null && <PartPhoto part={cpuPart} />}
           <div className={PART_ID}>
             <strong className={PART_NAME}>{cpuName(hw.cpu.model)}</strong>
             <span className={PART_DETAIL}>
@@ -122,15 +125,7 @@ export function BuildView({ d }: { d: Build }) {
           </span>
         }
       >
-        <div className={PART}>
-          <div className={PART_ID}>
-            <strong className={PART_NAME}>Noctua NH-L9x65</strong>
-            <span className={PART_DETAIL}>
-              65 mm tall, chosen against the case&rsquo;s 70 mm ceiling. The whole build turns on
-              that number.
-            </span>
-          </div>
-        </div>
+        <PartHead part={PARTS.cooler} />
         <h4 className={BOARD_SUB}>Fan headers</h4>
         <ul className={LIST}>
           {d.fans.map((f) => (
@@ -269,15 +264,13 @@ export function BuildView({ d }: { d: Build }) {
         </p>
       </Board>
 
-      <Board title="Power" icon="⚡" span={4} aside={<span className={BOARD_NOTE}>650 W</span>}>
-        <div className={PART}>
-          <div className={PART_ID}>
-            <strong className={PART_NAME}>EVGA SuperNOVA 650 GM</strong>
-            <span className={PART_DETAIL}>
-              SFX, 80+ Gold, fully modular. The case dictates the form factor.
-            </span>
-          </div>
-        </div>
+      <Board
+        title="Power"
+        icon="⚡"
+        span={4}
+        aside={<span className={BOARD_NOTE}>{PARTS.psu.specs[0]?.v ?? DASH}</span>}
+      >
+        <PartHead part={PARTS.psu} />
         <h4 className={BOARD_SUB}>Rails, as the board sees them</h4>
         <ul className={LIST}>
           {['+12V', '+5V', '+3.3V'].map((rail) => {

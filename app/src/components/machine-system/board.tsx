@@ -3,7 +3,9 @@ import { Link } from '@tanstack/react-router'
 import type { BoardInfo } from '../../lib/dashboard/board-info'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../lib/format'
+import { partMatching } from '../../lib/hardware/catalog'
 import type { Tone } from '../../lib/tone'
+import { PartPhoto } from '../part'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../viz'
 import {
   ago,
@@ -50,6 +52,12 @@ export function BoardView({ info }: { info: BoardInfo }) {
             : { tone: r.behind >= 4 ? 'bad' : 'warn', label: `${num(r.behind)} behind` }
   const newerThan = (v: string) =>
     r.behind !== null && r.releases.findIndex((x) => x.version === v) < r.behind
+  const part = partMatching('board', info.model)
+  // Gigabyte writes no revision into SMBIOS ("x.x"); its firmware line does
+  // the telling — the FA series ships on the rev 1.2 board, the F series
+  // on rev 1.0/1.1 and the V2 — so the revision is inferred rather than
+  // asked for, and the aside says it was.
+  const revision = revisionOf(info)
 
   return (
     <BoardGrid>
@@ -59,13 +67,16 @@ export function BoardView({ info }: { info: BoardInfo }) {
         span={4}
         aside={
           <span className={NOTE}>
-            {info.revision === null || info.revision === 'x.x'
+            {revision === null
               ? 'revision unstated'
-              : `rev ${info.revision}`}
+              : revision.inferred
+                ? `rev ${revision.rev}, from the firmware line`
+                : `rev ${revision.rev}`}
           </span>
         }
       >
         <div className={PART}>
+          {part !== null && <PartPhoto part={part} />}
           <div className={PART_ID}>
             <strong className={PART_NAME}>{info.model ?? DASH}</strong>
             <span className={PART_DETAIL}>
@@ -241,4 +252,16 @@ export function NodeBoardView({ d }: { d: NodeSystemData }) {
       }}
     />
   )
+}
+
+/** The board's revision: as SMBIOS states it, or as the firmware line implies it. */
+function revisionOf(info: BoardInfo): { rev: string; inferred: boolean } | null {
+  if (info.revision !== null && info.revision !== 'x.x' && info.revision.trim() !== '') {
+    return { rev: info.revision, inferred: false }
+  }
+  if (info.releases.make === 'gigabyte' && info.bios.version !== null) {
+    if (/^FA\d/i.test(info.bios.version)) return { rev: '1.2', inferred: true }
+    if (/^F\d/i.test(info.bios.version)) return { rev: '1.0/1.1 or V2', inferred: true }
+  }
+  return null
 }
