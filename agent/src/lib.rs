@@ -35,6 +35,7 @@ pub mod http;
 pub mod identity;
 pub mod net;
 pub mod power;
+pub mod providers;
 pub mod state;
 pub mod status;
 pub mod telemetry;

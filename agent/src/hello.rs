@@ -87,6 +87,32 @@ pub struct Policy {
     /// most recently used trusted project.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_workdir: Option<String>,
+    /// What the box knows about the providers on this machine — for now,
+    /// the port to look for each on. Absent from an older box.
+    #[serde(default, skip_serializing_if = "ProvidersPolicy::is_empty")]
+    pub providers: ProvidersPolicy,
+}
+
+/// The providers half of the policy, one optional entry per kind.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ProvidersPolicy {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lemonade: Option<ProviderPolicy>,
+}
+
+impl ProvidersPolicy {
+    pub fn is_empty(&self) -> bool {
+        self.lemonade.is_none()
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ProviderPolicy {
+    /// The port the provider answers on; None means the kind's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
 }
 
 impl Default for Policy {
@@ -95,6 +121,7 @@ impl Default for Policy {
             awake_hold: true,
             claude_remote_control: true,
             claude_workdir: None,
+            providers: ProvidersPolicy::default(),
         }
     }
 }
@@ -105,6 +132,7 @@ impl Policy {
             awake_hold: cfg.awake_hold,
             claude_remote_control: cfg.claude_remote_control,
             claude_workdir: cfg.claude_workdir.clone().filter(|d| !d.is_empty()),
+            providers: ProvidersPolicy::default(),
         }
     }
 }

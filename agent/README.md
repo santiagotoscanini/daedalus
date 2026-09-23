@@ -32,7 +32,14 @@ macOS launchd daemon, with a tray / menu bar app beside it, that
   Apple's own. A GPU carries its driver's marketed version and build date
   where the vendor writes one (AMD's Adrenalin, NVIDIA's GeForce number);
   a Mac carries its board target (`hw.target`), the name Apple's software
-  catalogue lists supported machines by. The status page carries the
+  catalogue lists supported machines by. Since 0.11.0 the document also
+  names the **providers** on the machine — a model server the network can
+  use, Lemonade first — as presence only: kind, port, version, answering
+  or installed and silent. The box reads the catalog from the server
+  itself, at this machine's name; the agent never carries a model list.
+  The box may set the port per provider in the policy
+  (`providers.lemonade.port`); the default is Lemonade's 13305. The
+  status page carries the
   machine and nothing that identifies a person (no serials, no process
   list, no installed applications — a count only); the full document —
   the heaviest processes, the failing services, the updates, the serials,

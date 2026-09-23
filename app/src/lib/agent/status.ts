@@ -433,7 +433,23 @@ export type NodeTelemetry = {
   /** What is installed; empty on the open page. Agent 0.10.0. */
   apps: NodeApp[]
   appCount: number | null
+  /**
+   * What the machine offers the network — a model server — as presence
+   * only: the box reads the catalog from the provider itself. Agent
+   * 0.11.0; empty from an older one.
+   */
+  providers: NodeProvider[]
   errors: string[]
+}
+
+export type NodeProvider = {
+  /** "lemonade" | "ollama" */
+  kind: string
+  port: number
+  /** From the provider's health endpoint; null when it is not answering. */
+  version: string | null
+  /** False with a report present means installed but not running. */
+  running: boolean
 }
 
 export type NodeApp = {
@@ -763,6 +779,17 @@ const telemetryShape = obj({
     [],
   ),
   app_count: nnum,
+  providers: optional(
+    arrayOf(
+      obj({
+        kind: optional(str, ''),
+        port: optional(num, 0),
+        version: nstr,
+        running: optional(bool, false),
+      }),
+    ),
+    [],
+  ),
   errors: optional(arrayOf(str), []),
 })
 
@@ -918,6 +945,9 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
       path: a.path,
     })),
     appCount: t.app_count,
+    providers: t.providers
+      .filter((p) => p.kind !== '' && p.port > 0)
+      .map((p) => ({ kind: p.kind, port: p.port, version: p.version, running: p.running })),
     errors: t.errors,
   }
 }

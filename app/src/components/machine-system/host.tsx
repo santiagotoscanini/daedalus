@@ -364,6 +364,56 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
       </Board>
 
       <Board
+        title="Providers"
+        icon="◈"
+        span={12}
+        aside={
+          t.providers.length === 0 ? (
+            <span className={NOTE}>none found</span>
+          ) : t.providers.every((p) => p.running) ? (
+            <Chip tone="ok">{num(t.providers.length)} running</Chip>
+          ) : (
+            <Chip tone="warn">
+              {num(t.providers.filter((p) => p.running).length)} of {num(t.providers.length)}{' '}
+              running
+            </Chip>
+          )
+        }
+      >
+        {t.providers.length === 0 ? (
+          <p className={EMPTY}>
+            {status.version !== null && agentBefore(status.version, '0.11.0')
+              ? 'Providers are reported by agent 0.11.0 and later.'
+              : 'No model server found on this machine.'}
+          </p>
+        ) : (
+          <ul className={LIST}>
+            {t.providers.map((p) => (
+              <li key={`${p.kind}:${String(p.port)}`} className={ROW}>
+                {p.running ? (
+                  <Chip tone="ok">running</Chip>
+                ) : (
+                  <Chip tone="warn">found, not running</Chip>
+                )}
+                <span className={ROW_MAIN}>
+                  {providerName(p.kind)}
+                  {p.version !== null && (
+                    <span className="ml-[0.4rem] text-muted-foreground">v{p.version}</span>
+                  )}
+                </span>
+                <span className={cn(ROW_SIDE, MONO)}>port {String(p.port)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className={FOOT}>
+          What this machine offers the network beyond itself. The agent reports that a server is
+          here and answering; the box reads its catalog from the server directly, at this machine's
+          name, which is the address the gateway dials.
+        </p>
+      </Board>
+
+      <Board
         title="Agent"
         icon="◎"
         span={12}
@@ -422,4 +472,21 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
       <NotReadable t={t} />
     </BoardGrid>
   )
+}
+
+/** The product name for a provider kind the agent reports. */
+function providerName(kind: string): string {
+  return kind === 'lemonade' ? 'Lemonade Server' : kind === 'ollama' ? 'Ollama' : kind
+}
+
+/** Whether an agent version predates the one a field arrived in. */
+function agentBefore(version: string, since: string): boolean {
+  const a = version.split('.').map(Number)
+  const b = since.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    const x = a[i] ?? 0
+    const y = b[i] ?? 0
+    if (x !== y) return x < y
+  }
+  return false
 }

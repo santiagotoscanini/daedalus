@@ -374,6 +374,11 @@ pub struct Telemetry {
     pub app_count: Option<usize>,
     /// None until the first search lands.
     pub updates: Option<Updates>,
+    /// What this machine offers the network — a model server — as
+    /// presence only (providers.rs). Kept on the open page: the machine,
+    /// not the person.
+    #[serde(default)]
+    pub providers: Vec<crate::providers::ProviderReport>,
     /// What could not be read, one line each, so the page says "not
     /// readable on this OS" rather than showing a dash without a reason.
     pub errors: Vec<String>,
@@ -519,7 +524,13 @@ pub fn read_updates() -> Updates {
 }
 
 /// Static, slow and sampled halves joined into the document.
-pub fn assemble(s: &Static, w: &Slow, p: &Sample, updates: Option<&Updates>) -> Telemetry {
+pub fn assemble(
+    s: &Static,
+    w: &Slow,
+    p: &Sample,
+    updates: Option<&Updates>,
+    providers: Vec<crate::providers::ProviderReport>,
+) -> Telemetry {
     let gpus = s
         .gpus
         .iter()
@@ -569,6 +580,7 @@ pub fn assemble(s: &Static, w: &Slow, p: &Sample, updates: Option<&Updates>) -> 
         apps: w.apps.clone(),
         app_count: Some(w.apps.len()),
         updates: updates.cloned(),
+        providers,
         errors,
     }
 }
@@ -653,7 +665,10 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
             }
         }
         let sample = c.sample();
-        shared.set_telemetry(assemble(&stat, &slow, &sample, updates.as_ref()));
+        // Presence, every sample: a refused port answers at once, and the
+        // page should say "running" within a tick of the server starting.
+        let providers = crate::providers::detect_all(&shared.policy(), &slow.apps);
+        shared.set_telemetry(assemble(&stat, &slow, &sample, updates.as_ref(), providers));
     }
 }
 /// Prometheus text exposition of the document. Gauges only; the counters
@@ -726,6 +741,20 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, hostname: &str) -> Strin
     for kind in ["app", "game", "launcher", "runtime", "driver"] {
         let n = t.apps.iter().filter(|a| a.kind == kind).count();
         gauge("apps", &format!("kind=\"{kind}\""), n as f64);
+    }
+    // A provider found on the machine: 1 when it answers, 0 when it is
+    // installed and silent. The version rides as a label, like the agent's.
+    for p in &t.providers {
+        gauge(
+            "provider_up",
+            &format!(
+                "kind=\"{}\",port=\"{}\",version=\"{}\"",
+                esc(&p.kind),
+                p.port,
+                esc(p.version.as_deref().unwrap_or(""))
+            ),
+            if p.running { 1.0 } else { 0.0 },
+        );
     }
     if let Some(u) = &t.updates {
         gauge("os_updates_pending", "", u.pending.len() as f64);
@@ -875,7 +904,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let t = assemble(&s, &w, &p, Some(&u));
+        let t = assemble(&s, &w, &p, Some(&u), Vec::new());
         assert_eq!(t.drives[0].serial.as_deref(), Some("S123"));
         assert_eq!(t.services.len(), 1);
         assert_eq!(t.updates.as_ref().map(|u| u.pending.len()), Some(1));
