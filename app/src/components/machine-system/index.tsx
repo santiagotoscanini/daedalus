@@ -1,5 +1,6 @@
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { NodeBoardView } from './board'
+import { NodeBrowsersView } from './browsers'
 import { NodeBuildView } from './build'
 import { NodeDisksView } from './disks'
 import { NodeHostView } from './host'
@@ -35,6 +36,9 @@ export const NODE_TABS = [
     boardSpans: [6, 6, 12, 6],
     dividerBefore: true,
   },
+  // The sessions' eyes, as Shotter is on the box: the Chromium-based
+  // browsers the machine has, against what their vendors ship today.
+  { id: 'browsers', label: 'Chromium', boardSpans: [6, 6, 12] },
 ] as const
 
 export type NodeTabId = (typeof NODE_TABS)[number]['id']
@@ -53,6 +57,8 @@ export function MachineSystemView({ d, tab }: { d: NodeSystemData; tab: NodeTabI
         <NodeMemoryView d={d} />
       ) : tab === 'disks' ? (
         <NodeDisksView d={d} />
+      ) : tab === 'browsers' ? (
+        <NodeBrowsersView d={d} />
       ) : tab === 'board' ? (
         <NodeBoardView d={d} />
       ) : tab === 'build' ? (

@@ -97,7 +97,9 @@ export const Route = createFileRoute('/c/$category')({
       node:
         machine === null
           ? null
-          : fetchNodeSystemFn({ data: { id: machine, board: nodeTab === 'board' } }),
+          : fetchNodeSystemFn({
+              data: { id: machine, board: nodeTab === 'board', browsers: nodeTab === 'browsers' },
+            }),
       nodeClaude:
         machine !== null && nodeTab === 'claude'
           ? fetchNodeClaudeFn({ data: { id: machine } })

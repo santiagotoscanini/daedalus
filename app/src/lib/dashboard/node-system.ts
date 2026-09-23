@@ -10,6 +10,7 @@ import {
 import { getJsonResult } from '../http'
 import { getNode, type NodeRow, nodeToken } from '../repo/nodes'
 import { type BoardReleases, boardReleases } from './board-releases'
+import { type BrowserLatest, browserLatest } from './browser-releases'
 
 // The System page for a machine that is not this box, the same tabs the
 // box draws for itself (components/machine-system/): one read of the
@@ -43,6 +44,8 @@ export type NodeSystemData = {
    * download host on the internet, which the other tabs have no use for).
    */
   releases: BoardReleases | null
+  /** The vendors' current stable per installed browser, read only for the Chromium tab. */
+  browserLatest: BrowserLatest[] | null
   /** Processor busy, six hours at two-minute steps, from the box's Prometheus. */
   cpuSpark: number[]
   error: string | null
@@ -50,7 +53,7 @@ export type NodeSystemData = {
 
 export async function loadNodeSystem(
   id: string,
-  opts: { board?: boolean } = {},
+  opts: { board?: boolean; browsers?: boolean } = {},
 ): Promise<NodeSystemData | null> {
   const node = await getNode(id)
   if (node === null) return null
@@ -61,6 +64,7 @@ export async function loadNodeSystem(
     full: false,
     detailError: null,
     releases: null,
+    browserLatest: null,
     cpuSpark: [] as number[],
   }
   if (node.lanIp === null) {
@@ -100,6 +104,14 @@ export async function loadNodeSystem(
           biosVersion: t.machine.biosVersion,
         })
       : null
+  const withBrowsers = async (t: NodeTelemetry): Promise<BrowserLatest[] | null> =>
+    opts.browsers === true
+      ? browserLatest(
+          t.browsers.map((b) => b.kind),
+          node.os,
+          node.arch,
+        )
+      : null
   if (open === null) {
     return { ...none, status, cpuSpark, error: null }
   }
@@ -110,6 +122,7 @@ export async function loadNodeSystem(
       telemetry: open,
       cpuSpark,
       releases: await withReleases(open),
+      browserLatest: await withBrowsers(open),
       detailError: 'no node token yet: approve the machine',
       error: null,
     }
@@ -131,6 +144,7 @@ export async function loadNodeSystem(
       status,
       telemetry: open,
       releases: await withReleases(open),
+      browserLatest: await withBrowsers(open),
       cpuSpark,
       detailError: why,
       error: null,
@@ -146,6 +160,7 @@ export async function loadNodeSystem(
           telemetry: t,
           full: true,
           releases: await withReleases(t),
+          browserLatest: await withBrowsers(t),
           cpuSpark,
           error: null,
         }

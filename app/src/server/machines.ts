@@ -12,15 +12,15 @@ export const fetchMachineNodesFn = createServerFn().handler(async () => {
 })
 
 export const fetchNodeSystemFn = createServerFn()
-  .validator((data: unknown): { id: string; board: boolean } => {
-    const d = data as { id?: unknown; board?: unknown } | null
+  .validator((data: unknown): { id: string; board: boolean; browsers: boolean } => {
+    const d = data as { id?: unknown; board?: unknown; browsers?: unknown } | null
     const id = d?.id
     if (typeof id !== 'string' || !NODE_ID.test(id)) throw new Error('expected a node id')
-    return { id, board: d?.board === true }
+    return { id, board: d?.board === true, browsers: d?.browsers === true }
   })
   .handler(async ({ data }) => {
     const { loadNodeSystem } = await import('../lib/dashboard/node-system')
-    return loadNodeSystem(data.id, { board: data.board })
+    return loadNodeSystem(data.id, { board: data.board, browsers: data.browsers })
   })
 
 /** The strip above the box's own System tabs: its release, kernel and board. */

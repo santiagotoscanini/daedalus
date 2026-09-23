@@ -412,6 +412,8 @@ export type NodeTelemetry = {
   /** Should be running and are not; empty on the open page. */
   services: NodeService[]
   serviceCount: number | null
+  /** The Chromium-based browsers installed; paths only on the token-gated document. */
+  browsers: NodeBrowser[]
   /** Null until the agent's first search, and on the open page. */
   updates: NodeUpdates | null
   errors: string[]
@@ -450,6 +452,17 @@ export type NodeProcess = {
   memoryBytes: number | null
   /** Percent of one core. */
   cpuPct: number | null
+}
+
+export type NodeBrowser = {
+  name: string
+  /** "chrome" | "edge" | "brave" | "arc" | "chromium" | "vivaldi" | "opera". */
+  kind: string
+  version: string | null
+  channel: string | null
+  path: string | null
+  running: boolean
+  defaultBrowser: boolean
 }
 
 export type NodeService = {
@@ -656,6 +669,20 @@ const telemetryShape = obj({
     [],
   ),
   service_count: nint,
+  browsers: optional(
+    arrayOf(
+      obj({
+        name: optional(str, ''),
+        kind: optional(str, ''),
+        version: nstr,
+        channel: nstr,
+        path: nstr,
+        running: optional(bool, false),
+        default_browser: optional(bool, false),
+      }),
+    ),
+    [],
+  ),
   updates: optional(
     nullable(
       obj({
@@ -793,6 +820,15 @@ function telemetryOf(t: ReturnType<typeof telemetryShape>): NodeTelemetry {
       exitCode: s.exit_code,
     })),
     serviceCount: t.service_count,
+    browsers: t.browsers.map((b) => ({
+      name: b.name,
+      kind: b.kind,
+      version: b.version,
+      channel: b.channel,
+      path: b.path,
+      running: b.running,
+      defaultBrowser: b.default_browser,
+    })),
     updates:
       t.updates === null
         ? null
