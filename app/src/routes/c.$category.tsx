@@ -51,23 +51,39 @@ import { fetchTabStatus, type TabStatus } from '../server/tab-status'
 // flash — the placeholders appear only when something is actually being
 // fetched.
 
-const NODE_ID = /^[0-9a-f]{16}$/
+/**
+ * A machine, as either picker names one: a node's id, or `box` for this
+ * one — optionally with a provider kind after a colon, because AI's picker
+ * is over provider rows and one machine may run more than one model server.
+ *
+ * It accepted the bare forms only, which silently dropped every id AI's
+ * picker produced: `?machine=…:lemonade` validated to undefined, the tab
+ * fell back to its default machine, and so every click on a pill appeared
+ * to do nothing at all. A search schema that drops what a Link sends is
+ * invisible from either side — hence the lab driver that now clicks the
+ * pills instead of typing their URLs.
+ */
+const MACHINE = /^(?:[0-9a-f]{16}|box)(?::[a-z][a-z0-9-]{0,31})?$/
+
+/** The machine half, for the readers that want a node id and not a row. */
+const machineOf = (v: string | undefined): string | undefined => v?.split(':')[0]
 
 export const Route = createFileRoute('/c/$category')({
   // Same reasoning as the app detail page: the sub-tab is in the URL so it
   // survives a refresh, can be linked, and renders on the server. So is the
   // picked machine: a node's id on the module with a picker, and on AI's
   // Providers tab — whose picker is inside the tab and includes this box as
-  // `box` — the machine the tab shows.
+  // `box` — the provider row the tab shows.
   validateSearch: (search: Record<string, unknown>): { tab?: string; machine?: string } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
     machine:
-      typeof search.machine === 'string' &&
-      (NODE_ID.test(search.machine) || search.machine === 'box')
+      typeof search.machine === 'string' && MACHINE.test(search.machine)
         ? search.machine
         : undefined,
   }),
-  loaderDeps: ({ search }) => ({ tab: search.tab, machine: search.machine }),
+  // The machine picker in the frame means a NODE, so the kind is dropped
+  // here; AI's own picker reads the whole row out of `useSearch`.
+  loaderDeps: ({ search }) => ({ tab: search.tab, machine: machineOf(search.machine) }),
   loader: async ({ params, deps }) => {
     const spec = moduleById(params.category)
     // An unknown module is a 404, not an empty page: the rail cannot produce

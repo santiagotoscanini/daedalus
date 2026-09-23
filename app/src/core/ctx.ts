@@ -27,7 +27,7 @@ import {
 } from '../host/prom'
 import { readSite } from '../host/site'
 import { bool, type Decoder, recordOf } from '../lib/contract/decode'
-import { getJson } from '../lib/http'
+import { getJson, getText } from '../lib/http'
 import type { Site } from '../lib/site'
 import type { GhResult } from './github-app'
 
@@ -77,7 +77,7 @@ export type Ctx = {
     /** Drop the key. The way to unset: the column refuses null. */
     delete(key: string): Promise<void>
   }
-  http: { getJson: typeof getJson }
+  http: { getJson: typeof getJson; getText: typeof getText }
   /**
    * The Prometheus client, the only way a module reads PromQL. `url` is
    * undefined on a box without the monitoring bridge, and every read answers
@@ -154,7 +154,7 @@ export async function makeCtx(): Promise<Ctx> {
     exportPath: (file) => join(exportDir, file),
     snapshot: readSnapshot,
     store: { read: readSetting, write: writeSetting, delete: deleteSetting },
-    http: { getJson },
+    http: { getJson, getText },
     prom: {
       url: PROM,
       escape: promEscape,

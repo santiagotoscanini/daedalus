@@ -1,4 +1,14 @@
-import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '../contract/decode'
+import {
+  arrayOf,
+  bool,
+  type Decoder,
+  nullable,
+  num,
+  obj,
+  optional,
+  recordOf,
+  str,
+} from '../contract/decode'
 
 // The provider kinds: what a machine on the network can offer the gateway,
 // as one interface. A kind knows three things — how to read the catalog,
@@ -7,28 +17,36 @@ import { arrayOf, bool, type Decoder, nullable, num, obj, optional, str } from '
 // readers live in ./read.ts; the AI page and the gateway sync both use
 // them, and neither knows a provider by anything but its kind and address.
 //
-// Three kinds cover every provider on this network today:
+// Two kinds cover every provider on this network today:
 // - `lemonade`: Lemonade Server, OpenAI-compatible under /api/v1, a catalog
 //   with labels, a health document with what is loaded. Windows today,
 //   macOS with Metal the day it is installed there, same API, same port.
 // - `subgen`: the tv stack's faster-whisper, one STT model behind
 //   /v1/audio/transcriptions — a provider with no catalog to read.
-// - `ollama`: /api/tags, chat and embeddings, the fallback for a Mac.
+//
+// ── Ollama was a kind here, and is not any more ───────────────────────────
+//
+// Lemonade's installer brings Ollama along, so every machine that ran one
+// ran both — and a kind per machine meant one computer drew two rows, two
+// pills and two catalogs of the same weights under different names. The
+// second row was never something the operator had chosen; it was an
+// installer's side effect being reported as a decision. Removed rather than
+// hidden, because a kind nothing offers is a decoder, a port and a name
+// that no reader can tell is dead. `git show 8410e1f` has the mapping if a
+// machine ever runs Ollama on its own.
 
-export type ProviderKind = 'lemonade' | 'subgen' | 'ollama'
+export type ProviderKind = 'lemonade' | 'subgen'
 
-export const PROVIDER_KINDS: readonly ProviderKind[] = ['lemonade', 'subgen', 'ollama']
+export const PROVIDER_KINDS: readonly ProviderKind[] = ['lemonade', 'subgen']
 
 export const DEFAULT_PORT: Record<ProviderKind, number> = {
   lemonade: 13305,
   subgen: 9000,
-  ollama: 11434,
 }
 
 export const PROVIDER_NAME: Record<ProviderKind, string> = {
   lemonade: 'Lemonade Server',
   subgen: 'subgen (faster-whisper)',
-  ollama: 'Ollama',
 }
 
 /**
@@ -38,7 +56,23 @@ export const PROVIDER_NAME: Record<ProviderKind, string> = {
  * its own module list (host/providers/fleet.ts). Adding a kind to this list
  * is what puts it on the page and into a node's policy.
  */
-export const NODE_PROVIDER_KINDS: readonly ProviderKind[] = ['lemonade', 'ollama']
+export const NODE_PROVIDER_KINDS: readonly ProviderKind[] = ['lemonade']
+
+/**
+ * The kinds whose residency the box may drive — load a model into the
+ * accelerator and put it back down — rather than only read.
+ *
+ * Which weights are warm is runtime state, not configuration: the provider
+ * loads on demand and evicts under pressure, so it drifts on its own and
+ * the two things anyone wants to do about it are "free that card up" and
+ * "have this one ready, I am about to use it". `subgen` is not here because
+ * it serves one model and holds it for its lifetime.
+ */
+export const MANAGED_RESIDENCY: readonly ProviderKind[] = ['lemonade']
+
+export function managesResidency(kind: ProviderKind): boolean {
+  return MANAGED_RESIDENCY.includes(kind)
+}
 
 export function isProviderKind(v: unknown): v is ProviderKind {
   return typeof v === 'string' && (PROVIDER_KINDS as readonly string[]).includes(v)
@@ -147,31 +181,52 @@ export const lemonadeHealthDecoder: Decoder<ProviderHealth> = (v, p) => {
   }
 }
 
-/* ── ollama ───────────────────────────────────────────────────────────── */
+/**
+ * What a Lemonade is busy fetching. Present only while a download runs, so
+ * an empty list is the resting state rather than a failed read.
+ */
+export type ProviderDownload = { model: string; percent: number | null; status: string }
 
-export const ollamaTagsDecoder: Decoder<ProviderModel[]> = (v, p) => {
-  const doc = obj({
-    models: arrayOf(
-      obj({
-        name: str,
-        size: optional(nullable(num), null),
-        details: optional(obj({ family: optional(nullable(str), null) }), { family: null }),
-      }),
-    ),
-  })(v, p)
-  return doc.models.map((m) => {
-    const embed = /embed|bge|nomic|minilm/i.test(m.name)
-    return {
-      id: m.name,
-      labels: embed ? ['embeddings'] : [],
-      mode: embed ? 'embedding' : 'chat',
-      supportsTools: false,
-      supportsVision: /vision|llava|vl/i.test(m.name),
-      downloaded: true,
-      sizeGb: m.size === null ? null : Math.round((m.size / 1e9) * 10) / 10,
-      recipe: m.details.family,
-    }
-  })
+export const lemonadeDownloadsDecoder: Decoder<ProviderDownload[]> = (v, p) => {
+  const rows = arrayOf(
+    obj({
+      model_name: optional(str, '?'),
+      percent: optional(nullable(num), null),
+      status: optional(str, '?'),
+    }),
+  )(v, p)
+  return rows.map((d) => ({ model: d.model_name, percent: d.percent, status: d.status }))
+}
+
+/**
+ * An inference runtime installed at the provider, with the build serving it.
+ *
+ * Worth reading separately from the models: the build number is what
+ * changes how fast a model runs, and it moves far more often than a
+ * Lemonade release does.
+ */
+export type ProviderBackend = {
+  recipe: string
+  backend: string
+  version: string | null
+  url: string | null
+}
+
+const backendState = obj({
+  state: optional(str, ''),
+  version: optional(nullable(str), null),
+  release_url: optional(nullable(str), null),
+})
+
+const recipeState = recordOf(obj({ backends: optional(recordOf(backendState), {}) }))
+
+export const lemonadeBackendsDecoder: Decoder<ProviderBackend[]> = (v, p) => {
+  const doc = obj({ recipes: optional(recipeState, {}) })(v, p)
+  return Object.entries(doc.recipes).flatMap(([recipe, r]) =>
+    Object.entries(r.backends)
+      .filter(([, b]) => b.state === 'installed')
+      .map(([backend, b]) => ({ recipe, backend, version: b.version, url: b.release_url })),
+  )
 }
 
 /* ── subgen ───────────────────────────────────────────────────────────── */

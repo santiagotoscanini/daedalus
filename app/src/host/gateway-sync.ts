@@ -351,21 +351,6 @@ async function policiesOf(ctx: Ctx): Promise<(p: FleetProvider) => ModelPolicies
     return n?.policy.providers?.[p.kind]?.models
   }
 }
-
-/** The box's own provider is offered only when its policy says so. */
-async function withBoxOffer(
-  ctx: Ctx,
-  readings: { provider: FleetProvider; reading: ProviderReading }[],
-) {
-  const box =
-    (await ctx.store.read(BOX_PROVIDERS_KEY, isBoxProviderPolicy)) ?? ({} as BoxProviderPolicy)
-  return readings.map((r) =>
-    r.provider.machine === 'box' && r.provider.kind === 'subgen'
-      ? { ...r, provider: { ...r.provider, offered: box.subgen?.offer === true } }
-      : r,
-  )
-}
-
 /** One sync, now. Concurrent callers share the run in flight. */
 export function syncGateway(ctx: Ctx, gw?: GatewayClient): Promise<SyncSummary> {
   const s = slot()
@@ -384,7 +369,9 @@ export function syncGateway(ctx: Ctx, gw?: GatewayClient): Promise<SyncSummary> 
       }
     }
     try {
-      const readings = await withBoxOffer(ctx, await readFleetProviders(ctx))
+      // `offered` comes from the provider list itself now — the box reads
+      // its own policy in host/providers/fleet.ts, where a node reads its.
+      const readings = await readFleetProviders(ctx)
       const summary = await reconcile(
         gw ?? litellmClient(ctx.gateway),
         readings,

@@ -1,28 +1,51 @@
 import type { Ctx } from '../../../core/ctx'
+import { NO_DETAIL, type ProviderDetail, readProviderDetail } from '../../../host/providers/detail'
 import { type FleetProvider, readFleetProviders } from '../../../host/providers/fleet'
 import { type GatewayRoute, gatewayRoutes } from '../../../host/providers/gateway'
 import { loadNodeSystem } from '../../../lib/dashboard/node-system'
 import {
-  defaultAlias,
+  managesResidency,
   PROVIDER_NAME,
   type ProviderKind,
   type ProviderModel,
 } from '../../../lib/providers/kinds'
+import type { ModelFigures } from '../../../lib/providers/metrics'
+import { type ModelPolicies, resolveModel } from '../../../lib/providers/policy'
 import { listApps } from '../../../lib/repo/apps'
+import { listNodes } from '../../../lib/repo/nodes'
 
 // The Providers tab: every machine on the network that offers models, read
 // from the provider itself, with the chain it feeds drawn once at the top.
 //
 // One loader answers for every machine and the view picks by `?machine=`:
-// three machines' worth of catalog is small, the provider reads are
-// remembered a minute, and a switch in the picker is then a re-render, not
-// a round trip.
+// the whole fleet's catalog is small, the provider reads are remembered a
+// minute, and a switch in the picker is then a re-render, not a round trip.
+//
+// A machine is ONE row here. It was one row per machine-and-kind, which is
+// the shape the fleet has underneath — but with Lemonade the only kind a
+// node offers (lib/providers/kinds.ts says why), a pair per machine only
+// ever drew the same computer twice, once per installer side effect. The
+// pair survives in `id` because the gateway sync still tags a route with
+// both, and because a machine that one day runs two model servers must not
+// silently show one of them.
+
+export type CatalogEntry = ProviderModel & {
+  /** The name the gateway publishes it under, per the operator's policy. */
+  alias: string
+  /** Offered to the gateway: the provider is, the policy says so, and it is on disk. */
+  offerable: boolean
+  /** A route in the gateway already forwards to this id on this machine. */
+  routed: string | null
+  /** Resident at the provider right now, with what it says about the slot. */
+  loaded: { device: string | null; maxContext: number | null; pinned: boolean } | null
+  /** What it has managed at the provider, or null if it has not run there. */
+  figures: ModelFigures | null
+}
 
 export type ProviderMachine = {
   /** 'box', or the node's id. */
   machine: string
-  /** `<machine>:<kind>`: a machine may offer more than one provider, so the
-      pair is what identifies a row, a pill and the `?machine=` value. */
+  /** `<machine>:<kind>`: what identifies a row, a pill and the `?machine=` value. */
   id: string
   name: string
   os: string
@@ -33,18 +56,14 @@ export type ProviderMachine = {
   reachable: boolean
   version: string | null
   error: string | null
+  /** Whether this box may load and unload models here, or only read them. */
+  manageable: boolean
   /** What the agent said on its last tick, for a node with agent 0.11.0+. */
   presence: { running: boolean; version: string | null } | null
-  loaded: { id: string; device: string | null; maxContext: number | null; pinned: boolean }[]
-  models: (ProviderModel & {
-    alias: string
-    /** Offered to the gateway: the provider is, and the model is on disk. */
-    offerable: boolean
-    /** A route in the gateway already forwards to this id on this machine. */
-    routed: string | null
-  })[]
+  models: CatalogEntry[]
   /** How many models the gateway would carry from here. */
   offerableCount: number
+  detail: ProviderDetail
 }
 
 export type Chain = {
@@ -64,6 +83,12 @@ export type ProvidersData = {
   chain: Chain
   /** The machine the picker opens on when the URL names none. */
   defaultMachine: string | null
+  /**
+   * The one provider whose own log this box ships, and the Loki stack label
+   * it arrives under. A model server off this box has no container here to
+   * select logs by: a bridge reads its WebSocket and pushes to Loki.
+   */
+  logs: { machine: string; stack: string } | null
 }
 
 function routedBy(routes: GatewayRoute[], p: FleetProvider, id: string): string | null {
@@ -91,19 +116,45 @@ async function presenceOf(machine: string, kind: ProviderKind) {
 }
 
 export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
-  const [read, gateway, apps] = await Promise.all([
+  const [read, gateway, apps, nodes] = await Promise.all([
     readFleetProviders(ctx),
     gatewayRoutes(ctx),
     listApps().catch(() => []),
+    listNodes().catch(() => []),
   ])
+  // The same policy the gateway sync resolves against, so the alias this
+  // page prints and the alias the gateway publishes cannot disagree — the
+  // page used to print the id's plain form and ignore a chosen alias.
+  const policiesOf = (p: FleetProvider): ModelPolicies | undefined =>
+    p.machine === 'box'
+      ? undefined
+      : nodes.find((n) => n.id === p.machine)?.policy.providers?.[p.kind]?.models
+
   const machines: ProviderMachine[] = await Promise.all(
     read.map(async ({ provider, reading }) => {
-      const models = reading.models.map((m) => ({
-        ...m,
-        alias: defaultAlias(m.id),
-        offerable: provider.offered && m.downloaded,
-        routed: routedBy(gateway.routes, provider, m.id),
-      }))
+      const [detail, presence] = await Promise.all([
+        reading.reachable
+          ? readProviderDetail(ctx, provider.kind, provider.base)
+          : Promise.resolve(NO_DETAIL),
+        presenceOf(provider.machine, provider.kind),
+      ])
+      const policies = policiesOf(provider)
+      const models: CatalogEntry[] = reading.models.map((m) => {
+        const r = resolveModel(policies, m)
+        const live = reading.health.loaded.find((l) => l.id === m.id)
+        return {
+          ...m,
+          mode: r.mode,
+          alias: r.alias,
+          offerable: provider.offered && r.offer,
+          routed: routedBy(gateway.routes, provider, m.id),
+          loaded:
+            live === undefined
+              ? null
+              : { device: live.device, maxContext: live.maxContext, pinned: live.pinned },
+          figures: detail.figures[m.id] ?? null,
+        }
+      })
       return {
         machine: provider.machine,
         id: `${provider.machine}:${provider.kind}`,
@@ -116,10 +167,11 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
         reachable: reading.reachable,
         version: reading.health.version,
         error: reading.error,
-        presence: await presenceOf(provider.machine, provider.kind),
-        loaded: reading.health.loaded,
+        manageable: managesResidency(provider.kind),
+        presence,
         models,
         offerableCount: models.filter((m) => m.offerable).length,
+        detail,
       }
     }),
   )
@@ -168,5 +220,24 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
       consumers,
     },
     defaultMachine: pick?.id ?? null,
+    logs: logsFor(ctx, machines),
   }
+}
+
+/**
+ * Which provider the log bridge is pointed at, if the box runs one.
+ *
+ * ONE bridge, one target, so the panel belongs to one machine — it was
+ * drawn under every Lemonade, which told a second machine its logs were
+ * being shipped when they were not. The rule mirrors the bridge's own
+ * (`lib.head config.fleet.lemonadeNodes`): nodes.json is written sorted by
+ * id and carries only offered providers, so the first offered Lemonade in
+ * id order is the one the bridge reads.
+ */
+function logsFor(ctx: Ctx, machines: ProviderMachine[]): ProvidersData['logs'] {
+  if (!ctx.modules.enabled('lemonade-logs')) return null
+  const target = machines
+    .filter((m) => m.machine !== 'box' && m.kind === 'lemonade' && m.offered)
+    .sort((a, b) => (a.machine < b.machine ? -1 : 1))[0]
+  return target === undefined ? null : { machine: target.machine, stack: 'lemonade' }
 }

@@ -3,10 +3,11 @@ import { decode } from '../contract/decode'
 import {
   apiBase,
   defaultAlias,
+  lemonadeBackendsDecoder,
   lemonadeCatalogDecoder,
+  lemonadeDownloadsDecoder,
   lemonadeHealthDecoder,
   modeOf,
-  ollamaTagsDecoder,
   routeFor,
 } from './kinds'
 
@@ -87,21 +88,6 @@ describe('lemonade', () => {
   })
 })
 
-describe('ollama', () => {
-  it('reads tags', () => {
-    const m = decode(ollamaTagsDecoder, {
-      models: [
-        { name: 'llama3.2:3b', size: 2_019_393_189, details: { family: 'llama' } },
-        { name: 'nomic-embed-text', size: 274_302_450 },
-      ],
-    })
-    expect(m.map((x) => [x.id, x.mode, x.sizeGb])).toEqual([
-      ['llama3.2:3b', 'chat', 2],
-      ['nomic-embed-text', 'embedding', 0.3],
-    ])
-  })
-})
-
 describe('the route a model becomes', () => {
   const gemma = decode(lemonadeCatalogDecoder, CATALOG)[1]
   if (gemma === undefined) throw new Error('fixture')
@@ -141,7 +127,6 @@ describe('the route a model becomes', () => {
     expect(apiBase('subgen', 'http://host.containers.internal:9000')).toBe(
       'http://host.containers.internal:9000/v1',
     )
-    expect(apiBase('ollama', 'http://m.lan:11434')).toBe('http://m.lan:11434/v1')
   })
 
   it('names a model plainly when nobody chose an alias', () => {
@@ -150,5 +135,37 @@ describe('the route a model becomes', () => {
     expect(defaultAlias('Whisper-Large-v3-Turbo')).toBe('whisper-large-v3-turbo')
     expect(defaultAlias('kokoro-v1')).toBe('kokoro-v1')
     expect(defaultAlias('Huihui-Gemma-4-12B-uncensored')).toBe('huihui-gemma-4-12b-uncensored')
+  })
+})
+
+describe('the rest of what a provider says', () => {
+  it('reads downloads in progress', () => {
+    expect(
+      decode(lemonadeDownloadsDecoder, [
+        { model_name: 'Flux-2-Klein-9B-GGUF', percent: 41.2, status: 'downloading' },
+        { status: 'queued' },
+      ]),
+    ).toEqual([
+      { model: 'Flux-2-Klein-9B-GGUF', percent: 41.2, status: 'downloading' },
+      { model: '?', percent: null, status: 'queued' },
+    ])
+  })
+
+  it('reads only the runtimes that are installed', () => {
+    expect(
+      decode(lemonadeBackendsDecoder, {
+        recipes: {
+          llamacpp: {
+            backends: {
+              rocm: { state: 'installed', version: 'b7054', release_url: 'https://example/b7054' },
+              vulkan: { state: 'not_installed', version: 'b7054' },
+            },
+          },
+          flm: { backends: { npu: { state: 'unsupported', version: 'v0.9.43' } } },
+        },
+      }),
+    ).toEqual([
+      { recipe: 'llamacpp', backend: 'rocm', version: 'b7054', url: 'https://example/b7054' },
+    ])
   })
 })

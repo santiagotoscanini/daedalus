@@ -14,8 +14,13 @@ import type { Ctx } from '../ctx'
 // bytes of a picture, where every read here is a getJson that folds a failure
 // into null.
 
-/** What a reader here needs of the capability set — so a test hands it three fakes. */
-export type IdentityCtx = Pick<Ctx, 'hosts' | 'secret' | 'http'>
+/**
+ * What a reader here needs of the capability set — so a test hands it three
+ * fakes. `http` is narrowed to the JSON reader alone: every read here is a
+ * getJson, and naming the whole capability made the fake owe a method no
+ * reader here calls.
+ */
+export type IdentityCtx = Pick<Ctx, 'hosts' | 'secret'> & { http: Pick<Ctx['http'], 'getJson'> }
 
 /**
  * The id Pocket ID gives the principal behind STATIC_API_KEY: the all-zero

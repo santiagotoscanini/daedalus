@@ -3,7 +3,6 @@ import { decode } from '../../lib/contract/decode'
 import {
   lemonadeCatalogDecoder,
   lemonadeHealthDecoder,
-  ollamaTagsDecoder,
   type ProviderHealth,
   type ProviderKind,
   type ProviderModel,
@@ -81,23 +80,6 @@ export async function readProvider(
           reachable: true,
           health: decode(lemonadeHealthDecoder, health),
           models: catalog === null ? [] : decode(lemonadeCatalogDecoder, catalog),
-          error: null,
-          readAt: now,
-        }
-        break
-      }
-      case 'ollama': {
-        const tags = await get('/api/tags')
-        if (tags === null) {
-          reading = unreachable(kind, base, 'did not answer /api/tags', now)
-          break
-        }
-        reading = {
-          kind,
-          base,
-          reachable: true,
-          health: { ok: true, version: null, loaded: [] },
-          models: decode(ollamaTagsDecoder, tags),
           error: null,
           readAt: now,
         }

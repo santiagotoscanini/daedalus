@@ -1,5 +1,6 @@
 import type { Ctx } from '../../core/ctx'
 import { DEFAULT_PORT, type ProviderKind } from '../../lib/providers/kinds'
+import { BOX_PROVIDERS_KEY, isBoxProviderPolicy } from '../../lib/providers/policy'
 import { listNodes, type NodeRow, netNameOf, providersOf } from '../../lib/repo/nodes'
 import { networkFacts } from '../contract/domains/network'
 import { type ProviderReading, readProvider } from './read'
@@ -49,9 +50,15 @@ export type FleetProvider = {
  * The box as a provider: subgen, when the tv stack runs it. Reached the way
  * every host-netns service is, through the host gateway alias, never the
  * LAN address.
+ *
+ * Its `offered` is the box's own policy — the setting Settings › Machines
+ * writes. It was hardcoded false here and corrected afterwards by the sync
+ * alone, so the AI page said "not offered" about a provider whose model the
+ * gateway was already serving. One answer, read once, for both readers.
  */
-function boxProviders(ctx: Ctx): FleetProvider[] {
+async function boxProviders(ctx: Ctx): Promise<FleetProvider[]> {
   if (!ctx.modules.enabled('tv')) return []
+  const policy = await ctx.store.read(BOX_PROVIDERS_KEY, isBoxProviderPolicy)
   return [
     {
       machine: 'box',
@@ -59,7 +66,7 @@ function boxProviders(ctx: Ctx): FleetProvider[] {
       os: 'linux',
       kind: 'subgen',
       base: `${ctx.hosts.hc}:${String(DEFAULT_PORT.subgen)}`,
-      offered: false,
+      offered: policy?.subgen?.offer === true,
     },
   ]
 }
@@ -87,11 +94,12 @@ function nodeProviders(n: NodeRow, domain: string): FleetProvider[] {
 
 /** Every provider, this box first, then the nodes in the order they joined. */
 export async function fleetProviders(ctx: Ctx): Promise<FleetProvider[]> {
-  const [nodes, { domain }] = await Promise.all([
+  const [box, nodes, { domain }] = await Promise.all([
+    boxProviders(ctx),
     listNodes().then((all) => all.filter((n) => n.state === 'approved')),
     lanDomain(),
   ])
-  return [...boxProviders(ctx), ...nodes.flatMap((n) => nodeProviders(n, domain))]
+  return [...box, ...nodes.flatMap((n) => nodeProviders(n, domain))]
 }
 
 /** The providers with what each answered, read in parallel. */
