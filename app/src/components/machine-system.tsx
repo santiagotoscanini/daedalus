@@ -63,7 +63,14 @@ export function MachineSystemView({ d }: { d: NodeSystemData }) {
           : { chip: 'may sleep', tone: 'muted' as Tone }
 
   const mainDisk = t?.disks[0] ?? null
-  const gpu = t?.gpus[0] ?? null
+  // The card that matters: the one with the most memory, which on a machine
+  // with an integrated and a discrete GPU is the discrete one.
+  const gpu =
+    t === null || t.gpus.length === 0
+      ? null
+      : t.gpus.reduce((best, g) =>
+          (g.vramTotalBytes ?? 0) > (best.vramTotalBytes ?? 0) ? g : best,
+        )
 
   return (
     <>
@@ -404,7 +411,9 @@ export function MachineSystemView({ d }: { d: NodeSystemData }) {
         <Board title="Temperatures" span={6}>
           {t === null || t.temperatures.length === 0 ? (
             <p className={EMPTY}>
-              {t?.errors.find((e) => /temperature/i.test(e)) ?? 'No sensors reported.'}
+              {t?.errors.find((e) => /^temperatures/i.test(e)) ??
+                t?.errors.find((e) => /temperature/i.test(e)) ??
+                'No sensors reported.'}
             </p>
           ) : (
             <Facts
