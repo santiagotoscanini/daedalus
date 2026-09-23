@@ -1,6 +1,4 @@
-import type { Hosts } from '../../../host/hosts'
-import { key } from '../../../host/keys'
-import { promScalars, promSeries } from '../../../host/prom'
+import type { Ctx } from '../../../core/ctx'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { getJson } from '../../../lib/http'
 import { daysSince } from './shared'
@@ -28,11 +26,11 @@ export type JellyfinData = {
   people: { name: string; lastSeenDays: number | null; lastLoginDays: number | null }[]
 }
 
-export async function loadJellyfin(hosts: Hosts): Promise<JellyfinData> {
-  const base = hosts.base('jellyfin')
+export async function loadJellyfin(ctx: Ctx): Promise<JellyfinData> {
+  const base = ctx.hosts.base('jellyfin')
   // `Authorization: MediaBrowser Token=` is the only scheme Jellyfin 12 keeps;
   // X-Emby-Token is gated behind EnableLegacyAuthorization there and removed next.
-  const h = { headers: { Authorization: `MediaBrowser Token="${key('JELLYFIN_API_KEY')}"` } }
+  const h = { headers: { Authorization: `MediaBrowser Token="${ctx.secret('JELLYFIN_API_KEY')}"` } }
   const now = Date.now()
 
   const [info, counts, sessions, users, disk, growth] = await Promise.all([
@@ -56,13 +54,13 @@ export async function loadJellyfin(hosts: Hosts): Promise<JellyfinData> {
       `${base}/Users`,
       h,
     ),
-    promScalars({
+    ctx.prom.scalars({
       size: 'node_filesystem_size_bytes{mountpoint="/s2/tv"}',
       avail: 'node_filesystem_avail_bytes{mountpoint="/s2/tv"}',
     }),
     // One point every 12h over a month: the library grows in episode-sized
     // steps, so a finer step is a flat line with noise on it.
-    promSeries(
+    ctx.prom.series(
       'node_filesystem_size_bytes{mountpoint="/s2/tv"} - node_filesystem_avail_bytes{mountpoint="/s2/tv"}',
       30 * 24 * 60,
       43200,

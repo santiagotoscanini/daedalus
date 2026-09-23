@@ -107,27 +107,48 @@ export async function ghApp<T = unknown>(
   path: string,
   init: RequestInit = {},
 ): Promise<GhResult<T>> {
-  const none = (error: GhError): GhResult<T> => ({
-    status: null,
-    body: null,
-    headers: new Headers(),
-    retryAfterMs: null,
-    error,
-  })
-  // A path, never a URL: nothing here may send the token to another host.
-  if (!path.startsWith('/') || path.startsWith('//')) return none('invalid-path')
-
   const token = usableToken(await installationState(ctx))
   if (token === null) {
     await requestTokenRefresh()
     return none('no-token')
   }
+  const r = await ghFetch<T>(token, path, init)
+  if (r.status === 401) await requestTokenRefresh()
+  return r
+}
+
+/**
+ * The same call with no token at all: what anyone on the internet can read.
+ * Enough for a public repository's workflows and runs, which is how the
+ * Actions page shows the engine's own releases before the App is granted
+ * `actions`. Shares the address's unauthenticated budget (60 an hour), so
+ * callers cache.
+ */
+export function ghAnon<T = unknown>(path: string): Promise<GhResult<T>> {
+  return ghFetch<T>(null, path, {})
+}
+
+const none = <T>(error: GhError): GhResult<T> => ({
+  status: null,
+  body: null,
+  headers: new Headers(),
+  retryAfterMs: null,
+  error,
+})
+
+async function ghFetch<T>(
+  token: string | null,
+  path: string,
+  init: RequestInit,
+): Promise<GhResult<T>> {
+  // A path, never a URL: nothing here may send the token to another host.
+  if (!path.startsWith('/') || path.startsWith('//')) return none('invalid-path')
 
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/vnd.github+json')
   headers.set('X-GitHub-Api-Version', GITHUB_API_VERSION)
   headers.set('User-Agent', 'daedalus')
-  headers.set('Authorization', `Bearer ${token}`)
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
   if (init.body !== undefined && init.body !== null && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
@@ -146,8 +167,6 @@ export async function ghApp<T = unknown>(
     const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')
     return none(timedOut ? 'timeout' : 'unreachable')
   }
-
-  if (res.status === 401) await requestTokenRefresh()
 
   let body: T | null = null
   if (text !== '') {

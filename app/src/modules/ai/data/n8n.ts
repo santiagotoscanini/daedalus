@@ -1,5 +1,4 @@
 import type { Ctx } from '../../../core/ctx'
-import { key } from '../../../host/keys'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { pinnedVersion } from '../../../lib/dashboard/images'
 import { DASH, localDay, since } from '../../../lib/format'
@@ -155,7 +154,7 @@ const RUNNING = new Set(['running', 'new', 'waiting'])
  */
 export async function loadN8n(ctx: Ctx): Promise<N8nData> {
   const base = ctx.hosts.base('n8n')
-  const auth = { headers: { 'X-N8N-API-KEY': key('N8N_API_KEY') } }
+  const auth = { headers: { 'X-N8N-API-KEY': ctx.secret('N8N_API_KEY') } }
   // n8n's public API has no version endpoint and /rest/settings does not carry
   // one either, so the tag the image is pinned to IS the running version.
   const version = await pinnedVersion('n8n', ctx.env('N8N_VERSION'))

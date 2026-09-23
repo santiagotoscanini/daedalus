@@ -1,6 +1,4 @@
 import type { Ctx } from '../../../core/ctx'
-import { lokiLatest } from '../../../host/loki'
-import { promPoints, promScalar, promVector } from '../../../host/prom'
 import { declaredVpnEgress, type VpnEgress } from '../../../host/vpn-egress'
 import {
   type CommitGap,
@@ -94,18 +92,18 @@ export async function loadOutbound(ctx: Ctx): Promise<OutboundData> {
     }
   }
 
-  const liveness = await promVector('container_up')
+  const liveness = await ctx.prom.vector('container_up')
   const upOf = (name: string): boolean | null => {
     const hit = liveness.find((r) => r.metric.name === name)
     return hit === undefined ? null : hit.value[1] === '1'
   }
 
   const [tunnels, gluetun, exporter] = await Promise.all([
-    Promise.all(declared.map((d) => loadTunnel(d, ctx.hosts.hc, upOf))),
+    Promise.all(declared.map((d) => loadTunnel(ctx, d, upOf))),
     // Read from the first instance's banner, and correct for all of them:
     // `mkGluetunInstance` pins one image digest, so a second tunnel is the
     // same binary. See `OutboundData.gluetun`.
-    gluetunBuild(declared[0]?.container ?? ''),
+    gluetunBuild(ctx, declared[0]?.container ?? ''),
     // No running version to compare against, deliberately unfaked: the image
     // is a digest-pinned `:latest` and the exporter prints no version in its
     // log, serves none on /metrics, and has no endpoint that would say. So
@@ -119,20 +117,22 @@ export async function loadOutbound(ctx: Ctx): Promise<OutboundData> {
 }
 
 /** The commit gluetun states in its startup banner, and master since it. */
-async function gluetunBuild(container: string): Promise<CommitGap> {
+async function gluetunBuild(ctx: Ctx, container: string): Promise<CommitGap> {
   if (container === '') return EMPTY_COMMITS
-  const banner = await lokiLatest(`{container=${JSON.stringify(container)}} |= "Running version"`)
+  const banner = await ctx.loki.latest(
+    `{container=${JSON.stringify(container)}} |= "Running version"`,
+  )
   // `Running version latest built on 2026-07-29T…Z (commit b00279b) on Linux …`
   const commit = /\(commit ([0-9a-f]{7,40})\)/.exec(banner ?? '')?.[1] ?? null
   return commitsSince('qdm12/gluetun', commit)
 }
 
 async function loadTunnel(
+  ctx: Ctx,
   d: VpnEgress,
-  hc: string,
   upOf: (name: string) => boolean | null,
 ): Promise<Tunnel> {
-  const control = `${hc}:${String(d.controlPort)}`
+  const control = `${ctx.hosts.hc}:${String(d.controlPort)}`
   const job = JSON.stringify(d.job)
 
   const [ip, port, up, uptime7d, daily] = await Promise.all([
@@ -148,9 +148,9 @@ async function loadTunnel(
       timezone?: string
     }>(`${control}/v1/publicip/ip`),
     d.portForwarding ? getJson<{ port?: number }>(`${control}/v1/portforward`) : null,
-    promScalar(`gluetun_vpn_status{job=${job}}`),
-    promScalar(`avg_over_time(gluetun_vpn_status{job=${job}}[7d])`),
-    promPoints(`avg_over_time(gluetun_vpn_status{job=${job}}[1d])`, DAYS * 24 * 60, 86400),
+    ctx.prom.scalar(`gluetun_vpn_status{job=${job}}`),
+    ctx.prom.scalar(`avg_over_time(gluetun_vpn_status{job=${job}}[7d])`),
+    ctx.prom.points(`avg_over_time(gluetun_vpn_status{job=${job}}[1d])`, DAYS * 24 * 60, 86400),
   ])
 
   const expiry = Date.parse(`${d.keyExpiry}T00:00:00Z`)

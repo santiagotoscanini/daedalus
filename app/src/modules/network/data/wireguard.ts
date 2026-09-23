@@ -1,9 +1,6 @@
 import type { Ctx } from '../../../core/ctx'
 import { publishingFacts } from '../../../host/contract/domains/publishing'
-import { key } from '../../../host/keys'
-import { lokiEntries, lokiScalar } from '../../../host/loki'
 import { webAppHosts } from '../../../host/nix-manifest'
-import { promPoints, promScalar, promScalars, promVector } from '../../../host/prom'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { pinnedVersion } from '../../../lib/dashboard/images'
 import { localDay, since } from '../../../lib/format'
@@ -221,7 +218,7 @@ async function cfTunnel(ctx: Ctx): Promise<CfTunnelRead> {
     `https://api.cloudflare.com/client/v4/accounts/${ctx.env('CF_ACCOUNT_ID') ?? ''}/cfd_tunnel/${
       ctx.env('CF_TUNNEL_ID') ?? ''
     }`,
-    { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
+    { headers: { Authorization: `Bearer ${ctx.secret('CF_API_TOKEN')}` } },
   )
 }
 
@@ -229,16 +226,16 @@ async function loadWireguard(ctx: Ctx): Promise<WireguardData> {
   const version = await pinnedVersion('wg-easy', ctx.env('WG_EASY_VERSION'))
 
   const [counts, peers, peak, hosts] = await Promise.all([
-    promScalars({
+    ctx.prom.scalars({
       configured: 'wireguard_configured_peers',
       enabled: 'wireguard_enabled_peers',
       connected: 'wireguard_connected_peers',
     }),
-    loadWgPeers(),
+    loadWgPeers(ctx),
     // Peak, not average: the question a household asks of a personal VPN is
     // "did anyone use it", and a peer connected for twenty minutes averages
     // to nearly nothing over a day while being the entire answer.
-    promPoints(`max_over_time(wireguard_connected_peers[1d])`, DAYS * 24 * 60, 86400),
+    ctx.prom.points(`max_over_time(wireguard_connected_peers[1d])`, DAYS * 24 * 60, 86400),
     webAppHosts(),
   ])
 
@@ -259,11 +256,11 @@ async function loadWireguard(ctx: Ctx): Promise<WireguardData> {
  * peer that has never completed a handshake has no handshake sample at all —
  * and a configured-but-never-used peer is exactly the one worth seeing.
  */
-async function loadWgPeers(): Promise<Peer[]> {
+async function loadWgPeers(ctx: Ctx): Promise<Peer[]> {
   const [handshake, rx, tx] = await Promise.all([
-    promVector('wireguard_latest_handshake_seconds'),
-    promVector('wireguard_received_bytes'),
-    promVector('wireguard_sent_bytes'),
+    ctx.prom.vector('wireguard_latest_handshake_seconds'),
+    ctx.prom.vector('wireguard_received_bytes'),
+    ctx.prom.vector('wireguard_sent_bytes'),
   ])
 
   const num = (v: VectorLike[], name: string): number =>
@@ -308,7 +305,7 @@ type VectorLike = { metric: Record<string, string>; value: [number, string] }
 async function loadCfTunnel(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<TunnelData> {
   const account = ctx.env('CF_ACCOUNT_ID') ?? ''
   const id = ctx.env('CF_TUNNEL_ID') ?? ''
-  const auth = { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } }
+  const auth = { headers: { Authorization: `Bearer ${ctx.secret('CF_API_TOKEN')}` } }
 
   const [cfRead, config, rph, errors, inFlight, rtt, daily] = await Promise.all([
     cfP,
@@ -324,14 +321,14 @@ async function loadCfTunnel(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<Tunne
     // Per HOUR over six, not per minute over ten: off-LAN traffic to this box
     // is a couple of dozen requests a day, and a per-minute rate of that is
     // indistinguishable from a tunnel carrying nothing at all.
-    promScalar('sum(rate(cloudflared_tunnel_total_requests[6h])) * 3600'),
-    promScalar('sum(cloudflared_tunnel_request_errors)'),
-    promScalar('sum(cloudflared_tunnel_concurrent_requests_per_tunnel)'),
+    ctx.prom.scalar('sum(rate(cloudflared_tunnel_total_requests[6h])) * 3600'),
+    ctx.prom.scalar('sum(cloudflared_tunnel_request_errors)'),
+    ctx.prom.scalar('sum(cloudflared_tunnel_concurrent_requests_per_tunnel)'),
     // Smoothed rather than latest: the latest sample is one packet and swings
     // by tens of milliseconds; smoothed is what the connection actually feels
     // like. Averaged across the four connections, which land in two colos.
-    promScalar('avg(quic_client_smoothed_rtt)'),
-    promPoints('sum(increase(cloudflared_tunnel_total_requests[1d]))', DAYS * 24 * 60, 86400),
+    ctx.prom.scalar('avg(quic_client_smoothed_rtt)'),
+    ctx.prom.points('sum(increase(cloudflared_tunnel_total_requests[1d]))', DAYS * 24 * 60, 86400),
   ])
 
   const summary = summariseTunnel(cfRead.ok ? cfRead.value.result : undefined, rph)
@@ -363,7 +360,7 @@ async function loadCfTunnel(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<Tunne
       .sort((a, b) => a.hostname.localeCompare(b.hostname)),
     // The prometheus half keeps drawing through this, which is exactly what
     // made a refused token look like a quiet tunnel; so it is said out loud.
-    cfError: cfReadError(cfRead, CF_TUNNEL_READ) ?? cfReadError(config, CF_TUNNEL_READ),
+    cfError: cfReadError(ctx, cfRead, CF_TUNNEL_READ) ?? cfReadError(ctx, config, CF_TUNNEL_READ),
   }
 }
 
@@ -398,17 +395,17 @@ async function loadDdns(ctx: Ctx, cfP: Promise<CfTunnelRead>): Promise<DdnsData>
   const [cf, resolved, day, week, month, gap, changes, runs] = await Promise.all([
     cfP,
     resolvePublic(host),
-    lokiScalar(`sum(count_over_time(${FAIL} [24h]))`),
-    lokiScalar(`sum(count_over_time(${FAIL} [7d]))`),
-    lokiScalar(`sum(count_over_time(${FAIL} [30d]))`),
+    ctx.loki.scalar(`sum(count_over_time(${FAIL} [24h]))`),
+    ctx.loki.scalar(`sum(count_over_time(${FAIL} [7d]))`),
+    ctx.loki.scalar(`sum(count_over_time(${FAIL} [30d]))`),
     versionGap('ddclient/ddclient', version),
     // `SUCCESS: [cloudflare][<wanHost>]> IPv4 address set to 1.2.3.4`,
     // logged only when the record actually changes.
-    lokiEntries('{unit="ddclient.service"} |= "IPv4 address set to"'),
+    ctx.loki.entries('{unit="ddclient.service"} |= "IPv4 address set to"'),
     // systemd's own line, not ddclient's: a run that changed nothing says
     // nothing, so the service's log cannot answer "did it run". Two hours is
     // ample at a five-minute cadence and keeps the query cheap.
-    lokiEntries('{unit="init.scope"} |= "Finished Dynamic DNS Client"', 120, 1),
+    ctx.loki.entries('{unit="init.scope"} |= "Finished Dynamic DNS Client"', 120, 1),
   ])
 
   const seconds = interval === undefined ? null : Number(interval)

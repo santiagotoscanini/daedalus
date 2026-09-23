@@ -1,4 +1,4 @@
-import { promScalars, promVector } from '../../../host/prom'
+import type { Ctx } from '../../../core/ctx'
 import { type Hardware, hostFacts } from '../../../lib/dashboard/host-facts'
 
 /* ── Build ────────────────────────────────────────────────────────────── */
@@ -68,20 +68,20 @@ function labelled(
     .filter((v) => Number.isFinite(v.value))
 }
 
-export async function loadBuild(): Promise<BuildData> {
+export async function loadBuild(ctx: Ctx): Promise<BuildData> {
   const [facts, temps, fans, volts, labels, gpu, engines, cpu] = await Promise.all([
     hostFacts(),
-    promVector('node_hwmon_temp_celsius'),
-    promVector('node_hwmon_fan_rpm'),
-    promVector('node_hwmon_in_volts'),
-    promVector('node_hwmon_sensor_label'),
+    ctx.prom.vector('node_hwmon_temp_celsius'),
+    ctx.prom.vector('node_hwmon_fan_rpm'),
+    ctx.prom.vector('node_hwmon_in_volts'),
+    ctx.prom.vector('node_hwmon_sensor_label'),
     // Every gpumon series carries a `type`, and taking the first sample of an
     // unqualified query means taking whichever the exporter happened to list
     // first — which for power is the whole PACKAGE, four times the figure the
     // render engine is drawing. Pinned, so a reordered scrape cannot quietly
     // put cpu watts in a graphics panel. Package power rides along beside it
     // because on an integrated part the two are worth seeing together.
-    promScalars({
+    ctx.prom.scalars({
       power: 'gpumon_power{type="gpu"}',
       packagePower: 'gpumon_power{type="pkg"}',
       frequency: 'gpumon_frequency{type="actual"}',
@@ -89,8 +89,8 @@ export async function loadBuild(): Promise<BuildData> {
     }),
     // `attrib="busy"` is the occupancy; `sema` is time spent waiting on a
     // semaphore, which is not work being done and would double every engine.
-    promVector('gpumon_engine_usage{attrib="busy"}'),
-    promScalars({
+    ctx.prom.vector('gpumon_engine_usage{attrib="busy"}'),
+    ctx.prom.scalars({
       temp: 'node_hwmon_temp_celsius{chip="platform_coretemp_0",sensor="temp1"}',
       usage: '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))',
       frequency: 'avg(node_cpu_scaling_frequency_hertz) / 1e6',

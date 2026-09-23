@@ -1,7 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
-import { key } from '../../../host/keys'
 import { webAppHosts } from '../../../host/nix-manifest'
-import { promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
 import { getJson, getJsonResult, getText } from '../../../lib/http'
 import { CF_TUNNEL_READ, type CfTunnel, cfReadError, lanIp, PIHOLE, piholeSid } from './shared'
 
@@ -107,15 +105,15 @@ export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
     hosts,
     tunnel,
   ] = await Promise.all([
-    promScalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
+    ctx.prom.scalars({ ping: 'myspeed_ping', down: 'myspeed_download', up: 'myspeed_upload' }),
     // MySpeed tests hourly, so an hourly step is the native resolution — a
     // finer one would just carry each sample forward and draw stairs.
     Promise.all([
-      promSeries('myspeed_download', 7 * 24 * 60, 3600),
-      promSeries('myspeed_upload', 7 * 24 * 60, 3600),
-      promSeries('myspeed_ping', 7 * 24 * 60, 3600),
+      ctx.prom.series('myspeed_download', 7 * 24 * 60, 3600),
+      ctx.prom.series('myspeed_upload', 7 * 24 * 60, 3600),
+      ctx.prom.series('myspeed_ping', 7 * 24 * 60, 3600),
     ]),
-    promScalars({
+    ctx.prom.scalars({
       // Bits, because a link is sold and negotiated in bits and the speed
       // test reports bits — the whole board would otherwise print two
       // numbers eight times apart in the same unit column.
@@ -126,18 +124,18 @@ export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
       linkMbps: 'max(node_network_speed_bytes{device!="lo"}) * 8 / 1e6',
     }),
     Promise.all([
-      promSeries(`sum(rate(${nic('receive')}[5m])) * 8 / 1e6`, 24 * 60, 300),
-      promSeries(`sum(rate(${nic('transmit')}[5m])) * 8 / 1e6`, 24 * 60, 300),
+      ctx.prom.series(`sum(rate(${nic('receive')}[5m])) * 8 / 1e6`, 24 * 60, 300),
+      ctx.prom.series(`sum(rate(${nic('transmit')}[5m])) * 8 / 1e6`, 24 * 60, 300),
     ]),
-    loadHops(),
-    promScalar('sum(rate(traefik_service_requests_total[10m])) * 60'),
+    loadHops(ctx),
+    ctx.prom.scalar('sum(rate(traefik_service_requests_total[10m])) * 60'),
     // One number wanted out of it — the router count under the headline —
     // and it is a call to a container on the next bridge over, so it costs
     // less than the prometheus query that would half-answer it.
     getJson<{ http?: { routers?: { total?: number } } }>('http://traefik:8080/api/overview'),
-    promSeries('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
+    ctx.prom.series('sum(rate(traefik_service_requests_total[5m])) * 60', 6 * 60, 120),
     loadAsked(ctx),
-    loadServiceTraffic(),
+    loadServiceTraffic(ctx),
     loadRouter(ctx),
     webAppHosts(),
     // Cloudflare's own view of the tunnel, for exactly one field. cloudflared
@@ -149,7 +147,7 @@ export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
       `https://api.cloudflare.com/client/v4/accounts/${ctx.env('CF_ACCOUNT_ID') ?? ''}/cfd_tunnel/${
         ctx.env('CF_TUNNEL_ID') ?? ''
       }`,
-      { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } },
+      { headers: { Authorization: `Bearer ${ctx.secret('CF_API_TOKEN')}` } },
     ),
   ])
 
@@ -181,7 +179,7 @@ export async function loadGeneral(ctx: Ctx): Promise<GeneralData> {
       gateway: ctx.env('GATEWAY_IP') ?? DASH_IP,
       lan: lanIp(ctx),
       wan: tunnel.ok ? (tunnel.value.result?.connections?.[0]?.origin_ip ?? null) : null,
-      wanError: cfReadError(tunnel, CF_TUNNEL_READ),
+      wanError: cfReadError(ctx, tunnel, CF_TUNNEL_READ),
       adminUrl: ctx.env('ROUTER_ADMIN_URL') ?? '',
     },
     proxy: { rpm, routers: overview?.http?.routers?.total ?? null, spark: rpmSpark },
@@ -248,12 +246,14 @@ const HOPS = [
   { id: 'internet', label: 'Past it' },
 ]
 
-async function loadHops(): Promise<Hop[]> {
+async function loadHops(ctx: Ctx): Promise<Hop[]> {
   const [up, rtt, history] = await Promise.all([
-    promVector('network_hop_up'),
-    promVector('network_hop_rtt_seconds * 1000'),
+    ctx.prom.vector('network_hop_up'),
+    ctx.prom.vector('network_hop_rtt_seconds * 1000'),
     Promise.all(
-      HOPS.map((h) => promSeries(`network_hop_rtt_seconds{hop="${h.id}"} * 1000`, 6 * 60, 300)),
+      HOPS.map((h) =>
+        ctx.prom.series(`network_hop_rtt_seconds{hop="${h.id}"} * 1000`, 6 * 60, 300),
+      ),
     ),
   ])
 
@@ -280,10 +280,10 @@ async function loadHops(): Promise<Hop[]> {
  * report the whole box. gluetun stands in for the download stack, and its
  * figure is the encrypted traffic that crossed the wire.
  */
-async function loadServiceTraffic(): Promise<GeneralData['services']> {
+async function loadServiceTraffic(ctx: Ctx): Promise<GeneralData['services']> {
   const [inBytes, outBytes] = await Promise.all([
-    promVector('sum by (name) (increase(container_network_receive_bytes_total[24h]))'),
-    promVector('sum by (name) (increase(container_network_transmit_bytes_total[24h]))'),
+    ctx.prom.vector('sum by (name) (increase(container_network_receive_bytes_total[24h]))'),
+    ctx.prom.vector('sum by (name) (increase(container_network_transmit_bytes_total[24h]))'),
   ])
 
   const rows = new Map<string, { name: string; in: number; out: number }>()

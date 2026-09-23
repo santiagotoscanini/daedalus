@@ -82,24 +82,24 @@ export type Tabs = {
 export type MediaData = TabPayload<typeof manifest, Tabs>
 
 export const load = defineLoader<typeof manifest, Tabs>(manifest, {
-  jellyfin: (ctx) => loadJellyfin(ctx.hosts),
-  calibre: (ctx) => loadCalibre(ctx.hosts),
+  jellyfin: (ctx) => loadJellyfin(ctx),
+  calibre: (ctx) => loadCalibre(ctx),
   wanted: async (ctx) => {
     // All five, because all five are on the page — the switch chooses what
     // is SHOWN, not what is fetched. Fetching on selection would put a
     // spinner behind a button that is meant to feel like a toggle.
     const [seerr, sonarr, radarr, recyclarr, bazarr] = await Promise.all([
-      loadSeerr(ctx.hosts),
-      loadArr('sonarr', ctx.hosts),
-      loadArr('radarr', ctx.hosts),
-      loadRecyclarr(),
-      loadBazarr(ctx.hosts),
+      loadSeerr(ctx),
+      loadArr('sonarr', ctx),
+      loadArr('radarr', ctx),
+      loadRecyclarr(ctx),
+      loadBazarr(ctx),
     ])
     return { seerr, sonarr, radarr, recyclarr, bazarr }
   },
-  indexer: (ctx) => loadProwlarr(ctx.hosts),
+  indexer: (ctx) => loadProwlarr(ctx),
   downloaders: loadDownloads,
-  cleanup: () => loadCleanup(),
+  cleanup: loadCleanup,
 })
 
 export type {

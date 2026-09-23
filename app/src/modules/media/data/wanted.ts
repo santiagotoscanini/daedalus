@@ -1,6 +1,4 @@
-import type { Hosts } from '../../../host/hosts'
-import { key } from '../../../host/keys'
-import { lokiEntries, lokiLatest, lokiScalar } from '../../../host/loki'
+import type { Ctx } from '../../../core/ctx'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
 import { localDay } from '../../../lib/format'
@@ -57,9 +55,9 @@ const REQUEST_STATE: Record<
 /** How many recent requests get their title looked up. See `titleOf`. */
 const REQUESTS_SHOWN = 8
 
-export async function loadSeerr(hosts: Hosts): Promise<SeerrData> {
-  const base = hosts.base('seerr')
-  const h = { headers: { 'X-Api-Key': key('SEERR_API_KEY') } }
+export async function loadSeerr(ctx: Ctx): Promise<SeerrData> {
+  const base = ctx.hosts.base('seerr')
+  const h = { headers: { 'X-Api-Key': ctx.secret('SEERR_API_KEY') } }
   const now = Date.now()
 
   const [status, counts, list, users] = await Promise.all([
@@ -227,12 +225,12 @@ const ARRS = {
 /** How far ahead the calendar looks. Two weeks is a fortnight of evenings. */
 const CALENDAR_DAYS = 14
 
-export async function loadArr(app: 'sonarr' | 'radarr', hosts: Hosts): Promise<ArrData> {
+export async function loadArr(app: 'sonarr' | 'radarr', ctx: Ctx): Promise<ArrData> {
   const cfg = ARRS[app]
   // gluetun owns the netns, so only gluetun publishes ports — the *arrs are
   // reachable at the host port and nowhere else.
-  const base = `${hosts.hc}:${String(cfg.port)}/api/v3`
-  const k = `apikey=${key(cfg.keyName)}`
+  const base = `${ctx.hosts.hc}:${String(cfg.port)}/api/v3`
+  const k = `apikey=${ctx.secret(cfg.keyName)}`
   const now = Date.now()
   const day = 86_400_000
 
@@ -425,9 +423,9 @@ export type BazarrData = {
   subgen: string | null
 }
 
-export async function loadBazarr(hosts: Hosts): Promise<BazarrData> {
-  const h = { headers: { 'X-API-KEY': key('BAZARR_API_KEY') } }
-  const base = `${hosts.hc}:6767/api`
+export async function loadBazarr(ctx: Ctx): Promise<BazarrData> {
+  const h = { headers: { 'X-API-KEY': ctx.secret('BAZARR_API_KEY') } }
+  const base = `${ctx.hosts.hc}:6767/api`
 
   const [status, eps, movies, providers, subgen] = await Promise.all([
     getJson<{
@@ -439,7 +437,7 @@ export async function loadBazarr(hosts: Hosts): Promise<BazarrData> {
       `${base}/providers`,
       h,
     ),
-    getJson<{ version?: string }>(`${hosts.hc}:9000/status`),
+    getJson<{ version?: string }>(`${ctx.hosts.hc}:9000/status`),
   ])
 
   const version = status?.data?.bazarr_version ?? null
@@ -503,21 +501,21 @@ export type RecyclarrData = {
   days: number
 }
 
-export async function loadRecyclarr(): Promise<RecyclarrData> {
+export async function loadRecyclarr(ctx: Ctx): Promise<RecyclarrData> {
   const window = `${String(CLEANUP_DAYS)}d`
 
   const [lastRunLine, errors, running, synced] = await Promise.all([
     // How the last scheduled sync ended. Recyclarr has no API, no metrics and
     // no UI, and "did it run, did it succeed" is the only question anybody has
     // about a nightly job.
-    lokiLatest('{container="recyclarr"} |~ `msg="job (succeeded|failed)"`'),
-    lokiScalar(
+    ctx.loki.latest('{container="recyclarr"} |~ `msg="job (succeeded|failed)"`'),
+    ctx.loki.scalar(
       `sum(count_over_time({container="recyclarr"} |~ \`\\[ERR\\]|job failed\` [${window}])) or vector(0)`,
     ),
     // Pinned to a bare major, which is a channel — the image label is the only
     // thing that knows the version.
     imageVersion('recyclarr'),
-    recyclarrSynced(CLEANUP_DAYS),
+    recyclarrSynced(ctx, CLEANUP_DAYS),
   ])
 
   const runStamp = /time="([^"T]+)/.exec(lastRunLine ?? '')?.[1] ?? null
@@ -536,8 +534,8 @@ export async function loadRecyclarr(): Promise<RecyclarrData> {
 }
 
 /** `radarr-main: Updated 2 Existing Custom Formats` and its Skipped sibling. */
-async function recyclarrSynced(days: number): Promise<RecyclarrData['synced']> {
-  const entries = await lokiEntries(
+async function recyclarrSynced(ctx: Ctx, days: number): Promise<RecyclarrData['synced']> {
+  const entries = await ctx.loki.entries(
     `{container="recyclarr"} |~ \`(Updated|Skipped) [0-9]+ .*Custom Formats\``,
     days * 24 * 60,
     200,

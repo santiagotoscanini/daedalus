@@ -1,6 +1,4 @@
 import type { Ctx, Gateway } from '../../../core/ctx'
-import { lokiLatest } from '../../../host/loki'
-import { promBars, promScalar } from '../../../host/prom'
 import {
   type CommitGap,
   commitsSince,
@@ -206,7 +204,7 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
       // many releases behind" there is a second, sharper question only the
       // registry can answer: has the channel moved on from the pin at all.
       imageFreshness('litellm'),
-      promScalar('sum(litellm_in_flight_requests)'),
+      ctx.prom.scalar('sum(litellm_in_flight_requests)'),
       // The histogram's own sum and count, kept APART rather than divided in
       // PromQL. Two keys can share a display name — a rotation leaves the old
       // hash in the ledger under the same alias as the new one — and averaging
@@ -218,18 +216,18 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
       // and all (`litellm_proxy_master_key`). The `api_key_alias` label would
       // have to be matched against a name this file invents, and reports "None"
       // for exactly the keys whose names it invents.
-      promBars(
+      ctx.prom.bars(
         `sum by (hashed_api_key) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))`,
         'hashed_api_key',
       ),
-      promBars(
+      ctx.prom.bars(
         `sum by (hashed_api_key) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
         'hashed_api_key',
       ),
       // Tool calls are filed under the `model` label as `MCP: <server>-<tool>`,
       // alongside the real models — which is why every other query here joins on
       // `requested_model` instead. Here it is the label wanted.
-      promBars(
+      ctx.prom.bars(
         `sum by (model) (increase(litellm_request_total_latency_metric_sum[${RANGE}]))` +
           ` / sum by (model) (increase(litellm_request_total_latency_metric_count[${RANGE}]))`,
         'model',
@@ -237,7 +235,7 @@ export async function loadLitellm(ctx: Ctx): Promise<LitellmData> {
       // What the gateway costs, separated from what the model costs. Every other
       // latency figure on this page is end-to-end and therefore mostly Lemonade;
       // this is the part that is actually attributable to litellm.
-      promScalar(
+      ctx.prom.scalar(
         `sum(increase(litellm_overhead_latency_metric_sum[${RANGE}]))` +
           ` / sum(increase(litellm_overhead_latency_metric_count[${RANGE}]))`,
       ),
@@ -391,7 +389,7 @@ async function loadNeighbours(ctx: Ctx): Promise<Neighbour[]> {
   const pgvectorRev = ctx.env('PGVECTOR_REV') || null
 
   const [searxBanner, grocyGap, yazioGap, supergatewayGap, pgvectorBuild] = await Promise.all([
-    lokiLatest('{container="searxng"} |~ "^SearXNG [0-9]"'),
+    ctx.loki.latest('{container="searxng"} |~ "^SearXNG [0-9]"'),
     versionGap('miguelangel-nubla/mcp-grocy', grocy),
     versionGap('fliptheweb/yazio-mcp', yazio),
     versionGap('supercorp-ai/supergateway', supergateway),

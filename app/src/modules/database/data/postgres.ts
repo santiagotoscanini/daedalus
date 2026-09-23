@@ -1,4 +1,4 @@
-import { promScalar, promScalars, promVector } from '../../../host/prom'
+import type { Ctx } from '../../../core/ctx'
 import type { VersionGap } from '../../../lib/dashboard/github'
 import { postgresGap } from '../../../lib/dashboard/postgres'
 
@@ -46,26 +46,26 @@ export type PostgresData = {
   gap: VersionGap
 }
 
-export async function loadPostgres(): Promise<PostgresData> {
+export async function loadPostgres(ctx: Ctx): Promise<PostgresData> {
   const [sizes, conns, hits, reads, commits, rollbacks, deadlocks, totals, up] = await Promise.all([
-    promVector('pg_database_size_bytes'),
-    promVector('pg_stat_database_numbackends'),
-    promVector('pg_stat_database_blks_hit'),
-    promVector('pg_stat_database_blks_read'),
-    promVector('pg_stat_database_xact_commit'),
-    promVector('pg_stat_database_xact_rollback'),
-    promVector('pg_stat_database_deadlocks'),
-    promScalars({
+    ctx.prom.vector('pg_database_size_bytes'),
+    ctx.prom.vector('pg_stat_database_numbackends'),
+    ctx.prom.vector('pg_stat_database_blks_hit'),
+    ctx.prom.vector('pg_stat_database_blks_read'),
+    ctx.prom.vector('pg_stat_database_xact_commit'),
+    ctx.prom.vector('pg_stat_database_xact_rollback'),
+    ctx.prom.vector('pg_stat_database_deadlocks'),
+    ctx.prom.scalars({
       connections: 'sum(pg_stat_activity_count)',
       maxConnections: 'pg_settings_max_connections',
       longestTx: 'max(pg_stat_activity_max_tx_duration)',
       locks: 'sum(pg_locks_count)',
       temp: 'sum(pg_stat_database_temp_bytes)',
     }),
-    promScalar('pg_up'),
+    ctx.prom.scalar('pg_up'),
   ])
 
-  const version = await pgVersion()
+  const version = await pgVersion(ctx)
 
   const by = (rows: { metric: Record<string, string>; value: [number, string] }[]) =>
     new Map(rows.map((r) => [r.metric.datname ?? '', Number(r.value[1])]))
@@ -116,8 +116,8 @@ export async function loadPostgres(): Promise<PostgresData> {
   }
 }
 
-async function pgVersion(): Promise<string | null> {
-  const rows = await promVector('pg_static')
+async function pgVersion(ctx: Ctx): Promise<string | null> {
+  const rows = await ctx.prom.vector('pg_static')
   const v = rows[0]?.metric.short_version ?? rows[0]?.metric.version ?? null
   return v === null ? null : v.split(' ').slice(0, 2).join(' ')
 }

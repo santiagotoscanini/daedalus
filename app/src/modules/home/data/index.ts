@@ -24,8 +24,6 @@ import type { Ctx } from '../../../core/ctx'
 // ID reads under it are core/identity/pocket-id, because the proxy's routing
 // table borrows the client list and a module must not import another's data.
 
-import { key } from '../../../host/keys'
-import { promScalars } from '../../../host/prom'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
 import { localDay } from '../../../lib/format'
@@ -107,7 +105,7 @@ type HouseData = {
 type HassState = { entity_id: string; state: string; attributes?: Record<string, unknown> }
 
 async function loadHouse(ctx: Ctx): Promise<HouseData> {
-  const h = { headers: { Authorization: `Bearer ${key('HASS_API_KEY')}` } }
+  const h = { headers: { Authorization: `Bearer ${ctx.secret('HASS_API_KEY')}` } }
 
   const [states, config] = await Promise.all([
     getJson<HassState[]>(`${ctx.hosts.hc}:8123/api/states`, h),
@@ -235,7 +233,7 @@ type ImmichUser = {
 }
 
 async function loadPhotos(ctx: Ctx): Promise<PhotosData> {
-  const h = { headers: { 'x-api-key': key('IMMICH_API_KEY') } }
+  const h = { headers: { 'x-api-key': ctx.secret('IMMICH_API_KEY') } }
   const base = ctx.hosts.base('immich')
 
   const [stats, ver, disk] = await Promise.all([
@@ -252,7 +250,7 @@ async function loadPhotos(ctx: Ctx): Promise<PhotosData> {
     // this key does not carry. The dataset underneath it is the same disk and
     // node_exporter already reports it, so the denominator is real rather
     // than invented.
-    promScalars({
+    ctx.prom.scalars({
       size: 'node_filesystem_size_bytes{mountpoint="/s2/immich"}',
       avail: 'node_filesystem_avail_bytes{mountpoint="/s2/immich"}',
     }),
@@ -363,7 +361,7 @@ async function loadFiles(ctx: Ctx): Promise<FilesData> {
       }
     }
   }>(`${ctx.hosts.base('nextcloud')}/ocs/v2.php/apps/serverinfo/api/v1/info?format=json`, {
-    headers: { 'NC-Token': key('NEXTCLOUD_KEY'), 'OCS-APIRequest': 'true' },
+    headers: { 'NC-Token': ctx.secret('NEXTCLOUD_KEY'), 'OCS-APIRequest': 'true' },
   })
 
   const d = body?.ocs?.data
@@ -431,7 +429,7 @@ type PantryData = {
 }
 
 async function loadPantry(ctx: Ctx): Promise<PantryData> {
-  const h = { headers: { 'GROCY-API-KEY': key('GROCY_API_KEY') } }
+  const h = { headers: { 'GROCY-API-KEY': ctx.secret('GROCY_API_KEY') } }
   const base = ctx.hosts.base('grocy')
   // The box's day, not UTC's: grocy states due dates in local time, and past
   // 21:00 here a UTC 'today' is tomorrow — which marks a whole day's chores

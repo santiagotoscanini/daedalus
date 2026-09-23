@@ -1,4 +1,4 @@
-import { promScalar, promVector } from '../../../host/prom'
+import type { Ctx } from '../../../core/ctx'
 import { hostFacts, type SmartDisk } from '../../../lib/dashboard/host-facts'
 
 /* ── Disks ────────────────────────────────────────────────────────────── */
@@ -16,13 +16,13 @@ export type DisksData = {
   smartdActive: boolean | null
 }
 
-export async function loadDisks(): Promise<DisksData> {
+export async function loadDisks(ctx: Ctx): Promise<DisksData> {
   const [facts, reads, writes, util, smartd] = await Promise.all([
     hostFacts(),
-    promVector('rate(node_disk_read_bytes_total[5m])'),
-    promVector('rate(node_disk_written_bytes_total[5m])'),
-    promVector('100 * rate(node_disk_io_time_seconds_total[5m])'),
-    promScalar('systemd_unit_state{name="smartd.service",state="active"}'),
+    ctx.prom.vector('rate(node_disk_read_bytes_total[5m])'),
+    ctx.prom.vector('rate(node_disk_written_bytes_total[5m])'),
+    ctx.prom.vector('100 * rate(node_disk_io_time_seconds_total[5m])'),
+    ctx.prom.scalar('systemd_unit_state{name="smartd.service",state="active"}'),
   ])
 
   const by = (rows: { metric: Record<string, string>; value: [number, string] }[]) =>

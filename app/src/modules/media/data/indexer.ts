@@ -1,5 +1,4 @@
-import type { Hosts } from '../../../host/hosts'
-import { key } from '../../../host/keys'
+import type { Ctx } from '../../../core/ctx'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { getJson } from '../../../lib/http'
 import { ARR_TAG } from './shared'
@@ -26,9 +25,9 @@ export type ProwlarrData = {
   }[]
 }
 
-export async function loadProwlarr(hosts: Hosts): Promise<ProwlarrData> {
-  const base = `${hosts.hc}:9696/api/v1`
-  const k = `apikey=${key('PROWLARR_API_KEY')}`
+export async function loadProwlarr(ctx: Ctx): Promise<ProwlarrData> {
+  const base = `${ctx.hosts.hc}:9696/api/v1`
+  const k = `apikey=${ctx.secret('PROWLARR_API_KEY')}`
 
   const [status, health, stats, indexers] = await Promise.all([
     getJson<{ version?: string }>(`${base}/system/status?${k}`),

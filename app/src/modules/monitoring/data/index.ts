@@ -1,4 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
+import type { LokiStream } from '../../../host/loki'
 // The Monitoring category: the machinery that watches everything else.
 //
 // Its own page rather than a corner of System because it answers a different
@@ -38,9 +39,6 @@ import type { Ctx } from '../../../core/ctx'
 // the tag the flake pins is only true while the tag names a release.
 
 import { siteMail } from '../../../host/contract/domains/site'
-import { key } from '../../../host/keys'
-import { LOKI, lokiScalar, lokiSeries, lokiStreamsOrNull, lokiVector } from '../../../host/loki'
-import { PROM, promBars, promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
 import { swrValue } from '../../../lib/cache'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { hostFacts, type JobRun } from '../../../lib/dashboard/host-facts'
@@ -146,12 +144,18 @@ const MAIL_LIMIT = 200
  * instead of hammering a busy Loki (`null` = unreachable, so stale-serving
  * applies).
  */
-const cachedMailAttempts = swrValue({ ttlMs: 5 * 60_000, retryMs: 60_000 }, () =>
-  lokiStreamsOrNull(MSMTP_LINE, { minutes: MAIL_WINDOW_MIN, limit: MAIL_LIMIT }),
-)
+let cachedMailAttempts: (() => Promise<LokiStream[] | null>) | null = null
+// Built on first use, because the Loki client arrives with the ctx and a
+// module-level constant has none; the process has one Loki, so one cache.
+const mailAttempts = (ctx: Ctx) => {
+  cachedMailAttempts ??= swrValue({ ttlMs: 5 * 60_000, retryMs: 60_000 }, () =>
+    ctx.loki.streamsOrNull(MSMTP_LINE, { minutes: MAIL_WINDOW_MIN, limit: MAIL_LIMIT }),
+  )
+  return cachedMailAttempts()
+}
 
-async function loadMail(): Promise<AlertsData['mail']> {
-  const [identity, streams] = await Promise.all([siteMail(), cachedMailAttempts()])
+async function loadMail(ctx: Ctx): Promise<AlertsData['mail']> {
+  const [identity, streams] = await Promise.all([siteMail(), mailAttempts(ctx)])
   if (streams === null) {
     // Loki did not answer — which on a board about silence must not be
     // allowed to render as a quiet month.
@@ -203,8 +207,10 @@ async function loadMail(): Promise<AlertsData['mail']> {
  * provisions them from files — so prometheus's own /rules endpoint is empty
  * and would report "0 alerts" on a box with thirty.
  */
-async function loadAlerts(): Promise<AlertsData> {
-  const h = { headers: { Authorization: basicAuth(key('GRAFANA_USER'), key('GRAFANA_PASS')) } }
+async function loadAlerts(ctx: Ctx): Promise<AlertsData> {
+  const h = {
+    headers: { Authorization: basicAuth(ctx.secret('GRAFANA_USER'), ctx.secret('GRAFANA_PASS')) },
+  }
 
   const [body, stats, contacts, health, mail] = await Promise.all([
     getJson<{ data?: { groups?: { file?: string; name?: string; rules?: GrafanaRule[] }[] } }>(
@@ -217,7 +223,7 @@ async function loadAlerts(): Promise<AlertsData> {
     ),
     getJson<unknown[]>('http://grafana:3000/api/v1/provisioning/contact-points', h),
     getJson<{ version?: string }>('http://grafana:3000/api/health', h),
-    loadMail(),
+    loadMail(ctx),
   ])
 
   const groups = body?.data?.groups ?? []
@@ -290,18 +296,18 @@ type ProbesData = {
   gap: VersionGap
 }
 
-async function loadProbes(): Promise<ProbesData> {
+async function loadProbes(ctx: Ctx): Promise<ProbesData> {
   const running = await imageVersion('gatus')
   const [totals, current, worst, slowest, certs, gap] = await Promise.all([
-    promScalars({
+    ctx.prom.scalars({
       up: 'count(gatus_results_endpoint_success == 1) or vector(0)',
       down: 'count(gatus_results_endpoint_success == 0) or vector(0)',
       uptime: '100 * avg(avg_over_time(gatus_results_endpoint_success[24h]))',
     }),
-    promVector('gatus_results_endpoint_success == 0'),
-    promVector('bottomk(8, 100 * avg_over_time(gatus_results_endpoint_success[7d]))'),
-    promBars('topk(8, gatus_results_duration_seconds)', 'name'),
-    promVector('bottomk(1, gatus_results_certificate_expiration_seconds)'),
+    ctx.prom.vector('gatus_results_endpoint_success == 0'),
+    ctx.prom.vector('bottomk(8, 100 * avg_over_time(gatus_results_endpoint_success[7d]))'),
+    ctx.prom.bars('topk(8, gatus_results_duration_seconds)', 'name'),
+    ctx.prom.vector('bottomk(1, gatus_results_certificate_expiration_seconds)'),
     versionGap('TwiN/gatus', running.version),
   ])
 
@@ -347,10 +353,10 @@ type MetricsData = {
   gap: VersionGap
 }
 
-async function loadMetrics(): Promise<MetricsData> {
+async function loadMetrics(ctx: Ctx): Promise<MetricsData> {
   const [targets, tsdb, seriesTrend, slowestScrapes, oldest, build] = await Promise.all([
-    loadTargets(),
-    promScalars({
+    loadTargets(ctx),
+    ctx.prom.scalars({
       series: 'prometheus_tsdb_head_series',
       // Only the float stream: the histogram appender is a second series that
       // is flat zero here and would double the headline for no reason.
@@ -358,11 +364,11 @@ async function loadMetrics(): Promise<MetricsData> {
       storage: 'sum(prometheus_tsdb_storage_blocks_bytes)',
       retention: 'prometheus_tsdb_retention_limit_seconds',
     }),
-    promSeries('prometheus_tsdb_head_series', 7 * 24 * 60, 3600),
-    promBars('topk(8, scrape_duration_seconds)', 'job'),
-    promScalar('prometheus_tsdb_lowest_timestamp_seconds'),
+    ctx.prom.series('prometheus_tsdb_head_series', 7 * 24 * 60, 3600),
+    ctx.prom.bars('topk(8, scrape_duration_seconds)', 'job'),
+    ctx.prom.scalar('prometheus_tsdb_lowest_timestamp_seconds'),
     // The HTTP API again: the binary's own version is not a metric.
-    getJson<{ data?: { version?: string } }>(`${PROM()}/api/v1/status/buildinfo`),
+    getJson<{ data?: { version?: string } }>(`${ctx.prom.url()}/api/v1/status/buildinfo`),
   ])
 
   const version = build?.data?.version ?? null
@@ -401,7 +407,7 @@ async function loadMetrics(): Promise<MetricsData> {
  * the difference between "prometheus cannot reach immich" and "immich answered
  * 401". Both read as a dead target on the graph.
  */
-async function loadTargets(): Promise<{
+async function loadTargets(ctx: Ctx): Promise<{
   up: number | null
   down: number | null
   list: { job: string; instance: string; error: string }[]
@@ -417,7 +423,7 @@ async function loadTargets(): Promise<{
         scrapePool?: string
       }[]
     }
-  }>(`${PROM()}/api/v1/targets?state=any`)
+  }>(`${ctx.prom.url()}/api/v1/targets?state=any`)
 
   const targets = body?.data?.activeTargets
   if (targets === undefined) return { up: null, down: null, list: [] }
@@ -487,11 +493,11 @@ type LogsData = {
   alloy: { running: RunningVersion; gap: VersionGap }
 }
 
-function loadLogVolume(): Promise<number | null> {
-  return lokiScalar('sum(count_over_time({level=~".+"}[1h])) or vector(0)')
+function loadLogVolume(ctx: Ctx): Promise<number | null> {
+  return ctx.loki.scalar('sum(count_over_time({level=~".+"}[1h])) or vector(0)')
 }
 
-async function loadLogs(): Promise<LogsData> {
+async function loadLogs(ctx: Ctx): Promise<LogsData> {
   const alloyRunning = await imageVersion('alloy')
 
   const [
@@ -507,15 +513,18 @@ async function loadLogs(): Promise<LogsData> {
     lokiBuild,
     alloyGap,
   ] = await Promise.all([
-    loadLogVolume(),
-    promScalar('sum(rate(loki_distributor_bytes_received_total[10m]))'),
-    lokiVector('sum by (level) (count_over_time({level=~".+"}[1h]))', 'level'),
-    lokiSeries('sum(count_over_time({level=~".+"}[1h]))', 24 * 60, 3600),
-    lokiSeries('sum(count_over_time({level="error"}[1h]))', 24 * 60, 3600),
-    lokiVector('topk(8, sum by (container) (count_over_time({level="error"}[24h])))', 'container'),
-    lokiVector('topk(10, sum by (stack) (count_over_time({stack=~".+"}[24h])))', 'stack'),
-    lokiScalar('sum(count_over_time({stack="adhoc"}[24h])) or vector(0)'),
-    promScalars({
+    loadLogVolume(ctx),
+    ctx.prom.scalar('sum(rate(loki_distributor_bytes_received_total[10m]))'),
+    ctx.loki.vector('sum by (level) (count_over_time({level=~".+"}[1h]))', 'level'),
+    ctx.loki.series('sum(count_over_time({level=~".+"}[1h]))', 24 * 60, 3600),
+    ctx.loki.series('sum(count_over_time({level="error"}[1h]))', 24 * 60, 3600),
+    ctx.loki.vector(
+      'topk(8, sum by (container) (count_over_time({level="error"}[24h])))',
+      'container',
+    ),
+    ctx.loki.vector('topk(10, sum by (stack) (count_over_time({stack=~".+"}[24h])))', 'stack'),
+    ctx.loki.scalar('sum(count_over_time({stack="adhoc"}[24h])) or vector(0)'),
+    ctx.prom.scalars({
       lag:
         'sum(rate(loki_write_entry_propagation_latency_seconds_sum[10m]))' +
         ' / sum(rate(loki_write_entry_propagation_latency_seconds_count[10m]))',
@@ -526,7 +535,7 @@ async function loadLogs(): Promise<LogsData> {
       retries: 'sum(increase(loki_write_batch_retries_total[24h]))',
       configOk: 'min(alloy_config_last_load_successful)',
     }),
-    getJson<{ version?: string }>(`${LOKI()}/loki/api/v1/status/buildinfo`),
+    getJson<{ version?: string }>(`${ctx.loki.url()}/loki/api/v1/status/buildinfo`),
     versionGap('grafana/alloy', alloyRunning.version),
   ])
 
@@ -636,7 +645,7 @@ async function loadJobs(ctx: Ctx): Promise<JobsData> {
 
   const [body, registry, gap, facts] = await Promise.all([
     getJson<{ checks?: HcCheck[] }>(`${ctx.hosts.base('healthchecks')}/api/v1/checks/`, {
-      headers: { 'X-Api-Key': key('HEALTHCHECKS_API_KEY') },
+      headers: { 'X-Api-Key': ctx.secret('HEALTHCHECKS_API_KEY') },
     }),
     monitoredJobs(),
     // healthchecks numbers its releases with two segments — `v4.2`, `v4.1.1`

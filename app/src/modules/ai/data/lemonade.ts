@@ -1,5 +1,4 @@
 import type { Ctx } from '../../../core/ctx'
-import { promVector } from '../../../host/prom'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { DASH } from '../../../lib/format'
 import { getJson } from '../../../lib/http'
@@ -149,7 +148,7 @@ export async function loadLemonade(ctx: Ctx): Promise<LemonadeData> {
         labels?: string[]
       }[]
     }>(`${base}/api/v1/models`),
-    modelStats(),
+    modelStats(ctx),
   ])
 
   const version = health?.version ?? null
@@ -293,7 +292,7 @@ export async function loadLemonade(ctx: Ctx): Promise<LemonadeData> {
  * that regex form makes Prometheus scan every metric name in the index, and
  * these are cheap instant queries against a 60s-resolution job.
  */
-async function modelStats(): Promise<
+async function modelStats(ctx: Ctx): Promise<
   Map<
     string,
     {
@@ -312,7 +311,9 @@ async function modelStats(): Promise<
     'lemonade_model_time_to_first_token_seconds',
   ] as const
 
-  const [requests, input, output, tps, ttft] = await Promise.all(names.map((n) => promVector(n)))
+  const [requests, input, output, tps, ttft] = await Promise.all(
+    names.map((n) => ctx.prom.vector(n)),
+  )
 
   const out = new Map<
     string,

@@ -1,5 +1,4 @@
 import type { Ctx } from '../../../core/ctx'
-import { key } from '../../../host/keys'
 import { webAppHosts } from '../../../host/nix-manifest'
 import { getJson, type JsonResult } from '../../../lib/http'
 
@@ -53,9 +52,9 @@ export const CF_TUNNEL_READ = 'Account › Cloudflare One Connector: cloudflared
  * that used to render as a quiet dash, because a refused read and an empty one
  * looked exactly alike.
  */
-export function cfReadError(r: JsonResult<unknown>, needs: string): string | null {
+export function cfReadError(ctx: Ctx, r: JsonResult<unknown>, needs: string): string | null {
   if (r.ok) return null
-  if (key('CF_API_TOKEN') === '') {
+  if (ctx.secret('CF_API_TOKEN') === '') {
     return 'No Cloudflare API token in this container. See daedalus-dashboard-keys.'
   }
   const { status, error } = r.reason

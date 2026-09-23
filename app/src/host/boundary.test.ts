@@ -236,6 +236,25 @@ describe('the host boundary', () => {
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 
+  it('keeps the metrics, log and secret clients behind the Ctx', () => {
+    // The same reach as process.env, one layer up. `host/prom`, `host/loki`
+    // and `host/keys` are the clients the Ctx hands a loader as `ctx.prom`,
+    // `ctx.loki` and `ctx.secret`; a data file that imports one directly
+    // works today and cannot be tested against a fake Ctx tomorrow, because
+    // the read bypasses the only object a test can substitute. Value edges
+    // only: `import type { VectorResult }` names a shape, loads nothing, and
+    // stays allowed. The other host imports a data file still makes
+    // (nix-manifest, hosts, workspaces, the contract domains) are the next
+    // seam, not this rule's.
+    const clients = ['src/host/prom.ts', 'src/host/loki.ts', 'src/host/keys.ts']
+    const offenders = files
+      .filter((f) => /^src\/modules\/[^/]+\/data\//.test(f))
+      .flatMap((f) =>
+        (edges.get(f) ?? []).filter((d) => clients.includes(d)).map((d) => `${f} → ${d}`),
+      )
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
   it('keeps configuration out of import.meta.env', () => {
     // Vite replaces `import.meta.env.VITE_*` with a literal in BOTH bundles,
     // at build time, and an image is built once for every box: whatever is

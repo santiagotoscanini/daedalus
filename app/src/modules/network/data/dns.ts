@@ -1,6 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
 import { networkFacts } from '../../../host/contract/domains/network'
-import { key } from '../../../host/keys'
 import { lanHosts, webAppHosts } from '../../../host/nix-manifest'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { localDay } from '../../../lib/format'
@@ -441,7 +440,7 @@ const MANAGED = 'Managed by fleet.cloudflareRoutes'
 async function loadZone(ctx: Ctx): Promise<ZoneData> {
   const domain = ctx.site.baseDomain
   const zoneId = ctx.env('CF_ZONE_ID') ?? ''
-  const auth = { headers: { Authorization: `Bearer ${key('CF_API_TOKEN')}` } }
+  const auth = { headers: { Authorization: `Bearer ${ctx.secret('CF_API_TOKEN')}` } }
 
   const [registration, zone, recordsBody, lan, published, served] = await Promise.all([
     rdap(domain),
@@ -566,7 +565,7 @@ async function loadZone(ctx: Ctx): Promise<ZoneData> {
     note:
       raw !== null
         ? null
-        : key('CF_API_TOKEN') === ''
+        : ctx.secret('CF_API_TOKEN') === ''
           ? 'No Cloudflare token in this container. See daedalus-dashboard-keys.'
           : 'Cloudflare did not answer for this zone.',
   }

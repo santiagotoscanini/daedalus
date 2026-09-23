@@ -1,5 +1,4 @@
 import type { Ctx } from '../../../core/ctx'
-import { promScalars } from '../../../host/prom'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { imageTag, imageVersion, type RunningVersion } from '../../../lib/dashboard/images'
 import { ATTEMPT_MS, getJson, getText } from '../../../lib/http'
@@ -152,7 +151,7 @@ export async function loadDownloads(ctx: Ctx): Promise<DownloadsData> {
     }>(`${hosts.base('metube')}/history`),
     getJson<{ country?: string }>(`${hosts.hc}:8000/v1/publicip/ip`),
     getJson<{ port?: number }>(`${hosts.hc}:8000/v1/portforward`),
-    promScalars({ up: 'gluetun_vpn_status' }),
+    ctx.prom.scalars({ up: 'gluetun_vpn_status' }),
     // Keyed by state, then by job id — see stacks/shelfmark. The inner
     // records are loosely typed on purpose: the fields vary by state and
     // only the title and progress are ever present.

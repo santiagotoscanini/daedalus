@@ -1,4 +1,4 @@
-import { promBars, promScalar, promScalars, promVector } from '../../../host/prom'
+import type { Ctx } from '../../../core/ctx'
 import { type Hardware, hostFacts } from '../../../lib/dashboard/host-facts'
 import { bytes } from '../../../lib/format'
 
@@ -53,10 +53,10 @@ export type MemoryData = {
   modules: Hardware['memory']
 }
 
-export async function loadMemory(): Promise<MemoryData> {
+export async function loadMemory(ctx: Ctx): Promise<MemoryData> {
   const [mem, arc, arcHits, topMemory, limits, usage, oom, oomKilled, containers, facts] =
     await Promise.all([
-      promScalars({
+      ctx.prom.scalars({
         total: 'node_memory_MemTotal_bytes',
         available: 'node_memory_MemAvailable_bytes',
         cached: 'node_memory_Cached_bytes',
@@ -64,21 +64,21 @@ export async function loadMemory(): Promise<MemoryData> {
         swapTotal: 'node_memory_SwapTotal_bytes',
         swapFree: 'node_memory_SwapFree_bytes',
       }),
-      promScalars({
+      ctx.prom.scalars({
         size: 'node_zfs_arc_size',
         max: 'node_zfs_arc_c_max',
         min: 'node_zfs_arc_c_min',
       }),
-      promScalar(
+      ctx.prom.scalar(
         '100 * rate(node_zfs_arc_hits[30m]) / (rate(node_zfs_arc_hits[30m]) + rate(node_zfs_arc_misses[30m]))',
       ),
-      promBars('topk(10, container_memory_usage_bytes)', 'name'),
-      promVector('container_memory_limit_bytes'),
-      promVector('container_memory_usage_bytes'),
-      promScalar('sum(container_oom_kills_total)'),
+      ctx.prom.bars('topk(10, container_memory_usage_bytes)', 'name'),
+      ctx.prom.vector('container_memory_limit_bytes'),
+      ctx.prom.vector('container_memory_usage_bytes'),
+      ctx.prom.scalar('sum(container_oom_kills_total)'),
       // `> 0` so the list is only ever the killed, never the fleet.
-      promBars('topk(10, container_oom_kills_total > 0)', 'name'),
-      promScalar('count(container_up)'),
+      ctx.prom.bars('topk(10, container_oom_kills_total > 0)', 'name'),
+      ctx.prom.scalar('count(container_up)'),
       hostFacts(),
     ])
 

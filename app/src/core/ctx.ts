@@ -3,11 +3,33 @@ import { readSnapshot, type SnapshotResult } from '../host/contract/snapshot'
 import { type ConfigName, env, type SecretName } from '../host/env'
 import { type Hosts, makeHosts } from '../host/hosts'
 import { key } from '../host/keys'
-import { lokiEntries, lokiLatest } from '../host/loki'
+import {
+  LOKI,
+  lokiEntries,
+  lokiLatest,
+  lokiScalar,
+  lokiSeries,
+  lokiStreams,
+  lokiStreamsOrNull,
+  lokiVector,
+} from '../host/loki'
+import {
+  PROM,
+  promBars,
+  promEscape,
+  promMatrix,
+  promPoints,
+  promQuote,
+  promScalar,
+  promScalars,
+  promSeries,
+  promVector,
+} from '../host/prom'
 import { readSite } from '../host/site'
 import { bool, type Decoder, recordOf } from '../lib/contract/decode'
 import { getJson } from '../lib/http'
 import type { Site } from '../lib/site'
+import type { GhResult } from './github-app'
 
 // The capability set a reader is handed instead of reaching for process.env.
 //
@@ -56,7 +78,45 @@ export type Ctx = {
     delete(key: string): Promise<void>
   }
   http: { getJson: typeof getJson }
-  loki: { latest: typeof lokiLatest; entries: typeof lokiEntries }
+  /**
+   * The Prometheus client, the only way a module reads PromQL. `url` is
+   * undefined on a box without the monitoring bridge, and every read answers
+   * null or [] rather than throwing, per lib/http.ts.
+   */
+  prom: {
+    url: typeof PROM
+    escape: typeof promEscape
+    quote: typeof promQuote
+    vector: typeof promVector
+    scalar: typeof promScalar
+    scalars: typeof promScalars
+    matrix: typeof promMatrix
+    series: typeof promSeries
+    points: typeof promPoints
+    bars: typeof promBars
+  }
+  /** The Loki client, same rule; one patient attempt per query (host/loki.ts). */
+  loki: {
+    url: typeof LOKI
+    scalar: typeof lokiScalar
+    vector: typeof lokiVector
+    series: typeof lokiSeries
+    streams: typeof lokiStreams
+    streamsOrNull: typeof lokiStreamsOrNull
+    latest: typeof lokiLatest
+    entries: typeof lokiEntries
+  }
+  /**
+   * GitHub, two ways. `app` speaks as the box's App installation and answers
+   * a 403 for anything the App was not granted; `anon` sends no token, which
+   * is enough for a public repository's Actions and costs the shared
+   * unauthenticated budget (60 calls an hour per address). Both are paths,
+   * never URLs, and never throw (core/github-app.ts).
+   */
+  github: {
+    app: <T = unknown>(path: string, init?: RequestInit) => Promise<GhResult<T>>
+    anon: <T = unknown>(path: string) => Promise<GhResult<T>>
+  }
   /**
    * The LLM gateway, or null on a box without one. Both halves or neither: a
    * base URL with no key is a tab of 401s read as zeroes.
@@ -87,7 +147,7 @@ export async function makeCtx(): Promise<Ctx> {
       fallback: {} as Record<string, boolean>,
     }),
   ])
-  return {
+  const ctx: Ctx = {
     env: (name) => env.text(name),
     secret: key,
     gateway: gatewayOf(env.get('LITELLM_BASE_URL'), env.get('LITELLM_API_KEY')),
@@ -95,11 +155,39 @@ export async function makeCtx(): Promise<Ctx> {
     snapshot: readSnapshot,
     store: { read: readSetting, write: writeSetting, delete: deleteSetting },
     http: { getJson },
-    loki: { latest: lokiLatest, entries: lokiEntries },
+    prom: {
+      url: PROM,
+      escape: promEscape,
+      quote: promQuote,
+      vector: promVector,
+      scalar: promScalar,
+      scalars: promScalars,
+      matrix: promMatrix,
+      series: promSeries,
+      points: promPoints,
+      bars: promBars,
+    },
+    loki: {
+      url: LOKI,
+      scalar: lokiScalar,
+      vector: lokiVector,
+      series: lokiSeries,
+      streams: lokiStreams,
+      streamsOrNull: lokiStreamsOrNull,
+      latest: lokiLatest,
+      entries: lokiEntries,
+    },
+    // Lazy on purpose: core/github-app.ts names this type, and a static
+    // import here would be a cycle.
+    github: {
+      app: (path, init) => import('./github-app').then((m) => m.ghApp(ctx, path, init)),
+      anon: (path) => import('./github-app').then((m) => m.ghAnon(path)),
+    },
     hosts,
     site: readSite(),
     modules: {
       enabled: (id) => (modules.available ? (modules.data[id] ?? true) : true),
     },
   }
+  return ctx
 }

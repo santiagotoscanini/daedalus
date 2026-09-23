@@ -1,6 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
 import { clientHost, idpClients, type PocketClient } from '../../../core/identity/pocket-id'
-import { promBars, promPoints, promScalar, promScalars, promVector } from '../../../host/prom'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import { localDay } from '../../../lib/format'
 import { getJson } from '../../../lib/http'
@@ -99,7 +98,7 @@ export type TraefikData = {
  * unprotected one does not. One request, for one column.
  */
 export async function loadProxy(ctx: Ctx): Promise<TraefikData> {
-  return loadTraefik(idpClients(ctx), `${ctx.hosts.base('traefik-dashboard')}/dashboard/`)
+  return loadTraefik(ctx, idpClients(ctx), `${ctx.hosts.base('traefik-dashboard')}/dashboard/`)
 }
 
 /**
@@ -111,6 +110,7 @@ export async function loadProxy(ctx: Ctx): Promise<TraefikData> {
  * numbers come from prometheus, which is scraping the same process.
  */
 async function loadTraefik(
+  ctx: Ctx,
   clientsP: Promise<PocketClient[]>,
   dashboardUrl: string,
 ): Promise<TraefikData> {
@@ -138,36 +138,36 @@ async function loadTraefik(
     }>(`${api}/overview`),
     getJson<TraefikRouter[]>(`${api}/http/routers`),
     clientsP,
-    promScalars({
+    ctx.prom.scalars({
       rpm: 'sum(rate(traefik_entrypoint_requests_total[10m])) * 60',
       open: 'sum(traefik_open_connections)',
     }),
     // Counts over the window rather than a rate: the tunnel carries a few
     // hundred requests a day against the LAN's six figures, and at a
     // per-minute rate it rounds to zero and reads as broken.
-    promBars(
+    ctx.prom.bars(
       `sum by (entrypoint) (increase(traefik_entrypoint_requests_total[${DAYS}d]))`,
       'entrypoint',
     ),
-    promBars(
+    ctx.prom.bars(
       'topk(8, sum by (service) (rate(traefik_service_requests_total[1h]) * 60))',
       'service',
       (s) => s.replace(/-svc@file$/, ''),
     ),
-    promBars('sum by (code) (increase(traefik_service_requests_total[24h]))', 'code'),
-    promPoints('sum(increase(traefik_entrypoint_requests_total[1d]))', DAYS * 24 * 60, 86400),
-    promScalar(
+    ctx.prom.bars('sum by (code) (increase(traefik_service_requests_total[24h]))', 'code'),
+    ctx.prom.points('sum(increase(traefik_entrypoint_requests_total[1d]))', DAYS * 24 * 60, 86400),
+    ctx.prom.scalar(
       'histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket[1h])))',
     ),
-    promVector('traefik_tls_certs_not_after'),
-    promBars('sum by (tls_version) (traefik_entrypoint_requests_tls_total)', 'tls_version'),
-    promScalars({
+    ctx.prom.vector('traefik_tls_certs_not_after'),
+    ctx.prom.bars('sum by (tls_version) (traefik_entrypoint_requests_tls_total)', 'tls_version'),
+    ctx.prom.scalars({
       at: 'traefik_config_last_reload_success',
       n: 'traefik_config_reloads_total',
     }),
   ])
 
-  const requests = await promVector(
+  const requests = await ctx.prom.vector(
     `sum by (router) (increase(traefik_router_requests_total[${DAYS}d]))`,
   )
   const perRouter = new Map(requests.map((r) => [r.metric.router ?? '', Number(r.value[1])]))

@@ -33,8 +33,6 @@
 //                                 to a changelog that is machine-readable
 
 import type { Ctx } from '../../../core/ctx'
-import { lokiEntries } from '../../../host/loki'
-import { promScalar, promScalars, promSeries, promVector } from '../../../host/prom'
 import type { Commit, CommitGap } from '../../../lib/dashboard/github'
 import { getJson } from '../../../lib/http'
 import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
@@ -157,8 +155,8 @@ async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
       'https://updater.factorio.com/get-available-versions',
     ),
     fetchFeed(),
-    promScalar('container_up{name="factorio"}'),
-    gameLines(),
+    ctx.prom.scalar('container_up{name="factorio"}'),
+    gameLines(ctx),
   ])
 
   const stable = releases?.stable?.headless ?? null
@@ -212,12 +210,12 @@ async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
  * the container gauge, because ofsm idling with no game is exactly the case
  * this read exists to catch.
  */
-async function gameLines(): Promise<{
+async function gameLines(ctx: Ctx): Promise<{
   state: 'running' | 'stopped' | null
   since: number | null
   events: FactorioData['events']
 }> {
-  const lines = await lokiEntries(
+  const lines = await ctx.loki.entries(
     '{stack="factorio"} |~ "\\\\[(JOIN|LEAVE)\\\\]|started on port|Factorio server stopped"',
     60 * 24 * 30,
     60,
@@ -482,7 +480,7 @@ async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
   const build = ctx.env('MINECRAFT_PAPER_BUILD') ?? null
 
   const [live, online, reported, latestVersion, builds, events] = await Promise.all([
-    promScalars({
+    ctx.prom.scalars({
       healthy: 'max(minecraft_status_healthy)',
       players: 'max(minecraft_status_players_online_count)',
       maxPlayers: 'max(minecraft_status_players_max_count)',
@@ -490,11 +488,11 @@ async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
     }),
     // 24h at the exporter's own resolution. Asking for finer just interpolates
     // the same samples — see promSeries.
-    promSeries('max(minecraft_status_players_online_count)', 24 * 60, 300),
-    reportedVersion(),
+    ctx.prom.series('max(minecraft_status_players_online_count)', 24 * 60, 300),
+    reportedVersion(ctx),
     latestRelease(),
     paperBuilds(version, build),
-    joinsAndLeaves(),
+    joinsAndLeaves(ctx),
   ])
 
   return {
@@ -525,8 +523,8 @@ async function loadMinecraft(ctx: Ctx): Promise<MinecraftData> {
  * decoration around the version ("Paper 26.2"), which is left alone — it is
  * what the server said, and tidying it would be inventing a fact.
  */
-async function reportedVersion(): Promise<string | null> {
-  const r = await promVector('minecraft_status_healthy')
+async function reportedVersion(ctx: Ctx): Promise<string | null> {
+  const r = await ctx.prom.vector('minecraft_status_healthy')
   return r[0]?.metric.server_version ?? null
 }
 
@@ -603,8 +601,8 @@ async function paperBuilds(version: string | null, build: string | null): Promis
  * second one could only be wrong. Failure is empty: this panel is the least
  * important thing on the page and must not cost it.
  */
-async function joinsAndLeaves(): Promise<MinecraftData['events']> {
-  const lines = await lokiEntries(
+async function joinsAndLeaves(ctx: Ctx): Promise<MinecraftData['events']> {
+  const lines = await ctx.loki.entries(
     '{stack="minecraft"} |~ "(joined|left) the game"',
     60 * 24 * 7,
     30,

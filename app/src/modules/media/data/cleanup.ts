@@ -1,4 +1,4 @@
-import { lokiLatest, lokiScalar } from '../../../host/loki'
+import type { Ctx } from '../../../core/ctx'
 import { type VersionGap, versionGap } from '../../../lib/dashboard/github'
 import {
   type ImageFreshness,
@@ -48,10 +48,10 @@ export type CleanupData = {
   days: number
 }
 
-export async function loadCleanup(): Promise<CleanupData> {
+export async function loadCleanup(ctx: Ctx): Promise<CleanupData> {
   const window = `${String(CLEANUP_DAYS)}d`
   const over = (container: string, needle: string) =>
-    lokiScalar(
+    ctx.loki.scalar(
       `sum(count_over_time({container="${container}"} |= \`${needle}\` [${window}])) or vector(0)`,
     )
 
@@ -77,7 +77,7 @@ export async function loadCleanup(): Promise<CleanupData> {
     imageFreshness('janitorr'),
   ])
 
-  const schedules = await janitorrSchedules()
+  const schedules = await janitorrSchedules(ctx)
 
   const [cleanuparrGap, janitorrGap] = await Promise.all([
     versionGap('Cleanuparr/Cleanuparr', cleanuparrVersion),
@@ -105,14 +105,14 @@ export async function loadCleanup(): Promise<CleanupData> {
  * quietly deleting. The `wouldDelete` count beside this is what covers that
  * case: it counts decisions, whichever schedule reached them.
  */
-async function janitorrSchedules(): Promise<CleanupData['janitorr']['schedules']> {
+async function janitorrSchedules(ctx: Ctx): Promise<CleanupData['janitorr']['schedules']> {
   const kinds = [
     { name: 'Tag', match: 'Tag based cleanup' },
     { name: 'Episode', match: 'Episode based cleanup' },
   ]
   const seen = await Promise.all(
     kinds.map(async (k) => {
-      const line = await lokiLatest(`{container="janitorr"} |= \`${k.match}\``, 24 * 60)
+      const line = await ctx.loki.latest(`{container="janitorr"} |= \`${k.match}\``, 24 * 60)
       // Absent from the log is not "enabled" — it is "we have not seen it say
       // either", which lands as disabled=false only if a line exists.
       return line === null ? null : { name: k.name, enabled: !line.includes('disabled') }
