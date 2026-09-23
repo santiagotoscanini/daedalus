@@ -143,7 +143,12 @@ function AppsPage() {
       <TabBar tabs={TABS} active={tab} linkTo={(id) => ({ to: '/apps', search: { tab: id } })} />
 
       {list !== null && (
-        <GuardedAwait resetKey={tab} promise={list} fallback={<RowsSkeleton count={4} />}>
+        <GuardedAwait
+          resetKey={tab}
+          slot="list"
+          promise={list}
+          fallback={<RowsSkeleton count={4} />}
+        >
           {(data) => <AppsList data={data} />}
         </GuardedAwait>
       )}
@@ -151,6 +156,7 @@ function AppsPage() {
       {images !== null && (
         <GuardedAwait
           resetKey={tab}
+          slot="images"
           promise={images}
           fallback={<BoardsSkeleton spans={[8, 4, 8, 4]} />}
         >
@@ -161,6 +167,7 @@ function AppsPage() {
       {packages !== null && (
         <GuardedAwait
           resetKey={tab}
+          slot="packages"
           promise={packages}
           fallback={<BoardsSkeleton spans={[6, 6, 12]} />}
         >

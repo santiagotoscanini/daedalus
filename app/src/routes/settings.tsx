@@ -324,6 +324,7 @@ function SettingsPage() {
           ) : (
             <GuardedAwait
               resetKey={tab}
+              slot="zones"
               promise={zones}
               fallback={
                 <General settings={settings} edit={edit} timezones={timezones} zones={null} />
@@ -344,6 +345,7 @@ function SettingsPage() {
           ) : (
             <GuardedAwait
               resetKey={tab}
+              slot="integrations"
               promise={integrations}
               fallback={
                 <Integrations
@@ -370,6 +372,7 @@ function SettingsPage() {
           ) : (
             <GuardedAwait
               resetKey={tab}
+              slot="site"
               promise={site}
               fallback={<Repository settings={settings} site={null} />}
             >

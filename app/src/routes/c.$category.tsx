@@ -154,6 +154,7 @@ function CategoryPage() {
           {nodeClaude !== null ? (
             <GuardedAwait
               resetKey={sectionKey}
+              slot="claude"
               promise={nodeClaude}
               fallback={
                 <>
@@ -174,6 +175,7 @@ function CategoryPage() {
           ) : node !== null ? (
             <GuardedAwait
               resetKey={sectionKey}
+              slot="node"
               promise={node}
               fallback={
                 <BoardsSkeleton
@@ -209,6 +211,7 @@ function CategoryPage() {
               // cost its own row of dots, not the page.
               <GuardedAwait
                 resetKey={sectionKey}
+                slot="tabs"
                 promise={tabStatus}
                 fallback={<TabNav spec={spec} category={category} tab={tab} status={null} />}
               >
@@ -219,6 +222,7 @@ function CategoryPage() {
           {boards !== null && (
             <GuardedAwait
               resetKey={sectionKey}
+              slot="boards"
               promise={boards}
               fallback={<BoardsPlaceholder spec={spec} tab={tab} />}
             >
@@ -325,7 +329,12 @@ function NodeHead({
 }) {
   if (promise === null) return null
   return (
-    <GuardedAwait resetKey={resetKey} promise={promise} fallback={<HeadStripSkeleton />}>
+    <GuardedAwait
+      resetKey={resetKey}
+      slot="head"
+      promise={promise}
+      fallback={<HeadStripSkeleton />}
+    >
       {(d) => (d === null ? null : <MachineHead d={d} />)}
     </GuardedAwait>
   )

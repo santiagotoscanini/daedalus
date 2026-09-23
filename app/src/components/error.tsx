@@ -14,7 +14,7 @@ import { errorText } from '../lib/redact'
 // caught failure without a full reload.
 
 import { Await, CatchBoundary, type ErrorComponentProps, useRouter } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useReducer, useState } from 'react'
 import { PageHead } from './page'
 import { Alert } from './ui/alert'
 import { Button } from './ui/button'
@@ -98,23 +98,106 @@ export function AwaitError({ error, reset }: ErrorComponentProps) {
   )
 }
 
-/** Drop-in for a streamed `<Await>` whose failure should cost one section. */
+/**
+ * Drop-in for a streamed `<Await>` whose failure should cost one section —
+ * and which, once it has answered, never shows its skeleton again.
+ *
+ * Every loader hands the page NEW promises, on purpose: the frame renders
+ * the instant you click and the boards stream in behind it. The cost was
+ * that a page you had already read streamed in again — the router keeps
+ * its loader result for `defaultStaleTime`, but past that (or on a reload
+ * it decided to run) the section got a fresh promise, suspended, and the
+ * skeleton flashed over content that was on screen a second ago. What the
+ * eye expects from a native app is the opposite: what you saw last time,
+ * at once, and the new answer replacing it in place if it differs.
+ *
+ * So a section remembers its last result, in this module, keyed by the
+ * caller's `resetKey` (which every page builds from the tab and the subject)
+ * plus its `slot` — the name a page gives a section when it draws several
+ * behind one key. On the client, a section with a
+ * memory renders it immediately and settles the new promise in an effect;
+ * a section without one — the first visit, and every server render — goes
+ * through `<Await>` as before, which is what keeps SSR streaming intact and
+ * the skeleton honest: it means "never loaded", not "loading again".
+ *
+ * The memory is per browser tab, unbounded, and never read on the server —
+ * a server-side map would hand one person's page to the next.
+ */
 export function GuardedAwait<T>({
   resetKey,
+  slot = 'main',
   promise,
   fallback,
   children,
 }: {
   resetKey: string
+  /** Which of the page's sections this is, when several share a key. */
+  slot?: string
   promise: Promise<T>
   fallback?: ReactNode
   children: (result: T) => ReactNode
 }) {
   return (
     <CatchBoundary getResetKey={() => resetKey} errorComponent={AwaitError}>
-      <Await promise={promise} fallback={fallback}>
+      <Settled cacheKey={`${resetKey}#${slot}`} promise={promise} fallback={fallback}>
         {children}
-      </Await>
+      </Settled>
     </CatchBoundary>
+  )
+}
+
+const settled = new Map<string, unknown>()
+
+function Settled<T>({
+  cacheKey,
+  promise,
+  fallback,
+  children,
+}: {
+  cacheKey: string
+  promise: Promise<T>
+  fallback?: ReactNode
+  children: (result: T) => ReactNode
+}) {
+  // Whether the effect below may run at all: on the server there is no memory,
+  // and on the client's first render after hydration there is none either, so
+  // both go through <Await> and agree.
+  const remembered = typeof window !== 'undefined' && settled.has(cacheKey)
+  const [, rerender] = useReducer((n: number) => n + 1, 0)
+  const [failure, setFailure] = useState<{ promise: Promise<T>; error: unknown } | null>(null)
+
+  useEffect(() => {
+    if (!remembered) return
+    let live = true
+    promise.then(
+      (value) => {
+        if (!live) return
+        settled.set(cacheKey, value)
+        rerender()
+      },
+      (error: unknown) => {
+        if (live) setFailure({ promise, error })
+      },
+    )
+    return () => {
+      live = false
+    }
+  }, [remembered, promise, cacheKey])
+
+  if (remembered) {
+    // A refresh that failed is worth the section, as a first load that failed
+    // is: stale numbers presented as current would be the worse lie.
+    if (failure !== null && failure.promise === promise) throw failure.error
+    return <>{children(settled.get(cacheKey) as T)}</>
+  }
+  return (
+    <Await promise={promise} fallback={fallback}>
+      {(value) => {
+        // Written during render, which is safe for an idempotent map write, and
+        // the only place the first answer passes through.
+        if (typeof window !== 'undefined') settled.set(cacheKey, value)
+        return children(value)
+      }}
+    </Await>
   )
 }
