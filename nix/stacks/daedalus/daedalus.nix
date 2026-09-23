@@ -2012,7 +2012,11 @@ in
           # for the next write if it lands in that window.
           if systemctl is-active --quiet pihole-ftl.service; then
             started=$(systemctl show -p ActiveEnterTimestampMonotonic --value pihole-ftl.service)
-            now=$(cut -d' ' -f1 /proc/uptime | tr -d .)0000
+            # Microseconds since boot, the unit systemd reports. Computed, not
+            # spliced: /proc/uptime prints two decimals today, and string
+            # surgery on that would silently skip the HUP (stale DNS) or
+            # reintroduce the outage if the format ever changed.
+            now=$(awk '{printf "%.0f", $1 * 1000000}' /proc/uptime)
             if [ -n "$started" ] && [ "$(( now - started ))" -gt 30000000 ]; then
               systemctl kill --kill-whom=main -s HUP pihole-ftl.service
             else
