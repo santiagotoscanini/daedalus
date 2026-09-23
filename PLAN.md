@@ -238,9 +238,9 @@ daedalus and the schema fixtures are in. What remains:
    positions. Once nothing is left to interleave with, one deliberate,
    separately-gated rebuild replaces the list with the single import; its
    closure diff will not be empty and must be read line by line.
-3. **`ARCHITECTURE.md` and `README.md` still say the module "is not in
+3. **`README.md` and `CONTRIBUTING.md` still say the module "is not in
    this repository yet"** (the paragraph after `README.md`'s layout table, `CONTRIBUTING.md` lines
-   119 and 127) and describe `PLAN.md` as carrying phase outcomes. Rewrite
+   119 and 127). Rewrite
    those paragraphs for what the repo is now.
 
 Decisions already taken for the moves, so they are not re-litigated: the
