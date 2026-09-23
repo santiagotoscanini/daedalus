@@ -91,7 +91,7 @@ export function RunnersView({ d }: { d: Runners }) {
           </ul>
           <p className={FOOT}>
             A runner is a label set a job asks for. The box would take the Linux jobs in a rootless
-            container; the PC and the Mac would take theirs as a service the agent supervises, like
+            container; a node would take its own as a service the agent supervises, the way it runs
             Claude's remote control. Nothing is started from this page yet.
           </p>
         </Board>

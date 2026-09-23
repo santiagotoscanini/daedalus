@@ -47,8 +47,7 @@ export function ConsumersView({ data }: { data: ConsumersData }) {
       {data.n8n !== null && (
         <section>
           <p className={`${SUB} mt-[1.2rem] mb-[0.6rem]`}>
-            n8n — workflows that call a model. Every workflow on it is inactive today; it is the
-            first candidate for a switch-off from its page.
+            n8n — workflows that call a model through the gateway, on the key its own page shows.
           </p>
           <N8nView data={data.n8n} />
         </section>

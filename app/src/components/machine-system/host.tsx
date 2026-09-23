@@ -5,6 +5,7 @@ import { cn } from '../../lib/cn'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { DASH, duration, num, pct, since, text } from '../../lib/format'
 import { partMatching } from '../../lib/hardware/catalog'
+import { PROVIDER_NAME, type ProviderKind } from '../../lib/providers/kinds'
 import { PartPhoto } from '../part'
 import { BarList, Board, BoardGrid, Chip, Facts, Measures, Trend } from '../viz'
 import {
@@ -474,9 +475,14 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
   )
 }
 
-/** The product name for a provider kind the agent reports. */
+/**
+ * The product name for a provider kind, from the one map that defines them
+ * (lib/providers/kinds.ts). The agent reports `kind` as free text, so a kind
+ * this page predates reads as itself rather than as a blank — a newer agent
+ * must not render an empty row here.
+ */
 function providerName(kind: string): string {
-  return kind === 'lemonade' ? 'Lemonade Server' : kind === 'ollama' ? 'Ollama' : kind
+  return Object.hasOwn(PROVIDER_NAME, kind) ? PROVIDER_NAME[kind as ProviderKind] : kind
 }
 
 /** Whether an agent version predates the one a field arrived in. */

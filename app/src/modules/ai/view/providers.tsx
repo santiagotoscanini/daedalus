@@ -212,10 +212,10 @@ function MachineView({ m }: { m: ProviderMachine }) {
             ]}
           />
           <p className={FOOT}>
-            {m.machine === 'box'
-              ? 'One model, speech to text, serving Bazarr’s subtitles today; not published by the gateway.'
-              : m.offered
-                ? 'Every model on disk here is offered; the gateway sync writes a route per model and removes it when the model leaves.'
+            {m.offered
+              ? 'Every model on disk here is offered; the gateway sync writes a route per model and removes it when the model leaves.'
+              : m.machine === 'box'
+                ? 'Speech to text, served by the box itself rather than by a node. Offer it on Settings › Machines to publish it through the gateway.'
                 : 'Switch "offer to the gateway" on Settings › Machines to publish these.'}
           </p>
         </Board>
@@ -284,7 +284,7 @@ function MachineView({ m }: { m: ProviderMachine }) {
         <WipBoard
           title="Last generation"
           span={6}
-          waits="drawn once the gateway sync owns the routes and the provider’s counters are read per model"
+          waits="waits on per-model counters from the provider; the routes themselves are the sync’s now"
         >
           <Measures
             items={[

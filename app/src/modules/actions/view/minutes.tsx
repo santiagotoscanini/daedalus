@@ -135,8 +135,8 @@ export function MinutesView({ d }: { d: Minutes }) {
                     {s.os === 'linux'
                       ? 'this box'
                       : s.os === 'windows'
-                        ? 'the Windows PC'
-                        : 'the Mac'}
+                        ? 'a Windows node'
+                        : 'a macOS node'}
                   </span>
                   <span className={ROW_SIDE}>
                     {num(s.jobs)} jobs · {num(s.raw)} wall min · {num(s.billed)} billed
