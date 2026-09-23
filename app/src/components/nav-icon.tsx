@@ -29,6 +29,9 @@ export type NavIconName =
   // same cluster seen from the tenant's side.
   | 'database'
   | 'monitoring'
+  // GitHub Actions: the play mark inside a ring, which is the platform's own
+  // glyph reduced to a stroke — a run is the thing this page is about.
+  | 'actions'
   | 'claude'
   | 'menu'
   | 'close'
@@ -101,6 +104,13 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
   ),
   // A trace: the only category whose subject is a line moving.
   monitoring: <path d="M2.9 12.7h4.3l2.45-6.4 3.7 11.5 2.35-5.1h5.4" />,
+
+  actions: (
+    <>
+      <circle cx="12" cy="12" r="8.6" />
+      <path d="m10.2 8.9 4.6 3.1-4.6 3.1Z" />
+    </>
+  ),
 
   // The one FILLED icon in the set, and the only one not drawn here:
   // Anthropic's own mark, the same path public/icon-claude.svg carries.

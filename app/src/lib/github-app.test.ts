@@ -38,6 +38,7 @@ describe('buildManifest', () => {
       setup_on_update: true,
       public: false,
       default_permissions: {
+        actions: 'read',
         contents: 'read',
         metadata: 'read',
         checks: 'write',

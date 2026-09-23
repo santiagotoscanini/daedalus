@@ -461,19 +461,39 @@ priority; each can be done independently unless noted.
     npmjs under a public scope, because GitHub-hosted CI cannot reach
     Verdaccio. **Not this:** a UI kit.
 
-11. **Self-hosted GitHub Actions runners, managed from daedalus.** Runners
-    run CI, never fleet images — the box's build path stays the only way an
-    image reaches zot. Ephemeral, on demand, per job: subscribe to
-    `workflow_job`; on `queued` with a matching label, mint a JIT runner
-    config and start one rootless podman container (`--ephemeral`, dedicated
-    uid, resource limits, the builder's owner-match egress fence, no secrets
-    beyond the single-use JIT token); it takes exactly that job and exits.
-    A second, narrow GitHub App (`daedalus-runners`, `administration:write`
-    on opted-in repos only, sealed in the same vault). The panel: runners
-    now, jobs queued and running, per-repo minutes this month against the
-    plan's allowance, failures; metrics through `fleet.prometheusScrapes`.
-    Later: a Windows runner on the PC through the agent (item 6); a `gpu`
-    label for jobs that want the model server.
+11. **Self-hosted GitHub Actions runners, managed from daedalus.** The
+    Actions page exists (rail entry, four tabs, engine `f6d74ad` and after):
+    Runs, Workflows, Minutes and Runners read every repository the box
+    watches — its apps, Settings › Projects, the engine — as the App where
+    it may and as anyone where the repository is public. What the page
+    still lacks, in order:
+    - **The App reads runs.** The build App was registered without
+      `actions: read` (the manifest carries it now for new Apps); until the
+      operator grants it by hand and accepts it on the installation, private
+      repositories show "needs actions: read" and public ones are read out
+      of the address's sixty-an-hour anonymous budget, which the page
+      meters and stops at. Owed to the operator, below.
+    - **Runners themselves.** Runners run CI, never fleet images — the
+      box's build path stays the only way an image reaches zot. Ephemeral,
+      on demand, per job: subscribe to `workflow_job`; on `queued` with a
+      matching label, mint a JIT runner config and start one rootless podman
+      container (`--ephemeral`, dedicated uid, resource limits, the
+      builder's owner-match egress fence, no secrets beyond the single-use
+      JIT token); it takes exactly that job and exits. A second, narrow
+      GitHub App (`daedalus-runners`, `administration:write` on opted-in
+      repos only, sealed in the same vault). The Runners tab draws the
+      design blurred today: a runner defined as a row (machine, labels, CPU
+      and memory cap, concurrency), runners now with load, the queue, and
+      the month's minutes taken here instead of hosted; each unblurs as its
+      mechanism lands. Metrics through `fleet.prometheusScrapes`.
+    - **Runners on the other machines, through the agent (item 6).** The
+      PC and the Mac as a declared service the agent supervises, the same
+      per-job lifetime; macOS jobs are the ones worth moving (ten billed
+      minutes per wall minute, and the agent's own release runs there).
+      A `gpu` label for jobs that want the model server.
+    - **GitHub's own meter.** The billing endpoint needs a user token with
+      the `user` scope; a vault entry for one, and the Minutes tab's plan
+      board reads the real cycle instead of assuming Free.
 
 ---
 
@@ -498,6 +518,12 @@ priority; each can be done independently unless noted.
 
 Hand edits the UI cannot make for itself:
 
+0. **Grant the build App `actions: read`.** GitHub → Settings → Developer
+   settings → GitHub Apps → the box's App → Permissions & events →
+   Repository permissions → Actions: Read-only → Save; then open the App's
+   installation on the account and accept. The Actions page reads every
+   private repository's runs from then on and stops spending the anonymous
+   budget on the public ones.
 1. **The MCP server's credentials — opt-in, not owed.** The server is built
    and reachable at `/mcp`; nothing calls it until the operator wants a
    Claude session driving daedalus through it. Then three edits: mint a

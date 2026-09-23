@@ -13,8 +13,11 @@ export const GITHUB_APP_FILE = 'vault/github-app.sops'
 /**
  * Least privilege. `pull_requests: write` is unused until PR previews, granted
  * now because widening an App's permissions makes every installation re-accept.
+ * `actions: read` is what the Actions page reads runs and jobs with; an App
+ * made before it was added shows the page how to grant it by hand.
  */
 export const GITHUB_APP_PERMISSIONS = {
+  actions: 'read',
   contents: 'read',
   metadata: 'read',
   checks: 'write',
