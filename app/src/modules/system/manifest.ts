@@ -3,7 +3,9 @@ import type { ModuleManifest } from '../../lib/modules/manifest'
 export const manifest = {
   id: 'system',
   label: 'System',
-  lede: 'The machine itself: what it is running on, what it is storing, and what survives it.',
+  // One lede for every machine on the picker, so the head and the tabs
+  // below it never move when the machine changes.
+  lede: 'This box, or another machine on the network: what it runs on, what it stores, how it is doing.',
   order: 60,
   // Shaped to Host, the tab that opens by default.
   boardSpans: [8, 4, 4, 4],

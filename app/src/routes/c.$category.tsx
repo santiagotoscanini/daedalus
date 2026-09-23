@@ -126,11 +126,9 @@ function CategoryPage() {
 
   return (
     <>
-      <PageHead title={spec.label}>
-        {nodeTab === null
-          ? spec.lede
-          : 'Another machine on the network, on the same tabs as this box: what it is, what it is running on, what it is storing, and what it is waiting to install — as its agent reports it every fifteen seconds.'}
-      </PageHead>
+      {/* The same lede whichever machine is picked: a second sentence for a
+          node once wrapped to two lines and moved every tab below it. */}
+      <PageHead title={spec.label}>{spec.lede}</PageHead>
 
       {spec.machinePicker === true && <MachinePicker nodes={nodes} active={machine} tab={tab} />}
 
