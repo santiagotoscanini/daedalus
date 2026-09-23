@@ -2002,8 +2002,22 @@ in
           rm -f "$dst"
         fi
         ${lib.optionalString config.fleet.modules.pihole.enable ''
+          # A HUP is only safe once FTL is up: in its first moments no
+          # handler is installed and the signal's default action ends the
+          # process — which is how the first activation of this unit took
+          # LAN DNS down for four minutes (2026-09-23). A resolver that
+          # started less than half a minute ago has read the directory
+          # itself, and dnsmasq picks up a NEW file there without any
+          # signal; the HUP is for a changed or removed line, and can wait
+          # for the next write if it lands in that window.
           if systemctl is-active --quiet pihole-ftl.service; then
-            systemctl kill --kill-whom=main -s HUP pihole-ftl.service
+            started=$(systemctl show -p ActiveEnterTimestampMonotonic --value pihole-ftl.service)
+            now=$(cut -d' ' -f1 /proc/uptime | tr -d .)0000
+            if [ -n "$started" ] && [ "$(( now - started ))" -gt 30000000 ]; then
+              systemctl kill --kill-whom=main -s HUP pihole-ftl.service
+            else
+              echo "pihole-ftl started under 30 s ago; leaving the HUP to the next write"
+            fi
           fi
         ''}
       '';
