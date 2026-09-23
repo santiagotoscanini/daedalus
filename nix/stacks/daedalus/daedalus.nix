@@ -1488,18 +1488,6 @@ in
         map (d: d.env) dashboard
         ++ [
           (lib.optionalAttrs haveGithubApp { BUILD_LOGS_PATH = "/builds"; })
-          # The model server on the first node that offers one (platform/
-          # nodes.nix) — off-box, so it cannot come from webAppHosts, and absent
-          # on a host with no such node: the AI → Lemonade tab reads the
-          # variable's absence as "no server".
-          (lib.optionalAttrs (config.fleet.lemonadeNodes != [ ]) (
-            let
-              node = lib.head config.fleet.lemonadeNodes;
-            in
-            {
-              LEMONADE_URL = "http://${config.fleet.nodeHost node}:${toString node.providers.lemonade.port}";
-            }
-          ))
           {
             # Reached over the `monitoring` bridge added above.
             PROMETHEUS_URL = "http://prometheus:9090";

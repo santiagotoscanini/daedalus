@@ -315,11 +315,6 @@ export const SCHEMA = {
     about: 'Pi-hole’s API.',
     source: 'stacks/pihole fleet.dashboard.pihole.env',
   },
-  LEMONADE_URL: {
-    kind: 'url',
-    about: 'The model server on the GPU machine.',
-    source: DAEDALUS,
-  },
   ROUTER_URL: {
     kind: 'url',
     about: 'The router’s login page, for the build stamp it carries.',
