@@ -54,6 +54,10 @@ const SERVER_REGIONS = [
   (f: string) => f.startsWith('src/lib/repo/'),
   (f: string) => f.startsWith('src/lib/dashboard/'),
   (f: string) => f.startsWith('src/lib/apps/'),
+  // The providers: the readers dial the network and the fleet list reads
+  // the nodes table. The pure kinds file sits beside them; a component
+  // that wants a mode word or an alias rule gets it through its data half.
+  (f: string) => f.startsWith('src/lib/providers/'),
   (f: string) => /^src\/routes\/api\./.test(f),
   // A module's data half. Its manifest and releases are pure by contract and
   // its view half is client code — see below.

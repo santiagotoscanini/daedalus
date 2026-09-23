@@ -57,6 +57,12 @@ export const SETTING_KEYS = {
   githubAppCreation: 'github.app.creation',
   /** A created GitHub App whose Apply was refused, kept for "Retry Apply". */
   githubAppPendingApply: 'github.app.pendingApply',
+  /**
+   * This box's own provider (subgen's whisper): offered to the gateway or
+   * not, and its alias (lib/providers/policy.ts BoxProviderPolicy). A
+   * node's equivalent lives in the node's policy, not here.
+   */
+  boxProviders: 'providers.box',
   /** When the build scheduler last ran its sweep. */
   buildsLastSweep: 'builds.lastSweep',
   /** Builds whose GitHub report failed, for "Retry report" (core/builds/report.ts). */

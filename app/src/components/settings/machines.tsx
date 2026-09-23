@@ -9,6 +9,7 @@ import type { Machine, MachineShape, MachinesData } from '../../lib/dashboard/ma
 import { bytes, duration, since } from '../../lib/format'
 import { CHOSEN_KINDS, finishesFor, partsOfKind } from '../../lib/hardware/catalog'
 import { LAN_DOMAIN, LEMONADE_DEFAULT_PORT, NODE_NAME_RE, slugOf } from '../../lib/nodes-file'
+import type { ModelPolicy } from '../../lib/providers/policy'
 import { errorText } from '../../lib/redact'
 import type { NodeRow } from '../../lib/repo/nodes'
 import { useShown } from '../../lib/shown'
@@ -26,6 +27,7 @@ import { Input } from '../ui/input'
 import { Picker } from '../ui/picker'
 import { Switch } from '../ui/switch'
 import { Chip } from '../viz'
+import { BoxProvider, GatewaySync, ProviderModels } from './provider-models'
 import {
   ASIDE,
   ERROR_NOTE,
@@ -287,7 +289,35 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
   }
   const lemonade = n.policy.providers?.lemonade ?? { port: LEMONADE_DEFAULT_PORT, offer: false }
   const saveLemonade = (next: { port: number; offer: boolean }) => {
-    save({ ...base.current, providers: { ...base.current.providers, lemonade: next } })
+    const models = base.current.providers?.lemonade?.models
+    save({
+      ...base.current,
+      providers: {
+        ...base.current.providers,
+        lemonade: models === undefined ? next : { ...next, models },
+      },
+    })
+  }
+  // The per-model curation rides the same policy: one model's change,
+  // merged into what was last saved (never the row from before the previous
+  // save — two aliases typed a second apart would undo each other).
+  const changeModel = (id: string, patch: ModelPolicy) => {
+    const current = base.current.providers?.lemonade ?? lemonade
+    const models = current.models ?? {}
+    const next: ModelPolicy = { ...models[id], ...patch }
+    for (const k of Object.keys(next) as (keyof ModelPolicy)[]) {
+      if (next[k] === undefined) delete next[k]
+    }
+    const { [id]: _old, ...others } = models
+    const merged = Object.keys(next).length === 0 ? others : { ...others, [id]: next }
+    const { models: _m, ...rest } = current
+    save({
+      ...base.current,
+      providers: {
+        ...base.current.providers,
+        lemonade: Object.keys(merged).length === 0 ? rest : { ...rest, models: merged },
+      },
+    })
   }
   const savePort = () => {
     const p = Number(port)
@@ -435,6 +465,9 @@ function Policy({ n, shape }: { n: NodeRow; shape: MachineShape | null }) {
                   </Mono>{' '}
                   after the next Apply. The agent probes the port and reports whether it answers.
                 </span>
+                {offer && (
+                  <ProviderModels nodeId={n.id} busy={busy} failed={failed} change={changeModel} />
+                )}
               </Stack>
             ),
           },
@@ -699,6 +732,19 @@ export function Machines({ d }: { d: MachinesData }) {
           <MachineSection key={m.node?.id ?? m.ip ?? m.lanName ?? ''} m={m} port={d.port} />
         ))
       )}
+
+      <Section
+        title="The gateway"
+        icon={<MonitorSmartphoneIcon />}
+        description="What every provider above offers becomes a route in LiteLLM, kept in step by the box."
+      >
+        <Rows
+          rows={[
+            { k: 'This box', v: <BoxProvider /> },
+            { k: 'Sync', v: <GatewaySync /> },
+          ]}
+        />
+      </Section>
 
       <Section title="How a machine joins" icon={<MonitorSmartphoneIcon />}>
         <p className={NOTE}>Install the agent on it. Windows, from an administrator PowerShell:</p>

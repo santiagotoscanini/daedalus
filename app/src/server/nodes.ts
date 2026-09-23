@@ -3,6 +3,7 @@ import { actorLabel } from '../core/auth'
 import type { NodePolicy } from '../host/schema'
 import { CHOSEN_KINDS, isChosenPart, isFinish } from '../lib/hardware/catalog'
 import { NODE_NAME_RE } from '../lib/nodes-file'
+import { modelPolicies } from '../lib/providers/policy'
 
 // Server functions behind Settings › Machines: the page's one read, and
 // its decisions about a node — approve, revoke, forget, the policy. Each
@@ -124,7 +125,11 @@ const nodePolicy = (data: unknown): { id: string; policy: NodePolicy } => {
       }
       if (typeof offer !== 'boolean')
         throw new Error('providers.lemonade.offer must be true or false')
-      policy.providers = { lemonade: { port, offer } }
+      const { models } = l as Record<string, unknown>
+      policy.providers = {
+        lemonade:
+          models === undefined ? { port, offer } : { port, offer, models: modelPolicies(models) },
+      }
     }
   }
   if (o.claudeWorkdir !== undefined) {
@@ -180,3 +185,97 @@ export const fetchNodesChangeFn = createServerFn().handler(async (): Promise<str
   const c = await nodesChange()
   return c.changed ? c.fields : []
 })
+
+/* ── the gateway: providers' models and the sync ──────────────────────── */
+
+/**
+ * What a node's provider serves, read from the provider itself, with each
+ * model as the operator's policy leaves it. For the models table on
+ * Settings › Machines. Read-only; a node the box does not know answers an
+ * empty list.
+ */
+export const fetchProviderModelsFn = createServerFn()
+  .validator(nodeId)
+  .handler(async ({ data }) => {
+    const { makeCtx } = await import('../core/ctx')
+    const { fleetProviders } = await import('../lib/providers/fleet')
+    const { readProvider } = await import('../lib/providers/read')
+    const { resolveModel } = await import('../lib/providers/policy')
+    const { getNode } = await import('../lib/repo/nodes')
+    const ctx = await makeCtx()
+    const node = await getNode(data.id)
+    const provider = (await fleetProviders(ctx)).find(
+      (p) => p.machine === data.id && p.kind === 'lemonade',
+    )
+    if (provider === undefined || node === null) {
+      return { reachable: false, error: 'no provider on this machine', version: null, models: [] }
+    }
+    const reading = await readProvider(ctx, provider.kind, provider.base)
+    const policies = node.policy.providers?.lemonade?.models
+    return {
+      reachable: reading.reachable,
+      error: reading.error,
+      version: reading.health.version,
+      models: reading.models.map((m) => ({
+        ...m,
+        loaded: reading.health.loaded.some((l) => l.id === m.id),
+        ...resolveModel(policies, m),
+        defaultAlias: resolveModel(undefined, m).alias,
+      })),
+    }
+  })
+
+/** The last gateway sync's summary, for the line under the models table. */
+export const fetchGatewaySyncFn = createServerFn().handler(async () => {
+  const { lastGatewaySync } = await import('../host/gateway-sync')
+  return lastGatewaySync()
+})
+
+/** "Sync now": one reconcile, awaited, its summary returned. */
+export const runGatewaySyncFn = createServerFn({ method: 'POST' }).handler(async () => {
+  const { assertAdmin } = await import('../core/authz')
+  await assertAdmin()
+  const { makeCtx } = await import('../core/ctx')
+  const { syncGateway } = await import('../host/gateway-sync')
+  return syncGateway(await makeCtx())
+})
+
+/** This box's own provider policy (subgen): offered or not, and its alias. */
+export const fetchBoxProvidersFn = createServerFn().handler(async () => {
+  const { makeCtx } = await import('../core/ctx')
+  const { BOX_PROVIDERS_KEY, isBoxProviderPolicy } = await import('../lib/providers/policy')
+  const ctx = await makeCtx()
+  const policy = (await ctx.store.read(BOX_PROVIDERS_KEY, isBoxProviderPolicy)) ?? {}
+  return { present: ctx.modules.enabled('tv'), policy }
+})
+
+const boxProviders = (data: unknown): { subgen: { offer: boolean; alias: string } } => {
+  if (typeof data !== 'object' || data === null) throw new Error('expected a policy')
+  const s = (data as { subgen?: unknown }).subgen
+  if (typeof s !== 'object' || s === null) throw new Error('expected subgen')
+  const { offer, alias } = s as Record<string, unknown>
+  if (typeof offer !== 'boolean') throw new Error('subgen.offer must be true or false')
+  if (typeof alias !== 'string') throw new Error('subgen.alias must be text')
+  const a = alias.trim().toLowerCase()
+  const checked = modelPolicies({ whisper: { alias: a } })
+  return { subgen: { offer, alias: checked.whisper?.alias ?? '' } }
+}
+
+export const saveBoxProvidersFn = createServerFn({ method: 'POST' })
+  .validator(boxProviders)
+  .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { makeCtx } = await import('../core/ctx')
+    const { BOX_PROVIDERS_KEY } = await import('../lib/providers/policy')
+    const { requestGatewaySync } = await import('../host/gateway-sync')
+    const ctx = await makeCtx()
+    await ctx.store.write(BOX_PROVIDERS_KEY, {
+      subgen: {
+        offer: data.subgen.offer,
+        models: data.subgen.alias === '' ? {} : { whisper: { alias: data.subgen.alias } },
+      },
+    })
+    requestGatewaySync()
+    return { ok: true }
+  })

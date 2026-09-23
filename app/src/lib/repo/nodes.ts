@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { asc, eq } from 'drizzle-orm'
 import type { HelloVerdict } from '../../host/agent-hello'
 import { db } from '../../host/db'
+import { requestGatewaySync } from '../../host/gateway-sync'
 import {
   householdMacs,
   nodeTargetsMissing,
@@ -231,6 +232,9 @@ export async function recordHello(v: Extract<HelloVerdict, { ok: true }>): Promi
   ) {
     await publishNodeTargets()
   }
+  // A provider may have changed what it serves since the last hello: the
+  // gateway sync runs soon, once for a burst of hellos.
+  if (state === 'approved') requestGatewaySync()
   // An approved row without a token (approved before tokens existed) gets
   // one now, so the box can read it from this hello on.
   let token = saved?.token ?? null
@@ -297,6 +301,8 @@ export async function setNodePolicy(id: string, policy: NodePolicy): Promise<boo
     .where(eq(nodes.id, id))
     .returning({ id: nodes.id })
   await publishNodeTargets()
+  // An alias, a mode or an offer changed: the gateway follows.
+  requestGatewaySync()
   return updated.length > 0
 }
 

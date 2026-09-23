@@ -27,6 +27,7 @@ import type {
   BuildStrategy,
 } from '../lib/builds'
 import type { McpScope } from '../lib/mcp'
+import type { ModelPolicies } from '../lib/providers/policy'
 
 // The app registry — daedalus's authoritative copy of what stacks/apps
 // declares. It mirrors the `fleet.apps` submodule (stacks/apps/apps.nix)
@@ -582,9 +583,10 @@ export type NodePolicy = {
    * The providers this machine offers and on which port. `offer` false
    * keeps the provider out of site/nodes.json (nothing on the box dials
    * it) without forgetting the port. The agent hears the port, never
-   * `offer`.
+   * `offer` nor `models` — the per-model curation (alias, offered, mode;
+   * lib/providers/policy.ts) is the gateway sync's to read.
    */
-  providers?: { lemonade?: { port: number; offer: boolean } }
+  providers?: { lemonade?: { port: number; offer: boolean; models?: ModelPolicies } }
   /** Hold the machine awake. The agent's default is true. */
   awakeHold?: boolean
   /** Run `claude remote-control` in the user's session. The agent's default is true. */
