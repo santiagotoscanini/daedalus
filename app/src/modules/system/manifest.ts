@@ -81,7 +81,13 @@ export const manifest = {
     // — which is why it is a tab here, after the second rule, rather than
     // a page of its own on the rail. These two keep a head: unlike the
     // layers above, a server has a version and a verdict.
-    { id: 'claude', label: 'Claude', boardSpans: [4, 8, 12, 6, 6], dividerBefore: true },
+    {
+      id: 'claude',
+      label: 'Claude',
+      icon: 'claude',
+      boardSpans: [4, 8, 12, 6, 6],
+      dividerBefore: true,
+    },
     // The sessions' eyes: the headless browser a session drives to look at
     // a page. The box's alone — the browser lab is here.
     { id: 'shotter', label: 'Shotter', boardSpans: [4, 8, 12] },

@@ -26,7 +26,13 @@ export const NODE_TABS = [
   // Who maintains it, as on the box: the remote-control server the agent's
   // tray runs there. Drawn by components/claude-node.tsx from the node's
   // Claude report rather than from the telemetry document.
-  { id: 'claude', label: 'Claude', boardSpans: [6, 6, 12, 6], dividerBefore: true },
+  {
+    id: 'claude',
+    label: 'Claude',
+    icon: 'claude' as const,
+    boardSpans: [6, 6, 12, 6],
+    dividerBefore: true,
+  },
 ] as const
 
 export type NodeTabId = (typeof NODE_TABS)[number]['id']

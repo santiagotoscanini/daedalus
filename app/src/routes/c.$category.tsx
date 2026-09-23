@@ -136,7 +136,12 @@ function CategoryPage() {
               below never move and never wait. */}
           <NodeHead promise={node} resetKey={sectionKey} />
           <TabBar
-            tabs={NODE_TABS.map((t) => ({ id: t.id, label: t.label }))}
+            tabs={NODE_TABS.map((t) => ({
+              id: t.id,
+              label: t.label,
+              icon: 'icon' in t ? t.icon : undefined,
+              dividerBefore: 'dividerBefore' in t ? t.dividerBefore : undefined,
+            }))}
             active={nodeTab}
             linkTo={(id) => ({
               to: '/c/$category',
@@ -261,6 +266,7 @@ function TabNav({
           id: t.id,
           label: t.label,
           dividerBefore: t.dividerBefore,
+          icon: t.icon,
           extra: dotted ? (
             <StateDot
               state={up === null ? 'unknown' : up ? 'running' : 'attention'}

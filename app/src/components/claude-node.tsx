@@ -78,7 +78,7 @@ export function NodeClaudeView({ d }: { d: NodeClaudeData }) {
     <>
       <ServiceHead
         logo="/icon-claude.svg"
-        name={`Claude Code on ${node.name}`}
+        name="Claude Code"
         version={running}
         versionNote={
           c?.server.version != null

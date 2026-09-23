@@ -1,3 +1,4 @@
+import type { NavIconName } from '../../components/nav-icon'
 // What a dashboard module declares about itself, and nothing more.
 //
 // A module is a directory under `src/modules/<id>/` holding exactly this
@@ -43,6 +44,8 @@ export type TabSpec = {
   boardSpans?: readonly number[]
   /** Draw a rule before this tab: it answers a different KIND of question. */
   dividerBefore?: boolean
+  /** A mark drawn before the label, for the one tab that is a product rather than a layer (Claude). */
+  icon?: NavIconName
   /** Whether this tab opens with a `ServiceHead`. Default true. */
   head?: boolean
   /**

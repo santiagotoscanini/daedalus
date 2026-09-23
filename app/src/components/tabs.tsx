@@ -1,6 +1,7 @@
 import { Link, type LinkProps } from '@tanstack/react-router'
 import { Fragment, type ReactNode } from 'react'
 import { cn } from '../lib/cn'
+import { NavIcon, type NavIconName } from './nav-icon'
 
 // The tab row every multi-tab page draws: category sub-tabs, the app detail
 // tabs, the app-list registries. One component because the row carries rules
@@ -15,6 +16,8 @@ export type TabItem<Id extends string = string> = {
   extra?: ReactNode
   /** A rule before this tab, separating it from the ones preceding it. */
   dividerBefore?: boolean
+  /** A mark before the label. */
+  icon?: NavIconName
 }
 
 export function TabBar<Id extends string>({
@@ -73,6 +76,7 @@ export function TabBar<Id extends string>({
             replace
           >
             {t.extra}
+            {t.icon !== undefined && <NavIcon name={t.icon} size={15} />}
             {t.label}
           </Link>
         </Fragment>
