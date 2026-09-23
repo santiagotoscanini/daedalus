@@ -125,6 +125,11 @@ function CategoryPage() {
   // Switching module or tab clears a caught failure; staying put does not,
   // so a section that failed stays failed until its loader is re-run.
   const sectionKey = `${category}/${tab}/${machine ?? ''}`
+  // The node tab's own shape, for its skeleton; `head` is set on the tabs
+  // that open with a ServiceHead (Chromium), as the box's manifest does.
+  const nodeSpec = NODE_TABS.find((t) => t.id === nodeTab) as
+    | { boardSpans: readonly number[]; head?: boolean }
+    | undefined
 
   return (
     <>
@@ -181,9 +186,10 @@ function CategoryPage() {
               slot="node"
               promise={node}
               fallback={
-                <BoardsSkeleton
-                  spans={[...(NODE_TABS.find((t) => t.id === nodeTab)?.boardSpans ?? [8, 4, 4])]}
-                />
+                <>
+                  {nodeSpec?.head === true && <ServiceHeadSkeleton />}
+                  <BoardsSkeleton spans={[...(nodeSpec?.boardSpans ?? [8, 4, 4])]} />
+                </>
               }
             >
               {(d) =>

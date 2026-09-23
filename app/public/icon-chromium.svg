@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- The Chromium mark, in its own blues: a ring of three sectors round a
+       hub. The open-source engine every browser on the Chromium tab is
+       built on, which is why the tab wears it rather than any one brand. -->
+  <rect width="48" height="48" rx="10" fill="#17171a"/>
+  <circle cx="24" cy="24" r="17" fill="#8ab4f8"/>
+  <path d="M24 24 L24 7 A17 17 0 0 1 38.7 15.5 Z" fill="#4285f4"/>
+  <path d="M24 24 L38.7 15.5 A17 17 0 0 1 9.3 32.5 Z" fill="#1a73e8"/>
+  <path d="M24 24 L9.3 32.5 A17 17 0 0 1 24 7 Z" fill="#8ab4f8"/>
+  <circle cx="24" cy="24" r="8.5" fill="#17171a"/>
+  <circle cx="24" cy="24" r="6.5" fill="#4285f4"/>
+</svg>

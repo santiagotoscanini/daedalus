@@ -38,7 +38,7 @@ export const NODE_TABS = [
   },
   // The sessions' eyes, as Shotter is on the box: the Chromium-based
   // browsers the machine has, against what their vendors ship today.
-  { id: 'browsers', label: 'Chromium', boardSpans: [6, 6, 12] },
+  { id: 'browsers', label: 'Chromium', boardSpans: [6, 6, 12], head: true },
 ] as const
 
 export type NodeTabId = (typeof NODE_TABS)[number]['id']
