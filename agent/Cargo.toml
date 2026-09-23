@@ -1,6 +1,6 @@
 [package]
 name = "daedalus-agent"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 rust-version = "1.85"
 description = "The daedalus agent: keeps a machine on the network awake, reports on it, and updates itself."
@@ -56,6 +56,7 @@ windows = { version = "0.61", features = [
   "Win32_NetworkManagement_Ndis",
   "Win32_Networking_WinSock",
   "Win32_Security",
+  "Win32_Security_Authorization",
   "Win32_Security_Cryptography",
   "Win32_Storage_FileSystem",
   "Win32_System_Console",

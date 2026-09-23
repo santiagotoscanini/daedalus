@@ -226,6 +226,33 @@ pub struct Process {
     pub cpu_pct: Option<f64>,
 }
 
+/// A Chromium-based browser installed on the machine.
+///
+/// Read every ten minutes with the drives and services: the version moves
+/// when the browser updates itself, and whether it is running is a
+/// process-list fact the same read already has. Chrome, Edge, Brave, Arc,
+/// Vivaldi, Opera and a bare Chromium are the kinds looked for; Firefox and
+/// Safari are not Chromium and are not here.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Browser {
+    /// "Google Chrome", "Microsoft Edge", "Brave", "Arc", "Chromium", "Vivaldi", "Opera".
+    pub name: String,
+    /// "chrome" | "edge" | "brave" | "arc" | "chromium" | "vivaldi" | "opera".
+    pub kind: String,
+    /// The browser's own version, "128.0.6613.120".
+    pub version: Option<String>,
+    /// "stable" | "beta" | "dev" | "canary", where the install says.
+    pub channel: Option<String>,
+    /// Where it is installed. Stripped from the open page: a per-user
+    /// install path carries the user's name.
+    pub path: Option<String>,
+    /// Whether any of its processes is running right now.
+    pub running: bool,
+    /// Whether it is the console user's default browser for http.
+    pub default_browser: bool,
+}
+
 /// A service that should be running and is not. Stripped from the open page.
 ///
 /// Windows: an Automatic service that is stopped with an exit code other
@@ -300,6 +327,8 @@ pub struct Telemetry {
     pub services: Vec<Service>,
     /// How many services the OS has in total, for the "n of m" the page says.
     pub service_count: Option<u32>,
+    /// The Chromium-based browsers installed, read with the slow facts.
+    pub browsers: Vec<Browser>,
     /// None until the first search lands.
     pub updates: Option<Updates>,
     /// What could not be read, one line each, so the page says "not
@@ -320,6 +349,9 @@ impl Telemetry {
         }
         t.processes.clear();
         t.services.clear();
+        for b in &mut t.browsers {
+            b.path = None;
+        }
         t.updates = None;
         t
     }
@@ -346,6 +378,8 @@ pub struct Slow {
     pub drives: Vec<Drive>,
     pub services: Vec<Service>,
     pub service_count: Option<u32>,
+    /// The Chromium-based browsers installed, read with the slow facts.
+    pub browsers: Vec<Browser>,
     pub errors: Vec<String>,
 }
 
@@ -471,6 +505,7 @@ pub fn assemble(s: &Static, w: &Slow, p: &Sample, updates: Option<&Updates>) -> 
         process_count: p.process_count,
         services: w.services.clone(),
         service_count: w.service_count,
+        browsers: w.browsers.clone(),
         updates: updates.cloned(),
         errors,
     }
@@ -501,6 +536,7 @@ pub fn run_loop(shared: Arc<Shared>, stop: Arc<AtomicBool>) {
     tracing::info!(
         drives = slow.drives.len(),
         services_down = slow.services.len(),
+        browsers = slow.browsers.len(),
         "telemetry: slow facts read"
     );
     for e in &slow.errors {
@@ -610,6 +646,18 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, hostname: &str) -> Strin
         gauge("processes", "", f64::from(v));
     }
     gauge("services_down", "", t.services.len() as f64);
+    for b in &t.browsers {
+        gauge(
+            "browser_info",
+            &format!(
+                "browser=\"{}\",version=\"{}\",running=\"{}\"",
+                esc(&b.kind),
+                esc(b.version.as_deref().unwrap_or("")),
+                if b.running { "1" } else { "0" }
+            ),
+            1.0,
+        );
+    }
     if let Some(u) = &t.updates {
         gauge("os_updates_pending", "", u.pending.len() as f64);
         if let Some(r) = u.reboot_pending {
@@ -731,6 +779,13 @@ mod tests {
                 serial: Some("S123".into()),
                 ..Default::default()
             }],
+            browsers: vec![Browser {
+                name: "Google Chrome".into(),
+                kind: "chrome".into(),
+                version: Some("128.0".into()),
+                path: Some("C:\\Users\\x\\chrome.exe".into()),
+                ..Default::default()
+            }],
             services: vec![Service {
                 name: "svc".into(),
                 state: "stopped".into(),
@@ -754,6 +809,8 @@ mod tests {
         assert_eq!(open.drives[0].serial, None);
         assert_eq!(open.drives[0].name, "D");
         assert!(open.services.is_empty());
+        assert_eq!(open.browsers[0].path, None);
+        assert_eq!(open.browsers[0].version.as_deref(), Some("128.0"));
         assert!(open.processes.is_empty());
         assert!(open.updates.is_none());
         assert_eq!(t.cpu.model.as_deref(), Some("X"));

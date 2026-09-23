@@ -22,7 +22,10 @@ macOS launchd daemon, with a tray / menu bar app beside it, that
   error counters, temperatures where an OS states them, network rates,
   battery. Sampled every fifteen seconds; drives and the services that
   should be running and are not every ten minutes; the OS's pending and
-  recently installed updates hourly. The status page carries the machine
+  recently installed updates hourly, and the Chromium-based browsers
+  installed (Chrome, Edge, Brave, Arc, Vivaldi, Opera, Chromium: version,
+  channel, open or not, which is the default) with the slow facts. The
+  status page carries the machine
   and nothing that identifies a person (no serials, no process list); the
   full document — the heaviest processes, the failing services, the
   updates, the serials — is on `/telemetry`, gated like `/claude`; and
