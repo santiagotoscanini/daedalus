@@ -548,7 +548,7 @@ async function loadZone(ctx: Ctx): Promise<ZoneData> {
       // traefik serves is a webApp — the shared postgres cluster is a TCP/SNI
       // router contributed as raw YAML, and comparing against webApps alone
       // reported it as broken while it was working exactly as designed. And
-      // only entries whose address IS this box: a `gaming-pc.local` record points
+      // only entries whose address IS this box: a record naming a machine points
       // at another machine, so traefik is not in its path and "no router" would be
       // a true statement about an irrelevant program.
       lanWithoutRoute:
