@@ -10,6 +10,7 @@ import {
   nullable,
   obj,
   optional,
+  recordOf,
   str,
 } from '../../../lib/contract/decode'
 import { errorText } from '../../../lib/redact'
@@ -57,6 +58,10 @@ const shape = obj({
   developer: optional(obj({ engineOverride: optional(nullable(str), null) }), {
     engineOverride: null,
   }),
+  // The switches the operator moved from a page: id → on/off, only the ids
+  // touched (core/site/file.ts). Filled in like `developer`: it is an
+  // EDITABLE field, and the renderer drops the block while it is empty.
+  modules: optional(obj({ enabled: optional(recordOf(bool), {}) }), { enabled: {} }),
   // The GitHub App's public half. Last, and it must stay last: `obj` copies
   // only the keys named here, so a key missing from this shape is dropped by
   // the next write, and the renderer puts this block after everything else.

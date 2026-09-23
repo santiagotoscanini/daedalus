@@ -3,6 +3,7 @@ import {
   CodeIcon,
   FolderGit2Icon,
   GlobeIcon,
+  LayersIcon,
   MonitorSmartphoneIcon,
   NetworkIcon,
   PaletteIcon,
@@ -21,6 +22,7 @@ import { ExternalApps } from '../components/settings/external-apps'
 import { General } from '../components/settings/general'
 import { Integrations } from '../components/settings/integrations'
 import { Machines } from '../components/settings/machines'
+import { Modules } from '../components/settings/modules'
 import { Network } from '../components/settings/network'
 import { Repository } from '../components/settings/repository'
 import { SiteDiff } from '../components/settings/site-fields'
@@ -28,6 +30,8 @@ import { BoardsSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import type { GithubAppStatus, GithubCallbackNotice } from '../core/settings/types'
 import { known } from '../lib/known'
+import { siteBarFields } from '../lib/module-switch'
+import { fetchModuleSwitches } from '../server/modules'
 import { fetchMachinesFn } from '../server/nodes'
 import { fetchApplyStatus } from '../server/registry'
 import {
@@ -98,6 +102,7 @@ const TABS = [
   { id: 'repository', label: <TabLabel icon={<FolderGit2Icon />}>Site</TabLabel> },
   { id: 'projects', label: <TabLabel icon={<GlobeIcon />}>Projects</TabLabel> },
   { id: 'machines', label: <TabLabel icon={<MonitorSmartphoneIcon />}>Machines</TabLabel> },
+  { id: 'modules', label: <TabLabel icon={<LayersIcon />}>Modules</TabLabel> },
   { id: 'appearance', label: <TabLabel icon={<PaletteIcon />}>Appearance</TabLabel> },
   { id: 'developer', label: <TabLabel icon={<CodeIcon />}>Developer</TabLabel> },
 ] as const
@@ -200,6 +205,8 @@ export const Route = createFileRoute('/settings')({
       // seconds when one is asleep: streamed, behind a skeleton the first
       // time and in place after.
       machines: deps.tab === 'machines' ? fetchMachinesFn() : null,
+      // Four export reads and the site draft, for the tab that lists the switches.
+      modules: deps.tab === 'modules' ? fetchModuleSwitches() : null,
       // The zone list asks Cloudflare, so it streams in behind the tab like the
       // integration checks.
       zones: general ? fetchZones() : null,
@@ -227,10 +234,14 @@ function SettingsPage() {
     mcpTokens,
     authorization,
     machines,
+    modules,
   } = Route.useLoaderData()
   // The bar's vocabulary is the registry's — a list of named things and the
   // fields that changed — so the site document is one entry named `site`.
-  const changed = edit.changes.length > 0 ? [{ name: 'site', fields: [...edit.changes] }] : []
+  const changed =
+    edit.changes.length > 0
+      ? [{ name: 'site', fields: siteBarFields(edit.changes, edit.moduleChanges) }]
+      : []
   const search = Route.useSearch()
   const tab: SettingsTab = isTab(search.tab) ? search.tab : 'general'
 
@@ -390,6 +401,16 @@ function SettingsPage() {
             </GuardedAwait>
           ))}
         {tab === 'projects' && <ExternalApps rows={externalApps} />}
+        {tab === 'modules' && modules !== null && (
+          <GuardedAwait
+            resetKey={tab}
+            slot="modules"
+            promise={modules}
+            fallback={<BoardsSkeleton spans={[12, 12]} />}
+          >
+            {(rows) => <Modules rows={rows} />}
+          </GuardedAwait>
+        )}
         {tab === 'machines' && machines !== null && (
           <GuardedAwait
             resetKey={tab}

@@ -87,6 +87,15 @@ export type SiteDocument = {
    * drops the block while it holds that.
    */
   developer: { engineOverride: string | null }
+  /**
+   * The switches moved from a page, and nothing else: `enabled.<id>` is
+   * what `fleet.modules.<id>.enable` becomes on the next Apply, at a
+   * priority the host's own files yield to. An id absent here keeps the
+   * host's word. A structural module (the engine's spine plus what the host
+   * adds) is refused here before it can reach nix, where it is an assertion.
+   * Absent and `{ enabled: {} }` are the same document.
+   */
+  modules: { enabled: Record<string, boolean> }
 }
 
 /**
@@ -132,6 +141,9 @@ export function siteDocument(s: BoxSettings): SiteDocument {
     // the NEXT Apply should build, and a system built from an override says
     // nothing about whether the next one should be.
     developer: { engineOverride: null },
+    // The running box's switches are its own files' word; the document
+    // carries only what the operator moved, which a box read back is none.
+    modules: { enabled: {} },
   }
 }
 
@@ -149,8 +161,9 @@ function identityAsWritten(identity: SiteDocument['identity']): Record<string, u
 }
 
 export function renderSiteFile(doc: SiteDocument): string {
-  const { github, developer, ...rest } = doc
+  const { github, developer, modules, ...rest } = doc
   const app = github?.app ?? null
+  const switched = Object.keys(modules.enabled).sort()
   const body = {
     ...PREAMBLE,
     ...rest,
@@ -161,6 +174,15 @@ export function renderSiteFile(doc: SiteDocument): string {
     ...(developer.engineOverride === null
       ? {}
       : { developer: { engineOverride: developer.engineOverride } }),
+    // Same rule again, and the ids sorted, so two edits that end in the same
+    // set render the same bytes.
+    ...(switched.length === 0
+      ? {}
+      : {
+          modules: {
+            enabled: Object.fromEntries(switched.map((id) => [id, modules.enabled[id] ?? false])),
+          },
+        }),
     // Last, and copied key by key. The fixed order keeps a new App a single
     // block in the diff, and nothing else on the caller's object can reach a
     // committed file (the manifest conversion reply also carries the private key).

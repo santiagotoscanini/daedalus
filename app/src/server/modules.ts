@@ -40,3 +40,44 @@ export const fetchActiveModules = createServerFn().handler(async (): Promise<Mod
   const { activeModules } = await import('../lib/modules/active')
   return activeModules(MODULES, (await makeCtx()).modules.enabled)
 })
+
+/* ── switching a module off, and on ───────────────────────────────────── */
+
+/** Every switch the box declares, with what a move would take (core/site/switches.ts). */
+export const fetchModuleSwitches = createServerFn().handler(async () => {
+  const { makeCtx } = await import('../core/ctx')
+  const { moduleSwitches } = await import('../core/site/switches')
+  return moduleSwitches(await makeCtx())
+})
+
+/** The switches a page's tab fronts, by nix module id. */
+export const fetchModuleSwitchFn = createServerFn()
+  .validator((data: unknown): { ids: string[] } => {
+    const ids = (data as { ids?: unknown })?.ids
+    if (!Array.isArray(ids) || !ids.every((i) => typeof i === 'string')) {
+      throw new Error('expected { ids: string[] }')
+    }
+    return { ids: ids as string[] }
+  })
+  .handler(async ({ data }) => {
+    const { makeCtx } = await import('../core/ctx')
+    const { moduleSwitches } = await import('../core/site/switches')
+    const all = await moduleSwitches(await makeCtx())
+    return all.filter((m) => data.ids.includes(m.id))
+  })
+
+export const setModuleEnabledFn = createServerFn({ method: 'POST' })
+  .validator((data: unknown): { id: string; enabled: boolean } => {
+    const d = data as { id?: unknown; enabled?: unknown } | null
+    if (d === null || typeof d.id !== 'string' || typeof d.enabled !== 'boolean') {
+      throw new Error('expected { id, enabled }')
+    }
+    return { id: d.id, enabled: d.enabled }
+  })
+  .handler(async ({ data }) => {
+    const { assertAdmin } = await import('../core/authz')
+    await assertAdmin()
+    const { makeCtx } = await import('../core/ctx')
+    const { setModuleEnabled } = await import('../core/site/switches')
+    return setModuleEnabled(await makeCtx(), data.id, data.enabled)
+  })

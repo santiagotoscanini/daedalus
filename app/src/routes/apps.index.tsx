@@ -15,6 +15,7 @@ import { Spark } from '../components/viz'
 import { CloneButton } from '../components/workspace'
 import { cn } from '../lib/cn'
 import { PLATFORMS, type Platform } from '../lib/external-apps'
+import { siteBarFields } from '../lib/module-switch'
 import { type AppStage, isAppStage } from '../lib/stage'
 import { fetchNodesChangeFn } from '../server/nodes'
 import { fetchApps, fetchImagesTab, fetchPackagesTab } from '../server/registry'
@@ -69,7 +70,11 @@ async function fetchAppsTab() {
     fetchSiteEdit(),
     fetchNodesChangeFn(),
   ])
-  return { ...list, siteChanges: site.changes, nodesChanges }
+  return {
+    ...list,
+    siteChanges: siteBarFields(site.changes, site.moduleChanges),
+    nodesChanges,
+  }
 }
 
 type ListData = Awaited<ReturnType<typeof fetchAppsTab>>

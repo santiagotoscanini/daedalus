@@ -91,6 +91,9 @@ export const EDITABLE = [
   // Apply that sets it is already governed by it, and the one that clears it
   // is the switch back onto the pinned engine.
   'developer.engineOverride',
+  // The switches moved from a page (core/site/switches.ts). One field, an
+  // object: the bar names each id inside it through `moduleChanges`.
+  'modules.enabled',
 ] as const
 
 /** One field of the document that the UI may edit. Dotted path into SiteDocument. */
@@ -103,6 +106,8 @@ export type SiteEdit = {
   desired: SiteDocument
   /** The fields where desired differs from committed. Empty = nothing to apply. */
   changes: SiteField[]
+  /** The switches inside `modules.enabled` that differ, in words: "n8n off". */
+  moduleChanges: string[]
   /** Rendered bytes, for the diff preview. `before` is null before the first write. */
   render: { before: string | null; after: string }
 }
@@ -196,10 +201,15 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
   // can never be pinned to a stale value by an old draft.
   const desired =
     draft === null ? base : EDITABLE.reduce((acc, f) => setField(acc, f, getField(draft, f)), base)
+  const { moduleChangeWords } = await import('../../lib/module-switch')
   return {
     committed: committedDoc,
     desired,
     changes: committedDoc === null ? [] : changesBetween(committedDoc, desired),
+    moduleChanges:
+      committedDoc === null
+        ? []
+        : moduleChangeWords(committedDoc.modules.enabled, desired.modules.enabled),
     render: { before: committed.ok ? committed.value.bytes : null, after: renderSiteFile(desired) },
   }
 }

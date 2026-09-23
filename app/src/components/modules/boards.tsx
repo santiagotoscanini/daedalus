@@ -1,5 +1,6 @@
 import type React from 'react'
 import type { ReactNode } from 'react'
+import { ModuleSwitchFoot } from '../module-switch'
 
 // The browser half of the module registry: every module's `views` record,
 // keyed by the directory the glob found it in.
@@ -41,6 +42,12 @@ export function ModuleBoards({ payload }: { payload: ModulePayload }) {
     throw new Error(`module ${payload.kind} has no view for tab ${payload.data.tab}`)
   }
   // Rendered as an element, not called: a view is a component and may hold
-  // hooks.
-  return <View data={payload.data} />
+  // hooks. The switch for the stack this tab fronts follows the boards: one
+  // footer for every module page, so no view has to know it exists.
+  return (
+    <>
+      <View data={payload.data} />
+      <ModuleSwitchFoot module={payload.kind} tab={payload.data.tab} />
+    </>
+  )
 }

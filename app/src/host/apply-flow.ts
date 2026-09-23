@@ -1,3 +1,4 @@
+import { siteBarFields } from '../lib/module-switch'
 import { defineFlow, defineGate, type FlowOutcome } from './flow'
 
 // The one apply implementation.
@@ -60,7 +61,16 @@ async function currentChanges() {
   const nodesFile = await nodesChange()
   const changed = [
     ...appChanges,
-    ...(site.changes.length > 0 ? [{ name: 'site', fields: [...site.changes] }] : []),
+    // The switches field is one entry in `changes` and several words on the
+    // bar: "n8n off" says more than the field's name.
+    ...(site.changes.length > 0
+      ? [
+          {
+            name: 'site',
+            fields: siteBarFields(site.changes, site.moduleChanges),
+          },
+        ]
+      : []),
     ...(nodesFile.changed ? [{ name: 'nodes', fields: nodesFile.fields }] : []),
   ]
 
