@@ -27,10 +27,11 @@ export const manifest = {
   // Settings › Machines, beside the policy the box sends them.
   // A machine picker above the tabs, and with it a different place on the
   // rail: a module about every machine on the network is not a directory
-  // entry for something this box runs, so the rail draws it below, beside
-  // Claude. A node's System page keeps these tab ids — Host, Memory, Disks,
-  // Build, Updates — over the one document its agent publishes
-  // (components/machine-system/); Pools and Backups are the box's alone.
+  // entry for something this box runs, so the rail draws it below, on its
+  // own. A node's System page keeps these tab ids — Host, Memory, Disks,
+  // Build, Updates, Claude — over the one document its agent publishes and
+  // its Claude report (components/machine-system/, components/claude-node);
+  // Pools, Backups and Shotter are the box's alone.
   machinePicker: true,
   tabs: [
     { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4], head: false },
@@ -72,5 +73,15 @@ export const manifest = {
       head: false,
       dividerBefore: true,
     },
+    // Who maintains it. The remote-control server that lets this machine be
+    // worked on from anywhere is a fact about the machine, not a service
+    // among the categories, and it exists on every machine on the network
+    // — which is why it is a tab here, after the second rule, rather than
+    // a page of its own on the rail. These two keep a head: unlike the
+    // layers above, a server has a version and a verdict.
+    { id: 'claude', label: 'Claude', boardSpans: [4, 8, 12, 6, 6], dividerBefore: true },
+    // The sessions' eyes: the headless browser a session drives to look at
+    // a page. The box's alone — the browser lab is here.
+    { id: 'shotter', label: 'Shotter', boardSpans: [4, 8, 12] },
   ],
 } as const satisfies ModuleManifest

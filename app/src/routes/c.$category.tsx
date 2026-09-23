@@ -1,9 +1,11 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
-
+import { NodeClaudeView } from '../components/claude-node'
 import { StateDot } from '../components/controls'
 import { GuardedAwait } from '../components/error'
 import { MachinePicker } from '../components/machine-picker'
 import {
+  BoxHead,
+  MachineHead,
   MachineSystemView,
   NODE_TABS,
   type NodeTabId,
@@ -11,12 +13,13 @@ import {
 } from '../components/machine-system'
 import { ModuleBoards } from '../components/modules/boards'
 import { PageHead } from '../components/page'
-import { BoardsSkeleton, ServiceHeadSkeleton } from '../components/skeleton'
+import { BoardsSkeleton, ServiceHeadSkeleton, StripSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { EMPTY } from '../components/tokens'
 import { isDotted, type PageSpec, resolveTabOf } from '../lib/modules/manifest'
 import { moduleById } from '../lib/modules/registry'
-import { fetchMachineNodesFn, fetchNodeSystemFn } from '../server/machines'
+import { fetchNodeClaudeFn } from '../server/claude'
+import { fetchBoxHeadFn, fetchMachineNodesFn, fetchNodeSystemFn } from '../server/machines'
 import { fetchModuleBoards } from '../server/modules'
 import { fetchTabStatus, type TabStatus } from '../server/tab-status'
 
@@ -77,9 +80,21 @@ export const Route = createFileRoute('/c/$category')({
       // The node list is one table read and the picker is part of the frame,
       // so it is awaited; a node's own page streams in like the boards.
       nodes: picker ? await fetchMachineNodesFn() : [],
+      // The strip above the box's tabs, cached reads, part of the frame too.
+      boxHead: picker && machine === null ? await fetchBoxHeadFn() : null,
       machine,
       nodeTab,
-      node: machine === null ? null : fetchNodeSystemFn({ data: { id: machine } }),
+      // A node's Claude tab is its Claude report (the tray's picture of the
+      // remote-control server), not its telemetry; the other tabs are the
+      // telemetry document. One fetch either way.
+      node:
+        machine === null || nodeTab === 'claude'
+          ? null
+          : fetchNodeSystemFn({ data: { id: machine } }),
+      nodeClaude:
+        machine !== null && nodeTab === 'claude'
+          ? fetchNodeClaudeFn({ data: { id: machine } })
+          : null,
       // The box's boards are not fetched behind a node's page: the picker
       // switched the subject, and a dozen prometheus queries for a page
       // nobody is reading is the cost of pretending it did not.
@@ -95,7 +110,8 @@ export const Route = createFileRoute('/c/$category')({
 })
 
 function CategoryPage() {
-  const { spec, tab, boards, tabStatus, nodes, machine, nodeTab, node } = Route.useLoaderData()
+  const { spec, tab, boards, tabStatus, nodes, boxHead, machine, nodeTab, node, nodeClaude } =
+    Route.useLoaderData()
   const { category } = Route.useParams()
   // Switching module or tab clears a caught failure; staying put does not,
   // so a section that failed stays failed until its loader is re-run.
@@ -104,16 +120,14 @@ function CategoryPage() {
   return (
     <>
       <PageHead title={spec.label}>
-        {node === null
+        {nodeTab === null
           ? spec.lede
           : 'Another machine on the network, on the same tabs as this box: what it is, what it is running on, what it is storing, and what it is waiting to install — as its agent reports it every fifteen seconds.'}
       </PageHead>
 
-      {spec.machinePicker === true && (
-        <MachinePicker nodes={nodes} active={machine} page="system" tab={tab} />
-      )}
+      {spec.machinePicker === true && <MachinePicker nodes={nodes} active={machine} tab={tab} />}
 
-      {node !== null && nodeTab !== null ? (
+      {nodeTab !== null ? (
         <>
           <TabBar
             tabs={NODE_TABS.map((t) => ({ id: t.id, label: t.label }))}
@@ -124,29 +138,55 @@ function CategoryPage() {
               search: { tab: id, machine: machine ?? undefined },
             })}
           />
-          <GuardedAwait
-            resetKey={sectionKey}
-            promise={node}
-            fallback={
-              <>
-                <ServiceHeadSkeleton />
-                <BoardsSkeleton
-                  spans={[...(NODE_TABS.find((t) => t.id === nodeTab)?.boardSpans ?? [8, 4, 4])]}
-                />
-              </>
-            }
-          >
-            {(d) =>
-              d === null ? (
-                <p className={EMPTY}>No machine with that id. It may have been forgotten.</p>
-              ) : (
-                <MachineSystemView d={d} tab={nodeTab} />
-              )
-            }
-          </GuardedAwait>
+          {nodeClaude !== null ? (
+            <GuardedAwait
+              resetKey={sectionKey}
+              promise={nodeClaude}
+              fallback={
+                <>
+                  <ServiceHeadSkeleton />
+                  <StripSkeleton count={4} />
+                  <BoardsSkeleton spans={[6, 6, 12, 6]} />
+                </>
+              }
+            >
+              {(d) =>
+                d === null ? (
+                  <p className={EMPTY}>No machine with that id. It may have been forgotten.</p>
+                ) : (
+                  <>
+                    <MachineHead d={d} />
+                    <NodeClaudeView d={d} />
+                  </>
+                )
+              }
+            </GuardedAwait>
+          ) : node !== null ? (
+            <GuardedAwait
+              resetKey={sectionKey}
+              promise={node}
+              fallback={
+                <>
+                  <ServiceHeadSkeleton />
+                  <BoardsSkeleton
+                    spans={[...(NODE_TABS.find((t) => t.id === nodeTab)?.boardSpans ?? [8, 4, 4])]}
+                  />
+                </>
+              }
+            >
+              {(d) =>
+                d === null ? (
+                  <p className={EMPTY}>No machine with that id. It may have been forgotten.</p>
+                ) : (
+                  <MachineSystemView d={d} tab={nodeTab} />
+                )
+              }
+            </GuardedAwait>
+          ) : null}
         </>
       ) : (
         <>
+          {boxHead !== null && <BoxHead h={boxHead} />}
           {spec.tabs.length > 0 &&
             (tabStatus === null ? (
               <TabNav spec={spec} category={category} tab={tab} status={null} />

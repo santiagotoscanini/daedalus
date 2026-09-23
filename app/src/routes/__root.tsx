@@ -258,8 +258,8 @@ function Shell({
   // Two kinds of entry. The directory is what this box RUNS, one row per
   // subject area. A module with a machine picker is about every machine on
   // the network, this one included — that is a different kind of thing, and
-  // it sits below with Claude, which is the other page whose subject is
-  // the fleet rather than a service on the box.
+  // it sits below on its own, where the Claude page was before it became
+  // System's last tab.
   const rail = modules.filter((c) => c.machinePicker !== true)
   const fleet = modules.filter((c) => c.machinePicker === true)
   const engineOverride = Route.useLoaderData({ select: (d) => d.engineOverride })
@@ -512,12 +512,11 @@ function Shell({
 
         {/* Below everything, and pushed there rather than ordered there.
             The rail above is a directory of what this box RUNS, one entry
-            per subject area. These are not that: System is every machine
-            on the network with this one first, and Claude is the thing that
-            maintains all of them — the session you would be holding while
-            reading any of the pages above. Sitting either in that list
-            would be a claim it belongs to the same taxonomy. The gap is
-            the argument. */}
+            per subject area. System is not that: it is every machine on the
+            network with this one first — its layers, and on its last tabs
+            the Claude session you would be holding while reading any of the
+            pages above. Sitting it in that list would be a claim it belongs
+            to the same taxonomy. The gap is the argument. */}
         <nav className={cn(NAV_LIST, 'mt-auto')} aria-label="This workshop">
           <span className={NAV_DIVIDER} aria-hidden="true" />
           {fleet.map((c) => (
@@ -534,15 +533,6 @@ function Shell({
               <span className={NAV_LABEL}>{c.label}</span>
             </Link>
           ))}
-          <Link
-            to="/claude"
-            className={NAV_ITEM}
-            activeProps={{ className: NAV_ITEM_ACTIVE }}
-            data-label="Claude"
-          >
-            <NavIcon name="claude" />
-            <span className={NAV_LABEL}>Claude</span>
-          </Link>
           {/* The person, last: who is signed in, and behind it Profile,
               Settings, the theme, passkeys and signing out
               (components/account-menu.tsx). Both pages are reached from in

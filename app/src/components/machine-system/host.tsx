@@ -312,7 +312,11 @@ export function NodeHostView({ d }: { d: NodeSystemData }) {
             Settings › Machines
           </Link>
           , and its Claude remote control on{' '}
-          <Link to="/claude" search={{ machine: node.id }}>
+          <Link
+            to="/c/$category"
+            params={{ category: 'system' }}
+            search={{ tab: 'claude', machine: node.id }}
+          >
             Claude
           </Link>
           . The agent&rsquo;s log is on the machine, in its tray menu; nothing ships it here yet.

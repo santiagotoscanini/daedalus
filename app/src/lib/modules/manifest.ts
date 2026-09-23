@@ -73,7 +73,7 @@ export type ModuleManifest = {
    * (System's mirror the box's: components/machine-system/); the box's tabs
    * are what the module declares. Only a page whose subject exists on every
    * machine sets it — and the rail draws that module below the directory,
-   * beside Claude, since it is about the fleet rather than this box.
+   * on its own, since it is about the fleet rather than this box.
    */
   machinePicker?: boolean
 }

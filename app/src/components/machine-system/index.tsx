@@ -6,6 +6,8 @@ import { NodeMemoryView } from './memory'
 import { MachineHead, NoDocument } from './shared'
 import { NodeUpdatesView } from './updates'
 
+export { BoxHead, MachineHead } from './shared'
+
 // The System page for a machine that is not this box: the box's own tabs,
 // drawn from the one document its agent publishes.
 //
@@ -21,6 +23,10 @@ export const NODE_TABS = [
   { id: 'disks', label: 'Disks', boardSpans: [4, 4, 4, 12] },
   { id: 'build', label: 'Build', boardSpans: [4, 4, 4, 6, 6, 12] },
   { id: 'updates', label: 'Updates', boardSpans: [12, 12, 6, 6] },
+  // Who maintains it, as on the box: the remote-control server the agent's
+  // tray runs there. Drawn by components/claude-node.tsx from the node's
+  // Claude report rather than from the telemetry document.
+  { id: 'claude', label: 'Claude', boardSpans: [6, 6, 12, 6], dividerBefore: true },
 ] as const
 
 export type NodeTabId = (typeof NODE_TABS)[number]['id']

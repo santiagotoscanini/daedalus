@@ -1,7 +1,9 @@
 import { Link } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
 
 import type { NodeTelemetry } from '../../lib/agent/status'
 import { cn } from '../../lib/cn'
+import type { BoxHead as BoxHeadData } from '../../lib/dashboard/box-head'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, since } from '../../lib/format'
 import type { Tone } from '../../lib/tone'
@@ -99,27 +101,27 @@ export function reason(t: NodeTelemetry | null, re: RegExp): string | null {
 }
 
 /**
- * The strip above every tab: the machine, its OS, and whether it is awake.
+ * The strip above every System tab: the machine, its OS, and how it is.
  *
  * Above the tabs rather than inside a board, because it is the subject of
- * all of them — the box's pages have no such head (the box is always the
- * box), and a node's pages need one because the picker above can change
- * what every board below is about.
+ * all of them, and the same strip for this box and for a node, because the
+ * picker above can change what every board below is about and the eye
+ * should not have to learn two shapes to follow it. The mark is the OS's:
+ * NixOS for the box, Windows or Apple for a node.
  */
-export function MachineHead({ d }: { d: NodeSystemData }) {
-  const { node, status } = d
-  const t = d.telemetry
-  const mark = OS_MARK[node.os]
-  const edition = status?.osName || node.os
-  const awake =
-    status === null
-      ? { chip: 'not answering', tone: 'muted' as Tone }
-      : status.awakeHold
-        ? { chip: 'held awake', tone: 'ok' as Tone }
-        : status.policy.awakeHold
-          ? { chip: 'hold OFF', tone: 'bad' as Tone }
-          : { chip: 'may sleep', tone: 'muted' as Tone }
-
+export function HeadStrip({
+  mark,
+  name,
+  chip,
+  aside,
+  line,
+}: {
+  mark: { src: string; invert: boolean } | undefined
+  name: string
+  chip?: { label: string; tone: Tone }
+  aside?: string
+  line: ReactNode
+}) {
   return (
     <div className="mb-[1.1rem] flex items-start gap-[0.85rem] max-[44rem]:flex-wrap">
       {mark !== undefined && (
@@ -133,27 +135,76 @@ export function MachineHead({ d }: { d: NodeSystemData }) {
       )}
       <div className="min-w-0 flex-auto">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="m-0 text-[1.25rem] tracking-[-0.01em]">{node.name}</h2>
-          <Chip tone={awake.tone}>{awake.chip}</Chip>
-          {t !== null && (
-            <span className={NOTE}>
-              sampled {since((Date.now() - Date.parse(t.sampledAt)) / 1000)}
-            </span>
-          )}
+          <h2 className="m-0 text-[1.25rem] tracking-[-0.01em]">{name}</h2>
+          {chip !== undefined && <Chip tone={chip.tone}>{chip.label}</Chip>}
+          {aside !== undefined && <span className={NOTE}>{aside}</span>}
         </div>
-        <p className={`${NOTE} mt-1`}>
+        <p className={`${NOTE} mt-1`}>{line}</p>
+      </div>
+    </div>
+  )
+}
+
+/** The box's own strip, from the site export and the host snapshot. */
+export function BoxHead({ h }: { h: BoxHeadData }) {
+  return (
+    <HeadStrip
+      mark={{ src: '/icon-nixos.webp', invert: false }}
+      name={h.hostname}
+      chip={{ label: 'this box', tone: 'ok' }}
+      line={
+        <>
+          {h.os}
+          {h.kernel !== null && ` · ${h.kernel}`}
+          {` · ${h.arch}`}
+          {h.model !== null && ` · ${h.model}`}
+          {' · '}
+          <span className={MONO}>{h.hostname}</span>
+        </>
+      }
+    />
+  )
+}
+
+/** A node's strip, from its row, its agent's page and its telemetry. */
+export function MachineHead({
+  d,
+}: {
+  d: Pick<NodeSystemData, 'node' | 'status'> & { telemetry?: NodeTelemetry | null }
+}) {
+  const { node, status } = d
+  const t = d.telemetry ?? null
+  const edition = status?.osName || node.os
+  const awake =
+    status === null
+      ? { label: 'not answering', tone: 'muted' as Tone }
+      : status.awakeHold
+        ? { label: 'held awake', tone: 'ok' as Tone }
+        : status.policy.awakeHold
+          ? { label: 'hold OFF', tone: 'bad' as Tone }
+          : { label: 'may sleep', tone: 'muted' as Tone }
+
+  return (
+    <HeadStrip
+      mark={OS_MARK[node.os]}
+      name={node.name}
+      chip={awake}
+      aside={
+        t === null ? undefined : `sampled ${since((Date.now() - Date.parse(t.sampledAt)) / 1000)}`
+      }
+      line={
+        <>
           {edition}
           {status?.osVersion ? ` · ${status.osVersion}` : ''}
           {status?.arch ? ` · ${status.arch}` : ''}
           {t?.machine.model ? ` · ${t.machine.model}` : ''}
           {' · '}
           <span className={MONO}>{node.hostname}</span>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    />
   )
 }
-
 /**
  * What the page can say when there is no document to draw: the agent did
  * not answer, or it is too old to carry one. Returned in place of the tabs'

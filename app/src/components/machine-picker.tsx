@@ -4,10 +4,10 @@ import { cn } from '../lib/cn'
 import type { NodeRow } from '../lib/repo/nodes'
 import { MONO } from './tokens'
 
-// The machine picker: this box, then every approved node. On the pages
-// whose subject exists on every machine — System, Claude — the same row
-// above the tabs, so the eye learns it once. Drawn only once there is a
-// node: a box alone has nothing to pick.
+// The machine picker: this box, then every approved node, above the System
+// tabs — the one page whose subject exists on every machine, now that
+// Claude is a tab of it. Drawn only once there is a node: a box alone has
+// nothing to pick.
 
 const OS_MARK: Record<string, { src: string; invert: boolean }> = {
   windows: { src: '/icon-windows.svg', invert: false },
@@ -18,14 +18,11 @@ const OS_MARK: Record<string, { src: string; invert: boolean }> = {
 export function MachinePicker({
   nodes,
   active,
-  page,
   tab,
 }: {
   nodes: NodeRow[]
   active: string | null
-  /** Which page's picker this is, so each link keeps that page's route and search. */
-  page: 'claude' | 'system'
-  /** The System tab to keep while switching machine; the target resolves an id it lacks to its first. */
+  /** The tab to keep while switching machine; the target resolves an id it lacks to its first. */
   tab?: string
 }) {
   if (nodes.length === 0) return null
@@ -36,21 +33,16 @@ export function MachinePicker({
         ? 'border-primary bg-primary/10 text-foreground'
         : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground',
     )
-  const link = (machine: string | null, className: string, children: React.ReactNode) =>
-    page === 'claude' ? (
-      <Link to="/claude" search={machine === null ? {} : { machine }} className={className}>
-        {children}
-      </Link>
-    ) : (
-      <Link
-        to="/c/$category"
-        params={{ category: 'system' }}
-        search={{ ...(tab === undefined ? {} : { tab }), ...(machine === null ? {} : { machine }) }}
-        className={className}
-      >
-        {children}
-      </Link>
-    )
+  const link = (machine: string | null, className: string, children: React.ReactNode) => (
+    <Link
+      to="/c/$category"
+      params={{ category: 'system' }}
+      search={{ ...(tab === undefined ? {} : { tab }), ...(machine === null ? {} : { machine }) }}
+      className={className}
+    >
+      {children}
+    </Link>
+  )
   return (
     <nav aria-label="Machine" className="mb-4 flex flex-wrap items-center gap-2">
       {link(
@@ -79,7 +71,8 @@ export function MachinePicker({
                   />
                 )}
                 {n.name}
-                {page === 'claude' && n.claude !== null && n.claude.sessions > 0 && (
+                {/* On the Claude tab the pill also says how many sessions are on it. */}
+                {tab === 'claude' && n.claude !== null && n.claude.sessions > 0 && (
                   <span className={`${MONO} text-[0.7rem] text-(--dim)`}>{n.claude.sessions}</span>
                 )}
               </>,

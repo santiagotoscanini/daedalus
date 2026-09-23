@@ -1,22 +1,15 @@
 import { createServerFn } from '@tanstack/react-start'
 import { actorLabel } from '../core/auth'
 
-// The Claude page's one loader.
+// The Claude tab's loaders — the box's (System › Claude and Shotter, through
+// modules/system/data/claude.ts) and a node's.
 //
 // Thin on purpose, like its siblings here: the work is in
 // lib/dashboard/claude.ts, and this exists so the browser bundle never gets
 // near the snapshot reader (node:fs) or the Loki client.
-//
-// One function rather than the boards/dots pair the category pages use. That
-// split buys a tab row that renders before its slowest upstream; this page
-// has no tabs, and its three sources are a file read, one anchored LogQL
-// query and a cached GitHub list — all of which the streaming skeleton
-// already covers.
-
-export const fetchClaude = createServerFn().handler(async () => {
-  const { loadClaude } = await import('../lib/dashboard/claude')
-  return loadClaude()
-})
+// The box's own document is loaded by the module loader (fetchModuleBoards)
+// like every other System tab; what stays here is the node's report and the
+// session actions.
 
 /**
  * Ask the host to restart the Remote Control server.
@@ -122,15 +115,6 @@ export const removeSessionFn = createServerFn({ method: 'POST' })
 export const fetchClaudeSessionStatusFn = createServerFn().handler(async () => {
   const { readClaudeSessionStatus } = await import('../host/claude-session-request')
   return readClaudeSessionStatus()
-})
-
-/**
- * The machines the picker offers beside this box: every approved node. One
- * table read, so awaited by the loader; the picker is part of the frame.
- */
-export const fetchClaudeNodesFn = createServerFn().handler(async () => {
-  const { listNodes } = await import('../lib/repo/nodes')
-  return (await listNodes()).filter((n) => n.state === 'approved')
 })
 
 const NODE_ID = /^[0-9a-f]{16}$/

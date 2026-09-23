@@ -21,3 +21,9 @@ export const fetchNodeSystemFn = createServerFn()
     const { loadNodeSystem } = await import('../lib/dashboard/node-system')
     return loadNodeSystem(data.id)
   })
+
+/** The strip above the box's own System tabs: its release, kernel and board. */
+export const fetchBoxHeadFn = createServerFn().handler(async () => {
+  const { loadBoxHead } = await import('../lib/dashboard/box-head')
+  return loadBoxHead()
+})

@@ -1,3 +1,4 @@
+import { ClaudeView, ShotterView } from '../../../components/claude'
 import { defineViews } from '../../../lib/modules/tabs'
 import type { Tabs } from '../data'
 import { manifest } from '../manifest'
@@ -32,4 +33,6 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
   build: ({ data }) => <BuildView d={data} />,
   updates: ({ data }) => <UpdatesView d={data} />,
   backups: ({ data }) => <BackupsView d={data} />,
+  claude: ({ data }) => <ClaudeView data={data} />,
+  shotter: ({ data }) => <ShotterView data={data} />,
 })

@@ -241,7 +241,11 @@ export function NodeUpdatesView({ d }: { d: NodeSystemData }) {
         )}
         <p className={FOOT}>
           The CLI updates itself on the machine; its sessions and the remote-control switch are on{' '}
-          <Link to="/claude" search={{ machine: node.id }}>
+          <Link
+            to="/c/$category"
+            params={{ category: 'system' }}
+            search={{ tab: 'claude', machine: node.id }}
+          >
             Claude
           </Link>
           .

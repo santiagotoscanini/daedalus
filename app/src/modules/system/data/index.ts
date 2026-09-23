@@ -28,6 +28,7 @@ import { defineLoader, type TabPayload } from '../../../lib/modules/tabs'
 import { manifest } from '../manifest'
 import { type BackupsData, loadBackups } from './backups'
 import { type BuildData, loadBuild } from './build'
+import { type ClaudeData, loadClaude } from './claude'
 import { type DisksData, loadDisks } from './disks'
 import { type HostData, loadHost } from './host'
 import { loadMemory, type MemoryData } from './memory'
@@ -42,6 +43,8 @@ export type Tabs = {
   build: BuildData
   updates: UpdatesData
   backups: BackupsData
+  claude: ClaudeData
+  shotter: ClaudeData
 }
 export type SystemData = TabPayload<typeof manifest, Tabs>
 
@@ -55,6 +58,8 @@ export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   build: loadBuild,
   updates: loadUpdates,
   backups: loadBackups,
+  claude: loadClaude,
+  shotter: loadClaude,
 })
 
 export type { HostFacts } from '../../../lib/dashboard/host-facts'
