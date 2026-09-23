@@ -7,6 +7,7 @@ import {
   msiKey,
   msiVersion,
   parseMsiNote,
+  smbiosDate,
   zipTextEntry,
 } from './board-releases'
 
@@ -95,5 +96,15 @@ describe('MSI’s two spellings of one version', () => {
     expect(boardMake('Gigabyte Technology Co., Ltd.')).toBe('gigabyte')
     expect(boardMake('Apple')).toBe('apple')
     expect(boardMake('ASUSTeK COMPUTER INC.')).toBeNull()
+  })
+})
+
+describe('SMBIOS dates', () => {
+  it('reads the US order the firmware writes, and ISO as it is', () => {
+    expect(smbiosDate('12/21/2023')).toBe('2023-12-21')
+    expect(smbiosDate('03/24/2024')).toBe('2024-03-24')
+    expect(smbiosDate('2025-03-11T10:22:33Z')).toBe('2025-03-11')
+    expect(smbiosDate('yesterday')).toBeNull()
+    expect(smbiosDate(null)).toBeNull()
   })
 })

@@ -4,6 +4,7 @@ import type { BoardInfo } from '../../lib/dashboard/board-info'
 import type { NodeSystemData } from '../../lib/dashboard/node-system'
 import { bytes, DASH, num } from '../../lib/format'
 import { partMatching } from '../../lib/hardware/catalog'
+import { gigabyteRevision } from '../../lib/hardware/gigabyte'
 import type { Tone } from '../../lib/tone'
 import { PartPhoto } from '../part'
 import { Board, BoardGrid, Chip, Facts, Measures } from '../viz'
@@ -132,13 +133,27 @@ export function BoardView({ info }: { info: BoardInfo }) {
             </>
           )}
           {r.make === 'msi' && r.error !== null && <>{r.error}. </>}
-          {r.make === 'msi' && r.releases.length > 0 && r.behind === null && (
+          {r.releases.length > 0 && r.behind === null && (
             <>
               The running version {info.bios.version ?? ''} did not match a package name, so nothing
               is counted.{' '}
             </>
           )}
-          {r.make === 'gigabyte' && <>{r.error}</>}
+          {r.make === 'gigabyte' && r.releases.length > 0 && (
+            <>
+              Read from Gigabyte&rsquo;s support page
+              {r.checkedAt !== null && ` ${ago(r.checkedAt)}`} by this box&rsquo;s own browser — the
+              site refuses every plain client, so the shotter lab reads it, daily and whenever a
+              board is first looked at. {r.note}{' '}
+              {r.behind !== null && r.behind > 0 && (
+                <>
+                  Being {num(r.behind)} behind is a fact, not a verdict: nothing here flashes
+                  anything.
+                </>
+              )}
+            </>
+          )}
+          {r.make === 'gigabyte' && r.releases.length === 0 && <>{r.error}</>}
           {r.make === 'apple' && (
             <>{r.error} A pending macOS update there is a pending firmware update here.</>
           )}
@@ -166,7 +181,7 @@ export function BoardView({ info }: { info: BoardInfo }) {
             {r.make === 'apple'
               ? 'Apple publishes firmware only inside macOS updates; the machine’s own list is on Updates.'
               : r.make === 'gigabyte'
-                ? 'No list from Gigabyte yet.'
+                ? (r.error ?? 'No list from Gigabyte yet.')
                 : r.make === null
                   ? 'No maker feed for this board.'
                   : (r.error ?? 'Nothing read yet.')}
@@ -259,9 +274,9 @@ function revisionOf(info: BoardInfo): { rev: string; inferred: boolean } | null 
   if (info.revision !== null && info.revision !== 'x.x' && info.revision.trim() !== '') {
     return { rev: info.revision, inferred: false }
   }
-  if (info.releases.make === 'gigabyte' && info.bios.version !== null) {
-    if (/^FA\d/i.test(info.bios.version)) return { rev: '1.2', inferred: true }
-    if (/^F\d/i.test(info.bios.version)) return { rev: '1.0/1.1 or V2', inferred: true }
+  if (info.releases.make === 'gigabyte') {
+    const g = gigabyteRevision(info.bios.version)
+    if (g !== null) return { rev: g.rev, inferred: true }
   }
   return null
 }

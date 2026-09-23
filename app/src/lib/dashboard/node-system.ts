@@ -102,6 +102,7 @@ export async function loadNodeSystem(
           vendor: t.machine.boardManufacturer ?? t.machine.manufacturer,
           product: t.machine.boardProduct ?? t.machine.model,
           biosVersion: t.machine.biosVersion,
+          biosDate: t.machine.biosDate,
         })
       : null
   const withBrowsers = async (t: NodeTelemetry): Promise<BrowserLatest[] | null> =>

@@ -1,4 +1,10 @@
+import { mkdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { inflateRawSync } from 'node:zlib'
+
+import { writeAtomic } from '../../host/bridge'
+import { env } from '../../host/env'
+import { gigabytePageSlug, gigabytePageUrl } from '../hardware/gigabyte'
 
 import { pool } from '../http'
 
@@ -17,10 +23,10 @@ import { pool } from '../http'
 // out of the first sixteen kilobytes of each package with a Range request —
 // the firmware image behind it is ten megabytes nobody here needs.
 //
-// Gigabyte's host is reachable too but its file names are not derivable
-// from the board's name (they carry a revision suffix the site assigns),
-// and Apple ships firmware inside macOS, so neither has a list here yet;
-// each says so on the tab. A vendor that is not recognised gets nothing and
+// Gigabyte refuses every plain client and names its packages with an
+// opaque token, so its list comes from the box's own browser (below);
+// Apple ships firmware inside macOS, so the Mac has no list here and
+// says so. A vendor that is not recognised gets nothing and
 // no error — the tab shows what SMBIOS knows and stops.
 //
 // Cached in this process: the list for twelve hours, a version's note
@@ -49,6 +55,8 @@ export type BoardReleases = {
   /** How many releases are newer than the running one; null when unmatched. */
   behind: number | null
   checkedAt: string | null
+  /** Something the reader worked out that the numbers alone would not say. */
+  note: string | null
   error: string | null
 }
 
@@ -59,6 +67,7 @@ const NONE: BoardReleases = {
   running: null,
   behind: null,
   checkedAt: null,
+  note: null,
   error: null,
 }
 
@@ -71,6 +80,8 @@ export type BoardIdentity = {
   vendor: string | null
   product: string | null
   biosVersion: string | null
+  /** As SMBIOS states it: "12/21/2023" on Windows, "03/24/2024" on the box, ISO on a Mac. */
+  biosDate?: string | null
 }
 
 export function boardMake(vendor: string | null): BoardReleases['make'] {
@@ -269,6 +280,140 @@ function dateOnly(httpDate: string): string {
   return new Date(httpDate).toISOString().slice(0, 10)
 }
 
+// ── the Gigabyte list, from the box's browser ────────────────────────────
+//
+// gigabyte.com refuses every plain HTTP client, and its packages carry an
+// opaque per-board token in their names, so neither the site nor the
+// download host can be read from here. A real browser gets in — the box's
+// shotter Chromium with a browser's fingerprint does — so the list is read
+// by a box-side job (the host's stacks/shotter) and published under the
+// apply dir, the way the system snapshot is: this reader writes the pages
+// it wants to `boards/request.json`, the job reads each page and writes
+// `boards/<id>.json`, and this reader draws it. A host without that job
+// leaves the request unanswered, and the tab says so.
+
+export type BoardPageRequest = { version: 1; pages: { id: string; url: string }[] }
+
+export type BoardPageSnapshot = {
+  version: 1
+  fetchedAt: string
+  url: string
+  rows: {
+    version: string
+    date: string | null
+    sizeBytes: number | null
+    notes: string[]
+    url: string | null
+  }[]
+  error: string | null
+}
+
+const applyDir = (): string => env.get('APPLY_DIR') ?? '/apply'
+const boardsDir = (): string => join(applyDir(), 'boards')
+
+async function readPageSnapshot(id: string): Promise<BoardPageSnapshot | null> {
+  try {
+    const raw = await readFile(join(boardsDir(), `${id}.json`), 'utf8')
+    const doc = JSON.parse(raw) as Partial<BoardPageSnapshot>
+    if (doc.version !== 1 || !Array.isArray(doc.rows)) return null
+    return {
+      version: 1,
+      fetchedAt: typeof doc.fetchedAt === 'string' ? doc.fetchedAt : '',
+      url: typeof doc.url === 'string' ? doc.url : '',
+      rows: doc.rows
+        .filter((r): r is BoardPageSnapshot['rows'][number] => typeof r?.version === 'string')
+        .map((r) => ({
+          version: r.version,
+          date: typeof r.date === 'string' ? r.date : null,
+          sizeBytes: typeof r.sizeBytes === 'number' ? r.sizeBytes : null,
+          notes: Array.isArray(r.notes) ? r.notes.filter((n) => typeof n === 'string') : [],
+          url: typeof r.url === 'string' ? r.url : null,
+        })),
+      error: typeof doc.error === 'string' ? doc.error : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Ask the box's job for a page, once: the request is rewritten only when it changes. */
+async function requestPage(id: string, url: string): Promise<void> {
+  const path = join(boardsDir(), 'request.json')
+  let current: BoardPageRequest = { version: 1, pages: [] }
+  try {
+    const doc = JSON.parse(await readFile(path, 'utf8')) as Partial<BoardPageRequest>
+    if (doc.version === 1 && Array.isArray(doc.pages)) current = { version: 1, pages: doc.pages }
+  } catch {
+    // No request yet.
+  }
+  if (current.pages.some((p) => p.id === id && p.url === url)) return
+  const pages = [...current.pages.filter((p) => p.id !== id), { id, url }]
+  await mkdir(boardsDir(), { recursive: true })
+  await writeAtomic(path, `${JSON.stringify({ version: 1, pages }, null, 2)}\n`)
+}
+
+async function gigabyteReleases(id: BoardIdentity): Promise<BoardReleases> {
+  const product = id.product?.trim() ?? ''
+  const make = 'gigabyte' as const
+  if (product === '') return { ...NONE, make, error: 'no board name to look up' }
+  const url = gigabytePageUrl(product, id.biosVersion)
+  const pageId = `gigabyte-${gigabytePageSlug(product, id.biosVersion).toLowerCase()}`
+  const snap = await readPageSnapshot(pageId)
+  if (snap === null) {
+    await requestPage(pageId, url)
+    return {
+      ...NONE,
+      make,
+      source: url,
+      error:
+        'gigabyte.com refuses every plain client, so the box’s browser reads the page for it; that job has not answered yet (it runs when a page is asked for, and daily).',
+    }
+  }
+  const releases: BoardRelease[] = snap.rows.map((r) => ({
+    version: r.version,
+    date: r.date,
+    notes: r.notes,
+    url: r.url,
+    sizeBytes: r.sizeBytes,
+  }))
+  // Gigabyte pulls a release from its page now and then (FA2a is gone while
+  // FA2 and FA4 stay), so a running version that is not listed is counted
+  // against its build date instead: every listed release newer than the
+  // firmware's own date is one it is behind.
+  const listed =
+    id.biosVersion === null
+      ? null
+      : (releases.find((r) => r.version.toLowerCase() === id.biosVersion?.toLowerCase())?.version ??
+        null)
+  const built = smbiosDate(id.biosDate ?? null)
+  let behind: number | null = null
+  let note: string | null = null
+  if (listed !== null) {
+    behind = releases.findIndex((r) => r.version === listed)
+  } else if (id.biosVersion !== null && built !== null) {
+    behind = releases.filter((r) => r.date !== null && r.date > built).length
+    note = `${id.biosVersion} is no longer on Gigabyte’s page; counted against its build date, ${built}.`
+  }
+  return {
+    make,
+    source: url,
+    releases,
+    running: listed ?? id.biosVersion,
+    behind,
+    checkedAt: snap.fetchedAt === '' ? null : snap.fetchedAt,
+    note,
+    error: snap.error,
+  }
+}
+
+/** "12/21/2023" (SMBIOS, US order) or an ISO date → "2023-12-21". */
+export function smbiosDate(s: string | null): string | null {
+  if (s === null) return null
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s.trim())
+  if (us) return `${us[3]}-${us[1]?.padStart(2, '0') ?? ''}-${us[2]?.padStart(2, '0') ?? ''}`
+  const iso = /^(\d{4}-\d{2}-\d{2})/.exec(s.trim())
+  return iso?.[1] ?? null
+}
 // ── the public reader ────────────────────────────────────────────────────
 
 export async function boardReleases(id: BoardIdentity): Promise<BoardReleases> {
@@ -282,14 +427,7 @@ export async function boardReleases(id: BoardIdentity): Promise<BoardReleases> {
         'Apple ships this firmware inside macOS; the machine’s own Software Update is the list, on Updates.',
     }
   }
-  if (make === 'gigabyte') {
-    return {
-      ...NONE,
-      make,
-      error:
-        'gigabyte.com refuses this address, and its download host names packages in a way the board’s name does not give away; no list yet.',
-    }
-  }
+  if (make === 'gigabyte') return gigabyteReleases(id)
   const code = msiCode(id.product)
   if (code === null) {
     return { ...NONE, make, error: 'no MS-xxxx code in the board’s name' }
@@ -328,6 +466,7 @@ export async function boardReleases(id: BoardIdentity): Promise<BoardReleases> {
     running,
     behind: at < 0 ? null : at,
     checkedAt,
+    note: null,
     error,
   }
 }

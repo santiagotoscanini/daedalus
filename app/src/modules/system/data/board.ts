@@ -15,6 +15,7 @@ export async function loadBoard(): Promise<BoardData> {
     vendor: board.vendor,
     product: board.model,
     biosVersion: board.bios.version,
+    biosDate: board.bios.date,
   })
   return {
     vendor: board.vendor,
