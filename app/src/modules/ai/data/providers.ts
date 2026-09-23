@@ -21,6 +21,9 @@ import { listApps } from '../../../lib/repo/apps'
 export type ProviderMachine = {
   /** 'box', or the node's id. */
   machine: string
+  /** `<machine>:<kind>`: a machine may offer more than one provider, so the
+      pair is what identifies a row, a pill and the `?machine=` value. */
+  id: string
   name: string
   os: string
   kind: ProviderKind
@@ -103,6 +106,7 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
       }))
       return {
         machine: provider.machine,
+        id: `${provider.machine}:${provider.kind}`,
         name: provider.machineName,
         os: provider.os,
         kind: provider.kind,
@@ -163,6 +167,6 @@ export async function loadProviders(ctx: Ctx): Promise<ProvidersData> {
       },
       consumers,
     },
-    defaultMachine: pick?.machine ?? null,
+    defaultMachine: pick?.id ?? null,
   }
 }

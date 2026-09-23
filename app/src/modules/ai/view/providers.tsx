@@ -101,11 +101,11 @@ function MachinePills({ machines, active }: { machines: ProviderMachine[]; activ
         const mark = m.machine === 'box' ? BOX_MARK : OS_MARK[m.os]
         return (
           <Link
-            key={m.machine}
+            key={m.id}
             to="/c/$category"
             params={{ category: 'ai' }}
-            search={{ tab: 'providers', machine: m.machine }}
-            className={pill(active === m.machine)}
+            search={{ tab: 'providers', machine: m.id }}
+            className={pill(active === m.id)}
           >
             {mark !== undefined && (
               <img
@@ -117,6 +117,9 @@ function MachinePills({ machines, active }: { machines: ProviderMachine[]; activ
               />
             )}
             {m.name}
+            {machines.filter((o) => o.machine === m.machine).length > 1 && (
+              <span className="text-muted-foreground">· {m.kindName}</span>
+            )}
             <Pulse on={m.reachable} tone={m.reachable ? 'ok' : 'muted'} />
           </Link>
         )
@@ -303,7 +306,8 @@ function MachineView({ m }: { m: ProviderMachine }) {
 export function ProvidersView({ data }: { data: ProvidersData }) {
   const search = useSearch({ from: '/c/$category' })
   const wanted = search.machine ?? data.defaultMachine
-  const active = data.machines.find((m) => m.machine === wanted) ?? data.machines[0]
+  const active =
+    data.machines.find((m) => m.id === wanted || m.machine === wanted) ?? data.machines[0]
 
   return (
     <>
