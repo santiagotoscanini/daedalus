@@ -11,11 +11,14 @@
 //!                         answer carries the box's policy and, once, a restart
 //!   POST /claude/restart  ask the tray to restart the server on its next report
 //!
-//! And one read that is not for the LAN: `GET /claude` is the tray's full
-//! report — session names, working directories, ids, the login's dates —
-//! answered on loopback, or to a caller holding the NODE TOKEN the box
-//! minted at approval and hands down every hello answer (`Authorization:
-//! Bearer <token>`). The open page carries only a summary of it.
+//! And two reads that are not for the LAN, answered on loopback or to a
+//! caller holding the NODE TOKEN the box minted at approval and hands down
+//! every hello answer (`Authorization: Bearer <token>`): `GET /claude` is
+//! the tray's full report — session names, working directories, ids, the
+//! login's dates — and `GET /telemetry` is the full telemetry document —
+//! drive serials, the heaviest processes, the services that are down, the
+//! OS's pending updates. The open page carries a summary of the first and
+//! `Telemetry::public` of the second.
 //!
 //! No auth otherwise: the page states facts about this machine that the LAN
 //! can already observe, and the firewall rule `install` adds scopes it to
@@ -108,7 +111,7 @@ struct Document<'a> {
     claude_restart_requested: bool,
     /// What the machine is and how it is doing (telemetry.rs); null until
     /// the first sample, a few seconds after start.
-    telemetry: Option<&'a Telemetry>,
+    telemetry: Option<Telemetry>,
     /// The box, as this agent last saw it.
     control_plane: &'a ControlPlane,
     #[serde(flatten)]
@@ -175,6 +178,16 @@ impl Shared {
             .filter(|(_, at)| at.elapsed() < REPORT_FRESH)
         {
             Some((r, _)) => serde_json::to_string_pretty(r).unwrap_or_else(|_| "{}".into()),
+            None => "null".into(),
+        }
+    }
+
+    /// The full telemetry document — drive serials, processes, services,
+    /// pending updates — for the box holding the node token, or this machine.
+    fn telemetry_document(&self) -> String {
+        let l = self.lock();
+        match &l.telemetry {
+            Some(t) => serde_json::to_string_pretty(t).unwrap_or_else(|_| "{}".into()),
             None => "null".into(),
         }
     }
@@ -305,7 +318,7 @@ impl Shared {
                 last_report: l.claude.as_ref().map(|(r, _)| r.reported_at.clone()),
             },
             claude_restart_requested: l.claude_restart_requested,
-            telemetry: l.telemetry.as_ref(),
+            telemetry: l.telemetry.as_ref().map(Telemetry::public),
             control_plane: &l.control_plane,
             state: &l.state,
         };
@@ -335,14 +348,19 @@ pub fn serve(port: u16, shared: Arc<Shared>) -> Result<Arc<Server>> {
                         (200, shared.metrics(), "text/plain; version=0.0.4")
                     }
                     (&Method::Get, "/" | "/status") => (200, shared.document(), "application/json"),
-                    (&Method::Get, "/claude") => {
+                    (&Method::Get, "/claude" | "/telemetry") => {
                         let auth = req
                             .headers()
                             .iter()
                             .find(|h| h.field.equiv("Authorization"))
                             .map(|h| h.value.as_str().to_string());
                         if local || shared.token_ok(auth.as_deref()) {
-                            (200, shared.claude_document(), "application/json")
+                            let body = if req.url() == "/telemetry" {
+                                shared.telemetry_document()
+                            } else {
+                                shared.claude_document()
+                            };
+                            (200, body, "application/json")
                         } else {
                             (
                                 403,

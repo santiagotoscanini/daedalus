@@ -13,6 +13,20 @@ macOS launchd daemon, with a tray / menu bar app beside it, that
   report (sessions, paths, ids) is on `/claude`, which answers only on
   loopback or to the node token the box mints at approval and hands down
   every hello answer;
+- **reports the machine** the way the box reports itself: what it is
+  (make, model, chassis, firmware, board, the memory modules from SMBIOS
+  or `system_profiler`), what it is running (kernel, build, install date),
+  and how it is doing — processor and GPU usage, memory with its cache,
+  compressor and commit charge, every volume, every physical drive with
+  the OS's health verdict and, on Windows, its temperature, hours, wear and
+  error counters, temperatures where an OS states them, network rates,
+  battery. Sampled every fifteen seconds; drives and the services that
+  should be running and are not every ten minutes; the OS's pending and
+  recently installed updates hourly. The status page carries the machine
+  and nothing that identifies a person (no serials, no process list); the
+  full document — the heaviest processes, the failing services, the
+  updates, the serials — is on `/telemetry`, gated like `/claude`; and
+  `/metrics` renders it as Prometheus gauges for the box to scrape;
 - **updates itself** to the newest `agent-v*` release of this repository,
   verifying every asset against the ed25519 key compiled into it;
 - **announces itself to the box** every minute: an ed25519 key made on first
@@ -42,10 +56,9 @@ macOS launchd daemon, with a tray / menu bar app beside it, that
   menu, and the actions: open the status page, check for updates now,
   restart Claude remote control, open the logs, open Claude's log.
 
-Nothing else yet: no other commands, no telemetry beyond the page, no
-inbound port but the page's. What the agent will do next arrives as a
-release the installed one applies on its own, which is why the update path
-shipped first.
+Nothing else yet: no other commands, no inbound port but the page's. What
+the agent will do next arrives as a release the installed one applies on
+its own, which is why the update path shipped first.
 
 ## Install
 

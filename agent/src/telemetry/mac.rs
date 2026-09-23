@@ -1,16 +1,33 @@
 //! The macOS collector. Apple's own tools do the reading — `system_profiler`
-//! for the hardware and the GPUs, `sysctl`, `vm_stat`, `df`, `mount`,
-//! `diskutil`, `netstat`, `pmset`, `ioreg`, and `powermetrics` (root only,
-//! which the launchd daemon is) for power and, on Intel, die temperatures —
-//! plus two Mach calls for the CPU ticks and the load averages. Every command
-//! runs with a closed stdin and a deadline, so a wedged tool costs one sample,
-//! not the telemetry thread.
+//! for the hardware, the GPUs, the memory modules and the physical drives,
+//! `sysctl`, `vm_stat`, `df`, `mount`, `diskutil`, `netstat`, `pmset`,
+//! `ioreg`, `ps`, `launchctl`, `softwareupdate`, `plutil`, and
+//! `powermetrics` (root only, which the launchd daemon is) for power and, on
+//! Intel, die temperatures — plus two Mach calls for the CPU ticks and the
+//! load averages. Every command runs with a closed stdin and a deadline, so
+//! a wedged tool costs one sample, not the telemetry thread.
+//!
+//! The four cadences telemetry.rs lays out, and what each reads here:
+//!
+//! - STATIC (hourly): `SPHardwareDataType` for make, model and firmware,
+//!   `SPDisplaysDataType` for the GPUs, `SPMemoryDataType` for the memory
+//!   modules, `sysctl` for the processor, `uname` and `sw_vers` for the OS.
+//! - SLOW (every ten minutes): `SPNVMeDataType`, `SPSerialATADataType` and
+//!   `SPUSBDataType` in one call for the physical drives, `diskutil info /`
+//!   to tell which of them carries the boot volume, and `launchctl list` for
+//!   the system-domain jobs whose last exit was not clean.
+//! - SAMPLED (every 15 s): the Mach calls, `vm_stat`, `df` + `mount`,
+//!   `ioreg` for the GPU, `powermetrics`, `netstat`, `pmset`, and `ps` for
+//!   the heaviest processes.
+//! - UPDATES (hourly, on its own thread): `softwareupdate -l` for what is
+//!   pending and the install-history plist for what was installed.
 //!
 //! The parsers take text and are unit-tested on any OS; the functions that
 //! run commands are thin and untested here. Anything that cannot be read is
-//! `None` with a one-line reason in `errors`. Nothing identifying is copied:
-//! `system_profiler` prints the serial number and the hardware UUID and both
-//! are left where they are.
+//! `None` with a one-line reason in `errors`. Nothing identifying is copied
+//! beyond what the contract asks for: `system_profiler` prints the serial
+//! number and the hardware UUID and both are left where they are; a drive's
+//! serial is carried, and the open page strips it.
 
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -22,8 +39,9 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use super::{
-    Battery, Collect, Cpu, Disk, Gpu, GpuSample, Machine, Memory, Network, Os, Sample, Static,
-    Temperature,
+    Battery, Collect, Cpu, Disk, Drive, Gpu, GpuSample, Installed, Machine, Memory, MemoryModule,
+    Network, Os, Process, Sample, Service, Slow, Static, Temperature, Update, Updates,
+    TOP_PROCESSES,
 };
 
 /// The fast tools (`sysctl`, `df`, `vm_stat`, `pmset`…) are done in
@@ -31,8 +49,22 @@ use super::{
 const QUICK: Duration = Duration::from_secs(10);
 /// `system_profiler` walks IOKit; a few seconds on a slow machine.
 const PROFILER: Duration = Duration::from_secs(30);
+/// `system_profiler SPMemoryDataType` alone is quicker than the display one.
+const MEMORY_PROFILER: Duration = Duration::from_secs(15);
+/// `system_profiler` over the three storage buses: longer with many drives
+/// and a full USB tree, but well short of the ten-minute cadence.
+const STORAGE_PROFILER: Duration = Duration::from_secs(20);
+/// `ps` over every process: a few hundred milliseconds.
+const PS: Duration = Duration::from_secs(5);
+/// `softwareupdate -l` without `--no-scan` asks Apple's servers; a minute
+/// is not unusual.
+const SOFTWAREUPDATE: Duration = Duration::from_secs(90);
 /// `powermetrics -n 1 -i 500` returns in about half a second.
 const POWERMETRICS: Duration = Duration::from_secs(4);
+/// Where macOS logs every install, its own updates included.
+const INSTALL_HISTORY: &str = "/Library/Receipts/InstallHistory.plist";
+/// How many past installs `read_updates` carries.
+const INSTALLED_KEPT: usize = 8;
 /// Battery health and the root volume's name are read once per this many
 /// samples (a hundred at 15 s is 25 minutes); both are static-ish and
 /// `system_profiler`/`diskutil` are not free.
@@ -208,9 +240,11 @@ fn parse_hardware(json: &str) -> Option<Machine> {
     let hw = v.get("SPHardwareDataType")?.as_array()?.first()?;
     let s = |k: &str| hw.get(k).and_then(Value::as_str).map(str::to_string);
     let identifier = s("machine_model");
+    let model = s("machine_name").or_else(|| identifier.clone());
+    let form = model.as_deref().and_then(form_of).map(str::to_string);
     Some(Machine {
         manufacturer: Some("Apple".into()),
-        model: s("machine_name").or_else(|| identifier.clone()),
+        model,
         chip: s("chip_type").or_else(|| s("cpu_type")),
         bios_vendor: Some("Apple".into()),
         bios_version: s("boot_rom_version"),
@@ -218,7 +252,116 @@ fn parse_hardware(json: &str) -> Option<Machine> {
         bios_date: None,
         board_manufacturer: Some("Apple".into()),
         board_product: identifier,
+        form,
     })
+}
+
+/// What shape the machine is, from its model name ("MacBook Pro", "Mac
+/// mini") or, when `system_profiler` gave only that, its identifier
+/// ("Macmini8,1", "iMacPro1,1"). Spaces and case are ignored so both read
+/// the same; "iMac" is tested before "Mac Pro" because "iMacPro" holds both.
+fn form_of(model: &str) -> Option<&'static str> {
+    let m: String = model
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    if m.contains("book") {
+        Some("laptop")
+    } else if m.contains("imac") {
+        Some("all-in-one")
+    } else if m.contains("macmini") {
+        Some("mini")
+    } else if m.contains("macstudio") || m.contains("macpro") {
+        Some("desktop")
+    } else {
+        None
+    }
+}
+
+/// What `system_profiler SPMemoryDataType -json` says about the memory.
+#[derive(Debug, Default, PartialEq)]
+struct MemoryProfile {
+    slots: Option<u32>,
+    max_capacity_bytes: Option<u64>,
+    modules: Vec<MemoryModule>,
+}
+
+/// Apple Silicon answers one entry with no slot list — the memory is on the
+/// package, so zero slots, the ceiling is what is fitted, and the one module
+/// is `total` (`hw.memsize`; the "16 GB" it prints is that number rounded).
+/// Intel answers a slot list ("BANK 0/DIMM0"…), one module per fitted
+/// DIMM; an empty slot counts as a slot and no module. The firmware states
+/// no ceiling on either, so it is the fitted total or nothing.
+fn parse_memory(json: &str, total: Option<u64>) -> Option<MemoryProfile> {
+    let v: Value = serde_json::from_str(json).ok()?;
+    let list = v.get("SPMemoryDataType")?.as_array()?;
+    let mut slots = Vec::new();
+    for e in list {
+        collect_slots(e, &mut slots);
+    }
+    if slots.is_empty() {
+        let e = list.first()?;
+        let s = |k: &str| e.get(k).and_then(Value::as_str).map(str::to_string);
+        let size = total.or_else(|| s("SPMemoryDataType").as_deref().and_then(parse_size));
+        return Some(MemoryProfile {
+            slots: Some(0),
+            max_capacity_bytes: size,
+            modules: vec![MemoryModule {
+                locator: Some("on package".into()),
+                size_bytes: size,
+                speed_mts: None,
+                kind: s("dimm_type").or_else(|| s("SPMemoryDataType_Type")),
+                manufacturer: s("dimm_manufacturer"),
+                part_number: None,
+            }],
+        });
+    }
+    let modules = slots
+        .iter()
+        .filter_map(|e| {
+            let s = |k: &str| e.get(k).and_then(Value::as_str);
+            let size = s("dimm_size")?;
+            let empty = size.eq_ignore_ascii_case("empty")
+                || s("dimm_status").is_some_and(|x| x.eq_ignore_ascii_case("empty"));
+            if empty {
+                return None;
+            }
+            Some(MemoryModule {
+                locator: s("_name").map(str::to_string),
+                size_bytes: parse_size(size),
+                // "2667 MHz" → 2667.
+                speed_mts: s("dimm_speed")
+                    .and_then(|x| x.split_whitespace().next())
+                    .and_then(|n| n.parse().ok()),
+                kind: s("dimm_type").map(str::to_string),
+                manufacturer: s("dimm_manufacturer").map(str::to_string),
+                part_number: s("dimm_part_number").map(str::to_string),
+            })
+        })
+        .collect();
+    Some(MemoryProfile {
+        slots: u32::try_from(slots.len()).ok(),
+        max_capacity_bytes: None,
+        modules,
+    })
+}
+
+/// The DIMM entries under `_items` (or `items`, as older releases spell
+/// it), however deep the controller tree goes. A DIMM is what states a
+/// `dimm_size`, "empty" included.
+fn collect_slots<'a>(v: &'a Value, out: &mut Vec<&'a Value>) {
+    if v.get("dimm_size").is_some() {
+        out.push(v);
+        return;
+    }
+    for k in ["_items", "items"] {
+        if let Some(list) = v.get(k).and_then(Value::as_array) {
+            for e in list {
+                collect_slots(e, out);
+            }
+        }
+    }
 }
 
 /// "sppci_vendor_amd" → "AMD"; the plain names pass through.
@@ -277,6 +420,202 @@ fn parse_displays(json: &str) -> Vec<Gpu> {
             })
         })
         .collect()
+}
+
+// ── the slow half: parsers ──────────────────────────────────────────────────
+
+/// `system_profiler SPNVMeDataType SPSerialATADataType SPUSBDataType -json`:
+/// one `Drive` per physical device. The NVMe and SATA sections list
+/// controllers with their drives under `_items`; the USB section is a tree
+/// of hubs whose storage devices carry a `Media` list. A drive's partitions
+/// are its `volumes`, and a partition states a `mount_point` only when it
+/// is mounted directly (HFS+, a FAT stick) — an APFS container's volumes
+/// are synthesised on another disk, so the boot volume is found the other
+/// way round: `boot_store` is the partition "/" lives on ("disk0s2", from
+/// `diskutil info /`), and the drive that owns it gets "/" first in its
+/// list. SMART counters (temperature, hours, wear, errors) are not readable
+/// without smartmontools and stay `None`; `smart_status` is the verdict.
+fn parse_storage(json: &str, boot_store: Option<&str>) -> Vec<Drive> {
+    let Ok(v) = serde_json::from_str::<Value>(json) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (section, bus) in [("SPNVMeDataType", "nvme"), ("SPSerialATADataType", "sata")] {
+        if let Some(list) = v.get(section).and_then(Value::as_array) {
+            for e in list {
+                walk_bus(e, bus, boot_store, &mut out);
+            }
+        }
+    }
+    if let Some(list) = v.get("SPUSBDataType").and_then(Value::as_array) {
+        for e in list {
+            walk_usb(e, boot_store, &mut out);
+        }
+    }
+    out
+}
+
+/// A controller and what hangs off it: the drives, or further controllers.
+fn walk_bus(v: &Value, bus: &str, boot_store: Option<&str>, out: &mut Vec<Drive>) {
+    if let Some(d) = drive_of(v, bus, boot_store) {
+        out.push(d);
+        return;
+    }
+    if let Some(list) = v.get("_items").and_then(Value::as_array) {
+        for e in list {
+            walk_bus(e, bus, boot_store, out);
+        }
+    }
+}
+
+/// A USB hub or device and what hangs off it. A mass-storage device names
+/// itself and its serial at the device level and its disks under `Media`.
+fn walk_usb(v: &Value, boot_store: Option<&str>, out: &mut Vec<Drive>) {
+    if let Some(media) = v.get("Media").and_then(Value::as_array) {
+        let device_serial = v.get("serial_num").and_then(Value::as_str);
+        for m in media {
+            if let Some(mut d) = drive_of(m, "usb", boot_store) {
+                if d.serial.is_none() {
+                    d.serial = device_serial.map(str::to_string);
+                }
+                out.push(d);
+            }
+        }
+    }
+    if let Some(list) = v.get("_items").and_then(Value::as_array) {
+        for e in list {
+            walk_usb(e, boot_store, out);
+        }
+    }
+}
+
+/// One item as a drive, when it is one: it names a BSD device and states a
+/// size (a controller does neither; an optical drive has no size).
+fn drive_of(item: &Value, bus: &str, boot_store: Option<&str>) -> Option<Drive> {
+    let s = |k: &str| item.get(k).and_then(Value::as_str);
+    let bsd = s("bsd_name")?;
+    let size_bytes = item
+        .get("size_in_bytes")
+        .and_then(Value::as_u64)
+        .or_else(|| s("size").and_then(|x| parse_size(&x.replace(',', "."))))?;
+    let name = s("device_model").or_else(|| s("_name"))?.trim().to_string();
+    if name.is_empty() {
+        return None;
+    }
+    let partitions = item.get("volumes").and_then(Value::as_array);
+    let boots = boot_store.is_some_and(|store| {
+        whole_disk(store) == bsd
+            || partitions.is_some_and(|ps| {
+                ps.iter()
+                    .any(|p| p.get("bsd_name").and_then(Value::as_str) == Some(store))
+            })
+    });
+    let mut volumes: Vec<String> = Vec::new();
+    if boots {
+        volumes.push("/".into());
+    }
+    for p in partitions.into_iter().flatten() {
+        if let Some(m) = p.get("mount_point").and_then(Value::as_str) {
+            if !m.is_empty() && !volumes.iter().any(|v| v == m) {
+                volumes.push(m.to_string());
+            }
+        }
+    }
+    let kind = if bus == "nvme" {
+        Some("ssd".to_string())
+    } else {
+        medium_kind(item)
+    };
+    Some(Drive {
+        name,
+        serial: s("device_serial").map(str::to_string),
+        firmware: s("device_revision").map(str::to_string),
+        size_bytes: Some(size_bytes),
+        bus: Some(bus.to_string()),
+        kind,
+        health: s("smart_status").map(|h| h.trim().to_ascii_lowercase()),
+        removable: s("removable_media").map(|r| r.trim().eq_ignore_ascii_case("yes")),
+        volumes,
+        ..Default::default()
+    })
+}
+
+/// "Solid State" | "Rotational" from whichever `*medium_type` key the bus
+/// uses (`spsata_medium_type` on SATA; USB states none).
+fn medium_kind(item: &Value) -> Option<String> {
+    item.as_object()?
+        .iter()
+        .filter(|(k, _)| k.ends_with("medium_type"))
+        .find_map(|(_, v)| {
+            let v = v.as_str()?.to_ascii_lowercase();
+            if v.contains("solid") {
+                Some("ssd".to_string())
+            } else if v.contains("rotational") {
+                Some("hdd".to_string())
+            } else {
+                None
+            }
+        })
+}
+
+/// "disk0s2" → "disk0": the whole device a partition belongs to.
+fn whole_disk(bsd: &str) -> &str {
+    let digits = bsd
+        .strip_prefix("disk")
+        .map_or(0, |r| r.bytes().take_while(u8::is_ascii_digit).count());
+    if digits == 0 {
+        bsd
+    } else {
+        &bsd[.."disk".len() + digits]
+    }
+}
+
+/// `diskutil info /`: the partition the root volume lives on. On APFS that
+/// is "APFS Physical Store" (the volume's own identifier is a synthesised
+/// disk); on HFS+ the volume is the partition, so "Device Identifier".
+fn parse_physical_store(text: &str) -> Option<String> {
+    let field = |name: &str| {
+        text.lines().find_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            if k.trim() != name {
+                return None;
+            }
+            v.split_whitespace()
+                .next()
+                .map(|s| s.trim_end_matches(',').to_string())
+        })
+    };
+    field("APFS Physical Store").or_else(|| field("Device Identifier"))
+}
+
+/// `launchctl list` in the system domain: a "PID\tStatus\tLabel" header,
+/// then one row per job — PID "-" when not running, Status its last exit
+/// status. The jobs whose last exit was not 0, Apple's own excluded (they
+/// exit non-zero as a matter of course), and how many rows there were.
+fn parse_launchctl(text: &str) -> (Vec<Service>, u32) {
+    let mut count = 0u32;
+    let mut down = Vec::new();
+    for l in text.lines() {
+        let t: Vec<&str> = l.split_whitespace().collect();
+        if t.len() < 3 || t[0] == "PID" {
+            continue;
+        }
+        count = count.saturating_add(1);
+        let Ok(status) = t[1].parse::<i64>() else {
+            continue;
+        };
+        let label = t[2..].join(" ");
+        if status == 0 || label.starts_with("com.apple.") {
+            continue;
+        }
+        down.push(Service {
+            name: label,
+            display: None,
+            state: "exited".into(),
+            exit_code: Some(status),
+        });
+    }
+    (down, count)
 }
 
 // ── the sampled half: parsers ───────────────────────────────────────────────
@@ -338,18 +677,30 @@ fn load_avg() -> Option<[f64; 3]> {
 
 /// The page counts `vm_stat` prints that make "available": free, inactive
 /// and speculative pages (active, wired and compressor pages are the rest
-/// of "used", which is total minus available). In pages, with the page size.
+/// of "used", which is total minus available) — plus the file-backed pages
+/// (the cache the OS drops under pressure) and the pages the compressor
+/// holds. In pages, with the page size.
 #[derive(Debug, Default, PartialEq)]
 struct VmStat {
     page_size: u64,
     free: u64,
     inactive: u64,
     speculative: u64,
+    file_backed: u64,
+    compressor: u64,
 }
 
 impl VmStat {
     fn available_bytes(&self) -> u64 {
         (self.free + self.inactive + self.speculative) * self.page_size
+    }
+
+    fn cached_bytes(&self) -> u64 {
+        self.file_backed * self.page_size
+    }
+
+    fn compressed_bytes(&self) -> u64 {
+        self.compressor * self.page_size
     }
 }
 
@@ -375,10 +726,53 @@ fn parse_vm_stat(text: &str) -> Option<VmStat> {
             "Pages free" => v.free = n,
             "Pages inactive" => v.inactive = n,
             "Pages speculative" => v.speculative = n,
+            "File-backed pages" => v.file_backed = n,
+            "Pages occupied by compressor" => v.compressor = n,
             _ => {}
         }
     }
     (v.page_size > 0).then_some(v)
+}
+
+/// `ps -axo pid=,rss=,pcpu=,comm=` rows: the heaviest `TOP_PROCESSES` by
+/// resident memory, and how many processes there were. `rss` is in KiB;
+/// `pcpu` is percent of one core; `comm` is the executable's full path on
+/// macOS and may hold spaces ("…/Google Chrome"), so it is the rest of the
+/// row and the name is its last component. Sorted here rather than by
+/// `ps -m`, so the flag's exact meaning does not matter.
+fn parse_ps(text: &str) -> (Vec<Process>, u32) {
+    let mut all: Vec<Process> = text
+        .lines()
+        .filter_map(|l| {
+            let mut rest = l.trim_start();
+            let pid: u32 = take_word(&mut rest)?.parse().ok()?;
+            let rss_kib: u64 = take_word(&mut rest)?.parse().ok()?;
+            let cpu: f64 = take_word(&mut rest)?.parse().ok()?;
+            let comm = rest.trim_end();
+            let name = comm.rsplit('/').next().unwrap_or(comm).trim();
+            if name.is_empty() {
+                return None;
+            }
+            Some(Process {
+                name: name.to_string(),
+                pid,
+                memory_bytes: Some(rss_kib.saturating_mul(1024)),
+                cpu_pct: Some(cpu),
+            })
+        })
+        .collect();
+    let count = u32::try_from(all.len()).unwrap_or(u32::MAX);
+    all.sort_by(|a, b| b.memory_bytes.cmp(&a.memory_bytes).then(a.pid.cmp(&b.pid)));
+    all.truncate(TOP_PROCESSES);
+    (all, count)
+}
+
+/// The next whitespace-delimited word of `rest`, which then starts at the
+/// word after it.
+fn take_word<'a>(rest: &mut &'a str) -> Option<&'a str> {
+    let (w, r) = rest.split_once(char::is_whitespace)?;
+    *rest = r.trim_start();
+    Some(w)
 }
 
 /// `sysctl -n vm.swapusage`: "total = 2048.00M  used = 1250.00M  free = 798.00M
@@ -641,6 +1035,193 @@ fn parse_battery_health(json: &str) -> Option<f64> {
         .and_then(|s| s.trim_end_matches('%').trim().parse::<f64>().ok())
 }
 
+// ── OS updates ──────────────────────────────────────────────────────────────
+
+/// `softwareupdate -l` stdout. Since Big Sur each update is two lines:
+///
+/// ```text
+/// * Label: macOS Sonoma 14.6.1-23G93
+///     Title: macOS Sonoma 14.6.1, Version: 14.6.1, Size: 1234567KiB, Recommended: YES, Action: restart,
+/// ```
+///
+/// Catalina and before printed the label after "* " and, on the next line,
+/// "title (version), 3123456K [recommended] [restart]"; both are read. "No
+/// new software available." goes to stderr, so an empty stdout is no update.
+fn parse_softwareupdate(text: &str) -> Vec<Update> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let head = lines[i].trim();
+        i += 1;
+        let Some(head) = head.strip_prefix("* ") else {
+            continue;
+        };
+        let detail = match lines.get(i).map(|d| d.trim()) {
+            Some(d) if !d.is_empty() && !d.starts_with("* ") => {
+                i += 1;
+                d
+            }
+            _ => "",
+        };
+        let mut u = Update::default();
+        if let Some(label) = head.strip_prefix("Label:") {
+            let label = label.trim();
+            u.id = Some(label.to_string());
+            for field in detail.split(", ") {
+                let Some((k, v)) = field.split_once(':') else {
+                    continue;
+                };
+                let v = v.trim().trim_end_matches(',').trim();
+                match k.trim() {
+                    "Title" => u.title = v.to_string(),
+                    "Size" => u.size_bytes = parse_update_size(v),
+                    "Recommended" => {
+                        if v.eq_ignore_ascii_case("yes") {
+                            u.severity = Some("recommended".into());
+                        }
+                    }
+                    "Action" => u.restart = Some(v.eq_ignore_ascii_case("restart")),
+                    _ => {}
+                }
+            }
+            if u.title.is_empty() {
+                u.title = label.to_string();
+            }
+        } else {
+            let label = head.trim();
+            u.id = Some(label.to_string());
+            let (desc, tags) = detail.split_once(", ").unwrap_or((detail, ""));
+            let title = desc.split(" (").next().unwrap_or(desc).trim();
+            u.title = if title.is_empty() {
+                label.to_string()
+            } else {
+                title.to_string()
+            };
+            u.size_bytes = tags.split_whitespace().next().and_then(parse_update_size);
+            if tags.contains("[recommended]") {
+                u.severity = Some("recommended".into());
+            }
+            if !tags.is_empty() {
+                u.restart = Some(tags.contains("[restart]"));
+            }
+        }
+        out.push(u);
+    }
+    out
+}
+
+/// "1234567KiB", "3123456K", "512MiB" → bytes; a bare number is bytes.
+fn parse_update_size(s: &str) -> Option<u64> {
+    let s = s.trim();
+    let split = s
+        .find(|c: char| !c.is_ascii_digit() && c != '.')
+        .unwrap_or(s.len());
+    let (num, unit) = s.split_at(split);
+    if unit.trim().is_empty() {
+        return num.parse().ok();
+    }
+    parse_size(&format!("{num} {}", unit.trim()))
+}
+
+/// `/Library/Receipts/InstallHistory.plist` as XML: an array of dicts with
+/// `date`, `displayName`, `displayVersion` and `processName`, oldest first.
+/// The OS's own installs are the ones `softwareupdated` or the OS Installer
+/// wrote, or whose name starts with "macOS"; the last `keep` of them,
+/// newest first. The version is appended when the name does not carry it.
+fn parse_install_history(xml: &str, keep: usize) -> Vec<Installed> {
+    let mut out: Vec<Installed> = xml
+        .split("<dict>")
+        .skip(1)
+        .filter_map(|d| {
+            let d = d.split("</dict>").next().unwrap_or(d);
+            let name = plist_string(d, "displayName")?;
+            let process = plist_string(d, "processName").unwrap_or_default();
+            let ours = matches!(process.as_str(), "softwareupdated" | "OS Installer")
+                || name.starts_with("macOS");
+            if !ours || name.is_empty() {
+                return None;
+            }
+            let version = plist_string(d, "displayVersion").unwrap_or_default();
+            let title = if version.is_empty() || name.contains(&version) {
+                name
+            } else {
+                format!("{name} {version}")
+            };
+            Some(Installed {
+                title,
+                at: plist_string(d, "date").filter(|s| !s.is_empty()),
+            })
+        })
+        .collect();
+    let mut out = out.split_off(out.len().saturating_sub(keep));
+    out.reverse();
+    out
+}
+
+/// The text of the value after `<key>name</key>` in a plist dict, whatever
+/// its tag (`<string>`, `<date>`), the XML entities decoded.
+fn plist_string(dict: &str, key: &str) -> Option<String> {
+    let tag = format!("<key>{key}</key>");
+    let after = &dict[dict.find(&tag)? + tag.len()..];
+    let open = after.find('<')?;
+    let close = open + after[open..].find('>')? + 1;
+    if after[open..close].ends_with("/>") {
+        return Some(String::new());
+    }
+    let end = close + after[close..].find('<')?;
+    Some(
+        after[close..end]
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&amp;", "&"),
+    )
+}
+
+/// What the OS's updater says, hourly on its own thread. The pending list
+/// is `softwareupdate -l --no-scan` — the OS's own last scan, so no
+/// network and a second; when that is refused, one real scan, which asks
+/// Apple's servers and can take a minute. The installed list is the
+/// receipts history, read through `plutil -convert xml1` (its `json`
+/// output refuses the `<date>` values this file is full of) or straight
+/// from the file, which is XML on disk anyway. macOS keeps no "restart
+/// pending" flag a tool can read, so that stays `None`.
+pub fn read_updates() -> Updates {
+    let mut u = Updates {
+        checked_at: Some(crate::state::now_rfc3339()),
+        ..Default::default()
+    };
+    let mut cached = Command::new("softwareupdate");
+    cached.args(["-l", "--no-scan"]);
+    let listed = output_or(cached, SOFTWAREUPDATE).or_else(|_| {
+        let mut scan = Command::new("softwareupdate");
+        scan.arg("-l");
+        output_or(scan, SOFTWAREUPDATE)
+    });
+    match listed {
+        Ok(text) => u.pending = parse_softwareupdate(&text),
+        Err(e) => u.error = Some(format!("softwareupdate -l failed ({e})")),
+    }
+    let mut plutil = Command::new("plutil");
+    plutil.args(["-convert", "xml1", "-o", "-", INSTALL_HISTORY]);
+    let history = output_or(plutil, QUICK).or_else(|_| {
+        std::fs::read_to_string(INSTALL_HISTORY).map_err(|e| Failed::Spawn(e.to_string()))
+    });
+    match history {
+        Ok(xml) => u.installed = parse_install_history(&xml, INSTALLED_KEPT),
+        Err(e) => {
+            let line = format!("install history not readable ({e})");
+            u.error = Some(match u.error.take() {
+                Some(first) => format!("{first}; {line}"),
+                None => line,
+            });
+        }
+    }
+    u
+}
+
 // ── the collector ───────────────────────────────────────────────────────────
 
 impl Collect for Collector {
@@ -700,13 +1281,70 @@ impl Collect for Collector {
             }
         };
 
+        // The memory modules; the fitted total is hw.memsize, which the
+        // sample reads too.
+        let memory = run_for(
+            "system_profiler",
+            &["SPMemoryDataType", "-json"],
+            MEMORY_PROFILER,
+        )
+        .and_then(|j| parse_memory(&j, sysctl_u64("hw.memsize")))
+        .unwrap_or_else(|| {
+            errors.push("system_profiler SPMemoryDataType gave nothing usable".into());
+            MemoryProfile::default()
+        });
+
         Static {
             machine,
             os,
             cpu,
             gpus,
+            memory_slots: memory.slots,
+            memory_max_capacity_bytes: memory.max_capacity_bytes,
+            memory_modules: memory.modules,
             errors,
         }
+    }
+
+    fn read_slow(&mut self) -> Slow {
+        let mut w = Slow::default();
+
+        // Drives: the three buses in one call, and which one boots.
+        let boot_store = run("diskutil", &["info", "/"]).and_then(|t| parse_physical_store(&t));
+        let mut profiler = Command::new("system_profiler");
+        profiler.args([
+            "SPNVMeDataType",
+            "SPSerialATADataType",
+            "SPUSBDataType",
+            "-json",
+        ]);
+        match output_or(profiler, STORAGE_PROFILER) {
+            Ok(j) => {
+                w.drives = parse_storage(&j, boot_store.as_deref());
+                if w.drives.is_empty() {
+                    w.errors
+                        .push("system_profiler lists no drive on NVMe, SATA or USB".into());
+                } else {
+                    w.errors
+                        .push("drive SMART counters: not readable without smartmontools".into());
+                }
+            }
+            Err(e) => w
+                .errors
+                .push(format!("system_profiler storage types failed ({e})")),
+        }
+
+        // Services: the system domain, since the daemon is root.
+        match run("launchctl", &["list"]) {
+            Some(t) => {
+                let (down, count) = parse_launchctl(&t);
+                w.services = down;
+                w.service_count = Some(count);
+            }
+            None => w.errors.push("launchctl list failed".into()),
+        }
+
+        w
     }
 
     fn sample(&mut self) -> Sample {
@@ -745,8 +1383,15 @@ impl Collect for Collector {
             total_bytes: total,
             used_bytes: total.zip(available).map(|(t, a)| t.saturating_sub(a)),
             available_bytes: available,
+            cached_bytes: vm.as_ref().map(VmStat::cached_bytes),
+            compressed_bytes: vm.as_ref().map(VmStat::compressed_bytes),
+            // A commit charge is a Windows notion; macOS overcommits.
+            committed_bytes: None,
+            commit_limit_bytes: None,
             swap_total_bytes: swap.map(|(t, _)| t),
             swap_used_bytes: swap.map(|(_, u)| u),
+            // Slots, ceiling and modules are static; `assemble` fills them.
+            ..Default::default()
         };
 
         // Disks.
@@ -888,6 +1533,18 @@ impl Collect for Collector {
             None => s.errors.push("pmset -g batt failed".into()),
         }
 
+        // Processes: the heaviest by resident memory, and the count.
+        let mut ps = Command::new("ps");
+        ps.args(["-axo", "pid=,rss=,pcpu=,comm="]);
+        match output_or(ps, PS) {
+            Ok(t) => {
+                let (top, count) = parse_ps(&t);
+                s.processes = top;
+                s.process_count = Some(count);
+            }
+            Err(e) => s.errors.push(format!("ps failed ({e})")),
+        }
+
         s
     }
 }
@@ -908,8 +1565,270 @@ mod tests {
         assert_eq!(m.chip.as_deref(), Some("Apple M1 Pro"));
         assert_eq!(m.bios_version.as_deref(), Some("10151.101.3"));
         assert_eq!(m.manufacturer.as_deref(), Some("Apple"));
+        assert_eq!(m.form.as_deref(), Some("laptop"));
         let dump = format!("{m:?}");
         assert!(!dump.contains("C02XXXXXXXXX") && !dump.contains("ABCD-1234"));
+    }
+
+    #[test]
+    fn form_from_name_or_identifier() {
+        assert_eq!(form_of("MacBook Air"), Some("laptop"));
+        assert_eq!(form_of("MacBookPro16,1"), Some("laptop"));
+        assert_eq!(form_of("Mac mini"), Some("mini"));
+        assert_eq!(form_of("Macmini8,1"), Some("mini"));
+        assert_eq!(form_of("Mac Studio"), Some("desktop"));
+        assert_eq!(form_of("MacPro7,1"), Some("desktop"));
+        assert_eq!(form_of("iMac"), Some("all-in-one"));
+        assert_eq!(form_of("iMacPro1,1"), Some("all-in-one"));
+        assert_eq!(form_of("Virtual Machine"), None);
+    }
+
+    #[test]
+    fn memory_apple_silicon_is_one_module_on_package() {
+        let j = r#"{"SPMemoryDataType":[{"SPMemoryDataType":"36 GB",
+            "dimm_manufacturer":"Apple","dimm_type":"LPDDR5"}]}"#;
+        let m = parse_memory(j, Some(36 << 30)).expect("parses");
+        assert_eq!(m.slots, Some(0));
+        assert_eq!(m.max_capacity_bytes, Some(36 << 30));
+        assert_eq!(m.modules.len(), 1);
+        let module = &m.modules[0];
+        assert_eq!(module.locator.as_deref(), Some("on package"));
+        assert_eq!(module.size_bytes, Some(36 << 30));
+        assert_eq!(module.kind.as_deref(), Some("LPDDR5"));
+        assert_eq!(module.manufacturer.as_deref(), Some("Apple"));
+        assert_eq!(module.speed_mts, None);
+        // Without hw.memsize the printed size stands in.
+        let m = parse_memory(j, None).expect("parses");
+        assert_eq!(m.modules[0].size_bytes, Some(36 << 30));
+    }
+
+    #[test]
+    fn memory_intel_is_one_module_per_fitted_dimm() {
+        let j = r#"{"SPMemoryDataType":[{"_name":"Memory Slots","_items":[
+            {"_name":"BANK 0/DIMM0","dimm_manufacturer":"0x802C","dimm_part_number":"0x3842",
+             "dimm_serial_number":"0xDEADBEEF","dimm_size":"8 GB","dimm_speed":"2667 MHz",
+             "dimm_status":"ok","dimm_type":"DDR4"},
+            {"_name":"BANK 2/DIMM1","dimm_size":"8 GB","dimm_speed":"2667 MHz",
+             "dimm_status":"ok","dimm_type":"DDR4"},
+            {"_name":"BANK 1/DIMM0","dimm_size":"empty","dimm_status":"empty"}],
+            "global_ecc_state":"ecc_disabled","is_memory_upgradeable":"Yes"}]}"#;
+        let m = parse_memory(j, Some(16 << 30)).expect("parses");
+        assert_eq!(m.slots, Some(3));
+        assert_eq!(m.max_capacity_bytes, None);
+        assert_eq!(m.modules.len(), 2);
+        assert_eq!(m.modules[0].locator.as_deref(), Some("BANK 0/DIMM0"));
+        assert_eq!(m.modules[0].size_bytes, Some(8 << 30));
+        assert_eq!(m.modules[0].speed_mts, Some(2667));
+        assert_eq!(m.modules[0].kind.as_deref(), Some("DDR4"));
+        assert_eq!(m.modules[0].part_number.as_deref(), Some("0x3842"));
+        assert!(!format!("{m:?}").contains("0xDEADBEEF"));
+        assert_eq!(parse_memory("nope", None), None);
+    }
+
+    #[test]
+    fn storage_nvme_sata_usb_and_the_boot_volume() {
+        let j = r#"{
+          "SPNVMeDataType":[{"_name":"Apple SSD Controller","_items":[
+            {"_name":"APPLE SSD AP0512Z","bsd_name":"disk0","detachable_drive":"no",
+             "device_model":"APPLE SSD AP0512Z","device_revision":"387.100.","device_serial":"0ba0NVME",
+             "partition_map_type":"guid_partition_map_type","removable_media":"no",
+             "size":"500,28 GB","size_in_bytes":500277790720,"smart_status":"Verified",
+             "volumes":[{"_name":"disk0s1","bsd_name":"disk0s1","iocontent":"Apple_APFS_ISC","size_in_bytes":524288000},
+                        {"_name":"disk0s2","bsd_name":"disk0s2","iocontent":"Apple_APFS","size_in_bytes":494384795648}]}]}],
+          "SPSerialATADataType":[{"_name":"Intel 8 Series Chipset","_items":[
+            {"_name":"WDC WD10EZEX","bsd_name":"disk1","device_model":"WDC WD10EZEX-00BN5A0",
+             "device_revision":"01.01A01","device_serial":"WD-SATA1","removable_media":"no",
+             "size":"1 TB","size_in_bytes":1000204886016,"smart_status":"Not Supported",
+             "spsata_medium_type":"Rotational",
+             "volumes":[{"_name":"Data","bsd_name":"disk1s2","file_system":"Journaled HFS+","mount_point":"/Volumes/Data"}]},
+            {"_name":"MATSHITADVD-R UJ-8A8","device_model":"MATSHITADVD-R UJ-8A8","spsata_drive_type":"optical"}]}],
+          "SPUSBDataType":[{"_name":"USB31Bus","_items":[
+            {"_name":"USB Hub","_items":[
+              {"_name":"Ultra Fit","manufacturer":"SanDisk","serial_num":"4C53USB",
+               "Media":[{"_name":"Ultra Fit","bsd_name":"disk4","removable_media":"yes",
+                         "size":"30,9 GB","size_in_bytes":30934745088,"smart_status":"Verified",
+                         "volumes":[{"_name":"USB","bsd_name":"disk4s1","file_system":"MS-DOS FAT32","mount_point":"/Volumes/USB"}]}]}]}]}]
+        }"#;
+        let d = parse_storage(j, Some("disk0s2"));
+        assert_eq!(d.len(), 3, "{d:?}");
+        assert_eq!(d[0].name, "APPLE SSD AP0512Z");
+        assert_eq!(d[0].serial.as_deref(), Some("0ba0NVME"));
+        assert_eq!(d[0].firmware.as_deref(), Some("387.100."));
+        assert_eq!(d[0].size_bytes, Some(500277790720));
+        assert_eq!(d[0].bus.as_deref(), Some("nvme"));
+        assert_eq!(d[0].kind.as_deref(), Some("ssd"));
+        assert_eq!(d[0].health.as_deref(), Some("verified"));
+        assert_eq!(d[0].removable, Some(false));
+        assert_eq!(d[0].volumes, vec!["/".to_string()]);
+        assert_eq!(d[0].temperature_c, None);
+        assert_eq!(d[1].name, "WDC WD10EZEX-00BN5A0");
+        assert_eq!(d[1].bus.as_deref(), Some("sata"));
+        assert_eq!(d[1].kind.as_deref(), Some("hdd"));
+        assert_eq!(d[1].health.as_deref(), Some("not supported"));
+        assert_eq!(d[1].volumes, vec!["/Volumes/Data".to_string()]);
+        assert_eq!(d[2].name, "Ultra Fit");
+        assert_eq!(d[2].bus.as_deref(), Some("usb"));
+        assert_eq!(d[2].serial.as_deref(), Some("4C53USB"));
+        assert_eq!(d[2].kind, None);
+        assert_eq!(d[2].removable, Some(true));
+        assert_eq!(d[2].volumes, vec!["/Volumes/USB".to_string()]);
+        // The boot volume can also be named by the whole disk, or by nothing.
+        assert_eq!(
+            parse_storage(j, Some("disk1s2"))[1].volumes,
+            vec!["/", "/Volumes/Data"]
+        );
+        assert!(parse_storage(j, None)[0].volumes.is_empty());
+        assert!(parse_storage("not json", None).is_empty());
+    }
+
+    #[test]
+    fn boot_store_from_diskutil() {
+        assert_eq!(whole_disk("disk0s2"), "disk0");
+        assert_eq!(whole_disk("disk12"), "disk12");
+        assert_eq!(whole_disk("nvme0"), "nvme0");
+        let apfs = "   Device Identifier:         disk3s1s1\n\
+                    \x20  Part of Whole:             disk3\n\
+                    \x20  Mount Point:               /\n\
+                    \x20  APFS Container:            disk3\n\
+                    \x20  APFS Physical Store:       disk0s2\n";
+        assert_eq!(parse_physical_store(apfs).as_deref(), Some("disk0s2"));
+        let hfs = "   Device Identifier:         disk1s2\n   Part of Whole:             disk1\n";
+        assert_eq!(parse_physical_store(hfs).as_deref(), Some("disk1s2"));
+        assert_eq!(parse_physical_store(""), None);
+    }
+
+    #[test]
+    fn launchctl_rows_keep_failed_third_party_jobs() {
+        let t = "PID\tStatus\tLabel\n\
+                 -\t0\tcom.apple.xpc.launchd.unmanaged.loginwindow.101\n\
+                 123\t0\tcom.openssh.sshd\n\
+                 -\t78\tcom.apple.mdworker.shared\n\
+                 -\t1\tcom.example.backup\n\
+                 -\t-9\tio.tailscale.ipn.system\n\
+                 456\t0\tme.daedalus.agent\n";
+        let (down, count) = parse_launchctl(t);
+        assert_eq!(count, 6);
+        let names: Vec<&str> = down.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["com.example.backup", "io.tailscale.ipn.system"]);
+        assert_eq!(down[0].exit_code, Some(1));
+        assert_eq!(down[1].exit_code, Some(-9));
+        assert_eq!(down[0].state, "exited");
+        assert_eq!(down[0].display, None);
+        assert_eq!(parse_launchctl(""), (Vec::new(), 0));
+    }
+
+    #[test]
+    fn ps_rows_top_by_rss_with_spaced_paths() {
+        let t = "    1   8192   0.1 /sbin/launchd\n\
+                 \x20 512 262144  12.5 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n\
+                 \x20 300  65536   0.0 /System/Library/CoreServices/WindowServer\n\
+                 \x20   0   1024   0.0 kernel_task\n\
+                 garbage line\n";
+        let (top, count) = parse_ps(t);
+        assert_eq!(count, 4);
+        assert_eq!(top.len(), 4);
+        assert_eq!(top[0].name, "Google Chrome");
+        assert_eq!(top[0].pid, 512);
+        assert_eq!(top[0].memory_bytes, Some(262144 * 1024));
+        assert_eq!(top[0].cpu_pct, Some(12.5));
+        assert_eq!(top[1].name, "WindowServer");
+        assert_eq!(top[3].name, "kernel_task");
+        // More rows than TOP_PROCESSES are cut, the count is not.
+        let many: String = (1..=20)
+            .map(|i| format!("{i} {} 0.0 /bin/p{i}\n", 1000 * i))
+            .collect();
+        let (top, count) = parse_ps(&many);
+        assert_eq!(count, 20);
+        assert_eq!(top.len(), TOP_PROCESSES);
+        assert_eq!(top[0].name, "p20");
+    }
+
+    #[test]
+    fn softwareupdate_modern_and_catalina() {
+        let modern = "Software Update Tool\n\nFinding available software\n\
+            Software Update found the following new or updated software:\n\
+            * Label: macOS Sonoma 14.6.1-23G93\n\
+            \tTitle: macOS Sonoma 14.6.1, Version: 14.6.1, Size: 1234567KiB, Recommended: YES, Action: restart,\n\
+            * Label: Command Line Tools for Xcode-15.3\n\
+            \tTitle: Command Line Tools for Xcode, Version: 15.3, Size: 728512KiB, Recommended: YES,\n";
+        let u = parse_softwareupdate(modern);
+        assert_eq!(u.len(), 2);
+        assert_eq!(u[0].title, "macOS Sonoma 14.6.1");
+        assert_eq!(u[0].id.as_deref(), Some("macOS Sonoma 14.6.1-23G93"));
+        assert_eq!(u[0].size_bytes, Some(1234567 * 1024));
+        assert_eq!(u[0].severity.as_deref(), Some("recommended"));
+        assert_eq!(u[0].restart, Some(true));
+        assert_eq!(u[1].title, "Command Line Tools for Xcode");
+        assert_eq!(u[1].size_bytes, Some(728512 * 1024));
+        assert_eq!(u[1].restart, None);
+        let old = "Software Update found the following new or updated software:\n\
+            \x20  * macOS Catalina 10.15.7 Update-10.15.7\n\
+            \tmacOS Catalina 10.15.7 Update (10.15.7), 3123456K [recommended] [restart]\n";
+        let u = parse_softwareupdate(old);
+        assert_eq!(u.len(), 1);
+        assert_eq!(u[0].title, "macOS Catalina 10.15.7 Update");
+        assert_eq!(
+            u[0].id.as_deref(),
+            Some("macOS Catalina 10.15.7 Update-10.15.7")
+        );
+        assert_eq!(u[0].size_bytes, Some(3123456 * 1024));
+        assert_eq!(u[0].severity.as_deref(), Some("recommended"));
+        assert_eq!(u[0].restart, Some(true));
+        assert!(parse_softwareupdate("Software Update Tool\n").is_empty());
+        assert!(parse_softwareupdate("").is_empty());
+        assert_eq!(parse_update_size("512MiB"), Some(512 << 20));
+        assert_eq!(parse_update_size("4096"), Some(4096));
+        assert_eq!(parse_update_size("lots"), None);
+    }
+
+    #[test]
+    fn install_history_last_os_installs_newest_first() {
+        let entry = |date: &str, name: &str, version: &str, process: &str| {
+            format!(
+                "<dict>\n\t<key>date</key>\n\t<date>{date}</date>\n\t<key>displayName</key>\n\t<string>{name}</string>\n\
+                 \t<key>displayVersion</key>\n\t<string>{version}</string>\n\t<key>packageIdentifiers</key>\n\
+                 \t<array>\n\t\t<string>com.apple.pkg.x</string>\n\t</array>\n\
+                 \t<key>processName</key>\n\t<string>{process}</string>\n</dict>\n"
+            )
+        };
+        let mut xml = String::from(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\">\n<array>\n",
+        );
+        xml += &entry("2024-01-01T00:00:00Z", "Google Chrome", "120", "Installer");
+        for i in 1..=9 {
+            xml += &entry(
+                &format!("2025-0{i}-01T00:00:00Z"),
+                "macOS Sonoma",
+                &format!("14.{i}"),
+                "softwareupdated",
+            );
+        }
+        xml += &entry(
+            "2025-10-01T00:00:00Z",
+            "macOS Sequoia 15.0",
+            "15.0",
+            "OS Installer",
+        );
+        xml += &entry(
+            "2025-11-01T00:00:00Z",
+            "Rosetta &amp; Friends",
+            "",
+            "softwareupdated",
+        );
+        xml += "</array>\n</plist>\n";
+        let h = parse_install_history(&xml, 8);
+        assert_eq!(h.len(), 8);
+        assert_eq!(h[0].title, "Rosetta & Friends");
+        assert_eq!(h[0].at.as_deref(), Some("2025-11-01T00:00:00Z"));
+        assert_eq!(h[1].title, "macOS Sequoia 15.0");
+        assert_eq!(h[2].title, "macOS Sonoma 14.9");
+        assert_eq!(h[7].title, "macOS Sonoma 14.4");
+        assert!(h.iter().all(|i| !i.title.contains("Chrome")));
+        assert!(parse_install_history("<plist/>", 8).is_empty());
+        assert_eq!(
+            plist_string("<key>a</key><string/>", "a").as_deref(),
+            Some("")
+        );
     }
 
     #[test]
@@ -976,13 +1895,17 @@ mod tests {
                  Pages wired down:                        150000.\n\
                  Pages purgeable:                           1000.\n\
                  \"Translation faults\":                 123456789.\n\
-                 Pages occupied by compressor:             20000.\n";
+                 Pages occupied by compressor:             20000.\n\
+                 File-backed pages:                       100000.\n\
+                 Anonymous pages:                         600000.\n";
         let v = parse_vm_stat(t).expect("parses");
         assert_eq!(v.page_size, 16384);
         assert_eq!(v.free, 12345);
         assert_eq!(v.inactive, 300000);
         assert_eq!(v.speculative, 5000);
         assert_eq!(v.available_bytes(), (12345 + 300000 + 5000) * 16384);
+        assert_eq!(v.cached_bytes(), 100000 * 16384);
+        assert_eq!(v.compressed_bytes(), 20000 * 16384);
         assert_eq!(parse_vm_stat("garbage"), None);
     }
 
