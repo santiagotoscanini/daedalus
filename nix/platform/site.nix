@@ -1,4 +1,9 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  options,
+  ...
+}:
 
 # fleet.site — the site directory: the one place in the operator's
 # configuration that daedalus writes, and the seam through which nix reads it.
@@ -70,6 +75,26 @@ let
       null;
   nodesSchemaVersions = [ 1 ];
 
+  # site.json `modules.enabled` — the switches the control plane flips.
+  #
+  # An object, id → bool, holding ONLY the modules the operator moved from
+  # their page ("Switch off" on a service's page, or Settings › Modules): a
+  # module the document does not name keeps whatever the host's own files
+  # say, so an old document changes nothing. A named id becomes a definition
+  # of `fleet.modules.<id>.enable` at priority 60 — stronger than the plain
+  # definition in a host's `host/modules.nix` or a stack's `default = true`,
+  # weaker than a `mkForce` a host writes on purpose. Two things are refused
+  # at eval rather than crashing it: an id no imported module declares (a
+  # document from a box that runs a stack this one lacks), and a structural
+  # module switched off (below).
+  siteSwitches = if sourced then (siteDoc.modules or { }).enabled or { } else { };
+  declaredSwitches = builtins.attrNames options.fleet.modules;
+  knownSwitches = lib.filterAttrs (id: _: builtins.elem id declaredSwitches) siteSwitches;
+  unknownSwitches = builtins.attrNames (removeAttrs siteSwitches declaredSwitches);
+  structuralOff = builtins.attrNames (
+    lib.filterAttrs (id: on: !on && builtins.elem id cfg.structuralModules) knownSwitches
+  );
+
   same = name: a: b: {
     assertion = a == b;
     message = "site.json disagrees with the configuration about ${name}: site.json says ${builtins.toJSON a}, configuration.nix says ${builtins.toJSON b}. This value is not yet sourced from site.json; write site.json again from Settings › Site.";
@@ -77,6 +102,36 @@ let
 in
 {
   options.fleet = {
+    # The modules a running box cannot do without: the control plane refuses
+    # to switch these off from its pages, and site.json naming one off is an
+    # eval error. The engine's default is its own spine — the proxy every
+    # hostname rides, the identity provider that gates the control plane,
+    # the cluster, the resolver the box itself resolves through, the
+    # registry the apps pull from, the log and metric pipeline, the apps
+    # platform daedalus IS an app on, and daedalus itself. A host appends
+    # what its own stacks make structural (a netns owner with tenants, a
+    # gateway whose sidecars write into another stack's bridge) in
+    # host/modules.nix; the module-system rule in the reference host's
+    # repository is the reasoning per stack.
+    structuralModules = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "app-db"
+        "apps"
+        "cloudflared"
+        "daedalus"
+        "gatus"
+        "healthchecks"
+        "logging"
+        "monitoring"
+        "pihole"
+        "pocket-id"
+        "registry"
+        "traefik"
+      ];
+      description = "Module ids the control plane must not switch off; site.json switching one off fails evaluation.";
+    };
+
     site = {
       path = lib.mkOption {
         type = lib.types.str;
@@ -244,6 +299,14 @@ in
     # The sourced constants. Plain definitions, not mkDefault: there must be
     # exactly one place these are written, and it is the document.
     fleet = {
+      # The switches the document names, at a priority the host's own files
+      # yield to. Only declared ids reach a definition; the rest are the
+      # assertion below, which is why this cannot be an "option does not
+      # exist" crash.
+      modules = lib.mapAttrs (_: on: {
+        enable = lib.mkOverride 60 on;
+      }) knownSwitches;
+
       # The fields are picked by name so a key the control plane adds later
       # cannot fail the submodule's type check before this module learns it.
       nodes = map (n: {
@@ -336,6 +399,14 @@ in
     # Belt and braces for what is NOT sourced yet: these must agree exactly,
     # and a stale copy fails the build rather than a page three days later.
     assertions = [
+      {
+        assertion = unknownSwitches == [ ];
+        message = "site.json modules.enabled names modules this host does not import: ${lib.concatStringsSep ", " unknownSwitches}. Switch them from a host that runs them, or remove the entries.";
+      }
+      {
+        assertion = structuralOff == [ ];
+        message = "site.json modules.enabled switches off structural modules: ${lib.concatStringsSep ", " structuralOff}. These are in fleet.structuralModules; a running box cannot do without them.";
+      }
       (same "hostname" siteDoc.identity.hostname config.networking.hostName)
       (same "owner" siteDoc.identity.owner cfg.github.owner)
       (same "operator.user" siteDoc.identity.operator.user cfg.operator.user)

@@ -139,6 +139,7 @@ And from `site/site.json`, which `platform/site.nix` turns into options
 | `mail.sender`, `mail.alertTo` | `fleet.mail.sender`, `fleet.mail.alertTo` |
 | `cloudflare.{accountId,tunnelId,zoneId}` | `fleet.cloudflare.*` |
 | `developer.engineOverride` | read by the host agents at run time, never by nix (below) |
+| `modules.enabled.<id>` | `fleet.modules.<id>.enable`, at a priority above the host's own files — only the ids the operator switched from a page; a structural module (`fleet.structuralModules`) named off fails evaluation |
 
 plus files beside it: `site/apps.json` (the app registry),
 `site/nodes.json` (the approved nodes — id, name, OS and what each offers,

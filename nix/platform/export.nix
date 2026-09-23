@@ -393,6 +393,21 @@ in
         schemaVersion = 1;
         data = lib.mapAttrs (_: m: m.enable) cfg.modules;
       };
+
+      # What switching a module off would take with it, and which ones may
+      # not be switched at all. `structural` is fleet.structuralModules;
+      # `stacks` is the log-stack registry (stack → containers), the one
+      # place a multi-container stack names its members — a stack absent
+      # from it is its one container of the same name. The page turns a
+      # container list into the hostnames that stop answering through the
+      # publishing export's serviceName.
+      switches = {
+        schemaVersion = 1;
+        data = {
+          structural = cfg.structuralModules;
+          stacks = cfg.logStacks;
+        };
+      };
     };
 
     fleet.imagePins = imagePins;
