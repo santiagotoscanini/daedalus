@@ -2000,11 +2000,12 @@ in
           # for the next write if it lands in that window.
           if systemctl is-active --quiet pihole-ftl.service; then
             started=$(systemctl show -p ActiveEnterTimestampMonotonic --value pihole-ftl.service)
-            # Microseconds since boot, the unit systemd reports. Computed, not
-            # spliced: /proc/uptime prints two decimals today, and string
-            # surgery on that would silently skip the HUP (stale DNS) or
-            # reintroduce the outage if the format ever changed.
-            now=$(awk '{printf "%.0f", $1 * 1000000}' /proc/uptime)
+            # Microseconds since boot, the unit systemd reports. Whole seconds
+            # are enough for a thirty-second window, so the fraction is simply
+            # dropped: that is right whatever /proc/uptime prints, and it uses
+            # only the shell, which awk here did not — it failed the service.
+            up=$(cut -d' ' -f1 /proc/uptime)
+            now=$(( ''${up%.*} * 1000000 ))
             if [ -n "$started" ] && [ "$(( now - started ))" -gt 30000000 ]; then
               systemctl kill --kill-whom=main -s HUP pihole-ftl.service
             else
