@@ -421,25 +421,32 @@ priority; each can be done independently unless noted.
    move (below). This is the one step that is an Apply, and it happens
    when a provider joins or leaves, not when a model does.
 
-   **Providers are what a machine offers, reported by the agent.** A
-   `Provider` trait in the agent (`kind`, `detect`, `catalog`, `health`;
-   later `start`, `stop`, `update`) with Lemonade first: probe
+   **The agent reports presence; the box reads the rest from the
+   provider.** A `Provider` trait in the agent (`kind`, `detect`; later
+   `start`, `stop`, `update`) with Lemonade first: probe
    `127.0.0.1:<port>/api/v1/health` (port from the policy, default
-   13305), read the catalog, and carry both in the telemetry document as
-   `providers: [{ kind, version, port, loaded: [...], models: [{ id,
-   labels, downloaded, recipe }] }]`, the catalog refreshed every few
-   minutes, the health every tick. Ollama on the Mac is the second
-   implementation of the same trait (`/api/tags`, port 11434), headless,
-   when the operator wants it. The System page's Host tab shows the
-   provider; Settings › Machines › the node shows it with a switch,
-   "offer to the gateway", and the model table.
+   13305) and carry `providers: [{ kind, port, version, running }]` in
+   the telemetry document, nothing more. The catalog, the labels, what is
+   loaded and the health are read by the box from the provider's own API
+   at `<name>.<localDomain>:<port>` — the address LiteLLM dials anyway,
+   so a provider is by definition reachable from the box, and a model list
+   carried by the agent would be a second copy of the provider's state. A
+   provider found by the agent is offered unless the node's switch says
+   otherwise; "found but bound to localhost" is a state the page names. A
+   provider can also exist without an agent — a machine not enrolled,
+   running Ollama — added on Settings › Machines by address and port; the
+   agent is one way to discover a provider, an address is the other, and
+   the box-side trait is the same. Ollama is the second `kind`
+   (`/api/tags`, port 11434). The System page's Host tab shows the
+   provider; Settings › Machines › the node shows it with the switch and
+   the model table.
 
    **Models reach LiteLLM through LiteLLM, not through nix.** A model
    comes and goes with a click in Lemonade's window; a rebuild and a
    gateway restart per click is the wrong cost, and the catalog is the
    provider's state, not the box's. So a sync in the control plane
-   reconciles LiteLLM's model table with what every offering provider
-   reports, on each telemetry tick and on Apply: for each downloaded
+   reconciles LiteLLM's model table with every offered provider's catalog,
+   read from the provider on each telemetry tick and on Apply: for each downloaded
    model, `/model/new` with `model_name` the alias, `litellm_params`
    `{ model: openai/<id>, api_base: http://<name>.<localDomain>:<port>/api/v1,
    api_key, timeout }`, and `model_info` derived from the labels (mode:
@@ -461,8 +468,9 @@ priority; each can be done independently unless noted.
 
    **Order of work**, each step usable on its own:
    1. Agent 0.11: the `Provider` trait and Lemonade detection in
-      telemetry; the classifier fix rides along. The Host tab and Settings
-      › Machines show the provider and its models. No nix.
+      telemetry; the classifier fix rides along. The box reads the
+      catalog from the provider; the Host tab and Settings › Machines show
+      the provider and its models. No nix.
    2. The slug and the runtime name: policy `name`, the dnsmasq file, the
       pihole module's `dhcp-hostsdir`/`hostsdir` lines and the HUP path
       unit (one engine nix change, closure-neutral for a host without
