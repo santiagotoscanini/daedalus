@@ -71,7 +71,8 @@ the remote is still the copy that survives a disk. Commit often.
   shotter run's frames and `deploy-shot` for an app's post-deploy
   screenshot.
 - **The dashboard modules — `src/modules/<id>/`**: one directory per
-  category page (ai, gaming, home, media, monitoring, network, system),
+  category page (actions, ai, database, gaming, home, media, monitoring,
+  network, system),
   found by `import.meta.glob`, never listed. Each holds `manifest.ts`
   (pure data: label, lede, rail `order`, the tabs with their probes,
   spans and the `nix` module ids each tab fronts), `releases.ts` (the
@@ -87,7 +88,11 @@ the remote is still the copy that survives a disk. Commit often.
   `host/modules.ts` (loaders, lazy) and `components/modules/boards.tsx`
   (views, eager). A new module = a new directory; nothing else changes.
 - **Loaders reach the machine only through `Ctx`** (`core/ctx.ts`:
-  env, secret, gateway, snapshot, store, http, loki, hosts, site, modules).
+  env, secret, gateway, snapshot, store, http, prom, loki, github, hosts,
+  site, modules). `ctx.prom` and `ctx.loki` are the only way a module
+  reads PromQL or LogQL, and `ctx.github.app` / `ctx.github.anon` the
+  only way it reads GitHub — the boundary test refuses a value import of
+  `host/prom`, `host/loki` or `host/keys` under a module's `data/`.
   `ctx.env` and `ctx.secret` take only names `host/env.ts` declares;
   `ctx.gateway` is LiteLLM, or null on a box without one. No
   `process.env` under `src/modules/` — the boundary test refuses it.
