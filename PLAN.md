@@ -453,36 +453,23 @@ priority; each can be done independently unless noted.
    node (`openai/*`: no per-model mode, so every embedding and image model
    would present as chat).
 
+   **Also landed 2026-09-23**: the AI page is Providers → Gateway →
+   Consumers with a machine picker; the box reads each provider's catalog
+   and health from its own API; the gateway sync writes a route per offered
+   model into LiteLLM's table and removes it when the model leaves, so
+   every Lemonade route left `config.yaml`; a node's policy can offer any
+   `ProviderKind`; `lanDomain` is published in the network export rather
+   than assumed.
+
    **Order of work**, each step usable on its own:
-   1. **The AI page becomes the chain: providers → gateway → consumers.**
-      Three tabs replace Lemonade / LiteLLM / Open WebUI / n8n. *Providers*
-      opens with the chain drawn once (who provides, what the gateway
-      exposes, who consumes) and a machine picker like System's: this box
-      (subgen's faster-whisper on :9000 is a provider of one STT model, the
-      `whisper-1` the tv stack already dials), `gaming-pc` (Lemonade),
-      `macbook-pro` (Lemonade for macOS — Metal backends for text, STT and
-      TTS, same API and port, so the Mac joins with the same provider kind
-      the day it is installed; Ollama stays the fallback kind). Each
-      machine's view: presence from the agent, health and the catalog with
-      labels read from the provider's API, what is loaded, what is offered
-      to the gateway, GPU load and VRAM (WIP until telemetry carries them).
-      *Gateway* is LiteLLM as today. *Consumers* is Open WebUI, n8n and
-      every app holding a `litellmKeys` entry, with what each is allowed
-      to call. Manifest tabs are static by contract, so machines are a
-      picker inside Providers (`?tab=providers&machine=<id>`), not tabs.
-      The box-side provider kinds are one interface: `lemonade`
-      (OpenAI-compatible `/api/v1`, catalog with labels, health),
-      `subgen` (STT only, one implicit model), `ollama` (`/api/tags`);
-      each kind says how to list, how to probe, and how a model maps to a
-      LiteLLM route.
-   2. The model sync and the per-model policy; the lemonade block leaves
-      `config.yaml`; the Gateway tab lists the models by the machine that
-      provides them.
-   3. Providers as declared services: start, stop, install and update
-      Lemonade from the box through the agent; Ollama on the Mac.
-   4. `pinAddress` gets its switch on Settings › Machines (the policy
-      field and the `MAC,IP,name` line exist; no UI yet).
-   5. Power verbs (sleep, restart, shut down, wake by magic packet),
+   1. Providers as declared services: start, stop, install and update
+      Lemonade from the box through the agent; Ollama on the Mac, which the
+      policy can already express but no machine yet runs.
+   2. Per-model counters from each provider — what the two WIP boards on
+      the Providers tab wait for — and GPU figures from the agent.
+   3. `pinAddress` gets its switch on Settings › Machines (the policy field
+      and the `MAC,IP,name` line exist; no UI yet).
+   4. Power verbs (sleep, restart, shut down, wake by magic packet),
       dashboards and sleep-aware alerts, the WIP boards (die temperatures,
       GPU live figures, the AMD driver feed, Homebrew formulae), signing
       (Apple once the `release` environment holds the six santree
@@ -588,28 +575,19 @@ priority; each can be done independently unless noted.
       the `user` scope; a vault entry for one, and the Minutes tab's plan
       board reads the real cycle instead of assuming Free.
 
----
 
-12. **Switch a service off from its page, with a confirmation.** Every
-    stack has `fleet.modules.<id>.enable`; the box's own default to on,
-    the catalog's are set in `host/modules.nix`. Nothing in the UI flips
-    one, and `site.json` has no `modules` section yet though the end
-    state names it. The mechanism: `site.json` gains `modules.enabled:
-    { <id>: bool }`; `platform/site.nix` defines `fleet.modules.<id>.enable`
-    from it with an override priority above a host's plain definition, so
-    a switch on the page beats `host/modules.nix` while a host that says
-    nothing keeps its file; the daedalus export gains the list of
-    structural non-flippers (the twelve the module-system rule documents:
-    the proxy, the identity provider, the cluster, the resolver…) so the
-    page can refuse them with the reason. The control: on the service's
-    own page head (the tab that fronts the stack), "Switch off", a
-    confirmation naming what stops (the containers, the hostname, the
-    routes, the rail entry) and what stays (the data under
-    `<stateRoot>/<stack>`), then the usual Apply. The same state is a
-    column on a Settings › Modules list. First candidate: n8n — every one
-    of its eleven workflows is inactive, and the only thing on the box
-    that names it is Open WebUI's config (check that reference and the
-    session MCP entry `n8n-mcp` before switching it off).
+12. **Switching a service off — built 2026-09-23.** `site.json` carries
+    `modules.enabled`; `platform/site.nix` defines each
+    `fleet.modules.<id>.enable` from it above a host's own definition;
+    `fleet.structuralModules` and `/export/switches.json` name the ones a
+    box may not switch off; Settings › Modules and a control on each
+    module's page write it. n8n was the first, switched off through the UI
+    with its data left in place. What remains: the page refuses a
+    structural module by name, but nothing explains a module's
+    *dependents* — `app-db` is impossible to switch off, while something
+    fifteen stacks read from is merely discouraged.
+
+---
 
 ## Operator decisions still open
 
